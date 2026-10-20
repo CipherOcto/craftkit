@@ -29,6 +29,14 @@
 //!    are built *every frame* — the toolbar's, every node row's, every
 //!    property editor's — so a name that cannot be given back is a process
 //!    that grows for as long as the window is open. §66.
+//!
+//! And one that keeps a lookup honest:
+//!
+//! 4. **A name is one widget.** Two widgets wanting one name is a collision:
+//!    the first is published and the second is **not in the registry at all**,
+//!    so a lookup for it succeeds and answers with the other widget — in
+//!    another panel, doing something else. The collision is recorded, so it
+//!    can be refused instead of swallowed. §99.
 
 use egui::{Id, Rect};
 use std::collections::HashSet;
@@ -69,6 +77,19 @@ impl AutomationId {
     /// The name for the editor of `path` on node `id`.
     pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
         AutomationId(format!("node.{}.prop.{}", id.get(), path))
+    }
+
+    /// The name for the level bar of node `id`.
+    ///
+    /// The level bar is **not a property**, so it does not publish a
+    /// property's name. It used to publish `node.<id>.prop.$level`, which is
+    /// a property's name spelled the way a property spelled `$level` spells
+    /// it — and a property may be called `$level`, so the property's editor
+    /// and the level bar wanted the same name, and the property's editor
+    /// lost: the first name published in a frame wins, and the node list is
+    /// drawn before the properties panel. §99.
+    pub fn level_bar(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("node.{}.level", id.get()))
     }
 
     /// The name for the keyframe row of `path` on node `id`.
@@ -126,6 +147,19 @@ pub struct Automation {
     /// accepts. Measured: 3.4 ms for a thousand nodes, 79 ms for five
     /// thousand, 378 ms for ten. §98.
     seen: HashSet<AutomationId>,
+    /// The names two widgets wanted in the same frame.
+    ///
+    /// A name published twice means two widgets want it, and only the first
+    /// is published — so the second widget is **not in the registry at all**,
+    /// and an agent that asks for it is answered with the first widget's
+    /// rectangle, which is in a different panel and does something else.
+    ///
+    /// The collision is otherwise invisible: the name is present, the lookup
+    /// succeeds, and nothing says that the widget behind it is not the one
+    /// that was asked for. The level bar wanted `node.<id>.prop.$level` — a
+    /// property's name — and a property called `$level` wanted it too, so the
+    /// property's editor was dropped without a word. §99.
+    collisions: Vec<AutomationId>,
 }
 
 impl Automation {
@@ -142,9 +176,41 @@ impl Automation {
         // The set answers "have I seen this name?" in one lookup. The copy of
         // the name it keeps is the price, and it is the same order as the
         // allocation the caller has already made for it.
+        //
+        // The loser is **recorded**. It is not in the registry, so nothing
+        // else would say that it was ever there. §99.
         if self.seen.insert(id.clone()) {
             self.entries.push((id, rect, enabled));
+        } else {
+            self.collisions.push(id);
         }
+    }
+
+    /// The names two widgets wanted in the same frame.
+    ///
+    /// Empty is the healthy answer. A name here is a widget that is **not**
+    /// in the registry, under a name that another widget answers for.
+    pub fn collisions(&self) -> &[AutomationId] {
+        &self.collisions
+    }
+
+    /// Forget everything published, for the next frame.
+    ///
+    /// The registry is **one frame's** worth of widgets. The names are built
+    /// every frame and the rectangles belong to the frame they were drawn in,
+    /// so a registry that carried the last frame's entries would answer
+    /// about a screen that is no longer there: a widget that has moved would
+    /// keep its old rectangle, and a widget that has gone would keep its
+    /// rectangle too, and an agent's click would land on nothing.
+    ///
+    /// §99: the registry was never cleared, so it grew for as long as the
+    /// shell lived, and "the first one published wins" meant "the first
+    /// *frame* wins" — every later frame's publications were recorded as
+    /// collisions with the first frame's.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.seen.clear();
+        self.collisions.clear();
     }
 
     /// Every name published this frame, sorted.
@@ -261,6 +327,23 @@ mod tests {
         assert_ne!(prop, key);
     }
 
+    /// A level bar is not a property, so it does not share a property's name.
+    ///
+    /// §99: the level bar published `node.<id>.prop.$level`, which is how a
+    /// property *named* `$level` spells its own name. The two wanted the same
+    /// name, and the property's editor lost it — it was never published, so
+    /// an agent asking for the property's editor was answered with the level
+    /// bar's rectangle, in a different panel.
+    #[test]
+    fn a_level_bar_and_a_property_never_share_a_name() {
+        let bar = AutomationId::level_bar(craftkit_core::NodeId(1));
+        assert_eq!(bar.as_str(), "node.1.level");
+        for path in ["$level", "level", "amount", "$level#2"] {
+            assert_ne!(bar, AutomationId::property(craftkit_core::NodeId(1), path));
+        }
+        assert_ne!(bar, AutomationId::node_row(craftkit_core::NodeId(1)));
+    }
+
     #[test]
     fn an_empty_registry_reports_missing() {
         let a = Automation::new();
@@ -301,6 +384,23 @@ mod tests {
         a.publish(AutomationId::toolbar("node.add"), second, true);
         assert_eq!(a.len(), 1);
         assert_eq!(a.rect("toolbar.node.add"), Some(first));
+    }
+
+    /// A name two widgets want is a collision, and it is recorded.
+    ///
+    /// §99: the loser of a name is not in the registry at all, so a lookup
+    /// for it succeeds and answers with the *other* widget — the level bar's
+    /// rectangle for a property's editor, in a different panel. Nothing said
+    /// so, until the collision was recorded.
+    #[test]
+    fn a_name_two_widgets_want_is_recorded_as_a_collision() {
+        let mut a = Automation::new();
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
+        a.publish(AutomationId::property(craftkit_core::NodeId(1), "$level"), rect, true);
+        a.publish(AutomationId::property(craftkit_core::NodeId(1), "$level"), rect, true);
+        assert_eq!(a.len(), 1, "the first still wins");
+        assert_eq!(a.collisions().len(), 1, "the loser is recorded");
+        assert_eq!(a.collisions()[0], AutomationId::property(craftkit_core::NodeId(1), "$level"));
     }
 
     /// Publishing a widget must not cost more than the widgets before it.

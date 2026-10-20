@@ -80,6 +80,9 @@ impl<'a> Shell<'a> {
 
     /// Draw one frame.
     pub fn show(&mut self, ctx: &Context, tokens: &Tokens) {
+        // The registry is **this frame's**: the names are rebuilt and the
+        // rectangles are the ones drawn just now. §99.
+        self.automation.clear();
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui, tokens));
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status_bar(ui, tokens));
         egui::SidePanel::left("nodes").show(ctx, |ui| self.node_list(ui, tokens));
@@ -159,9 +162,12 @@ impl<'a> Shell<'a> {
                     let response = ui.selectable_label(is_selected, RichText::new(name).color(colour));
                     let row = response.rect;
                     let clicked = response.clicked();
-                    let (_, level_bar) = draw_level_bar(ui, tokens, *level);
+                    // The **track**, not the fill: the fill is as wide as the
+                    // level, so at level zero it is a rectangle with no area at
+                    // all — a name an agent can look up and never click. §99.
+                    let (level_track, _) = draw_level_bar(ui, tokens, *level);
                     automation.publish(AutomationId::node_row(id), row, true);
-                    automation.publish(AutomationId::property(id, "$level"), level_bar, true);
+                    automation.publish(AutomationId::level_bar(id), level_track, true);
                     if clicked {
                         selected = Some(id);
                     }
@@ -500,7 +506,7 @@ mod tests {
         for id in ids {
             assert!(registry.known(AutomationId::node_row(id).as_str()) != Widget::Missing);
             assert!(
-                registry.known(AutomationId::property(id, "$level").as_str()) != Widget::Missing,
+                registry.known(AutomationId::level_bar(id).as_str()) != Widget::Missing,
                 "node {id} has no level bar"
             );
         }
@@ -542,6 +548,176 @@ mod tests {
             let _ = ctx.run(egui::RawInput::default(), |ctx| shell.show(ctx, &tokens));
         }
         assert_ne!(shell.automation.known(AutomationId::property(first, "amount").as_str()), Widget::Missing);
+    }
+
+    /// Draw the shell with a node selected, and hand back the registry.
+    ///
+    /// The properties panel only draws when something is selected, so the
+    /// tests that look at a property's editor have to select one.
+    fn draw_selected(session: &mut Session, id: NodeId) -> Automation {
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(session);
+        shell.state.selected = Some(id);
+        for _ in 0..2 {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| shell.show(ctx, &tokens));
+        }
+        shell.automation
+    }
+
+    /// Every property of the selected node has an editor in the registry.
+    ///
+    /// §99: the node list published the level bar under
+    /// `node.<id>.prop.$level` — a **property's** name. A property may be
+    /// called `$level`, and when it was, the property's editor and the level
+    /// bar wanted the same name. The first name published in a frame wins and
+    /// the node list is drawn before the properties panel, so the property's
+    /// editor was **never published at all**: an agent asking for
+    /// `node.1.prop.$level` was answered with the level bar's rectangle, in
+    /// the wrong panel, and the property had no editor to click.
+    ///
+    /// The count alone cannot see it — the level bar was wearing the
+    /// property's name, so the numbers matched — which is why the frame is
+    /// also checked for collisions, in
+    /// [`a_frame_publishes_no_name_twice`].
+    #[test]
+    fn every_property_of_the_selected_node_has_an_editor() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let created = session.execute(
+            "prop.set",
+            &serde_json::json!({ "node": first.get(), "path": "$level", "value": "0.5" }),
+        );
+        assert!(created.is_ok(), "a property may be called `$level`: {created:?}");
+
+        let registry = draw_selected(&mut session, first);
+        let paths: Vec<String> = session
+            .node(first)
+            .map(|n| n.props.flatten().into_iter().map(|(path, _)| path.to_string()).collect())
+            .unwrap_or_default();
+        assert!(paths.contains(&"$level".to_string()), "the probe property is missing: {paths:?}");
+        for path in &paths {
+            let name = AutomationId::property(first, path);
+            assert_ne!(
+                registry.known(name.as_str()),
+                Widget::Missing,
+                "the property `{path}` has no editor in the registry"
+            );
+        }
+    }
+
+    /// A frame publishes no name twice.
+    ///
+    /// §99: two widgets wanting one name is a collision, and the loser is not
+    /// in the registry — so a lookup for it succeeds and answers with the
+    /// *other* widget. The level bar wanted `node.<id>.prop.$level`, which
+    /// is a property's name, and a property called `$level` wanted it too.
+    ///
+    /// This is the general shape of the bug: it is not about `$level` but
+    /// about two widgets sharing a name, so the check is over the whole
+    /// frame and not over one property.
+    #[test]
+    fn a_frame_publishes_no_name_twice() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let created = session.execute(
+            "prop.set",
+            &serde_json::json!({ "node": first.get(), "path": "$level", "value": "0.5" }),
+        );
+        assert!(created.is_ok(), "{created:?}");
+        let registry = draw_selected(&mut session, first);
+        assert_eq!(
+            registry.collisions(),
+            &[] as &[AutomationId],
+            "two widgets want the same name: {:?}",
+            registry.collisions()
+        );
+    }
+
+    /// The level bar and a property are two widgets, and they have two names.
+    ///
+    /// §99: they shared one name, and the property's editor lost.
+    #[test]
+    fn a_property_named_after_the_level_bar_keeps_its_own_editor() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let created = session.execute(
+            "prop.set",
+            &serde_json::json!({ "node": first.get(), "path": "$level", "value": "0.5" }),
+        );
+        assert!(created.is_ok(), "{created:?}");
+
+        let registry = draw_selected(&mut session, first);
+        let property = AutomationId::property(first, "$level");
+        let bar = AutomationId::level_bar(first);
+        let property_rect = registry.rect(property.as_str());
+        let bar_rect = registry.rect(bar.as_str());
+        assert!(property_rect.is_some(), "the property's editor is not published");
+        assert!(bar_rect.is_some(), "the level bar is not published");
+        assert_ne!(
+            property_rect, bar_rect,
+            "the level bar and the property named `$level` are the same widget"
+        );
+    }
+
+    /// A widget an agent can look up must have an area to click.
+    ///
+    /// §99: the level bar published the **fill** — the coloured part, whose
+    /// width is the level. At level zero that is a rectangle with no width at
+    /// all, so the name resolved to a point no click could ever land on.
+    /// Measured before the fix: `node.1.prop.$level` resolved to
+    /// `[[54.3 61.0] - [54.3 71.0]]` — zero wide.
+    #[test]
+    fn a_level_bar_publishes_a_rectangle_with_an_area() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let registry = draw_selected(&mut session, first);
+        let bar = AutomationId::level_bar(first);
+        let rect = registry.rect(bar.as_str()).unwrap_or_else(|| panic!("`{bar}` is not published"));
+        assert!(rect.width() > 0.0, "the level bar's rectangle has no width: {rect:?}");
+        assert!(rect.height() > 0.0, "the level bar's rectangle has no height: {rect:?}");
+    }
+
+    /// The registry is one frame's worth of widgets.
+    ///
+    /// §99: it was never cleared, so it grew for as long as the shell lived
+    /// and "the first publication wins" meant "the first **frame** wins" — a
+    /// widget that had moved kept the rectangle it had when it was first
+    /// drawn, and a widget that had gone kept its rectangle too.
+    ///
+    /// Measured before the fix: with a node selected, the registry held 31
+    /// widgets; the selection was then cleared, the properties panel drew
+    /// nothing, and the registry still held all 31 — `node.1.prop.amount`
+    /// was still "found", at a rectangle where no editor was.
+    #[test]
+    fn the_registry_holds_the_frame_that_was_drawn() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+
+        shell.state.selected = Some(first);
+        for _ in 0..2 {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| shell.show(ctx, &tokens));
+        }
+        let editor = AutomationId::property(first, "amount");
+        assert_ne!(
+            shell.automation.known(editor.as_str()),
+            Widget::Missing,
+            "the editor was not published in the first place"
+        );
+
+        // The selection goes: the properties panel draws nothing now.
+        shell.state.selected = None;
+        for _ in 0..2 {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| shell.show(ctx, &tokens));
+        }
+        assert_eq!(
+            shell.automation.known(editor.as_str()),
+            Widget::Missing,
+            "the editor is gone from the screen but the registry still has it"
+        );
     }
 
     #[test]

@@ -10031,6 +10031,135 @@ thousand nodes. The registry cost 378 ms a frame at that size, so the promise
 was "a document the model accepts is a document the window can draw". It was
 not true, and nothing measured the gap between the two.
 
+## 99. The level bar wore a property's name, and the registry wore the first frame's
+
+The registry that lets an agent find a widget by name is rebuilt **every frame**.
+Its own doc says so, and so does the shell's.
+
+It was not.
+
+Three things were wrong with it, and they are one thing: **a name is a promise about
+one widget, in one frame.**
+
+### The measurement
+
+A property may be called `$level` — the grammar writes it plainly, the model accepts
+it, and the tree's own fixture does it
+(`apps/craftkit-cli/tests/command_effects_survive_the_file.rs` sets `path: "$level"`
+on node 1). The node list published the **level bar** as `node.1.prop.$level`, which
+is how a property named `$level` spells its own name. The properties panel
+published the property's **editor** as `node.1.prop.$level`.
+
+One name, two widgets. The first publication wins, so the property's editor was
+**not in the registry at all**. Measured, one frame:
+
+```
+PROBE names containing $level: ["node.1.prop.$level", "node.2.prop.$level", "node.3.prop.$level"]
+PROBE known node.1.prop.$level: Found { rect: [[54.3 61.0] - [54.3 71.0]], enabled: true }
+PROBE row rect:               Found { rect: [[8.0 57.0] - [46.3 75.0]], enabled: true }
+PROBE amount rect:            Found { rect: [[9808.0 100.0] - [10009.0 118.0]], enabled: true }
+```
+
+The name `node.1.prop.$level` resolved to a rectangle at x = 54 — the node list,
+beside the row — while the property's editor lives in the properties panel at
+x = 9808. An agent asking for the property's editor was answered with the level
+bar's rectangle, in the wrong panel, and the property had no editor to click. The
+name was there, the lookup succeeded, and the widget behind it was not the one that
+was asked for.
+
+And the rectangle it resolved to was `[[54.3 61.0] - [54.3 71.0]]` — **zero wide**.
+The level bar published its *fill*, the coloured part, whose width *is* the level. At
+level zero that is a rectangle with no area at all: a name an agent can look up and
+never click.
+
+The third defect is in the registry itself. It was never cleared, so it grew for as
+long as the shell lived, and "the first publication wins" meant "the first **frame**
+wins". Measured, with a node selected and then deselected:
+
+| | entries in the registry | `node.1.prop.amount` |
+|---|---|---|
+| frame 1, node selected | 31 | Found, at `[[9808.0 100.0] - [10009.0 118.0]]` |
+| frame 2, nothing selected | 31 | **still Found**, at the same rectangle |
+
+The properties panel drew nothing in the second frame — the editor was gone from the
+screen — and the registry still offered it. That is exactly what the type's own doc
+promised would not happen: *"Rebuilt every frame and dropped after, so a widget that
+disappears does not linger in the registry and let a click land on stale
+coordinates."*
+
+### Why nothing noticed
+
+**A property may be called `$level`, and the tree's own fixture does it.** So the
+name was not hypothetical: it is a property a person can create with one command.
+
+**Nothing published a name twice, so nothing had a reason to check.** "First wins"
+was there because two *buttons* might want one name. There was no counter, no log
+and no record: the second widget was dropped, and the registry answered for it with
+the first widget's rectangle. The failure was invisible by construction.
+
+**The doc said the opposite of the code.** `Automation`'s doc promised a per-frame
+registry; the shell never cleared it. The promise sat in the place a reader would
+look, which is why it survived.
+
+**A count could not see it.** The obvious test — "one editor per property" — passes
+while the bug is there: the level bar was *wearing* the property's name, so the
+numbers matched. A test that counts what a collision can impersonate is not a test.
+
+### The fix
+
+**A name is one widget.** The registry records the loser of a name
+(`Automation::collisions()`), so a collision is something that can be refused rather
+than swallowed.
+
+**The level bar has a name of its own.** `AutomationId::level_bar(id)` is
+`node.<id>.level` — not a property's name, because it is not a property.
+
+**The registry is rebuilt each frame.** `Shell::show` clears it, so the names and the
+rectangles belong to the frame that was drawn.
+
+**The level bar publishes its track**, not its fill: a widget has an area.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A level bar and a property never share a name | `a_level_bar_and_a_property_never_share_a_name` |
+| A name two widgets want is recorded as a collision | `a_name_two_widgets_want_is_recorded_as_a_collision` |
+| A frame publishes no name twice | `a_frame_publishes_no_name_twice` |
+| Every property of the selected node has an editor | `every_property_of_the_selected_node_has_an_editor` |
+| A property named after the level bar keeps its own editor | `a_property_named_after_the_level_bar_keeps_its_own_editor` |
+| A level bar publishes a rectangle with an area | `a_level_bar_publishes_a_rectangle_with_an_area` |
+| The registry holds the frame that was drawn | `the_registry_holds_the_frame_that_was_drawn` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the level bar wears a
+property's name again; the level bar publishes the fill again; a collision is
+swallowed again; the registry is not rebuilt each frame again.
+
+`crates/ui/src/shell.rs` joined `FILES` for this, because a mutation outside `FILES`
+is a mutation the script cannot put back.
+
+The §66 mutation's anchor had to move: it spanned the whole block of name
+constructors, and the level bar's constructor now sits among them. It is anchored on
+one constructor now, which is where it belongs.
+
+### The lesson
+
+**A name is a promise about one widget.** Two widgets wanting one name is not a tie
+to be broken; it is a collision, and the loser's widget is simply *not there*.
+
+**A lookup that succeeds is not an answer.** The name was present, the registry
+answered, and the answer was about a different widget in a different panel. The
+registry cannot tell an agent that — only the publisher can, so the publisher
+records it.
+
+**The doc is not the code.** `Automation`'s doc promised a registry that was rebuilt
+every frame; the shell never cleared it. The promise sat in the place a reader would
+look.
+
+**A count cannot see a collision.** The intruder wore the victim's name, so the
+numbers matched. What sees it is a *record of the conflict*, not a count of the
+things.
+
 ---
 
 ---
@@ -10222,6 +10351,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A path longer than a name is still carried** | `craftkit-engine` test | 1 mutation — §97 |
 | **A file with a group id longer than a name is refused** | `craftkit-io` test | 1 mutation — §97 |
 | **Publishing a widget does not cost more than the widgets before it** | `craftkit-ui` test | 1 mutation — §98 |
+| **A level bar and a property never share a name** | `craftkit-ui` test | 1 mutation — §99 |
+| **A name two widgets want is recorded as a collision** | `craftkit-ui` test | 1 mutation — §99 |
+| **A frame publishes no name twice** | `craftkit-ui` test | 1 mutation — §99 |
+| **Every property of the selected node has an editor** | `craftkit-ui` test | 1 mutation — §99 |
+| **A property named after the level bar keeps its own editor** | `craftkit-ui` test | 1 mutation — §99 |
+| **A level bar publishes a rectangle with an area** | `craftkit-ui` test | 1 mutation — §99 |
+| **The registry holds the frame that was drawn** | `craftkit-ui` test | 1 mutation — §99 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

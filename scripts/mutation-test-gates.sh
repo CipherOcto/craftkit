@@ -70,6 +70,7 @@ readonly FILES=(
     crates/kernel/src/lib.rs
     crates/ui/src/lib.rs
     crates/ui/src/automation.rs
+    crates/ui/src/shell.rs
     crates/ui/src/raster.rs
     crates/mcp/src/server.rs
     crates/mcp/src/rpc.rs
@@ -1659,39 +1660,9 @@ expect_catch "eval: a source takes the level out of range" \
 swap crates/ui/src/automation.rs \
     '    pub fn toolbar(command_id: &str) -> Self {
         AutomationId(format!("toolbar.{command_id}"))
-    }
-
-    /// The name for the row of node `id`.
-    pub fn node_row(id: craftkit_core::NodeId) -> Self {
-        AutomationId(format!("nodes.row.{}", id.get()))
-    }
-
-    /// The name for the editor of `path` on node `id`.
-    pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
-        AutomationId(format!("node.{}.prop.{}", id.get(), path))
-    }
-
-    /// The name for the keyframe row of `path` on node `id`.
-    pub fn keyframe(id: craftkit_core::NodeId, path: &str) -> Self {
-        AutomationId(format!("node.{}.key.{}", id.get(), path))
     }' \
     '    pub fn toolbar(command_id: &str) -> Self {
         AutomationId(Box::leak(format!("toolbar.{command_id}").into_boxed_str()).to_string())
-    }
-
-    /// The name for the row of node `id`.
-    pub fn node_row(id: craftkit_core::NodeId) -> Self {
-        AutomationId(Box::leak(format!("nodes.row.{}", id.get()).into_boxed_str()).to_string())
-    }
-
-    /// The name for the editor of `path` on node `id`.
-    pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
-        AutomationId(Box::leak(format!("node.{}.prop.{}", id.get(), path).into_boxed_str()).to_string())
-    }
-
-    /// The name for the keyframe row of `path` on node `id`.
-    pub fn keyframe(id: craftkit_core::NodeId, path: &str) -> Self {
-        AutomationId(Box::leak(format!("node.{}.key.{}", id.get(), path).into_boxed_str()).to_string())
     }'
 expect_catch "ui: the widget names leak their bytes again" \
     "cargo test -p craftkit-ui --profile ci building_a_widget_name_does_not_leak_memory"
@@ -2347,5 +2318,53 @@ expect_catch "ui: the registry scans every name it has published for every widge
     "cargo test -p craftkit-ui --profile ci publishing_a_widget_does_not_cost_more_than_the_widgets_before_it"
 
 # ------------------------------------------------------------------ done ----
+# The level bar wore a property's name. The node list published the level bar
+# as `node.<id>.prop.$level` -- which is how a property *named* `$level`
+# spells its own name -- so the level bar and the property's editor wanted
+# one name. The first publication won and the second was not in the registry
+# at all, so an agent asking for the property's editor was answered with the
+# level bar's rectangle, in another panel. §99.
+swap crates/ui/src/automation.rs \
+    '    pub fn level_bar(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("node.{}.level", id.get()))
+    }' \
+    '    pub fn level_bar(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("node.{}.prop.$level", id.get()))
+    }'
+expect_catch "ui: the level bar wears a property's name" \
+    "cargo test -p craftkit-ui --profile ci a_level_bar_and_a_property_never_share_a_name"
+
+# The level bar published its *fill* -- the coloured part, whose width is the
+# level -- so at level zero the name resolved to a rectangle with no width at
+# all: a widget an agent could look up and never click. §99.
+swap crates/ui/src/shell.rs \
+    '                    let (level_track, _) = draw_level_bar(ui, tokens, *level);' \
+    '                    let (_, level_track) = draw_level_bar(ui, tokens, *level);'
+expect_catch "ui: the level bar publishes the fill" \
+    "cargo test -p craftkit-ui --profile ci a_level_bar_publishes_a_rectangle_with_an_area"
+
+# A name two widgets want was swallowed: the first was published and the
+# second was not in the registry at all, so nothing said that the widget
+# behind the name was not the one that was asked for. §99.
+swap crates/ui/src/automation.rs \
+    '        } else {
+            self.collisions.push(id);
+        }' \
+    '        } else {
+            let _ = id;
+        }'
+expect_catch "ui: a name two widgets want is not recorded" \
+    "cargo test -p craftkit-ui --profile ci a_name_two_widgets_want_is_recorded_as_a_collision"
+
+# The registry was never cleared, so it grew for as long as the shell lived
+# and "the first publication wins" meant "the first *frame* wins": a widget
+# that had gone kept its rectangle, and an agent's click would land on
+# nothing. §99.
+swap crates/ui/src/shell.rs \
+    '        self.automation.clear();' \
+    '        let _ = &self.automation;'
+expect_catch "ui: the registry is not rebuilt each frame" \
+    "cargo test -p craftkit-ui --profile ci the_registry_holds_the_frame_that_was_drawn"
+
 restore
 finish
