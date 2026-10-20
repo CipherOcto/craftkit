@@ -2201,30 +2201,16 @@ expect_catch "model: a write that changes nothing does not say so" \
 # commands -- `playback.seek`, `plan.evaluate`, `diagnostics.list` and
 # `session.stats` -- declared `undoable: true` and never could, and the flag
 # is published to agents in the command schema. §94.
+# The anchor is the pair of flags, and it has to be: a longer one would run
+# into the apostrophe in "the plan's rate", and an apostrophe closes the
+# shell's single-quoted string. The pair is not unique -- four commands have
+# it -- and `swap` replaces the first, which is `playback.seek`. That is
+# enough: whichever command it lands on, a command that does not mutate and
+# claims to be undoable breaks the rule.
 swap crates/engine/src/commands.rs \
-    '    id: "playback.seek",
-    label: "Go to",
-    area: Area::Playback,
-    icon: Icon("play"),
-    shortcut: None,
-    doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
-    params: &[
-        ParamDoc::req("seconds", Doc::Time, "The instant to go to, in seconds."),
-        ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
-    ],
-    mutates: false,
+    '    mutates: false,
     undoable: false,' \
-    '    id: "playback.seek",
-    label: "Go to",
-    area: Area::Playback,
-    icon: Icon("play"),
-    shortcut: None,
-    doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
-    params: &[
-        ParamDoc::req("seconds", Doc::Time, "The instant to go to, in seconds."),
-        ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
-    ],
-    mutates: false,
+    '    mutates: false,
     undoable: true,'
 expect_catch "engine: a command that does not mutate is undoable anyway" \
     "cargo test -p craftkit-engine --profile ci no_command_that_does_not_mutate_is_undoable"
