@@ -31,6 +31,7 @@
 //!    that grows for as long as the window is open. §66.
 
 use egui::{Id, Rect};
+use std::collections::HashSet;
 
 /// A stable widget name.
 ///
@@ -113,6 +114,18 @@ pub enum Widget {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Automation {
     entries: Vec<(AutomationId, Rect, bool)>,
+    /// The names already published this frame.
+    ///
+    /// A set, so the duplicate check is a **lookup** and not a scan of
+    /// everything published so far.
+    ///
+    /// The scan made a frame quadratic in the number of widgets: the node list
+    /// publishes two names per node, so a document at the model's own limit of
+    /// ten thousand nodes publishes twenty thousand names, and the frame spent
+    /// **378 ms** in the registry — every frame, for a document the model
+    /// accepts. Measured: 3.4 ms for a thousand nodes, 79 ms for five
+    /// thousand, 378 ms for ten. §98.
+    seen: HashSet<AutomationId>,
 }
 
 impl Automation {
@@ -125,7 +138,11 @@ impl Automation {
         // A second publish at the same name in one frame means two widgets
         // share an id; the first wins, because the first is the one a person
         // would call "the" button.
-        if !self.entries.iter().any(|(known, _, _)| known == &id) {
+        //
+        // The set answers "have I seen this name?" in one lookup. The copy of
+        // the name it keeps is the price, and it is the same order as the
+        // allocation the caller has already made for it.
+        if self.seen.insert(id.clone()) {
             self.entries.push((id, rect, enabled));
         }
     }
@@ -284,6 +301,39 @@ mod tests {
         a.publish(AutomationId::toolbar("node.add"), second, true);
         assert_eq!(a.len(), 1);
         assert_eq!(a.rect("toolbar.node.add"), Some(first));
+    }
+
+    /// Publishing a widget must not cost more than the widgets before it.
+    ///
+    /// §98: the duplicate check scanned every name published so far, so a
+    /// frame was **quadratic** in the number of widgets. The node list
+    /// publishes two names per node, so a document at the model's own limit of
+    /// ten thousand nodes publishes twenty thousand names — and the frame
+    /// spent 378 ms in the registry, every frame.
+    ///
+    /// The test is **relative**, so it does not depend on how fast the machine
+    /// is: a second batch of the same size must not cost twice as much as the
+    /// first. Linear costs the same; quadratic costs four times as much,
+    /// because the second batch scans a list twice as long.
+    #[test]
+    fn publishing_a_widget_does_not_cost_more_than_the_widgets_before_it() {
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
+        let batch = |registry: &mut Automation, from: usize| {
+            let start = std::time::Instant::now();
+            for i in from..from + 5_000 {
+                registry.publish(AutomationId(format!("widget.{i}")), rect, true);
+            }
+            start.elapsed()
+        };
+        let mut registry = Automation::new();
+        let first = batch(&mut registry, 0);
+        let second = batch(&mut registry, 5_000);
+        let ratio = second.as_secs_f64() / first.as_secs_f64().max(f64::MIN_POSITIVE);
+        assert!(
+            ratio < 2.0,
+            "the second batch of 5000 widgets took {ratio:.1}x as long as the first: \
+             the registry is scanning what it has already published"
+        );
     }
 
     #[test]

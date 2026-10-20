@@ -2332,6 +2332,20 @@ swap crates/io/src/format.rs \
 expect_catch "io: a file with a group id longer than a name is read" \
     "cargo test -p craftkit-io --profile ci a_file_with_a_group_id_longer_than_a_name_is_refused"
 
+# The automation registry checked for a duplicate name by walking the list of
+# the names it had already published -- once per widget, on every frame. A
+# document at the model's own limit of ten thousand nodes publishes twenty
+# thousand names, and the frame spent 378 ms in the registry. §98.
+swap crates/ui/src/automation.rs \
+    '        if self.seen.insert(id.clone()) {
+            self.entries.push((id, rect, enabled));
+        }' \
+    '        if !self.entries.iter().any(|(known, _, _)| known == &id) {
+            self.entries.push((id, rect, enabled));
+        }'
+expect_catch "ui: the registry scans every name it has published for every widget" \
+    "cargo test -p craftkit-ui --profile ci publishing_a_widget_does_not_cost_more_than_the_widgets_before_it"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish

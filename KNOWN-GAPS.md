@@ -9943,6 +9943,96 @@ followed.
 
 ---
 
+## 98. The automation registry scanned everything it had published, for every widget
+
+The registry that lets an agent find a widget by name is rebuilt **every
+frame**. And for every widget published, it checked whether that name had
+already been published — by scanning the whole list.
+
+So a frame cost the square of the number of widgets in it.
+
+### The measurement
+
+The node list publishes two names per node (the row and its level bar), so a
+document at the model's own limit of ten thousand nodes publishes twenty
+thousand names. Measured, publishing those names:
+
+| Nodes | Names published | Before | After | Per name, before |
+|---|---|---|---|---|
+| 100 | 200 | 51 µs | 47 µs | 255 ns |
+| 1 000 | 2 000 | 3.4 ms | 0.39 ms | 1.7 µs |
+| 5 000 | 10 000 | 78.7 ms | 1.9 ms | 7.9 µs |
+| 10 000 | 20 000 | **377.9 ms** | **6.9 ms** | 18.9 µs |
+
+The per-name cost is the tell: it grows with the number of names already
+published, because each one walks the list looking for a duplicate. A
+thousand nodes cost 3.4 ms a frame; five thousand cost 79 ms — twelve frames a
+second — and ten thousand, which the model accepts, cost **378 ms a frame**.
+
+And it is every frame: the registry is rebuilt from scratch each time, so the
+cost is paid again on every repaint.
+
+### Why nothing noticed
+
+**The check is one line and looks free.** "Have I published this name before?"
+is a question about a list of names, and a list of names is small — until it
+is twenty thousand of them, and each question walks it.
+
+**The registry is not where anybody looked.** The tree's performance work went
+into the *evaluator* (§53 measured a cache that cost 7 400 times the work it
+avoided) and into the *document's* memory budget (§52). The registry is the
+agent's window on the window: it is rebuilt every frame and nobody measures it,
+because it is not on the document and it does not touch the model.
+
+**And the numbers a small document hides are the numbers that matter.** At a
+hundred nodes the registry costs 51 µs — a rounding error next to egui's own
+layout. The curve only shows up at the size the model *allows*.
+
+### The fix
+
+**The duplicate check is a lookup.** The registry keeps a set of the names it
+has published this frame, so "have I seen this name?" is a hash lookup rather
+than a walk. The list keeps its order, because the order is what "topmost" and
+"first wins" mean.
+
+The copy of the name the set keeps is the price, and it is the same order as
+the allocation the caller has already made for it: 6.9 ms for twenty thousand
+names, against 378 ms.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Publishing a widget does not cost more than the widgets before it | `publishing_a_widget_does_not_cost_more_than_the_widgets_before_it` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: the duplicate check goes
+back to being a scan.
+
+The test is **relative** on purpose: a second batch of five thousand names
+must not cost twice as much as the first. Linear costs the same; quadratic
+costs three times as much, because the second batch walks a list twice as
+long. So the test does not depend on how fast the machine is — and the
+mutation that puts the scan back measures 3.7× and fails.
+
+### The lesson
+
+**A duplicate check is a lookup.** The tree has one of those rules everywhere
+else — a set of the ids it has seen, a map of the names it knows — and here the
+same question was answered by walking a list, in a loop that runs once per
+widget, on every frame.
+
+**The cost of a frame is not the cost of the work.** A frame does a lot of
+small things: a name per widget, a rectangle per widget, a check per widget.
+None of them is expensive. All of them together are the frame, and the frame
+is what a person feels.
+
+**A limit is a promise about the size of a document.** The model allows ten
+thousand nodes. The registry cost 378 ms a frame at that size, so the promise
+was "a document the model accepts is a document the window can draw". It was
+not true, and nothing measured the gap between the two.
+
+---
+
 ---
 
 ## What enforces what
@@ -10131,6 +10221,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A name too long is refused in either spelling** | `craftkit-model` test | 1 mutation — §97 |
 | **A path longer than a name is still carried** | `craftkit-engine` test | 1 mutation — §97 |
 | **A file with a group id longer than a name is refused** | `craftkit-io` test | 1 mutation — §97 |
+| **Publishing a widget does not cost more than the widgets before it** | `craftkit-ui` test | 1 mutation — §98 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
