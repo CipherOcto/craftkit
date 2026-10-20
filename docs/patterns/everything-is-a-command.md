@@ -49,6 +49,14 @@ Three fields do the load-bearing work:
   a new step would push an entry pointing at the state just left behind, so a
   second undo would appear to do nothing and the redo branch would be cleared by
   its own undo.
+- **A command that does not mutate cannot push an undo entry**, so `undoable`
+  is only meaningful together with `mutates`. The field's own comment says
+  *"whether a successful run pushes an undo entry"*, and that is not true for a
+  command that does not mutate: the push happens inside the `mutates` branch.
+  Four commands — `playback.seek`, `plan.evaluate`, `diagnostics.list` and
+  `session.stats` — declared `undoable: true` and can never push one, and the
+  flag is published to agents in the command schema. They are `false` now, and
+  `no_command_that_does_not_mutate_is_undoable` keeps them that way. §94.
 
 A command, in full:
 

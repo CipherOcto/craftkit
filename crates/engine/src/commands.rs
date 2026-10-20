@@ -689,7 +689,7 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
         ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
     ],
     mutates: false,
-    undoable: true,
+    undoable: false,
     enabled: always,
     run: |s, p| {
         let rate = s.document().meta.frame_rate();
@@ -776,7 +776,7 @@ pub static PLAN_EVALUATE: CommandSpec = CommandSpec {
     doc: "Evaluate the document at an instant and return the whole plan.",
     params: &[ParamDoc::opt("at", Doc::Time, "The instant. Defaults to the playhead.")],
     mutates: false,
-    undoable: true,
+    undoable: false,
     enabled: always,
     run: |s, p| {
         let rate = s.document().meta.frame_rate();
@@ -795,7 +795,7 @@ pub static DIAGNOSTICS_LIST: CommandSpec = CommandSpec {
     doc: "List what the evaluator has to say about the current plan.",
     params: &[],
     mutates: false,
-    undoable: true,
+    undoable: false,
     enabled: always,
     run: |s, _p| {
         let items: Vec<serde_json::Value> = s
@@ -825,7 +825,7 @@ pub static SESSION_STATS: CommandSpec = CommandSpec {
     doc: "Counters for the running session: commands, failures, undo depth, kernel recoveries (process-wide).",
     params: &[],
     mutates: false,
-    undoable: true,
+    undoable: false,
     enabled: always,
     run: |s, _p| {
         Ok(Outcome::with(

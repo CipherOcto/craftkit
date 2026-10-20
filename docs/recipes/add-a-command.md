@@ -93,13 +93,19 @@ These are two different questions and they have two different answers.
 
 | Field | Question | Set `false` when |
 | --- | --- | --- |
-| `mutates` | Does a *successful* run change the document? | The command only reads — `plan.evaluate`, `diagnostics.list`, `session.stats`, `playback.seek` (`mutates: false, undoable: true`). |
+| `mutates` | Does a *successful* run change the document? | The command only reads — `plan.evaluate`, `diagnostics.list`, `session.stats`, `playback.seek` (`mutates: false, undoable: false`). |
 | `undoable` | Should a successful run push an undo entry? | The command restores state by itself, or is not a document edit. |
 
 `history.undo` and `history.redo` are `mutates: true, undoable: false`. The doc
 comment on `CommandSpec::undoable` (`crates/engine/src/command.rs:148`) explains
 why in full: pushing the restore as a new step makes undo appear to do nothing
 and clears the redo branch with its own undo.
+
+**A command that does not mutate is never undoable.** The undo entry is pushed
+inside the `mutates` branch, so there is nothing to push — and the flag is
+published to agents in the command schema, so a command that claims it is
+undoable while it can never be is a claim every reader of the catalogue sees.
+Measured: four commands claimed it and never could. §94.
 
 `Session::execute` treats these as follows
 (it is in `crates/engine/src/session.rs`):

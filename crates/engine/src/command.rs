@@ -154,6 +154,15 @@ pub struct CommandSpec {
     /// snapshot, and pushing that as a new step would push a history entry that
     /// points at the state we just came from — so undoing again would appear to
     /// do nothing, and the redo branch would be cleared by its own undo.
+    ///
+    /// **Only meaningful together with `mutates`.** A command that does not
+    /// change the document has nothing to undo: the push lives inside the
+    /// `mutates` branch, so a read-only command cannot push an entry however
+    /// it is declared. Four commands — `playback.seek`, `plan.evaluate`,
+    /// `diagnostics.list` and `session.stats` — declared `undoable: true` and
+    /// never could, and the flag is published to agents in the command
+    /// schema. `no_command_that_does_not_mutate_is_undoable` keeps the data
+    /// honest. §94.
     pub undoable: bool,
     /// Whether the command is available right now.
     pub enabled: fn(&Session) -> bool,
@@ -505,6 +514,24 @@ mod tests {
                 a.area.key(),
                 b.id,
                 b.area.key()
+            );
+        }
+    }
+
+    /// A command that does not change the document cannot be undoable.
+    ///
+    /// The undo entry is pushed inside the `mutates` branch, so a command that
+    /// does not mutate never pushes one — whatever its `undoable` flag says.
+    /// The flag is published to agents in the command schema, so a command that
+    /// claims it is undoable while it can never be is a claim the catalogue
+    /// makes to every reader. Four commands made it. §94.
+    #[test]
+    fn no_command_that_does_not_mutate_is_undoable() {
+        for c in all() {
+            assert!(
+                c.mutates || !c.undoable,
+                "`{}` does not change the document, so it cannot be undoable",
+                c.id
             );
         }
     }

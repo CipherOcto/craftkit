@@ -171,19 +171,41 @@ it — so the two cannot drift apart. The pattern that says so, and the
 measurement behind it, is in [`patterns/clone-before-edit.md`](patterns/clone-before-edit.md).
 
 The same snapshot does three jobs: it is the undo entry, it is the error
-rollback, and it is the "did this command actually change anything?" check that
-turns a command declaring `mutates: true` and writing nothing into an
-`EngineError::Internal` rather than a no-op step on the undo stack.
+rollback, and it is the "did this command actually change anything?" check.
+
+That check used to turn *any* command declaring `mutates: true` and writing
+nothing into an `EngineError::Internal`. The comparison cannot tell "the
+command forgot to write" from "the command wrote the value a field already
+held" — and the second is ordinary. Measured: eight of the nine commands that
+could be asked to do what they had already done were refused as *"failed
+unexpectedly"*. §93.
+
+So the **command** says now: `Outcome::changed` is true unless the command
+says otherwise, and the check fires only when the command claims it wrote and
+the document says otherwise. A command that may legitimately change nothing
+takes the answer from the model's write — `Node::set_muted`,
+`Property::set_value`, `Document::set_range` and their siblings return
+whether they changed anything — and passes it on with
+`Outcome::unchanged_if(!changed)`. A no-op is then a success: no undo entry,
+no dirty flag, and the document left as it was.
+
+`history.undo` and `history.redo` are the two commands that change the
+document and are **not** undoable: they change it *by* restoring a snapshot,
+and pushing that as a new step would push an entry pointing at the state just
+left behind.
+
+A command that does **not** change the document cannot be undoable at all: the
+push lives inside the `mutates` branch, so there is nothing to push. Four
+commands — `playback.seek`, `plan.evaluate`, `diagnostics.list` and
+`session.stats` — declared `undoable: true` and never could, and the flag is
+published to agents in the command schema. They are `false` now, and
+`no_command_that_does_not_mutate_is_undoable` keeps them that way. §94.
 
 The cost is bounded and measured rather than guessed: `History::MAX_ENTRIES` is
 128 entries, and each entry is a document of at most
 `craftkit_model::limits::MAX_NODES` (10 000) nodes. If that ever shows up in a
 profile, the fix is to raise the entry count and add a size cap — not to start
 inverting commands by hand.
-
-`history.undo` and `history.redo` are the two commands with `undoable: false`:
-they change the document *by* restoring a snapshot, and pushing that as a new
-step would push an entry pointing at the state just left behind.
 
 ## Incremental evaluation
 

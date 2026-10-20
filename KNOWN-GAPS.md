@@ -9449,6 +9449,124 @@ and used the wrong one.
 
 ---
 
+## 94. The catalogue told every agent that four commands were undoable, and none of them could be
+
+§93 fixed what happens when a command changes nothing. This is the other half
+of the same flag: what the tree *says* about undoing.
+
+### The measurement
+
+`CommandSpec` has two flags, and the second one's own comment is its
+definition:
+
+```rust
+/// Whether a successful run pushes an undo entry.
+pub undoable: bool,
+```
+
+The engine pushes the entry inside the `mutates` branch:
+
+```rust
+if spec.mutates {
+    …
+    if spec.undoable { self.history.push(snapshot, spec.label); }
+}
+```
+
+So a command that does **not** change the document has nothing to undo, and
+cannot push an undo entry however it is declared. Four commands declared it
+anyway:
+
+```text
+playback.seek      mutates=false, undoable=true
+plan.evaluate      mutates=false, undoable=true
+diagnostics.list   mutates=false, undoable=true
+session.stats      mutates=false, undoable=true
+```
+
+Measured, none of them pushes an entry, and none of them can:
+
+```text
+playback.seek      undo depth 0 -> 0
+plan.evaluate      undo depth 0 -> 0
+diagnostics.list   undo depth 0 -> 0
+session.stats      undo depth 0 -> 0
+node.add           undo depth 0 -> 1     (a command that does mutate)
+```
+
+And the flag is **published**. The command schema — the JSON that
+`engine.describe` returns, that `commands --json` prints and that the MCP
+server turns into a tool description — carries `"undoable": true` for all
+four. An agent reading the catalogue is told that `playback.seek` is undoable.
+
+The history only ever stored the **document**, so the playhead was never
+undoable either: the claim could not be made true by changing the flag.
+
+### Why nothing noticed
+
+**The flag was read in one place and written in twenty-one.** Nothing checked
+the *pair*. A command's `mutates` and `undoable` were two literals next to
+each other, and the relationship between them was in the engine, not in the
+data.
+
+**Every command that mattered was consistent.** The fifteen mutating commands
+were `mutates: true, undoable: true` (apart from the two history commands,
+which are false on purpose), so the flag looked right everywhere anyone
+looked.
+
+**The prose described the flag's *purpose*, not its *rule*.** The pattern
+document said the right thing — *"`mutates` decides whether the snapshot
+becomes an undo entry"* — and the field's comment said the wrong thing. Two
+sentences about one flag, one of them true.
+
+### The fix
+
+**The data is honest.** The four commands are `undoable: false`, which is
+what they have always been in fact.
+
+**The rule is in the field's own comment**, next to the data it constrains:
+only meaningful together with `mutates`; a command that does not change the
+document has nothing to undo.
+
+**A test keeps it that way.** `no_command_that_does_not_mutate_is_undoable`
+walks the registry and refuses the combination — so a new command cannot
+repeat the mistake, and the rule is in one check rather than in a reviewer's
+memory.
+
+**The prose that named the old state is corrected.** `docs/architecture.md`
+said "`history.undo` and `history.redo` are the two commands with
+`undoable: false`". There are six now, and the sentence says why.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A command that does not mutate is never undoable | `no_command_that_does_not_mutate_is_undoable` |
+| The flag's comment says what the flag means | the comment on `CommandSpec::undoable` |
+| The catalogue does not claim what the engine cannot do | the same test, through the registry |
+
+and one mutation in `scripts/mutation-test-gates.sh`: a command that does not
+mutate is undoable anyway.
+
+### The lesson
+
+**A flag and the rule that constrains it belong in the same place.** Two
+literals next to each other invite the reader to assume they are independent.
+They are not.
+
+**A published flag is a promise.** The schema goes to agents, and the MCP
+server turns it into a tool description. A flag that says `true` where the
+engine can never do the thing is a false promise made to every reader at once
+— and it cost nothing to fix, because the truth was already what the engine
+did.
+
+**A flag whose value is always the same for a subset of the data is a second
+copy of another flag.** `undoable` was `mutates` for fifteen commands, `true`
+for six, and meaningless for four. The meaningful values are the exceptions,
+and the exceptions are what need checking.
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -9623,6 +9741,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Keying and easing what is already there succeeds** | `craftkit-engine` test | 1 mutation — §93 |
 | **A command that claims to change something and does not is refused** | `craftkit-engine` test | 1 mutation — §93 |
 | **A write that changes nothing says so** | model and engine tests | 2 mutations — §93 |
+| **A command that does not mutate is never undoable** | `craftkit-engine` test | 1 mutation — §94 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
