@@ -71,6 +71,18 @@ pub mod limits {
     pub const MAX_PATH_SEGMENTS: usize = 16;
     /// The longest node name, in bytes.
     pub const MAX_NAME: usize = 255;
+    /// The longest property path, in bytes.
+    ///
+    /// A path is made of names, and a name is at most [`MAX_NAME`] bytes, so a
+    /// path of [`MAX_PATH_SEGMENTS`] segments is at most this long: the names
+    /// plus the slashes between them.
+    ///
+    /// The number is here so that **every layer that carries a path agrees on
+    /// how long one may be**. The grammar accepted a path of four kilobytes,
+    /// the commands refused anything over 255 bytes, and the model did not
+    /// limit a group's id at all — so a file could hold a property that the
+    /// tree published a path to and no command would accept. §97.
+    pub const MAX_PATH_BYTES: usize = MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1;
     /// How much memory one document may hold.
     ///
     /// Every other limit here is a **count**, and a count does not say how

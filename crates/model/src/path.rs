@@ -82,6 +82,17 @@
 //! bounded by the same number: a property deeper than a path can name is a
 //! property nothing can reach, so the tree is refused rather than quietly
 //! truncated. §85.
+//!
+//! And each segment is a **name**, so it is at most [`limits::MAX_NAME`]
+//! bytes — in every spelling. The length rule used to be only in the plain
+//! one, so the grammar refused a name of 256 bytes and accepted the same name
+//! written with an explicit occurrence, `name#1`. A name the model refuses is
+//! a name no path may spell, and the spelling that skipped the rule was the
+//! one the listing used for a long group id. §97.
+//!
+//! So the longest path the grammar can express is
+//! [`limits::MAX_PATH_BYTES`] bytes, and that is the number the commands
+//! carry: a path the tree publishes is a path a command accepts.
 
 use crate::limits;
 use craftkit_core::NodeId;
@@ -171,6 +182,14 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
     // `name#n` — split on the LAST `#`, so a name may itself contain one.
     match part.rsplit_once('#') {
         Some((name, digits)) if !name.is_empty() => {
+            // The same length rule as the plain spelling below. It used to be
+            // missing here, so the grammar was inconsistent with itself: it
+            // refused a name of 256 bytes and accepted the same name written
+            // with an explicit occurrence — `name#1`. A name the model would
+            // refuse is a name no path may spell. §97.
+            if name.len() > limits::MAX_NAME {
+                return None;
+            }
             let n: usize = digits.parse().ok()?;
             (n >= 1).then(|| PathSeg::Match(name.to_string(), n))
         }
@@ -337,6 +356,24 @@ mod tests {
         let deep: String =
             std::iter::repeat_n("a", limits::MAX_PATH_SEGMENTS + 1).collect::<Vec<_>>().join("/");
         assert!(PropPath::parse(&deep).is_none());
+    }
+
+    /// A name that is too long is too long in every spelling.
+    ///
+    /// §97: the grammar refused a name of 256 bytes and accepted the same name
+    /// written with an explicit occurrence — `name#1` — because the length
+    /// rule was only in the plain branch. A name the model refuses is a name
+    /// no path may spell, and the spelling that skipped the rule was the one
+    /// the listing used for a long group id.
+    #[test]
+    fn a_name_too_long_is_refused_in_either_spelling() {
+        let long = "a".repeat(limits::MAX_NAME + 1);
+        assert!(PropPath::parse(&long).is_none(), "the plain spelling must be refused");
+        assert!(PropPath::parse(&format!("{long}#1")).is_none(), "the occurrence spelling too");
+
+        let at_the_limit = "a".repeat(limits::MAX_NAME);
+        assert!(PropPath::parse(&at_the_limit).is_some(), "a name at the limit is a name");
+        assert!(PropPath::parse(&format!("{at_the_limit}#1")).is_some());
     }
 
     #[test]

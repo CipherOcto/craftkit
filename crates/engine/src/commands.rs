@@ -375,7 +375,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let value = value_for(p, "value")?.ok_or_else(|| EngineError::Param {
             id: PROP_SET.id.to_string(),
             source: craftkit_core::ParamError::new("value", "this parameter is required"),
@@ -444,7 +444,7 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let node = node_mut(s, id, PROP_RESET.id)?;
         let parsed = parse_path(&path, PROP_RESET.id)?;
         let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
@@ -489,7 +489,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let value = value_for(p, "value")?.ok_or_else(|| EngineError::Param {
             id: KEY_SET.id.to_string(),
             source: craftkit_core::ParamError::new("value", "this parameter is required"),
@@ -559,7 +559,7 @@ pub static KEY_REMOVE: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
         let node = node_mut(s, id, KEY_REMOVE.id)?;
@@ -602,7 +602,7 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let node = node_mut(s, id, KEY_CLEAR.id)?;
         let parsed = parse_path(&path, KEY_CLEAR.id)?;
         let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
@@ -638,7 +638,7 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
     enabled: has_nodes,
     run: |s, p| {
         let id = node_by_id_or_name(s.document(), p)?;
-        let path = required_text(p, "path")?;
+        let path = required_path(p, "path")?;
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
         let easing = opt_easing(p, "easing")?.ok_or_else(|| EngineError::Param {
@@ -852,8 +852,22 @@ fn has_nodes(s: &Session) -> bool {
 }
 
 fn required_text(p: &Params<'_>, key: &str) -> Result<String, EngineError> {
-    let text =
-        p.text(key, limits::MAX_NAME).map_err(|e| EngineError::Param { id: String::new(), source: e })?;
+    required_text_capped(p, key, limits::MAX_NAME)
+}
+
+/// A required text parameter whose limit is the **model's**, not this file's.
+///
+/// A name is at most `MAX_NAME` bytes; a **path** is made of names, so it may
+/// be as long as the grammar can express one. Capping a path at a name's
+/// length was the tree refusing a path it had published itself: the listing
+/// builds paths out of the model's names, and a path of two hundred-byte
+/// groups is four hundred bytes, which no command would carry. §97.
+fn required_path(p: &Params<'_>, key: &str) -> Result<String, EngineError> {
+    required_text_capped(p, key, limits::MAX_PATH_BYTES)
+}
+
+fn required_text_capped(p: &Params<'_>, key: &str, max: usize) -> Result<String, EngineError> {
+    let text = p.text(key, max).map_err(|e| EngineError::Param { id: String::new(), source: e })?;
     match text {
         None => Err(EngineError::Param {
             id: String::new(),
@@ -1123,6 +1137,27 @@ mod tests {
             reported > before,
             "the statistics reported {reported} recoveries, but only {before} had happened before the worker ran"
         );
+    }
+
+    /// A path the grammar can express is a path a command can carry.
+    ///
+    /// §97: a path is made of names, and a name is at most `MAX_NAME` bytes,
+    /// so a path of `MAX_PATH_SEGMENTS` names is longer than a name — and the
+    /// commands capped a path at a *name's* length. So the tree published
+    /// paths it would not accept: the listing builds them out of the model's
+    /// names, and a path of two two-hundred-byte groups is four hundred bytes,
+    /// which every command refused for its size.
+    #[test]
+    fn a_path_longer_than_a_name_is_still_carried() {
+        let mut s = session();
+        let first = "a".repeat(200);
+        let second = "b".repeat(100);
+        let path = format!("{first}/{second}");
+        assert!(path.len() > craftkit_model::limits::MAX_NAME, "the path has to be longer than a name");
+
+        let outcome = s.execute("prop.set", &json!({ "node": 1, "path": path.clone(), "value": 2.0 }));
+        assert!(outcome.is_ok(), "a legal path was refused: {outcome:?}");
+        assert!(s.document().validate().is_ok(), "the document the command left behind does not validate");
     }
 
     /// The statistics count the whole session, not the last 256 commands.

@@ -136,6 +136,17 @@ where this is enforced.
 Paths are `/`-separated. An empty path means the node itself, which is how
 `node.rename` and `node.mute` are written.
 
+**A name is at most 255 bytes, and a path is made of names.** A property's
+label and a group's id are both path segments, and a segment the grammar
+cannot write is a name nothing can reach — the tree refuses it rather than
+publish a path that lies (§88). The length rule is the same in every
+spelling: the grammar refused a name of 256 bytes and accepted the same name
+written `name#1`, which is the spelling the listing uses for a long group id
+(§97). So a group's id is at most 255 bytes, a path is at most sixteen
+segments, and the longest path the grammar can express — 4 095 bytes — is the
+longest a command carries. A path the tree publishes is a path a command
+accepts.
+
 ---
 
 ## Time

@@ -619,6 +619,38 @@ mod tests {
         );
     }
 
+    /// A file whose group id is longer than a name is refused.
+    ///
+    /// §97: a group's id is a path segment, and the model had no length rule
+    /// for it — so a file could carry a group whose id was thirty thousand
+    /// bytes. The document was read, it validated, and the listing published a
+    /// path of thirty thousand bytes that no command would carry. The property
+    /// label beside it has had the rule all along.
+    #[test]
+    fn a_file_with_a_group_id_longer_than_a_name_is_refused() {
+        let id = "a".repeat(craftkit_model::limits::MAX_NAME + 1);
+        let text = format!(
+            r#"{{
+  "format": "craftkit/1",
+  "meta": {{ "written_by": "probe", "written_at": 0, "pending": [] }},
+  "document": {{
+    "meta": {{ "name": "probe", "fps": 24, "start": 0, "end": 1270080000000, "comment": "" }},
+    "nodes": [
+      {{ "id": 1, "name": "In", "kind": "source",
+        "props": {{ "id": "props", "label": "Properties", "nodes": [
+          {{ "Group": {{ "id": "{id}", "label": "{id}", "nodes": [
+            {{ "Prop": {{ "id": 5, "label": "amount", "value": {{ "t": "num", "v": 1.0 }} }} }}
+          ]}} }}
+        ]}},
+        "muted": false }}
+    ]
+  }}
+}}"#
+        );
+        let err = File::from_text(&text).expect_err("refused");
+        assert!(err.to_string().contains("group id"), "{err}");
+    }
+
     #[test]
     fn a_newer_file_is_refused_rather_than_guessed_at() {
         let mut file = File::new(Document::empty("x"));

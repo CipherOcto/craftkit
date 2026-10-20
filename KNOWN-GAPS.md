@@ -9838,6 +9838,111 @@ over two lines, and the check behind it counts substrings.
 
 ---
 
+## 97. The tree published a property path that no command would accept
+
+A path is made of names. A name is at most 255 bytes. So a path is *longer*
+than a name — and three layers of the tree had three different answers about
+how long a path may be.
+
+### The measurement
+
+| Layer | Its rule | Measured |
+|---|---|---|
+| the grammar | a segment's name ≤ 255 bytes — in the **plain** spelling only | `parse("a"×256)` → refused; `parse("a"×256 + "#1")` → **accepted** |
+| the commands | a path parameter ≤ 255 bytes | `prop.set` with a 309-byte path → refused: *"path 309 bytes, the limit is 255"* |
+| the model | a group's id: **no rule at all** | a file with a 30 000-byte group id → read, validated, and the listing published a path of 30 009 bytes |
+
+Measured on files, before the fix, each one read and **validated**:
+
+| The group's id | Read? | The path the listing published | A command could carry it? |
+|---|---|---|---|
+| 255 bytes | yes | 262 bytes | **no** |
+| 256 bytes | yes | 265 bytes | **no** |
+| 300 bytes | yes | 309 bytes | **no** |
+| 30 000 bytes | yes | 30 009 bytes | **no** |
+
+So the tree published a path it refused to accept — and it did so for a
+document the model itself was happy with. A group's id of 255 bytes is a
+perfectly legal name; the path to the property inside it is 262 bytes, and
+every command that takes a path said *"the limit is 255"*.
+
+And the asymmetry inside the model was plain: the **property label** has had
+the 255-byte rule all along — *"property label is 256 characters, the limit is
+255"* — and the **group's id**, the other name in the same tree, had none.
+
+### Why nothing noticed
+
+**A path is a name in most people's heads.** The commands' cap was
+`MAX_NAME` — the *name* limit — applied to a path, which is made of names. No
+document said a path may be longer than a name, so nobody wrote the number
+down.
+
+**Two questions about the same string, and only one of them had an answer.**
+§88 asked whether a group id is *writable* — whether the grammar can spell it
+— and the answer was a round trip through the grammar. Nobody asked the other
+question: whether it is *short*.
+
+**The listing is the tree's own view of its data**, so a path it publishes
+looks right by construction. §88's lesson was that a published path can mean
+something else; this time the published path could not be *sent*.
+
+**And the grammar was inconsistent with itself.** It refused a name of 256
+bytes and accepted the same name written `name#1` — because the length rule
+was only in the plain branch. That spelling is exactly the one the listing
+uses for a long group id, so the hole and the symptom were the same thing.
+
+### The fix
+
+**The model owns the rule.** A group's id is a name, so it obeys the name
+rule: not empty, and at most `MAX_NAME` bytes — the same rule the property
+label obeys. The reader refuses a file that breaks it.
+
+**The grammar is consistent with itself.** The occurrence spelling obeys the
+same length rule as the plain one, so a name the model refuses is a name no
+path may spell.
+
+**A path parameter is capped at the grammar's longest path.** The commands
+read a path with their own reader now — `required_path` — and the cap is
+`MAX_PATH_BYTES`: sixteen segments of 255 bytes and the slashes between them,
+4 095 bytes. A name parameter still has a name's limit. So a path the tree
+publishes is a path a command accepts.
+
+**And the error message said "characters" where it counted bytes.** The
+length rule is in bytes, everywhere; the message said otherwise.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A group id longer than a name is refused | `a_group_id_longer_than_a_name_is_refused` |
+| The longest path the grammar can express fits the path budget | `the_longest_path_the_grammar_can_express_fits_in_the_path_budget` |
+| A name too long is refused in either spelling | `a_name_too_long_is_refused_in_either_spelling` |
+| A path longer than a name is still carried | `a_path_longer_than_a_name_is_still_carried` |
+| A file with a group id longer than a name is refused | `a_file_with_a_group_id_longer_than_a_name_is_refused` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the model accepts a
+long group id, the grammar accepts a long name in the occurrence spelling, the
+commands do not carry a path the grammar can express, and the reader does not
+validate what it read.
+
+### The lesson
+
+**A name, a path and a parameter are three different lengths.** The tree had
+one number for all three, and it was the smallest of them. The rule was
+"everything textual is at most 255 bytes", and a path is not one thing.
+
+**Two questions about the same string need two answers.** "Can the grammar
+spell this name?" and "Is this name short enough?" are different questions, and
+a rule that answers one of them says nothing about the other. §88 answered
+the first for every name; the second was answered for one name out of three.
+
+**A published path is a promise too.** §88's rule was that a published path
+must not mean something else. This one is that it must be *sendable* — and a
+tree that lists what it will not accept is a tree whose listing cannot be
+followed.
+
+---
+
 ---
 
 ## What enforces what
@@ -10021,6 +10126,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An earlier file may name a change that was folded** | `craftkit-io` test | 1 mutation — §95 |
 | **A command that declares it does not mutate and writes is refused** | `craftkit-engine` test | 1 mutation — §96 |
 | **A command that declares it does not mutate cannot leave an invalid document** | `craftkit-engine` test | 1 mutation — §96 |
+| **A group id longer than a name is refused** | `craftkit-model` test | 1 mutation — §97 |
+| **The longest path the grammar can express fits the path budget** | `craftkit-model` test | 1 mutation — §97 |
+| **A name too long is refused in either spelling** | `craftkit-model` test | 1 mutation — §97 |
+| **A path longer than a name is still carried** | `craftkit-engine` test | 1 mutation — §97 |
+| **A file with a group id longer than a name is refused** | `craftkit-io` test | 1 mutation — §97 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

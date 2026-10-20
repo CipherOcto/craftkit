@@ -62,7 +62,7 @@ pub enum CoreError {
     #[error("limit reached: {limit}")]
     LimitReached { limit: &'static str },
     /// A string was longer than the domain allows.
-    #[error("{what} is {len} characters, the limit is {max}")]
+    #[error("{what} is {len} bytes, the limit is {max}")]
     TooLong { what: String, len: usize, max: usize },
     /// A path could not name what it was asked to name.
     ///

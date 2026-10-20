@@ -507,6 +507,24 @@ impl PropGroup {
                     prop_ids.push(p.id);
                 }
                 PropNode::Group(g) => {
+                    // A group's id is a name, and it is a path segment, so it
+                    // obeys the same rule every other name in the model obeys:
+                    // not empty, and at most `MAX_NAME` bytes.
+                    //
+                    // It did not, and the file reader is where that showed: a
+                    // file could carry a group whose id was thirty thousand
+                    // bytes, the document was read and validated, and the
+                    // listing published a path of thirty thousand bytes — a
+                    // path no command would accept, because a path parameter
+                    // was capped at a quarter of it. The property label beside
+                    // it has had the rule all along. §97.
+                    if g.id.is_empty() || g.id.len() > limits::MAX_NAME {
+                        return Err(CoreError::TooLong {
+                            what: "group id".to_string(),
+                            len: g.id.len(),
+                            max: limits::MAX_NAME,
+                        });
+                    }
                     // A group's id is a path segment, so it has to be one the
                     // grammar can write. A group whose id is `a/b` would be
                     // listed as `a/b/…` — a path that names two segments — and
@@ -823,6 +841,43 @@ mod tests {
         }
         current.push(Property::new(1, "leaf", Value::num("t", 1.0).unwrap()));
         root
+    }
+
+    /// A group's id is a name, so it obeys the name rule.
+    ///
+    /// §97. A group id is a **path segment**: it is in every path to the
+    /// properties below it, and the tree publishes those paths. The id had no
+    /// length rule at all, so a file could carry a group whose id was thirty
+    /// thousand bytes — the document was read, validated, and the listing
+    /// published a path of thirty thousand bytes that no command would carry.
+    /// The property label beside it has had the rule all along.
+    #[test]
+    fn a_group_id_longer_than_a_name_is_refused() {
+        let long = "a".repeat(limits::MAX_NAME + 1);
+        let mut group = PropGroup::new("root", "root");
+        group.push_group(PropGroup::new(long.clone(), long));
+        let err = group.validate().expect_err("refused");
+        assert!(matches!(err, CoreError::TooLong { .. }), "{err}");
+        assert!(err.to_string().contains("group id"), "{err}");
+
+        let at_the_limit = "a".repeat(limits::MAX_NAME);
+        let mut group = PropGroup::new("root", "root");
+        group.push_group(PropGroup::new(at_the_limit.clone(), at_the_limit));
+        assert!(group.validate().is_ok(), "a name at the limit is a name");
+    }
+
+    /// A path is made of names, and every name in the model is at most
+    /// `MAX_NAME` bytes — so a path of `MAX_PATH_SEGMENTS` of them is at most
+    /// `MAX_PATH_BYTES` long, and the commands carry paths of that length.
+    ///
+    /// §97: the commands capped a path at a **name's** length, so a path the
+    /// grammar could express was a path no command would carry.
+    #[test]
+    fn the_longest_path_the_grammar_can_express_fits_in_the_path_budget() {
+        let segment = "a".repeat(limits::MAX_NAME);
+        let path = vec![segment; limits::MAX_PATH_SEGMENTS].join("/");
+        assert_eq!(path.len(), limits::MAX_PATH_BYTES);
+        assert!(PropPath::parse(&path).is_some(), "the grammar must accept the longest path");
     }
 
     #[test]

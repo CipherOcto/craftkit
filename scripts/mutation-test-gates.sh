@@ -2296,6 +2296,42 @@ swap crates/engine/src/session.rs \
 expect_catch "engine: the refusal does not say what the command did" \
     "cargo test -p craftkit-engine --profile ci a_command_that_declares_it_does_not_mutate_and_writes_is_refused"
 
+# A group's id is a name, and every name in the model is at most 255 bytes.
+# The group id had no rule at all, so a file could carry a group whose id was
+# thirty thousand bytes: the document was read, it validated, and the listing
+# published a path no command would carry. §97.
+swap crates/model/src/property.rs \
+    '                    if g.id.is_empty() || g.id.len() > limits::MAX_NAME {' \
+    '                    if false {'
+expect_catch "model: a group id longer than a name is accepted" \
+    "cargo test -p craftkit-model --profile ci a_group_id_longer_than_a_name_is_refused"
+
+# The grammar refused a name of 256 bytes and accepted the same name written
+# with an explicit occurrence, because the length rule was only in the plain
+# branch. The listing used that spelling for a long group id.
+swap crates/model/src/path.rs \
+    '            if name.len() > limits::MAX_NAME {' \
+    '            if false {'
+expect_catch "model: a name too long is accepted in the occurrence spelling" \
+    "cargo test -p craftkit-model --profile ci a_name_too_long_is_refused_in_either_spelling"
+
+# A path is made of names, so a path may be longer than a name. The commands
+# capped a path at a name's length, so the tree published paths it refused.
+swap crates/engine/src/commands.rs \
+    '    required_text_capped(p, key, limits::MAX_PATH_BYTES)' \
+    '    required_text_capped(p, key, limits::MAX_NAME)'
+expect_catch "engine: a path the grammar can express is not carried" \
+    "cargo test -p craftkit-engine --profile ci a_path_longer_than_a_name_is_still_carried"
+
+# The reader validates the document it read. Without that, a file whose group
+# id is longer than a name is read: the model's rule is there, but nothing
+# asks the model. §97.
+swap crates/io/src/format.rs \
+    '        file.document.validate().map_err(|e| FormatError::InvalidDocument(e.to_string()))?;' \
+    '        let _ = &file.document;'
+expect_catch "io: a file with a group id longer than a name is read" \
+    "cargo test -p craftkit-io --profile ci a_file_with_a_group_id_longer_than_a_name_is_refused"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish
