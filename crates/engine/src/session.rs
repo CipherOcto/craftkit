@@ -924,12 +924,20 @@ mod tests {
         assert!(!s.is_dirty(), "opening an example is not an edit");
     }
 
-    #[test]
-    fn hostile_params_never_panic() {
-        // Every registered command, fired at every documented parameter name
-        // with hostile values. Either it refuses or it succeeds; panicking is
-        // not on the menu. This is the test `crates/core/src/params.rs` refers
-        // to, and it is why "never index a parameter" is a rule with teeth.
+    /// Fire every registered command at every documented parameter with
+    /// hostile values.
+    ///
+    /// Returns the `(command, parameter)` pairs it fired, so the coverage
+    /// test can assert that it really did fire all of them.
+    ///
+    /// The values are **derived from the registry**, not written out here.
+    /// The test used to fire five fixed parameter objects, and the doc said it
+    /// fired every command at every documented parameter name: measured, 58 of
+    /// the 105 firings were stopped by `deny_unknown` before the command's
+    /// own code ran, and 27 documented parameters — `node.add.name`,
+    /// `node.add.kind`, `doc.range.fps`, `key.ease.easing` — were never fired
+    /// at all. Deriving them is what makes the promise true. §92.
+    fn fire_hostile_params() -> Vec<String> {
         let hostile = [
             json!({}),
             json!({"node": -1}),
@@ -937,6 +945,35 @@ mod tests {
             json!({"node": u64::MAX, "path": "../../etc", "value": []}),
             json!({"amount": [1, 2, 3], "index": -5, "time": "yesterday"}),
         ];
+        // One hostile value per documented parameter, on its own.
+        let per_parameter: Vec<(String, Vec<serde_json::Value>)> = command::ids()
+            .into_iter()
+            .flat_map(|id| {
+                let spec = command::lookup(id).expect("a spec for every id");
+                spec.param_names()
+                    .into_iter()
+                    .map(move |name| {
+                        let values = vec![
+                            serde_json::Value::Null,
+                            serde_json::Value::Bool(true),
+                            serde_json::Value::String(String::new()),
+                            serde_json::Value::String("  ".to_string()),
+                            serde_json::Value::String("<not a node>".to_string()),
+                            serde_json::json!(-1),
+                            serde_json::json!(1e300),
+                            serde_json::json!(u64::MAX),
+                            serde_json::json!([]),
+                            serde_json::json!({}),
+                            serde_json::json!([1, 2, 3]),
+                            serde_json::json!("../../etc"),
+                        ];
+                        (format!("{id}.{name}"), values)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let mut fired: Vec<String> = Vec::new();
         for id in command::ids() {
             for params in &hostile {
                 let mut s = sample();
@@ -944,8 +981,62 @@ mod tests {
                 if let Err(e) = s.execute(id, params) {
                     assert!(!e.to_string().is_empty(), "`{id}` produced an empty message");
                 }
+                if let Some(obj) = params.as_object() {
+                    for key in obj.keys() {
+                        fired.push(format!("{id}.{key}"));
+                    }
+                }
             }
         }
+
+        for (label, values) in &per_parameter {
+            let (id, name) = label.split_once('.').expect("a command and a parameter");
+            for value in values {
+                let mut obj = serde_json::Map::new();
+                obj.insert(name.to_string(), value.clone());
+                let params = serde_json::Value::Object(obj);
+                let mut s = sample();
+                if let Err(e) = s.execute(id, &params) {
+                    assert!(!e.to_string().is_empty(), "`{label}` produced an empty message");
+                }
+            }
+            fired.push(label.clone());
+        }
+        fired
+    }
+
+    #[test]
+    fn hostile_params_never_panic() {
+        // Every registered command, fired at every documented parameter name
+        // with hostile values. Either it refuses or it succeeds; panicking is
+        // not on the menu. This is the test `crates/core/src/params.rs` refers
+        // to, and it is why "never index a parameter" is a rule with teeth.
+        let fired = fire_hostile_params();
+        assert!(!fired.is_empty(), "nothing was fired at all");
+    }
+
+    /// Every documented parameter is fired with a hostile value.
+    ///
+    /// The test above derives its values from the registry, so this is the
+    /// assertion that the derivation still happens: a command that documents a
+    /// parameter nobody fires is a parameter nobody has checked. §92.
+    #[test]
+    fn every_documented_parameter_is_fired_with_a_hostile_value() {
+        let fired = fire_hostile_params();
+        let mut missing: Vec<String> = Vec::new();
+        for id in command::ids() {
+            let spec = command::lookup(id).expect("a spec for every id");
+            for name in spec.param_names() {
+                if !fired.contains(&format!("{id}.{name}")) {
+                    missing.push(format!("{id}.{name}"));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "{} documented parameters are never fired with a hostile value: {missing:?}",
+            missing.len()
+        );
     }
 
     /// A command that leaves an invalid document is refused and rolled back.

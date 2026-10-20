@@ -28,7 +28,7 @@ field existed show? Two shapes only.
 | See an explicit, non-default value | `#[serde(default = "fn_name")]` |
 
 The canonical example is already in the tree —
-`DocumentMeta::comment` (`crates/model/src/document.rs:108`):
+`DocumentMeta::comment` (`crates/model/src/document.rs`, `DocumentMeta`):
 
 ```rust exact
 // crates/model/src/document.rs

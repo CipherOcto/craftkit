@@ -621,6 +621,28 @@ mod tests {
         }
     }
 
+    /// A file carrying a node with an unusable name is refused.
+    ///
+    /// A node's name is a name: not empty, not blank, not longer than the
+    /// limit. The command and the validator used to disagree about that —
+    /// `node.add` accepted an empty name and the validator refused it
+    /// afterwards, so the user's empty name came back as the tree's own
+    /// unexpected failure — and a file could carry the same name. §92.
+    #[test]
+    fn a_file_carrying_an_unusable_node_name_is_refused() {
+        for name in ["", "   "] {
+            let mut doc = Document::empty("by hand");
+            let _ = doc.add_node("In", craftkit_model::NodeKind::Source);
+            doc.nodes[0].name = name.to_string();
+            let mut file = File::new(doc);
+            file.format = tag(CURRENT);
+            let text = file.to_text().expect("json");
+            let err = File::from_text(&text).expect_err("refused");
+            assert!(matches!(err, FormatError::InvalidDocument(_)), "for {name:?}: {err}");
+            assert!(err.to_string().contains("unusable name"), "for {name:?}: {err}");
+        }
+    }
+
     #[test]
     fn the_meta_block_lists_the_pending_changes() {
         let meta = Meta::now();

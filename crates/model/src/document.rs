@@ -70,6 +70,36 @@ impl Node {
     pub fn new(id: NodeId, name: impl Into<String>, kind: NodeKind) -> Self {
         Self { id, name: name.into(), kind, props: PropGroup::new("props", "Properties"), muted: false }
     }
+
+    /// Why a node's name cannot be used, if it cannot.
+    ///
+    /// **One rule, in one place, next to the type that has it.** The
+    /// constructor, the validator and the command all ask this, so they cannot
+    /// disagree about what a name is.
+    ///
+    /// They did disagree, and the tree had three answers to one question.
+    /// Measured: `node.add { name: "" }` was *accepted* by the command and
+    /// then refused by the document validator — so the user's empty name came
+    /// back as the tree's own unexpected failure, of the kind the tree
+    /// documents as "worth a crash report and a bug". `node.add { name: " " }`
+    /// was accepted outright, while `node.rename { name: " " }` refused the
+    /// same name. §92.
+    ///
+    /// The length is counted in **bytes**, because that is the unit every
+    /// other text limit in the tree is counted in — `Params::text`,
+    /// `Value::check`, a property's label, a path segment. The engine had its
+    /// own copy of the limit, counted in characters, which could never fire:
+    /// the parameter had already been refused by the byte count.
+    pub fn why_not_a_name(name: &str) -> Option<String> {
+        if name.trim().is_empty() {
+            return Some("a name must not be empty".to_string());
+        }
+        if name.len() > limits::MAX_NAME {
+            return Some(format!("{} bytes, the limit is {}", name.len(), limits::MAX_NAME));
+        }
+        None
+    }
+
     /// A node with the standard property set a user expects to be able to set.
     pub fn with_defaults(mut self, enabled: bool, amount: f64) -> Result<Self, CoreError> {
         self.set_defaults(enabled, amount)?;
@@ -185,12 +215,10 @@ impl Document {
             return Err(CoreError::LimitReached { limit: "nodes per document" });
         }
         let name = name.into();
-        if name.len() > limits::MAX_NAME {
-            return Err(CoreError::TooLong {
-                what: "node name".to_string(),
-                len: name.len(),
-                max: limits::MAX_NAME,
-            });
+        // The name is checked here, where the rule lives, so a caller cannot
+        // add a node the validator would refuse. §92.
+        if let Some(why) = Node::why_not_a_name(&name) {
+            return Err(CoreError::BadData(format!("the node name `{name}` cannot be used: {why}")));
         }
         let id = NodeId(self.next_id.next());
         self.nodes.push(Node::new(id, name, kind));
@@ -329,8 +357,8 @@ impl Document {
             return Err(DocError::DuplicateId("two nodes share an id"));
         }
         for n in &self.nodes {
-            if n.name.is_empty() || n.name.len() > limits::MAX_NAME {
-                return Err(DocError::BadMeta(format!("node {} has an unusable name", n.id)));
+            if let Some(why) = Node::why_not_a_name(&n.name) {
+                return Err(DocError::BadMeta(format!("node {} has an unusable name: {why}", n.id)));
             }
             n.props.validate().map_err(|e| DocError::Invalid(format!("node {}: {e}", n.id)))?;
         }
@@ -591,5 +619,59 @@ mod tests {
         // The restored document must not hand out an id that already exists.
         let fresh = back.add_node("fresh", NodeKind::Source).unwrap();
         assert!(back.get(fresh).is_some());
+    }
+
+    // ------------------------------------------------------------------ §92 --
+
+    /// The name rule is the model's, and it is asked in one place.
+    ///
+    /// Measured, before the rule was shared: `node.add { name: "" }` was
+    /// accepted by the command and refused by the validator — so the user's
+    /// empty name came back as the tree's own unexpected failure — and
+    /// `node.add { name: " " }` was accepted while `node.rename` refused the
+    /// same name. §92.
+    #[test]
+    fn the_name_rule_says_what_a_name_may_not_be() {
+        assert!(Node::why_not_a_name("Camera").is_none());
+        assert!(Node::why_not_a_name("Camera 2").is_none());
+        let empty = Node::why_not_a_name("").expect("an empty name is not a name");
+        assert!(empty.contains("empty"), "{empty}");
+        let blank = Node::why_not_a_name("   ").expect("a blank name is not a name");
+        assert!(blank.contains("empty"), "{blank}");
+        let long = Node::why_not_a_name(&"x".repeat(limits::MAX_NAME + 1)).expect("too long");
+        assert!(long.contains("the limit is"), "{long}");
+        // The length is counted in bytes, like every other text limit in the
+        // tree — a name of 200 two-byte characters is 400 bytes.
+        assert!(Node::why_not_a_name(&"é".repeat(200)).is_some());
+        assert!(Node::why_not_a_name(&"é".repeat(100)).is_none());
+    }
+
+    /// The constructor refuses a name the validator would refuse.
+    ///
+    /// Otherwise a command could add a node the document cannot hold, and the
+    /// *validator* would be the thing that noticed — after the damage. §92.
+    #[test]
+    fn the_constructor_refuses_a_name_the_validator_would_refuse() {
+        let mut d = Document::empty("names");
+        for bad in ["", "   ", &"x".repeat(limits::MAX_NAME + 1)] {
+            let err = d.add_node(bad, NodeKind::Source).expect_err("refused");
+            assert!(err.to_string().contains("cannot be used"), "{err}");
+            assert!(d.nodes.is_empty(), "a refused name still added a node");
+        }
+        // And a good one still works.
+        d.add_node("Camera", NodeKind::Source).expect("a good name");
+        assert_eq!(d.nodes.len(), 1);
+    }
+
+    /// A file carrying a node with an unusable name is refused.
+    ///
+    /// The document is deserialized straight into the model, so the rule is
+    /// checked rather than kept — the same shape as §91's keyframes. §92.
+    #[test]
+    fn a_document_with_an_unusable_node_name_is_refused() {
+        let raw = r#"{"meta":{"name":"n","fps":24,"start":0,"end":100},"nodes":[{"id":1,"name":"","kind":"source","props":{"id":"props","label":"Properties","nodes":[]},"muted":false}]}"#;
+        let doc: Document = serde_json::from_str(raw).expect("the file is readable");
+        let err = doc.validate().expect_err("refused");
+        assert!(err.to_string().contains("unusable name"), "{err}");
     }
 }

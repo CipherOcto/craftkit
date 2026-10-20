@@ -102,7 +102,7 @@ looks a shipped command up; `lookup` (same file) also resolves the test-only
 2. Read every parameter with `Params` (section 3). Never index.
 3. If it changes the document: `mutates: true`, and `undoable: true` unless the
    change should not be undoable (say why in a comment).
-4. Write `enabled` from real state — `has_nodes` (`commands.rs:765`) or
+4. Write `enabled` from real state — `has_nodes` (`crates/engine/src/commands.rs`) or
    `node_mut` (in `crates/engine/src/commands.rs`) style helpers. A command that is always enabled and then
    fails is worse than one that greys out.
 5. Add the icon **name** to `crates/ui/src/icons.rs` if the set has no such shape
@@ -135,15 +135,15 @@ command at every documented parameter name with every hostile value; a single
 
 | Reader | Line | Use it for |
 |---|---|---|
-| `num(key)` | `params.rs:67` | a number; missing / null / string → `Ok(None)` |
-| `num_in(key, lo, hi)` | `params.rs:82` | a number the caller has already decided bounds for |
-| `int(key)` | `params.rs:100` | a whole number; **refuses** a fraction rather than truncating |
+| `num(key)` | `crates/core/src/params.rs` | a number; missing / null / string → `Ok(None)` |
+| `num_in(key, lo, hi)` | `crates/core/src/params.rs` | a number the caller has already decided bounds for |
+| `int(key)` | `crates/core/src/params.rs` | a whole number; **refuses** a fraction rather than truncating |
 | `bool(key)` | `params.rs:108` | a flag |
 | `text(key, max)` | `params.rs:117` | a string with a byte cap, so a 100 MB value is refused on read |
 | `color(key)` | `params.rs:134` | `"#rrggbb"` or `[r, g, b]` |
 | `num_list(key, max)` | `params.rs:163` | a homogeneous list with a caller-supplied cap |
-| `raw(key)` | `params.rs:190` | the raw `Json`, when you must interpret it yourself |
-| `deny_unknown(allowed)` | `params.rs:197` | reject a misspelled key instead of ignoring it |
+| `raw(key)` | `crates/core/src/params.rs` | the raw `Json`, when you must interpret it yourself |
+| `deny_unknown(allowed)` | `crates/core/src/params.rs` | reject a misspelled key instead of ignoring it |
 
 `Session::execute` already calls `deny_unknown` for every command
 (in `crates/engine/src/session.rs`), so an agent's typo is already loud — do not repeat it by hand.

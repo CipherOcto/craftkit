@@ -9120,6 +9120,186 @@ cheaper than documenting it.
 
 ---
 
+## 92. The tree had three answers to "what is a name?", and a user's bad parameter was reported as a crash
+
+§91 was about a validator that checked one field of a thing and not the
+others. This is the same shape one level up: **a rule that three places kept,
+differently.**
+
+### The measurement
+
+The tree splits its failures in two, and the split is load-bearing:
+
+> Whether this is a crash rather than a refusal. The distinction drives
+> everything downstream: an internal error is worth a crash report and a bug, a
+> refusal is worth a better message.
+
+So a command that is handed an empty name must refuse it — with a **param**
+error, before it changes anything. Two commands did not:
+
+```text
+node.add { "name": "" }
+  -> kind=internal
+  -> `node.add` failed unexpectedly (the command left the document in a state
+     the file format refuses: bad metadata: node n4 has an unusable name);
+     your document is unchanged
+```
+
+The command *accepted* the empty name, added the node, and the **document
+validator** — the backstop — refused it afterwards. The user's empty name came
+back as the tree's own unexpected failure, of the kind the tree documents as
+worth a bug report. An agent branches on that kind, so a typo became a crash.
+
+And the two commands that take a name did not agree:
+
+```text
+node.add    { "name": "   " }  -> ACCEPTED: added source `   `
+node.rename { "name": "   " }  -> refused: `name` this parameter is required
+```
+
+The same name, two commands, two answers.
+
+A third case, of the same family:
+
+```text
+doc.range {}
+  -> kind=internal
+  -> `doc.range` failed unexpectedly (the command declared that it mutates the
+     document but changed nothing); your document is unchanged
+```
+
+Asking a command to change nothing is the **user's** mistake. It set every
+value to what it already was, changed nothing, and hit §44's backstop — which
+is an internal error, because a command that declares that it mutates and does
+not is supposed to be a tree bug.
+
+And a message that points at the wrong mistake:
+
+```text
+node.rename { "node": 1, "name": "" }
+  -> `name` this parameter is required
+```
+
+The parameter **was** given. It was empty.
+
+### Why nothing noticed
+
+**The name rule was written five times, and the copies were not equal.**
+
+| where | rule | unit |
+|---|---|---|
+| `Params::text` | at most 255 | bytes |
+| `Document::add_node` | at most 255 | bytes |
+| `Document::validate` | not empty, at most 255 | bytes |
+| `check_name` (the engine) | at most 255 | **characters** |
+| `required_text` (the engine) | not empty, not blank | — |
+
+The engine's character count could never fire: the parameter had already been
+refused by the byte count. It was a copy of a rule, in the wrong unit, that
+was dead code.
+
+**The backstops were doing the commands' job.** §44's "changed nothing" and
+§50's "invalid document" are *backstops* — they exist for a command that
+breaks a rule the model keeps. A command that never checked the rule in the
+first place makes them the *primary* path, and they report in the wrong
+category.
+
+**The test that promised to catch this fired the wrong things.** The module
+that holds the parameter reader says:
+
+> `hostile_params_never_panic` — a test that fires every registered command at
+> every documented parameter name with every hostile value
+
+Measured, it fires **five fixed parameter objects**:
+
+```text
+21 commands x 5 hostile objects = 105 firings
+  47 reach a command's body
+  58 are stopped by `deny_unknown` before the command's own code runs
+27 documented parameters are never fired with a hostile value at all
+  (node.add.name, node.add.kind, doc.range.fps, key.ease.easing, ...)
+```
+
+Firing every documented parameter name with every hostile value finds **no
+panic** — and finds all four of the defects above.
+
+**One of the five copies of the name rule could not fire, and that was how it
+was found.** A mutation that removed `required_text`'s blank check changed
+**nothing** that any test could see, because `check_name` — which asks the
+model — refused the same name one line later. The engine's own character
+count was the same story: the parameter had already been refused by the byte
+count. A copy of a rule that can never fire is not a safety net; it is a
+second thing to keep in step, and the mutation suite is what says so.
+
+### The fix
+
+**The model owns what a name is.** One rule, one place, next to the type that
+has it:
+
+```rust
+impl Node {
+    pub fn why_not_a_name(name: &str) -> Option<String>
+}
+```
+
+Not empty, not blank, at most `MAX_NAME` **bytes** — the unit every other text
+limit in the tree is counted in. The constructor (`Document::add_node`), the
+validator (`Document::validate`) and the command (`check_name`) all ask it, so
+they cannot disagree.
+
+**A bad parameter is refused before the document changes.** `check_name` now
+asks the model's rule and returns a **param** error naming the parameter, so
+the command never reaches the backstop with the user's mistake in hand.
+
+**A command asked to change nothing says so.** `doc.range` with no `start`,
+`end` or `fps` — including a `null`, which means "leave this alone" — is
+refused with a param error, not caught by §44's backstop.
+
+**A parameter that was given but is empty says that.** `required_text` tells
+"required" (it was not there) from "must not be empty" (it was there).
+
+**The hostile test now does what it says.** The values are derived from the
+registry, so every documented parameter is fired with every hostile shape, and
+a second test asserts that the coverage holds — a command that documents a
+parameter nobody fires is a parameter nobody has checked.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A name is not empty, not blank and within the limit | `Node::why_not_a_name` |
+| The constructor refuses a name the validator would refuse | `the_constructor_refuses_a_name_the_validator_would_refuse` |
+| A file carrying an unusable node name is refused | `a_file_carrying_an_unusable_node_name_is_refused` |
+| An empty name is a refusal, not an internal failure | `an_empty_node_name_is_a_refusal_not_an_internal_failure` |
+| Every command that takes a name agrees about a name | `every_command_that_takes_a_name_agrees_about_what_a_name_is` |
+| A command asked to change nothing is a refusal | `a_range_command_with_nothing_to_change_is_a_refusal` |
+| A parameter that was given but is empty says so | `a_parameter_that_was_given_but_is_empty_says_so` |
+| Every documented parameter is fired with a hostile value | `every_documented_parameter_is_fired_with_a_hostile_value` |
+
+### The lesson
+
+**A backstop is not a substitute for a check.** §44 and §50 are the tree's
+safety net, and they report in the category that means "a bug". A command
+that leans on them has turned the user's typo into a crash report.
+
+**Three copies of a rule are three rules.** The name rule was written five
+times, in two units, with three different answers — and the copy that was
+*wrong in the unit* was also the copy that could never fire, so it looked
+harmless.
+
+**A test's promise is part of the test.** "Every documented parameter name"
+was a sentence in a module doc, and the test below it fired five hard-coded
+objects. The sentence was the *specification*; nothing checked that the code
+met it. Deriving the values from the registry is what makes the sentence true
+and keeps it true as commands are added.
+
+**A test can be right and still be weak.** The hostile test passed. It was
+also missing 27 parameters' worth of coverage — and the four defects it
+should have found were all *refusals*, not panics, so a test that only
+asserts "it did not panic" would not have seen them either.
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -9282,6 +9462,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A property with broken keyframes is refused** | `craftkit-model` test | 1 mutation — §91 |
 | **An unsorted list samples to the wrong value** | `craftkit-model` test | 1 mutation — §91 |
 | **A command cannot store an easing the model refuses** | `craftkit-model` test | 1 mutation — §91 |
+| **A name is not empty, not blank and within the limit** | `craftkit-model` test | 2 mutations — §92 |
+| **The constructor refuses a name the validator would refuse** | `craftkit-model` test | 1 mutation — §92 |
+| **A file carrying an unusable node name is refused** | `craftkit-io` test | 1 mutation — §92 |
+| **A user's bad parameter is a refusal, not an internal error** | `craftkit-engine` test | 2 mutations — §92 |
+| **Every command that takes a name agrees about a name** | `craftkit-engine` test | 2 mutations — §92 |
+| **A parameter that was given but is empty says so** | `craftkit-engine` test | 1 mutation — §92 |
+| **Every documented parameter is fired with a hostile value** | `craftkit-engine` test | 1 mutation — §92 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

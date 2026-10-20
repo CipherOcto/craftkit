@@ -11,6 +11,11 @@
 //! `hostile_params_never_panic` — a test that fires every registered command at
 //! every documented parameter name with every hostile value — can pass.
 //!
+//! The test derives its values from the registry, so "every documented
+//! parameter name" stays true as commands are added: the test used to fire
+//! five fixed parameter objects, and 27 of the commands' documented parameters
+//! were never fired at all. §92.
+//!
 //! ```
 //! use craftkit_core::Params;
 //! let json = serde_json::json!({ "distance": 20 });

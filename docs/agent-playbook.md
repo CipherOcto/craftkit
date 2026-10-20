@@ -187,6 +187,22 @@ everything below the apps still **builds** for a browser, not that it still
 **works** in one. Measured with `scripts/mutation-test-gates.sh`; the boundary is
 written down in `xtask/src/wasm.rs`.
 
+### 11. A user's bad parameter is a refusal, never an internal error
+
+**Why:** the tree splits its failures in two — a **refusal** is a message someone
+can act on, and an **internal** error is the kind the tree documents as "worth
+a crash report and a bug". An agent branches on the kind. So a command that is
+handed an empty name must say so, not mutate the document and let the
+validator catch it afterwards: measured, `node.add { name: "" }` came back as
+*"failed unexpectedly (the command left the document in a state the file format
+refuses)"*. §92.
+
+**Check:** your command refuses a bad parameter **before** it changes anything,
+and the refusal is `EngineError::Param` — not `Internal`, and not "the document
+does not validate afterwards". The engine's two backstops (§44's "changed
+nothing", §50's "invalid document") are for **tree** bugs; a user who typed
+something wrong must never reach them.
+
 ---
 
 ## How to verify a change

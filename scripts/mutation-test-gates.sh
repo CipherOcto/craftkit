@@ -2052,6 +2052,82 @@ swap crates/model/src/keyframe.rs \
 expect_catch "model: set_ease stores an easing the model refuses" \
     "cargo test -p craftkit-model --profile ci set_ease_changes_the_curve_and_refuses_an_invalid_one"
 
+# A name is not empty and not blank. The tree had three answers to "what is a
+# name?": the command accepted an empty name and the validator refused it
+# afterwards, so the user's empty name came back as the tree's own unexpected
+# failure -- the kind the tree documents as "worth a crash report and a bug".
+# And `node.add { name: " " }` was accepted while `node.rename` refused the
+# same name. §92.
+swap crates/model/src/document.rs \
+    '        if name.trim().is_empty() {' \
+    '        if false {'
+expect_catch "model: an empty or blank name is a name" \
+    "cargo test -p craftkit-engine --profile ci an_empty_node_name_is_a_refusal_not_an_internal_failure"
+
+# The length is counted in bytes, like every other text limit in the tree. The
+# engine had a copy of the rule counted in characters, which could never fire:
+# the parameter had already been refused by the byte count. §92.
+swap crates/model/src/document.rs \
+    '        if name.len() > limits::MAX_NAME {' \
+    '        if name.chars().count() > limits::MAX_NAME {'
+expect_catch "model: a name's length is counted in characters" \
+    "cargo test -p craftkit-model --profile ci the_name_rule_says_what_a_name_may_not_be"
+
+# The constructor keeps the rule the validator keeps. Otherwise a command can
+# add a node the document cannot hold, and the validator is what notices --
+# after the damage. §92.
+swap crates/model/src/document.rs \
+    '        if let Some(why) = Node::why_not_a_name(&name) {' \
+    '        if let Some(why) = None::<String> {'
+expect_catch "model: the constructor accepts a name the validator refuses" \
+    "cargo test -p craftkit-model --profile ci the_constructor_refuses_a_name_the_validator_would_refuse"
+
+# And the validator keeps it for the files, which are deserialized straight
+# into the model. §92.
+swap crates/model/src/document.rs \
+    '            if let Some(why) = Node::why_not_a_name(&n.name) {' \
+    '            if let Some(why) = None::<String> {'
+expect_catch "model: a file may carry a node whose name cannot be used" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_an_unusable_node_name_is_refused"
+
+# The command asks the model for the rule, so the two cannot disagree. §92.
+swap crates/engine/src/commands.rs \
+    '    if let Some(why) = craftkit_model::Node::why_not_a_name(name) {' \
+    '    if let Some(why) = None::<String> {'
+expect_catch "engine: the command does not ask the model what a name is" \
+    "cargo test -p craftkit-engine --profile ci an_empty_node_name_is_a_refusal_not_an_internal_failure"
+
+# Asking a command to change nothing is the user's mistake, not the tree's.
+# It used to reach the backstop -- "the command declared that it mutates the
+# document but changed nothing" -- which is an internal error. §92.
+swap crates/engine/src/commands.rs \
+    '        if p.raw("start").is_none() && p.raw("end").is_none() && p.raw("fps").is_none() {' \
+    '        if false {'
+expect_catch "engine: a command asked to change nothing is reported as a crash" \
+    "cargo test -p craftkit-engine --profile ci a_range_command_with_nothing_to_change_is_a_refusal"
+
+# A parameter that was given but is empty is not "required". §92.
+swap crates/engine/src/commands.rs \
+    '            source: craftkit_core::ParamError::new(key, "this parameter must not be empty"),' \
+    '            source: craftkit_core::ParamError::new(key, "this parameter is required"),'
+expect_catch "engine: a parameter that was given but is empty says it is required" \
+    "cargo test -p craftkit-engine --profile ci a_parameter_that_was_given_but_is_empty_says_so"
+
+# And every command that takes a name agrees about what a name is. The two
+# mutations above are what break the agreement -- the model's rule, and the
+# command asking it -- so there is no separate case for it: a mutation that
+# cannot be seen is not a case. §92.
+
+# The test that promises to fire every command at every documented parameter
+# name derives its values from the registry. It used to fire five fixed
+# objects, and 27 documented parameters were never fired at all. §92.
+swap crates/engine/src/session.rs \
+    '        let per_parameter: Vec<(String, Vec<serde_json::Value>)> = command::ids()' \
+    '        let per_parameter: Vec<(String, Vec<serde_json::Value>)> = Vec::new();
+        let _unused = command::ids()'
+expect_catch "engine: a documented parameter is never fired with a hostile value" \
+    "cargo test -p craftkit-engine --profile ci every_documented_parameter_is_fired_with_a_hostile_value"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish

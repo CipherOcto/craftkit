@@ -16,7 +16,7 @@ use crate::command::{Area, CommandSpec, Icon, ParamDoc};
 use crate::error::EngineError;
 use crate::params::{self, Doc, node_by_id_or_name, value_for};
 use crate::session::{Outcome, Session};
-use craftkit_core::{CoreError, FrameRate, Params, Tick};
+use craftkit_core::{FrameRate, Params, Tick};
 use craftkit_model::{Easing, Key, Node, NodeKind, PropGroup, PropNode, PropPath, Property, limits};
 
 // ---------------------------------------------------------------- document --
@@ -56,6 +56,25 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
     undoable: true,
     enabled: always,
     run: |s, p| {
+        // A range command with nothing in it changes nothing — and §44's rule
+        // says a command that declares that it mutates and does not is an
+        // error. That error is an **internal** one, which the tree documents
+        // as "worth a crash report and a bug". But nothing to change is the
+        // *user's* mistake, not the tree's, so it is refused here, with the
+        // parameters in the message. §92.
+        //
+        // `null` counts as absent: a script that sends `{"fps": null}` means
+        // "leave the rate alone", which is a thing to say — and it is a
+        // *refusal*, not a failure.
+        if p.raw("start").is_none() && p.raw("end").is_none() && p.raw("fps").is_none() {
+            return Err(EngineError::Param {
+                id: DOC_RANGE.id.to_string(),
+                source: craftkit_core::ParamError::new(
+                    "start",
+                    "give at least one of `start`, `end` or `fps`",
+                ),
+            });
+        }
         let fps = match p.int("fps")? {
             Some(f) => {
                 // The bound is the model's, not a copy of it. The command used
@@ -810,22 +829,41 @@ fn has_nodes(s: &Session) -> bool {
 }
 
 fn required_text(p: &Params<'_>, key: &str) -> Result<String, EngineError> {
-    p.text(key, limits::MAX_NAME)
-        .map_err(|e| EngineError::Param { id: String::new(), source: e })?
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| EngineError::Param {
+    let text =
+        p.text(key, limits::MAX_NAME).map_err(|e| EngineError::Param { id: String::new(), source: e })?;
+    match text {
+        None => Err(EngineError::Param {
             id: String::new(),
             source: craftkit_core::ParamError::new(key, "this parameter is required"),
-        })
+        }),
+        // The parameter **was** given. Saying "required" about a parameter
+        // that arrived is a message that sends the reader looking for the
+        // wrong mistake. §92.
+        Some(s) if s.trim().is_empty() => Err(EngineError::Param {
+            id: String::new(),
+            source: craftkit_core::ParamError::new(key, "this parameter must not be empty"),
+        }),
+        Some(s) => Ok(s),
+    }
 }
 
+/// Check a name against the model's rule.
+///
+/// The rule is the **model's** — `Node::why_not_a_name` — and the command
+/// asks it, so the command and the document validator cannot disagree about
+/// what a name is. They did: the command accepted an empty name and the
+/// validator refused it, so the user's empty name came back as the tree's own
+/// unexpected failure. §92.
+///
+/// The error is a **parameter** error, naming the parameter: a name the user
+/// typed is the user's mistake, and the tree says so in the category that
+/// means "a refusal", not the one that means "a crash and a bug".
 fn check_name(name: &str) -> Result<(), EngineError> {
-    if name.chars().count() > limits::MAX_NAME {
-        return Err(EngineError::Core(CoreError::TooLong {
-            what: "node name".to_string(),
-            len: name.chars().count(),
-            max: limits::MAX_NAME,
-        }));
+    if let Some(why) = craftkit_model::Node::why_not_a_name(name) {
+        return Err(EngineError::Param {
+            id: String::new(),
+            source: craftkit_core::ParamError::new("name", why),
+        });
     }
     Ok(())
 }
@@ -1381,6 +1419,80 @@ mod tests {
             .execute("key.ease", &json!({ "node": 1, "path": "amount", "time": 0.0, "easing": "wobble" }))
             .expect_err("refused");
         assert!(err.to_string().contains("easing"), "{err}");
+    }
+
+    // ------------------------------------------------------------------ §92 --
+
+    /// An empty name is the user's mistake, and it is reported as one.
+    ///
+    /// The command used to *accept* an empty name and let the document
+    /// validator refuse it afterwards — so the tree's own backstop caught the
+    /// user's empty name and reported it as *"failed unexpectedly"*, of the
+    /// kind the tree documents as "worth a crash report and a bug". The
+    /// document is unchanged either way, but the *kind* of the error is what
+    /// an agent branches on. §92.
+    #[test]
+    fn an_empty_node_name_is_a_refusal_not_an_internal_failure() {
+        let mut s = session();
+        let before = s.document().nodes.len();
+        let err = s.execute("node.add", &json!({ "name": "", "kind": "source" })).expect_err("refused");
+        assert!(!err.is_internal(), "an empty name must not be reported as a crash: {err}");
+        assert_eq!(err.kind(), "bad-parameter", "{err}");
+        assert!(err.to_string().contains("name"), "{err}");
+        assert_eq!(s.document().nodes.len(), before, "a refused node was added anyway");
+    }
+
+    /// The two commands that take a name agree about what a name is.
+    ///
+    /// `node.add { name: " " }` used to be accepted while `node.rename` with
+    /// the same name was refused — two commands, one rule, two answers. §92.
+    #[test]
+    fn every_command_that_takes_a_name_agrees_about_what_a_name_is() {
+        for bad in ["", "   "] {
+            let mut s = session();
+            let added = s.execute("node.add", &json!({ "name": bad, "kind": "source" }));
+            assert!(added.is_err(), "node.add accepted the name {bad:?}");
+            let mut s = session();
+            let renamed = s.execute("node.rename", &json!({ "node": 1, "name": bad }));
+            assert!(renamed.is_err(), "node.rename accepted the name {bad:?}");
+            let mut s = session();
+            let doc = s.execute("doc.rename", &json!({ "name": bad }));
+            assert!(doc.is_err(), "doc.rename accepted the name {bad:?}");
+        }
+    }
+
+    /// A range command with nothing in it is a refusal, not a failure.
+    ///
+    /// `doc.range {}` set every value to what it already was, changed
+    /// nothing, and hit §44's backstop — *"the command declared that it
+    /// mutates the document but changed nothing"* — which is an **internal**
+    /// error. Asking a command to change nothing is the user's mistake. §92.
+    #[test]
+    fn a_range_command_with_nothing_to_change_is_a_refusal() {
+        for params in [json!({}), json!({ "start": null }), json!({ "fps": null })] {
+            let mut s = session();
+            let err = s.execute("doc.range", &params).expect_err("refused");
+            assert!(!err.is_internal(), "{params} must not be reported as a crash: {err}");
+            assert_eq!(err.kind(), "bad-parameter", "{params}: {err}");
+            assert!(err.to_string().contains("start"), "{params}: {err}");
+        }
+    }
+
+    /// A parameter that was given but is empty says so.
+    ///
+    /// The message used to be "this parameter is required", which sends the
+    /// reader looking for a parameter that was never sent. §92.
+    #[test]
+    fn a_parameter_that_was_given_but_is_empty_says_so() {
+        let mut s = session();
+        let err = s.execute("node.rename", &json!({ "node": 1, "name": "" })).expect_err("refused");
+        assert!(err.to_string().contains("must not be empty"), "{err}");
+        assert!(!err.to_string().contains("required"), "{err}");
+
+        // And a parameter that was never given still says *that*.
+        let mut s = session();
+        let err = s.execute("node.rename", &json!({ "node": 1 })).expect_err("refused");
+        assert!(err.to_string().contains("required"), "{err}");
     }
 
     #[test]
