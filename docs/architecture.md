@@ -201,6 +201,14 @@ commands — `playback.seek`, `plan.evaluate`, `diagnostics.list` and
 published to agents in the command schema. They are `false` now, and
 `no_command_that_does_not_mutate_is_undoable` keeps them that way. §94.
 
+And the other side of the flag is a rule too. A command that declares that it
+does **not** change the document and changes it is refused and rolled back: the
+write would not be validated, would not be undoable, and would not mark the
+project dirty — so the design would change and the app would not know that it
+had, and closing the file would lose the change without anything having said
+the file was unsaved. The flag is published to agents as *"safe to use as a
+probe"*, so it has to mean it. §96.
+
 The cost is bounded and measured rather than guessed: `History::MAX_ENTRIES` is
 128 entries, and each entry is a document of at most
 `craftkit_model::limits::MAX_NODES` (10 000) nodes. If that ever shows up in a

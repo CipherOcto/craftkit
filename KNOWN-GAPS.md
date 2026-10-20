@@ -9714,6 +9714,130 @@ own.
 
 ---
 
+## 96. Every backstop the engine had was on one side of the `mutates` flag
+
+The engine's `mutates` flag says that a command does not change the document.
+The engine has three backstops for a command that breaks a rule: §44's *"the
+command declared that it mutates the document but changed nothing"*, §50's
+*"the command left the document in a state the file format refuses"*, and the
+panic rollback.
+
+Every one of them is inside `if spec.mutates { … }`. That is where the undo
+entry and the dirty flag live, so that is where the checks went with them.
+
+The other side of the flag — a command that says it does **not** change the
+document and changes it — had nothing at all.
+
+### The measurement
+
+With a test-only command that declares `mutates: false` and renames a node:
+
+```text
+PROBE result: Ok("renamed the node and claimed to be read-only")
+PROBE name before: "Taper" after: "renamed"
+PROBE dirty: false
+PROBE can_undo: false
+```
+
+The command **succeeded**. The write **landed**. The project was **not** marked
+dirty, there was **no** undo step, and the document was never validated.
+
+And with a test-only command that declares `mutates: false` and empties the
+range:
+
+```text
+PROBE invalidate result: Ok("the document is now invalid")
+PROBE document valid now: false
+PROBE dirty after invalid: false
+```
+
+The session was left holding a document that `Document::validate` refuses — a
+design that **cannot be written to a file**, because the writer refuses it —
+and the app would have drawn it.
+
+The consequences are not hypothetical. The project is not marked dirty, so
+closing the file loses the change, and nothing ever said the file was unsaved.
+The change is not undoable. And a design the file reader refuses is a design
+the app cannot open again.
+
+### Why nothing noticed
+
+**The flag's promise was kept by a test, not by a rule.**
+`every_read_only_command_leaves_the_document_alone` proves that the four
+commands in the registry do not write. That is a fact about *today's*
+commands, checked when the tree is built — not something the engine applies.
+Delete the engine's check and that test still passes, because the four
+commands still do not write.
+
+**Every backstop was written for the `mutates: true` side.** They live in the
+same branch because that is where the undo entry and the dirty flag live, and
+nobody asked what the branch does for everybody else.
+
+**And the flag is published.** `mutates` is in the command schema, in
+`commands --json` and in the MCP tool description. An agent reads
+`mutates: false` as *"safe to use as a probe"* — the read-only commands are
+exactly the ones an agent is told to use as a probe. The flag was a promise
+with no backstop behind it.
+
+### The fix
+
+**The engine compares the document before and after every command**, not only
+for the mutating ones, and refuses a command that declared it does not mutate
+and changed the document — with the document rolled back, and the refusal
+saying which of the two backstops it was.
+
+**The cost is nothing.** The snapshot is already taken, for every command,
+mutating or not:
+
+> Clone before edit. Taken for *every* command, mutating or not, so the
+> restore path below is a single unconditional assignment.
+
+The comparison is the same one the `mutates` branch already makes. The clone
+that the read-only commands paid for, for a restore that never came, now buys
+the evidence.
+
+**The flag's own doc says it is a promise the engine keeps, on both sides**,
+and the read-only table in the tree's tests says the same thing the rule 13
+of the playbook says.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A command that declares it does not mutate and writes is refused | `a_command_that_declares_it_does_not_mutate_and_writes_is_refused` |
+| A command that declares it does not mutate cannot leave an invalid document | `a_command_that_declares_it_does_not_mutate_cannot_leave_an_invalid_document` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the check does not
+fire, the write is not rolled back, and the refusal does not say what the
+command did.
+
+### The lesson
+
+**A flag is a promise, and a promise needs a backstop on both sides.** The
+engine had a rule for a command that lied upwards — it said it changed
+something and did not — and none for a command that lied downwards. The
+downwards one is the dangerous one: it is the one an agent trusts.
+
+**A test is a fact about today; a backstop is a rule.** The tree had a test
+that the read-only commands do not write, and it was green, and the flag was
+still a promise the engine did not keep. The test was the right thing to have
+and it was not the thing that was missing.
+
+**A rule that lives in a branch covers the branch.** Every backstop the engine
+had was written where the undo entry and the dirty flag were, and the branch
+was read as "the mutating commands" rather than as "the commands that
+declared they change something". A check that lives inside a condition is
+only about the cases the condition selects.
+
+**And the mutation anchor was a lesson of its own.** The first anchor for the
+rollback case was one line, and `grep` said it matched once — because `grep`
+counts *lines* and the anchor matched as a *substring* of the more deeply
+indented restores in the same file. `swap` replaces the first match, so the
+mutation landed on the §44 branch and the case never bit. The anchor now runs
+over two lines, and the check behind it counts substrings.
+
+---
+
 ---
 
 ## What enforces what
@@ -9895,6 +10019,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A file at the current version naming an unknown change is refused** | `craftkit-io` test | 1 mutation — §95 |
 | **A file naming a change this build has is read** | `craftkit-io` test | 1 mutation — §95 |
 | **An earlier file may name a change that was folded** | `craftkit-io` test | 1 mutation — §95 |
+| **A command that declares it does not mutate and writes is refused** | `craftkit-engine` test | 1 mutation — §96 |
+| **A command that declares it does not mutate cannot leave an invalid document** | `craftkit-engine` test | 1 mutation — §96 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

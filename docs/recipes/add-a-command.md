@@ -82,7 +82,8 @@ Rules the surrounding code already enforces and you must match:
 
 ### 2. Declare the icon name
 
-`Icon("…")` is a **name, not a drawing** (`crates/engine/src/command.rs:99`).
+`Icon("…")` is a **name, not a drawing** (the `Icon` struct in
+`crates/engine/src/command.rs`).
 If the name is not one the UI already draws, see
 [add-an-icon.md](add-an-icon.md) and do it in the same change — otherwise the
 UI's icon test fails and you will not know why.
@@ -97,7 +98,7 @@ These are two different questions and they have two different answers.
 | `undoable` | Should a successful run push an undo entry? | The command restores state by itself, or is not a document edit. |
 
 `history.undo` and `history.redo` are `mutates: true, undoable: false`. The doc
-comment on `CommandSpec::undoable` (`crates/engine/src/command.rs:148`) explains
+comment on `CommandSpec::undoable` (in `crates/engine/src/command.rs`) explains
 why in full: pushing the restore as a new step makes undo appear to do nothing
 and clears the redo branch with its own undo.
 
@@ -117,6 +118,11 @@ Measured: four commands claimed it and never could. §94.
 - `mutates: true` sets `dirty`, pushes history if `undoable`, and recomputes.
 - `mutates: false` does none of that, so a read-only command cannot dirty the
   project or grow the undo stack.
+- `mutates: false` and the document is **not** byte-identical afterwards is
+  refused with `EngineError::Internal` and rolled back. The other side of the
+  flag is a promise too: the write would not be validated, would not be
+  undoable, and would not mark the project dirty, so the design would change
+  and the app would not know that it had. §96.
 
 **A command that may legitimately change nothing has to say so.** The
 comparison above cannot tell "the command forgot to write" from "the command
@@ -148,7 +154,7 @@ needs a new condition, add it there.
 
 ### 5. Register it in `ALL`
 
-`crates/engine/src/command.rs:219`:
+the `ALL` list in `crates/engine/src/command.rs`:
 
 ```rust
 static ALL: [&CommandSpec; 21] = [
@@ -285,7 +291,7 @@ to actually call the command with its own parameters.
 ### The other three worth naming
 
 **Out-of-order `ALL`.** The array is the one file every command change edits.
-It is hand-written on purpose — `crates/engine/src/command.rs:205` says deriving
+It is hand-written on purpose — the `all()` doc in `crates/engine/src/command.rs` says deriving
 it from a macro "would save three lines and lose the ability to read the
 catalogue top to bottom, which is how a reviewer checks that a new command has
 a sensible neighbour and no duplicate id". Unsorted, it produces a merge

@@ -218,6 +218,23 @@ A command that always changes something needs none of this: the default is
 "it changed something", which is the direction that keeps §44's bug check
 alive.
 
+### 13. `mutates: false` means you do not change the document
+
+**Why:** the flag is published to agents in the command schema, and an agent
+that reads it as *"safe to use as a probe"* has to be right. A command that
+says it does not change the document and changes it is not a small mistake:
+the write is not validated, is not undoable, and does not mark the project
+dirty — so the design changes, the app does not know it has, and closing the
+file loses the change with nothing having said the file was unsaved. Measured,
+before the engine refused it: the command succeeded, the write landed, the
+project was not dirty, there was no undo step, and the document was never
+validated. §96.
+
+**Check:** `mutates: false` and the document is left exactly as it was. The
+engine now refuses and rolls back a command that breaks this, so you do not
+have to notice it yourself — but a command that has to be refused to be
+correct is a command that should not exist.
+
 ---
 
 ## How to verify a change
@@ -358,7 +375,7 @@ So: **`node.enable`**, label `"Enable node"`, `Area::Node`.
 | Piece | File | What |
 | --- | --- | --- |
 | the spec | `crates/engine/src/commands.rs`, in the `// ---- node ----` section, alphabetically | the whole `CommandSpec` |
-| the registry entry | `crates/engine/src/command.rs:219` | `&NODE_ENABLE,` in `(area, id)` order, and `21` becomes `22` |
+| the registry entry | `crates/engine/src/command.rs`, the `ALL` list | `&NODE_ENABLE,` in `(area, id)` order, and `21` becomes `22` |
 | the icon | `crates/ui/src/icons.rs` | the name in `ALL`, a `Painter` method, a `draw` arm |
 | the behaviour | `run` in `commands.rs` | `Session::execute` does the rest |
 | the test | `crates/engine/src/commands.rs`, `mod tests` | calls the command with its own parameters |

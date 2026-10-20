@@ -44,6 +44,12 @@ Three fields do the load-bearing work:
 - **`mutates`** decides whether the snapshot becomes an undo entry, whether the
   document is marked dirty, and whether the evaluator re-runs. A read-only
   command must not mark the project dirty.
+- **And it is a promise the engine keeps.** A command that declares
+  `mutates: false` and changes the document is refused and rolled back. The
+  flag is published to agents in the command schema, and an agent that reads
+  it as *"safe to use as a probe"* has to be right: the change would not be
+  validated, would not be undoable, and would not mark the project dirty, so
+  the design would change and the app would not know that it had. §96.
 - **`undoable`** is separate from `mutates` because `history.undo` and
   `history.redo` change the document *by* restoring a snapshot. Pushing that as
   a new step would push an entry pointing at the state just left behind, so a

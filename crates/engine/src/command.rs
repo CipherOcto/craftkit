@@ -146,6 +146,15 @@ pub struct CommandSpec {
     pub doc: &'static str,
     /// Whether the command changes the document. A read-only command must not
     /// mark the project dirty.
+    ///
+    /// It is a promise the engine keeps, on both sides. A command that
+    /// declares `mutates: true` and changes nothing is refused, and a command
+    /// that declares `mutates: false` and changes it is refused too: the write
+    /// would not be validated, would not be undoable, and would not mark the
+    /// project dirty, so the design would change and the app would not know
+    /// that it had. The flag is published to agents in the command schema, and
+    /// an agent that reads it as *"safe to use as a probe"* has to be right.
+    /// §44, §93, §96.
     pub mutates: bool,
     /// Whether a successful run pushes an undo entry.
     ///
@@ -429,10 +438,81 @@ pub static TEST_INVALIDATE: CommandSpec = CommandSpec {
     },
 };
 
+/// A command that declares that it does not change the document and changes
+/// it anyway.
+///
+/// Registered only in test builds. The engine compares the document with the
+/// snapshot it took before the command, and a command that says it does not
+/// mutate the document but mutates it is a bug: the change would not be
+/// validated, would not be undoable, and would not mark the project dirty —
+/// so the design would change and the app would not know that it had. §96.
+///
+/// No command in the tree does that on purpose, so nothing ever reached the
+/// check. This is the same shape as §44's test-only command, on the other
+/// side of the flag: there, a command said it changed something and did not;
+/// here, a command says it changes nothing and does.
+#[cfg(test)]
+pub static TEST_WRITE_WHILE_READ_ONLY: CommandSpec = CommandSpec {
+    id: "test.write_while_read_only",
+    label: "Write while claiming to be read-only (test only)",
+    area: Area::Debug,
+    icon: Icon("warning"),
+    shortcut: None,
+    doc: "Changes the document and declares that it does not mutate it. Registered only in test builds.",
+    params: &[],
+    mutates: false,
+    undoable: false,
+    enabled: always_in_tests,
+    run: |s, _p| {
+        let node = s.doc_mut().get_mut(craftkit_core::NodeId(2)).ok_or_else(|| EngineError::Param {
+            id: TEST_WRITE_WHILE_READ_ONLY.id.to_string(),
+            source: craftkit_core::ParamError::new("node", "the sample has no node 2"),
+        })?;
+        node.name = "renamed".to_string();
+        Ok(Outcome::new("renamed the node and claimed to be read-only"))
+    },
+};
+
+/// A command that declares that it does not change the document and leaves it
+/// in a state the file reader refuses.
+///
+/// Registered only in test builds. The check that the document stays a
+/// document the reader would accept runs inside the `mutates` branch, so a
+/// command that claims not to mutate escapes it — and a design that cannot be
+/// written to a file is a design the app cannot open again. §96.
+#[cfg(test)]
+pub static TEST_INVALIDATE_WHILE_READ_ONLY: CommandSpec = CommandSpec {
+    id: "test.invalidate_while_read_only",
+    label: "Invalidate while claiming to be read-only (test only)",
+    area: Area::Debug,
+    icon: Icon("warning"),
+    shortcut: None,
+    doc: "Leaves the document in a state the file reader refuses and declares that it does not mutate it. Registered only in test builds.",
+    params: &[],
+    mutates: false,
+    undoable: false,
+    enabled: always_in_tests,
+    run: |s, _p| {
+        // An empty range: `Document::validate` refuses a range that is not
+        // strictly increasing, so this document cannot be written to a file.
+        let meta = &mut s.doc_mut().meta;
+        meta.end = meta.start;
+        Ok(Outcome::new("the document is now invalid"))
+    },
+};
+
 /// The commands that exist only in a test build.
 #[cfg(test)]
-fn test_only() -> [&'static CommandSpec; 5] {
-    [&TEST_PANIC, &TEST_HALF_APPLY, &TEST_NOOP, &TEST_DIRTY_NOOP, &TEST_INVALIDATE]
+fn test_only() -> [&'static CommandSpec; 7] {
+    [
+        &TEST_PANIC,
+        &TEST_HALF_APPLY,
+        &TEST_NOOP,
+        &TEST_DIRTY_NOOP,
+        &TEST_INVALIDATE,
+        &TEST_WRITE_WHILE_READ_ONLY,
+        &TEST_INVALIDATE_WHILE_READ_ONLY,
+    ]
 }
 
 /// The command a given id resolves to, including the test-only ones.

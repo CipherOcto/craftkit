@@ -21,7 +21,7 @@ confirmed the name you want is not already there under a different spelling.
 **`Icon("name")` is a name, not a drawing, and it stays that way.**
 
 `craftkit_engine::Icon` is `pub struct Icon(pub &'static str)`
-(`crates/engine/src/command.rs:105`). The engine holds no image data, no SVG
+(the `Icon` struct in `crates/engine/src/command.rs`). The engine holds no image data, no SVG
 path and no coordinates. The UI owns every shape. That is deliberate — it is
 what lets everything below L5 be tested without a window, and what stops the
 engine from growing a rendering concern.

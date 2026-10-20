@@ -473,6 +473,26 @@ impl Session {
                     }
                     self.dirty = true;
                     self.recompute();
+                } else if self.doc != snapshot {
+                    // The other side of the flag. A command that says it does
+                    // not change the document and changed it is a bug, and a
+                    // quiet one: the change would not be validated, would not
+                    // be undoable, and would not mark the project dirty — so
+                    // the design would change and the app would not know that
+                    // it had. The user closes the file and the change is gone,
+                    // with nothing having said the file was not saved. §96.
+                    //
+                    // The snapshot is already in hand, so the comparison is
+                    // the same one the `mutates` branch makes. A command that
+                    // does what it says leaves the document identical.
+                    self.restore(snapshot, before_dirty);
+                    let err = EngineError::Internal {
+                        id: id.to_string(),
+                        detail: "the command declared that it does not mutate the document but changed it"
+                            .to_string(),
+                    };
+                    self.log.record(id, false, &err.to_string());
+                    return Err(err);
                 }
                 self.log.record(id, true, &outcome.message);
                 Ok(outcome)
@@ -660,6 +680,50 @@ mod tests {
             assert!(!s.is_dirty(), "{id} marked the document dirty");
             assert!(!s.can_undo(), "{id} pushed an undo entry");
         }
+    }
+
+    /// A command that says it does not change the document and changes it is
+    /// refused, and the change is rolled back.
+    ///
+    /// §96. The engine compares the document with the snapshot it took before
+    /// the command, and it does that inside the `mutates` branch — so every
+    /// backstop it has is on one side of the flag. On the other side there was
+    /// nothing.
+    ///
+    /// Measured, before the check: the command succeeded, the write landed,
+    /// the project was **not** marked dirty, there was no undo step, and the
+    /// document was never validated. The `mutates` flag is published to agents
+    /// in the command schema, and an agent that reads it as "safe to use as a
+    /// probe" would be wrong: the design would change and the app would not
+    /// know that it had, so closing the file would lose the change without
+    /// anything having said the file was unsaved.
+    #[test]
+    fn a_command_that_declares_it_does_not_mutate_and_writes_is_refused() {
+        let mut s = sample();
+        let before = s.document().clone();
+
+        let err = s.execute("test.write_while_read_only", &json!({})).expect_err("refused");
+        assert!(matches!(err, EngineError::Internal { .. }), "{err}");
+        assert!(err.to_string().contains("does not mutate"), "{err}");
+        assert_eq!(s.document(), &before, "the write was not rolled back");
+        assert!(!s.is_dirty(), "the project was marked dirty");
+        assert!(!s.can_undo(), "the change pushed an undo entry");
+    }
+
+    /// A command that says it does not change the document cannot leave the
+    /// document in a state the file reader refuses.
+    ///
+    /// §96 again, and the sharper half: the check that the document stays a
+    /// document the reader would accept lives inside the `mutates` branch too,
+    /// so a command that claims not to mutate escapes it. A design that cannot
+    /// be written to a file is a design the app cannot open again.
+    #[test]
+    fn a_command_that_declares_it_does_not_mutate_cannot_leave_an_invalid_document() {
+        let mut s = sample();
+
+        let err = s.execute("test.invalidate_while_read_only", &json!({})).expect_err("refused");
+        assert!(matches!(err, EngineError::Internal { .. }), "{err}");
+        assert!(s.document().validate().is_ok(), "the document is in a state the file reader refuses");
     }
 
     /// The table and the registry are the same list.

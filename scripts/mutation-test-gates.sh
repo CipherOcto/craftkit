@@ -2259,6 +2259,43 @@ swap crates/io/src/format.rs \
 expect_catch "io: the refusal does not name the change" \
     "cargo test -p craftkit-io --profile ci a_file_that_names_a_change_this_build_has_never_heard_of_is_refused"
 
+# The other side of the `mutates` flag. A command that says it does not change
+# the document and changes it is a bug, and a quiet one: the change would not
+# be validated, would not be undoable, and would not mark the project dirty.
+# Every backstop the engine has lived inside the `mutates` branch, so nothing
+# was on this side. §96.
+swap crates/engine/src/session.rs \
+    '                } else if self.doc != snapshot {' \
+    '                } else if self.doc == snapshot {'
+expect_catch "engine: a command that writes while claiming to be read-only is not caught" \
+    "cargo test -p craftkit-engine --profile ci a_command_that_declares_it_does_not_mutate_and_writes_is_refused"
+
+# The refusal has to put the document back. Without the restore the write
+# stays, and the session holds a design the file reader would refuse.
+#
+# The anchor runs over two lines on purpose: the restore line on its own also
+# matches the deeper ones in the `mutates` branch, and `swap` replaces the
+# first match, which is one of those.
+swap crates/engine/src/session.rs \
+    '                    self.restore(snapshot, before_dirty);
+                    let err = EngineError::Internal {
+                        id: id.to_string(),
+                        detail: "the command declared that it does not mutate the document but changed it"' \
+    '                    let _ = before_dirty;
+                    let err = EngineError::Internal {
+                        id: id.to_string(),
+                        detail: "the command declared that it does not mutate the document but changed it"'
+expect_catch "engine: a command that writes while claiming to be read-only is not rolled back" \
+    "cargo test -p craftkit-engine --profile ci a_command_that_declares_it_does_not_mutate_cannot_leave_an_invalid_document"
+
+# The refusal has to say what the command did, or the person reading the log
+# has to guess which of the two backstops it was.
+swap crates/engine/src/session.rs \
+    '                        detail: "the command declared that it does not mutate the document but changed it"' \
+    '                        detail: "the command changed the document"'
+expect_catch "engine: the refusal does not say what the command did" \
+    "cargo test -p craftkit-engine --profile ci a_command_that_declares_it_does_not_mutate_and_writes_is_refused"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish
