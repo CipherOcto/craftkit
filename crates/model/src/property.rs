@@ -127,6 +127,19 @@ impl Property {
         self.keys.sample(time).unwrap_or_else(|| self.value.clone())
     }
 
+    /// Set the stored value. Returns whether it changed.
+    ///
+    /// Writing the value a property already holds leaves the document
+    /// *identical*, and the engine cannot tell that from a command that
+    /// forgot to write. So the write says whether it changed anything. §93.
+    pub fn set_value(&mut self, value: Value) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
+    }
+
     pub fn is_animated(&self) -> bool {
         !self.keys.is_empty()
     }
@@ -1337,5 +1350,20 @@ mod tests {
             .expect("a key");
         group.push(prop);
         assert!(group.validate().is_ok(), "a good list is refused");
+    }
+
+    /// Writing the value a property already holds changes nothing, and the
+    /// write says so.
+    ///
+    /// The engine compares the document with the snapshot it took before the
+    /// command, and cannot tell "the command forgot to write" from "the
+    /// command wrote the value the field already held". §93.
+    #[test]
+    fn writing_a_value_a_property_already_holds_says_it_changed_nothing() {
+        let mut prop = Property::new(1, "amount", Value::Num(1.0));
+        assert!(!prop.set_value(Value::Num(1.0)), "the same value is not a change");
+        assert!(prop.set_value(Value::Num(2.0)), "a new value is a change");
+        assert!(!prop.set_value(Value::Num(2.0)), "the same value is not a change");
+        assert!(prop.set_value(Value::Text("x".into())), "a different type is a change");
     }
 }

@@ -338,8 +338,18 @@ pub static TEST_HALF_APPLY: CommandSpec = CommandSpec {
 /// `mutates: true` and writes nothing is a bug — it would put a no-op step on
 /// the undo stack and mark the project dirty for no reason.
 ///
-/// No command in the tree does that, so nothing ever reached the check: §44
-/// found that deleting the check left every test in the workspace green.
+/// No command in the tree does that on purpose, so nothing ever reached the
+/// check: §44 found that deleting the check left every test in the workspace
+/// green.
+///
+/// But the check was reached **every day** by another route. A command that
+/// writes the value a field already holds leaves the document identical, and
+/// the comparison cannot tell that from a command that forgot to write.
+/// Measured: eight of the nine commands that can be asked to do what they
+/// have already done were refused as *"failed unexpectedly (the command
+/// declared that it mutates the document but changed nothing)"*. §93 fixed
+/// that by having the command say whether it changed anything — and this
+/// command, which claims it did, is what keeps the check alive.
 #[cfg(test)]
 pub static TEST_NOOP: CommandSpec = CommandSpec {
     id: "test.noop",

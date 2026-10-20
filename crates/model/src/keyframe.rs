@@ -134,15 +134,21 @@ impl Keyframes {
 
     /// Change the easing of the key at `time`.
     ///
-    /// Returns `false` when there is no key at that time. The easing is
-    /// checked **before** it is stored: an easing the model's own constructor
-    /// refuses must not be able to enter the tree through this door either.
+    /// Returns whether the easing **changed**. A key that is not there, and a
+    /// key that already has this easing, both leave the list as it was — and
+    /// the command that calls this needs to tell those apart, so it looks for
+    /// the key first.
+    ///
+    /// The easing is checked **before** it is stored: an easing the model's
+    /// own constructor refuses must not be able to enter the tree through this
+    /// door either.
     pub fn set_ease(&mut self, time: Tick, ease: Easing) -> Result<bool, CoreError> {
         let ease = ease.checked()?;
         match self.0.binary_search_by(|k| k.time.cmp(&time)) {
             Ok(i) => {
+                let changed = self.0[i].ease != ease;
                 self.0[i].ease = ease;
-                Ok(true)
+                Ok(changed)
             }
             Err(_) => Ok(false),
         }

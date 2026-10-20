@@ -662,7 +662,7 @@ swap crates/engine/src/session.rs \
 ' \
     ''
 expect_catch "engine: a command may leave a document the file reader refuses" \
-    "cargo test -p craftkit-engine --profile ci leaves_a_document_the_file_would_refuse"
+    "cargo test -p craftkit-engine --profile ci a_command_that_leaves_an_invalid_document_is_refused_and_rolled_back"
 
 # The model's group-id rule. It was stricter than its own reason: two groups
 # with the same id under one parent are ambiguous, and the same id at two
@@ -2127,6 +2127,68 @@ swap crates/engine/src/session.rs \
         let _unused = command::ids()'
 expect_catch "engine: a documented parameter is never fired with a hostile value" \
     "cargo test -p craftkit-engine --profile ci every_documented_parameter_is_fired_with_a_hostile_value"
+
+# A command asked to do what it has already done is a success, not a crash.
+# The engine compares the document with the snapshot it took before the
+# command, and cannot tell "the command forgot to write" from "the command
+# wrote the value the field already held" -- so the command says, and the
+# engine believes it. Measured: eight of the nine commands that can be asked
+# to do what they have already done were refused as "failed unexpectedly
+# (the command declared that it mutates the document but changed nothing)".
+# §93.
+swap crates/engine/src/session.rs \
+    '                    if !changed && outcome.changed {' \
+    '                    if !changed {'
+expect_catch "engine: a command asked to do what it has already done is a crash" \
+    "cargo test -p craftkit-engine --profile ci a_command_asked_to_do_what_it_has_already_done_succeeds"
+
+# And the other way round: a command that claims to have changed something and
+# did not is still a bug -- that is what §44's check is for, and the default
+# is the direction that keeps it alive. §93.
+swap crates/engine/src/session.rs \
+    '                    if !changed && outcome.changed {' \
+    '                    if false {'
+expect_catch "engine: a command that changed nothing is not caught" \
+    "cargo test -p craftkit-engine --profile ci a_command_that_claims_to_change_something_and_does_not_is_still_refused"
+
+# A no-op must not put a step on the undo stack, nor mark the project dirty.
+swap crates/engine/src/session.rs \
+    '                    if !changed {
+                        // The command says it changed nothing, and the' \
+    '                    if false {
+                        // The command says it changed nothing, and the'
+expect_catch "engine: a no-op puts a step on the undo stack" \
+    "cargo test -p craftkit-engine --profile ci a_command_asked_to_do_what_it_has_already_done_succeeds"
+
+# The commands that may do nothing have to say so. Without it, the engine
+# sees a document it did not expect and refuses the command. §93.
+swap crates/engine/src/commands.rs \
+    '        let changed = node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);' \
+    '        node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);
+        let changed = true;'
+expect_catch "engine: muting a node that is already muted is a crash" \
+    "cargo test -p craftkit-engine --profile ci a_command_asked_to_do_what_it_has_already_done_succeeds"
+
+swap crates/engine/src/commands.rs \
+    '                let mut changed = existing.set_value(value.clone());' \
+    '                existing.set_value(value.clone());
+                let mut changed = true;'
+expect_catch "engine: setting a property to the value it already has is a crash" \
+    "cargo test -p craftkit-engine --profile ci a_command_asked_to_do_what_it_has_already_done_succeeds"
+
+# The write that says whether it changed anything. Without it, every command
+# that uses it has to guess. §93.
+swap crates/model/src/property.rs \
+    '    pub fn set_value(&mut self, value: Value) -> bool {
+        if self.value == value {
+            return false;
+        }' \
+    '    pub fn set_value(&mut self, value: Value) -> bool {
+        if false {
+            return false;
+        }'
+expect_catch "model: a write that changes nothing does not say so" \
+    "cargo test -p craftkit-model --profile ci writing_a_value_a_property_already_holds_says_it_changed_nothing"
 
 # ------------------------------------------------------------------ done ----
 restore

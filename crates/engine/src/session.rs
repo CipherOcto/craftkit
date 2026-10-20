@@ -42,15 +42,67 @@ pub struct Outcome {
     /// Whatever the command wants to hand back. Read-only commands put their
     /// answer here; mutating ones usually return the id or path they created.
     pub data: Json,
+    /// Whether this command changed the document.
+    ///
+    /// The engine compares the document with the snapshot it took before the
+    /// command, and a command that declares `mutates: true` and changes
+    /// nothing is refused — because that is usually a command that forgot to
+    /// write, and it would put a no-op step on the undo stack. §44.
+    ///
+    /// But the comparison cannot tell "the command forgot to write" from "the
+    /// command wrote the value the field already held", and the second is
+    /// ordinary. Measured: eight of the nine commands that can be asked to do
+    /// what they have already done — `prop.set` with the value a property
+    /// already had, `node.mute` on a node that is already muted, `doc.range`
+    /// with the range the document already has — were refused as *"failed
+    /// unexpectedly (the command declared that it mutates the document but
+    /// changed nothing)"*. §93.
+    ///
+    /// So the **command** says. The default is `true`, which is the direction
+    /// that keeps §44's check alive: a command that forgot to write is still
+    /// caught. A command that may legitimately change nothing sets this to
+    /// `false` — through [`Outcome::unchanged`] — when it did not.
+    pub changed: bool,
 }
 
 impl Outcome {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), data: Json::Null }
+        Self { message: message.into(), data: Json::Null, changed: true }
     }
 
     pub fn with(message: impl Into<String>, data: Json) -> Self {
-        Self { message: message.into(), data }
+        Self { message: message.into(), data, changed: true }
+    }
+
+    /// Say that this command changed nothing on purpose.
+    ///
+    /// Writing the value a field already holds leaves the document
+    /// *identical*, and the engine cannot tell that from a command that
+    /// forgot to write. The command knows the difference; this is how it says
+    /// so. §93.
+    ///
+    /// ```
+    /// # use craftkit_engine::Outcome;
+    /// let outcome = Outcome::new("the amount is 1.0").unchanged();
+    /// assert!(!outcome.changed);
+    /// ```
+    pub fn unchanged(mut self) -> Self {
+        self.changed = false;
+        self
+    }
+
+    /// Say that this command changed nothing, when it did not.
+    ///
+    /// The usual shape at a command's end: the command knows whether its
+    /// write changed anything, and this says so in one call. §93.
+    ///
+    /// ```
+    /// # use craftkit_engine::Outcome;
+    /// let outcome = Outcome::new("the amount is 1.0").unchanged_if(true);
+    /// assert!(!outcome.changed);
+    /// ```
+    pub fn unchanged_if(self, unchanged: bool) -> Self {
+        if unchanged { self.unchanged() } else { self }
     }
 
     pub fn to_json(&self) -> Json {
@@ -364,7 +416,13 @@ impl Session {
                     // declares `mutates: true` and changes nothing is a bug —
                     // almost always one that forgot to write — and would
                     // otherwise put a no-op step on the undo stack.
-                    if self.doc == snapshot {
+                    //
+                    // The comparison cannot tell a command that forgot to
+                    // write from a command that wrote the value a field
+                    // already held, so the command says which it was
+                    // (`Outcome::changed`). §44, §93.
+                    let changed = self.doc != snapshot;
+                    if !changed && outcome.changed {
                         // The engine refuses the command, so the session goes
                         // back to exactly where it was — the same restore the
                         // failure and panic paths use, and the same one the
@@ -377,6 +435,16 @@ impl Session {
                         };
                         self.log.record(id, false, &err.to_string());
                         return Err(err);
+                    }
+                    if !changed {
+                        // The command says it changed nothing, and the
+                        // document agrees. That is a **success** — "the amount
+                        // is 1.0" — and it must not put a step on the undo
+                        // stack or mark the project dirty. The document is
+                        // already valid: it is the one that was there before.
+                        self.restore(snapshot, before_dirty);
+                        self.log.record(id, true, &outcome.message);
+                        return Ok(outcome);
                     }
                     // The document has to stay a document the file reader
                     // would accept.

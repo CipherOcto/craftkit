@@ -9231,6 +9231,17 @@ count was the same story: the parameter had already been refused by the byte
 count. A copy of a rule that can never fire is not a safety net; it is a
 second thing to keep in step, and the mutation suite is what says so.
 
+**And fixing this blinded a gate.** The full mutation run after the fix
+reported one missed case: *"a command may leave a document the file reader
+refuses"*. The case removed the engine's backstop — the check that refuses a
+command which leaves a document the reader would refuse — and it used to be
+caught by `node.add { name: "" }`, which was the only real command that could
+leave an invalid document. Now that the command refuses an empty name, **no
+real command can**, so the backstop is reachable only through the test-only
+command that exists to reach it. The case now names that command. A gate that
+stops biting because the bug it watched is gone is not a gate that has
+nothing left to do — it is a gate that has been pointed at nothing.
+
 ### The fix
 
 **The model owns what a name is.** One rule, one place, next to the type that
@@ -9297,6 +9308,144 @@ and keeps it true as commands are added.
 also missing 27 parameters' worth of coverage — and the four defects it
 should have found were all *refusals*, not panics, so a test that only
 asserts "it did not panic" would not have seen them either.
+
+---
+
+## 93. The engine could not tell "the command forgot to write" from "the command wrote what was already there"
+
+§92 fixed the *kind* of a refusal. This is the next layer: the engine
+refused commands that had done nothing wrong at all.
+
+### The measurement
+
+§44 put a backstop in the engine: a command that declares `mutates: true`
+and changes nothing is a bug — usually one that forgot to write — so the
+engine refuses it and rolls the document back.
+
+The check compares the document with the snapshot taken before the command.
+That comparison cannot tell two things apart:
+
+```text
+a command that forgot to write        -> the document is identical
+a command that wrote the value a      -> the document is identical
+field already held
+```
+
+The second is not a bug. It is what "set the amount to 1.0" means when the
+amount is 1.0. Measured, **eight of the nine** commands that can be asked to
+do what they have already done were refused:
+
+```text
+prop.set    the value a property already had   -> internal
+prop.reset  a property with no keyframes        -> internal
+key.clear   a property with no keyframes        -> internal
+node.mute   a node that is already unmuted      -> internal
+node.kind   the kind a node already has         -> internal
+node.rename the name a node already has         -> internal
+doc.rename  the name the document already has   -> internal
+doc.range   the range the document already has  -> internal
+```
+
+Each with the same message:
+
+> `prop.set` failed unexpectedly (the command declared that it mutates the
+> document but changed nothing); your document is unchanged
+
+"Failed unexpectedly" is the tree's **internal** classification — the kind
+the tree documents as "worth a crash report and a bug". An agent branches on
+the kind. So the ordinary operation "set this to what it already is" was
+reported as the tree's own unexpected failure.
+
+And the comment on the test-only command that exists to reach the check said
+the opposite of the truth:
+
+> No command in the tree does that, so nothing ever reached the check.
+
+Eight commands reached it every day.
+
+### Why nothing noticed
+
+**No test asked a command to do what it had already done.** Every test in
+the tree changed something. The backstop only fires on a *no-op*, so a suite
+that never asks for one never sees it.
+
+**The check was right and the comparison was wrong.** §44's rule is sound: a
+command that claims to mutate and does not is a bug. What the engine could
+not do was tell that case from the other one.
+
+**§92 made it worse before it made it better.** The fix for §92 — a command
+that is handed an empty name refusing it — removed the only *real* command
+that reached the backstop with an invalid document behind it. The full
+mutation run after §92 reported one missed case, and it was §50's: the
+backstop's removal had stopped being visible.
+
+### The fix
+
+**The command says whether it changed anything.** `Outcome` gains a `changed`
+flag, and the engine believes it:
+
+```rust
+let changed = self.doc != snapshot;
+if !changed && outcome.changed {
+    // the command says it wrote and the document says otherwise: a bug
+}
+```
+
+The default is `true`, which is the direction that keeps §44's check alive:
+a command that forgot to write says nothing, so it is still caught. A
+command that may legitimately change nothing says so — through
+`Outcome::unchanged` — when it did not.
+
+**The write says, not the command.** The model owns the rule, as it does
+everywhere else: `Node::rename`, `Node::set_kind`, `Node::set_muted`,
+`Property::set_value`, `Document::set_name`, `Document::set_range` and
+`Document::move_to` all return whether they changed anything. The command
+passes that on, so there is no place where a command has to remember to
+compare two values by hand.
+
+**A no-op is a success, and it leaves no trace.** It does not put a step on
+the undo stack, it does not mark the project dirty, and it does not fail. The
+document is the one that was there before, so it is already valid.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A command asked to do what it has already done succeeds | `a_command_asked_to_do_what_it_has_already_done_succeeds` |
+| Keying and easing what is already there succeeds | `keying_and_easing_what_is_already_there_succeeds` |
+| A command that claims to change something and does not is still refused | `a_command_that_claims_to_change_something_and_does_not_is_still_refused` |
+| A no-op puts nothing on the undo stack | `a_command_asked_to_do_what_it_has_already_done_succeeds` |
+| A write that changes nothing says so | `a_write_that_changes_nothing_says_so`, `writing_a_value_a_property_already_holds_says_it_changed_nothing` |
+
+and six mutations in `scripts/mutation-test-gates.sh`:
+
+- a command asked to do what it has already done is a crash;
+- a command that changed nothing is not caught;
+- a no-op puts a step on the undo stack;
+- muting a node that is already muted is a crash;
+- setting a property to the value it already has is a crash;
+- a write that changes nothing does not say so.
+
+### The lesson
+
+**A check that compares a *result* cannot tell two different *acts*.** The
+document before and after are the same in both cases; the difference is
+whether the command wrote. The check had to move to where the knowledge is.
+
+**The default must be the strict side.** If "the command changed something"
+were the default, a command that forgot to write would pass the check
+silently. The default says "it changed something", so the bug is caught and
+the *honest* case has to opt out. A rule that is opt-out by default fails
+safe.
+
+**Eight commands reached a check every day, and the comment said none did.**
+The comment was written when the check was new and the commands had not yet
+been exercised. The comment was a description of a code that had never been
+run against those commands — §65's shape, nineteen sections earlier.
+
+**A no-op is not a failure, and it is not a change.** It is a success with
+nothing to undo. The engine had three states for "the document is the same"
+and used the wrong one.
 
 ---
 
@@ -9469,6 +9618,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every command that takes a name agrees about a name** | `craftkit-engine` test | 2 mutations — §92 |
 | **A parameter that was given but is empty says so** | `craftkit-engine` test | 1 mutation — §92 |
 | **Every documented parameter is fired with a hostile value** | `craftkit-engine` test | 1 mutation — §92 |
+| **The engine's backstop still refuses an invalid document** | `craftkit-engine` test | 1 mutation — §92 |
+| **A command asked to do what it has already done succeeds** | `craftkit-engine` test | 3 mutations — §93 |
+| **Keying and easing what is already there succeeds** | `craftkit-engine` test | 1 mutation — §93 |
+| **A command that claims to change something and does not is refused** | `craftkit-engine` test | 1 mutation — §93 |
+| **A write that changes nothing says so** | model and engine tests | 2 mutations — §93 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

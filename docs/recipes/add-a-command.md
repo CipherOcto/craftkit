@@ -112,6 +112,27 @@ and clears the redo branch with its own undo.
 - `mutates: false` does none of that, so a read-only command cannot dirty the
   project or grow the undo stack.
 
+**A command that may legitimately change nothing has to say so.** The
+comparison above cannot tell "the command forgot to write" from "the command
+wrote the value the field already held" — and the second is ordinary: setting
+a property to the value it already has, muting a node that is already muted.
+Measured: eight of the nine commands that could be asked to do what they had
+already done were refused as *"failed unexpectedly"*. §93.
+
+So the **model's write** says whether it changed anything, and the command
+passes that on:
+
+```rust
+let changed = node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);
+Ok(Outcome::with("muted", data).unchanged_if(!changed))
+```
+
+The model's setters that report it: `Node::rename`, `Node::set_kind`,
+`Node::set_muted`, `Property::set_value`, `Document::set_name`,
+`Document::set_range`, `Document::move_to`. A command that always changes
+something does not need it — the default is "it changed something", which is
+the direction that keeps the bug check alive.
+
 ### 4. Set `enabled`
 
 `enabled: fn(&Session) -> bool`. Use the existing helpers in

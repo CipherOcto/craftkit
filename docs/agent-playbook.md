@@ -203,6 +203,21 @@ does not validate afterwards". The engine's two backstops (§44's "changed
 nothing", §50's "invalid document") are for **tree** bugs; a user who typed
 something wrong must never reach them.
 
+### 12. Say whether your command changed anything
+
+**Why:** the engine compares the document with the snapshot it took before your
+command. It cannot tell "you forgot to write" from "you wrote the value the
+field already held" — and the second is ordinary: setting a property to the
+value it already has. Measured, eight of the nine commands that could be asked
+to do what they had already done were refused as *"failed unexpectedly"*. §93.
+
+**Check:** take the answer from the model's write — `Node::set_muted`,
+`Property::set_value`, `Document::set_range` and their siblings return whether
+they changed anything — and pass it on with `Outcome::unchanged_if(!changed)`.
+A command that always changes something needs none of this: the default is
+"it changed something", which is the direction that keeps §44's bug check
+alive.
+
 ---
 
 ## How to verify a change

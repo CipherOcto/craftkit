@@ -71,8 +71,7 @@ impl Node {
         Self { id, name: name.into(), kind, props: PropGroup::new("props", "Properties"), muted: false }
     }
 
-    /// Why a node's name cannot be used, if it cannot.
-    ///
+    /// Why a node's name cannot be used, if it cannot.    ///
     /// **One rule, in one place, next to the type that has it.** The
     /// constructor, the validator and the command all ask this, so they cannot
     /// disagree about what a name is.
@@ -104,6 +103,39 @@ impl Node {
     pub fn with_defaults(mut self, enabled: bool, amount: f64) -> Result<Self, CoreError> {
         self.set_defaults(enabled, amount)?;
         Ok(self)
+    }
+
+    /// Give the node a new name. Returns whether it changed.
+    ///
+    /// Writing the name a node already has leaves the document *identical*,
+    /// and the engine cannot tell that from a command that forgot to write.
+    /// So the write says whether it changed anything, and the command passes
+    /// that on. §93.
+    pub fn rename(&mut self, name: impl Into<String>) -> bool {
+        let name = name.into();
+        if self.name == name {
+            return false;
+        }
+        self.name = name;
+        true
+    }
+
+    /// Change what the node does. Returns whether it changed.
+    pub fn set_kind(&mut self, kind: NodeKind) -> bool {
+        if self.kind == kind {
+            return false;
+        }
+        self.kind = kind;
+        true
+    }
+
+    /// Mute or unmute the node. Returns whether it changed.
+    pub fn set_muted(&mut self, muted: bool) -> bool {
+        if self.muted == muted {
+            return false;
+        }
+        self.muted = muted;
+        true
     }
 
     /// The same, in place.
@@ -206,6 +238,31 @@ impl Document {
         }
     }
 
+    /// Give the document a new name. Returns whether it changed.
+    ///
+    /// Writing the name the document already has leaves it *identical*, and
+    /// the engine cannot tell that from a command that forgot to write. So
+    /// the write says whether it changed anything. §93.
+    pub fn set_name(&mut self, name: impl Into<String>) -> bool {
+        let name = name.into();
+        if self.meta.name == name {
+            return false;
+        }
+        self.meta.name = name;
+        true
+    }
+
+    /// Set the document's range and rate. Returns whether it changed.
+    pub fn set_range(&mut self, start: Tick, end: Tick, fps: u32) -> bool {
+        if self.meta.start == start && self.meta.end == end && self.meta.fps == fps {
+            return false;
+        }
+        self.meta.start = start;
+        self.meta.end = end;
+        self.meta.fps = fps;
+        true
+    }
+
     /// Append a node and return it, so the caller can keep configuring it.
     ///
     /// Returns `Err` rather than a default value when the document is full: a
@@ -255,7 +312,11 @@ impl Document {
     /// original behaviour and it is wrong twice over: the caller is told the node
     /// moved to `99` when it moved to the end, and a script that computes an
     /// index has a bug that the clamp hides instead of reporting.
-    pub fn move_to(&mut self, id: NodeId, index: usize) -> Result<(), CoreError> {
+    /// Move a node to another position. Returns whether it changed.
+    ///
+    /// Moving a node to the position it is already at changes nothing, and
+    /// the engine cannot tell that from a command that forgot to write. §93.
+    pub fn move_to(&mut self, id: NodeId, index: usize) -> Result<bool, CoreError> {
         let from = self.index_of(id).ok_or(CoreError::LimitReached { limit: "unknown node" })?;
         let to = index.min(self.nodes.len().saturating_sub(1));
         if index > to {
@@ -266,9 +327,12 @@ impl Document {
                 max: to.to_string(),
             });
         }
+        if from == to {
+            return Ok(false);
+        }
         let node = self.nodes.remove(from);
         self.nodes.insert(to, node);
-        Ok(())
+        Ok(true)
     }
 
     /// The id the next added node will get, without taking it.
@@ -673,5 +737,40 @@ mod tests {
         let doc: Document = serde_json::from_str(raw).expect("the file is readable");
         let err = doc.validate().expect_err("refused");
         assert!(err.to_string().contains("unusable name"), "{err}");
+    }
+
+    // ------------------------------------------------------------------ §93 --
+
+    /// A write that changes nothing says so.
+    ///
+    /// The engine compares the document with the snapshot it took before the
+    /// command, and cannot tell "the command forgot to write" from "the
+    /// command wrote the value the field already held". So the write says
+    /// whether it changed anything, and the command passes that on. §93.
+    #[test]
+    fn a_write_that_changes_nothing_says_so() {
+        let mut d = Document::empty("plan");
+        let id = d.add_node("Camera", NodeKind::Source).expect("a node");
+        let node = d.get_mut(id).expect("the node");
+
+        assert!(node.rename("Camera 2"), "a new name is a change");
+        assert!(!node.rename("Camera 2"), "the same name is not a change");
+        assert!(node.set_kind(NodeKind::Filter), "a new kind is a change");
+        assert!(!node.set_kind(NodeKind::Filter), "the same kind is not a change");
+        assert!(node.set_muted(true), "muting is a change");
+        assert!(!node.set_muted(true), "muting twice is not a change");
+
+        assert!(d.set_name("other"), "a new name is a change");
+        assert!(!d.set_name("other"), "the same name is not a change");
+
+        let range = (d.meta.start, d.meta.end, d.meta.fps);
+        assert!(d.set_range(range.0, range.1, range.2 + 1), "a new rate is a change");
+        let range = (d.meta.start, d.meta.end, d.meta.fps);
+        assert!(!d.set_range(range.0, range.1, range.2), "the same range is not a change");
+
+        // And moving a node to where it already is changes nothing.
+        let second = d.add_node("Second", NodeKind::Source).expect("a node");
+        assert!(d.move_to(second, 0).expect("the node is there"), "a move is a change");
+        assert!(!d.move_to(second, 0).expect("the node is there"), "a move to where it is is not a change");
     }
 }

@@ -35,8 +35,9 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
     run: |s, p| {
         let name = required_text(p, "name")?;
         check_name(&name)?;
-        s.doc_mut().meta.name = name.clone();
-        Ok(Outcome::with(format!("renamed to `{name}`"), serde_json::json!({ "name": name })))
+        let changed = s.doc_mut().set_name(name.clone());
+        Ok(Outcome::with(format!("renamed to `{name}`"), serde_json::json!({ "name": name }))
+            .unchanged_if(!changed))
     },
 };
 
@@ -112,14 +113,12 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
                 source: craftkit_core::ParamError::new("end", "the end must be after the start"),
             });
         }
-        let meta = &mut s.doc_mut().meta;
-        meta.fps = fps;
-        meta.start = start;
-        meta.end = end;
+        let changed = s.doc_mut().set_range(start, end, fps);
         Ok(Outcome::with(
             format!("range {:.3}s..{:.3}s at {fps} fps", start.seconds_f64(), end.seconds_f64()),
             serde_json::json!({ "start": start.raw(), "end": end.raw(), "fps": fps }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 
@@ -212,8 +211,9 @@ pub static NODE_RENAME: CommandSpec = CommandSpec {
         let name = required_text(p, "name")?;
         check_name(&name)?;
         let node = node_mut(s, id, NODE_RENAME.id)?;
-        node.name = name.clone();
-        Ok(Outcome::with(format!("renamed to `{name}`"), serde_json::json!({ "id": id.get() })))
+        let changed = node.rename(name.clone());
+        Ok(Outcome::with(format!("renamed to `{name}`"), serde_json::json!({ "id": id.get() }))
+            .unchanged_if(!changed))
     },
 };
 
@@ -238,11 +238,12 @@ pub static NODE_MUTE: CommandSpec = CommandSpec {
             Some(b) => b,
             None => !node_mut(s, id, NODE_MUTE.id)?.muted,
         };
-        node_mut(s, id, NODE_MUTE.id)?.muted = muted;
+        let changed = node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);
         Ok(Outcome::with(
             if muted { "muted" } else { "unmuted" },
             serde_json::json!({ "id": id.get(), "muted": muted }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 
@@ -267,11 +268,12 @@ pub static NODE_KIND: CommandSpec = CommandSpec {
             id: NODE_KIND.id.to_string(),
             source: craftkit_core::ParamError::new("kind", "this parameter is required"),
         })?;
-        node_mut(s, id, NODE_KIND.id)?.kind = kind;
+        let changed = node_mut(s, id, NODE_KIND.id)?.set_kind(kind);
         Ok(Outcome::with(
             format!("is now a {}", kind.label()),
             serde_json::json!({ "id": id.get(), "kind": kind.label() }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 
@@ -302,8 +304,9 @@ pub static NODE_MOVE: CommandSpec = CommandSpec {
                 source: craftkit_core::ParamError::new("index", format!("{index} is negative")),
             });
         }
-        s.doc_mut().move_to(id, index as usize)?;
-        Ok(Outcome::with(format!("moved to {index}"), serde_json::json!({ "id": id.get(), "index": index })))
+        let changed = s.doc_mut().move_to(id, index as usize)?;
+        Ok(Outcome::with(format!("moved to {index}"), serde_json::json!({ "id": id.get(), "index": index }))
+            .unchanged_if(!changed))
     },
 };
 
@@ -382,7 +385,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
         let at = s.at();
         let node = node_mut(s, id, PROP_SET.id)?;
         let parsed = parse_path(&path, PROP_SET.id)?;
-        match node.props.find_mut(&parsed) {
+        let changed = match node.props.find_mut(&parsed) {
             Some(existing) => {
                 if existing.locked {
                     return Err(EngineError::Param {
@@ -390,10 +393,12 @@ pub static PROP_SET: CommandSpec = CommandSpec {
                         source: craftkit_core::ParamError::new("path", format!("`{path}` is locked")),
                     });
                 }
-                existing.value = value.clone();
+                let mut changed = existing.set_value(value.clone());
                 if animated {
                     key_now(existing, at, PROP_SET.id)?;
+                    changed = true;
                 }
+                changed
             }
             None => {
                 // The model creates it: the path is the model's grammar, and
@@ -411,12 +416,14 @@ pub static PROP_SET: CommandSpec = CommandSpec {
                     })?;
                     key_now(created, at, PROP_SET.id)?;
                 }
+                true
             }
-        }
+        };
         Ok(Outcome::with(
             format!("`{path}` = {}", value.display()),
             serde_json::json!({ "id": id.get(), "path": path, "value": value }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 
@@ -449,7 +456,8 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
         Ok(Outcome::with(
             format!("removed {n} keyframe(s) from `{path}`"),
             serde_json::json!({ "id": id.get(), "path": path, "removed": n }),
-        ))
+        )
+        .unchanged_if(n == 0))
     },
 };
 
@@ -507,11 +515,16 @@ pub static KEY_SET: CommandSpec = CommandSpec {
                 })?
             }
         };
+        // What the key at that instant held before, so the command can say
+        // whether it changed anything. §93.
+        let before = prop.keys.keys().iter().find(|k| k.time == time).map(|k| k.value.clone());
         prop.keys.set(Key::new(time, value.clone(), easing)?)?;
         // The stored value follows the key. Without this, `prop.reset` — which
         // clears the keys and leaves the stored value — would snap a property
         // back to a number the user set three edits ago.
-        prop.value = value.clone();
+        let value_changed = prop.set_value(value.clone());
+        let after = prop.keys.keys().iter().find(|k| k.time == time).map(|k| k.value.clone());
+        let changed = value_changed || before != after;
         Ok(Outcome::with(
             format!("keyed `{path}` at {:.3}s", time.seconds_f64()),
             serde_json::json!({
@@ -521,7 +534,8 @@ pub static KEY_SET: CommandSpec = CommandSpec {
                 "value": value,
                 "keys": prop.keys.len(),
             }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 
@@ -600,7 +614,8 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
         Ok(Outcome::with(
             format!("cleared {n} keyframe(s)"),
             serde_json::json!({ "id": id.get(), "removed": n }),
-        ))
+        )
+        .unchanged_if(n == 0))
     },
 };
 
@@ -639,16 +654,24 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         // The easing goes in through the model's own door, so the list keeps
         // its rules: the easing is checked, and the key is found by its time
         // in a list that is sorted. §91.
-        if !prop.keys.set_ease(time, easing).map_err(|e| EngineError::Param {
-            id: KEY_EASE.id.to_string(),
-            source: craftkit_core::ParamError::new("easing", e.to_string()),
-        })? {
+        //
+        // What the key held before, so the command can say whether it changed
+        // anything: easing a key it already eases changes nothing, and that
+        // is a success, not a failure. §93.
+        let before = prop.keys.keys().iter().find(|k| k.time == time).map(|k| k.ease);
+        if before.is_none() {
             return Err(EngineError::Param {
                 id: KEY_EASE.id.to_string(),
                 source: craftkit_core::ParamError::new("time", format!("`{path}` has no key there")),
             });
         }
-        Ok(Outcome::with(format!("`{path}` eased {}", easing.name()), serde_json::json!({ "id": id.get() })))
+        prop.keys.set_ease(time, easing).map_err(|e| EngineError::Param {
+            id: KEY_EASE.id.to_string(),
+            source: craftkit_core::ParamError::new("easing", e.to_string()),
+        })?;
+        let changed = before != Some(easing);
+        Ok(Outcome::with(format!("`{path}` eased {}", easing.name()), serde_json::json!({ "id": id.get() }))
+            .unchanged_if(!changed))
     },
 };
 
@@ -1493,6 +1516,86 @@ mod tests {
         let mut s = session();
         let err = s.execute("node.rename", &json!({ "node": 1 })).expect_err("refused");
         assert!(err.to_string().contains("required"), "{err}");
+    }
+
+    // ------------------------------------------------------------------ §93 --
+
+    /// A command asked to do what it has already done is a **success**.
+    ///
+    /// The engine compares the document with the snapshot it took before the
+    /// command, and a command that declares that it mutates and changes
+    /// nothing is refused — because that is usually a command that forgot to
+    /// write. But the comparison cannot tell that from a command that wrote
+    /// the value a field already held, and that is ordinary.
+    ///
+    /// Measured, before the fix: eight of the nine commands that can be asked
+    /// to do what they have already done were refused as *"failed
+    /// unexpectedly (the command declared that it mutates the document but
+    /// changed nothing)"*. §93.
+    #[test]
+    fn a_command_asked_to_do_what_it_has_already_done_succeeds() {
+        let cases: Vec<(&str, serde_json::Value)> = vec![
+            ("prop.set", json!({ "node": 1, "path": "amount", "value": 1.0 })),
+            ("prop.reset", json!({ "node": 1, "path": "amount" })),
+            ("key.clear", json!({ "node": 1, "path": "amount" })),
+            ("node.mute", json!({ "node": 1, "muted": false })),
+            ("node.kind", json!({ "node": 1, "kind": "source" })),
+            ("node.rename", json!({ "node": 1, "name": "Level" })),
+            ("node.move", json!({ "node": 1, "index": 0 })),
+            ("doc.rename", json!({ "name": "Sample plan" })),
+            ("doc.range", json!({ "fps": 24 })),
+        ];
+        for (id, params) in cases {
+            let mut s = session();
+            let before = s.document().clone();
+            let undo_before = s.undo_depth();
+            let outcome = s.execute(id, &params).unwrap_or_else(|e| panic!("`{id}` refused: {e}"));
+            assert!(!outcome.message.is_empty(), "`{id}` said nothing");
+            assert_eq!(s.document(), &before, "`{id}` changed the document");
+            assert_eq!(s.undo_depth(), undo_before, "`{id}` put a no-op step on the undo stack");
+            assert!(!s.is_dirty(), "`{id}` marked the project dirty");
+        }
+    }
+
+    /// The same, for the two commands that need a keyframe first.
+    ///
+    /// Keying a property at an instant it is already keyed at, with the value
+    /// it already has, changes nothing — and easing a key it already eases
+    /// changes nothing. Both are ordinary. §93.
+    #[test]
+    fn keying_and_easing_what_is_already_there_succeeds() {
+        let mut s = session();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 3, "time": 1.0 }));
+        // The first keying really did change the document, so this is the
+        // state the no-ops are measured against.
+        let before = s.document().clone();
+        let undo_before = s.undo_depth();
+        let dirty_before = s.is_dirty();
+
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 3, "time": 1.0 }));
+        assert_eq!(s.document(), &before, "keying a key that is already there changed the document");
+        assert_eq!(s.undo_depth(), undo_before, "a no-op put a step on the undo stack");
+        assert_eq!(s.is_dirty(), dirty_before, "a no-op changed the dirty flag");
+
+        ok(&mut s, "key.ease", json!({ "node": 1, "path": "amount", "time": 1.0, "easing": "linear" }));
+        assert_eq!(s.document(), &before, "easing a key that is already eased changed the document");
+        assert_eq!(s.undo_depth(), undo_before, "a no-op put a step on the undo stack");
+        assert_eq!(s.is_dirty(), dirty_before, "a no-op changed the dirty flag");
+    }
+
+    /// A command that claims to have changed something and did not is still a
+    /// bug.
+    ///
+    /// The fix for §93 is that the **command** says whether it changed
+    /// anything — and the default is "it did", which is the direction that
+    /// keeps §44's check alive. A command that forgot to write still says
+    /// nothing, so the engine still catches it. §44, §93.
+    #[test]
+    fn a_command_that_claims_to_change_something_and_does_not_is_still_refused() {
+        let mut s = session();
+        let err = s.execute("test.noop", &json!({})).expect_err("refused");
+        assert!(err.is_internal(), "{err}");
+        assert!(err.to_string().contains("changed nothing"), "{err}");
     }
 
     #[test]
