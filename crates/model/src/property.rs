@@ -473,7 +473,7 @@ impl PropGroup {
                             p.label
                         )));
                     }
-                    // The value, and the values of the keys.
+                    // The value, and the whole keyframe list.
                     //
                     // These are the invariants the *constructors* keep, and a
                     // file is not built by a constructor: it is deserialized
@@ -483,10 +483,14 @@ impl PropGroup {
                     // evaluator's comment says "every number the tree stores
                     // is" in range — this is where that becomes true rather
                     // than merely intended. §73.
+                    //
+                    // The keyframes have their own rules — sorted, unique,
+                    // within `MAX_KEYS`, on a time a reply could carry, with
+                    // an easing the model accepts — and they live next to the
+                    // type that has them, so there is one place that knows
+                    // what a keyframe list must be. §91.
                     p.value.check(&p.label)?;
-                    for key in p.keys.keys() {
-                        key.value.check(&p.label)?;
-                    }
+                    p.keys.check(&p.label)?;
                     prop_ids.push(p.id);
                 }
                 PropNode::Group(g) => {
@@ -1270,5 +1274,68 @@ mod tests {
         group.push(Property::new(1, "amount", Value::Num(1.0)));
         group.push(Property::new(2, "label", Value::Text("x".into())));
         assert!(group.validate().is_ok());
+    }
+
+    /// A property whose keyframes break the model's rules is refused.
+    ///
+    /// §73 checked the keyframes' **values**. Their **times** and their
+    /// **easings** were not checked at all, and neither was the list itself:
+    /// a file could carry an unsorted list — which samples to the wrong
+    /// value — a duplicated time, a tick outside the range a reply could
+    /// carry, an easing the model refuses, or more keys than the limit. Every
+    /// one of them validated as `Ok`. §91.
+    #[test]
+    fn a_property_with_broken_keyframes_is_refused() {
+        // The list arrives the way a **file** delivers it: deserialized. The
+        // model cannot build a broken list through its own API — `set` sorts,
+        // replaces and bounds it — and the tree must not need a test-only
+        // door to prove that the broken one is refused.
+        let list = |json: serde_json::Value| -> crate::keyframe::Keyframes {
+            serde_json::from_value(json).expect("a keyframe list")
+        };
+        let num = |v: f64| serde_json::json!({ "t": "num", "v": v });
+
+        // Out of order.
+        let mut group = PropGroup::new("props", "Properties");
+        let mut prop = Property::new(1, "amount", Value::Num(0.0));
+        prop.keys = list(serde_json::json!([
+            { "time": 500, "value": num(1.0), "ease": "linear" },
+            { "time": 0, "value": num(2.0), "ease": "linear" },
+        ]));
+        group.push(prop);
+        let err = group.validate().expect_err("an unsorted list");
+        assert!(err.to_string().contains("not sorted by time"), "{err}");
+        assert!(err.to_string().contains("amount"), "{err}");
+
+        // Two keys at the same time.
+        let mut group = PropGroup::new("props", "Properties");
+        let mut prop = Property::new(1, "amount", Value::Num(0.0));
+        prop.keys = list(serde_json::json!([
+            { "time": 0, "value": num(1.0), "ease": "linear" },
+            { "time": 0, "value": num(2.0), "ease": "linear" },
+        ]));
+        group.push(prop);
+        assert!(group.validate().is_err(), "two keys at the same time");
+
+        // An easing the model refuses.
+        let mut group = PropGroup::new("props", "Properties");
+        let mut prop = Property::new(1, "amount", Value::Num(0.0));
+        prop.keys = list(serde_json::json!([
+            { "time": 0, "value": num(1.0), "ease": { "bezier": { "out_x": 5.0, "out_y": 1.0 } } },
+        ]));
+        group.push(prop);
+        assert!(group.validate().is_err(), "an easing the model refuses");
+
+        // And a good list still passes.
+        let mut group = PropGroup::new("props", "Properties");
+        let mut prop = Property::new(1, "amount", Value::Num(0.0));
+        prop.keys
+            .set(
+                crate::keyframe::Key::new(Tick::ZERO, Value::Num(1.0), crate::keyframe::Easing::Linear)
+                    .expect("a key"),
+            )
+            .expect("a key");
+        group.push(prop);
+        assert!(group.validate().is_ok(), "a good list is refused");
     }
 }

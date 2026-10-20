@@ -124,6 +124,16 @@ Interpolation follows the same rule. A keyframe's curve is described on the
 fields it points *back* from (`in_*`), which keeps the keyframe *list* sorted by
 time regardless of the curve — the property the evaluator's cache depends on.
 
+That list is sorted because the model keeps it sorted, and a **file** does
+not go through the model's constructors: it is deserialized straight into the
+model, so the list's rules are *checked* by `Keyframes::check` rather than
+kept on the way in. An unsorted list does not sample to a tidier answer, it
+samples to the **wrong one** — the key that is earliest in time is never
+reached — so the reader refuses such a file. A keyframe's **time** is checked
+against the range a reply could carry, for the same reason the document's own
+range is: a tick outside it would make every reply that mentions it fail
+inside `json!`. §60, §91.
+
 ## When NOT to use it
 
 - **For display.** Seconds, `MM:SS:FF` and "1.5 s" are output formats. Convert

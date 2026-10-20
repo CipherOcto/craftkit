@@ -617,12 +617,18 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
             id: KEY_EASE.id.to_string(),
             source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
-        let key =
-            prop.keys.keys_mut().iter_mut().find(|k| k.time == time).ok_or_else(|| EngineError::Param {
+        // The easing goes in through the model's own door, so the list keeps
+        // its rules: the easing is checked, and the key is found by its time
+        // in a list that is sorted. §91.
+        if !prop.keys.set_ease(time, easing).map_err(|e| EngineError::Param {
+            id: KEY_EASE.id.to_string(),
+            source: craftkit_core::ParamError::new("easing", e.to_string()),
+        })? {
+            return Err(EngineError::Param {
                 id: KEY_EASE.id.to_string(),
                 source: craftkit_core::ParamError::new("time", format!("`{path}` has no key there")),
-            })?;
-        key.ease = easing;
+            });
+        }
         Ok(Outcome::with(format!("`{path}` eased {}", easing.name()), serde_json::json!({ "id": id.get() })))
     },
 };
@@ -1337,6 +1343,44 @@ mod tests {
             .execute("key.ease", &json!({ "node": 1, "path": "amount", "time": 1.0, "easing": "hold" }))
             .expect_err("refused");
         assert!(err.to_string().contains("no key"), "{err}");
+    }
+
+    /// Easing a key changes the curve and nothing else.
+    ///
+    /// The easing goes in through the model's own door, so the list keeps its
+    /// rules — the key is found by its time in a list that is sorted, and the
+    /// easing is checked before it is stored. §91.
+    #[test]
+    fn easing_a_key_changes_the_curve_and_leaves_the_keys_alone() {
+        let mut s = session();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 2, "time": 0.0 }));
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 8, "time": 1.0 }));
+        ok(&mut s, "key.ease", json!({ "node": 1, "path": "amount", "time": 0.0, "easing": "easeOut" }));
+
+        let node = s.document().get(craftkit_core::NodeId(1)).expect("node");
+        let path = craftkit_model::PropPath::parse("amount").expect("a path");
+        let prop = node.props.find(&path).expect("the property");
+        assert_eq!(prop.keys.len(), 2, "easing a key must not add or remove keys");
+        assert_eq!(
+            prop.keys.keys()[0].ease,
+            craftkit_model::keyframe::Easing::Bezier { out_x: 0.58, out_y: 1.0 }
+        );
+    }
+
+    /// An easing the model refuses is refused.
+    ///
+    /// The presets are all legal, so this cannot be reached through the
+    /// command's own parameter — the check is here because the door the
+    /// easing comes through is the model's, and the model refuses it there
+    /// too. §91.
+    #[test]
+    fn an_easing_the_model_refuses_is_refused() {
+        let mut s = session();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 2, "time": 0.0 }));
+        let err = s
+            .execute("key.ease", &json!({ "node": 1, "path": "amount", "time": 0.0, "easing": "wobble" }))
+            .expect_err("refused");
+        assert!(err.to_string().contains("easing"), "{err}");
     }
 
     #[test]

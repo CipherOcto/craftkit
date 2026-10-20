@@ -535,6 +535,92 @@ mod tests {
         }
     }
 
+    /// A file carrying a keyframe list that breaks the model's rules is
+    /// refused.
+    ///
+    /// The keyframes were the one part of a document the reader did **not**
+    /// check: §73 checked their values, and nothing checked their times,
+    /// their easings or the list itself. Measured, before this was refused:
+    /// a file carrying an unsorted list loaded, validated `Ok` — and the
+    /// animation sampled to the **wrong value** (keys at 500 and 0 gave the
+    /// value of the later key, where the sorted list gives the interpolation
+    /// between them). A file carrying a duplicated time, a tick outside the
+    /// range a reply could carry, an easing the model refuses, or more keys
+    /// than `MAX_KEYS` all loaded as well. §91.
+    #[test]
+    fn a_file_carrying_broken_keyframes_is_refused() {
+        // The list is written by hand, because the model cannot build one: the
+        // point of the check is that the *file* can.
+        let file_with = |keys: &str| {
+            format!(
+                r#"{{
+  "format": "{tag}",
+  "meta": {{ "written_by": "probe", "written_at": 0, "pending": [] }},
+  "document": {{
+    "meta": {{ "name": "probe", "fps": 24, "start": 0, "end": 1270080000000, "comment": "" }},
+    "nodes": [
+      {{
+        "id": 1,
+        "name": "In",
+        "kind": "source",
+        "props": {{
+          "id": "props",
+          "label": "Properties",
+          "nodes": [
+            {{
+              "Prop": {{
+                "id": 1,
+                "label": "amount",
+                "value": {{ "t": "num", "v": 0.0 }},
+                "keys": [{keys}],
+                "locked": false,
+                "hint": "Number"
+              }}
+            }}
+          ]
+        }},
+        "muted": false
+      }}
+    ]
+  }}
+}}"#,
+                tag = tag(CURRENT)
+            )
+        };
+        let key = |time: &str, value: f64, ease: &str| {
+            format!(r#"{{ "time": {time}, "value": {{ "t": "num", "v": {value} }}, "ease": {ease} }}"#)
+        };
+
+        let cases: Vec<(String, String)> = vec![
+            (
+                "an unsorted list".to_string(),
+                file_with(&format!("{},{}", key("500", 1.0, "\"linear\""), key("0", 2.0, "\"linear\""))),
+            ),
+            (
+                "two keys at the same time".to_string(),
+                file_with(&format!("{},{}", key("0", 1.0, "\"linear\""), key("0", 2.0, "\"linear\""))),
+            ),
+            (
+                "a time outside the range a reply can carry".to_string(),
+                file_with(&key("18446744073709551616", 1.0, "\"linear\"")),
+            ),
+            (
+                "an easing the model refuses".to_string(),
+                file_with(&key("0", 1.0, r#"{"bezier":{"out_x":5.0,"out_y":1.0}}"#)),
+            ),
+            (
+                "a non-finite easing".to_string(),
+                file_with(&key("0", 1.0, r#"{"bezier":{"out_x":1e40,"out_y":1.0}}"#)),
+            ),
+        ];
+
+        for (what, text) in cases {
+            let err = File::from_text(&text).expect_err("refused");
+            assert!(matches!(err, FormatError::InvalidDocument(_)), "for {what}: {err}");
+            assert!(err.to_string().contains("amount"), "for {what}: {err}");
+        }
+    }
+
     #[test]
     fn the_meta_block_lists_the_pending_changes() {
         let meta = Meta::now();

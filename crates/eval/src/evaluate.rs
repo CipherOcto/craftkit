@@ -704,7 +704,8 @@ mod tests {
         // untouched.
         {
             let p = first_prop(&mut d, NodeId(1));
-            p.keys.keys_mut().first_mut().expect("a key").ease = Easing::EaseInOut;
+            let time = p.keys.keys().first().expect("a key").time;
+            p.keys.set_ease(time, Easing::EaseInOut).expect("the easing is a valid one");
         }
 
         let second = ev.evaluate(&d, at).expect("plan");

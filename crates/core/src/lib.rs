@@ -70,6 +70,13 @@ pub enum CoreError {
     /// command that was handed a path by a person or a script. §85.
     #[error("{0}")]
     BadPath(String),
+    /// Stored data broke a rule the model keeps.
+    ///
+    /// The rules are the model's own — a keyframe list is sorted and unique, a
+    /// property's label can be written as a path — and each message says which
+    /// rule broke it and which value broke it. §85, §91.
+    #[error("{0}")]
+    BadData(String),
 }
 
 /// The largest magnitude any stored scalar may take.

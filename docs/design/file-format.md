@@ -160,6 +160,28 @@ a million frames per second would otherwise overflow a tick conversion
 silently. The same limit is what the `doc.range` command enforces, so a
 document can never hold a rate no command can set. §89.
 
+### Keyframes
+
+A keyframe is a **time**, a **value** and an **easing**; a property's keyframe
+list is **sorted**, **unique** and within `MAX_KEYS`.
+
+The model keeps those rules when it *builds* a list. A file does not build
+one — it is deserialized straight into the model — so the rules are **checked**
+by `Keyframes::check` instead, and the reader refuses a file that breaks one:
+
+- a keyframe's time outside the range a reply could carry (the same range the
+  document's own `start` and `end` are checked against — §60);
+- an easing the model refuses, such as a bezier whose `out_x` is outside
+  `0..=1` or is not finite;
+- a list that is not sorted by time, or that has two keys at the same time;
+- more keys than `MAX_KEYS`.
+
+The last two are not tidiness. An unsorted list does not sample to an untidy
+answer — it samples to the **wrong one**: the key that is earliest in time is
+never reached, and the animation starts at the later key's value. Measured:
+keys at 0 and 500, sampled at tick 50, gave `1.0` where the sorted list gives
+`1.9`. §91.
+
 ---
 
 ## Versions, and changing what is saved

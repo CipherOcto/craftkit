@@ -125,7 +125,8 @@ impl Default for FrameRate {
 /// The file format is wider than this: a bare integer in a file is read
 /// straight into an `i128`, so a file can carry a tick the model will not
 /// hold. The reader refuses such a file rather than loading a document whose
-/// ticks no reply could report.
+/// ticks no reply could report — the document's own range, and every
+/// keyframe's time, are checked against this range. §60, §91.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Tick(i128);

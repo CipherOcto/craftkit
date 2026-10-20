@@ -6,6 +6,18 @@
 //! Interpolation is described on the keyframe it points *back* from — the
 //! `in_*` fields. That is the convention every timeline format uses, and it
 //! means the keyframe *list* stays sorted by time regardless of the curve.
+//!
+//! # Who keeps the list sorted
+//!
+//! [`Keyframes::set`] sorts, replaces and bounds the list, so a list built
+//! through the model is sorted, unique and within `MAX_KEYS`.
+//!
+//! A **file** is not built that way: it is deserialized straight into the
+//! model, so the rules are not kept on the way in — they are *checked* by
+//! [`Keyframes::check`], which the reader calls and the engine calls again
+//! after every command. That distinction is the whole point: a list that
+//! arrives out of order samples to the **wrong value**, not to an untidy one.
+//! §91.
 
 use craftkit_core::{CoreError, Tick};
 use serde::{Deserialize, Serialize};
@@ -116,12 +128,94 @@ impl Keyframes {
         self.0.is_empty()
     }
 
-    pub fn keys_mut(&mut self) -> &mut [Key] {
-        &mut self.0
-    }
-
     pub fn keys(&self) -> &[Key] {
         &self.0
+    }
+
+    /// Change the easing of the key at `time`.
+    ///
+    /// Returns `false` when there is no key at that time. The easing is
+    /// checked **before** it is stored: an easing the model's own constructor
+    /// refuses must not be able to enter the tree through this door either.
+    pub fn set_ease(&mut self, time: Tick, ease: Easing) -> Result<bool, CoreError> {
+        let ease = ease.checked()?;
+        match self.0.binary_search_by(|k| k.time.cmp(&time)) {
+            Ok(i) => {
+                self.0[i].ease = ease;
+                Ok(true)
+            }
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// Check every rule a keyframe list must hold.
+    ///
+    /// The list is **deserialized straight into the model**: a file is not
+    /// built by [`Keyframes::set`], so the rules `set` keeps are not kept on
+    /// the way in. Measured, before this check existed:
+    ///
+    /// - a file could carry an **unsorted** list — and the sample of it was
+    ///   *wrong*, not merely untidy: keys at 500 and 0 sampled to the value
+    ///   of the later key, where the sorted list gives the interpolation
+    ///   between them;
+    /// - a file could carry **two keys at the same time**, of which only the
+    ///   second was ever reachable;
+    /// - a file could carry a **tick outside the range a time may hold**,
+    ///   which [`Tick::from_raw`] clamps — so the same document had two
+    ///   representations, one of which the type says it cannot hold;
+    /// - a file could carry an **easing** that [`Easing::checked`] refuses
+    ///   (`out_x` outside 0..=1, or not finite);
+    /// - a file could carry **more keys than `MAX_KEYS`**.
+    ///
+    /// Every one of them validated as `Ok`, and the reader handed the editor a
+    /// document whose animation did not mean what the file said. §91.
+    ///
+    /// `what` names the property, so the message says whose keyframes are
+    /// wrong.
+    pub fn check(&self, what: &str) -> Result<(), CoreError> {
+        if self.0.len() > crate::limits::MAX_KEYS {
+            return Err(CoreError::LimitReached { limit: "keyframes per property" });
+        }
+        for (i, key) in self.0.iter().enumerate() {
+            // The time has to be one a reply could carry. The document's own
+            // range is checked the same way — `Document::validate` refuses a
+            // `start` or an `end` outside it — and a keyframe's time is the
+            // same kind of number in the same kind of file. §60, §91.
+            let raw = key.time.raw();
+            if raw < Tick::MIN.raw() || raw > Tick::MAX.raw() {
+                return Err(CoreError::OutOfRange {
+                    what: format!("the time of a keyframe of {what}"),
+                    value: format!("{raw}"),
+                    min: format!("{}", Tick::MIN.raw()),
+                    max: format!("{}", Tick::MAX.raw()),
+                });
+            }
+            // The easing the model's own constructor refuses must not be able
+            // to arrive by another door. The message names the property, so a
+            // file with many properties says which one is wrong.
+            key.ease
+                .checked()
+                .map_err(|e| CoreError::BadData(format!("the easing of a keyframe of {what}: {e}")))?;
+            // The value, exactly as §73 checks it.
+            key.value.check(what)?;
+            if i > 0 {
+                let prev = &self.0[i - 1];
+                if key.time == prev.time {
+                    return Err(CoreError::BadData(format!(
+                        "two keyframes of {what} share the time {}",
+                        prev.time.raw()
+                    )));
+                }
+                if key.time < prev.time {
+                    return Err(CoreError::BadData(format!(
+                        "the keyframes of {what} are not sorted by time: {} comes after {}",
+                        key.time.raw(),
+                        prev.time.raw()
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Insert or replace the key at `time`. **Keeps the list sorted**, so a
@@ -614,5 +708,112 @@ mod tests {
             k.set(Key::new(Tick::from_raw(i as i128), num(i as f64), Easing::Linear).unwrap()).unwrap();
         }
         assert!(k.set(Key::new(Tick::from_raw(1 << 40), num(0.0), Easing::Linear).unwrap()).is_err());
+    }
+
+    // ------------------------------------------------------------------ §91 --
+
+    /// A key at a time, built without the constructor.
+    ///
+    /// The model cannot build a broken list through its own API — `set`
+    /// sorts, replaces and bounds it — so a list that breaks the rules can
+    /// only arrive the way a file arrives: deserialized. The test module is a
+    /// child of this one, so it can build the list the way the file does.
+    fn raw_key(time: i128, value: f64) -> Key {
+        Key { time: Tick::from_raw(time), value: num(value), ease: Easing::Linear }
+    }
+
+    /// The reason the list has to be sorted.
+    ///
+    /// An unsorted list does not sample to a wrong *shape* — it samples to the
+    /// wrong **value**, and quietly: the key that is earliest in time is never
+    /// reached. Measured: keys at 500 and 0 sampled to the value of the later
+    /// key, where the sorted list gives the interpolation between them. §91.
+    #[test]
+    fn an_unsorted_list_samples_to_the_wrong_value() {
+        let sorted = Keyframes(vec![raw_key(0, 2.0), raw_key(500, 1.0)]);
+        let unsorted = Keyframes(vec![raw_key(500, 1.0), raw_key(0, 2.0)]);
+        let at = Tick::from_raw(50);
+
+        let right = sorted.sample(at).and_then(|v| v.as_num()).expect("a number");
+        let wrong = unsorted.sample(at).and_then(|v| v.as_num()).expect("a number");
+
+        // 2.0 + (1.0 - 2.0) × (50 / 500) = 1.9.
+        assert!((right - 1.9).abs() < 1e-9, "the sorted list gave {right}, want 1.9");
+        assert!((wrong - 1.9).abs() > 1e-9, "the unsorted list gave {wrong}, which is what it always gave");
+        assert!(unsorted.check("amount").is_err(), "and the check does not let that list in");
+    }
+
+    #[test]
+    fn a_list_that_is_not_sorted_by_time_is_refused() {
+        let k = Keyframes(vec![raw_key(500, 1.0), raw_key(0, 2.0)]);
+        let err = k.check("amount").expect_err("refused");
+        assert!(err.to_string().contains("not sorted by time"), "{err}");
+        assert!(err.to_string().contains("amount"), "the message does not name the property: {err}");
+    }
+
+    #[test]
+    fn two_keys_at_the_same_time_are_refused() {
+        let k = Keyframes(vec![raw_key(0, 1.0), raw_key(0, 2.0)]);
+        let err = k.check("amount").expect_err("refused");
+        assert!(err.to_string().contains("share the time"), "{err}");
+    }
+
+    /// A time outside the range a reply could carry is refused.
+    ///
+    /// `Tick::from_raw` clamps, so the model cannot build one; a **file** can
+    /// carry one, because a bare integer in a file is read straight into an
+    /// `i128`. The tick's own documentation promises the reader refuses such a
+    /// file — it did not, until this check existed. §60, §91.
+    #[test]
+    fn a_time_outside_the_range_a_reply_can_carry_is_refused() {
+        let raw: i128 = 18_446_744_073_709_551_616; // u64::MAX + 1
+        let tick: Tick = serde_json::from_str(&raw.to_string()).expect("a tick");
+        assert_eq!(tick.raw(), raw, "the tick should have arrived out of range");
+        let k = Keyframes(vec![Key { time: tick, value: num(1.0), ease: Easing::Linear }]);
+        let err = k.check("amount").expect_err("refused");
+        assert!(err.to_string().contains("out of range"), "{err}");
+        assert!(err.to_string().contains("amount"), "the message does not name the property: {err}");
+    }
+
+    #[test]
+    fn an_easing_the_model_refuses_is_refused() {
+        let k = Keyframes(vec![Key {
+            time: Tick::ZERO,
+            value: num(1.0),
+            ease: Easing::Bezier { out_x: 5.0, out_y: 1.0 },
+        }]);
+        let err = k.check("amount").expect_err("refused");
+        assert!(err.to_string().contains("easing"), "{err}");
+        assert!(err.to_string().contains("amount"), "the message does not name the property: {err}");
+    }
+
+    #[test]
+    fn more_keys_than_the_limit_are_refused() {
+        let max = crate::limits::MAX_KEYS;
+        let k = Keyframes((0..=max as i128).map(|i| raw_key(i, 1.0)).collect());
+        let err = k.check("amount").expect_err("refused");
+        assert!(err.to_string().contains("keyframes per property"), "{err}");
+    }
+
+    /// The check does not refuse what the model builds.
+    #[test]
+    fn a_list_built_through_the_model_is_accepted() {
+        let k = track(&[(0, 0.0), (10, 1.0)], Easing::Linear);
+        assert!(k.check("amount").is_ok());
+        let mut k = Keyframes::new();
+        k.set(Key::new(Tick::ZERO, num(0.0), Easing::Bezier { out_x: 0.5, out_y: 2.0 }).unwrap()).unwrap();
+        assert!(k.check("amount").is_ok(), "an overshoot in y is a legal easing");
+    }
+
+    #[test]
+    fn set_ease_changes_the_curve_and_refuses_an_invalid_one() {
+        let mut k = track(&[(0, 0.0), (10, 1.0)], Easing::Linear);
+        assert!(k.set_ease(Tick::from_raw(0), Easing::EaseInOut).expect("a valid easing"));
+        assert_eq!(k.keys()[0].ease, Easing::EaseInOut);
+        assert!(!k.set_ease(Tick::from_raw(999), Easing::Hold).expect("no key there, but no error"));
+        // An easing the model's own constructor refuses must not enter
+        // through this door either.
+        assert!(k.set_ease(Tick::from_raw(0), Easing::Bezier { out_x: 5.0, out_y: 1.0 }).is_err());
+        assert_eq!(k.keys()[0].ease, Easing::EaseInOut, "the refused easing was not stored");
     }
 }

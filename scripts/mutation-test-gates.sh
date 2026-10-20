@@ -1985,6 +1985,73 @@ swap crates/core/src/tick.rs \
 expect_catch "core: a rate that does not divide the tick rate is called exact" \
     "cargo test -p craftkit-core --profile ci a_rate_that_does_not_divide_the_tick_rate_is_inexact"
 
+# A keyframe list has rules — sorted, unique, within `MAX_KEYS`, on a time a
+# reply could carry, with an easing the model accepts — and the model keeps
+# them. A file is deserialized straight into the model, so the reader is the
+# only place they can be enforced; before the check existed, a file carrying
+# an unsorted list loaded, validated `Ok`, and animated to the *wrong value*.
+# §91.
+swap crates/model/src/property.rs \
+    '                    p.keys.check(&p.label)?;' \
+    '                    let _ = &p.keys;'
+expect_catch "model: a property's keyframe list is not checked at all" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_broken_keyframes_is_refused"
+
+# The list has to be sorted. An unsorted list does not sample to an untidy
+# answer, it samples to the wrong one: the key that is earliest in time is
+# never reached. §91.
+swap crates/model/src/keyframe.rs \
+    '                if key.time < prev.time {' \
+    '                if key.time < prev.time && false {'
+expect_catch "model: a keyframe list that is not sorted is accepted" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_broken_keyframes_is_refused"
+
+# Two keys at the same time: of the two, only the second was ever reachable.
+swap crates/model/src/keyframe.rs \
+    '                if key.time == prev.time {' \
+    '                if key.time == prev.time && false {'
+expect_catch "model: two keyframes at the same time are accepted" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_broken_keyframes_is_refused"
+
+# A time outside the range a reply could carry. The tick's own documentation
+# promises that the reader refuses such a file. §60, §91.
+swap crates/model/src/keyframe.rs \
+    '            if raw < Tick::MIN.raw() || raw > Tick::MAX.raw() {' \
+    '            if (raw < Tick::MIN.raw() || raw > Tick::MAX.raw()) && false {'
+expect_catch "model: a keyframe on a time no reply could carry is accepted" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_broken_keyframes_is_refused"
+
+# The easing the model's own constructor refuses must not arrive by another
+# door. §91.
+swap crates/model/src/keyframe.rs \
+    '            key.ease
+                .checked()
+                .map_err(|e| CoreError::BadData(format!("the easing of a keyframe of {what}: {e}")))?;' \
+    '            let _ = key.ease.checked();'
+expect_catch "model: an easing the model refuses is accepted" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_broken_keyframes_is_refused"
+
+# And the easing's own check: the control point's range.
+swap crates/model/src/keyframe.rs \
+    '            craftkit_core::in_range("easing out_x", out_x as f64, 0.0, 1.0)?;' \
+    '            let _ = out_x as f64;'
+expect_catch "model: a bezier control point outside 0..=1 is accepted" \
+    "cargo test -p craftkit-model --profile ci a_non_finite_control_point_is_refused"
+
+# The limit.
+swap crates/model/src/keyframe.rs \
+    '        if self.0.len() > crate::limits::MAX_KEYS {' \
+    '        if self.0.len() > crate::limits::MAX_KEYS && false {'
+expect_catch "model: a property may carry more keyframes than the limit" \
+    "cargo test -p craftkit-model --profile ci more_keys_than_the_limit_are_refused"
+
+# And the door the easing comes through when a command changes it.
+swap crates/model/src/keyframe.rs \
+    '        let ease = ease.checked()?;' \
+    '        let ease = ease;'
+expect_catch "model: set_ease stores an easing the model refuses" \
+    "cargo test -p craftkit-model --profile ci set_ease_changes_the_curve_and_refuses_an_invalid_one"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish

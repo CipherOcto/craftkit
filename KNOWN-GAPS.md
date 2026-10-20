@@ -8990,6 +8990,136 @@ sentence in the code that does the conversion.
 
 ---
 
+## 91. The model checked a keyframe's value and none of the other things it promised about a keyframe
+
+§73 made the model check the numbers a file carries. It checked a keyframe's
+**value** — and stopped there.
+
+### The measurement
+
+A keyframe is three things: a **time**, a **value** and an **easing**. A
+keyframe *list* has three more rules: it is **sorted**, **unique**, and
+within `MAX_KEYS`. The model keeps all of them when it *builds* a list. A
+**file** does not build one — it is deserialized straight into the model — so
+the rules were never kept on the way in, and (until this was fixed) never
+*checked* either.
+
+Seven cases, each written by hand into a file and loaded through the real
+reader. Before the fix, **every one of them loaded, and every one of them
+validated `Ok`**:
+
+| What the file carried | What the model says about it | What the reader did |
+|---|---|---|
+| keys at 500 and 0 — **out of order** | "a sorted, unique list" | loaded it |
+| **two keys at the same time** | "a sorted, unique list" | loaded it |
+| a time of `18446744073709551616` | `Tick::from_raw` clamps; the tick's own doc says "the reader refuses such a file" | loaded it |
+| a time of `-99999999999999999999` | the same | loaded it |
+| a bezier with `out_x: 5.0` | `Easing::checked()` refuses it | loaded it |
+| a bezier with `out_x: 1e40` (which is `inf` in `f32`) | `Easing::checked()` refuses it | loaded it |
+| **10 005 keys** on one property | the limit is 10 000 | loaded it |
+
+The worst of them is not a tidiness problem. An **unsorted** list does not
+sample to an untidy answer — it samples to the **wrong one**:
+
+```text
+keys at 0 (value 2.0) and 500 (value 1.0), sampled at tick 50
+  sorted list   -> 2.0 + (1.0 - 2.0) x (50/500) = 1.9   <- right
+  unsorted list -> 1.0                               <- what the file gave
+```
+
+The key that is *earliest in time* is never reached: the list holds from its
+first element, so the animation starts at the **later** key's value and the
+earlier one is dead. Nothing said so; the document validated.
+
+### Why nothing noticed
+
+**Nothing ever built a broken list.** `Keyframes::set` sorts, replaces and
+bounds the list, so every list the tree makes is correct. The bug was
+therefore *unreachable* from the tree's own API — and every test in the tree
+built its lists through that API.
+
+**The one field that was checked was the field that is hard to get wrong.** A
+number past the limit is a number; the tests for §73 wrote one. A *time* and
+an *easing* are different kinds of thing, and the check never grew to them.
+
+**The reader checked everything else.** The document's frame rate is checked
+(§89), its range is checked (§60), its properties are checked (§73, §88) —
+and its keyframes were the one part that was not. The check was not missing
+*from* the tree; it was missing *from one field*.
+
+### The fix
+
+**One place knows what a keyframe list must be.** `Keyframes::check` lives
+next to the type that has the rules, and the model's property check calls it:
+
+```rust
+pub fn check(&self, what: &str) -> Result<(), CoreError>
+```
+
+It checks the count, every key's time against the range a reply could carry,
+every key's easing against `Easing::checked`, every key's value (§73), and
+the list's own two rules — sorted, and no two keys at the same time. The
+message names the property, so a file with many properties says which one is
+wrong.
+
+**The door the easing comes through is the model's.** `Keyframes::keys_mut`
+is gone: it handed out `&mut [Key]`, which is a way to break the list's
+rules without the tree knowing. `key.ease` now goes through
+`Keyframes::set_ease`, which checks the easing before it stores it — so an
+easing the model's own constructor refuses cannot enter by the back door
+either.
+
+**The reader refuses such a file, and the engine keeps refusing it.** The
+model's check is called by `Document::validate`, which the reader calls
+(§50's rule, §73's precedent) and which the engine calls after **every**
+command (§50). So a file carrying a broken list is refused at the door, and a
+command that broke one would be rolled back.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A keyframe list is sorted, unique and within the limit | `Keyframes::check` |
+| A keyframe's time is one a reply could carry | `Keyframes::check` |
+| A keyframe's easing is one the model accepts | `Keyframes::check`, `Easing::checked` |
+| A file carrying a broken list is refused | `a_file_carrying_broken_keyframes_is_refused` |
+| A property with broken keyframes is refused | `a_property_with_broken_keyframes_is_refused` |
+| An unsorted list samples to the wrong value | `an_unsorted_list_samples_to_the_wrong_value` |
+| A command cannot break the list's rules | `Keyframes::set_ease`, and no `keys_mut` |
+
+and eight mutations in `scripts/mutation-test-gates.sh`:
+
+- the model's property check does not check the keyframe list at all;
+- a list that is not sorted is accepted;
+- two keys at the same time are accepted;
+- a keyframe on a time no reply could carry is accepted;
+- an easing the model refuses is accepted;
+- a bezier control point outside 0..=1 is accepted;
+- a property may carry more keyframes than the limit;
+- `set_ease` stores an easing the model refuses.
+
+### The lesson
+
+**A check that grows one field at a time needs a reason to grow the next.**
+§73 checked the value because the value was the thing a file could get
+wrong. The time and the easing were the same kind of thing and nobody wrote
+them down.
+
+**"The constructor keeps it" is not the same as "the tree keeps it".** The
+rules a constructor keeps are exactly the rules a *file* breaks, because a
+file does not go through a constructor. The tree had a rule about sorted
+keyframes and no rule about *checking* them.
+
+**A wrong answer is worse than no answer.** An unsorted list does not fail
+loudly and it does not look wrong: it animates, smoothly, to the wrong
+values. The refusal is worth more than the tidiness.
+
+**The escape hatch was the hole.** `keys_mut` existed for one caller, and
+one caller is enough to make an invariant unenforceable. Removing it was
+cheaper than documenting it.
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -9145,6 +9275,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every property is named by a path that names it** | `craftkit-model` test | 1 mutation — §88 |
 | **The command can set any rate a document may carry** | `craftkit-engine` test | 2 mutations — §89 |
 | **Whether a rate is exact is a fact the model can state** | `craftkit-core` test | 1 mutation — §90 |
+| **A keyframe list is sorted, unique and within the limit** | `craftkit-model` test | 3 mutations — §91 |
+| **A keyframe's time is one a reply could carry** | model and io tests | 1 mutation — §91 |
+| **A keyframe's easing is one the model accepts** | model and io tests | 2 mutations — §91 |
+| **A file carrying a broken keyframe list is refused** | `craftkit-io` test | 1 mutation — §91 |
+| **A property with broken keyframes is refused** | `craftkit-model` test | 1 mutation — §91 |
+| **An unsorted list samples to the wrong value** | `craftkit-model` test | 1 mutation — §91 |
+| **A command cannot store an easing the model refuses** | `craftkit-model` test | 1 mutation — §91 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
