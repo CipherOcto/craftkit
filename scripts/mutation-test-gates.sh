@@ -1081,11 +1081,17 @@ expect_catch "prose: a limit in a table cell is not the constant's value" \
 
 # The "did this command actually change anything?" check. The engine compares
 # the document with the snapshot it took before the command, and a command
-# that declares `mutates: true` and writes nothing is a bug. No command in
-# the tree did that, so nothing ever reached the check: deleting it left
-# every test in the workspace green.
+# that declares `mutates: true` and writes nothing is a bug.
+#
+# §93 changed the shape of the check — the command now says whether it
+# changed anything, because the comparison cannot tell "the command forgot to
+# write" from "the command wrote the value a field already held" — and this
+# anchor moved with it. The check is still the one that catches a command
+# that forgot to write: the default of `Outcome::changed` is "it did", so a
+# command that says nothing is caught. The gate here is the old test; §93's
+# own case removes the same check and is caught by the new one.
 swap crates/engine/src/session.rs \
-    '                    if self.doc == snapshot {' \
+    '                    if !changed && outcome.changed {' \
     '                    if false {'
 expect_catch "engine: a command that changes nothing is allowed" \
     "cargo test -p craftkit-engine --profile ci says_it_changes_the_document"
@@ -2189,6 +2195,39 @@ swap crates/model/src/property.rs \
         }'
 expect_catch "model: a write that changes nothing does not say so" \
     "cargo test -p craftkit-model --profile ci writing_a_value_a_property_already_holds_says_it_changed_nothing"
+
+# A command that does not change the document has nothing to undo, so it
+# cannot be undoable: the push lives inside the `mutates` branch. Four
+# commands -- `playback.seek`, `plan.evaluate`, `diagnostics.list` and
+# `session.stats` -- declared `undoable: true` and never could, and the flag
+# is published to agents in the command schema. §94.
+swap crates/engine/src/commands.rs \
+    '    id: "playback.seek",
+    label: "Go to",
+    area: Area::Playback,
+    icon: Icon("play"),
+    shortcut: None,
+    doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
+    params: &[
+        ParamDoc::req("seconds", Doc::Time, "The instant to go to, in seconds."),
+        ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
+    ],
+    mutates: false,
+    undoable: false,' \
+    '    id: "playback.seek",
+    label: "Go to",
+    area: Area::Playback,
+    icon: Icon("play"),
+    shortcut: None,
+    doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
+    params: &[
+        ParamDoc::req("seconds", Doc::Time, "The instant to go to, in seconds."),
+        ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
+    ],
+    mutates: false,
+    undoable: true,'
+expect_catch "engine: a command that does not mutate is undoable anyway" \
+    "cargo test -p craftkit-engine --profile ci no_command_that_does_not_mutate_is_undoable"
 
 # ------------------------------------------------------------------ done ----
 restore
