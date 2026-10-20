@@ -155,14 +155,14 @@ The loader calls it. `File::from_text` in `crates/io/src/format.rs` does:
 
 ```rust
 let mut file: Self = serde_json::from_str(text).map_err(|e| FormatError::NotJson(e.to_string()))?;
-file.check()?;
+file.check_with(&File::known_changes(steps))?;
 // Pending rewrites run before validation, because a `step` is exactly
 // the thing that fixes an old file's shape into this version's.
 //
 // Only the changes the file has **not** had: a file this build wrote
 // already has them, and applying them again would rewrite it. §81.
 let already = file.meta.pending.clone();
-pending::apply(&mut file.document, &already);
+pending::apply_steps(&mut file.document, &already, steps);
 file.document.validate().map_err(|e| FormatError::InvalidDocument(e.to_string()))?;
 ```
 
@@ -172,6 +172,15 @@ validation runs against the old shape. The `already` list is the other half:
 it is the file's own record of the changes it has had, and it is what keeps a
 file this build wrote from being rewritten when it is read back.
 
+The `check_with` line is the **other** direction, and it is the one a change
+author has to know about. The file's list is not only a list of things to skip:
+a file that names a change this build has never heard of was written by a
+build whose shape this build does not know, and the reader refuses it rather
+than dropping the parts it does not recognise. §95. So the reader asks two
+questions of the same list — *what does the file still need* and *what has it
+had that I do not have* — and a change author's name has to be in the table
+for the file that carries it to be readable at all.
+
 > **This note used to say the opposite.** It claimed that the loader did not
 > call `apply` at all, and told the reader to add the call if it was "still
 > missing". The call was there; the note was not. A note in a recipe is not
@@ -179,7 +188,7 @@ file this build wrote from being rewritten when it is read back.
 
 ### 5. Do not touch `CURRENT`
 
-`pub const CURRENT: u32 = 1` (`crates/io/src/format.rs:33`) names the version
+`pub const CURRENT: u32 = 1` (the `CURRENT` constant in `crates/io/src/format.rs`) names the version
 *this build writes*. `Format::check` refuses anything with a higher number and accepts anything
 lower. A pending change
 does not move it. A release does.

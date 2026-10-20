@@ -29,6 +29,18 @@
 //! change to a file this build wrote — and the file does not read back as it
 //! was written.
 //!
+//! # Which changes a file has had that this build does not have
+//!
+//! The same list, read the other way, is the one the reader used to ignore.
+//! A file that names a change this build has never heard of was written by a
+//! build whose shape this build does not know: the document in it is in that
+//! change's "after" shape, and the parts this build does not recognise are
+//! dropped without a word. A reader that only ever subtracts the file's list
+//! from its own cannot tell that file from one it understands. §95.
+//!
+//! [`unknown_names`] is that other direction, and the reader refuses a file
+//! that needs it.
+//!
 //! # Why it is worth the ceremony
 //!
 //! The alternative — bump the number and edit the reader in one diff — reads
@@ -72,6 +84,25 @@ const FILES: &[&str] = &[];
 /// pending change existing — which is what §81 asked for.
 fn missing<'a>(names: &[&'a str], already: &[String]) -> Vec<&'a str> {
     names.iter().copied().filter(|name| !already.iter().any(|a| a == name)).collect()
+}
+
+/// The changes a file names that this build has never heard of.
+///
+/// The other direction, and the one the reader used to be blind to: `missing`
+/// works out what the file still **needs**, and this works out what the file
+/// has **had** that this build does not have.
+///
+/// A name in this list means the file was written by a build whose shape this
+/// build does not know. The document in such a file is in that change's
+/// "after" shape, and the parts of it this build does not recognise are
+/// dropped without a word — so a save writes the file back without them, and
+/// the data is gone. §95.
+///
+/// The rule is symmetric with [`missing`] on purpose: one asks what the file
+/// still needs, the other asks what it has had, and a reader that asks only
+/// one of the two questions can read a file it does not understand.
+pub fn unknown_names(already: &[String], known: &[&str]) -> Vec<String> {
+    already.iter().filter(|name| !known.contains(&name.as_str())).cloned().collect()
 }
 
 /// A pending change and the step that applies it.
@@ -196,6 +227,34 @@ mod tests {
         // A change this build does not have is not the file's business.
         let other = vec!["a_change_from_another_build".to_string()];
         assert_eq!(missing(&names, &other).len(), 2);
+    }
+
+    /// The other direction: the changes a file has had that this build does
+    /// not have.
+    ///
+    /// §95: the reader worked out what a file still needed and never asked
+    /// what it had already had, so a file written by a build with a format
+    /// change this build does not have was read like any other — and the
+    /// parts of the document that change had put there were dropped without a
+    /// word.
+    #[test]
+    fn the_changes_a_file_has_that_this_build_does_not_have_are_worked_out() {
+        let known = ["a_change", "another_change"];
+        let none: Vec<String> = Vec::new();
+        assert!(unknown_names(&none, &known).is_empty(), "a file that has had nothing is fine");
+
+        let one = vec!["a_change".to_string()];
+        assert!(unknown_names(&one, &known).is_empty(), "a change this build has is not unknown");
+
+        let stranger = vec!["a_change_from_another_build".to_string()];
+        assert_eq!(
+            unknown_names(&stranger, &known),
+            vec!["a_change_from_another_build".to_string()],
+            "a change this build has never heard of is the one that matters"
+        );
+
+        let both = vec!["a_change".to_string(), "a_stranger".to_string()];
+        assert_eq!(unknown_names(&both, &known), vec!["a_stranger".to_string()]);
     }
 
     #[test]

@@ -115,6 +115,20 @@ including the files it has just written — and the file does not read back as i
 was written. §81 measured that: the round-trip tests caught it the moment a
 real pending change existed.
 
+**And the other direction.** A file that names a change this build has never
+heard of was written by a build whose shape this build does not know — and the
+reader used to read it anyway, dropping the parts of the document it did not
+recognise without a word and writing them back without them on the next save.
+A pending change does not bump the version, so the tag cannot catch this: the
+file says `craftkit/1`, like every file this build writes. So the reader
+refuses it, with `FormatError::UnknownChange` and the name of the change in
+the message. §95.
+
+A file from an **earlier** version may name a change that was folded into a
+later version, and this build does not keep the folded names — so it reads
+those files rather than refusing every design written before the last release.
+What a folded change is stays the open question below.
+
 **What happens to a folded step is still open.** The release script moves the
 files into `pending/v<N>/` and empties the wiring, so nothing calls them
 afterwards; the recipe describes a version directory the reader dispatches to

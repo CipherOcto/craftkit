@@ -204,6 +204,21 @@ rewritten when it is read back. It is `#[serde(default)]`, because a file
 written before the field existed must still load, and it has had none of the
 changes.
 
+The same list, read the other way, is what says whether this build understands
+the file at all. A pending change does not bump the version — that is the whole
+point of the scheme — so the version tag says nothing about the *shape*. A file
+at the current version that names a change this build has never heard of was
+written by a different build, and its document is in a shape this build does not
+know: the parts of it this build does not recognise are dropped without a word,
+and the next save writes the file back without them. The reader refuses such a
+file (`FormatError::UnknownChange`), naming the change. §95.
+
+A file from an **earlier** version may name a change that was folded into a
+later version, and this build does not keep the folded names — so it reads
+those files rather than refusing every design written before the last release.
+What a folded change *is*, and whether the reader has to know the older shapes
+by hand, is still open; `KNOWN-GAPS.md` §81 records it.
+
 See [`../recipes/change-the-file-format.md`](../recipes/change-the-file-format.md).
 
 ---

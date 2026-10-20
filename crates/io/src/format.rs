@@ -6,6 +6,20 @@
 //! A reader refuses a version it does not know rather than guessing, because a
 //! guessed read of a newer file silently corrupts a design.
 //!
+//! # The pending list, and the other direction
+//!
+//! A format change that alters what is saved does **not** bump the version —
+//! that is the whole point of the pending scheme. So the version cannot be the
+//! only thing that says whether this build understands a file: the file's
+//! `meta.pending` list says which changes had been applied to it, and a change
+//! this build has never heard of means the document is in a shape this build
+//! does not know.
+//!
+//! The reader applies the changes this build has that the file has not had.
+//! It also refuses a file that names a change this build does not have: the
+//! parts of the document that change had put there are dropped without a word,
+//! and the next save writes the file back without them. §95.
+//!
 //! # How a version is born
 //!
 //! **A change that alters what is saved adds ONE file**, `pending/<name>.rs`.
@@ -73,6 +87,23 @@ pub enum FormatError {
 
     #[error("the file's `meta` block is malformed: {0}")]
     Meta(String),
+
+    /// The file names a format change this build has never heard of.
+    ///
+    /// A file's `meta.pending` list says which format changes had been applied
+    /// to it. A change this build does not have means the file was written by a
+    /// build whose shape this build does not know — so the parts of the
+    /// document that change had put there are dropped without a word, and the
+    /// next save writes them back without them.
+    ///
+    /// §95: the reader looked at the changes a file still needed and never at
+    /// the ones it had, so a file like this was read like any other.
+    #[error(
+        "this file has had the format change `{0}`, and this build has never heard of it. \
+         It was written by a build with a format change this build does not have; \
+         open it with that build."
+    )]
+    UnknownChange(String),
 
     #[error("the document in this file is not valid: {0}")]
     InvalidDocument(String),
@@ -153,15 +184,7 @@ impl Format {
 
     /// The version this file claims.
     pub fn version(&self) -> Result<u32, FormatError> {
-        if self.format.trim().is_empty() {
-            return Err(FormatError::MissingTag);
-        }
-        let Some(rest) = self.format.strip_prefix(&format!("{TAG_PREFIX}/")) else {
-            return Err(FormatError::NotOurs(self.format.clone()));
-        };
-        rest.parse::<u32>()
-            .map_err(|_| FormatError::TooOld(self.format.clone()))
-            .and_then(|v| if v == 0 { Err(FormatError::TooOld(self.format.clone())) } else { Ok(v) })
+        version_of(&self.format)
     }
 
     /// Refuse a file this build cannot read correctly.
@@ -172,6 +195,48 @@ impl Format {
         }
         Ok(())
     }
+}
+
+/// The version a tag names.
+///
+/// One rule, in one place: the tag is either ours and carries a version, or
+/// it is something else. The reader and the change check both ask this
+/// question, and two spellings of it is how they would come to disagree.
+fn version_of(tag: &str) -> Result<u32, FormatError> {
+    if tag.trim().is_empty() {
+        return Err(FormatError::MissingTag);
+    }
+    let Some(rest) = tag.strip_prefix(&format!("{TAG_PREFIX}/")) else {
+        return Err(FormatError::NotOurs(tag.to_string()));
+    };
+    rest.parse::<u32>()
+        .map_err(|_| FormatError::TooOld(tag.to_string()))
+        .and_then(|v| if v == 0 { Err(FormatError::TooOld(tag.to_string())) } else { Ok(v) })
+}
+
+/// The format changes a file names that a build may not read.
+///
+/// `version` is the version the file claims, `current` the version this build
+/// writes, `already` the file's own list and `known` the changes this build
+/// has. §95.
+///
+/// A file's list names the changes that had been applied to it, on top of the
+/// shape its version's base defines. A build at the **same** version knows
+/// every change that can have been applied, so a name it has never heard of
+/// means the file was written by a different build at the same version — and
+/// the document is in a shape this build does not know.
+///
+/// A build at a **later** version may know a change it has in no list any
+/// more: the change was folded into a version between the file's and this
+/// build's. This build does not keep the folded names, so it cannot tell that
+/// from a change it has never heard of — and refusing every such file would
+/// refuse every design written before the last release. So an earlier file is
+/// read, and what a folded change is stays the open question it is.
+fn unknown_changes(version: u32, current: u32, already: &[String], known: &[&str]) -> Vec<String> {
+    if version != current {
+        return Vec::new();
+    }
+    pending::unknown_names(already, known)
 }
 
 impl Default for Format {
@@ -219,8 +284,48 @@ impl File {
     }
 
     /// Refuse a file this build cannot read correctly.
+    ///
+    /// The version, and the format changes the file names that this build has
+    /// never heard of. §95.
     pub fn check(&self) -> Result<(), FormatError> {
-        Format { format: self.format.clone(), meta: self.meta.clone() }.check()
+        self.check_with(&pending::names())
+    }
+
+    /// The same check, against a known set of format changes.
+    ///
+    /// The seam is [`pending::Step`]s: a test that drives the reader with a
+    /// step of its own has to be able to say that the file's header names a
+    /// change this reader does have — otherwise the refusal of §95 would
+    /// refuse the test that §81 needs. §81, §95.
+    pub fn check_with(&self, known: &[&str]) -> Result<(), FormatError> {
+        Format { format: self.format.clone(), meta: self.meta.clone() }.check()?;
+        self.check_changes(known)
+    }
+
+    /// The format changes this build has, plus the ones the seam hands in.
+    fn known_changes(steps: &[pending::Step]) -> Vec<&'static str> {
+        let mut known = pending::names();
+        for (name, _) in steps {
+            if !known.contains(name) {
+                known.push(name);
+            }
+        }
+        known
+    }
+
+    /// Refuse a file that names a format change this build has never heard of.
+    ///
+    /// A file at the current version may only name the changes this build has.
+    /// The file's document is in the "after" shape of the changes it names, and
+    /// a change this build does not have means it does not know that shape:
+    /// the parts of the document it does not recognise are dropped without a
+    /// word, and the next save writes them back without them. §95.
+    fn check_changes(&self, known: &[&str]) -> Result<(), FormatError> {
+        let version = version_of(&self.format)?;
+        match unknown_changes(version, CURRENT, &self.meta.pending, known).first() {
+            Some(name) => Err(FormatError::UnknownChange(name.clone())),
+            None => Ok(()),
+        }
     }
 
     /// The JSON this build writes, pretty-printed with a trailing newline.
@@ -277,7 +382,7 @@ impl File {
             return Err(FormatError::TooLarge { bytes: text.len(), limit: MAX_FILE_BYTES });
         }
         let mut file: Self = serde_json::from_str(text).map_err(|e| FormatError::NotJson(e.to_string()))?;
-        file.check()?;
+        file.check_with(&File::known_changes(steps))?;
         // Pending rewrites run before validation, because a `step` is exactly
         // the thing that fixes an old file's shape into this version's.
         //
@@ -429,6 +534,91 @@ mod tests {
         );
     }
 
+    /// A file that names a format change this build has never heard of is
+    /// refused.
+    ///
+    /// §95: the reader looked at the changes a file still **needed** and never
+    /// at the ones it had **already had**. A file naming a change this build
+    /// does not have was written by a build whose shape this build does not
+    /// know, and the reader took it anyway.
+    ///
+    /// Measured, before this was refused: the file below loaded without a word
+    /// of complaint, its node's `nickname` — a field this build has never heard
+    /// of — was dropped on the way in, and the file written back had no trace
+    /// of it. The version tag could not catch it either, because a pending
+    /// change does not bump the version: the file said `craftkit/1`, exactly
+    /// like every file this build writes.
+    #[test]
+    fn a_file_that_names_a_change_this_build_has_never_heard_of_is_refused() {
+        let mut file = File::new(Document::empty("x"));
+        file.meta.pending = vec!["a_change_this_build_has_never_heard_of".to_string()];
+        let text = file.to_text().expect("json");
+
+        let err = File::from_text(&text).expect_err("refused");
+        assert!(
+            matches!(err, FormatError::UnknownChange(ref name) if name == "a_change_this_build_has_never_heard_of"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("a_change_this_build_has_never_heard_of"), "{err}");
+        assert!(err.to_string().contains("never heard of it"), "{err}");
+    }
+
+    /// A file that names a change this build **has** is read.
+    ///
+    /// The other half of the rule above, and the reason the check is written
+    /// against a known set rather than against the build's own list: a test
+    /// that drives the reader with a step of its own has to be able to say
+    /// that the file's header names a change this reader does have. §81.
+    #[test]
+    fn a_file_that_names_a_change_this_build_has_is_read() {
+        fn rename(doc: &mut Document) {
+            if let Some(node) = doc.nodes.first_mut() {
+                node.name = "Renamed".to_string();
+            }
+        }
+        let steps: &[pending::Step] = &[("a_change", rename)];
+
+        let mut doc = Document::empty("x");
+        let _ = doc.add_node("A", craftkit_model::NodeKind::Source);
+        let mut file = File::new(doc);
+        file.meta.pending = vec!["a_change".to_string()];
+        let text = file.to_text().expect("json");
+
+        let back = File::from_text_with(&text, steps).expect("read");
+        assert_eq!(back.document.nodes.first().map(|n| n.name.clone()).unwrap_or_default(), "A");
+    }
+
+    /// A file from an earlier version may name a change that has been folded.
+    ///
+    /// The half of §95 that is still open: a change folded into a later
+    /// version is not in this build's pending list any more, so a file from
+    /// before the fold names a change this build cannot find — and refusing
+    /// every such file would refuse every design written before the last
+    /// release.
+    ///
+    /// So an earlier file is read, and what a folded change *is* — and whether
+    /// the reader has to know the older shapes by hand — is the open question
+    /// about the folded format change. It is written down rather than guessed
+    /// at, and this test is where it will change.
+    ///
+    /// The rule is asked with the two versions it is about, because the tree
+    /// has no version earlier than the current one: version 1 is the first, so
+    /// there is no earlier file to write. §95 measured that too — the test
+    /// that claimed to read an older file was tagging one with the *current*
+    /// version, and so was reading a file of its own age.
+    #[test]
+    fn an_earlier_file_may_name_a_change_that_was_folded() {
+        assert!(
+            unknown_changes(1, 2, &["a_change_folded".to_string()], &[]).is_empty(),
+            "a file from before the fold may name the change the fold carried"
+        );
+        assert_eq!(
+            unknown_changes(2, 2, &["a_change_folded".to_string()], &[]),
+            vec!["a_change_folded".to_string()],
+            "a file at the current version may not name a change this build has never heard of"
+        );
+    }
+
     #[test]
     fn a_newer_file_is_refused_rather_than_guessed_at() {
         let mut file = File::new(Document::empty("x"));
@@ -439,10 +629,20 @@ mod tests {
         assert!(err.to_string().contains("newer craftkit"), "{err}");
     }
 
+    /// A file at the current version is read.
+    ///
+    /// This test used to be called `an_older_file_is_read` and to tag the file
+    /// with version 1 — which is the **current** version, because version 1 is
+    /// the first version there is. So it was reading a file of its own age and
+    /// claiming to read an older one. There is no older version to write, and
+    /// that is worth saying out loud: the tree has never read a file written
+    /// by an earlier craftkit, and cannot until version 2 exists. The rule
+    /// about an earlier version is `unknown_changes`, and it is tested there
+    /// with the two versions the rule is about. §95.
     #[test]
-    fn an_older_file_is_read() {
+    fn a_file_at_the_current_version_is_read() {
         let mut file = File::new(Document::empty("old"));
-        file.format = tag(1);
+        file.format = tag(CURRENT);
         assert!(file.check().is_ok());
     }
 

@@ -9565,6 +9565,155 @@ copy of another flag.** `undoable` was `mutates` for fifteen commands, `true`
 for six, and meaningless for four. The meaningful values are the exceptions,
 and the exceptions are what need checking.
 
+## 95. The reader looked at the changes a file still needed, and never at the ones it had
+
+§81 gave the pending mechanism a rule for the changes a file still **needs**.
+This is the other direction, and it is the one that decides whether the reader
+understands a file at all.
+
+### The measurement
+
+The file format promises this:
+
+> A reader refuses a version it does not know rather than guessing, because a
+> guessed read of a newer file silently corrupts a design.
+
+But a format change that alters what is saved does **not** bump the version —
+that is the whole point of the pending scheme. So the version cannot be the
+only thing that says whether this build understands a file. The other thing is
+the file's own `meta.pending` list: the changes that had been applied to it.
+
+The reader's rule was one-sided. `pending::apply_steps` works out what the
+file still needs and applies it:
+
+```rust
+fn missing<'a>(names: &[&'a str], already: &[String]) -> Vec<&'a str> {
+    names.iter().copied().filter(|name| !already.iter().any(|a| a == name)).collect()
+}
+```
+
+The file's list is used to **subtract** from this build's list, and that is all
+it is ever used for. Nothing ever asks the other question — *which changes has
+the file had that this build has never heard of?* — because a subtraction
+cannot ask it.
+
+Measured, on a file at the current version whose header names a change this
+build has never heard of:
+
+```text
+PROBE loaded: yes
+PROBE nickname survived the round trip: false
+```
+
+The file loaded without a word of complaint. Its node carried a field this
+build has never heard of, the field was dropped on the way in, and the file
+written back had no trace of it — so the next save **loses the data**. The
+file's own header was rewritten too: the saved file says `"pending": []`, so
+the file's record of its own history became a lie as well.
+
+The version tag could not catch it, and could not have: the file said
+`craftkit/1`, exactly like every file this build writes. A pending change
+does not bump the version, so the tag says nothing about the shape.
+
+### Why nothing noticed
+
+**The rule was one-sided by construction.** `missing` is a subtraction, and a
+subtraction never looks at what it subtracts from. The name of the function
+says what it was for, and nothing else was ever written.
+
+**There was nothing to be wrong about.** The pending list has been empty since
+version 1 (§45), so the whole mechanism has never run: a file written by this
+build names no changes, and this build has no changes to name. The reader
+could not be wrong about a change that did not exist.
+
+**The reader had no way to say it.** There was no error to give: a build that
+has never heard of a change has nothing to compare the name against, so
+silence was the only thing it could produce.
+
+**And the tree has never read an older file.** Version 1 is the first version
+there is, so there is no version before the current one to write — and the
+test that claimed to read an older file was tagging the file with version 1,
+which is the *current* version. It was reading a file of its own age and
+calling it an older one. "Open a design written by an earlier craftkit" has
+never happened, and cannot until version 2 exists.
+
+### The fix
+
+**The other direction is a function of its own.** `pending::unknown_names` is
+the mirror of `missing`: it works out what the file has had that this build
+does not have, and it is a pure function that a test can exercise while there
+is still nothing pending.
+
+**A refusal that names the change.** `FormatError::UnknownChange` says which
+change the file names and that this build has never heard of it. The file is
+refused, loudly, instead of being read as a design this build understands:
+
+```text
+this file has had the format change `a_change_this_build_has_never_heard_of`,
+and this build has never heard of it. It was written by a build with a format
+change this build does not have; open it with that build.
+```
+
+**The check is in the reader.** `File::check` refuses such a file, and
+`File::check_with` does the same against a known set — so the seam that §81
+needs, a test that drives the reader with a step of its own, can say that the
+file's header names a change this reader *does* have.
+
+**The rule is in one pure function.** `unknown_changes` takes the file's
+version, this build's version, the file's list and this build's list, and
+answers with the names that may not be read. That is what makes the older-
+version half testable at all: the tree has no version older than the current
+one, so the rule is asked with the two versions it is about — 1 and 2 — rather
+than with a file that cannot be written yet.
+
+**An earlier file is still read.** A change folded into a later version is
+not in this build's pending list any more, so a file from before the fold
+names a change this build cannot find — and refusing every such file would
+refuse every design written before the last release. What a folded change *is*
+is still the open question it was, and it is recorded rather than guessed at.
+
+**The test that lied says so.** `an_older_file_is_read` is now
+`a_file_at_the_current_version_is_read`, and its comment says why the tree has
+no older file to read.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The changes a file has had that this build does not have are worked out | `the_changes_a_file_has_that_this_build_does_not_have_are_worked_out` |
+| A file at the current version naming an unknown change is refused | `a_file_that_names_a_change_this_build_has_never_heard_of_is_refused` |
+| A file naming a change this build has is read | `a_file_that_names_a_change_this_build_has_is_read` |
+| An earlier file may name a change that was folded | `an_earlier_file_may_name_a_change_that_was_folded` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the other direction is
+never worked out, the refusal does not fire, the known set loses the seam's
+steps, and the message does not name the change.
+
+### The lesson
+
+**A rule that only runs one way is half a rule.** The reader asked what a file
+needed and never what it had. Both questions are about the same list, and a
+list that is only ever subtracted from cannot tell a file it understands from
+a file it does not.
+
+**A promise about the future needs a way to be wrong.** "A reader refuses what
+it does not understand" was true about the *version* and untrue about the
+*shape*, and the shape was the part a pending change moved. A scheme that
+deliberately does not bump the version has to say what does.
+
+**The mechanism that has never run is the one with no evidence.** §45 found
+that the pending steps had never executed. The same is true of the check
+around them: with an empty list there is nothing to be wrong about, and a
+reader that cannot be wrong is a reader nobody has tested.
+
+**A test can be named for a thing it does not do.** `an_older_file_is_read`
+read a file of the current version, because there is no other version to read.
+The name was wrong in a way that hid the gap: the tree had never opened a
+design from an earlier craftkit, and the test that said it had was reading its
+own.
+
+---
+
 ---
 
 ## What enforces what
@@ -9742,6 +9891,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A command that claims to change something and does not is refused** | `craftkit-engine` test | 1 mutation — §93 |
 | **A write that changes nothing says so** | model and engine tests | 2 mutations — §93 |
 | **A command that does not mutate is never undoable** | `craftkit-engine` test | 1 mutation — §94 |
+| **The changes a file has had that this build does not have are worked out** | `craftkit-io` test | 1 mutation — §95 |
+| **A file at the current version naming an unknown change is refused** | `craftkit-io` test | 1 mutation — §95 |
+| **A file naming a change this build has is read** | `craftkit-io` test | 1 mutation — §95 |
+| **An earlier file may name a change that was folded** | `craftkit-io` test | 1 mutation — §95 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

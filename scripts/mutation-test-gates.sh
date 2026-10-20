@@ -2215,6 +2215,50 @@ swap crates/engine/src/commands.rs \
 expect_catch "engine: a command that does not mutate is undoable anyway" \
     "cargo test -p craftkit-engine --profile ci no_command_that_does_not_mutate_is_undoable"
 
+# The other direction of the pending list: the changes a file HAS HAD that this
+# build does not have. §95: the reader worked out what a file still needed and
+# never asked what it had already had, so a file written by a build with a
+# format change this build does not have was read like any other -- and the
+# parts of the document that change had put there were dropped without a word.
+swap crates/io/src/format/pending.rs \
+    '.filter(|name| !known.contains(&name.as_str()))' \
+    '.filter(|_| false)'
+expect_catch "io: the changes a file has that this build does not have are not worked out" \
+    "cargo test -p craftkit-io --profile ci the_changes_a_file_has_that_this_build_does_not_have_are_worked_out"
+
+# The refusal itself. A pending change does not bump the version, so the tag
+# cannot catch a file from a build with a change this build does not have: the
+# file says craftkit/1, like every file this build writes. The reader has to
+# refuse it on the strength of the list alone.
+swap crates/io/src/format.rs \
+    '    if version != current {' \
+    '    if version == current {'
+expect_catch "io: a file naming a change this build has never heard of is read" \
+    "cargo test -p craftkit-io --profile ci a_file_that_names_a_change_this_build_has_never_heard_of_is_refused"
+
+# The known set has to include the steps the seam hands in, or the refusal
+# above would refuse the test that section 81 needs: a file whose header names
+# a change this reader DOES have.
+swap crates/io/src/format.rs \
+    '        for (name, _) in steps {
+            if !known.contains(name) {
+                known.push(name);
+            }
+        }' \
+    '        for (name, _) in steps {
+            let _ = name;
+        }'
+expect_catch "io: the reader forgets the changes the seam hands it" \
+    "cargo test -p craftkit-io --profile ci a_file_is_given_only_the_changes_it_has_not_had"
+
+# The refusal has to name the change, or the person holding the file cannot
+# tell which one it is.
+swap crates/io/src/format.rs \
+    '            Some(name) => Err(FormatError::UnknownChange(name.clone())),' \
+    '            Some(_name) => Err(FormatError::UnknownChange(String::new())),'
+expect_catch "io: the refusal does not name the change" \
+    "cargo test -p craftkit-io --profile ci a_file_that_names_a_change_this_build_has_never_heard_of_is_refused"
+
 # ------------------------------------------------------------------ done ----
 restore
 finish
