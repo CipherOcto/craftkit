@@ -1,0 +1,176 @@
+# Continuous integration.
+#
+# The gates live in `cargo xtask`, not in this file. That is deliberate: the
+# rules are versioned with the code they check, they run identically on a
+# laptop and here, and they are unit-tested. This workflow only decides *where*
+# to run them and on what.
+#
+# The one thing this file does add is the matrix, because the things a single
+# Linux box cannot tell you are exactly the things worth a second machine.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # An agent working alone for a day should not need a commit to find out that
+  # it broke something.
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run on the same ref: nobody is waiting for
+# a result they no longer care about.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # `--locked` everywhere. A build that quietly updates the lock file is a build
+  # nobody has tested.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # The main gate. Everything else is a question this job cannot answer.
+  gates:
+    name: gates (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # toolchain from rust-toolchain.toml, with the wasm target.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Can this machine build it?
+        run: cargo xtask doctor
+
+      # Stops at the first failure and says which one. About 43 seconds warm.
+      - name: The gate
+        run: cargo xtask ci
+
+      # The browser build, not just the wasm check: install a wasm-bindgen CLI
+      # whose version matches the crate, and prove the bundle is actually
+      # produced. `cargo xtask wasm` only compiles; it writes nothing, which is
+      # how a page that 404s on every load sat behind four green checks.
+      - name: Install a matching wasm-bindgen-cli
+        run: |
+          version=$(grep -A 1 '^name = "wasm-bindgen"$' Cargo.lock | awk '/^version/ {print $3; exit}' | tr -d '"')
+          echo "installing wasm-bindgen-cli $version"
+          cargo install wasm-bindgen-cli --version "$version" --locked
+
+      - name: Produce the browser bundle
+        run: cargo xtask bundle
+
+      - name: The page imports the bundle this job just produced
+        run: |
+          # Read the one constant the page and the bundler both come from, and
+          # require the file to exist. A version of this step that only ran
+          # `cargo xtask wasm` passed on a page that 404s.
+          expected="./dist/$(sed -n 's/.*const BUNDLE_NAME: &str = "\(.*\)";.*/\1/p' xtask/src/wasm.rs).js"
+          cd apps/craftkit-web
+          for f in "$expected" ./dist/*_bg.wasm; do
+            test -f "$f" || { echo "::error::apps/craftkit-web/$f was not produced"; exit 1; }
+          done
+          grep -q "$expected" index.html || {
+            echo "::error::index.html does not import $expected"; exit 1; }
+          echo "ok: the page imports $expected and the job produced it"
+
+  # Does each gate still catch the thing it claims?
+  #
+  # A gate that cannot fail teaches people to trust a check that has never
+  # checked anything. This job breaks each rule on purpose and requires the gate
+  # to notice. It is the only job that can catch a gate that has quietly stopped
+  # working, and it is the job the audit in `KNOWN-GAPS.md` §1 argues for.
+  #
+  # It is Ubuntu-only because what it tests is OS-independent, and because two of
+  # its cases run the whole of `cargo xtask ci`.
+  mutation:
+    name: mutation (gates must be able to fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # The script is a gate, so it must be able to fail too. `--self-test`
+      # injects one synthetic case that is guaranteed to miss and exits
+      # non-zero. Asserting that here means a future edit that restores the old
+      # "print the failures and exit 0" behaviour goes red on this line, before
+      # the full run below can be believed.
+      - name: The mutation script fails when a gate stops catching
+        run: |
+          if scripts/mutation-test-gates.sh --self-test; then
+            echo "::error::scripts/mutation-test-gates.sh exited 0 on a missed mutation"
+            exit 1
+          fi
+          echo "ok: a missed mutation makes the script exit non-zero"
+
+      # Every mutation, one at a time, with the tree restored between them.
+      # The script restores the tree itself and compares checksums at the end;
+      # the checkout afterwards is belt and braces, so a failure here leaves an
+      # obviously dirty tree to read.
+      - name: Break each rule and require the gate to notice
+        run: scripts/mutation-test-gates.sh
+
+      - name: What did it leave behind?
+        if: always()
+        run: git status --porcelain
+
+  # What a Linux build machine cannot tell you.
+  portability:
+    name: portability
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # An old toolchain that still compiles is still a broken promise.
+      - name: The declared minimum toolchain
+        run: |
+          rustup toolchain install "$(grep -m1 rust-version Cargo.toml | cut -d'"' -f2)" \
+            --profile minimal --component clippy,rustfmt
+          cargo +"$(grep -m1 rust-version Cargo.toml | cut -d'"' -f2)" xtask ci
+
+  # Not part of `cargo xtask ci`, because it needs a network and a licence
+  # database, and a gate that fails for want of either gets switched off.
+  policy:
+    name: policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+      # Licences and sources. `deny.toml` is in the repository; this reads it.
+      - name: Licence and advisory policy
+        run: cargo deny check
+
+      # ATTRIBUTION.md must exist and agree with the tree. Already part of
+      # `cargo xtask assets`; run again on its own so a failure here is
+      # obviously about attribution rather than about layering.
+      - name: Attribution
+        run: cargo xtask assets

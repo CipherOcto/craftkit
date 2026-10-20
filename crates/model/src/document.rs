@@ -1,0 +1,595 @@
+//! The document.
+//!
+//! Plain data, no I/O, no behaviour beyond validation. That is not laziness —
+//! it is what makes undo a snapshot, the file format a `serde_json` call, and
+//! the evaluator a pure function of `(document, instant)`.
+//!
+//! # One id space
+//!
+//! Nodes and documents draw from a single monotonic [`IdCounter`]. An id is
+//! therefore unique across the whole document, so a log line can name any object
+//! without a kind prefix, and copying an id between two collections cannot
+//! collide. `Document::validate` checks uniqueness.
+
+use crate::limits;
+use crate::property::{PropGroup, Property};
+use craftkit_core::{CoreError, IdCounter, NodeId, Tick, Value};
+use serde::{Deserialize, Serialize};
+
+/// What a node does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeKind {
+    /// Reads a value from somewhere. A leaf of the graph.
+    Source,
+    /// Changes a value on the way through.
+    Filter,
+    /// Writes a value out.
+    Sink,
+    /// Holds an animation, with no other effect.
+    Cue,
+    /// A note. Ignored by the evaluator.
+    Comment,
+}
+
+impl NodeKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            NodeKind::Source => "source",
+            NodeKind::Filter => "filter",
+            NodeKind::Sink => "sink",
+            NodeKind::Cue => "cue",
+            NodeKind::Comment => "comment",
+        }
+    }
+
+    /// Whether the evaluator does anything with it.
+    pub fn is_passive(self) -> bool {
+        matches!(self, NodeKind::Comment)
+    }
+
+    /// Every kind, for the UI's add menu.
+    pub fn all() -> &'static [NodeKind] {
+        &[NodeKind::Source, NodeKind::Filter, NodeKind::Sink, NodeKind::Cue, NodeKind::Comment]
+    }
+}
+
+/// One node in the plan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Node {
+    pub id: NodeId,
+    pub name: String,
+    pub kind: NodeKind,
+    /// The node's own property tree.
+    pub props: PropGroup,
+    /// Whether the evaluator skips it.
+    pub muted: bool,
+}
+
+impl Node {
+    pub fn new(id: NodeId, name: impl Into<String>, kind: NodeKind) -> Self {
+        Self { id, name: name.into(), kind, props: PropGroup::new("props", "Properties"), muted: false }
+    }
+    /// A node with the standard property set a user expects to be able to set.
+    pub fn with_defaults(mut self, enabled: bool, amount: f64) -> Result<Self, CoreError> {
+        self.set_defaults(enabled, amount)?;
+        Ok(self)
+    }
+
+    /// The same, in place.
+    ///
+    /// Separate from [`Node::with_defaults`] because a command usually holds a
+    /// `&mut Node` borrowed out of a document. Moving the node out to call the
+    /// builder would need a clone of the whole property tree, which for a
+    /// command that only wants to add four properties is absurd.
+    pub fn set_defaults(&mut self, enabled: bool, amount: f64) -> Result<(), CoreError> {
+        self.props.push(Property::new(1, "enabled", Value::Bool(enabled)));
+        self.props.push(
+            Property::new(2, "amount", Value::num("amount", amount)?)
+                .with_hint(crate::property::PropHint::Slider { min: 0.0, max: 1.0 }),
+        );
+        self.props.push(Property::new(3, "tint", Value::Color(craftkit_core::Color::rgb(140, 170, 210))));
+        self.props.push(Property::new(4, "label", Value::text("label", String::new())?));
+        Ok(())
+    }
+
+    /// A cheap, conservative estimate of the memory this node holds.
+    ///
+    /// Never under-estimates: a budget a document can lie about is not a
+    /// budget. §52.
+    pub fn estimated_bytes(&self) -> usize {
+        std::mem::size_of::<Node>() + self.name.capacity() + self.props.estimated_bytes()
+    }
+}
+
+/// Document-level settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocumentMeta {
+    pub name: String,
+    pub fps: u32,
+    /// The first instant in the document.
+    pub start: Tick,
+    /// One past the last instant.
+    pub end: Tick,
+    #[serde(default)]
+    pub comment: String,
+}
+
+impl Default for DocumentMeta {
+    fn default() -> Self {
+        Self {
+            name: "Untitled".to_string(),
+            fps: 24,
+            start: Tick::ZERO,
+            end: Tick::from_seconds_f64(5.0),
+            comment: String::new(),
+        }
+    }
+}
+
+impl DocumentMeta {
+    pub fn frame_rate(&self) -> craftkit_core::FrameRate {
+        craftkit_core::FrameRate(self.fps)
+    }
+    pub fn duration(&self) -> Tick {
+        self.end.sub_ticks(self.start.raw())
+    }
+}
+
+/// A whole document: ordered nodes plus settings.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Document {
+    pub meta: DocumentMeta,
+    pub nodes: Vec<Node>,
+    #[serde(skip)]
+    next_id: IdCounter,
+}
+
+impl Document {
+    pub fn new(name: impl Into<String>) -> Self {
+        let mut d = Self {
+            meta: DocumentMeta { name: name.into(), ..Default::default() },
+            nodes: Vec::new(),
+            next_id: IdCounter::new(1),
+        };
+        // A document with nothing in it is not a document: start with one node
+        // so the UI, the evaluator and every example have something to show.
+        if let Ok(id) = d.add_node("Start", NodeKind::Source) {
+            // `with_defaults` only fails on a bad number, and 1.0 is not a bad
+            // number — but the document must be usable even so, so an unexpected
+            // failure leaves a node without properties rather than propagating
+            // out of a constructor.
+            if let Some(n) = d.get_mut(id)
+                && let Ok(ready) = n.clone().with_defaults(true, 1.0)
+            {
+                *n = ready;
+            }
+        }
+        d
+    }
+
+    pub fn empty(name: impl Into<String>) -> Self {
+        Self {
+            meta: DocumentMeta { name: name.into(), ..Default::default() },
+            nodes: Vec::new(),
+            next_id: IdCounter::new(1),
+        }
+    }
+
+    /// Append a node and return it, so the caller can keep configuring it.
+    ///
+    /// Returns `Err` rather than a default value when the document is full: a
+    /// document at its limit should refuse the edit, not silently drop it.
+    pub fn add_node(&mut self, name: impl Into<String>, kind: NodeKind) -> Result<NodeId, CoreError> {
+        if self.nodes.len() >= limits::MAX_NODES {
+            return Err(CoreError::LimitReached { limit: "nodes per document" });
+        }
+        let name = name.into();
+        if name.len() > limits::MAX_NAME {
+            return Err(CoreError::TooLong {
+                what: "node name".to_string(),
+                len: name.len(),
+                max: limits::MAX_NAME,
+            });
+        }
+        let id = NodeId(self.next_id.next());
+        self.nodes.push(Node::new(id, name, kind));
+        Ok(id)
+    }
+
+    pub fn remove(&mut self, id: NodeId) -> bool {
+        let before = self.nodes.len();
+        self.nodes.retain(|n| n.id != id);
+        self.nodes.len() != before
+    }
+
+    pub fn index_of(&self, id: NodeId) -> Option<usize> {
+        self.nodes.iter().position(|n| n.id == id)
+    }
+
+    pub fn get(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.iter().find(|n| n.id == id)
+    }
+
+    pub fn get_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.iter_mut().find(|n| n.id == id)
+    }
+
+    /// Find a node by its name, first match wins.
+    pub fn find_by_name(&self, name: &str) -> Option<&Node> {
+        self.nodes.iter().find(|n| n.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Move a node within the order. The timeline is the document's spine, so
+    /// this is a first-class operation rather than a generic `reorder`.
+    ///
+    /// An index past the end is **refused**, not clamped. Clamping here was the
+    /// original behaviour and it is wrong twice over: the caller is told the node
+    /// moved to `99` when it moved to the end, and a script that computes an
+    /// index has a bug that the clamp hides instead of reporting.
+    pub fn move_to(&mut self, id: NodeId, index: usize) -> Result<(), CoreError> {
+        let from = self.index_of(id).ok_or(CoreError::LimitReached { limit: "unknown node" })?;
+        let to = index.min(self.nodes.len().saturating_sub(1));
+        if index > to {
+            return Err(CoreError::OutOfRange {
+                what: "index".to_string(),
+                value: index.to_string(),
+                min: "0".to_string(),
+                max: to.to_string(),
+            });
+        }
+        let node = self.nodes.remove(from);
+        self.nodes.insert(to, node);
+        Ok(())
+    }
+
+    /// The id the next added node will get, without taking it.
+    pub fn peek_next_id(&self) -> NodeId {
+        NodeId(self.next_id.peek())
+    }
+
+    /// Repoint the counter above every id in the document.
+    ///
+    /// Called on load so a hand-edited file cannot reuse an id. This is the
+    /// single most important line of defence against a corrupt or hostile file:
+    /// without it, `add_node` can hand out an id that is already in use and the
+    /// next `get` returns the wrong node.
+    pub fn reseat_id_counter(&mut self) {
+        let mut c = IdCounter::new(1);
+        for n in &self.nodes {
+            c.observe(n.id.get());
+        }
+        self.next_id = c;
+    }
+
+    /// A cheap, conservative estimate of the memory this document holds.
+    ///
+    /// Never under-estimates: a budget a document can lie about is not a
+    /// budget. This is what `MAX_DOCUMENT_BYTES` is measured against, and it
+    /// is what the undo stack's budget is measured in. §52.
+    pub fn estimated_bytes(&self) -> usize {
+        std::mem::size_of::<Document>()
+            + self.meta.name.capacity()
+            + self.meta.comment.capacity()
+            + self.nodes.capacity() * std::mem::size_of::<Node>()
+            + self.nodes.iter().map(|n| n.estimated_bytes()).sum::<usize>()
+    }
+
+    /// Check every invariant that must hold before the document is trusted.
+    pub fn validate(&self) -> Result<(), DocError> {
+        // A frame rate has two rules: it must not be zero, because the ticks
+        // per frame divide by it, and it must not be faster than the model
+        // allows. The first lives in the core, next to the type; the second is
+        // `MAX_FRAME_RATE` — the same number the `doc.range` command uses, so
+        // a document can never hold a rate no command can set. §89.
+        if craftkit_core::FrameRate::new(self.meta.fps).is_err() || self.meta.fps > limits::MAX_FRAME_RATE {
+            return Err(DocError::BadMeta(format!(
+                "frame rate {} is not usable: it must be between 1 and {}",
+                self.meta.fps,
+                limits::MAX_FRAME_RATE
+            )));
+        }
+        if self.meta.start >= self.meta.end {
+            return Err(DocError::BadMeta(format!(
+                "the document is empty: start {} is not before end {}",
+                self.meta.start, self.meta.end
+            )));
+        }
+        // The range has to be one a reply can carry.
+        //
+        // The file format is wider than the model: a bare integer in a file is
+        // read straight into an `i128`, so a file can name an instant that no
+        // JSON number holds. A document like that would make every reply that
+        // mentions its playhead fail inside `json!` — where the `unwrap` is
+        // invisible to the lint — so the reader refuses it instead of loading
+        // it. §60.
+        if self.meta.start < craftkit_core::Tick::MIN || self.meta.end > craftkit_core::Tick::MAX {
+            return Err(DocError::BadMeta(format!(
+                "the document's range is outside what a time can be: {}..{}",
+                self.meta.start, self.meta.end
+            )));
+        }
+        // The document has to fit in memory, not just in the file.
+        //
+        // Every other limit here is a count — nodes, properties, keyframes —
+        // and the product of those counts was never written down. The engine
+        // clones the whole document for every command and keeps 128 of them
+        // for undo, so a document of 12 MiB cost 1.5 GiB. A byte budget is
+        // the only limit that says what the memory actually is. §52.
+        let bytes = self.estimated_bytes();
+        if bytes > limits::MAX_DOCUMENT_BYTES {
+            return Err(DocError::TooLarge { bytes, limit: limits::MAX_DOCUMENT_BYTES });
+        }
+        if self.nodes.len() > limits::MAX_NODES {
+            return Err(DocError::LimitReached("nodes per document"));
+        }
+        let mut seen: Vec<NodeId> = self.nodes.iter().map(|n| n.id).collect();
+        seen.sort_unstable();
+        if seen.windows(2).any(|w| w[0] == w[1]) {
+            return Err(DocError::DuplicateId("two nodes share an id"));
+        }
+        for n in &self.nodes {
+            if n.name.is_empty() || n.name.len() > limits::MAX_NAME {
+                return Err(DocError::BadMeta(format!("node {} has an unusable name", n.id)));
+            }
+            n.props.validate().map_err(|e| DocError::Invalid(format!("node {}: {e}", n.id)))?;
+        }
+        Ok(())
+    }
+
+    /// A short description of the document for the UI title bar.
+    pub fn summary(&self) -> String {
+        let anim =
+            self.nodes.iter().filter(|n| n.props.flatten().iter().any(|(_, p)| p.is_animated())).count();
+        format!("{} nodes · {anim} animated · {}s", self.nodes.len(), self.meta.duration().seconds_f64())
+    }
+}
+
+/// Why a document is not usable.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DocError {
+    #[error("bad metadata: {0}")]
+    BadMeta(String),
+    #[error("two objects share an id: {0}")]
+    DuplicateId(&'static str),
+    #[error("limit reached: {0}")]
+    LimitReached(&'static str),
+    #[error("invalid: {0}")]
+    Invalid(String),
+    /// The document is too big to hold.
+    ///
+    /// §52: the other limits here are counts, and a count does not say how
+    /// much memory the thing counted holds.
+    #[error("the document is {bytes} bytes, and the limit is {limit}")]
+    TooLarge { bytes: usize, limit: usize },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_document_is_valid_and_has_something_in_it() {
+        let d = Document::new("test");
+        assert!(d.validate().is_ok(), "{:?}", d.validate());
+        assert_eq!(d.nodes.len(), 1);
+    }
+
+    /// A document over the byte limit is refused.
+    ///
+    /// §52: every other limit here is a **count**, and the product of the
+    /// counts was never written down — 10 000 nodes × 50 000 properties ×
+    /// 10 000 keyframes is a number no machine has. The engine clones the
+    /// whole document for every command and keeps 128 of them, so this is the
+    /// limit that says what the memory is.
+    #[test]
+    fn a_document_over_the_byte_limit_is_refused() {
+        let doc = over_the_byte_limit();
+        let err = doc.validate().expect_err("refused");
+        assert!(matches!(err, DocError::TooLarge { .. }), "{err}");
+        assert!(err.to_string().contains("the limit is"), "{err}");
+    }
+
+    /// A range no reply could carry is refused.
+    ///
+    /// The file format is wider than the model: a bare integer in a file is
+    /// read straight into an `i128`, so a file can name an instant that no
+    /// JSON number holds. A document like that would make every reply that
+    /// mentions its playhead fail inside `json!`. §60.
+    ///
+    /// The tick cannot be built with `from_raw` — that saturates to the
+    /// model's bounds, which is the point — so it arrives the way it really
+    /// arrives: by being read out of a file.
+    #[test]
+    fn a_document_whose_range_is_outside_what_a_time_can_be_is_refused() {
+        let raw = r#"{"meta":{"name":"Too far out","fps":24,"start":18446744073709551616,"end":18446744073709551617},"nodes":[]}"#;
+        let doc: Document = serde_json::from_str(raw).expect("the tick is read straight into an i128");
+        assert_eq!(doc.meta.start.raw(), u64::MAX as i128 + 1, "the file really did carry it");
+        let err = doc.validate().expect_err("refused");
+        assert!(err.to_string().contains("outside what a time can be"), "{err}");
+
+        // And one that is inside is accepted.
+        let mut ok = Document::new("Fine");
+        ok.meta.start = craftkit_core::Tick::ZERO;
+        ok.meta.end = craftkit_core::Tick::from_raw(u64::MAX as i128);
+        ok.validate().expect("a range inside the bounds is fine");
+    }
+
+    /// The estimate grows with the content, and a small document is nowhere
+    /// near the limit.
+    ///
+    /// The estimate is what the budget is measured against, so it has to move
+    /// when the document does.
+    #[test]
+    fn the_estimate_grows_with_the_document() {
+        let small = Document::new("t");
+        assert!(small.estimated_bytes() < limits::MAX_DOCUMENT_BYTES, "a new document is not big");
+        let mut bigger = small.clone();
+        let id = bigger.add_node("n", NodeKind::Source).expect("node");
+        let mut prop = Property::new(1, "p", Value::Num(1.0));
+        for t in 0..1000 {
+            let _ = prop.keys.set(
+                crate::keyframe::Key::new(
+                    craftkit_core::Tick::from_raw(t),
+                    Value::Num(t as f64),
+                    crate::keyframe::Easing::Linear,
+                )
+                .expect("key"),
+            );
+        }
+        bigger.get_mut(id).expect("node").props.push(prop);
+        assert!(
+            bigger.estimated_bytes() > small.estimated_bytes(),
+            "a thousand keyframes did not move the estimate: {} vs {}",
+            bigger.estimated_bytes(),
+            small.estimated_bytes()
+        );
+    }
+
+    /// A document that is over the byte limit, and still inside every count.
+    ///
+    /// One node, 60 properties, 10 000 keyframes on each: inside
+    /// `MAX_PROPERTIES` and `MAX_KEYS`, and over `MAX_DOCUMENT_BYTES`.
+    fn over_the_byte_limit() -> Document {
+        let mut doc = Document::empty("Big");
+        let id = doc.add_node("n", NodeKind::Source).expect("node");
+        let mut group = PropGroup::new("props", "Properties");
+        for p in 0..60u64 {
+            let mut prop = Property::new(p + 1, format!("p{p}"), Value::Num(1.0));
+            for t in 0..10_000i128 {
+                let _ = prop.keys.set(
+                    crate::keyframe::Key::new(
+                        craftkit_core::Tick::from_raw(t),
+                        Value::Num(t as f64),
+                        crate::keyframe::Easing::Linear,
+                    )
+                    .expect("key"),
+                );
+            }
+            group.push(prop);
+        }
+        doc.get_mut(id).expect("just added").props = group;
+        doc
+    }
+
+    #[test]
+    fn ids_are_unique_and_monotonic() {
+        let mut d = Document::empty("t");
+        let a = d.add_node("a", NodeKind::Source).unwrap();
+        let b = d.add_node("b", NodeKind::Filter).unwrap();
+        assert_ne!(a, b);
+        assert!(b.get() > a.get());
+        assert!(d.validate().is_ok());
+    }
+
+    #[test]
+    fn reseating_the_counter_repairs_a_hand_edited_duplicate_id() {
+        let mut d = Document::empty("t");
+        let a = d.add_node("a", NodeKind::Source).unwrap();
+        d.add_node("b", NodeKind::Filter).unwrap();
+        // Simulate a corrupt file: give two nodes the same id.
+        d.nodes[1].id = a;
+        assert!(d.validate().is_err());
+        d.reseat_id_counter();
+        // The duplicate is still there — validate is what catches it — but the
+        // next id is above everything, so a repair can finish the job.
+        assert!(d.peek_next_id() > a);
+    }
+
+    #[test]
+    fn add_node_refuses_at_the_limit_rather_than_truncating() {
+        let mut d = Document::empty("t");
+        for i in 0..limits::MAX_NODES {
+            d.add_node(format!("n{i}"), NodeKind::Source).unwrap();
+        }
+        assert_eq!(d.nodes.len(), limits::MAX_NODES);
+        assert!(d.add_node("one too many", NodeKind::Source).is_err());
+    }
+
+    #[test]
+    fn an_over_long_name_is_refused() {
+        let mut d = Document::empty("t");
+        let long = "x".repeat(limits::MAX_NAME + 1);
+        assert!(d.add_node(long, NodeKind::Source).is_err());
+    }
+
+    #[test]
+    fn move_to_reorders_and_refuses_an_index_past_the_end() {
+        let mut d = Document::empty("t");
+        let a = d.add_node("a", NodeKind::Source).unwrap();
+        d.add_node("b", NodeKind::Filter).unwrap();
+        let c = d.add_node("c", NodeKind::Sink).unwrap();
+        d.move_to(c, 0).unwrap();
+        assert_eq!(d.nodes[0].id, c);
+
+        // An index past the end is refused, not clamped: a caller told "moved to
+        // 9" when it moved to the end is a caller with a bug that never finds
+        // out.
+        let err = d.move_to(a, 9_999).expect_err("refused");
+        assert!(err.to_string().contains("index"), "{err}");
+
+        // The last valid index still works, and the document is unchanged by
+        // the refusal.
+        let before: Vec<NodeId> = d.nodes.iter().map(|n| n.id).collect();
+        d.move_to(a, d.nodes.len() - 1).expect("the last index is valid");
+        assert_eq!(d.nodes[d.nodes.len() - 1].id, a);
+        assert_eq!(d.nodes.len(), before.len());
+
+        assert!(d.move_to(NodeId(9_999), 0).is_err(), "an unknown node is refused");
+    }
+
+    #[test]
+    fn an_empty_time_range_is_refused() {
+        let mut d = Document::new("t");
+        d.meta.end = d.meta.start;
+        assert!(matches!(d.validate(), Err(DocError::BadMeta(_))));
+    }
+
+    #[test]
+    fn an_unusable_frame_rate_is_refused() {
+        let mut d = Document::new("t");
+        d.meta.fps = 0;
+        assert!(d.validate().is_err());
+        // And one above the model's limit. The limit is the same number the
+        // `doc.range` command enforces, so a document can never hold a rate
+        // no command can set. §89.
+        d.meta.fps = limits::MAX_FRAME_RATE + 1;
+        assert!(d.validate().is_err());
+        // The limit itself is fine.
+        d.meta.fps = limits::MAX_FRAME_RATE;
+        assert!(d.validate().is_ok());
+    }
+
+    #[test]
+    fn a_node_with_a_broken_property_tree_is_refused() {
+        let mut d = Document::new("t");
+        let id = d.add_node("bad", NodeKind::Filter).unwrap();
+        let n = d.get_mut(id).unwrap();
+        n.props.push_group(PropGroup::new("dup", "dup"));
+        n.props.push_group(PropGroup::new("dup", "dup again"));
+        assert!(d.validate().is_err());
+    }
+
+    #[test]
+    fn remove_reports_whether_anything_went() {
+        let mut d = Document::new("t");
+        let id = d.add_node("gone", NodeKind::Comment).unwrap();
+        assert!(d.remove(id));
+        assert!(!d.remove(id));
+    }
+
+    #[test]
+    fn documents_round_trip_through_json_and_keep_the_id_counter() {
+        let mut d = Document::new("round trip");
+        d.add_node("second", NodeKind::Filter).unwrap();
+        let j = serde_json::to_string(&d).unwrap();
+        let mut back: Document = serde_json::from_str(&j).unwrap();
+        back.reseat_id_counter();
+        assert_eq!(back.nodes.len(), d.nodes.len());
+        assert_eq!(back.meta.name, "round trip");
+        assert!(back.validate().is_ok());
+        // The restored document must not hand out an id that already exists.
+        let fresh = back.add_node("fresh", NodeKind::Source).unwrap();
+        assert!(back.get(fresh).is_some());
+    }
+}

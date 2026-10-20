@@ -1,0 +1,83 @@
+[workspace]
+resolver = "3"
+# Sorted: `cargo xtask lists` checks it, because this list is edited by almost
+# every change that adds a crate.
+members = [
+    "apps/*",
+    "crates/*",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# The lowest toolchain this workspace is actually verified against: `stable` as
+# of the first full green `cargo xtask ci`, with every test passing. Not a guess
+# and not a wish — `cargo xtask doctor` compares it against the toolchain you
+# are actually using and tells you when they disagree.
+rust-version = "1.93"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/storytold/craftkit"
+authors = ["craftkit contributors"]
+
+[workspace.dependencies]
+# --- internal -------------------------------------------------------------
+craftkit-core = { path = "crates/core" }
+craftkit-model = { path = "crates/model" }
+craftkit-eval = { path = "crates/eval" }
+craftkit-kernel = { path = "crates/kernel" }
+craftkit-io = { path = "crates/io" }
+craftkit-engine = { path = "crates/engine" }
+craftkit-control = { path = "crates/control" }
+craftkit-mcp = { path = "crates/mcp" }
+craftkit-ui = { path = "crates/ui" }
+
+# --- external -------------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+egui = "0.33"
+eframe = { version = "0.33", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Browser only. See apps/craftkit-web/Cargo.toml, where they are target-gated.
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "Storage",
+    "Window",
+] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# The house deny. Every production crate root repeats this with
+# `#![deny(clippy::unwrap_used, ...)]`; `clippy.toml` relaxes it for tests.
+# Kept here so a new crate that forgets the attribute still gets it.
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[profile.dev]
+opt-level = 1
+
+# The `ci` profile exists so the test suite is fast without going to full
+# release, and with debug assertions off (they are slow and, in a graphics
+# context, sometimes wrong) but overflow checks on.
+# The lesson here is learned from the SolidCraft family.
+[profile.ci]
+inherits = "dev"
+opt-level = 1
+debug = "line-tables-only"
+debug-assertions = false
+overflow-checks = true
+incremental = true

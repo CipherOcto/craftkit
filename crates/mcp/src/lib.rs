@@ -1,0 +1,46 @@
+//! # craftkit-mcp
+//!
+//! An MCP server over stdio: the same commands, in the shape an agent expects.
+//!
+//! ## What it is for
+//!
+//! The control channel is a socket, for scripts and for driving a running
+//! window. An MCP server is a subprocess speaking JSON-RPC, for an agent that
+//! has a tool-calling loop and wants craftkit's capabilities *as tools*.
+//!
+//! The important thing is that **it exposes no new behaviour**. Every tool maps
+//! onto a [`craftkit_engine`] command, and a tool's schema is generated from the
+//! same `ParamDoc` table the CLI help and the docs use. A capability that
+//! exists only over MCP is a capability the guard, the undo snapshot and the
+//! crash reporter do not know about — which is exactly the failure the whole
+//! "everything is a command" rule exists to prevent.
+//!
+//! ## Transport
+//!
+//! JSON-RPC 2.0 over stdio, one message per line. Line framing rather than
+//! `Content-Length` headers: it is what the current MCP stdio transport uses,
+//! and it keeps `nc` usable as a debugging tool.
+
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
+pub mod rpc;
+pub mod server;
+pub mod tools;
+
+pub use rpc::{Error as RpcError, Request as RpcRequest, Response as RpcResponse};
+pub use server::{handle_line, serve};
+pub use tools::{Tool, all, command_for, tool_for, tool_name, tools_json};
+
+/// The protocol version this server speaks.
+pub const PROTOCOL_VERSION: &str = "2024-11-05";
+
+/// What this server calls itself.
+pub const SERVER_NAME: &str = "craftkit";

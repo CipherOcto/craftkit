@@ -1,0 +1,16 @@
+[package]
+name = "craftkit-model"
+description = "The document model: nodes, properties, property paths, keyframes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+craftkit-core = { workspace = true }

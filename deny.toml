@@ -1,0 +1,38 @@
+# Dependency policy for craftkit.
+#
+# The rule the whole house follows: dependencies are a supply-chain decision, so
+# it is checked, not reviewed-and-forgotten.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+unmaintained = "all"          # a stale crate is a risk, not a convenience
+yanked = "warn"
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"            # never `foo = "*"` in a manifest
+allow-wildcard-paths = false
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"           # every git dependency must be an allow-listed repo
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

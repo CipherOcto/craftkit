@@ -1,0 +1,9 @@
+# The one place that decides whether the "never crash" rule is enforced.
+# Each is re-enabled for test code, because tests are allowed to panic.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# Useful at every level, from clippy::correctness up.
+msrv = "1.93"

@@ -1,0 +1,19 @@
+[package]
+name = "craftkit-mcp"
+description = "The MCP server: a JSON-RPC 2.0 stdio server exposing the same commands."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+craftkit-core = { workspace = true }
+craftkit-model = { workspace = true }
+craftkit-engine = { workspace = true }

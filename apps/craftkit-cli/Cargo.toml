@@ -1,0 +1,33 @@
+[package]
+name = "craftkit-cli"
+description = "Headless craftkit: run scripts, open designs, list commands, replay crashes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "craftkit-cli"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+craftkit-core = { workspace = true }
+craftkit-engine = { workspace = true }
+craftkit-io = { workspace = true }
+craftkit-ui = { workspace = true }
+craftkit-mcp = { workspace = true }
+
+[dev-dependencies]
+# The model, for the file tests: they check that a document's *contents*
+# survived the file, and naming a property path needs the type that parses
+# one. The application crates are exempt from the layer table, and the model is
+# below everything they use.
+craftkit-model = { workspace = true }

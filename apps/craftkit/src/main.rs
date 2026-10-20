@@ -1,0 +1,948 @@
+//! # craftkit
+//!
+//! The desktop application: a window, a document, and a control channel.
+//!
+//! ## What this binary owns
+//!
+//! - **The window.** `eframe` runs the loop; `craftkit_ui` draws the shell.
+//! - **The session.** One [`craftkit_engine::Session`], shared between the UI and
+//!   the control channel behind a mutex.
+//! - **The files.** Open and save go through `craftkit-io`.
+//!
+//! It owns **no behaviour**. Every command it can perform is registered in the
+//! engine; this file adds wiring, a panic hook and a few flags, and not one
+//! more rule than that.
+//!
+//! ## Flags
+//!
+//! ```text
+//! craftkit [--sample] [--control PORT] [FILE]
+//! ```
+//!
+//! `--sample` opens the example document, which is what makes a fresh checkout
+//! show something. `--control PORT` opens the loopback control channel; the token
+//! is written to `~/.local/share/craftkit/control/PORT.token` unless
+//! `CRAFTKIT_CONTROL_TOKEN` says otherwise.
+//!
+//! ## Panics
+//!
+//! A panic hook records a crash report before the process dies, because the
+//! moment to find out *what the user was doing* is while the session still
+//! knows. Everything else is handled by the engine's own boundary, which means
+//! most panics never reach this hook at all.
+
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use craftkit_control::ServerOptions;
+use craftkit_engine::Session;
+
+/// Everything the flags said.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct Flags {
+    sample: bool,
+    control: Option<u16>,
+    file: Option<PathBuf>,
+    headless_help: bool,
+}
+
+const USAGE: &str = "\
+craftkit — a parametric plan editor
+
+USAGE:
+    craftkit [OPTIONS] [FILE]
+
+ARGS:
+    <FILE>            A .craftkit design to open.
+
+OPTIONS:
+    --sample          Open the example document.
+    --control <PORT>  Serve the loopback control channel on <PORT>.
+                      The token is written to
+                      ~/.local/share/craftkit/control/<PORT>.token
+                      unless CRAFTKIT_CONTROL_TOKEN is set.
+    -h, --help        Print this message.
+    -V, --version     Print the version.
+
+The application is driven by commands, not by this binary: `craftkit-cli
+commands` lists everything it can do, and the control channel exposes the same
+list over JSON lines.
+";
+
+fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let flags = match parse_flags(&args) {
+        Ok(Some(f)) => f,
+        Ok(None) => return std::process::ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("{message}\n\n{USAGE}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+
+    install_logger();
+    let session = Arc::new(Mutex::new(open(&flags)));
+    install_crash_hook(&session);
+
+    // The window's egui context does not exist until eframe runs, but the
+    // control channel starts first and outlives any one frame — so the two
+    // sides meet here rather than in either one's lifetime.
+    let ctx_slot: ContextSlot = Arc::new(Mutex::new(None));
+
+    // Started *before* the window, so a port clash is reported before anything
+    // is drawn, and held in a local so it lives exactly as long as the window
+    // and not a moment longer.
+    let control = match flags.control {
+        None => None,
+        Some(port) => match start_control(port, &session, &ctx_slot) {
+            Ok(server) => Some(server),
+            Err(e) => {
+                eprintln!("control channel: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+    };
+
+    let options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_title("craftkit")
+            .with_inner_size([1180.0, 720.0]),
+        ..Default::default()
+    };
+
+    let run = eframe::run_native(
+        "craftkit",
+        options,
+        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot }))),
+    );
+    match run {
+        Ok(()) => {
+            // The window has closed, so the channel has nothing left to serve.
+            drop(control);
+            std::process::ExitCode::SUCCESS
+        }
+        Err(e) => {
+            // No display, or no GPU. The window is the point of this binary, but
+            // it is not the only thing it does: the control channel reaches
+            // every command, and `ui.render` draws a real frame into a fresh
+            // egui context — no window, no GPU. So a failed window is a loud
+            // message and not an exit, and the channel keeps serving.
+            //
+            // That matters on a build machine, which is exactly where an agent
+            // tends to be, and it means `craftkit` without a display is a
+            // usable headless host rather than a refusal.
+            eprintln!("craftkit could not open a window: {e}");
+            match control {
+                None => {
+                    eprintln!(
+                        "There is no control channel either, so there is nothing left to do.\n\
+                         On a machine with no display use `craftkit-cli`, which needs neither a window nor a channel."
+                    );
+                    std::process::ExitCode::FAILURE
+                }
+                Some(mut server) => {
+                    eprintln!(
+                        "The control channel is still serving on 127.0.0.1:{} — `engine.execute` and `ui.render` both work.\n\
+                         Ctrl-C to stop.",
+                        server.port()
+                    );
+                    server.join();
+                    std::process::ExitCode::SUCCESS
+                }
+            }
+        }
+    }
+}
+
+/// Parse the flags. `Ok(None)` means "printed help and stop".
+fn parse_flags(args: &[String]) -> Result<Option<Flags>, String> {
+    let mut flags = Flags::default();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                return Ok(None);
+            }
+            "-V" | "--version" => {
+                println!("craftkit {}", env!("CARGO_PKG_VERSION"));
+                return Ok(None);
+            }
+            "--sample" => flags.sample = true,
+            "--control" => {
+                let port = args.get(i + 1).ok_or_else(|| "`--control` needs a port".to_string())?;
+                flags.control =
+                    Some(port.parse::<u16>().map_err(|_| format!("`{port}` is not a port number"))?);
+                i += 1;
+            }
+            other if other.starts_with('-') => {
+                return Err(format!("`{other}` is not a flag I know"));
+            }
+            other => flags.file = Some(PathBuf::from(other)),
+        }
+        i += 1;
+    }
+    Ok(Some(flags))
+}
+
+/// The session the window opens with.
+fn open(flags: &Flags) -> Session {
+    if let Some(path) = &flags.file {
+        return match craftkit_io::load(path) {
+            Ok(doc) => {
+                let mut session = Session::new(doc.meta.name.clone());
+                session.load_document(doc);
+                session
+            }
+            Err(e) => {
+                // A file that will not open must not stop the application from
+                // starting: an empty document plus a loud message is something
+                // a person can act on, and a refusal to launch is not.
+                eprintln!("could not open {}: {e}", path.display());
+                Session::sample()
+            }
+        };
+    }
+    if flags.sample {
+        return Session::sample();
+    }
+    Session::new("Untitled")
+}
+
+/// Where the window's egui context is published for the control channel.
+///
+/// `eframe::Context` is a handle, so handing one to the channel's thread is
+/// how a command that ran over TCP reaches the window's frame loop. `None`
+/// until the first frame: the channel is deliberately started before the window,
+/// so for the first moments there is nothing to repaint and the slot stays
+/// empty rather than blocking.
+type ContextSlot = Arc<Mutex<Option<eframe::egui::Context>>>;
+
+/// Ask the window to redraw, if there is one.
+///
+/// # Why this exists
+///
+/// eframe paints when something happens: an input event, or a repaint request.
+/// A command that arrives over the control channel is none of those — it
+/// mutates the session on a socket thread, behind a mutex the frame loop never
+/// sees. Without this call the window keeps showing the last frame it painted,
+/// so an agent that drives the app and then looks at the window is looking at a
+/// picture of the past, with no error anywhere to say so.
+///
+/// Ignored when no context has been published yet, which is the window's first
+/// few frames and the whole lifetime of a process whose window failed to open.
+///
+/// # Why there is no unit test for the call itself
+///
+/// egui offers no observable that separates "a repaint was requested" from
+/// "a repaint is pending" on a context that is not attached to a real window:
+/// `has_requested_repaint` is already true after the first headless pass
+/// (`outstanding` is re-armed at the end of every pass), and the wake-up
+/// callback only fires when the delay is *lowered*, which requires the idle
+/// state only a real integration loop reaches. Both were measured, not assumed.
+///
+/// So the check that matters is `scripts/live-window-check.sh`, which runs this
+/// binary on a real display, drives it over the control channel and compares
+/// the window's own pixels before and after. A unit test asserting a flag would
+/// have looked like evidence and proved nothing — which is the failure mode
+/// `KNOWN-GAPS.md` §1 is about.
+fn request_repaint(slot: &ContextSlot) {
+    let Ok(guard) = slot.lock() else { return };
+    if let Some(ctx) = guard.as_ref() {
+        ctx.request_repaint();
+    }
+}
+
+/// Open the loopback control channel.
+fn start_control(
+    port: u16,
+    session: &Arc<Mutex<Session>>,
+    ctx_slot: &ContextSlot,
+) -> Result<craftkit_control::Server, String> {
+    let token = craftkit_control::Token::resolve()?;
+    // Cloned rather than borrowed: the handler outlives this function, and the
+    // slot outlives it in turn because `main` holds it for the window's life.
+    let slot = Arc::clone(ctx_slot);
+    let options =
+        ServerOptions::new(port, token).with_ui(ui_request).with_after(move || request_repaint(&slot));
+    // The channel is bound **before** the token is published. The token file
+    // is the promise that this port answers to this token, and a second
+    // instance — which cannot bind — used to take that promise away from the
+    // instance that could keep it, locking a running app out with "a bad
+    // token". §54.
+    let (server, path) = craftkit_control::serve_published(Arc::clone(session), options)?;
+    println!("control channel listening on 127.0.0.1:{}", server.port());
+    println!("token in {}", path.display());
+    println!("try: {{\"id\":1,\"token\":\"…\",\"method\":\"engine.describe\"}}");
+    Ok(server)
+}
+
+/// Answer a `ui.*` request.
+///
+/// # Why it draws a fresh frame rather than reading the window
+///
+/// Reading the window's pixels needs a graphics context, and this runs on a
+/// socket thread that has none. It would not be better either: the framebuffer
+/// is one particular moment, while this draws the *current* state into a fresh
+/// egui context — so what an agent is shown is what the session says now, not
+/// whatever the window last painted.
+///
+/// The consequence is that `ui.render` works with no window at all, which is
+/// what makes this binary usable on a build machine. The consequence of *that*
+/// is that `ui.screenshot` must not pretend to be the window's pixels, so it
+/// says so in its own reply.
+fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> craftkit_control::Response {
+    use craftkit_control::Response;
+    use serde_json::Value as Json;
+
+    // The method name decides, so `ui.click` clicks. This used to read the action
+    // out of `params` and default it to `render`, which meant the one thing every
+    // agent would type from the protocol docs drew a picture instead.
+    let action = match request.ui_action() {
+        Ok(action) => action,
+        Err(response) => return response,
+    };
+    let (default_width, default_height) =
+        (craftkit_ui::raster::DEFAULT_SIZE[0], craftkit_ui::raster::DEFAULT_SIZE[1]);
+    let width = size(request.params.get("width")).unwrap_or(default_width);
+    let height = size(request.params.get("height")).unwrap_or(default_height);
+
+    match action {
+        craftkit_control::UiAction::Render | craftkit_control::UiAction::Screenshot => {
+            let message = if action == craftkit_control::UiAction::Screenshot {
+                format!(
+                    "rendered {}x{} from the current session — a fresh render of the shell, not the window's framebuffer, which a socket thread cannot read",
+                    width, height
+                )
+            } else {
+                format!("rendered {width}x{height}")
+            };
+            match craftkit_ui::raster::render(session, width, height) {
+                Ok(frame) => Response::ok(
+                    &request.id,
+                    message,
+                    Json::Object(
+                        [
+                            ("png_base64".to_string(), Json::String(base64(&frame.png))),
+                            ("width".to_string(), Json::from(frame.width)),
+                            ("height".to_string(), Json::from(frame.height)),
+                            ("widgets".to_string(), Json::from(frame.automation.names())),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
+                ),
+                Err(e) => Response::error(&request.id, "bad-parameter", e),
+            }
+        }
+        craftkit_control::UiAction::Click => {
+            let (Some(x), Some(y)) = (number(request.params.get("x")), number(request.params.get("y")))
+            else {
+                return Response::error(
+                    &request.id,
+                    "bad-parameter",
+                    "`x` and `y` are required, and must be finite numbers",
+                );
+            };
+            match craftkit_ui::raster::click(session, x, y, width, height) {
+                Ok(click) => {
+                    let hit = click.hit.clone();
+                    Response::ok(
+                        &request.id,
+                        click_message(hit.as_deref()),
+                        Json::Object(
+                            [
+                                ("hit".to_string(), hit.map(Json::from).unwrap_or(Json::Null)),
+                                ("x".to_string(), Json::from(click.point[0])),
+                                ("y".to_string(), Json::from(click.point[1])),
+                                ("status".to_string(), Json::from(click.state.status)),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    )
+                }
+                Err(e) => Response::error(&request.id, "bad-parameter", e),
+            }
+        }
+        craftkit_control::UiAction::Widgets => match craftkit_ui::raster::render(session, width, height) {
+            Ok(frame) => Response::ok(
+                &request.id,
+                "the widgets on screen",
+                Json::Object(
+                    [("widgets".to_string(), Json::from(frame.automation.names()))].into_iter().collect(),
+                ),
+            ),
+            Err(e) => Response::error(&request.id, "bad-parameter", e),
+        },
+    }
+}
+
+/// What a click says.
+///
+/// A click is a hit test and nothing else — see `KNOWN-GAPS.md` §17 — so the
+/// reply must not read as though something happened. It used to say
+/// ``clicked `toolbar.node.duplicate` ``, which an agent has every reason to
+/// read as "the button was pressed": three of those replies in a row, and the
+/// document was byte-identical afterwards. The name is still returned, in `hit`,
+/// for the caller that wants it; the sentence now says what happened.
+fn click_message(hit: Option<&str>) -> String {
+    match hit {
+        Some(name) => format!(
+            "`{name}` is at that point; a click reports where it landed and does not activate \
+             anything — run it with `engine.execute`"
+        ),
+        None => "nothing is at that point".to_string(),
+    }
+}
+
+/// A requested size, checked rather than trusted.
+///
+/// `usize::MAX` is a perfectly good JSON number, so this bounds the value before
+/// it reaches the renderer rather than trusting the caller to have been
+/// reasonable.
+fn size(value: Option<&serde_json::Value>) -> Option<usize> {
+    let raw = value?.as_u64()?;
+    usize::try_from(raw).ok().filter(|n| *n <= craftkit_ui::raster::MAX_SIZE)
+}
+
+/// A requested coordinate, checked rather than trusted.
+fn number(value: Option<&serde_json::Value>) -> Option<f32> {
+    let raw = value?.as_f64()?;
+    if raw.is_finite() { Some(raw as f32) } else { None }
+}
+
+/// Standard base64, because JSON has no bytes and a PNG is not text.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
+        let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(ALPHABET[(triple >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(triple >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { ALPHABET[(triple >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { ALPHABET[triple as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+/// Record a crash report before the process dies.
+///
+/// # Why this exists
+///
+/// Everything inside `Session::execute` runs under `catch_unwind`, so the common
+/// case never reaches here: a command that panics is caught, the document is
+/// restored, and the user sees an error.
+///
+/// This is for the panics that escape anyway — a panic on a thread that is not
+/// the render thread, a poisoned lock turned into an unwrap somewhere we do
+/// not own. **A panic in the drawing code does not reach here**: the render
+/// path holds the session's lock, and this hook runs on the panicking thread,
+/// so it could not write a report even if it tried. That case is caught by
+/// [`draw_guarded`], which is the one place that can still see the session.
+/// §76.
+///
+/// The moment to write the report is *while the session still knows what the
+/// user was doing*. After the process dies that knowledge is gone, and a crash
+/// report that says only "it crashed" is not worth the disk it occupies.
+///
+/// # What it must not do
+///
+/// - **It must not panic.** A panic inside a panic hook aborts the process
+///   immediately, so the original panic is lost along with the report. Every
+///   fallible step here is on its own and gives up quietly.
+/// - **It must not block for long.** The session may be locked by the thread
+///   that panicked. `try_lock` is used rather than `lock` for exactly that
+///   reason: a hook that waits for a lock held by a dead thread is a hang that
+///   looks like a freeze.
+///
+/// A report that could not be written is a log line, not a failure: the crash has
+/// already happened and there is nothing this can do about it.
+fn install_crash_hook(session: &Arc<Mutex<Session>>) {
+    install_crash_hook_in(session, None)
+}
+
+/// [`install_crash_hook`], writing to an explicit folder.
+///
+/// `None` is the real crash folder. The parameter exists so the *production*
+/// hook can be tested without an environment variable: a process-global
+/// `CRAFTKIT_CRASH_DIR` set by one test would be read by another, and a test
+/// that cannot run alone is a test that fails in a full suite.
+fn install_crash_hook_in(session: &Arc<Mutex<Session>>, dir: Option<std::path::PathBuf>) {
+    // Only one hook, and it is not the default one — the default still prints,
+    // which is what makes the panic visible in a terminal at all.
+    let previous = std::panic::take_hook();
+    let session = Arc::clone(session);
+    std::panic::set_hook(Box::new(move |info| {
+        let message = panic_message(info);
+        let command = last_command(&session);
+
+        // `try_lock` on purpose; see the note above.
+        match session.try_lock() {
+            Ok(guard) => match &dir {
+                Some(dir) => {
+                    craftkit_engine::crash::record_in(dir, &guard, &command, &message);
+                }
+                None => {
+                    craftkit_engine::crash::record(&guard, &command, &message);
+                }
+            },
+            Err(_) => {
+                log::error!(
+                    "a crash happened ({message}) and the session was locked, \
+                     so the hook could not write a report"
+                );
+            }
+        }
+
+        previous(info);
+    }));
+}
+
+/// Draw a frame, and survive a panic in the drawing code.
+///
+/// **The panic hook cannot do this.** The hook runs on the panicking thread,
+/// and the render path holds the session's lock for the length of a frame — so
+/// the hook's `try_lock` fails, and it writes nothing. Measured: a panic
+/// while the session was locked wrote **no report at all**, and a panic in a
+/// widget is exactly that. The hook's own comment used to name this case as
+/// the one it existed for. §76.
+///
+/// This is the one place that can still see the document the user was working
+/// on, so this is where the report is written. And the application survives:
+/// a panic in a widget is a bug, not a reason to lose the work.
+fn draw_guarded(
+    session: &mut Session,
+    dir: Option<&std::path::Path>,
+    draw: impl FnOnce(&mut Session),
+) -> Result<(), String> {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(session)));
+    let Err(payload) = outcome else { return Ok(()) };
+    // `as_ref()`, not `&payload`: coercing `&Box<dyn Any>` to a trait object
+    // points at the **box**, and the downcast inside the box never matches.
+    let message = message_from_payload(payload.as_ref());
+    let command = last_command_of(session);
+    match dir {
+        Some(dir) => {
+            craftkit_engine::crash::record_in(dir, session, &command, &message);
+        }
+        None => {
+            craftkit_engine::crash::record(session, &command, &message);
+        }
+    }
+    Err(message)
+}
+
+/// The panic message, in a form a person can read.
+fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
+    message_from_payload(info.payload())
+}
+
+/// The message out of a panic payload.
+///
+/// Split from [`panic_message`] because `PanicHookInfo` cannot be constructed
+/// outside a real panic — its constructor is unstable — so the only way to test
+/// the awkward payloads is to hand this function one directly.
+fn message_from_payload(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(text) = payload.downcast_ref::<&str>() {
+        return (*text).to_string();
+    }
+    if let Some(text) = payload.downcast_ref::<String>() {
+        return text.clone();
+    }
+    "a panic with no message".to_string()
+}
+
+/// The command that was running, from the session's own log.
+///
+/// The session's log rather than the engine's panic path, because by the time a
+/// panic hook runs the engine may not have written anything: the panic may have
+/// happened outside a command entirely.
+fn last_command(session: &Arc<Mutex<Session>>) -> String {
+    session
+        .try_lock()
+        .ok()
+        .map(|guard| last_command_of(&guard))
+        .unwrap_or_else(|| "none recorded".to_string())
+}
+
+/// [`last_command`] for a session that is already in hand.
+///
+/// The render path holds the lock, so it can ask the session directly — and
+/// the crash report it writes should name the command that was running, which
+/// is the one thing that says what the user was doing. §76.
+fn last_command_of(session: &Session) -> String {
+    session.log().last_command().map(str::to_string).unwrap_or_else(|| "none recorded".to_string())
+}
+
+/// A minimal stderr logger.
+///
+/// Hand-rolled rather than pulled in: a logging framework is a dependency
+/// surface for something this small, and the whole of it is twenty lines.
+fn install_logger() {
+    struct Stderr;
+    impl log::Log for Stderr {
+        fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+            true
+        }
+
+        fn log(&self, record: &log::Record<'_>) {
+            if !self.enabled(record.metadata()) {
+                return;
+            }
+            eprintln!("[{}] {}", record.level(), record.args());
+        }
+
+        fn flush(&self) {}
+    }
+    static LOGGER: Stderr = Stderr;
+    // `set_logger` fails only if something already claimed the global logger,
+    // which is a test harness rather than a reason to abort.
+    let _ = log::set_logger(&LOGGER);
+    log::set_max_level(log::LevelFilter::Info);
+}
+
+/// The eframe application.
+///
+/// Holds the session behind a mutex because the control channel runs on its own
+/// thread and needs the same document. The UI only ever borrows it for the
+/// length of a frame.
+///
+/// `ctx_slot` is the other half of that sharing: the channel is started before
+/// the window, so it cannot be handed a context directly.
+struct Application {
+    session: Arc<Mutex<Session>>,
+    ctx_slot: ContextSlot,
+}
+
+impl eframe::App for Application {
+    fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+        // Published before the session is touched, and every frame rather than
+        // once, because a window can be replaced and a stale context would ask
+        // for repaints on a viewport that no longer exists.
+        if let Ok(mut slot) = self.ctx_slot.lock()
+            && slot.as_ref().map(|held| held.clone() != *ctx).unwrap_or(true)
+        {
+            *slot = Some(ctx.clone());
+        }
+
+        let tokens = craftkit_ui::Tokens::dark();
+        let Ok(mut session) = self.session.lock() else {
+            // A poisoned lock means another thread panicked. The document is
+            // still there; refusing to draw would lose more than it protects.
+            log::error!("the session lock is poisoned; the document may be mid-edit");
+            return;
+        };
+        // A panic in the drawing code is caught here, where the session is
+        // still in hand, and the crash report is written from here. §76.
+        let outcome = draw_guarded(&mut session, None, |session| {
+            let _ = craftkit_ui::frame(ctx, session, &tokens);
+        });
+        if let Err(message) = outcome {
+            log::error!("the drawing code panicked ({message}); the crash report has been written");
+        }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let Ok(session) = self.session.lock() else { return };
+        if session.is_dirty() {
+            log::warn!("exiting with unsaved changes");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The panic hook is **process-global**, so the tests that install it, or
+    /// that panic while it is installed, must not run at the same time.
+    ///
+    /// They did, and the suite was flaky: the hook that ran for one test's
+    /// panic was the one another test had installed, with that test's folder,
+    /// so the report landed in the wrong directory. §76.
+    static HOOK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Take the hook lock, ignoring a poisoned one.
+    ///
+    /// A test that panics while holding it poisons it, and the next test must
+    /// still be able to run.
+    fn hook_lock() -> std::sync::MutexGuard<'static, ()> {
+        HOOK_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn no_flags_means_an_empty_session() {
+        let flags = parse_flags(&args(&[])).expect("ok").expect("not help");
+        assert!(!flags.sample);
+        assert!(flags.control.is_none());
+        assert!(flags.file.is_none());
+        assert!(open(&flags).document().nodes.is_empty());
+        assert!(!open(&flags).is_dirty(), "a fresh session is not unsaved work");
+    }
+
+    #[test]
+    fn the_sample_flag_opens_the_example() {
+        let flags = parse_flags(&args(&["--sample"])).expect("ok").expect("not help");
+        assert!(flags.sample);
+        assert_eq!(open(&flags).document().nodes.len(), 3);
+    }
+
+    #[test]
+    fn a_file_is_remembered() {
+        let flags = parse_flags(&args(&["plan.craftkit"])).expect("ok").expect("not help");
+        assert_eq!(flags.file, Some(PathBuf::from("plan.craftkit")));
+    }
+
+    /// The defect this exists for: a command over the control channel changed
+    /// the document, and the window went on showing the frame before it.
+    ///
+    /// The window is started *after* the channel, so for the first few frames —
+    /// and for the whole life of a process whose window never opened — the slot
+    /// is empty. A command arriving then must not panic or block.
+    #[test]
+    fn a_command_before_the_window_exists_is_not_an_error() {
+        let slot: ContextSlot = Arc::new(Mutex::new(None));
+        request_repaint(&slot);
+    }
+
+    #[test]
+    fn the_control_port_is_parsed_and_its_argument_consumed() {
+        let flags = parse_flags(&args(&["--control", "4711", "--sample"])).expect("ok").expect("not help");
+        assert_eq!(flags.control, Some(4711));
+        assert!(flags.sample, "the flag after the port must survive");
+    }
+
+    #[test]
+    fn help_and_version_stop_before_anything_else() {
+        assert!(parse_flags(&args(&["--help"])).expect("ok").is_none());
+        assert!(parse_flags(&args(&["-V"])).expect("ok").is_none());
+    }
+
+    #[test]
+    fn a_panic_hook_writes_a_report_a_person_can_act_on() {
+        // The whole point of the hook. A crash report that nobody can read is
+        // worse than none, because it displaces the crash you would otherwise
+        // have noticed.
+        let dir = std::env::temp_dir().join(format!("craftkit-crash-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let _lock = hook_lock();
+
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let _ = session.lock().expect("fresh").execute(
+            "node.add",
+            &serde_json::json!({
+                "name": "Before", "kind": "source"
+            }),
+        );
+        install_crash_hook_in(&session, Some(dir.clone()));
+
+        // A real panic, on a thread, so the hook is the production one.
+        let panic_on = Arc::clone(&session);
+        std::thread::spawn(move || {
+            let _ = panic_on;
+            panic!("deliberate probe");
+        })
+        .join()
+        .ok();
+
+        // Only this test's own panic: the panic hook is process-global, so a
+        // panic caught in another test can write a report into this folder.
+        let ids = craftkit_engine::crash::list_in(&dir);
+        let mine: Vec<String> = ids
+            .iter()
+            .filter(|id| {
+                craftkit_engine::crash::show_in(&dir, id)
+                    .map(|r| r.message.contains("deliberate probe"))
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        assert_eq!(mine.len(), 1, "expected one report in {}", dir.display());
+        let report = craftkit_engine::crash::show_in(&dir, &mine[0]).expect("reads back");
+        assert!(report.message.contains("deliberate probe"), "{}", report.message);
+        assert_eq!(report.command, "node.add", "the report should name what was running");
+        assert!(
+            !report.replay.is_empty(),
+            "a report with no steps cannot be replayed, which is the point of one"
+        );
+        // The design must be the document as it was *before* the panic, so it
+        // can be recovered.
+        // The design is stored as the document itself, so a person can open it
+        // again. Four nodes: the three the sample has, plus the one added just
+        // before the panic — which is the whole reason the hook runs while the
+        // session still exists.
+        let nodes = &report.design.nodes;
+        assert_eq!(nodes.len(), 4, "the design should be the document at the crash");
+        assert!(
+            nodes.iter().any(|n| n.name == "Before"),
+            "the node added just before the panic should be in the report"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        // Put the default hook back for the rest of the suite.
+        let _ = std::panic::take_hook();
+    }
+
+    /// A panic in the drawing code writes a report.
+    ///
+    /// The panic hook cannot do this: it runs on the panicking thread, and
+    /// the render path holds the session's lock for the length of a frame, so
+    /// the hook's `try_lock` fails and it writes nothing. Measured: a panic
+    /// while the session was locked wrote **no report at all**. §76.
+    #[test]
+    fn a_panic_in_the_drawing_code_writes_a_report() {
+        let dir = std::env::temp_dir().join(format!("craftkit-crash-draw-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let _lock = hook_lock();
+
+        let mut session = Session::sample();
+        let outcome = draw_guarded(&mut session, Some(dir.as_path()), |_| {
+            panic!("a panic in the drawing code");
+        });
+
+        let message = outcome.expect_err("the panic is caught and reported");
+        assert!(message.contains("a panic in the drawing code"), "{message}");
+        let ids = craftkit_engine::crash::list_in(&dir);
+        assert_eq!(ids.len(), 1, "expected one report in {}", dir.display());
+        let report = craftkit_engine::crash::show_in(&dir, &ids[0]).expect("reads back");
+        assert!(report.message.contains("a panic in the drawing code"), "{}", report.message);
+        assert!(
+            !report.design.nodes.is_empty(),
+            "the report should carry the document the user was working on"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A frame that does not panic writes no report and says nothing.
+    #[test]
+    fn a_frame_that_does_not_panic_writes_no_report() {
+        let dir = std::env::temp_dir().join(format!("craftkit-crash-draw-ok-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mut session = Session::sample();
+        let outcome = draw_guarded(&mut session, Some(dir.as_path()), |_session| {});
+        assert!(outcome.is_ok(), "{outcome:?}");
+        assert!(craftkit_engine::crash::list_in(&dir).is_empty());
+    }
+
+    #[test]
+    fn the_hook_survives_a_panic_payload_it_cannot_read() {
+        // A panic inside the hook aborts the process and loses the original
+        // panic, so the hook has to cope with whatever it is handed — including
+        // a payload that is neither a `&str` nor a `String`.
+        // A literal `panic!("…")` payload is `&'static str`; `panic!("{}", x)`
+        // with a formatted String is `String`. Both are the cases that matter.
+        let borrowed: &'static str = "a borrowed str";
+        assert_eq!(message_from_payload(&borrowed), "a borrowed str");
+        let owned: String = String::from("an owned str");
+        assert_eq!(message_from_payload(&owned), "an owned str");
+        assert_eq!(
+            message_from_payload(&()),
+            "a panic with no message",
+            "an unreadable payload must still produce something to write down"
+        );
+        assert_eq!(message_from_payload(&42u32), "a panic with no message");
+    }
+
+    #[test]
+    fn a_missing_or_bad_port_is_an_error_with_the_usage() {
+        let err = parse_flags(&args(&["--control"])).expect_err("refused");
+        assert!(err.contains("needs a port"), "{err}");
+        let err = parse_flags(&args(&["--control", "banana"])).expect_err("refused");
+        assert!(err.contains("port number"), "{err}");
+    }
+
+    #[test]
+    fn an_unknown_flag_is_refused_rather_than_ignored() {
+        let err = parse_flags(&args(&["--frobnicate"])).expect_err("refused");
+        assert!(err.contains("--frobnicate"), "{err}");
+    }
+
+    #[test]
+    fn a_file_that_will_not_open_still_gives_a_usable_session() {
+        // The point of the test: an unreadable design must not stop the
+        // application from starting.
+        let flags = parse_flags(&args(&["/nonexistent/plan.craftkit"])).expect("ok").expect("not help");
+        let session = open(&flags);
+        assert!(!session.document().nodes.is_empty());
+    }
+
+    #[test]
+    fn the_usage_mentions_every_flag_the_parser_accepts() {
+        for flag in ["--sample", "--control", "--help", "--version"] {
+            assert!(USAGE.contains(flag), "the usage text does not mention {flag}");
+        }
+    }
+
+    /// The sentence an agent reads after clicking, which must not claim an action
+    /// that did not happen.
+    ///
+    /// It said ``clicked `toolbar.node.duplicate` ``, three times in a row against
+    /// a live app, with the document byte-identical afterwards. `data.hit` is where
+    /// the name belongs; the sentence has to say what a click is.
+    #[test]
+    fn a_click_reply_does_not_claim_to_have_clicked() {
+        let hit = click_message(Some("toolbar.node.duplicate"));
+        assert!(!hit.starts_with("clicked"), "the sentence claims an action: {hit}");
+        // The name is still reported — that is the whole point of a click.
+        assert!(hit.contains("toolbar.node.duplicate"), "{hit}");
+        // And the way to actually do it is named, rather than left to be guessed.
+        assert!(hit.contains("engine.execute"), "{hit}");
+
+        // The empty case was already honest; keep it that way.
+        assert_eq!(click_message(None), "nothing is at that point");
+    }
+
+    /// `ui.click` reaches the click, through the handler that answers `ui.*`.
+    ///
+    /// The unit test above is about the sentence; this one is about the request
+    /// getting there at all, which is what was broken: the action defaulted to
+    /// `render` and the typed method was never read.
+    #[test]
+    fn a_ui_click_request_reaches_the_click_handler() {
+        let mut session = Session::sample();
+        let mut request = craftkit_control::Request::new(1, craftkit_control::Method::Ui);
+        request.method = "ui.click".to_string();
+        request.params = serde_json::json!({ "x": 400.0, "y": 12.0 });
+
+        let response = ui_request(&mut session, &request);
+        assert!(response.ok, "{:?}", response.message);
+        let message = response.message.clone().unwrap_or_default();
+        assert!(!message.starts_with("rendered"), "ui.click was rendered instead of clicked: {message}");
+        // A click does not activate, so the document is untouched — and the reply
+        // must not have a png in it either.
+        let data = response.data.unwrap_or(serde_json::Value::Null);
+        assert!(data.get("png_base64").is_none(), "{data}");
+        assert!(data.get("hit").is_some(), "no hit was reported: {data}");
+
+        // `ui.render` still renders: the two are not the same request.
+        let mut render = craftkit_control::Request::new(2, craftkit_control::Method::Ui);
+        render.method = "ui.render".to_string();
+        render.params = serde_json::json!({ "width": 320, "height": 240 });
+        let response = ui_request(&mut session, &render);
+        let render_message = response.message.unwrap_or_default();
+        assert!(render_message.starts_with("rendered"), "{render_message}");
+        assert!(response.data.and_then(|d| d.get("png_base64").cloned()).is_some(), "no frame");
+    }
+}

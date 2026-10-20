@@ -1,0 +1,20 @@
+# Cargo configuration for this workspace.
+#
+# The one thing here is the `xtask` alias, and it is here because `cargo xtask`
+# is how every gate, every recipe, every document and the CI workflow refers to
+# running the checks. Without this file, `cargo xtask ci` fails with
+# "no such command: xtask" — which is a confusing way to learn that a build tool
+# exists.
+#
+# It is an alias rather than a wrapper script because then the build tool is an
+# ordinary workspace member: `cargo test -p xtask` runs its unit tests,
+# `cargo clippy --workspace` covers it, and the layering gate sees it. A shell
+# script would be none of those things.
+
+[alias]
+# `cargo xtask <command>` → run the xtask binary with those arguments.
+#
+# `--quiet` so the gate's output is the gate's output, not cargo's. The extra
+# `--` is what separates cargo's flags from xtask's, so `cargo xtask ci --help`
+# passes `--help` through rather than eating it.
+xtask = "run --quiet -p xtask --"

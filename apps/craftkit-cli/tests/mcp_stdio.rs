@@ -1,0 +1,206 @@
+//! End-to-end over stdio: the real binary, a real pipe, real JSON-RPC.
+//!
+//! Everything else in this crate tests `handle_line`, which is pure and is
+//! therefore tested thoroughly. `serve` is the part that reads a pipe, writes
+//! replies and decides when to stop, and it had no test at all — `CONTRIBUTING`
+//! records it as "the one subcommand no test executes", on the grounds that it
+//! blocks on stdio. Blocking on stdio is not a reason a test cannot drive it:
+//! that is what a pipe is for.
+//!
+//! These run in CI. Unlike the window, stdio needs no display.
+
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+
+const BIN: &str = env!("CARGO_BIN_EXE_craftkit-cli");
+
+/// The running server and the pipe into it.
+struct Server {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    /// Where the server's own words go.
+    ///
+    /// They used to go to `/dev/null`, and a server that died said nothing
+    /// about why: the test could only report "a reply to the call", and the
+    /// person reading it had nothing to go on. §87.
+    log: PathBuf,
+}
+
+impl Server {
+    fn start() -> Self {
+        let log = std::env::temp_dir().join("craftkit-mcp-stdio").join(format!(
+            "{}-{:?}.log",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        if let Some(parent) = log.parent() {
+            std::fs::create_dir_all(parent).expect("a directory for the server's log");
+        }
+        // A file, not a pipe: a pipe nobody reads fills up, and then the
+        // server blocks writing to it — which would look exactly like the
+        // hang this file is trying to catch.
+        let err = std::fs::File::create(&log).expect("a log file for the server");
+        let mut child = Command::new(BIN)
+            .arg("mcp")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::from(err))
+            .spawn()
+            .expect("the binary that cargo just built");
+        let stdin = child.stdin.take().expect("stdin is piped");
+        let stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
+        let mut s = Server { child, stdin, stdout, log };
+        // The handshake every real client sends first, so the rest of the test
+        // reads like a session rather than a protocol probe.
+        s.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"craftkit-test","version":"1"}}}"#);
+        s.reply();
+        s
+    }
+
+    fn send(&mut self, line: &str) {
+        // A write that fails means the server is gone, and the reason it is
+        // gone is in its log and its exit status — not in the broken pipe.
+        let written = writeln!(self.stdin, "{line}").and_then(|()| self.stdin.flush());
+        if let Err(e) = written {
+            let complaint = self.complaint();
+            panic!("the server stopped listening ({e}) — {complaint}");
+        }
+    }
+
+    /// The next reply, or `None` if the server has stopped talking.
+    fn reply(&mut self) -> Option<serde_json::Value> {
+        let mut line = String::new();
+        let n = self.stdout.read_line(&mut line).ok()?;
+        if n == 0 {
+            return None;
+        }
+        Some(serde_json::from_str(&line).unwrap_or_else(|e| panic!("not JSON: {line:?} ({e})")))
+    }
+
+    /// What the server said, and what became of it.
+    ///
+    /// This is what a failure message is made of: without it, "a reply to the
+    /// call" is all anybody has. §87.
+    fn complaint(&mut self) -> String {
+        let status = self.child.try_wait().ok().flatten();
+        let said = std::fs::read_to_string(&self.log).unwrap_or_default();
+        let said = said.trim();
+        if said.is_empty() {
+            format!("the server said nothing; its status is {status:?}")
+        } else {
+            format!("the server said: {said}; its status is {status:?}")
+        }
+    }
+
+    /// The next reply, or a panic that says what the server said.
+    fn expect_reply(&mut self, what: &str) -> serde_json::Value {
+        let reply = self.reply();
+        let complaint = self.complaint();
+        reply.unwrap_or_else(|| panic!("{what} — {complaint}"))
+    }
+
+    fn wait(&mut self) -> Option<std::process::ExitStatus> {
+        self.child.wait().ok()
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_file(&self.log);
+    }
+}
+
+fn id_of(v: &serde_json::Value) -> i64 {
+    v.get("id").and_then(serde_json::Value::as_i64).expect("every reply carries its id")
+}
+
+/// The document really changed and the tool really said so.
+#[test]
+fn a_tool_call_changes_the_document_through_the_real_binary() {
+    let mut s = Server::start();
+
+    s.send(r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"craftkit_node_add","arguments":{"name":"EndToEnd","kind":"filter"}}}"#);
+    let added = s.expect_reply("a reply to the call");
+    assert_eq!(id_of(&added), 2);
+    let result = added.get("result").expect("a result, not an error");
+    assert_eq!(result["isError"], serde_json::Value::Bool(false), "{added}");
+    assert_eq!(result["structuredContent"]["name"], "EndToEnd", "{added}");
+
+    // Independent check: the session says so too, so the test is not just
+    // echoing the tool's own answer back at itself.
+    s.send(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"craftkit_status","arguments":{}}}"#);
+    let status = s.expect_reply("a reply to the status call");
+    let text = status["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains("EndToEnd"), "the status does not list the node: {text}");
+}
+
+/// A refused command is a tool error, not a protocol error, and an unknown tool
+/// is the other way round. Mixing those two up is what makes an agent retry a
+/// request that can never work.
+#[test]
+fn refusals_keep_their_protocol_codes() {
+    let mut s = Server::start();
+
+    s.send(r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"craftkit_node_remove","arguments":{"node":"nope"}}}"#);
+    let bad = s.expect_reply("a reply to the refused command");
+    assert_eq!(bad["result"]["isError"], serde_json::Value::Bool(true), "{bad}");
+    assert_eq!(bad["result"]["structuredContent"]["kind"], "bad-parameter", "{bad}");
+
+    s.send(
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"no_such_tool","arguments":{}}}"#,
+    );
+    let missing = s.expect_reply("a reply about the unknown tool");
+    assert_eq!(missing["error"]["code"], -32601, "{missing}");
+
+    // Malformed input must not take the server down: the next request still works.
+    s.send("this is not json");
+    let junk = s.expect_reply("a parse error, not a dead server");
+    assert_eq!(junk["error"]["code"], -32700, "{junk}");
+
+    s.send(r#"{"jsonrpc":"2.0","id":4,"method":"ping"}"#);
+    assert_eq!(id_of(&s.expect_reply("still alive")), 4);
+}
+
+/// A line that is too long is refused, and the server carries on.
+///
+/// The limit is applied while the line is read, so the reader has to leave
+/// the stream in step: the rest of the long line is drained and the next
+/// line is read normally. A server that ended here would take the client's
+/// whole session with it, and a client that sent one long line by accident
+/// would have to start again.
+#[test]
+fn a_too_long_line_is_refused_and_the_server_carries_on() {
+    let mut s = Server::start();
+
+    let huge = format!("{{\"a\":\"{}\"}}", "x".repeat(4 * 1024 * 1024));
+    s.send(&huge);
+    let refused = s.expect_reply("a refusal, not a dead server");
+    assert_eq!(refused["error"]["code"], -32600, "{refused}");
+    let message = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("the limit is"), "{refused}");
+
+    s.send(r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#);
+    assert_eq!(id_of(&s.expect_reply("still alive")), 9);
+}
+
+/// The defect this file exists for: `serve` said it ended "or `shutdown`
+/// arrives", acknowledged `shutdown`, and then served the next request anyway.
+/// Kept as an end-to-end test because the unit test cannot see the loop.
+#[test]
+fn shutdown_ends_the_server_and_the_reply_before_it_is_still_sent() {
+    let mut s = Server::start();
+
+    s.send(r#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#);
+    let ack = s.expect_reply("the acknowledgement is sent before the server stops");
+    assert_eq!(id_of(&ack), 2, "{ack}");
+
+    // Nothing more may be answered, and the process must be gone on its own.
+    // stdin is held open, so only `shutdown` can end this.
+    s.send(r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#);
+    assert!(s.reply().is_none(), "the server answered after shutdown");
+    assert!(s.wait().is_some(), "the process did not exit after shutdown");
+}

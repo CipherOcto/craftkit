@@ -1,0 +1,17 @@
+# This file pins the toolchain the project is developed against, so that
+# "works on my machine" has a definition.
+#
+# `stable`, not a date-pinned release: a scaffold gets copied into other
+# projects on other schedules, and a channel that goes stale in three months is
+# worse than no pin. The floor is `rust-version` in Cargo.toml, and the
+# `portability` job in .github/workflows/ci.yml builds with exactly that.
+#
+# `rustfmt` and `clippy` are components because `cargo xtask ci` runs both and
+# a missing component turns the gate into an error rather than a skip.
+# `wasm32-unknown-unknown` is a target because `cargo xtask wasm` checks every
+# library crate against it; without the target the check skips, and a skip is
+# not a pass.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

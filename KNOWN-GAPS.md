@@ -1,0 +1,9461 @@
+# Known gaps
+
+What this project does **not** do, what it claims to do and does not, and what
+a gate cannot see. Every entry says how it was found and how you can check it
+again, because a gap list with no evidence is a list of opinions.
+
+The entries marked **fixed** were found by this audit and have been repaired;
+they are kept because "we looked and here is what we found" is more useful than
+"everything is fine", and because the mutation that found each one is still in
+`scripts/mutation-test-gates.sh` so it cannot come back unnoticed.
+
+Run the audit yourself:
+
+```bash
+scripts/mutation-test-gates.sh     # break each rule, check the gate notices
+cargo xtask doctor                 # what this machine cannot do
+cargo llvm-cov --workspace --summary-only --profile ci   # §14
+```
+
+---
+
+## 1. Gates that could not fail — fixed
+
+The most valuable kind of gap, because a gate that cannot fail teaches people to
+trust a check that has never checked anything.
+
+| Gate | The mutation it missed | Now |
+|---|---|---|
+| `web` | Renaming the canvas element's `id` while the name survived in the stylesheet and a comment. The check was `html.contains(CANVAS_ID)` — a substring search. | `canvas_element_is_correctly_identified` parses the opening tag and its `id` attribute. A second rule checks the stylesheet has a rule for it. |
+| `lists` | An unsorted workspace `members` list. The check existed only as a unit test, so `cargo xtask lists` printed "lists are sorted" about a list it never looked at. | The gate reads and checks the list. |
+| `assets` | An `ATTRIBUTION.md` row glued onto the end of a prose line. The document had **no trailing newline**, so appending a row produced a line that does not begin with `\|`, and the table reader correctly refused to see it. | Added `mentioned_files`: a name mentioned anywhere but claimed by no row is reported as malformed. The missing newline in `ATTRIBUTION.md` is fixed. |
+| `ci` | Deleting the one call that ran the tests and the wasm check. `cargo xtask ci` printed **"ci green — …, tests, wasm"** and exited 0 without running either. §2 has the whole story. | One `PHASES` list that `run` iterates, a closing line built from the phases that ran, and two tests that pin both. |
+
+Verified by re-running the mutation script: **every case caught**, and the one
+that is not is the wasm limitation below, which is deliberate and is printed as
+a `known` line rather than hidden.
+
+This paragraph deliberately carries **no number of its own**. It used to say
+"28 of 29 caught", which was true on the day it was written and was **ninety
+cases out of date** by the time the next section was added — a hand-written
+count of a thing that grows is stale by construction. §71.
+
+The number in that line is computed by counting the cases the script runs, not
+written by hand. It used to be `caught / caught + 1`, which quietly assumed
+there was exactly one un-catchable case; two labels also claimed to test one
+thing while three mutations were applied under a single check. Both are fixed,
+because a gate that reports a wrong ratio is the same species of gate as a gate
+that cannot fail — and `cargo xtask lists` now checks that the ratio is still
+computed, rather than written out.
+
+## 2. `cargo xtask ci` reported gates it had not run — fixed
+
+The worst thing found, and the reason §1 exists.
+
+`ci::run` ran the six cheap gates from the `PHASES` constant, and then called
+`tests_and_wasm(root)?` separately, after the loop. Its closing line was a
+string literal:
+
+```rust
+println!("\nci green in {:.1}s — fmt, assets, lists, layers, web, clippy, tests, wasm.", …);
+```
+
+Delete that one call and the result is a green CI run that ran neither the tests
+nor the wasm check, and **says it ran both**. This was verified by doing exactly
+that, not by reading the code and suspecting: exit code 0, "ci green", and the
+full list of phases in the summary.
+
+Nothing noticed, for three separate reasons, and each of them had to be fixed:
+
+1. **No test ran `ci::run`.** `xtask/src/ci.rs` was the least-covered file in the
+   workspace at 41.03%. The three tests it had asserted over the *constant*
+   `PHASES` — which was accurate — and never over the function that used it.
+2. **The summary was a claim, not a record.** It could name any phase and be
+   believed. It is now built from the outcomes.
+3. **The mutation script did not touch `ci`.** It broke six gates and never the
+   one that runs them.
+
+Fixed: `PHASES` now holds all eight phases and `run` iterates that one list, so
+a dropped phase is a failing `assert_eq!` rather than a silent omission. Gates
+return `Outcome::Ran` or `Outcome::Skipped`, and `ci::summary` builds the closing
+line from them — a phase that could not run is named as skipped and is **not**
+listed among the ones that ran. `the_closing_line_names_what_actually_ran` pins
+that, and both mutations are in the script.
+
+## 3. The audit's own instrument could not fail — fixed
+
+`scripts/mutation-test-gates.sh` is a gate too, and it had the defect the whole
+exercise exists to find: **it printed its failures and exited 0.**
+
+Found by making it fail. Replacing every gate in it with a command that always
+succeeds produced eighteen red `MISSED` lines, the correct explanation, "Tree
+unchanged" — and exit code 0. In CI that is a green build with the instrument
+shouting inside it, which is worse than having no instrument, because the red
+text is on a line people learn to scroll past.
+
+It is a section of its own rather than a row in §1 because §1 is about the
+project's gates and this one is about the thing that audits them. The same
+sentence covers both: *a gate that cannot fail teaches people to trust a check
+that has never checked anything.* This one taught it.
+
+Fixed: the exit status is now part of the result. A run with a missed mutation
+exits 1, and the reporting lives in a `finish` function rather than at the end of
+the script body. `--self-test` then asserts the negative cheaply — it injects one
+synthetic case that is guaranteed to miss, drives it through the real
+`expect_catch` and the real `finish`, and must exit non-zero:
+
+```console
+$ scripts/mutation-test-gates.sh --self-test; echo $?
+  MISSED  synthetic: a gate that never rejects
+1 of 1 gate(s) MISSED their mutation:
+A gate that cannot fail is worse than no gate. Fix the gate, or the check.
+1
+```
+
+The workflow asserts that this command fails, so restoring the old behaviour
+turns CI red on that line before the full run can be believed.
+
+## 4. A security boundary with no test on it — fixed
+
+The most severe thing this audit found, and it is not a gate at all.
+
+The control channel is a JSON endpoint on a TCP socket that runs engine
+commands. `ServerOptions::allow_remote` decides whether it binds loopback or
+`0.0.0.0` — every interface on the machine. The field's own documentation says
+what that means: *"a control channel on a routable interface is remote code
+execution with a JSON syntax."*
+
+**The default had no test.** There was a test named
+`the_listener_is_loopback_only_by_default`, and it passed a hardcoded `false` to
+`bind()` rather than the default from `ServerOptions::new`. So it asserted that
+the function treats `false` as loopback, and said nothing about what the program
+actually does. Flipping the default to `true` — one character — left all 41
+control tests green:
+
+```console
+$ cargo test -p craftkit-control
+test result: ok. 41 passed; 0 failed
+```
+
+A test named after a property that nothing checks is the most expensive kind of
+test, because it is read as proof.
+
+What was *not* wrong, checked while looking: the token itself. The token file is
+written `0600` inside a `0700` directory, and there is a test asserting the
+mode. Rejecting a wrong token, a missing token, and a token presented after the
+first request are all covered. So the token was never the weak link — the socket
+address was, and the socket address was the one thing with no test.
+
+(This paragraph also said the permissions were set **before** the content rather
+than after. It was not — the *directory*'s were, and the *file*'s were not. The
+file was created with the umask, which measured `0664`, and restricted
+afterwards, so the secret was on disk in a world-readable file for the length of
+one call. §55 found it. The sentence here was wrong when it was written, and it
+was wrong in exactly the way §53 describes: a section that checks a mechanism
+and then describes it in detail is still a *description*, and it can be wrong
+the same way a test can be green.)
+
+Fixed with two tests:
+
+- `the_default_is_loopback_and_the_default_is_what_binds` reads the default from
+  `ServerOptions::new` and binds with it, so the property is about the program
+  rather than about the function.
+- `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one` reads every
+  `.rs` file under `crates/`, `apps/` and `xtask/`, so the flag being set where
+  the server is built fails the build. That is the realistic way the boundary
+  goes, not a flipped default.
+
+Two things went wrong while writing the second one, both worth recording because
+they are the failure mode of a tree-scanning test:
+
+1. It failed on a clean tree, because its own source contained the string it was
+   searching for. The needle is now assembled at run time.
+2. Then it passed on a probe that set the flag with `=`, because it only knew the
+   `: ` spelling a struct literal uses. Both spellings are searched now, and
+   both are in `scripts/mutation-test-gates.sh`.
+
+**The residual, stated rather than hidden:** the `allow_remote == true` branch of
+`bind()` is still never executed by a test, because the only honest way to test
+it is to bind a routable interface and look at the result. That is the one branch
+this audit chose to document instead of fix. The flag is off by default, nothing
+in the tree sets it, and the tree-wide test now fails the build if that changes.
+
+## 5. A format migration nobody ran — fixed
+
+The design file format is the one thing in this project that, going wrong,
+produces wrong values rather than an error.
+
+`AGENTS.md`, `CONTRIBUTING.md` and four docs all state the rule: a change that
+alters what is saved **adds one file** under `crates/io/src/format/pending/`, and
+the release folds them in. A pending file holds a `step` that rewrites a document
+written by the previous version. It only runs if the file is also listed in the
+`FILES` table in `pending.rs` — and nothing checked that against the disk.
+
+Writing `pending/probe.rs` and running the suite:
+
+```console
+$ cargo test -p craftkit-io
+test result: ok. 24 passed; 0 failed
+```
+
+All four pending tests passed with a migration sitting in the directory that
+`names()` never returns and `apply` never calls. A design saved by an older
+version would load without its rewrite. Not an error — just wrong values, which
+is the failure mode nobody looks for.
+
+The reason is worth recording, because it is the same shape as §4:
+
+- `every_pending_file_is_wired_into_apply` asserted `FILES.is_empty()`. A test
+  named after a property, checking a constant.
+- It cannot see the filesystem at all, so it is blind to exactly the direction
+  that happens in practice — you write the migration file first and register it
+  second, if at all.
+- The one direction it *does* cover (a name with no file) failed on purpose, as a
+  standing reminder to wire `apply` when the first change lands.
+
+Fixed with two tests:
+
+- `the_files_on_disk_and_the_table_agree` reads the directory and compares it
+  with `names()` in both directions, and its failure message names both sides.
+- `every_listed_change_is_declared_and_applied` closes the last hole in the loop:
+  a listed file with no `mod` declaration is not compiled at all, so a mistake in
+  it cannot even fail to build, and a declared file never called from `apply`
+  compiles perfectly and does nothing. This one is vacuous while the list is
+  empty — the normal state between releases — and is a tripwire for the first
+  real change.
+
+**Two durable facts about this mechanism, stated because they are easy to be
+surprised by:**
+
+1. `pending/` is empty today, and **git does not track empty directories**. A
+   fresh clone has no `pending/` at all. The new test treats a missing directory
+   as empty rather than failing, because that is a real state and the table is
+   correctly empty for it — but the directory itself is not durable, and whoever
+   adds the first change creates it.
+2. The whole mechanism has therefore never run. Every part of it — `step`,
+   `FILES`, `apply`, the fold script — is exercised only by its own tests and
+   never by an actual format change. The first one is the first time any of it
+   meets reality.
+
+## 6. "Rust only" was never enforced, and never true — fixed
+
+`AGENTS.md` states it as absolute: *"Rust only. The single exception is
+JavaScript the browser requires."*
+
+Nothing checked it, and the statement was already untrue. The tree holds **five**
+files that are not Rust:
+
+```text
+apps/craftkit-web/index.html      the module script the page imports
+apps/craftkit-web/sw.js           a service worker; browsers only run these as JS
+scripts/mutation-test-gates.sh    the gate instrument
+scripts/fold-format-pending.sh    runs once, by hand, at a release
+.github/workflows/ci.yml          continuous integration is YAML
+```
+
+`cargo xtask assets` looked like it should have caught this and did not, which is
+the interesting part. It is the gate that owns "what may exist in this tree", it
+walks every file, and it rejects anything that embeds a file — but it recognises
+a file by extension, and `ASSET_EXTENSIONS` is binary and media formats only. A
+script is not an asset.
+
+So the check saw every one of those files, every time, and classified all of them
+as "not my problem". Measured, not suspected:
+
+```console
+$ printf 'print("x")\n' > crates/ui/build_helper.py
+$ printf 'const x = 1;\n' > apps/craftkit-web/extra.js
+$ printf '#!/bin/sh\necho hi\n' > crates/core/deploy.sh
+$ cargo xtask ci
+ci green in 2.3s — fmt, assets, lists, layers, web, clippy, tests, wasm.
+```
+
+A Python build helper inside `crates/ui`, a stray JavaScript file in the web app
+and a deploy script inside `crates/core`, and the gate that exists to police the
+tree said nothing about any of them.
+
+Fixed in the same gate, because that is where the walk already was:
+
+- `FOREIGN_SOURCE_EXTENSIONS` — twenty-six extensions that mean "code, in
+  another language".
+- `FOREIGN_SOURCE_EXCEPTIONS` — the five files above, each with its reason. A row
+  without a reason is a permission slip that looks like a decision, so
+  `every_declared_exception_is_a_real_file_with_a_reason` requires both a
+  non-empty reason and a file that is actually there.
+- `walk` takes a predicate, so one traversal serves both rules.
+
+One detail worth recording, because it is the kind of thing that makes a rule
+quietly off on one platform: `walk` yields whatever `strip_prefix` gives, which on
+Windows is backslash-separated. Comparing that against a table of `/` paths would
+have made **every exception a false negative on Windows** — and CI runs
+`windows-latest`. `relative_name` normalises.
+
+`AGENTS.md` now says what is true: the rule is checked, the list has five
+entries, and it was never the two the file claimed.
+
+## 7. Ninety citations, none of them checked — fixed
+
+For a project whose premise is that agents read prose and act on it, the prose
+is the product. So: every `file.rs:12` in every document and every skill, and
+whether any of them still points where it claims.
+
+**90 citations. 5 provably wrong, and nothing had ever looked.**
+
+| Where | Cites | Actually points at |
+|---|---|---|
+| `skills/craftkit-checking/SKILL.md` | `xtask/src/wasm.rs:41-48` | the import block, in a paragraph about the skip |
+| `skills/craftkit-checking/SKILL.md` | `xtask/src/web.rs:163-167` | a `fallback` check, in a paragraph about `node` being missing |
+| `skills/craftkit-checking/SKILL.md` | `wasm.rs:58` | a lone `}` |
+| `skills/craftkit-checking/SKILL.md` | `apps/craftkit/src/main.rs:187` | blank lines |
+| `skills/craftkit-editing/SKILL.md` | `lists.rs:492` | blank lines |
+| `docs/recipes/change-the-file-format.md` | `crates/io/src/format.rs:213` | a closing brace, cited for `reseat_id_counter` |
+| `docs/recipes/add-a-control-channel-method.md` | `crates/control/src/server.rs:523` | a closing brace |
+
+**Part of that drift was caused by this audit.** Every one of those files was
+edited in the course of the last four rounds, which moved the lines below the
+ones cited. A citation is a claim about a file, and the audit made six of them
+false without noticing. That is the honest version of the finding: this is not a
+mistake somebody made once, it is the normal decay rate of an unchecked citation.
+
+The checking skill was worse than stale. It described the `assets` gate without
+mentioning the Rust-only rule added in §6, quoted gate output that no longer
+matched, cited `xtask/src/ci.rs:109` for a phase list that had moved to a
+`PHASES` constant, and — the worst of it — **never mentioned
+`scripts/mutation-test-gates.sh` at all**. Zero mentions in both skills. The one
+workflow `CONTRIBUTING.md` calls its first rule, and the one CI now runs as a
+job, was invisible to the agents the skills exist to serve.
+
+Fixed in three parts:
+
+1. **The seven wrong citations now name symbols** — `wasm::run`, `web::run`,
+   `reseat_id_counter`, `a_deny_in_a_different_order_is_not_the_house_one`.
+   A symbol still means something next year; a line number does not.
+2. **`cargo xtask lists` checks them**, via `citation_drift`. It reports a
+   citation whose line is blank, whose line range is past the end of the file, or
+   whose file is not in the tree.
+3. **The checking skill documents the instrument**, including that
+   `--self-test` is *expected to exit non-zero*.
+
+**What the check deliberately does not do.** It cannot tell that
+`crates/engine/src/session.rs:229` should be about `catch_unwind` and now is
+about something else, because the line is real code either way. "What the
+citation should have said" is a judgement about prose and no tool can make it. So
+the gate covers the mechanically detectable half — a citation pointing at
+nothing — and `KNOWN-GAPS.md` says plainly that the other half is a reviewer's
+job.
+
+Writing that scanner found three bugs in itself, all of the same kind: `.rs:` is
+four bytes so digits start at `dot + 4`, not `dot + 3`; the name has to be
+sliced to `dot + 3` to include the extension; and the range separator has to be
+stepped over, not merely detected, or `read_number` is looking at a `-`. It is
+hand-written for the reason `args.rs` is: the pattern is small, and this build
+tool has no dependency that is not already in the tree.
+
+## 8. Three of six easings had no answer anyone checked — fixed
+
+Every other finding in this document is one of two things: a check that cannot
+fail, or prose that no longer matches the code. This is neither. It is a
+**computation nothing checked the answer to**, and it was found by asking a
+question the other eleven findings never asked: *what does the engine actually
+compute, and who knows whether it is right?*
+
+The timeline interpolates keyframes through an easing curve. Six easings are
+supported — `hold`, `linear`, `easeInOut`, `easeIn` and `easeOut`, plus
+aliases. Two of them are a cubic bezier solved by bisection, which is the most
+numerically involved code in the project and the kind that can be subtly wrong
+without ever being obviously broken: an iteration count that is one short, a
+solver that gives up on a non-monotonic curve, an endpoint that drifts.
+
+So: replace `easeInOut` and both bezier presets with a linear ramp, and count the
+failures across the whole workspace.
+
+```console
+$ cargo test --workspace --no-fail-fast
+passed: 542  failed: 1
+```
+
+**One failure, and it was not about the thing that was broken.** It came from
+`hold_does_not_interpolate` — the only easing with a numeric test. `easeInOut`,
+`easeIn` and `easeOut` could return linear values forever and the suite would
+stay green.
+
+Only `linear` was properly anchored, and it is anchored well: `a_keyframe_sorts
+_itself_and_samples_in_between` asserts 0, 5 and 10 at the quarter, middle and
+end of a 0→10 ramp, which is the correct answer by hand. That test set the
+standard the other five were not held to.
+
+Fixed with four tests carrying hand-derived values, so the oracle never calls
+its own subject:
+
+- `ease_in_out_is_smoothstep_and_not_linear` — `t²(3−2t)` gives 0.15625, 0.5 and
+  0.84375 at a quarter, the middle and three quarters.
+- `ease_in_out_is_symmetric_about_the_middle` — the property, independent of the
+  constants.
+- `the_two_bezier_presets_solve_their_own_curve` — values obtained by solving
+  `x(t) = x` and reading `y(t)` from the *definition* of each preset:
+  `easeIn` 0.093465 / 0.315357 / 0.621862, `easeOut` 0.386805 / 0.686461 /
+  0.897053, plus the shape check that `easeIn` is always below linear and
+  `easeOut` always above it.
+- `every_easing_pins_both_ends_and_stays_inside_the_unit_range` — endpoints,
+  range and monotonicity for all six, which is what a broken *solver* breaks
+  before a broken *curve* does.
+
+The same mutation now fails two tests instead of one, and the script keeps it
+that way.
+
+Worth recording honestly: the endpoint test was wrong on its first run, because
+it assumed `hold` ends at 1. `hold` holds the first key's value, so it ends at
+0 — which is what the word means. The test was asserting the wrong thing
+beautifully, and the only reason it was caught is that it was written against
+the implementation's behaviour rather than its documentation.
+
+**What this opens up.** This is the first finding here about *answers* rather
+than *checks*. It also produced a prediction, and §9 records what happened when
+that prediction was tested: this section guessed that the evaluator's semantics
+had no independent oracle either, and it was wrong — every rule is mutation
+covered. It also guessed wrong about the shape of the thing, expecting a graph
+with fan-in and cycle detection, when evaluation is a sequential fold over the
+node list. Coverage of numeric code says it ran, not that it was right, so the
+question is worth asking of every computation in the tree.
+
+## 9. The evaluator's rules were anchored, but by the wrong tests — fixed
+
+§8 ended by pointing at this as the next thing to check: the evaluator's graph
+topology is well covered and, by the standard applied to the easings, might have
+no independent oracle either.
+
+**It does.** Three semantic mutations, three catches:
+
+| Mutation | Caught by |
+|---|---|
+| A `Source` multiplies instead of setting the level | `reordering_nodes_is_not_served_from_the_cache` |
+| Muting a node stops bypassing it | `a_muted_node_passes_the_level_through_untouched` |
+| The chain starts at 0.5 instead of unity | `removing_a_node_does_not_reuse_a_tail_that_moved` |
+
+The evaluator is sound, and that is the finding — a verified negative, which is
+worth recording precisely because §8 predicted otherwise and was wrong.
+
+But look at which tests caught them. Two of the three are named for the **cache**,
+not for the rule they happen to assert. The second cache test even carries the
+comment *"A source sets the level, so the plan's output is the last node's"*
+inside a test about fingerprint invalidation. So:
+
+- A source setting rather than multiplying was one careless edit to an unrelated
+  test away from having no coverage at all.
+- Nothing in the test names tells a reader that either rule is anchored.
+
+An oracle you cannot see is one you will not protect. Fixed by giving each rule a
+test named after it — `a_source_sets_the_level_rather_than_multiplying_it` and
+`the_chain_starts_at_unity_so_one_gain_is_one_gain` — and by putting both mutations
+in the script. Each now fails a test whose name says what it protects.
+
+`hold` and mute were already anchored by correctly-named tests, so they were left
+alone.
+
+**The method, since it is the reusable part.** Asking "what does this compute, and
+who knows whether it is right?" is a different question from "can this check
+fail?", and it takes thirty seconds per rule to answer by mutation. It found §8's
+three unanchored easings, and here it cleared five rules and made two of the
+remaining oracles legible. Negative results are worth running on purpose: the
+rules that turn out to be fine are now known to be fine rather than merely
+assumed to be.
+
+## 10. Two doc comments described a saturation rule that never existed — fixed
+
+The kernel has two ways to do arithmetic, and both have a doc comment describing
+a saturation rule they share:
+
+- `apply_gain` — `level * gain`, **clamped** at `MAX_MAGNITUDE`. This is what the
+  plan evaluator calls, per node, per frame.
+- `evaluate_chain` — a whole-document walk with offsets and a trace. Its comment
+  said *"Saturating arithmetic throughout, so a long chain of large gains
+  reaches a limit rather than an infinity."*
+
+`apply_gain`'s comment said the rule *"is identical to the chain's, and lives here
+so there is exactly one copy of it."*
+
+**Neither is true.** `evaluate_chain` does not saturate; it stops and returns an
+error naming the node where the value went non-finite. And that is not an
+oversight — it is asserted, twenty lines below the comment, by
+`overflow_stops_the_walk_with_a_named_node`, which feeds two `1e300` gains and
+requires `expect_err`. Two doc comments in one file describing a single rule,
+contradicted by a test in the same file, and nothing had ever noticed.
+
+This is the whole audit in miniature: a claim, written down, that nothing checks.
+It is also the closest thing to a contradiction anyone can construct — a comment
+that disagrees with the test sitting beneath it is worse than no comment, because
+it is *believed*.
+
+The behaviour is fine and deliberate. The two paths want different things:
+
+- `apply_gain` runs inside drawing. A runaway gain must not throw away a frame,
+  and "sounding wrong" is the intended outcome of a hundred `gain` parameters.
+- `evaluate_chain` is a walk a person asked for as a unit. An infinity there is
+  information, and naming the node that produced it is more useful than a clamp.
+
+Fixed by correcting both comments to say what actually happens and why the two
+differ, and by adding `the_two_arithmetic_paths_disagree_on_overflow_on_purpose`
+— which asserts both behaviours side by side, so that *making them the same*
+becomes a decision somebody writes down rather than a difference that drifts into
+an accident.
+
+**Context, not a defect:** `evaluate_chain` has no caller anywhere in the
+workspace. It is a public, tested extension point — the kernel is the seam where
+an untrusted node implementation would be plugged in, and this is the walk such
+an implementation would replace — but today only its own tests run it. Worth
+knowing before someone reads it as the engine's own path; it is not.
+
+## 11. The browser page was a 404, and every gate was green — fixed
+
+This section said *"nothing here replaces opening the page."* A browser was
+available, so it was opened. **The page did not work, and no compile check in the
+project could tell.**
+
+**The defect.** `index.html` imports `./dist/craftkit_web.js`. `wasm-bindgen`
+emits `<whatever name it is handed>.js`, and left to itself it uses the crate's
+— dashes and all. So it wrote `craftkit-web.js`, and every load of the deployed
+page 404'd on its own JavaScript and rendered the "craftkit did not start"
+fallback.
+
+Measured, served and loaded:
+
+```console
+$ curl -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8099/dist/craftkit_web.js
+404
+$ google-chrome --headless --dump-dom http://127.0.0.1:8099/index.html
+  <div id="fallback" role="alert" data-shown="true">
+    <h1>craftkit did not start</h1>
+```
+
+**Three things made it invisible, and each is a separate gap:**
+
+1. **The bundling step did not exist.** `cargo xtask wasm` only *checked* that
+   the crates compile for the target. Nothing in the repository turned a `.wasm`
+   into the `dist/` the page imports — so a developer following the instructions
+   could not produce a working page at all.
+2. **`index.html` told them to run `cargo xtask wasm` "to run this."** A
+   confident instruction to a command that does not produce the thing.
+3. **The `web` gate asserted a falsehood.** Its error message read *"craftkit-web
+   produces `craftkit_web.js` (the dashes become underscores)"*. `wasm-bindgen`
+   does not do that. The gate checked that the *string* appeared in `index.html`
+   and called that the check, so the page and the bundler could disagree
+   indefinitely.
+
+The second half of this entry is still true and still worth reading: a lower
+layer can reach for `std::fs` or `std::env`, pass `cargo xtask wasm`, and fail in
+a browser, because those calls *compile* for `wasm32-unknown-unknown`. That limit
+is unchanged. What changed is that something now produces the bundle and
+something now opens the page.
+
+**Fixed, all four ways:**
+
+- `cargo xtask bundle` exists: it builds the release `wasm`, runs `wasm-bindgen`
+  with `--out-name` set to one constant, and prints the files it wrote. When the
+  CLI is missing or its version does not match the `wasm-bindgen` crate, it
+  prints a **skip with a reason** — never a pass.
+- `wasm::BUNDLE_NAME` is the single name. `web::bundle_path()` derives the page's
+  import path from it, and `cargo xtask web` checks the page against the derived
+  path, so a rename on either side is a failing gate rather than a 404.
+- `index.html` says `cargo xtask bundle`, and says why `wasm` is not it.
+- CI installs a **version-matched** `wasm-bindgen-cli`, produces the bundle, and
+  then requires that the file the page imports is one that job just produced.
+
+Verified after the fix, in the same browser that had shown the failure — the
+fallback is gone, the canvas is laid out at 1180×633, both bundle files are
+fetched with 200, and the shell renders: the sample's Level/Taper/Out in the
+Nodes panel, the playback and history controls, the stash buttons, and "opened
+the sample plan; nothing was saved here yet".
+
+**The instrument caught my own fix being incomplete.** The first version of this
+repair kept a second hardcoded copy of the name in `web.rs` and had the check
+read *that* one, so renaming `BUNDLE_NAME` alone changed nothing. The new mutation
+— *"the bundler is told to emit a name the page does not import"* — reported
+MISSED on its first run, which is the instrument working exactly as intended.
+
+And fixing that exposed a bug in the instrument itself: `restore()` used
+`cp -a`, which preserves the snapshot's timestamp, so cargo could not see that a
+source file had changed and kept the **mutated binary**. A gate after a mutation
+run was reporting on a build that was no longer on disk. `restore()` now touches
+what it restores. That one produced a failure no source in the tree could
+explain, which is how it was found.
+
+## 12. The crash-report pipeline had no producer — fixed
+
+`craftkit-engine::crash` was fully implemented and tested: `record`, `list`,
+`show`, `replay`, atomic writes, a design snapshot, a replayable step list. The
+CLI reads the folder. The control channel exposes `diagnostics.crash_reports`.
+
+**Nothing in any binary ever wrote to it.** There was no `std::panic::set_hook`
+anywhere in the tree, and no caller of `crash::record` outside its own tests —
+while `apps/craftkit/src/main.rs` claimed in its own module docs that it "adds
+wiring, a panic hook and a few flags". So the documented recovery workflow —
+"when someone says the app crashed, look there first" — could not happen.
+
+Fixed: the desktop app installs a hook that records a report before the process
+dies, using `try_lock` (a hook that waits for a lock held by a dead thread is a
+hang that looks like a freeze) and taking the default hook so the panic still
+prints. It is proven by `a_panic_hook_writes_a_report_a_person_can_act_on`,
+which panics a real thread and asserts the report names the message, the command
+that was running, a non-empty replay list, and the document as it was.
+
+Worth knowing: a panic inside a *command* still never reaches this hook, because
+`Session::execute` catches it first. That is the design — the common case is a
+recovered error, and the hook is for the panics that escape anyway.
+
+## 13. A skip that could be mistaken for a pass — fixed
+
+`cargo xtask doctor` reports `blocking` / `degraded` / `info`. A `degraded`
+finding is **not** a gate failure, and the standing example is `wasm-bindgen`:
+the CLI here is 0.2.89 against a 0.2.129 crate, so the `.wasm` builds and
+`cargo xtask wasm` is green, but `wasm-bindgen` would refuse to produce a bundle.
+
+The risk is not the finding; it is that somebody reads "cargo xtask wasm passed"
+and concludes the browser build works. Measured on this machine, before the fix:
+
+```console
+$ cargo xtask wasm
+   ok: every library crate and craftkit-web build for wasm32-unknown-unknown
+$ cargo xtask bundle
+   skipped: the browser bundle — the CLI is 0.2.89 but the wasm-bindgen crate
+   is 0.2.129; wasm-bindgen refuses a bundle whose schema versions differ
+```
+
+`wasm` said nothing. The two commands disagreed and neither told the reader
+which of them decided the outcome.
+
+**What was fixed.** `wasm::run` now asks the same question `bundle` asks and
+prints the answer when the browser build is out of reach:
+
+```
+── wasm
+   ok: every library crate and craftkit-web build for wasm32-unknown-unknown
+   note: that is a compile check. It writes nothing, and the browser bundle
+         cannot be built here: the CLI is 0.2.89 but the wasm-bindgen crate is
+         0.2.129; wasm-bindgen refuses a bundle whose schema versions differ
+         `cargo xtask wasm` is green; the page's JavaScript does not exist yet.
+```
+
+A note and not a skip, deliberately: the compile check *did* run and *did* pass,
+so `Outcome::Skipped` would be its own kind of lie and would put a passing phase
+in the closing line's "skipped, not passed" list. It is also silent when the
+bundler works, so a machine that can build the page is not told it cannot — three
+tests pin that symmetry, including the quiet case.
+
+**The obvious fix was measured and rejected.** Adding `bundle` to `ci`'s phases
+would make the gate actually attempt the browser build, which is the structural
+answer and the one this section wanted. It costs, on a cold cache:
+
+```console
+$ time cargo xtask bundle        # with a correctly matched CLI
+real  2,644s
+```
+
+Forty-four minutes inside a gate that currently takes seconds. That is not a
+price worth paying for a sentence that can be printed instead, so the structural
+fix was declined and recorded rather than quietly adopted on principle. The cost
+is stated because the next person will think of the same idea.
+
+**What is still not enforced.** The mutation covers `post_build_note`, which is
+pure so that it can be tested without a `wasm-bindgen` installed — a test that
+depended on the machine's CLI would pass in one checkout and fail in another,
+reporting the machine instead of the tree. Deleting the *call* in `run` would
+not be caught by it. That is the same honest limitation §21 has on the other
+side of the layer boundary, and it is not dressed up as covered.
+
+## 14. Doc-tests: effectively none — fixed for the two that matter
+
+This started as *"One doc-test in the whole workspace."* Every crate had heavy
+`//!` and `///` prose and no runnable example, so nothing could rot — and nothing
+demonstrated that the documented shapes were the real ones.
+
+Two places mattered, and both are now assertions rather than prose.
+
+**The `.craftkit` format** (`craftkit_io::save_text` and `load_text`). Three
+doc-tests pin exactly what `docs/design/file-format.md` claims, checked against
+what the serialiser actually emits rather than against the document:
+
+- `format` is the string `"craftkit/1"`, not a number.
+- A value is adjacently tagged — `{"t": "num", "v": 2.0}`.
+- A property node is externally tagged, so the variant name is the key: the leaf
+  is under `Prop`, not inlined.
+- A hint is externally tagged with a capitalised name — `{"Slider": {…}}`, not
+  `{"slider": {…}}`.
+
+And two that check the *reading* side, which is where a hand-written file actually
+goes wrong:
+
+- A complete file typed by hand parses. This is the case the document says was
+  correct only because it was written after probing `craftkit-cli eval` and
+  reading four successive error messages.
+- A bare `2.0` where a value belongs is refused with a message containing
+  **"expected adjacently tagged enum Value"** — the exact sentence the document
+  quotes. That assertion is what makes the quoted error a fact rather than a
+  recollection.
+
+**The command schemas** (`craftkit_engine::catalogue`). The catalogue is what the
+MCP tool list and the playbook are generated from, so its contract now lives in a
+doc-test: every command has a dotted lower-case id, a non-empty label, a doc
+string and an area, and every parameter has a name, a type, a `required` flag and
+help text. Verified not vacuous — blanking one label fails with
+`` `doc.rename` has no label ``.
+
+**One small thing found on the way.** `PropHint` was public but not re-exported
+from `craftkit-model`'s root alongside `Property`, `PropNode` and `PropGroup`, so
+a library consumer had to reach into `craftkit_model::property` to name the type.
+It is exported now. That is the shape of the whole audit: a thing that is
+*available* but not reachable the way everything around it is.
+
+The rest of the prose is still unexampled, and that is a deliberate stopping
+point rather than an oversight: a doc-test is worth writing where a reader would
+otherwise have to trust a shape, and the format and the command registry are the
+only two places that happens.
+
+## 15. Coverage is a diagnostic, not a gate — and that is now a decision
+
+Measured three times as the audit went, on a tree that changed under it:
+
+```text
+                       first    second   now
+TOTAL  lines            21356     21533     22372
+       missed            3106      2911      2960
+       line cover       85.46%    86.48%    86.77%
+       region cover     86.09%    87.09%    87.24%
+       function cover   84.32%    85.47%    85.83%
+```
+
+**The shape of the misses is the finding. The total never was.** 85% sounds fine
+and means nothing on its own; the same 85% hid a CI run that never executed its
+own test suite (§2). What mattered was *which* files sat at the bottom, and the
+two that sat lowest were the two that mattered:
+
+| File | First | Now |
+|---|---|---|
+| `xtask/src/ci.rs` — the gate that runs the gates | 41.03% | 50.00% |
+| `apps/craftkit-cli/src/cli.rs` — the headless surface | 37.97% | 78.05% |
+| `xtask/src/lib.rs` — command dispatch | 64.80% | 63.78% |
+| `xtask/src/doctor.rs` — the machine report | 71.50% | 71.50% |
+| `crates/ui/src/shell.rs` — widget layout | 81.64% | 81.85% |
+| `crates/model/src/lib.rs` | 100.00% | 100.00% |
+
+**A coverage gate was recommended here, and is deliberately not being added.**
+That recommendation was wrong, and the work that followed is what showed it:
+
+- The rule it proposed — *the gate that runs the gates and the CLI an agent
+  drives are both covered* — is **already enforced, and more strongly**, by
+  `scripts/mutation-test-gates.sh`. A mutation proves a line is reached *and*
+  that reaching it changes the outcome. A coverage percentage proves only the
+  first. Two mutations sit in `ci.rs` and seven in `cli.rs`.
+- `ci.rs`'s remaining 50% **cannot** be raised by a test. `fmt`, `clippy`,
+  `tests` and `wasm` shell out to cargo; a unit test that called them would run
+  the gate from inside the gate. Any threshold low enough to pass there is low
+  enough to mean nothing, and any threshold high enough to be worth having
+  cannot be met.
+
+So the honest rule is not a number. It is the one already in
+`CONTRIBUTING.md`: *when you add or change a gate, break its rule and require the
+gate to notice.* Coverage is what you look at to decide **where** to point that
+rule, and this table is what it was used for — it found the CLI dispatcher and
+`ci.rs`, both of which turned out to be real.
+
+**What the number will never tell you**, even at 100%: that a line *executed* is
+not a line that was *asserted about*; that `fn main` entry points read 0.00%;
+and that the rasteriser's 97% says nothing about whether a frame looks right.
+Those are §16 and §8's business, not a percentage's.
+
+## 16. The software rasteriser is a rasteriser, not a renderer
+
+`craftkit-ui`'s rasteriser walks egui's tessellated shapes and samples the font
+atlas, so text rasterises. Its stated limits:
+
+- **Hard edges.** egui's geometry is the only anti-aliasing and there is none
+  beyond it, so a frame looks crisper and slightly jaggy beside the window.
+- **Gradients at the triangle centroid.** A theme that adds one will band.
+- **Only the font atlas is uploaded.** A texture a document loaded would draw as
+  a flat rectangle.
+
+It exists so a frame can be produced on a machine with no display and no GPU,
+which is what makes `ui.render` and `snapshot` work in CI. It is not a
+comparison tool: to know what the window really looks like, open the window.
+
+## 17. `ui.click` reports, it does not act
+
+`ui.click` replays a pointer event into a fresh context and answers with the
+name of the topmost widget at that point. It does not activate anything —
+`engine.execute` does, and that is undoable, logged and audited.
+
+This is deliberate, but it is a gap against what an agent might expect from the
+name. It was also, for a while, a lie in the only place an agent looks: the reply
+said ``clicked `toolbar.node.duplicate` `` for a click that activates nothing.
+§32 has the measurement and the fix.
+
+The second half of this section used to say the UI was "the only place with no
+end-to-end test on a real display", and that this was because CI has no display.
+**Having a display showed that this was not a testing gap but a real defect:**
+the window never repainted after a command, so §17's `ui.click` was not the only
+thing an agent could be misled by. See §21, and `scripts/live-window-check.sh`
+for the end-to-end check that now exists and what it can and cannot prove from
+CI.
+
+## 18. Scope boundaries, not defects
+
+Stated so nobody discovers them as surprises:
+
+- **No `save`/`open` commands.** The engine registry has 21 commands and none of
+  them touch the filesystem; the desktop app calls `craftkit-io` directly, the
+  way the CLI does. Everything is a command applies to *behaviour*, and file I/O
+  is the host's business. The cost is that an agent cannot persist a plan through
+  the command registry — it must use the web stash or the CLI.
+- **No undo for `prop.reset` and friends beyond what `undoable` declares.** The
+  distinction is documented in `AGENTS.md` and enforced by
+  `every_read_only_command_leaves_the_document_alone`.
+- **The web build's stash is one plan.** `STASH_KEY` is a single fixed slot.
+  Losing it loses the plan, and the panel says so in the open.
+- **The software rasteriser's `Frame` borrows the session.** Rendering cannot
+  run concurrently with a command in the same session, which is why `ui.render`
+  takes the session lock for the duration.
+- **`Cli::run`'s `mcp` arm is no longer the untested one.** It used to be, and
+  the stated reason — that it blocks on stdio — was not a reason. It is driven
+  end to end now, over a real pipe, and doing so found a defect on the first
+  run. See §24.
+
+## 19. Not a git repository
+
+There is no history, no remote and no branch. Nothing was committed, and
+`AGENTS.md` tells agents not to push. `.gitignore` is written and ready.
+
+## 20. Licence texts are not vendored
+
+`LICENSE` names MIT OR Apache-2.0 and links the canonical texts rather than
+transcribing them: a paraphrase of a licence is not a licence, and a
+transcription that differs in one word is worse than none. The copying
+instructions in `README.md` say to add the two files.
+
+## 21. The window did not follow the document — fixed
+
+§17 said the UI was "the only place with no end-to-end test on a real display".
+That was true, and having a display turned it into the largest defect found in
+this audit after §11.
+
+**The defect.** A command that arrives over the control channel runs on a socket
+thread. It mutates the session — which is behind a `Mutex` the frame loop never
+sees — and nothing tells egui a frame is due. eframe paints on input events, and
+a command over a socket is not one. So the window kept showing the frame it had
+already painted. Measured on a real X display, after two `node.add` commands:
+
+```console
+$ python3 drive.py $PORT '[{"id":3,"method":"engine.execute",
+                           "params":{"command":"session.stats","params":{}}}]'
+id=3 ok=True 2 command(s), 0 failure(s)
+   data: {"commands":2,"failures":0,"nodes":5,"undo_depth":2}
+
+$ DISPLAY=:1 import -window 0x4600005 /tmp/after.png   # the window's own pixels
+```
+
+`nodes: 5`. The window showed **three** nodes, "3 nodes saved". Nothing errored,
+no command failed, and the reply said `ok`. The engine had moved and the window
+was showing it a picture of the past. That is the worst shape a defect can have:
+it is invisible to every check in the project and actively misleading to the one
+consumer the app is built for — an agent that drives the app and looks at it.
+
+**The fix.** `craftkit-control` gained an extension point beside the `ui.*` one:
+
+- `ServerOptions::with_after(handler)` — called after a request that can change
+  the document, *after* the reply is sent and *after* the session lock is
+  released, so a handler is free to read the document it just changed.
+- `apps/craftkit` publishes its `eframe::egui::Context` into a slot on the first
+  frame and passes `request_repaint` as that handler. The channel starts before
+  the window does, so the slot is empty for the first few frames and for the
+  whole life of a headless process; an empty slot is a no-op, and there is a
+  test for exactly that.
+
+It fires for `engine.execute` and `ui.*` only. `engine.describe` in a loop must
+not repaint a window, and two tests pin that.
+
+**There is no unit test for the call itself, and there cannot be one.** egui
+offers no observable that separates "a repaint was requested" from "a repaint is
+pending" on a context with no window behind it. This was measured, not assumed:
+`has_requested_repaint` is already `true` on a headless context after the first
+pass (`outstanding` is re-armed at the end of every pass), and the wake-up
+callback in `set_request_repaint_callback` fires only when the delay is
+*lowered*, which requires the idle state only a real integration loop reaches.
+Both were tried; both were measured to be true before and after a request. A
+test asserting such a flag would have looked like evidence and proved nothing,
+which is the failure mode §1 is about.
+
+So the check measures the thing that matters instead:
+**`scripts/live-window-check.sh`**. It runs the real binary on a real display,
+drives it over the control channel, captures the window's own pixels before and
+after, and requires the two to differ by more than 1000 pixels — plus, as an
+independent oracle, that the engine's own node count moved. Exit 77 for skip,
+never 0: CI has no display, and a check that quietly reported success there would
+be the same lie as the bug.
+
+Proven to fail on the unfixed tree, and to pass on the fixed one:
+
+| Tree | Engine says | Differing pixels | Exit |
+|---|---|---|---|
+| `.with_after(…)` removed | 7 nodes | **0** | **1** |
+| as committed | 7 nodes | **11290** | **0** |
+
+The 0 is the whole point. Anything that reports success while the window is
+showing stale pixels is the defect it was written to catch.
+
+**What CI can and cannot run.** The policy half — *which requests announce
+themselves* — is a normal test in `craftkit-control` and is mutation-tested, so
+it runs everywhere. The mechanism half needs a display and is a local check,
+documented as one. That split is deliberate: the part CI can see is enforced in
+CI, and the part it cannot is not dressed up as if it were.
+
+**A hole in the fix, found by reading the fix.** The first version announced the
+change *after* sending the reply:
+
+```rust
+let response = answer(&request, session.as_ref(), ui);
+if send(&mut writer, &response).is_err() {
+    break;                      // <-- returns without ever announcing
+}
+if matches!(method, Method::Execute | Method::Ui) && let Some(h) = after { h() }
+```
+
+`answer` has already changed the document by then. Whether the reply reaches the
+client is a fact about the socket and says nothing about the document, so a
+client that disconnected mid-command left the window showing the frame from
+before it — silently and permanently, because nothing had gone wrong anywhere.
+The announcement now happens between the two.
+
+This ordering is **not** mutation-tested, and it cannot be: making a send fail
+deterministically needs a socket that is reliably dead on the first write, and
+Linux gives you a buffered write plus an RST instead. It was found by reading the
+five lines the previous paragraph was about, which is the same method as §22 and
+the same reason it is worth writing down.
+
+**One completeness check.** A `Mutex<Session>` is shared in exactly two places
+in this tree: the desktop app, where a window and the control channel share it,
+and `craftkit-mcp`, which runs in its own process with no window. So §21's fix
+covers every path that can move a session a window is drawing, and the sweep
+turned up no third case to miss.
+
+---
+
+## 22. Two copies of "can this machine build the page?", and they disagreed
+
+Found while fixing §13, by asking the same question of the next piece of code:
+*what does this compute, and is anyone checking the answer?*
+
+`cargo xtask doctor` and `cargo xtask bundle` each decided on their own whether
+`wasm-bindgen` could produce a bundle. Same inputs, same tool, **two
+implementations of one rule** — which is how §11's `BUNDLE_NAME` bug happened,
+and the instrument caught that one too.
+
+They did not agree. Both read the crate version out of `Cargo.lock` with
+`wasm_bindgen_crate_version`, which returns `Option`. When it came back `None`,
+the two halves did opposite things:
+
+- `wasm::bundler_blocker` used `?` on the `Option`, so `None` meant **"no
+  blocker"** — and `cargo xtask bundle` would carry on and run a CLI it had
+  checked against nothing.
+- `doctor` matched `(None, _)` and filed an **`info`** finding, the lowest
+  severity there is.
+
+So the one state in which the machine knows nothing was the state it reported as
+knowing nothing, most quietly. `Cargo.lock` is hand-parsed for the
+`name = "wasm-bindgen"` entry; the day cargo reformats that file, or the lockfile
+is unreadable, the failure mode is a bundle built against an unchecked tool.
+
+There was also a literal doing nothing at all. `doctor` compared the CLI against
+a hardcoded `"0.2.0"` and then discarded the answer with a `_` in the pattern, so
+the number looked like a minimum-version policy and did nothing whatsoever.
+
+**The fix.** One function, `doctor::bundler_status(cli, crate_version)`, answers
+`Ready` or `Blocked(reason)`, and both callers use it. The rule it now states is
+the one this document keeps arguing for:
+
+> "I could not read the version I need to compare against" is not "they match."
+
+An unknown is `Blocked`, in both halves, with a sentence that names the CLI
+version the reader has to go and fix. Three tests cover it as a pure function —
+no `wasm-bindgen` has to be installed for them to mean anything — and the
+mutation puts the unsafe reading back to prove they bite.
+
+**Recorded as a method note rather than a triumph.** This defect could not be
+found by running anything: on this machine `Cargo.lock` parses, the CLI is
+0.2.89, and every command behaved correctly. It was found by reading two
+functions that should have been one and asking why both existed. That is the
+question that found §8's unanchored easings and §9's misnamed tests too, and it
+is the one that no mutation and no failing run will ever ask on your behalf.
+
+## 23. The instrument's whitelist let a mutation corrupt the tree, silently
+
+Found because §22's own mutation did this to me, four minutes after I added it.
+
+`scripts/mutation-test-gates.sh` protects the tree three ways: it takes a
+`FILES` snapshot up front, `restore`s the whole list after every case, and ends
+by `fingerprint`ing the list to prove it changed nothing. All three walk the
+same array.
+
+I added a mutation against `xtask/src/doctor.rs` and **did not add that file to
+`FILES`.** So:
+
+- `snapshot()` never copied it — nothing to restore *from*.
+- `restore()`'s `cp -a "$SNAPSHOT/$f" "$f" 2>/dev/null` failed, silently, by
+  design.
+- `fingerprint()` never looked at it.
+
+The mutation ran, the gate caught it, the run printed **"Tree unchanged"** and
+**exited 0** — while the tree kept the broken source. The header of that script
+claims *"the whole mutable surface is restored between cases"*, and for that one
+file that was false.
+
+What noticed was the next ordinary `cargo xtask ci`: a test asserting the §22
+fix failed with a message about the old behaviour being back. Not the script
+that made the mess. That is the worst way for this to be caught, because the
+script's whole claim is that it is the thing that notices.
+
+**The fix is not just the missing line.** Adding `xtask/src/doctor.rs` to `FILES`
+repairs this instance; the next person adds a mutation against a file not on the
+list and gets the same silent corruption. So `swap` and `append` now call
+`guarded`, which refuses any target outside `FILES` and says why:
+
+```
+MUTATION TARGET IS NOT SNAPSHOTTED
+  README.md
+
+  It is not in FILES, so snapshot() never copied it, restore() cannot put it
+  back and fingerprint() never looks at it. Add it to FILES first.
+```
+
+Verified by adding a probe mutation against `README.md` and running the suite:
+exit 1, the refusal printed, and `README.md` was not touched.
+
+**Why this one matters more than the rest of §1's list.** The other gaps were
+gates that could not fail. This one is the *instrument that exists to prove gates
+can fail*, and it reported a clean tree it had not looked at. A whitelist that
+is consulted by the writers and not by the readers is a list that can fall behind
+the thing it constrains, and nothing in a passing run would ever say so.
+
+## 24. `shutdown` said ok and kept serving
+
+§18 listed this as the last untested surface: *"`Cli::run`'s `mcp` arm is the
+one subcommand no test executes."* The stated reason was that it blocks on
+stdio. That is not a reason a test cannot drive it — a pipe is exactly what
+tests do — and driving it found a real defect immediately.
+
+**The defect.** `serve` opened with *"Serve MCP over stdio until the input ends
+or `shutdown` arrives."* The loop ended when the input ended. `shutdown`
+dispatched to `Response::result(id, json!({}))` and carried on. Measured,
+holding stdin open so that only `shutdown` could possibly have ended it:
+
+```console
+$ { echo '{"jsonrpc":"2.0","id":1,"method":"shutdown"}'
+    echo '{"jsonrpc":"2.0","id":2,"method":"ping"}'
+    echo '{"jsonrpc":"2.0","id":3,"method":"ping"}'
+    sleep 4; } | craftkit-cli mcp
+{"jsonrpc":"2.0","id":1,"result":{}}
+{"jsonrpc":"2.0","id":2,"result":{}}
+{"jsonrpc":"2.0","id":3,"result":{}}
+```
+
+The server answered a stop request with success and then served two more
+requests. That is the failure mode `crates/engine`'s own `key.remove` doc warns
+about — *"a command that reports success without changing anything is how an
+agent concludes it has done something it has not"* — in the one place where an
+agent decides whether the process is still there.
+
+The two servers also disagreed: the control channel's `shutdown` really does
+break its accept loop. Two servers, one name, two meanings.
+
+**The fix.** `handle_line` could not report "and stop", because it returns only
+a reply. So the parse now produces an `Answer { reply, stop }`, `handle_line` is
+a thin wrapper over it (so every existing protocol test keeps testing exactly
+one function), and `serve` breaks on `stop` — **after** sending the
+acknowledgement, because the client that asked to stop still deserves to hear
+that it was heard.
+
+**The stop has to travel separately from the reply**, and that is not a detail:
+a `shutdown` sent as a *notification* gets no reply by design, so if the signal
+were folded into the reply it would be lost exactly when a client is shutting
+down cleanly. A test pins that, and a mutation puts it back to prove the test
+notices.
+
+**What is now covered.** `apps/craftkit-cli/tests/mcp_stdio.rs` spawns the real
+binary and drives a real pipe: a tool call that changes the document and is
+confirmed by an independent `status` call, refusal codes kept apart from
+protocol codes, malformed input that does not kill the server, and `shutdown`
+ending it. Unlike the window in §21, **these run in CI** — stdio needs no
+display. §18's last untested surface is closed.
+
+**A verified negative, and one thing left alone.** Every other walker in the tree
+— `assets::walk`, `assets::collect`, `collect_rust` — already recursed. The
+shallow one was `prose_files`, and only `prose_files`.
+
+Left in place deliberately: five documents assert "21 commands", and 21 is
+correct today. That is a rot risk, not a defect, and the project's own rule —
+*"don't hardcode counts or timings in prose; they rot; point at the command"* —
+is what argues against them. There is no gate for it, and adding one would mean
+parsing digits out of sentences, which is the substring-checking this document
+has spent twenty-six sections objecting to. Recorded here so that adding
+command 22 is a moment somebody notices five sentences, rather than a moment
+five sentences quietly become wrong.
+
+## 25. §11's own falsehood survived in the error box
+
+§11 fixed the browser page: nothing produced the bundle, `index.html` named a
+file `wasm-bindgen` never wrote, and a gate's error message asserted something
+false. The authoring instructions in `index.html` were corrected to say
+`cargo xtask bundle`.
+
+**One copy of that sentence was not corrected.** Line 102 of the same file —
+the `<pre>` inside `#fallback`, the box drawn when the page fails to start —
+still read:
+
+```
+1. The bundle is missing.        Run:  cargo xtask wasm
+```
+
+Served with no `dist/` so the import must fail, and read in a real browser:
+
+```console
+$ google-chrome --headless --dump-dom http://127.0.0.1:8123/index.html
+  <pre>1. The bundle is missing.        Run:  cargo xtask wasm
+```
+
+`cargo xtask wasm` only checks that the crates compile for the browser. It
+writes nothing. So the one instruction a reader sees **when the page is
+already broken** told them to run the command that cannot fix it — and, having
+just failed, they would run it, see it pass, and conclude the page was fine.
+
+This is §11 arriving one file later. The lesson of §11 was "one constant, not
+two spellings", and the fix for it left a second spelling in the same file
+where nobody was looking, because the thing being corrected was prose and prose
+does not fail to compile.
+
+**The fix, and the rule that keeps it fixed.** The gate now reads the failure
+box:
+
+```
+• apps/craftkit-web/index.html: the failure box tells the reader to run
+  `cargo xtask wasm`, which only checks that the crates compile and writes
+  nothing.
+   `cargo xtask bundle` is the command that produces the file this page imports.
+```
+
+It matches the sentence, not the bare word `wasm` — `wasm` appears in this page
+legitimately, in the comment that explains *why* `bundle` is the right command.
+A check that matched the word would be the substring gate §1 is about; this one
+matches the instruction, and a mutation puts `wasm` back to prove it bites.
+
+**The method note.** This was found by grepping for a command name that §11 had
+already established was wrong — not by running anything, because nothing was
+broken. `cargo xtask web` was green throughout, exactly as it had been in §11.
+The question that found it is the same one that found §22: *which other places
+does this same fact appear in?* It is cheap to ask and it does not need a
+failure to ask it.
+
+## 26. A gate that read three documents and called itself exhaustive
+
+§25's method note — *which other places does this same fact appear in?* — was
+aimed at one string. It was applied to the whole documentation tree, and two
+things came back.
+
+**A recipe named a command that does not exist.** `docs/recipes/add-a-command.md`
+listed the live `Area::Node` entries in the order you must insert into:
+
+```
+node.add, node.duplicate, node.enable, node.kind, node.move, node.mute,
+node.remove, node.rename
+```
+
+`node.enable` has never been in the registry. The catalogue has 21 commands and
+this is not one of them; the nearest is `node.mute`. An agent reading that
+sentence learns where a real command lives and invents a real-looking id that
+fails on the first call.
+
+**The citation gate had never opened a subdirectory.** This is the larger one.
+§7's `citation_drift` is the check whose closing line reads *"every `file.rs:12`
+in prose points at something"*. Its walker read `docs/*.md` — **three files** —
+and stopped. It never descended into `docs/recipes/`, `docs/design/` or
+`docs/patterns/`, which hold **fifteen** documents and **49** line-number
+citations:
+
+```rust
+} else if path.is_dir()
+    && let Ok(dir) = std::fs::read_dir(&path)
+{
+    for e in dir.flatten() {          // <- one level, and no recursion
+```
+
+So a walk that inspected three documents out of eighteen reported, in bold
+confidence, that every citation in prose was checked. It did not say otherwise
+anywhere. Making it recurse found the drift immediately — **five stale
+citations** in `docs/recipes/add-a-control-channel-method.md`, two of them
+pointing past the end of a 450-line file:
+
+```
+docs/recipes/add-a-control-channel-method.md: cites
+  `crates/control/src/server.rs:496`, outside a 450-line file
+```
+
+All five were replaced by the symbol already sitting beside them, which is the
+rule the gate itself prints: *"Cite the symbol, not the line number."* A sixth,
+in `skills/craftkit-editing/SKILL.md`, went stale *during this work* because my
+own edit moved `lists.rs` — which is the citation-drift problem happening to me
+in real time.
+
+**A second check was added for command ids.** `cargo xtask lists` now refuses a
+document that names a `<area>.<name>` the registry has never heard of. It reads
+the ids from `crates/engine/src/commands.rs` rather than linking
+`craftkit-engine`, because xtask deliberately depends on nothing but `serde`
+and a build tool should not have to be the thing it builds.
+
+Three dotted names in the prose are not commands and are allowed by name, with
+reasons: `session.state` and `diagnostics.crash_reports` are control-channel
+methods, `session.execute` is the Rust method every channel calls.
+
+**The one exemption worth arguing about.** `node.enable` is also the command
+`docs/agent-playbook.md` and `docs/recipes/add-a-command.md` work through
+*adding* — the gate cannot tell prose that describes a command from prose that
+proposes one. So `PROPOSED_IN` exempts that id in those two files **and nowhere
+else**. The first attempt exempted the id globally, and the mutation caught the
+thickness of that idea immediately: the fabricated id reappeared in the recipe
+and the gate said nothing. An exemption scoped to the id would have left the
+exact place this defect was found unguarded.
+
+**A mutation that could not be written, and why.** The obvious second case — break
+the recursion and require the gate to notice — does not exist. Removing the
+recursion genuinely changes what the gate can see, so the gate passing is then
+*correct*, and no mutation can honestly assert otherwise. The fabricated-id case
+does the job instead: it plants its defect in a subdirectory, so if the walk is
+flattened again it stops being caught, the run reports MISSED and exits
+non-zero. That is the instrument doing the one thing it is for. Writing the
+other case anyway would have been a gate asserting that it is worse than it is.
+
+## 27. The crash pipeline had a tested producer and an untested consumer
+
+§24 established a habit: map the surfaces, then drive them. Six CLI subcommands,
+one integration test. So: `commands`, `run`, `eval`, `snapshot` and `crashes`
+were all exercised by hand for the first time, and the crash folder came back
+empty.
+
+**The gap.** `crates/engine/src/crash.rs` is well covered — reports round-trip
+through temporary folders, a corrupt report is refused by name, two reports in
+the same second get different ids. The panic hook in `apps/craftkit` has its own
+test. All of that is the **producer**.
+
+Nothing covered `craftkit-cli crashes` — the command a person is told to run
+first when they say the app crashed, and the one the skills tell an agent to
+run. It had never been executed against a real report on any machine, because
+the folder only fills when something crashes, and nothing had.
+
+**It was already testable.** `CRAFTKIT_CRASH_DIR` relocates the folder, which
+means the whole pipeline can run in CI without writing into anybody's home.
+`apps/craftkit-cli/tests/crash_pipeline.rs` now records a report from a session
+that has done real work, then drives the real binary through `list`, `show` and
+`replay`, asserting the document and the steps come back out and run again in a
+fresh session. Two smaller properties are pinned alongside: an empty folder says
+*"no crash reports in …"* rather than printing nothing that reads like a
+folder that could not be opened, and an unknown id is refused by both `show`
+and `replay`.
+
+**The mutation is the interesting one.** It removes the `CRAFTKIT_CRASH_DIR`
+override, and it fails with a message that names the real folder the CLI fell
+back to:
+
+```
+`list` did not name the report:
+  "no crash reports in /home/…/.local/share/craftkit/crashes"
+```
+
+That test is what makes the override load-bearing rather than merely present —
+without it the pipeline cannot be tested at all, and nothing would say so.
+
+**A measurement lesson, recorded because it bit twice in this document already.**
+A combined shell pipeline reported "47 tests passed" when the workspace run had
+**573**. The suite was green both times; the number was an artefact of reading
+a partially-flushed stream through a pipe. Re-running the count on its own gave
+573, exit 0, 26 test binaries, 0 failures. A number that changes when you
+measure it a second way is a measurement, not a fact.
+## 28. The tool that exists to be driven by an agent hid its one input format
+
+Found by doing what §27 describes — driving the CLI by hand — and getting this
+on the first attempt:
+
+```console
+$ craftkit-cli run script.json
+craftkit-cli: script.json is not a script: invalid type: map, expected a string
+```
+
+An array of `{"command", "params"}` is the shape an agent would reach for, and
+it is refused. The real shape is an **object** with a `commands` array. Which is
+fine to refuse — it refuses, by name, with exit 1 — and not fine to have to
+discover.
+
+**It was documented.** `apps/craftkit-cli/src/main.rs` carries the shape in its
+module documentation, with a worked example, under `## The script format`. So
+the claim "it is undocumented" would have been wrong.
+
+The claim that survives is narrower and is the real finding:
+
+- `craftkit-cli --help` does not show it.
+- **Every error message ends by printing `USAGE`, and `USAGE` does not show it.**
+- `skills/craftkit-checking/SKILL.md:194` tells an agent to run
+  `craftkit-cli run script.json` without ever saying what one is.
+
+So the format was written down in the one place in that file a reader of the
+tool never reaches. This is a program whose stated purpose is being driven by an
+agent, and the first thing that agent has to write is invisible from the
+program.
+
+`USAGE` now carries it, and the example is a real one:
+
+```
+SCRIPT FORMAT (`run` and `snapshot`):
+    {"name": "optional",
+     "commands": [{"command": "node.add",
+                    "params": {"name": "Box", "kind": "filter"}}]}
+    `params` may be omitted and means no parameters. `crashes replay <ID>`
+    prints this same shape.
+```
+
+Verified the way a user would: piped out of `--help`, stripped of its indent,
+written to a file, run.
+
+```console
+$ craftkit-cli run pasted.json
+1/1 node.add: added filter `Box`
+optional — 1 step(s), 1 node(s)
+```
+
+**Two copies, then one.** The test was first written against a second constant
+holding the example — which is §11's "two spellings" bug, introduced in the same
+commit as the fix for a documentation bug about duplicated facts. A test
+comparing them failed immediately, on line wrapping, and the constant was
+deleted: the test now reads the example out of `USAGE` and parses it, so there
+is exactly one source and it is the text that gets printed.
+
+**And the mutation nearly passed.** The first version rewrote the heading to
+`SCRIPT FORMAT IS A SECRET`, which does not bite — the test's guard is a
+`contains("SCRIPT FORMAT")`, so it matched the mangled text happily. §1's
+substring disease, caught the day it was written by checking rather than
+assuming. The mutation now removes the heading outright.
+
+## 29. Prose names test symbols, and nothing checks those either
+
+Found by sweeping every backticked identifier in `skills/` against the source —
+the same question §25 asked, one level of indirection further. Sixteen
+candidates; seven did not match a `fn`, `struct`, `enum`, `const`, `static` or
+`mod`, and six of those were correct: `catch_unwind`, `unwrap_used`,
+`png_base64` and three MCP tool names.
+
+The seventh was a real inexactness, in three places at once:
+
+```
+skills/craftkit-editing/SKILL.md:237   `pending_list_is_sorted` keeps the table honest.
+docs/patterns/format-changes.md:32      `pending_list_is_sorted` test keeps the table honest.
+crates/io/src/format/pending.rs:43      `pending_list_is_sorted` test keeps the table honest.
+```
+
+The test is `the_pending_list_is_sorted`. Two other lines in the *same pattern
+document* spell it correctly, so the file had drifted against itself. All three
+are fixed.
+
+**Why this is small, and why it is still worth writing down.** A reader who
+pastes `pending_list_is_sorted` into a `cargo test` filter gets a green run,
+because cargo matches substrings and `the_pending_list_is_sorted` contains it.
+A reader who greps for `fn pending_list_is_sorted` gets nothing. So the failure
+is quiet in one direction and loud in the other.
+
+**No gate, deliberately.** `cargo xtask lists` checks `file.rs:12` citations and
+command ids; extending it to every backticked snake_case name in prose would
+have to distinguish `the_pending_list_is_sorted` from `catch_unwind` and from
+`craftkit_node_add`, and every rule I could write for that distinction is a
+heuristic that would eventually flag something real. A gate that cries wolf is
+worse than the absence of one, which is §1 stated the other way round. The
+finding is recorded so the next sweep knows the shape of it.
+
+## 30. Every surface, driven by hand — and what that found
+
+Twenty-nine of these sections list defects. This one lists the opposite result,
+because the absence of findings is only worth knowing if somebody went looking.
+
+**Method.** Enumerate the surfaces a user or an agent can touch, then drive each
+one for real rather than reading the test that claims to cover it. §24's `mcp`
+and §27's crash folder both came out of this and both had a defect waiting.
+
+| Surface | How it was driven | Result |
+|---|---|---|
+| `craftkit-cli commands` | run | correct — 21 ids |
+| `craftkit-cli run` | hand-written script | correct |
+| `craftkit-cli eval` | the format doc's own example | correct — and the doc's claim ("one node, 12 frames at 24 fps, no diagnostics") is exactly what it prints |
+| `craftkit-cli snapshot` | script → PNG | correct; the frame renders the nodes |
+| `craftkit-cli crashes` | see §27 | **defect found** |
+| `craftkit-cli mcp` | see §24 | **defect found** |
+| the desktop window | `--sample`, control channel | **defect found** — §21 |
+| the desktop window opening a file | a hand-written `.craftkit`, real display | correct |
+| the browser page | headless Chrome, bundle present and absent | correct after §11 and §25 |
+
+**`eval` against hostile files.** Seven malformed inputs — truncated, empty,
+not JSON, an array, missing fields — all refused, exit 1, no panic. The version
+gate is the interesting one, and it is well made:
+
+| `format` | what it says |
+|---|---|
+| `craftkit/2` | "this file is format version 2, and this build reads up to 1. Open it with a newer craftkit" |
+| `craftkit/0` | "this file is format version 0 or less" |
+| `craftkit/banana` | "this file is format version 0 or less" — unparseable is refused, not guessed |
+| absent | "this is not a craftkit file: the `format` field is missing" |
+
+That last behaviour is the one the format document stakes its safety on, and it
+holds.
+
+**Opening a file on a real display.** A four-node plan written by hand, opened
+by `craftkit FILE`, on Xorg with hardware GL: the window shows the plan's name
+from the file, all four nodes with their kinds, and the status bar reads
+**"4 nodes saved"** — not "unsaved", because a document that was opened rather
+than edited is clean. That is a small thing to get right and it is the sort of
+thing that quietly stops being true.
+
+**What this sweep did not reach, and cannot.**
+
+- The repaint *mechanism* on the real display — §21's instrument covers the
+  behaviour, not the call that causes it.
+- The `after` hook's call site in `serve` — §21 records why it has no test.
+- ~~Real-browser *interaction*.~~ **Done — §31.** It needed a DevTools-protocol
+  client, not more reading, and it found a defect on the first real click.
+- `craftkit-web`'s stash (`localStorage`), which §18 lists as a single fixed
+  slot and which nothing here exercised.
+
+**The honest summary.** Four defects came out of driving things (§21, §24, §27,
+and §11 before them). This pass found none new, and the surfaces it covered now
+have an answer either way rather than an assumption. The next useful question is
+not "what else is untested" — it is the one at the bottom of this table.
+
+## 31. The browser's save button printed the whole plan, and nothing read it
+
+§30 ended by saying real-browser *interaction* was the thing the sweep had not
+reached. It was also the thing most likely to pay, so this is what it paid.
+
+**How.** No websocket library is installed, so the DevTools-protocol client is
+about sixty lines: an HTTP upgrade, and a frame codec where the client masks and
+the server does not. Chrome is started with `--remote-debugging-port` and the
+page is driven with `Input.dispatchMouseEvent`.
+
+**Validating the instrument first, which is the part that mattered.** The first
+click on "Save in this browser" did nothing. Before calling that a defect I
+clicked "Add node" instead — and a node appeared. So the clicking worked and the
+*coordinate* was wrong: I had read it off a screenshot of a different browser
+instance, whose viewport is 1180×760, while this one is 1180×**617**. Save was
+at y=576 here and y=714 there, so the click had gone off the bottom of the
+screen. Had I not checked, this section would have reported a stash that does
+not work.
+
+**The defect.** Once the click landed:
+
+```rust
+format!("saved {text} bytes under “{STASH_KEY}”")
+```
+
+`{text}` where `{text.len()}` was meant. So the note was not a count, it was the
+**entire document** — 7462 bytes of JSON, inside a sentence claiming to be a
+count. The bottom panel grew to hold it, pushed the toolbar off the top of the
+window, and left the note reading `saved {…} bytes`, which is not a number and
+not a sentence.
+
+The correct form was **twelve lines below**, in the "Copy the plan as text"
+button: `format!("copied {} bytes to the clipboard", text.len())`. One
+interpolation short, in the only place in the tree where that mistake was made.
+
+**Why nothing caught it.** Nothing read the note. Every test in the web crate
+covers the stash *behaviour* — write, read, forget, a broken stash falling back
+to the sample — and all of those were green and stayed green while the panel
+grew a hundred times taller than it should. The property that was broken is a
+property of a **sentence**: it must be short. No amount of testing the storage
+would have found it, and no gate would, because the note is only wrong when
+something is actually stashed.
+
+`saved_note` is now its own function and the test asserts the note is under 80
+characters and contains no fragment of the plan — not merely that it mentions
+one. Reinstating `{text}` fails both tests.
+
+**Verified where it broke.** Bundle rebuilt, and the same click in the same
+browser:
+
+```
+saved 7462 bytes under "craftkit/plan"
+```
+
+One line, panel back at the bottom, toolbar intact, four nodes.
+
+**A positive result worth having.** The round trip itself works, and had never
+been exercised: save, reload the page, and the app comes back from the browser
+alone — *"reopened "Sample plan" from this browser"*, four nodes, status `saved`.
+§18 calls the single-slot stash the riskiest thing in the web build, and it is
+the part that is now known to work rather than assumed to.
+
+**The rest of the row, driven for real — three verified negatives.** The defect
+was in one button's sentence, but the other three produce sentences too, and
+nothing had ever read them. Each was clicked against the same live page with a
+cleared `localStorage`:
+
+| Clicked | localStorage after | Note shown | Verdict |
+|---|---|---|---|
+| Restore, nothing stashed | `[]` | `there is nothing saved here yet` | correct |
+| Save in this browser | `["craftkit/plan"]` | `saved 7462 bytes under "craftkit/plan"` | correct (§31) |
+| Forget | `[]` | `the saved plan is gone; what is on screen is not` | correct, and honest about the difference |
+| Copy the plan as text | (nothing) | `copied 5667 bytes to the clipboard` | correct |
+
+Every screenshot has the note on one line at the bottom with the toolbar intact,
+which is the property §31 broke.
+
+The copy row needed the instrument checked too. `navigator.clipboard.readText()`
+is refused in this headless Chrome — `NotAllowedError: Read permission denied`,
+and `Browser.grantPermissions` did not lift it — so *reading the clipboard back
+is not available here*. Rather than report an unverifiable success, I wrapped
+`writeText` in the page and recorded what it was called with and how its promise
+settled:
+
+```
+{"len":5667,"head":"{\n  \"format\": \"craftkit/1\",\n  \"meta\": {\n    \"written_by\": \"craftkit 0.","ok":true}
+```
+
+5667 bytes, the promise resolved, and the head is the plan. So the button copied
+what it claims to copy. Note the honest limit of this: it proves the write
+succeeded, **not** that the bytes are retrievable by a later paste — that needs a
+document with clipboard read permission, which this browser will not grant.
+
+Also worth recording, because it looks like an inconsistency and is not: the
+save note counts 7462 bytes and the copy note 5667. Both come from the same
+`stash_text`, and the difference is the plan itself — four nodes when the page
+was reloaded from the stash, three after edits in the session. Same function,
+same document, different moment.
+
+---
+
+## 32. `ui.click` rendered instead of clicking, and said `clicked` when it did
+
+§17 recorded that `ui.click` reports rather than acts, and filed the enforcement
+column as *nothing*. Reading it again, the interesting part was not the design
+but the fact that the one place an agent reads — the reply — contradicted it.
+Two defects, found by driving the running app rather than by reading.
+
+**One. The method name was decoration.** `Method::parse` maps `ui`, `ui.click`,
+`ui.screenshot` and `ui.render` all to `Method::Ui`, and the host then read the
+action from `params.action`, defaulting to `render`. The method the caller
+actually typed was never read. So the request the docs show:
+
+```json
+{"id":3,"method":"ui.click","params":{"x":400,"y":12}}
+```
+
+answered `rendered 1180x720`, `ok: true`, `data.png_base64` — a full frame, and
+no click. And symmetrically, `{"method":"ui.render","params":{"action":"click"}}`
+*did* click. Measured against the live app:
+
+```
+id=1 ok=True  message='rendered 1180x720'          <- asked to click
+id=2 ok=True  message='clicked `toolbar.node.duplicate`'   <- asked to render
+```
+
+Both `ok: true`. Nothing errored anywhere.
+
+The worst part is that the documentation had been written around the accident:
+`docs/agent-playbook.md` and `skills/craftkit-checking/SKILL.md` both showed
+`{"method":"ui.render","params":{"action":"click"}}` — the one spelling that
+worked, for the wrong reason — and the recipe called the four names "aliases".
+
+**Two. The reply claimed an action that does not happen.** With the action
+finally reaching the click, the reply was:
+
+```
+clicked `toolbar.node.duplicate`
+```
+
+Three of those in a row against a live app, and the document was byte-identical
+afterwards: 3 nodes, `dirty: false`, before and after. §17 says a click is a hit
+test; the sentence said otherwise; an agent has every reason to believe the button
+was pressed. The control crate's own refusal message states the principle the app
+broke ten lines away — *"a silent success here is how an agent comes to believe
+it clicked something."*
+
+**Fixed.** `Request::ui_action` in `crates/control/src/protocol.rs` decides from
+the **method name**, consulting `params.action` only for the bare `ui`, and
+refuses a method and an action that disagree rather than guessing which one to
+ignore. The click reply is `click_message`, which says what happened:
+
+```
+`toolbar.node.duplicate` is at that point; a click reports where it landed and
+does not activate anything — run it with `engine.execute`
+```
+
+The name is still in `data.hit`, which is where a machine should read it.
+
+**A lesson worth keeping, because I walked into it.** The first version of the
+mutation case filtered on `ui_action` and the test that catches the mutation was
+called `the_method_name_decides_what_a_ui_request_does` — so the filter ran one
+unrelated test, which passed, and the case would have shipped as "caught" while
+catching nothing. It only showed up because the run was done by hand first and
+the output was read: `1 passed; 48 filtered out`. A mutation case is a claim that
+a gate bites; running it once by hand is the only way to know the claim is true.
+
+**The examples are now a gate.** `Request::ui_action` is locked by a mutation,
+but the docs' *examples* were prose and nothing parsed them — so the spelling
+this section is about was teachable. `cargo xtask lists` now reads every
+request-shaped line in `docs/` and `skills/`: it must be JSON, name a method the
+protocol accepts, and not contradict itself.
+
+The method and action names are **read out of `crates/control/src/protocol.rs`'s
+own match arms**, not listed here. A second list is §22's defect waiting to
+happen, so `wire_names` takes the names from where they are defined and refuses
+to run if it finds none — a parser that matched nothing would otherwise check the
+examples against an empty set and pass, which is the failure mode this document
+keeps writing about.
+
+**Its first finding was in prose written ten minutes earlier.** The playbook
+explained the refusal with a copyable counter-example,
+`{"method":"ui.render","params":{"action":"click"}}`, and the gate reported it —
+correctly, by its own rule, and wrongly in effect: a request-shaped object on a
+line of its own is something to send, and that one was something *not* to send.
+The rule is kept and the prose was changed to describe the bad request in words,
+with a note saying why. That is the honest resolution rather than a special case
+for "unless the line looks like a warning", which is the kind of heuristic that
+cries wolf.
+
+Seven examples are checked. What the gate cannot do is judge whether an example
+is a *sensible* request, or prove it behaves as documented — a wrong coordinate
+in a click example is still a well-formed request. That is still found by a
+person running it.
+
+---
+
+## 33. Nothing in the tree can save a design
+
+Found by asking §32's question of the next surface: not *can this check fail*,
+but *what does this do, and is anyone relying on it*. `apps/craftkit` opens a
+design, so the obvious next question is where a design goes when you have edited
+it.
+
+**Answer: nowhere.** Measured three ways.
+
+```console
+$ grep -rn "craftkit_io::save" --include=*.rs apps/ crates/
+apps/craftkit-cli/src/cli.rs:452:        craftkit_io::save(&file, session.document()).expect(…);
+```
+
+One caller in the whole workspace, at `cli.rs:452`, and `#[cfg(test)]` starts at
+line 269 — so it is a **test**. There is no production call to `craftkit_io::save`
+anywhere in craftkit.
+
+- The desktop app calls `craftkit_io::load` for `--file` and never `save`. There
+  is no Save control; the shell's status bar is where saving would announce
+  itself, and it says `unsaved` / `saved`, never `save`.
+- The CLI's `--out` writes a **PNG**: `snapshot <script.json> --out <file.png>`.
+  `run` has no `--out` for a design at all.
+- The web build writes `localStorage`, not a file.
+
+Worth being precise about which half is missing, because it changes who has to do
+what. `craftkit-io`'s **write path is finished**: `save`, `save_text`, a
+`SaveError` with a path and a recoverability judgement in every variant, and
+doc-tests that assert the text it produces. It has no production caller. So this
+is not a missing capability in the library — it is a missing **wire-up**, and
+whichever way the owner decides to do it, the format layer needs no work.
+
+**The only signal that work is being lost** is in `on_exit`:
+
+```rust
+if session.is_dirty() {
+    log::warn!("exiting with unsaved changes");
+}
+```
+
+which goes to the `Stderr` logger installed at `main.rs:555`. Launched from a
+terminal, a person might see it. Launched from a desktop environment — a double
+click, a `.desktop` file, a dock icon — stderr goes to the journal and nobody
+sees it. So the ordinary way to run this app loses every edit silently, and the
+extraordinary way loses them with one line on a console that has already closed.
+
+**§18 gets this wrong, and it is worth correcting because it is the sentence an
+agent would rely on.** It says:
+
+> the desktop app calls `craftkit-io` directly, the way the CLI does
+
+The app calls `load`. It has no `save` to call, and neither does the CLI. The
+paragraph reads as though the host writes files, and the cost it names — *"an
+agent cannot persist a plan through the command registry"* — understates the
+position: an agent cannot persist a plan **at all**, through any interface,
+unless it writes the format itself.
+
+**This is the pending owner decision, not a bug to fix here.** Item 6 of the
+suggested order already asks whether `save`/`open` belongs in the command
+registry, and this section sharpens what that decision actually costs. The options
+are not equivalent: a `doc.save` command is one registry entry plus a file
+dialog, and it makes saving reachable by every surface for free; a host-side
+shortcut is one binding plus a dialog and leaves agents unable to save; a
+recovery file is invisible until the day it is needed. What must not happen is
+what happens today, which is that all three look implemented because the format
+round-trips in tests and the app *can* open a file.
+
+What is cheap and is fixed here: nothing. This is recorded rather than acted on,
+deliberately, because every version of "fix it" is a product decision the owner
+has not made — and §18's own argument, that file I/O is the host's business, is
+an argument about *where* the code lives, not a reason the capability can be
+absent.
+
+---
+
+## 34. `AGENTS.md` sent every agent to a file that does not exist
+
+Found by reading `AGENTS.md` to check whether §32's change had made its control-
+channel description wrong. It had not — but the paragraph below that one says:
+
+> `docs/control-protocol.md` has the wire format.
+
+That file has never existed. `docs/` holds `agent-playbook.md`, `architecture.md`,
+`README.md` and three directories. So the one document every agent is told to
+consult, for the one thing §32 changed, is a dead reference — in the file that
+introduces the channel in the first place.
+
+**The wider finding is the gate.** `citation_drift` (§7, §26) reads every
+`file.rs:12` in prose and checks it points at something. It found seven stale
+citations across `docs/` and `skills/` when it was extended to recurse. It does
+**not** look at document-to-document references, which are citations too and are
+the ones a reader actually follows.
+
+Measured before fixing anything, so the claim is a count and not a story:
+
+```console
+$ python3 scan.py     # every backticked `*.md` in docs/, skills/, AGENTS.md,
+                      # README.md, CONTRIBUTING.md
+markdown references in prose: 58, broken: 1
+  AGENTS.md:204 -> docs/control-protocol.md
+```
+
+Fifty-eight references, one broken. Both ways a reader tries one are tried — next
+to the referring document, and from the repository root — because both spellings
+are in use in this tree.
+
+**Fixed both ways.** The sentence now points at `docs/agent-playbook.md` and at
+`crates/control/src/protocol.rs`, and `broken_document_links` in `cargo xtask
+lists` checks every `\`something.md\`` in prose, resolving both ways. The gate
+found one broken reference the moment it existed — `AGENTS.md`'s, before I fixed
+it — and the mutation puts it back:
+
+```
+caught  prose: a document points at a document that is not in the tree
+```
+
+The honest limit is the same one `citation_drift` states: this checks that the
+target exists, never that it says what the sentence claims. Fifty-seven other
+references resolve to real files, and at least one of them is probably about
+something that has since changed.
+
+---
+
+## 35. Nothing checked that a command's effect survives the file
+
+Found by putting §33's question to the format instead of the application: if
+`.craftkit` is the only persistence there is, does everything a command does
+reach it?
+
+**Nothing checked it.** The round-trip tests that existed were at the *model*
+level — `documents_round_trip_through_json_and_keep_the_id_counter` proves the
+`Document` type survives serde. That is not the same claim. A command that
+writes to a field the format does not carry would pass every test in the tree,
+because the type round-trips perfectly; only the *command's* effect is lost.
+
+**The measurement.** One command at a time: run it, save the document, load it
+back, and compare. Fifteen candidates, and the first version of the probe was
+worthless in a way I had to catch — it reported success for `playback.seek`,
+because the playhead is **session state** and the document never had it. A
+round-trip assertion over a command that changed nothing proves nothing, so the
+test now asserts that the command *changed* the document first, and says so
+when it did not.
+
+With that in place: **fourteen commands change the document and every one of
+them survives the file**, byte for byte. `doc.rename`, `doc.range`, `node.add`,
+`node.duplicate`, `node.rename`, `node.kind`, `node.move`, `node.mute`,
+`node.remove`, `prop.set`, `prop.reset`, `key.set`, `key.ease`, `key.remove`,
+`key.clear`. A verified negative, and a useful one: the format is not missing
+anything the registry writes.
+
+**What was missing was the *check*, and the list.** The test is
+`apps/craftkit-cli/tests/command_effects_survive_the_file.rs`, and it has a
+completeness half that matters more than the round-trip half: every command in
+the registry has to be either in the table or in `NOT_IN_THE_FILE` with a reason
+recorded. A new command is then a *decision* — is this in the file? — rather
+than an oversight nobody notices until a design loses an edit.
+
+It lives in an app rather than in `craftkit-io` because it needs both crates and
+`craftkit-io` is a *lower* layer than `craftkit-engine`; a dev-dependency
+upwards would be a layering violation that `cargo xtask layers` correctly
+reports. The statement is an application-level one — "the file the application
+writes is the file it read" — so an application-level test is where it belongs.
+
+**A small omission, found on the way.** The format document has a section
+called *What is not in the file*, and it lists the plan, the id counter and
+anything derived. It did not list the **playhead** or the **undo history**,
+which are also not in any file and are the two absences a person actually
+notices: a reopened design starts at its first frame with nothing to undo. The
+section now says so, and a test asserts it keeps saying so.
+
+**What it still cannot check.** Whether the *reloaded* document means the same
+thing to the evaluator — that is `plan.evaluate` on both sides, and the plan is
+computed, not stored. This test compares documents, not behaviour.
+
+---
+
+## 36. Thirteen wrong citations, and the gate could not see one of them
+
+Found by asking `citation_drift` (§7, §26) the question it had never been asked:
+*what does it actually read?* It reads `name.rs:12` — a file name and a line
+number. It does not read a **bare** line number, and this tree had twenty-four
+of those.
+
+**The bare form.** `` (`:330`) `` means "the line I named a sentence ago" — the
+file was mentioned just above, and the number is a short way back to it. It is a
+real convention, and it is also a citation with no owner.
+
+Measured, by resolving each one the way a reader would — to the nearest `.rs`
+the document has named:
+
+```console
+bare citations resolved: 19, stale: 4, unresolved: 0
+```
+
+Four flagged, and then the interesting part. Checking each against the symbol it
+claims to point at found **thirteen wrong out of twenty-four**, in four
+different ways:
+
+| How it was wrong | Example |
+|---|---|
+| The line had moved | `add-an-icon.md` cited `icons.rs:300` for a test now at 286 |
+| The line had moved a lot | `add-a-command.md` cited `:353` and `:365` for a test now at 390 |
+| **The file was wrong** | `add-a-control-channel-method.md` cited `:446` for a test that is in `server.rs`, not `protocol.rs` |
+| The number was right, the file was wrong | `change-the-file-format.md` cited `:72` for a test in `format/pending.rs`, read as `format.rs` |
+
+The third kind is the worst, because a bare citation *cannot* be checked by
+anyone: the sentence before it names two files, and which one the number means
+depends on which one you happened to notice last.
+
+**And the explicit ones were wrong too.** `add-a-command.md` cited
+`crates/engine/src/command.rs:312` for a test now at 348. `citation_drift`
+passed it, because 312 is real code — it is the gap §34 named, now with a
+number on it: of thirteen wrong citations, the mechanical rule sees **four**.
+The other nine point at code that exists and says something else, which no tool
+can know is wrong.
+
+**One of them was mine.** `add-a-control-channel-method.md` cited `:254` for
+`every_method_round_trips_through_its_own_name`; §32's `ui_action` pushed it to
+389, and 254 is now the middle of my own new function. The same thing happened
+to `protocol.rs:261` in §32, and `citation_drift` caught that one because it had
+landed on a lone brace. A citation is a promise to keep a file in step.
+
+**The fix is not to check the bare form — it is to stop using it.** A citation
+that names a *symbol* rots into a wrong reading at worst; one that names a
+*line* rots into a wrong *place*, and a wrong place sends somebody to the wrong
+file. So:
+
+- All twenty-four bare citations are gone. Where a symbol was already named, the
+  number went with it. Where it was not — `mute` is the shortest icon example —
+  the file is named instead.
+- The nine wrong explicit citations are corrected: `command.rs:312` → the
+  symbol, `session.rs:262`/`:273` → `263` and `271` (the two
+  `self.doc = snapshot;` lines, which is what the sentence says they are),
+  `icons.rs:156` → `152` (the start of `fn mute`).
+- `cargo xtask lists` now **refuses** a bare line citation, with the file to
+  name in the message. The rule is mechanical and complete, so it cannot rot:
+  a bare number with no file is an error, full stop.
+
+The gate found four more bare citations that my own inventory had missed,
+including two in a list form — `` (`UI_CRATES`, `:93`; `UI_MIN_LAYER`, `:96`) ``
+— which a hand-written pattern had not matched. The gate is the better
+instrument; it is now the one in charge of this.
+
+**What this says about the rest of the citations.** The nine wrong explicit
+citations are still there, corrected by hand, and they can rot again. The rule
+that would catch them is "the cited line must contain the symbol the sentence
+names" — which needs the sentence to be machine-readable, and it is not. The
+honest position is the one §34 took: the gate checks that a citation points at
+*something*, and a person checks that it points at the *right* thing. The
+difference is that the bare form no longer adds a second way to be wrong.
+
+---
+
+## 37. The README's layer table was decoration
+
+Found by asking the same question of the layer table that §36 asked of the
+citations: *what does this check, and what does it leave out?*
+
+`cargo xtask lists` compares the layering table in `docs/architecture.md` with
+the table in `xtask/src/layers.rs`, and it has done so since §7. The README has
+a **second copy of the same table**, in a different shape:
+
+```text
+crates/core     L0   ticks, values, ids, hostile parameters
+crates/kernel   L2   the numeric kernel, behind the panic guard
+...
+```
+
+and **nothing compared it with anything**. The two agree today — measured, not
+assumed — but the agreement is a coincidence of two people having been careful,
+and the README is the front door of the project. This is §22's shape one layer
+down: one rule, two spellings, one of them enforced and the other decorative.
+
+**Fixed.** `readme_layers` reads the README's rows, resolves each directory to
+its package through the directory's own `Cargo.toml`, and compares the layer
+with the code's. Both directions are checked, because either one alone is a
+half-check:
+
+```console
+$ cargo xtask lists        # README says crates/kernel is L3; the code says L2
+$ cargo xtask lists        # README's layer table does not mention craftkit-io (L3)
+```
+
+**Why the direction that matters is the one people forget.** A README that says
+L3 for a crate the code puts at L2 is a wrong fact. A README that *omits* a
+crate is a table that rots the moment a crate is added, and it rots quietly:
+the new crate is invisible in the front door of the project until somebody goes
+looking. The second failure is the more likely one, and it is the one the
+"missing crate" direction catches.
+
+**And the measurement that made it worth doing.** The two tables agreed, so
+this section is a *verified negative* plus a gate. That is the honest shape of
+this kind of finding: the defect is not that the README was wrong, it is that
+nothing would have said so.
+
+---
+
+## 38. The CLI's help and its parser were two lists that nobody compared
+
+§28 found that `craftkit-cli --help` never showed the script format — the one
+thing anybody must know to use the tool — and fixed it. Reading that section
+again raised the obvious next question: **the help is a hand-written string and
+the subcommands are match arms.** What keeps them in step?
+
+Nothing.
+
+```rust
+// apps/craftkit-cli/src/args.rs
+match first.as_str() {
+    "help" | "-h" | "--help" => …,
+    "commands" => …,
+    "run" => …,
+    "eval" => …,
+    "snapshot" => …,
+    "crashes" => …,
+    "mcp" => …,
+    other => Err(UsageError::UnknownSubcommand(other.to_string())),
+}
+```
+
+Seven arms, seven lines in `USAGE`, and no test anywhere compared them. They
+agree today — measured, not assumed — but the failure mode is one-sided and
+silent: a subcommand added to the parser and not to the help **exists and is
+undiscoverable**, and the help is the only place an agent looks. §28's defect
+was the help hiding the script format; this is the help hiding a whole
+subcommand.
+
+**Fixed by deriving one from the other.** The test reads the subcommand names
+out of `args.rs`'s own source — the `match first.as_str()` block, found by
+walking the braces, taking the first quoted word of each arm and skipping the
+ones that start with `-` — and requires the help to mention every one of them.
+The other direction is checked too, because a help that lists a command the
+parser refuses is a lie of the same kind.
+
+```console
+$ # a subcommand added to the parser and not to the help
+the parser accepts `export` and the help does not mention it:
+  ["commands", "run", "eval", "snapshot", "crashes", "mcp", "help"]
+```
+
+**A note on the mechanism, because it is the same lesson as §22 and §36.** The
+names are *read out of the parser*, not listed a second time in the test. A
+test that listed them would have been a third copy, and would have needed its
+own check — the thing this document has now found seven times. The scan is
+hand-written, like every other parser in this tree, and it is bounded: it
+counts braces, so it cannot run past the end of the match it is reading.
+
+---
+
+## 39. The part of §29 that *could* be gated, and was not
+
+§29 swept the backticked names in `skills/` against the source and found three
+places naming `pending_list_is_sorted` when the test is called
+`the_pending_list_is_sorted`. It fixed them and then wrote:
+
+> Prose-cited test symbols could be gated, and deliberately are not: every rule
+> that separates `the_pending_list_is_sorted` from `catch_unwind` is a
+> heuristic that would eventually flag something real.
+
+That reasoning is right about the *general* rule, and this section is the
+exception it did not see: **when the sentence names the file, the check is
+anchored and stops being a heuristic.**
+
+The sweep of the directories §29 did not cover found the case:
+
+```text
+docs/recipes/add-an-icon.md:5
+yet. `every_command_has_an_icon_this_set_can_draw`
+(the `every_command_has_an_icon_it_can_draw` test in `crates/ui/src/icons.rs`)
+fails the moment you write `Icon("power")`
+```
+
+A recipe naming a test **that does not exist**, in the same sentence as the
+right one — the parenthetical is an older name for the same test, left behind
+when it was renamed. The reader is sent to look for a test that was never
+there, and the sentence contradicts itself.
+
+**What is checkable, and what is not.** The general rule — "every backticked
+snake_case name in prose is a symbol in this tree" — cries wolf, because
+`catch_unwind`, `unwrap_used`, `png_base64`, `serde_json` and `as_f64` are all
+in prose and none of them is in this tree. But the *anchored* rule — "this
+symbol is in this file" — does not:
+
+| Claim | Verdict |
+|---|---|
+| `` `a_request_round_trips` (in `crates/mcp/src/rpc.rs`) `` | true |
+| `` `the_pending_list_is_sorted` (in `crates/io/src/format/pending.rs`) `` | true |
+| `` `every_command_has_an_icon_it_can_draw` test in `crates/ui/src/icons.rs` `` | **false** |
+
+Eleven such claims in the tree, two false, both the same stale name.
+
+**The rule, precisely.** A backticked symbol *immediately* followed by a
+backticked `*.rs` path is a claim that the symbol is in that file — "immediately"
+meaning the next backticked thing, in the same paragraph, with nothing much in
+between. Two refinements were needed, and both came from the gate finding a
+false positive of its own:
+
+- The first version paired a test with a file named **three sections later**,
+  because "the next backticked thing" crossed a paragraph boundary. A claim is
+  about the file it names, so the two must be in the same breath: no blank
+  line, and a gap of at most forty characters. The longest gap in a real claim
+  is ten.
+- The symbol must look like a test name — `every_`, `the_`, `a_`, `an_` — so
+  `catch_unwind` is not a claim and the rule does not cry wolf.
+
+**Fixed and gated.** The two stale names are gone (the correct one was already
+in the sentence), and `symbol_file_claims` is in `cargo xtask lists` with a
+mutation that puts the stale name back.
+
+**What §29's verdict was, restated honestly.** §29 was right that the general
+rule cannot be gated, and this section is the part of it that can. The two
+statements are not in conflict: a *claim with a file* is a fact about this
+tree; a *bare name* is a name from somewhere, and the tree cannot tell where
+from.
+
+---
+
+## 40. A pattern document promised a safety property the code did not have
+
+`docs/patterns/clone-before-edit.md` is the document an agent reads before
+touching the engine. It describes the rollback, and it described it in a
+sentence that was false:
+
+> **`evaluator.invalidate()` accompanies every restore.** The cache belongs to the
+> document that produced it, and a restore puts a different document in place.
+
+Read literally, that says: without the call, the cache would serve states
+computed from a document that no longer exists. It says the same thing, in
+code, on the method itself:
+
+```rust
+/// The engine calls this when it restores an undo entry: the cache belongs
+/// to the document that produced it, and after a restore that document is
+/// not the one in the cache.
+pub fn invalidate(&mut self) {
+```
+
+And on `Session::replace_document`:
+
+> Public because a document loaded from disk has to reset the evaluator's
+> cache too, and a cache that survived a load would serve states computed
+> from the *previous* document.
+
+**Measured, the claim is false.** The evaluator's cache is content-addressed:
+an entry is reused only when the node it was computed from still hashes the
+same, and the walk stops at the first entry that does not match. A restored
+document cannot be served a state belonging to a node it no longer has. The
+removal of every `invalidate()` call in the engine changes nothing:
+
+| Tree | Tests | Result |
+|---|---|---|
+| As it stands | 604 | 604 passed, 0 failed |
+| The `self.evaluator.invalidate();` in `crates/engine/src/session.rs` removed | 604 | 604 passed, 0 failed |
+
+(The call was in three places before the rollback was folded into one
+function; the measurement was made again afterwards, on the one call that
+was left. The count is 604 because the measurement was taken before §43 added
+two tests — the number is what the tree held at the time, and §41 is why a
+number in a sentence needs a gate.)
+
+The call is not *wrong* — clearing is cheaper than relying on a property, and
+it makes the invariant explicit. But the *reason* it was given was wrong, and
+a false reason in the document an agent reads is worse than no reason: it
+teaches a reader to believe something untrue about the safety of the rollback.
+
+**The count was the thing that rotted.** The same document said "the four
+restore statements" — and, in three other places, "one", "two" and "three".
+The two rollback branches each spelled out the same four statements, so the
+document had to keep a count in step with two copies of the same code, by
+hand. A number in a sentence is not a citation, and `citation_drift` only
+reads `file.rs:12`; nothing in the tree could see the count drift.
+
+**Fixed by quoting instead of counting.** The rollback is now one function:
+
+```rust
+fn restore(&mut self, doc: craftkit_model::Document, dirty: bool) {
+    self.doc = doc;
+    self.evaluator.invalidate();
+    self.recompute();
+    self.dirty = dirty;
+}
+```
+
+Both branches call it, and `replace_document` calls it too, so "the same
+statements" is true by construction rather than by agreement. The document
+quotes the function instead of counting it, and the quote is **exact** — a
+fenced block whose info string says `exact` is a claim that it is the source,
+word for word.
+
+**And that claim is gated.** `quoted_functions_match_the_source` is in
+`cargo xtask lists`: every function an `exact` block quotes must be the
+function in the file the block names, line for line, in both directions. A
+line added to the function and not to the document is caught, and so is a line
+in the document that the function does not have. Two mutations, one for each
+direction.
+
+The marker is deliberate. Most blocks in the tree are *illustrations* with
+elisions in them, and pretending otherwise would make the check cry wolf —
+which is §29's lesson applied to §39's rule: anchor the check or do not make
+it.
+
+**The property is now tested, and the test bites.** The claim that a restore
+cannot serve a stale state had no test at the engine's level, where the
+restore happens. `a_restore_cannot_serve_a_state_from_the_document_it_replaced`
+changes the document twice, puts the first change back **without** clearing
+the cache, and compares the result with a plan computed by a session that has
+never seen any of the three documents.
+
+**A wrong prediction, recorded.** The first version of that test restored the
+*original* document and **passed with the fingerprint broken**. The reason is
+worth keeping: with a broken fingerprint the cache is frozen at the first
+evaluation, and the document it was frozen at was the one being restored, so
+the stale state and the correct state were the same state. The test now
+restores a document that differs from the first evaluation, and it fails when
+the fingerprint stops distinguishing nodes.
+
+The mutation that proves it is the sharpest one in the tree: it removes the
+node's **name** from the fingerprint. Every test in `craftkit-eval` still
+passes — they all change values and positions — and only the engine's own
+test sees it, because it is the only one that renames a node and then puts
+the document back. That is a coverage difference the mutation script found
+and no reading of the code would have.
+
+### The false alarm, which was worth having
+
+`cargo xtask lists` reported:
+
+```text
+docs/patterns/clone-before-edit.md: line 94 points at `KNOWN-GAPS.md`, which is not in the tree
+```
+
+The file is `KNOWN-GAPS.md`. The document said `KNOW-GAPS.md` — a typo, in a
+sentence added minutes earlier. The gate was right and the typo was mine.
+
+What happened next is the part worth recording. `stat`, `File::open` and
+`read` all found the file; `metadata()` inside the xtask process returned
+`ENOENT`; `read_dir` of the same parent listed it with its full size. The
+rule "a document that is not in the tree is not in the directory either" was
+added as a fallback, with a doc comment asserting that "`stat` intermittently
+answered 'no such file' for a document that `read_dir` listed". **That
+comment was false**, and it was written into the build tool in the same hour
+it was believed. It is now deleted, and `in_the_tree` asks the question one
+way again.
+
+The lesson is not "check your spelling" — it is that a workaround built on an
+unverified belief is a new false claim, and it is written into the code
+rather than into a conversation. A gate that says "this is not here" deserves
+to be doubted *once*, carefully, by looking at the name it was given.
+
+---
+
+## 41. Two documents disagreed about one file, and both were wrong
+
+§40 found a number in a sentence that had rotted: "the four restore
+statements". It fixed that one by quoting the code instead of counting it,
+and it left a question behind: **how many other numbers are in this tree's
+prose, and how many of them are true?**
+
+The sweep looked for the shapes a number takes in a sentence — "N lines",
+"N commands", "N areas", "N rules", "N tests", "the tests start at line N",
+"N lines of code" — and checked each against the tree.
+
+**Fifteen claims. Four wrong.**
+
+| Claim | File | True? |
+|---|---|---|
+| "153 lines" — `crates/core/src/lib.rs` | `docs/agent-playbook.md` | yes |
+| "its first ~900 lines" — `crates/engine/src/commands.rs` | `docs/agent-playbook.md` | yes (an approximation) |
+| "the tests start at line 957" | `docs/agent-playbook.md` | yes |
+| "21 commands across seven areas" | `docs/patterns/everything-is-a-command.md` | yes |
+| "the two commands with `undoable: false`" | `docs/architecture.md` | yes |
+| "the three panic boundaries" | `docs/architecture.md` | yes |
+| "the six clippy lints" | `docs/agent-playbook.md` | yes |
+| "rule 4 in `crates/engine/src/lib.rs`" | `docs/agent-playbook.md` | yes |
+| "the four rules" — `crates/control/src/lib.rs` | `docs/recipes/add-a-control-channel-method.md` | yes |
+| "Over 500 tests" | `README.md` | yes (604) |
+| "the three applications" | `docs/architecture.md` | yes |
+| **"110 lines" — `crates/io/src/format/pending.rs`** | `docs/agent-playbook.md` | **no — it is 174** |
+| **"98 lines" — the same file** | `docs/recipes/change-the-file-format.md` | **no — it is 174** |
+| **"the same three lines" — the rollback** | `docs/architecture.md` | **no — it was four statements** |
+| **"lines 196-282", "87 lines" — `Session::execute`** | `docs/agent-playbook.md` | **no — but §40 broke it, not time** |
+
+The last row is this document's own doing and is here because a finding that
+flatters the finder is the one most worth checking. §40 folded the rollback
+into a function, and `Session::execute` went from 196-282 to 196-276, so a
+line range that was correct an hour ago is now wrong. It is counted as
+wrong because it *is* wrong, and it is fixed the way §36 says line
+citations are fixed: the symbol is named and the range is dropped. The other
+three had rotted on their own.
+
+**The two wrong counts were about the same file, and they disagreed with each
+other.** One document said 110 lines, another said 98, and the file is 174.
+Neither was a typo: both were numbers written once, when the file was a
+different length, and both documents were *correct when written*. The recipe
+tells an agent to read that file "top to bottom" and calls it "the rule" —
+so the one number that would have told the agent how much reading it was
+being asked for was the number that was wrong.
+
+The rollback count was wrong in the same way, and it is §40's finding seen
+from the other side: "the same three lines" for a block of **four**. It had
+been wrong for a while.
+
+**Why the citation gate did not see them.** §36 removed the bare line
+*citations* — `` `:123` `` — and taught the tree to cite symbols. A line
+*count* is not a citation: it names no line, so `citation_drift` has nothing
+to resolve, and the rule that replaced it ("cite the symbol") says nothing
+about how long a file is. The numbers were left behind by a fix that was
+right about its own subject.
+
+**Fixed, and gated.** The four wrong claims are corrected, and
+`prose_line_counts_match_the_files` is in `cargo xtask lists`. The rule is
+anchored the way §39's is: **the nearest backticked `*.rs` path before the
+number, in the same paragraph, is the file the number is about.** Two forms
+count, and only two:
+
+- "N lines" — the file is N lines long. `~900` does not count: an
+  approximation is not a claim that can be wrong.
+- "the tests start at line N" — the file's test module begins at that line.
+
+Two mutations, one for each form. The second is the sharp one: it moves the
+line the document names to a line that holds something else, and the gate
+reports what is actually there.
+
+**What is not gated, and why.** The counts written as *words* — "the same
+three lines", "the six clippy lints" — are not mechanically locatable, and a
+rule that guessed at them would cry wolf. The two that were wrong are fixed
+anyway, and §40's answer applies to them: quote the code, do not count it.
+The "lines 196-282" claim was a line citation in disguise, so it went the
+way §36 says line citations go: the symbol is named, and the range is not.
+
+### A note on the two that *were* right
+
+Eleven of the fifteen claims were true, including the ones that look like
+they should not be: "21 commands across seven areas" (the registry really
+does hold 21 commands in 7 areas), "the three panic boundaries" (the
+architecture document counts the control server's boundary, which is easy to
+forget), and "the tests start at line 957".
+
+They were true by luck, not by anything. That is the whole point of the
+sweep: a number in a sentence is a claim that is either checked or not, and
+until now none of them was.
+
+### The safety limits, which are the numbers that matter
+
+The same sweep was pointed at the *constants*: the hard limits that bound a
+hostile file, written down in three documents so that an agent coding against
+them uses the right ones. **Twenty claims, all twenty true** — `MAX_NODES`
+10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000,
+`MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_EDGES` 20 000, `MAX_STEPS` 64,
+`MAX_LINE` `1 << 20`, `MAX_TEXT` `1 << 16`, `MAX_ENTRIES` 128.
+
+True by luck. Change `MAX_NODES` and the architecture table keeps saying
+10 000, and the table is what an agent reads.
+
+`prose_constants_match_the_code` is in `cargo xtask lists`. Two shapes:
+
+- a constant and its value side by side — `` `MAX_DEPTH` 32 `` — wherever
+  that pair appears;
+- a constant and its value in **different cells of a table row**, which is
+  how the pattern document writes the cost bound.
+
+Two mutations, one for each shape. The message names the file, because two
+constants can share a name: the engine's history keeps 128 entries and its
+log keeps 256, and a claim that matches neither is reported against both.
+
+---
+
+## 42. The rollback is described in five places, and three of them were wrong
+
+§40 found that `docs/patterns/clone-before-edit.md` gave a false reason for
+why `Evaluator::invalidate` exists, and fixed it — in the document and in the
+method's own doc comment. It also folded the rollback into one function,
+`Session::restore`, so the two branches could not drift apart.
+
+That left a question the fix did not answer: **where else is the rollback
+described?** The answer was three more places, and two of them were wrong.
+
+| Place | What it said | True? |
+|---|---|---|
+| `crates/eval/src/evaluate.rs` — `invalidate`'s doc comment | "the cache belongs to the document that produced it" | **no** — §40 fixed it |
+| `docs/patterns/clone-before-edit.md` | the same reason, in a bullet | **no** — §40 fixed it |
+| `docs/architecture.md`, in "Incremental evaluation" | "because the cache belongs to the document that produced it" | **no** — fixed here |
+| `docs/recipes/fix-a-crash.md`, in "The test you must add" | "`replace_document` invalidates the evaluator's cache, **which a direct assignment would not**" | **no** — fixed here |
+| `docs/recipes/fix-a-crash.md`, in "A crash handled at the wrong layer" | "the two `self.doc = snapshot;` lines in `crates/engine/src/session.rs`" | **no** — §40 deleted those lines |
+| `skills/craftkit-editing/SKILL.md`, in the `Session::execute` map | "restore snapshot, invalidate, recompute" | **no** — it is one call now |
+
+**All six were wrong.** The false reason — "the cache belongs to the
+document that produced it" — was written once and copied three times, and
+each copy looked authoritative. A reader of `docs/architecture.md` would
+learn that the cache is *owned* by a document, and from there the "a direct
+assignment would not" sentence in the crash recipe reads as obvious.
+
+They are all wrong for one reason, and §40 measured it: the cache is
+content-addressed, so a restored document cannot be served a state belonging
+to a node it no longer has.
+
+**The lesson is not "be careful".** It is that **a fact stated in N places
+is a fact with N chances to rot, and the gates check one of them.** §40
+fixed the two places it had been sent to. The other three were found by
+asking a question with a mechanical answer — *where else is this described?*
+— and that question is now a gate.
+
+**The gate: code that prose attributes to a file.** A claim is a *pair*: a
+backticked piece of code and the backticked `*.rs` path it is about, next to
+each other in the same paragraph. Two forms count:
+
+- `Type::method` — the method must be in that file. **Eleven live claims**,
+  all true.
+- a statement, ending in `;` — the statement must be a *line* of that file.
+  **One claim existed, and it was false.**
+
+`attributed_code_is_in_the_file` is in `cargo xtask lists`, with a mutation
+for each form. The statement mutation puts back the exact sentence that
+started this section, and the gate says:
+
+```text
+docs/recipes/fix-a-crash.md: line 251 says `self.doc = snapshot;` is in
+`crates/engine/src/session.rs`, and it is not
+```
+
+**What else the sweep found, and did not.** The same question — *where else
+is this described?* — was asked of the rollback's **line citations**, and the
+answer was better than expected. `skills/craftkit-editing/SKILL.md` maps
+`Session::execute` with six line numbers, and **all six still point at the
+right lines** after §40's refactor moved the function's tail. Only the
+*words* beside one of them were stale: "restore snapshot, invalidate,
+recompute" described three statements where there is now one call. A line
+number that is right and a description that is wrong is the most annoying
+combination there is, because the reader checks the line, sees that it is
+right, and believes the words.
+
+The lesson from that is the one §36 already taught, applied to a place §36
+did not look: **cite the symbol, and say what it does.**
+
+---
+
+## 43. Two of the four statements in the rollback were pinned by no test
+
+§40 folded the rollback into one function:
+
+```rust
+fn restore(&mut self, doc: craftkit_model::Document, dirty: bool) {
+    self.doc = doc;
+    self.evaluator.invalidate();
+    self.recompute();
+    self.dirty = dirty;
+}
+```
+
+**A change to a function is a change to its contract, and the contract here
+was not written down anywhere.** So the next question was mechanical: *for
+each statement in it, is there a test that fails when the statement is
+deleted?* Four statements, four deletions, one full test run each:
+
+| Deleted | Tests that fail |
+|---|---|
+| `self.doc = doc;` | 4 |
+| `self.evaluator.invalidate();` | 0 — the cache is content-addressed; §40 |
+| `self.recompute();` | **0** |
+| `self.dirty = dirty;` | **0** |
+
+**Two of the four statements could be deleted and the whole workspace would
+still be green.**
+
+### The plan
+
+`self.recompute()` is what puts the *plan* back — the thing the window draws,
+the status bar reads and `plan.evaluate` returns. Without it, a document that
+arrives from outside keeps the plan of whatever was there before.
+
+A document arrives from outside in three places: the desktop app, the web app
+and the CLI all call `Session::replace_document` when they open a file. That
+is not a command, so `execute`'s success path never runs, and **nothing else
+recomputes the plan**. A file that had just been opened would have shown the
+previous document's plan.
+
+That is §21's bug in a new place: the engine says one thing and the screen
+says another, with `ok: true` on the reply and nothing reporting a problem.
+§21 found it by looking at a real window; it survived every test because the
+window was the only witness.
+
+`loading_a_document_re_evaluates_the_plan` now pins it.
+
+### The dirty flag
+
+`self.dirty = dirty;` restores the flag, and **no command sets it** — the
+engine sets it only after a command succeeds. So the statement is a
+no-op in every path that exists today, and the pattern doc gave it a reason
+that was false: *"restoring only the document would leave a save prompt for
+changes that were rolled back"*. It would not: the flag was never set.
+
+It is still worth keeping — it is a precaution against the next command that
+does mark the project dirty — and it is now pinned by
+`a_restore_puts_the_dirty_flag_back`. A precaution nobody checks is a
+comment.
+
+### The half-applied command
+
+There was no way to write the first test, and the reason is worth recording:
+**the plan is recomputed on the success path too**, so a command that is
+refused before it changes anything never shows the difference between the two
+recomputes. Every failure the tree had was refused early.
+
+So the tree needed a command that changes the document and *then* fails.
+`test.half_apply` is one: it mutes the filter — which changes the plan's
+output — and then refuses. It is registered only in test builds, beside
+`test.panic`, and it is the only way to reach the state where the document
+and the plan disagree.
+
+`a_failed_command_leaves_the_plan_as_it_was` uses it.
+
+### The lesson
+
+**"The rollback restores the document" is not the contract. The contract is
+"the rollback restores the document *and the plan* and the dirty flag", and
+two thirds of it was untested.** The doc said the document; the code did
+three things; the tests checked one.
+
+The generalisable instrument is cheap and it is the one to reach for after
+any change to a small, load-bearing function: **delete each statement in
+turn and watch the tests.** A function of four statements is a contract of
+four claims, and a claim with no test is a comment that happens to compile.
+
+The four new tests are proven to bite: delete the statement each one
+guards and it fails.
+
+---
+
+## 44. The check that catches a command lying about itself was never run
+
+§43's instrument — *delete each statement and watch the tests* — was pointed
+at the next most load-bearing function in the tree, `Session::execute`.
+Eleven statements, eleven full test runs:
+
+| Statement | Tests that fail, before this section |
+|---|---|
+| `if self.doc == snapshot` — the no-op check | **0** |
+| `self.restore(snapshot, before_dirty)` in that branch | **0** |
+| `self.history.push(snapshot, spec.label)` | 5 |
+| `self.dirty = true` | 1 |
+| `self.recompute()` | 2 |
+| `self.log.record(id, true, …)` | 1 |
+| `self.restore(snapshot, before_dirty)` on the error path | 1 |
+| `self.log.record(id, false, …)` on the error path | **0** |
+| `self.restore(snapshot, before_dirty)` on the panic path | 1 |
+| `self.log.record(id, false, …)` on the panic path | **0** |
+| `let e = e.with_command(id)` | 1 |
+
+**Four statements had no test, and three of them are promises the documents
+make.**
+
+### The no-op check
+
+```rust
+if self.doc == snapshot {
+    // A command that declares `mutates: true` and writes nothing is a bug —
+    // almost always one that forgot to write — and would otherwise put a
+    // no-op step on the undo stack.
+```
+
+The engine compares the document with the snapshot it took before the
+command, and refuses a command that claims to change the document and does
+not. The pattern document promises it in a table row, the architecture
+document promises it, and the code says it in a comment.
+
+**No command in the tree ever did it.** Every command that declares
+`mutates: true` writes something, so the check never fired, so no test
+reached it, so deleting it changed nothing. A guard against a bug that has
+not happened yet is exactly the kind of thing that quietly stops being a
+guard.
+
+`test.noop` is the command that does it: it declares `mutates: true` and
+changes nothing. `a_command_that_says_it_changes_the_document_and_does_not_is_an_error`
+now pins the refusal, the message, the untouched document, the absent undo
+entry and the clean dirty flag.
+
+### The dirty flag, again
+
+§43 found that `self.dirty = dirty;` in the restore is a no-op, because no
+command sets the flag. The same was true of the branch above, for the same
+reason — and the reason was *the same reason twice*: the engine sets the
+flag only after a command succeeds, so nothing can change it between the
+capture and the restore.
+
+`test.dirty_noop` breaks the circle: it marks the project dirty, leaves the
+document alone, and succeeds. The engine refuses it as a no-op, and the
+rollback has to put the flag back — which is the first time in this tree's
+history that the dirty flag has been anything but a constant.
+
+`a_command_that_marks_the_project_dirty_and_changes_nothing_leaves_the_flag_alone`
+pins it, and the branch now goes through `Session::restore` like the other
+two, so there is one place where the session is put back and one place where
+the flag is restored.
+
+### Two log entries
+
+The log records what ran. Three things can end a command badly — an unknown
+id, a refusal, a panic — and the log test used the first: an unknown id
+fails in the *lookup*, before the snapshot, before the rollback, before the
+log entry. So the two entries that matter most were never written by a test.
+
+`a_refused_command_is_logged_as_a_failure` and
+`a_panicking_command_is_logged_as_a_failure` now write them.
+
+### The lesson
+
+§43's lesson was "a change to a function is a change to its contract, and
+the contract was written down nowhere". This is the same finding one level
+up: **the contract was written down in a table row, and the table row was
+not a test.** "A command declaring `mutates: true` that writes nothing is an
+`EngineError::Internal`" reads like a guarantee. It was a *hope*, held by a
+branch that no test had ever entered.
+
+The instrument generalises further than §43 said: it is not only the
+statements of a function that need checking, but the *branches* — a branch
+that no test enters is a branch that does not work. Four of the eleven
+statements above were in branches that nothing had ever reached.
+
+`Session::execute` is now fully pinned: every statement in it, deleted,
+fails a test. (The test count is not written here on purpose — §41 is why a
+number in a sentence needs a gate, and this one has none.)
+
+---
+
+## 45. The pending-change mechanism had never run
+
+The format-change recipe is the one document in the tree that a *future*
+change depends on: it tells whoever bumps the version how to write the
+migration that rewrites an old design. It is also the document that had gone
+stale in four separate ways, all of the same shape — a statement about the
+tree that was written once and then never checked again:
+
+1. a note claiming the loader does not call `apply` (it does);
+2. four test citations pointing at the wrong lines (all four);
+3. a note claiming the folding machinery does not exist (it does);
+4. a line count of `pending.rs` in two other documents (it grew).
+
+None of the four is a `file.rs:12` citation, so §36's rules saw none of
+them. Each was prose about the tree.
+
+### The loader calls `apply`. The recipe says it does not.
+
+The recipe's step 4 was a blockquote:
+
+> **Note — the loader does not call `apply` yet.** In the tree as of this
+> writing, `grep -rn "pending::apply" crates/` returns nothing … Add that
+> call as part of this change if it is still missing.
+
+The grep returns one line: `crates/io/src/format.rs:203`. The call is there,
+in exactly the place the note says it belongs — between the parse and the
+validation, because a document has to be a `Document` before it can be
+stepped and has to be stepped before it is validated.
+
+**A note in a recipe is not a citation**, so nothing noticed it going stale.
+§36's rules cover `file.rs:12`; a paragraph that says "the loader does not
+do X" is prose about behaviour, and prose about behaviour was unchecked until
+this section.
+
+### The mechanism had never executed
+
+`pending::apply` was a skeleton:
+
+```rust
+pub fn apply(doc: &mut craftkit_model::Document) {
+    let _ = doc;
+    for name in names() {
+        // Each pending module's `step` is called here as it is added…
+        let _ = name;
+    }
+}
+```
+
+`FILES` has been empty since version 1 — the module's own docs say so — so
+`apply` had run **zero** times. The module promises that "`step` functions
+run in order, each seeing what the previous one produced", and nothing
+tested the order or the chaining, because there was nothing to run.
+
+The first real format change would have been the first execution of the
+mechanism, in the one place a silent failure is expensive: a design written
+by an older build, loaded by a newer one, quietly not rewritten.
+
+`apply` now collects the steps the names give and hands them to `run_steps`,
+and `run_steps` is tested with two synthetic steps — one that renames a node
+and one that checks it can see the rename. The order is the contract, and
+the second test proves it by showing that the *last* step wins.
+
+### Four citations of a test, all four stale
+
+The recipe and the skills cite tests by line:
+
+| Citation | The test is at |
+|---|---|
+| `crates/io/src/format/pending.rs:89` — `every_pending_name_is_a_plausible_file_name` | line 236 |
+| `crates/io/src/store.rs:138` — `a_document_round_trips_through_a_file` | line 238 |
+| `crates/engine/src/crash.rs:325` — `the_replay_rebuilds_the_document_that_crashed` | line 316 |
+| `crates/io/src/format/pending.rs:44` — `the_pending_list_is_sorted` | line 96 |
+
+**All four were wrong, by 9, 52, 100 and 147 lines.** `citation_drift` did
+not see them, because it only asks whether the line is *in* the file and
+points at something — and a doc comment is something.
+
+The fix is §36's rule, applied to the last citations that had it:
+`citations_of_tests_point_at_the_test` is in `cargo xtask lists`, and it
+checks a citation **paired with a test-shaped name** — next to it, in the
+same paragraph, in either order. A citation of a file's *region* — a struct
+field, a block of code — is not a claim about one symbol, and the tree has
+plenty of those, so the rule is deliberately narrow.
+
+### The folding machinery exists. The recipe said it did not.
+
+The same note was duplicated further down the recipe, under "How a release
+folds the change in". It read:
+
+> **Note** — the pattern document and the release script "do not exist in the
+> tree yet", and `ls scripts` is empty.
+
+All three clauses were false. `docs/patterns/format-changes.md` is in the
+tree. `scripts/fold-format-pending.sh` is in the tree. `scripts/` holds
+three scripts. The only true part of the sentence was the one it did not
+make: there is no `v<N>/` directory under `crates/io/src/format/`, because
+nothing has been folded.
+
+A note is not a citation, and a note *about the tree* is the least
+self-correcting kind of prose there is: the author had to look at the tree
+to write it, and never had to look again.
+
+### The gate caught my own stale count
+
+While writing this section, the pending module grew from 174 lines to 245
+and the line count in two documents went stale — **and §41's gate said so
+within the same minute**, naming both documents and the true number. That is
+the whole argument for gating a number rather than trusting it: the person who
+made the change is the person most likely not to notice.
+
+---
+
+## 46. The instrument's own guard did not stop the run
+
+`scripts/mutation-test-gates.sh` is the tree's instrument: it breaks each
+rule on purpose and requires the gate to notice. Its own header is explicit
+about the failure mode it has already suffered:
+
+> **A mutation that does not apply.** Three of the mutations below silently
+> did nothing once because an anchor string had moved. The output still
+> looked plausible — a gate was reported MISSED that had never been handed a
+> broken tree. So every mutation goes through `swap`, which exits with an
+> error if the text it is looking for is not there. A mutation that changes
+> nothing is a bug in this script, not a result.
+
+**`swap` did exit with an error. Nobody was listening.**
+
+`swap` is a shell function whose last command is a python heredoc. Python
+exited non-zero; the function returned non-zero; and *no caller checked*,
+because `swap` and `expect_catch` are two separate lines of a flat script
+and nothing connects them. The run continued, the gate was handed an
+**unmutated** tree, the gate passed, and the case was reported as a missed
+gate — which is a statement about the gate, when it is a statement about this
+file.
+
+The run that exposed it was this session's own: §45 grew the pending module,
+the line count in two documents went 174 → 245, and the §41 mutation's
+anchor — `174 lines for the second one` — moved with it. The output said:
+
+```text
+  looking for: '174 lines for the second one'
+  This is a bug in scripts/mutation-test-gates.sh: the anchor moved.
+  A mutation that changes nothing makes every result below meaningless.
+  MISSED  prose: a line count in prose is not the file's length
+```
+
+**The loud message was right there, and the line under it said the opposite.**
+I read "1 of 67 gates MISSED their mutation" as a finding about a gate and
+started looking for the gate that had stopped catching. The gate was fine.
+The script had stopped noticing.
+
+### Fixed, and the fix is itself tested
+
+`swap` now stops the run:
+
+```bash
+if ! python3 - "$1" "$2" "$3" <<'PYSWAP'
+…
+PYSWAP
+then
+    printf 'THE MUTATION DID NOT APPLY, SO THE RUN IS VOID.\n' >&2
+    exit 1
+fi
+```
+
+and `--self-test` has a second half that drives a deliberately non-applying
+mutation and fails if the run is *not* stopped. The first half proves a
+missed mutation fails the script; the second proves a broken mutation fails
+it too. With the guard removed, the self-test exits 2 and says so.
+
+### The lesson
+
+**A guard that prints a loud message and then lets the run continue is worse
+than no guard.** The message is read as a warning and the result under it as
+a finding, and the finding is about the wrong thing. The instrument's own
+failure modes have to be *fatal*, not advisory — and they have to be tested,
+because a guard that only prints is a guard that only prints.
+
+This is §2's shape one level down. There, `cargo xtask ci` printed "ci
+green — …, tests, wasm" and exited 0 without running the tests: a check
+that *reported* rather than *stopped*. Here, a check printed the truth and
+let the run carry on to print a falsehood.
+
+---
+
+## 47. The crash report replayed into a different document, and said nothing
+
+A crash report exists to be a **reproduction**: the design as it was, and the
+commands that produced it. The engine's module comment says so —
+*"**reproduction**: the design as it was, and the commands that produced it"* —
+and `docs/recipes/fix-a-crash.md` is built on the same claim.
+
+The report had the design and the commands. It did not have the **starting
+point**, and it did not have a way to say "this replay did not reproduce".
+
+**Four separate ways existed for the report to be wrong about the session it
+claims to reproduce. None of them said a word.** The first three made the
+*replay* land somewhere else; the fourth made the *session* itself wrong, and
+the report faithfully recorded a document nobody had.
+
+### The measurements
+
+Each of these was measured with a probe against the real engine, not reasoned
+about.
+
+**1. A long parameter became an empty one.** The trace was a line of text —
+`format!("{id} {}", crate::log::compact(params))` — and `compact` cut it at
+200 characters. A node name of 250 characters (the limit is
+`limits::MAX_NAME`, 255) produced the line
+
+```text
+node.add {"kind":"source","name":"xxx…
+```
+
+which is not JSON. `parse_trace` parsed it, failed, and fell back to
+`serde_json::Value::Object(Default::default())` — **an empty parameter
+object**. The replay then ran `node.add` with *no parameters at all*, and
+`node.add` without a name succeeds and invents one. The replayed document had
+a node called `filter 1` where the crashed one had a 250-character name.
+
+The fallback was not an accident; it was pinned by a test called
+`a_trace_line_that_is_not_json_still_replays_as_a_step`, which asserted
+`params == {}` as the *correct* behaviour.
+
+**2. The trace was a ring of sixty-four.** `MAX_TRACE` was 64, and
+`execute` dropped the oldest line when the ring was full. After 70
+`node.add` commands the trace held 64; the replay rebuilt 64 nodes where the
+session had 70, and its first node was `n6` where the original's was `n0`.
+The report did not say that six commands were missing.
+
+**3. Opening a document left the trace behind.** `replace_document` — the
+path every file-open went through — restored the document and nothing else. A
+session that opened a document with five nodes in it and then ran one command
+had a trace of exactly one line. Replaying that line into a fresh session
+produced **one** node where the report recorded **five**. The file's contents
+were simply not there, and the report claimed to reproduce the session that
+had them.
+
+**4. Opening a document left the undo stack behind.** Measured this session: a
+session that had added a node and then opened a three-node document still had
+the old snapshot on its undo stack. The first Ctrl+Z answered *"undid Add
+node"* and left **zero** nodes — the empty document, not the file's. The undo
+stack belonged to the document that had been there before.
+
+**A verified negative, and the reason the other four survived.** Undo and
+redo *do* replay correctly: `node.add A`, `node.add B`, `history.undo` gives
+one node in the original and one node in the replay, equal. The reason is
+that the undo and redo commands are themselves in the trace, so the replay's
+own undo stack does the same work. That accident is why the trace looked
+right in every test anybody wrote: the sessions those tests used had never
+opened a file, never used a long name, and never run more than sixty-four
+commands.
+
+### The fix
+
+**The trace is structured, so it cannot be lossy.** `TraceStep` is a command
+id and the parameters *as they were given* — a `serde_json::Value`, not text.
+There is nothing to truncate and nothing to parse back, so the `{}` fallback
+is gone rather than fixed, and `log::compact` is gone with it. The test that
+pinned the fallback is gone with that too.
+
+**The trace is bounded by bytes, and it says what it dropped.** `MAX_TRACE` is
+now `MAX_TRACE_BYTES`, and the report carries `dropped`: the number of
+commands the bound made it leave behind. A partial replay now says it is
+partial.
+
+**The report carries the base.** `CrashReport` has a `base` field: the
+document the recorded commands were relative to. The replay starts there, so
+a session that opened a file replays *onto that file*. The report also
+carries the playhead, because the plan depends on it.
+
+**The replay has a verdict.** `crash::reproduce` starts from the base, runs
+the steps, and then **compares the result with the design the report
+recorded**. It answers `reproduced`, or it lists the differences — the node
+that is named differently, the id that does not match, the count that is
+short. `craftkit-cli crashes replay <id>` prints the verdict; the control
+channel's `diagnostics.crash_reports` returns `reproduced` and `differences`.
+
+**Opening a document is a distinct operation.** `Session::load_document` is
+what the three file-open sites call now. It clears the undo stack and the log
+— they belong to the document that was there before — and restarts the trace
+from the document it loaded. `Session::replace_document` stays as the
+restore-only path that undo and redo use.
+
+**And the reproduction can be rendered.** `craftkit-cli crashes replay <id>
+--script` prints the replay as a script *with its base*, and the script
+format learned a `base` field, so `snapshot` can draw the crash that
+happened. This is the workflow `skills/craftkit-checking/SKILL.md` claimed
+and the CLI did not have.
+
+### One detail worth keeping
+
+The base document is read with `crash::document_from_json`, which calls
+`reseat_id_counter` — and it has to. A document's id counter is **derived**
+from the ids in it, not stored, so a document read back from JSON hands out
+id 0 for its first new node. The first version of the replay failed with
+*"there is no node with id 2"*: the base was empty, the counter had been
+reset, the replay's first node took id 0, and every later step named the
+wrong node. The rule is already written down in the file reader
+(`crates/io/src/format.rs`), which is where the model keeps it. Every place
+that reads a document now reseats it — checked, not assumed.
+
+### The lesson
+
+**A silent divergence is worse than an error.** Every one of these four
+defects could have been an error — "the replay needs a document it does not
+have", "these parameters were truncated", "this report covers 64 of your 70
+commands". None of them was, because the pipeline's contract was "run these
+commands and you have the design". It is not enough for the commands to run.
+They have to *arrive*.
+
+This is the same shape as §32, one layer down. There, `ui.click` answered
+`clicked` when it had only rendered; here, `crashes replay` answered "N
+step(s) replayed" when it had rebuilt something else. A message that claims
+more than happened is the defect, whatever the message is about.
+
+### What now holds it
+
+Seven mutations in `scripts/mutation-test-gates.sh`, each of which breaks one
+of the properties above and requires a test to notice:
+
+| Mutation | Caught by |
+|---|---|
+| the verdict always says "reproduced" | `a_replay_says_whether_it_reproduced_the_document` |
+| the replay starts from an empty session | `a_session_that_opened_a_document_replays_onto_it` |
+| the trace keeps the parameters | `the_trace_keeps_the_parameters_exactly` |
+| opening a document does not restart the trace | `opening_a_document_starts_the_trace_again` |
+| opening a document keeps the old undo stack | `opening_a_document_clears_the_undo_stack` |
+| the CLI calls a divergence a reproduction | `a_replay_that_does_not_match_the_report_says_so` |
+| a dropped command is not counted | `a_long_session_reports_how_many_commands_it_dropped` |
+
+---
+
+## 48. The crash report was read as trusted input, and it was executed
+
+§47 made the crash report honest. It also made it **input**: the replay now
+starts from a document the report carries and runs the report's commands. And
+`docs/recipes/fix-a-crash.md` has always said where reports come from — when
+the crash happened on somebody else's machine, it asks for the report file —
+so a report is expected to arrive from **another machine**. The file the app
+writes and the file the CLI reads are the same file, and only the writer's
+assumptions had ever been checked.
+
+### Three measurements
+
+**1. There was no size bound.** The tree has two other readers of the same
+kind, and both cap themselves:
+
+| Reader | Bound | Where |
+|---|---|---|
+| a design file | 64 MiB | `crates/io/src/format.rs` — *"a hostile or truncated file must not reach `serde_json::from_str` with a megabyte of input"* |
+| a script file | 32 MiB | `apps/craftkit-cli/src/cli.rs` |
+| **a crash report** | **none** | `crates/engine/src/crash.rs` |
+
+Measured: a **104 857 690-byte** `report.json` was read in **105 ms** without
+a word of complaint.
+
+**2. The base was not validated.** The design reader refuses a document whose
+nodes share an id — *"two objects share an id: two nodes share an id"* — and
+the crash reader accepted the same document. The consequence is not
+theoretical: a step that named the duplicated id (`node.mute {"node": 1}`)
+**muted the first of the two nodes**, and the replay reported no failure.
+
+**3. The report is executed, and the cost is quadratic.** Every command clones
+the document, so a replay of `n` commands that each add a node copies O(n²)
+nodes. Measured, with the real engine:
+
+| steps | time | per step |
+|---|---|---|
+| 500 | 0.82 s | 1.63 ms |
+| 1 000 | 3.25 s | 3.25 ms |
+| 2 000 | 13.13 s | 6.56 ms |
+| 4 000 | 55.58 s | 13.90 ms |
+
+Each doubling of the steps doubles the per-step cost, which is the signature
+of the square. A report big enough to hold two million steps — and 64 MiB
+holds about two million — would run for **years**.
+
+### What §47 already did for it
+
+The wrong-node edit of measurement 2 was **not silent**, and that is worth
+recording: §47's verdict compared the replayed document with the recorded one
+and answered `reproduced: false`, with the differences listed — *"node 1 is `A`
+in the report and `Level` in the replay"*. The verdict is what turned a
+corrupt report from a wrong answer into a reported one.
+
+It did not make the reader safe, and it did not make the *cost* bounded.
+
+### The fix
+
+- **`MAX_REPORT_BYTES`**, 64 MiB — the design reader's own number, for the
+  same kind of file, and the reader now applies it **while reading**: `take`
+  cuts the file off at the limit, so a ten-gigabyte report costs one buffer
+  rather than ten gigabytes of memory.
+- **`MAX_REPLAY_STEPS`**, 20 000 — the trace a session keeps is bounded at
+  about ten thousand steps, so a report with more was not written by this
+  tree. The check happens **before the first step runs**, because the cost is
+  in the running.
+- **The base is validated**, exactly as the design reader validates a design.
+  A corrupt base is refused with the reason it is corrupt.
+
+### The lesson
+
+**A file the tool writes is not the file the tool reads.** The report is
+written by the desktop app, which knows exactly what it put in; it is read by
+the CLI, the control channel and the MCP server, which know nothing about
+whoever wrote it. The reader is the side that has to cope with anything — and
+it was the side with no bounds and no validation, in a tree where the other
+two readers have both.
+
+The three measurements have one shape: each of them is a place where the
+*writer* was trusted. The trace was trusted to be short (§47's ring), the
+parameters were trusted to be small (§47's truncation), and now the report is
+trusted to be small, well-formed and cheap. Trusting the writer is fine until
+the file leaves the machine — and this one is meant to.
+
+### What now holds it
+
+Three more mutations, each breaking one bound:
+
+| Mutation | Caught by |
+|---|---|
+| the report file is read with no bound | `a_report_larger_than_the_limit_is_refused` |
+| the replay runs as many steps as the report holds | `a_replay_with_too_many_steps_is_refused_before_it_runs` |
+| a corrupt base is replayed anyway | `a_report_with_a_corrupt_base_is_refused` |
+
+---
+
+## 49. Every limit in the tree was checked after the bytes were already in memory
+
+The tree is careful about hostile input. `crates/control/src/protocol.rs` says
+it best:
+
+> A cap is not politeness. Without one, one line from a client that has gone
+> wrong fills memory until the process is killed — and this process holds the
+> user's document.
+
+That cap is there, that reasoning is there, and the memory was spent anyway.
+The cap was checked in the **parser**: the line was read, the file was read,
+and only then did the code look at how long it was. By the time the refusal
+was written, the allocation it was meant to prevent had already happened.
+
+### The measurements
+
+Three readers, each measured with the real program and the real input, before
+and after:
+
+| Reader | Input | Refused? | Peak RSS before | Peak RSS after |
+|---|---|---|---|---|
+| the design file (`craftkit_io::load`) | a 300 MiB file | yes | **300 MiB** | 64 MiB |
+| the MCP server (`stdin`) | a 200 MiB line | yes | **203 MiB** | 7.7 MiB |
+| the control channel (a socket) | a 64 MiB line | yes | **66 MiB** | 3.4 MiB |
+
+Every refusal was **correct and specific**:
+
+- *"the line is 209715208 bytes; the limit is 4194304"*
+- *"the file is 314572800 bytes, and the limit is 67108864"*
+
+The cap did its job. It just did it after the memory was gone.
+
+### The fix
+
+One implementation, in the layer whose own module comment says it holds *"the
+readers that turn hostile input into typed values"*: `craftkit_core::readers`.
+
+- **`read_to_string_bounded`** — reads an input whole and refuses one over the
+  limit. The reader is *cut off* at the limit (`take`), so the input is never
+  read into memory in the first place.
+- **`read_file_bounded`** — the same, for a file, and it reports the file's
+  own size.
+- **`read_line_bounded`** — reads one line, keeps at most `max` bytes of it,
+  and drops the rest. It still reads the rest of the line, so a server that
+  carries on after refusing one stays in step with its client.
+
+Five call sites now use them: the design file, the script file, the crash
+report, the MCP server and the control channel — and the crash report, which
+§48 had already fixed on its own.
+
+### The lesson
+
+**A cap in the parser is not a cap on the memory.** The distinction is the
+whole difference between *"the file is 300 MiB and the limit is 64 MiB"* —
+written after reading 300 MiB — and refusing the file without reading it. The
+first is a message; the second is a limit.
+
+There is a second lesson, and it is the one that cost the tree four readers:
+**the reasoning was right and the placement was wrong, in four places at
+once.** The comment above `MAX_LINE` describes the failure *exactly* — a line
+from a client that has gone wrong filling memory until the process is killed —
+and the code did that anyway, because the check sat one function too far
+down. A cap written next to the parser reads like the parser's business. It
+is the reader's business.
+
+### What now holds it
+
+Two mutations, and one test that can see the property exactly:
+
+| Mutation | Caught by |
+|---|---|
+| the bounded read is not bounded | `a_bounded_read_never_asks_for_more_than_the_limit` |
+| a long line is kept instead of dropped | `the_bytes_kept_never_exceed_the_limit` |
+
+The first test uses a reader that counts the bytes it hands out, so it can
+assert that the reader was **never asked** for more than the limit — which is
+the property, and which no amount of peak-memory measuring could pin down
+reliably.
+
+The second one was **missed** the first time, and the miss is worth
+recording. The mutation broke a branch that decided whether the bytes were
+dropped — and the test still passed, because the *error* was the same either
+way. The difference was in the memory, and the test was looking at the error.
+The mutation now moves the property the test can see: the size of the buffer
+the reader fills. A test that cannot fail is a test that has not been asked
+the right question, and the instrument saying so is the whole point of
+running it.
+
+---
+
+## 50. The engine could write a file its own reader refused
+
+The writer and the reader are two functions in one crate, a few lines apart:
+`craftkit_io::save_text` and `craftkit_io::load_text`. One turns a document
+into text; the other turns text back into a document. The reader **validates**
+what it gets — it has to, because the text may come from a file on disk or
+from a browser's storage. The writer did not.
+
+So the tree could produce a document that was fine in memory and meaningless
+on disk. Two ordinary commands could each do it.
+
+### The measurements
+
+Both measured with the real engine, by reverting the four fixes and running the
+real code — not by reading it.
+
+**The group id that had to be unique in the whole tree.** Two commands:
+
+```
+prop.set  { node: 1, path: "a/trigger/lead", value: 1 }   →  Ok
+prop.set  { node: 1, path: "trigger/lead", value: 2 }     →  Ok
+```
+
+The first creates a group `a` holding a group `trigger`; the second creates a
+group `trigger` at the top level. Two groups, the same id, two depths. Both
+commands reported success.
+
+Then the document was asked whether it was valid, and it said no:
+
+```
+Err(Invalid("node n1: limit reached: duplicate group id"))
+```
+
+Then the writer was asked to save it, and it saved it:
+
+```
+WROTE 7134 bytes
+```
+
+And the reader was handed those 7 134 bytes back:
+
+```
+the document in this file is not valid: invalid: node n1: limit reached: duplicate group id
+```
+
+A file the app wrote, that the app could not open. The web app stashes through
+the same two functions (`apps/craftkit-web/src/main.rs` — `stash_text` calls
+`save_text`, `restore` calls `load_text`), so the same plan, in a browser, was
+a reload away from being lost.
+
+**A range of zero.** One command:
+
+```
+doc.range { start: 0, end: 0 }   →  Ok("range 0.000s..0.000s at 24 fps")
+```
+
+and the document it left behind:
+
+```
+Err(BadMeta("the document is empty: start 0t is not before end 0t"))
+```
+
+A successful command, a plan that cannot be saved, and no hint that the two
+things are related.
+
+### The rule was stricter than its reason
+
+The rule that refused the first document was the model's own, and its comment
+explains it:
+
+> A group id must be unique, because two groups with the same id make `#2` and
+> `dup#1` ambiguous about which one they name.
+
+Two groups with the same id **under one parent**. The old rule did not say
+that — it compared every group id in the whole tree. And the path scheme
+disagrees with it in as many words, in the same file:
+
+> `flatten` counts the occurrences of a name **per level**, because *"`trigger/x`
+> and `trigger/trigger/y` are not competing for the same name space at all"*.
+
+So the rule was stricter than the reason it gave, and `prop.set` — which
+creates groups one level at a time — could cross it on purpose. A rule stricter
+than its stated reason, reachable by an ordinary command, is not a rule. It is
+a trap, and the trap was in the direction that loses work.
+
+### The fix
+
+Three changes, at three levels, because each of them closes a different hole.
+
+**The model** — the duplicate-group-id rule is now scoped to **siblings**, and
+compares case-insensitively, because the resolver's does
+(`index_of_seg` matches with `eq_ignore_ascii_case`): two siblings called
+`Trigger` and `trigger` would always resolve to the first, which is exactly
+the ambiguity the rule exists for.
+
+**The writer** — `save_text` validates the document before writing it. A file
+that cannot be loaded back is worse than no file at all: it looks like a save,
+it takes the name the plan should have, and the refusal comes later, when the
+work is already out of sight.
+
+**The engine** — `Session::execute` validates after every mutating command and
+rolls the snapshot back if the document no longer validates. The check is in
+one place rather than in each command, so the next command cannot forget it.
+
+And `doc.range` refuses `end <= start` with a parameter error, before it can
+leave an empty document behind.
+
+### What the backstop alone would have done
+
+Worth measuring, because it is the difference between *losing work* and *being
+inconvenienced*. With the backstop in place and the old rule still in the
+model, the second `prop.set` is refused:
+
+```
+Err(Internal { id: "prop.set", detail: "the command left the document in a state the file
+              format refuses: invalid: node n1: limit reached: duplicate group id" })
+```
+
+and the document is rolled back — `validate` is `Ok(())` afterwards, and
+`doc.range { start: 0, end: 0 }` is refused for the same reason.
+
+So the backstop alone stops the bad file. But it also **refuses a legitimate
+command**: the user's `trigger/lead` is rejected because of a rule that is
+stricter than its reason. That is why the model was fixed too, and not just
+the writer.
+
+After the fix, the same two commands succeed, the document validates, the file
+is 7 134 bytes — **the same size as the broken one** — and it reads back.
+
+### The lesson
+
+**A file the tool writes is not the file the tool reads.** They are two
+functions with two sets of assumptions, and the gap between them is where the
+work disappears. The reader validates because it cannot trust the input; the
+writer did not validate because it *did* trust the input — it had just built
+it. Trusting your own output is the most expensive kind of trust.
+
+The second lesson is older and sharper: **a model's rule must not be stricter
+than its stated reason.** The reason existed to stop `#2` from being
+ambiguous, and it was enforcing something else — a uniqueness constraint the
+scheme had already decided not to have. The check was not wrong about
+ambiguity; it was answering a question nobody had asked.
+
+### What now holds it
+
+Five mutations, and six tests that can see the difference:
+
+| Mutation | Caught by |
+|---|---|
+| a command may leave a document the file reader refuses | `leaves_a_document_the_file_would_refuse` |
+| two groups with one id are allowed among siblings | `two_siblings_with_the_same_id_are_refused` |
+| the same group id at two depths is refused again | `a_group_id_may_repeat_at_a_different_depth` |
+| a group is created under a name the path does not name | `a_group_name_at_two_depths_survives_the_file` |
+| the writer writes a document the reader would refuse | `the_writer_refuses_a_document_the_reader_would_refuse` |
+
+The third of those restores the **old rule exactly** — the group ids threaded
+back through the recursion, the check tree-wide again — so it is not a
+hypothetical mutation but the defect itself, put back for the test to catch.
+
+The third of those was **missed** the first time, and the miss is the useful
+part. The mutation changed the group's *label* and left its *id* alone — and
+the test still passed, because the resolver matches on the id. A mutation that
+changes the wrong thing measures nothing, and the script reported it as
+*caught* only because the mutation had broken something else. The mutation now
+moves the id, and the test fails with the group's real structure in the
+message:
+
+```
+the top-level group is missing: PropGroup { id: "props", …,
+  Group(PropGroup { id: "a#2", label: "a", nodes: [Group(PropGroup { id: "trigger#2", …
+```
+
+---
+
+## 51. The writer had no limit, and the reader did
+
+§49 gave the reader a limit — 64 MiB, applied *while* reading. The writer
+never learned about it. So the tree could write a file that the tree could not
+open: §50's shape, one level up, and §50's fix did not touch it, because §50
+was about a document being *invalid* and this is about it being *too big*.
+
+### The measurements
+
+A document the model's own limits allow: one node, 32 properties, 10 000
+keyframes on each. `MAX_PROPERTIES` is 50 000 per node and `MAX_KEYS` is
+10 000 per property, so this is inside every limit the tree has. Serialised,
+it is **74 820 332 bytes**.
+
+Then:
+
+```
+save      -> Ok(())      // 74 820 332 bytes on disk
+load      -> the file is 74820332 bytes, and the limit is 67108864
+load_text -> the file is 74820332 bytes, and the limit is 67108864
+```
+
+A file the crate wrote, that the crate could not open. The desktop app has no
+save path yet (§33), so the reachable surface today is the web app's stash —
+which uses the same `save_text` — and there the browser's own storage quota
+hid the defect by accident. A 74 MiB stash is refused by a browser long
+before it reaches the disk; a 74 MiB file is refused by nothing at all.
+
+### The fix
+
+**`File::to_text` now writes *through* a limit.** A `LimitedWriter` refuses
+any chunk past `MAX_FILE_BYTES`, so the text is never more than the limit in
+memory and the file is never bigger than the reader will take. `to_text_bounded(max)`
+is the general form; `to_text` uses `MAX_FILE_BYTES`.
+
+The refusal is a new error variant, `FormatError::TooLargeToWrite`, because
+the message has to be true: there is no file yet, and *"the file is N bytes"*
+about a file that was never written is the kind of small lie this tree does
+not tell. It says:
+
+```
+the file would be more than 67108865 bytes, and the limit is 67108864
+```
+
+The count is a **lower bound**, and the wording says so: the writer stopped
+there rather than finishing the text to find out how big it really was.
+
+`save_text` inherits the refusal, `save` inherits it, and **no file is
+written** — the refusal happens before the temporary file is created, so
+there is nothing to clean up and nothing half-written:
+
+```
+save_text -> the file would be more than 67108865 bytes, and the limit is 67108864
+save      -> the file would be more than 67108865 bytes, and the limit is 67108864
+file on disk -> None
+```
+
+A document that *is* under the limit still saves and loads, because a limit
+that refuses everything is not a limit, it is a wall. There is a test for
+that half too.
+
+### The lesson
+
+**A limit belongs to both ends of a pipe.** §49 taught that a limit checked
+after the bytes are in memory is not a limit at all. This is the same lesson
+from the other end: a limit on one end of a pipe is a limit on *both*, or it
+is a half-measure that only ever surprises the side that has to cope with
+it. The reader's 64 MiB cap was never a safety feature — it was a rule the
+writer was breaking, every time it wrote a big enough plan.
+
+And the second lesson is about the shape of the work: **the writer and the
+reader are one contract with two halves.** §50 fixed the validity half — the
+writer must not write a document the reader refuses — and §51 fixed the size
+half. Two defects, one contract, and the second was found only because the
+first had made the contract explicit. A defect you have already written down
+the rule for is much easier to find than one you have not.
+
+### What is still open
+
+The writer now refuses a document too big to save, so no work is lost to a
+file that cannot be opened. But the **engine can still hold** such a
+document: nothing stops a command from growing the plan past what can be
+written, and the engine keeps 128 copies of it for undo. That is §52, and it
+is a different kind of limit — a budget rather than a cap.
+
+### What now holds it
+
+Two mutations, and three tests:
+
+| Mutation | Caught by |
+|---|---|
+| the writer writes a file too large to read back | `a_document_too_large_to_read_back_is_not_written` |
+| the writer keeps the bytes it refused | `the_writer_keeps_no_more_than_the_limit` |
+
+The second one is the interesting one, and it is §49's lesson turned into a
+mutation. The first version of the fix serialised the whole text and checked
+its length afterwards — correct, and useless: the 74 MiB had already been
+built. The mutation keeps the chunk the writer refused, and the test says
+exactly what it saw:
+
+```
+the writer kept 16 bytes of a 10-byte limit
+```
+
+---
+
+## 52. The undo stack kept 128 copies of a document nobody had measured
+
+The history module says what its design costs:
+
+> The cost is a clone per mutating command on a document of at most
+> `MAX_NODES` nodes — bounded, predictable, and profiled rather than guessed.
+
+It was none of the three. `MAX_NODES` is a count of nodes, not a number of
+bytes, and the product of the model's counts — 10 000 nodes × 50 000
+properties × 10 000 keyframes — is a number no machine has. Nothing had ever
+measured it, because measuring it was not something the tree did.
+
+### The measurements
+
+A document the model's own limits allow: one node, 20 properties, 10 000
+keyframes on each — 200 000 keyframes, about 12 MiB of memory. Then 128
+mutating commands, which is what the history is there for.
+
+| | before | after |
+|---|---|---|
+| resident size with the document loaded | 25 748 KiB | 25 752 KiB |
+| resident size after 128 mutating commands | **1 638 844 KiB** (1.56 GiB) | **88 560 KiB** |
+| undo steps kept | 128 | 3 |
+| resident size after undoing all 128 | 1 664 436 KiB | 112 784 KiB |
+
+**1.56 GiB** for a 12 MiB plan, and **undoing every step did not give it
+back** — the snapshots moved to the redo stack, so "undo everything" freed
+nothing at all. The one thing a person reaches for when the app is heavy was
+the one thing that did not help.
+
+### The fix
+
+Three parts, because "the document is too big" is three different questions.
+
+**An estimate.** `Document::estimated_bytes()` walks the document and counts
+what it holds: the structures, the strings' *capacities* rather than their
+lengths, and every keyframe and value. It never under-estimates — a budget a
+document can lie about is not a budget. For the 12 MiB document it says
+19 207 535 bytes, about 1.5× the real thing: conservative, and the direction
+that matters.
+
+**A limit on the document.** `limits::MAX_DOCUMENT_BYTES` (32 MiB) is checked
+in `Document::validate()`, which is the check the engine already runs after
+every mutating command (§50) and the check the reader and the writer already
+run. So a command that grows the plan past the limit is *refused and rolled
+back*, a file that holds one is refused, and the number is one number in one
+place.
+
+**A budget on the history.** `MAX_HISTORY_BYTES` (64 MiB) bounds the undo and
+redo stacks *together*, in bytes. The count of steps (`MAX_ENTRIES`) is still
+there for the small-document case, where 128 steps cost nothing; when the
+document is large the budget binds first and the oldest steps go. Which is
+what a budget means: the stack keeps as much undo as it can afford.
+
+> **§68: this paragraph was the intention, and the code did not do it.** The
+> budget counted the memory the stacks hold together, and the one operation
+> that *frees* memory — throwing the redo stack away when a new edit arrives
+> — did not give it back. So the budget was enforced against a phantom, and
+> on a full-size document it emptied the undo stack: undo stopped working
+> after twenty-one edit/undo cycles. A section that verifies a mechanism and
+> then describes it is still a description, and this one described a mechanism
+> that was not finished.
+
+### The lesson
+
+**A count is not a bound on memory.** Every limit in the model was a count,
+and each one was correct about what it counted. What none of them said was
+what the thing counted *held* — and the history multiplied that silence by
+128. The limit that was missing was not a bigger limit on nodes or
+keyframes; it was a limit in the unit the resource is actually spent in.
+
+The second lesson is about the sentence: *"bounded, predictable, and profiled
+rather than guessed"* was a claim about work that had been done. It had not
+been. A comment that says a thing was profiled is a promise to the next
+reader, and the only way to keep it is to profile it — which takes one
+measurement, and takes ten minutes.
+
+### What is still open
+
+The engine still clones the whole document for **every** command, including
+the read-only ones, because the snapshot is what restores the design if a
+command fails or panics. Measured on the 19 MiB document: the clone is
+**205 µs**, and twenty cheap commands through the engine take 38 ms — so
+about 1.9 ms of engine overhead per command. That is the price of the
+restore guarantee, and it is the right price: a snapshot cannot be subtly
+wrong, which is the whole reason the design is snapshots rather than
+inverted commands.
+
+The 108 ms that first showed up in this section was **not** the clone. It was
+`plan.evaluate` doing a full, uncached evaluation of the whole document on
+every call — which turned out to be §53's subject, and which now costs 5 ms
+instead of 102 ms.
+
+The fix that would remove the clone's 205 µs is copy-on-write: share the
+property tree between the snapshot and the live document and clone only the
+branch a command writes. That is a redesign of the model's ownership rules,
+not a patch, and it is the kind of change that should be a decision rather
+than an accident. It is recorded here rather than done.
+
+### What now holds it
+
+Three mutations, and three tests:
+
+| Mutation | Caught by |
+|---|---|
+| a document over the byte limit is accepted | `a_document_over_the_byte_limit_is_refused` |
+| the size estimate does not count the content | `the_history_keeps_its_memory_within_a_budget` |
+| the undo stack ignores its memory budget | `the_history_keeps_its_memory_within_a_budget` |
+
+The second one was **missed** the first time, and the miss is the useful
+part. The mutation zeroed `Value::estimated_bytes` — so the estimate
+under-counted — and the test still passed, because an under-estimate is still
+an estimate and the budget still bound. The count that decides the budget is
+the keyframes' count, and that is what the mutation moves now. The test says
+what it saw:
+
+```
+the budget should have bound this before the count did: 128 steps
+```
+
+---
+
+## 53. The evaluator's cache cost 7 400 times more than the work it avoided
+
+The evaluator keeps the last plan and reuses the states of nodes that have
+not changed. "Has not changed" is answered by a **fingerprint** — a hash of
+the node — and the fingerprint used to be *the node's serialised form*:
+`serde_json::to_string(&node.props)`, hashed.
+
+The code said why, and it was right at the time:
+
+> A hand-written structural hash would be faster, and would have to be
+> updated by hand every time the model grows a field. A forgotten update is a
+> **silent wrong answer**: a stale state the engine believes. Hashing the
+> `serde_json` form cannot drift. Correctness first; if this ever shows up in
+> a profile, move it to a single `Node::fingerprint` and keep it there.
+
+This is that profile.
+
+### The measurements
+
+One node, 20 properties, 10 000 keyframes on each — 200 000 keyframes, a
+document the model's own limits allow.
+
+| | before | after |
+|---|---|---|
+| the work the cache avoids (`resolve_props`) | 7 µs | 7 µs |
+| the cost of the cache (one fingerprint) | 52.1 ms | **5.0 ms** |
+| a cold evaluation | 101.6 ms | **5.0 ms** |
+| a warm evaluation — everything reused, nothing evaluated | 102.6 ms | **5.0 ms** |
+
+The two lines that matter are the last two. A **warm** evaluation, where
+every node was reused and *no node was evaluated at all*, cost exactly as
+much as a cold one — because the fingerprint was computed **twice** per
+evaluation (once to decide whether the state could be reused, once again when
+the cache was rebuilt) and each one was a full JSON serialisation of the
+node's 12 MiB of properties.
+
+So the cache cost **7 400 times** more than the work it avoided, and a cache
+that costs more than it saves is not a cache; it is a tax on every
+evaluation, taken whether or not anything was reused.
+
+### The fix
+
+Two changes, and the tree had already decided both.
+
+**The fingerprint is structural.** `Node::fingerprint` now lives in the
+model, next to the data it hashes, and walks the fields directly: no
+allocation, no JSON, 5 ms instead of 52 ms. The comment above it had already
+named this as the answer — *"if this ever shows up in a profile, move it to a
+single `Node::fingerprint` and keep it there"* — and this is that profile.
+
+**The fingerprint is computed once.** The cache rebuild reuses the
+fingerprint the reuse check already computed.
+
+The evaluation of that document is **20 times faster**, and the cost is now
+in the right place: a plan of 40 ordinary nodes evaluates in 68 µs, and a
+warm evaluation of the same plan is 33 µs, so the cache does what it was
+written to do.
+
+### The risk, and what holds it down
+
+A hand-written hash is the thing the old comment was afraid of, and the
+fear was right: a field the model grows and the hash forgets would let the
+evaluator serve a state computed from the old value — a silent wrong answer,
+with nothing anywhere reporting a problem.
+
+So the risk is held down by a test that sits next to the hash:
+`the_fingerprint_sees_every_part_of_the_node` changes each part of a node in
+turn — the id, the name, the kind, the muted flag, a group's id and label, a
+property's id, label, value, locked flag, hint and keyframes — and requires
+the fingerprint to move every time.
+
+And the part nothing checked at all: **no test in the tree changed a
+*keyframe* and then re-evaluated.** The other cache tests change a property's
+value or move a node; the keyframes are the part of a node a hand-written
+hash is most likely to forget, and they were the part with no test. There is
+one now:
+`a_node_whose_keyframes_changed_is_not_served_from_the_cache`.
+
+### The lesson
+
+**Measure the thing you are optimising against the thing you are paying.**
+The cache was written to avoid re-evaluating nodes, and it was measured
+against nothing; the profile it asked for took ten minutes and showed that
+the mechanism cost 7 400 times the work. A cache that has never been timed
+is a belief.
+
+And the second lesson is about the comment: it said *"if this ever shows up
+in a profile"* — and the profile was the only thing that could have told the
+tree the trade had gone bad. The comment was not wrong; it was **waiting for
+a measurement that nobody had gone to take**. The engine's own promise, in
+§52, was the same shape: *"bounded, predictable, and profiled rather than
+guessed"*.
+
+### What now holds it
+
+Three mutations, and the two that already existed moved with the code:
+
+| Mutation | Caught by |
+|---|---|
+| the fingerprint stops looking at the node's properties | the evaluator's own tests |
+| the fingerprint stops looking at the keyframes | `a_node_whose_keyframes_changed_is_not_served_from_the_cache` |
+| the node's name stops being part of the fingerprint | `a_restore_cannot_serve_a_state_from_the_document_it_replaced` |
+
+The middle one is new, and it is the one that matters: it is the mutation
+the old code could not express, because a serialisation-based fingerprint
+*cannot* forget the keyframes. The risk arrived with the fix, and so did the
+test that holds it down.
+
+### The prose was still describing the old fingerprint
+
+Two documents said the fingerprint was *"FNV-1a over the document's serde
+form"*: `docs/design/file-format.md` and `docs/architecture.md`. The second
+went further and explained why — *"Hashing the serialization cannot drift"* —
+which is the argument the fix had just given up on purpose.
+
+Nothing noticed. `cargo xtask lists` checks that prose **points at** code that
+exists — a file, a line, a symbol, a test — and both documents pointed at
+things that all still exist. What they no longer *said* was not checked,
+because checking what prose says is the heuristic this tree does not do
+(§29). The only thing that found it was reading the documents after changing
+the code, which is a thing a person does and a gate does not.
+
+So: **a gate that checks that prose points at code is not a gate that checks
+that prose describes code.** The two are different questions, and only the
+first one has a cheap mechanical answer. The second one still depends on
+somebody reading the document after the code moves — which is why the
+documents are part of the change and not part of the aftermath.
+
+---
+
+## 54. The second instance took the first one's token file
+
+The control channel is how an agent drives the running application. The token
+is not passed out of band: the app writes it to a file, and the agent reads
+the file. The file is the promise — *this port answers to this token* — and
+the app wrote it **before** it knew whether it held the port.
+
+### The measurements
+
+Two instances, the second one on the port the first one already had:
+
+```text
+$ craftkit --sample --control 47766        # the first instance
+control channel listening on 127.0.0.1:47766
+token in /home/…/craftkit/control/47766.token
+
+$ craftkit --sample --control 47766        # the second instance
+control channel: could not bind 127.0.0.1:47766: Address already in use (os error 98)
+$ echo $?
+1
+```
+
+The second instance failed, said so, and exited. And it had already
+overwritten the first instance's token file on its way to the bind:
+
+```text
+A's token:    e776f56747069df6…
+token file:   5d170a412cb47724…   (changed: YES)
+```
+
+So the first instance was still running, its window was still there, and the
+token in the file was the **second** instance's — a token belonging to a
+process that had already exited. An agent that did what the documentation
+told it to do — read the file, connect, send — got:
+
+```text
+control channel: rejected a connection with a bad token
+```
+
+…from an application that was working perfectly, on a port that was open.
+The failure looks like a security rejection, so the first thing anybody
+reasons about is *"is someone else using my token?"* — and the answer is no:
+the token is the app's own, written by a copy of the app that quit.
+
+### The fix
+
+**The channel is bound before the token is published.** The order is the
+whole contract: a promise is not made for a port this process does not hold.
+`craftkit_control::serve_published` does both, in that order, and the app
+calls it.
+
+The file is also named for the port that was **bound**, not the one that was
+asked for. With `--control 0` the operating system picks the port, and the
+old code wrote a file called `0.token` — a promise about nothing.
+
+After the fix, the same two instances leave the first one reachable:
+
+```text
+token file: e776f56747069df6…   (changed: NO)
+the running app with the token from the file ->
+  {"id":1,"ok":true,"message":"0 command(s), 0 failure(s)","data":{…,"nodes":3,…}}
+```
+
+### The escape hatch that did not exist
+
+The reason no test caught this is worth recording, because it is the more
+general failure.
+
+`token_path`'s own comment said:
+
+> `CRAFTKIT_CONTROL_DIR` overrides it, which is what lets a test run entirely
+> inside a temporary directory.
+
+It cannot. Setting an environment variable is `unsafe` in edition 2024, and
+the crate forbids `unsafe` — so **no test in that crate can use the escape
+hatch its own documentation advertises.** The mechanism was described, it
+worked for a launch script, and it was not reachable from a test. The test
+that would have caught the takeover could not have been written the way the
+documentation said to write it, so it was not written.
+
+So the fix also adds what a test can actually use: `ServerOptions::with_token_dir`,
+a per-server token directory. The environment variable is for *launching* the
+app; the option is for *testing* it, and the comment now says so.
+
+### The lesson
+
+**A promise is made after the thing it is about has happened.** The token
+file says "this port answers to this token", and it was written before anyone
+knew whether this process held the port. Every ordering that matters in this
+tree is the same ordering: the crash report is written when the process
+dies, the document is validated before it is written, the file is validated
+before it is loaded, the bound is taken before the token is published.
+
+And the second lesson is about the escape hatch: **a documented mechanism
+that cannot be reached is worse than no mechanism**, because it explains why
+the test was not written. The comment was not wrong about the environment
+variable — it was wrong about *who could set it*, and that difference is
+exactly the difference between "there is a way to test this" and "there is
+not".
+
+### What now holds it
+
+One mutation, and one test:
+
+| Mutation | Caught by |
+|---|---|
+| the token is published before the port is bound | `a_second_instance_does_not_take_the_first_ones_token_file` |
+
+The mutation is the old order, and the test says what it saw:
+
+```
+assertion `left == right` failed: the second instance took the first one's token file
+```
+
+---
+
+## 55. The tool changed the permissions of a directory it did not create
+
+The control channel's token file is written by `craftkit_control::write_token`.
+The file's mode is `0600`. The **directory's** mode is `0700` — and the code
+that set it never asked whether the tool had made that directory.
+
+### The measurements
+
+`CRAFTKIT_CONTROL_DIR` relocates the token file. It is documented in three
+places, and every one of them says only *where the file goes*:
+
+- `skills/craftkit-checking/SKILL.md`: "`CRAFTKIT_CONTROL_DIR` relocates the
+  folder — useful for a launch script."
+- `docs/recipes/add-a-control-channel-method.md`: "`CRAFTKIT_CONTROL_DIR`
+  relocates the token file."
+- `crates/control/src/token.rs`: the variable's own doc comment.
+
+Point it at a directory that already exists:
+
+```text
+$ mkdir -p /tmp/shared && chmod 755 /tmp/shared
+$ CRAFTKIT_CONTROL_DIR=/tmp/shared craftkit --sample --control 47772
+control channel listening on 127.0.0.1:47772
+token in /tmp/shared/47772.token
+
+$ stat -c '%a %A' /tmp/shared
+700 drwx------
+```
+
+The directory went from `0755` to `0700`. The application printed nothing
+about it, logged nothing about it, and returned success.
+
+With a `setgid` bit — the usual mark of a directory whose contents belong to
+a group — the bit goes too:
+
+```text
+before: 2775 drwxrwsr-x
+after:  0700 drwx------
+```
+
+`0700` means *the owner, and nobody else*. On a shared machine every other
+user's access to that directory, and to everything already in it, ends at that
+moment — because of a file the user asked to be written somewhere. The
+directory was not the tool's to restrict.
+
+### The coupling: the file's own privacy was never what protected the secret
+
+`write_token`'s own comment said:
+
+> The permissions are set *before* the content is written. Doing it afterwards
+> leaves a window in which another local process can read the token.
+
+That was true of the **directory** and false of the **file**. The code was:
+
+```rust
+std::fs::write(path, body)?;                      // the secret goes in here
+if let Err(e) = restrict(path, false) { … }       // and is locked down here
+```
+
+and `std::fs::write` creates its file with the process's umask. Measured on
+this account, in the directory the tool writes to:
+
+```text
+umask-visible mode of a freshly created file: 0664
+```
+
+So the secret was on disk in a world-readable file between two adjacent
+calls. The window is short — a watcher polling the file's mode never caught
+it in 200 000 attempts — but the promise in the comment was not kept, and
+what actually protected the token was the directory's `0700`.
+
+**That is why the tool felt entitled to change the directory.** The file's own
+mode was not doing the work, so the directory had to. Fixing the directory
+without fixing the file would have left the secret in a world-readable file;
+fixing the file removes the reason to touch the directory at all. The two
+defects are one defect seen from two sides.
+
+### The fix
+
+Two rules, and they are separable.
+
+**The file is private.** It is created `0600` from the moment it exists —
+`OpenOptions::mode(0o600)` — and the mode is *checked* before the secret goes
+into it, so a file that is not private is one the tool refuses to write
+rather than one it writes and repairs. It is then moved into place, so the
+published path is never a half-written file, and a token file left over from
+a previous launch is replaced rather than kept.
+
+**The directory is left alone unless the tool made it.** `write_token`
+records whether the parent existed before it created it, and only restricts
+the ones it created.
+
+After the fix, the same directory keeps its permissions and the token is
+still private:
+
+```text
+before: 0755 drwxr-xr-x
+after:  0755 drwxr-xr-x
+-rw------- 1 … 47776.token
+```
+
+and the application still answers with the token in the file:
+
+```json
+{"id":1,"ok":true,"message":"added filter `Probe`","data":{"id":4,"kind":"filter","name":"Probe"}}
+```
+
+### The lesson
+
+**A tool that keeps a secret safe by changing something it does not own will
+eventually change something it must not.** The directory was not the tool's
+to restrict; the file was. The two got confused because the file's own
+protection was not doing its job, and the confusion was invisible, because
+the outcome — a private token — was right. The wrongness only showed up on
+the one input where "the right outcome for the wrong reason" is not the same
+as "the right outcome": a directory the user named.
+
+The second lesson is smaller and sharper: **a promise in a comment is a
+mechanism.** "The permissions are set before the content is written" was a
+statement about a mechanism that did not exist. The comment was describing a
+different function — `restrict` on the *directory* — and a reader (including
+me, until I measured it) took it as a description of the file. The rule from
+§42 applies here as much as it does to the rollback: a comment that names a
+mechanism has to name the mechanism that is actually there.
+
+### What now holds it
+
+Four mutations, and the tests they bite:
+
+| Mutation | Caught by |
+|---|---|
+| the directory is restricted whether or not the tool made it | `a_directory_that_was_already_there_keeps_its_permissions` |
+| the token file is created `0644` | `the_token_file_is_private_in_a_shared_directory` |
+| the tool's own directory is created `0755` | `a_directory_the_tool_creates_is_private` |
+| a token file that already exists is not replaced | `a_token_file_left_over_from_a_previous_launch_is_replaced` |
+
+One of them has to be honest about what it cannot show. The token file's mode
+is `0600` before the fix and `0600` after it, so **no mutation can catch the
+difference in the file's final state** — the difference is in the state
+*before* the fix finished, which no test can reach. What the mutations lock
+is the directory rule, which is where the observable harm was. The file-side
+guarantee is a promise kept, not a promise proved.
+
+---
+
+## 56. The check that watches the window could watch the wrong window
+
+`scripts/live-window-check.sh` is the only thing in the tree that can see
+whether the window follows the document. Everything else about the repaint is
+unobservable from a test — that was measured, and it is why the script exists
+(§21). It starts the real binary on a real display, drives it over the
+control channel, and compares the window's own pixels before and after.
+
+It found the window by name.
+
+### The measurement
+
+The window it found looked like this:
+
+```text
+$ DISPLAY=:1 xwininfo -root -tree | grep '"craftkit"'
+        0x3e00005 "craftkit": ("craftkit" "craftkit")  1180x720+10+45  +106+114
+```
+
+and the id was pulled out with
+
+```bash
+grep -o '0x[0-9a-f]\+'
+```
+
+which matched **two** things on that line:
+
+```text
+$ … | grep '"craftkit"' | grep -o '0x[0-9a-f]\+'
+0x3e00005
+0x720
+```
+
+`0x720` is not a window. It is the *width*: the geometry on the same line
+says `1180x720+10+45`, and `0x720` is the tail of it. Only the first id was
+used, so this did not bite by itself — but it shows the extraction was
+reading a line rather than a field.
+
+The name was the real problem. **A second instance of the application has a
+window with the same name**, and the script took whichever the X server
+listed first.
+
+### What it cost
+
+A leftover instance — one of several, from something else that happened to be
+running — was enough:
+
+```text
+live-window: window 0x3e00005            # the *other* instance's window
+engine: 3 nodes before, 7 after, 0 failure(s)
+live-window: 0 differing pixels (< 1000)
+live-window: the engine changed and the window did not — this is the stale-window bug
+```
+
+The check reported the bug it exists to find, with the diagnosis attached.
+The code was fine. The check was watching a window that had never received
+the commands.
+
+This is the failure the script's own comment claimed to have avoided:
+
+> The window, found by name rather than assumed — a stale id from a previous
+> run would capture whatever is there now, which is exactly the kind of quiet
+> wrong answer this project keeps paying for.
+
+It did avoid a *hard-coded* id. It did not avoid the window it actually had
+to avoid: **another instance's**.
+
+The false direction is the dangerous one. A wrong window that happens to
+change — because something else drove *it* — makes the check report a
+**pass** while the window under test stayed stale.
+
+### The fix
+
+An X window carries `_NET_WM_PID`: the process that owns it. Measured:
+
+```text
+window 0x4400005 -> pid 53939
+```
+
+and 53939 was the application's own pid. So the check now finds the window
+**by pid**:
+
+- every window named `craftkit`, with the pid that owns it;
+- the one whose pid is the app's is the app's window;
+- one candidate and no way to tell whose it is → use it, because there is
+  nothing to confuse it with;
+- more than one candidate and none of them ours → **refuse**, rather than
+  guess.
+
+"Not ours" is not "not there": the app's window is mapped a moment after the
+process starts, so an early look sees only the other instance's. The check
+waits; only the timeout turns that into a failure.
+
+The ids are read as the *first field* of the line now, not as every
+hex-looking token on it, so the geometry stays out.
+
+### The instrument checks itself
+
+The part of the script that decides which window to measure is pure: it reads
+"id pid" pairs and writes one id. So it can be tested without a display, a
+build or an application:
+
+```text
+$ ./scripts/live-window-check.sh --self-test
+  ok    the window whose pid is ours wins
+  ok    a lone window with no pid is used
+  ok    a window that belongs to another process is refused
+  ok    several windows and none of them ours is refused
+  ok    no window at all means wait
+live-window: self-test ok
+```
+
+The same situation, before and after — a second instance running, the code
+untouched:
+
+| | window chosen | result |
+|---|---|---|
+| the old search | the other instance's | 0 differing pixels — **FAIL**, *"this is the stale-window bug"* |
+| the new search | this app's (pid 53939) | 11 290 differing pixels — **pass** |
+
+### The lesson
+
+**A gate that cannot tell its instances apart measures one of them and
+reports on it.** The name was the only identity the check had, and a name is
+not an identity. The window's pid is.
+
+And the smaller lesson, which cost an hour: **the pid of a backgrounded
+command is not always the pid of the program.** In a shell, `cmd &` gives
+the pid of the job; when the command is compound (`cd … && cmd &`), that is
+the *subshell's* pid and the program underneath is a different process.
+Measured here: the shell reported 52537, whose `/proc/52537/comm` was `bash`,
+while the application was 52539 — and the window carried 52539. The script
+backgrounds a simple command, so `$!` is the application's own pid, and the
+check now prints it: `window 0x4400005 (pid 53939)`. **A gate that names the
+thing it measured is a gate whose answer can be checked** — and this one had
+been answering about a window it could not identify.
+
+### What now holds it
+
+One mutation, and the self-test that bites:
+
+| Mutation | Caught by |
+|---|---|
+| the check stops matching the window by pid | `live-window-check.sh --self-test` |
+
+The mutation is the old rule — *any candidate with a pid will do* — and the
+self-test says what it saw:
+
+```
+FAIL  the window whose pid is ours wins — expected status 0 output 0xb, got status 0 output 0xa
+```
+
+---
+
+## 57. The crash report wrote the design world-readable
+
+A crash report holds the reproduction: the design as it was, and the command
+trace that produced it. It is written automatically, on every unclean exit,
+into a folder the application chooses. It is the most private thing this
+program writes, and it was written with the process's umask and nothing else.
+
+### The measurements
+
+The default folder, on this account:
+
+```text
+default crash folder: /home/…/.local/share/craftkit/crashes
+after:  0775
+report folder 0775
+  report.json  0664
+  design.json  0664
+  replay.json  0664
+```
+
+And the parent it lands in:
+
+```text
+drwxrwxr-x 3 mmacedoeu mmacedoeu 4096 … /home/mmacedoeu/.local/share/craftkit
+```
+
+`0775` and `0664` are world-readable. `~/.local/share/craftkit` is `0755`, so
+the path is traversable too. **On a shared machine, any local user could read
+the design of any project that crashed** — every node name, every property
+value, every keyframe:
+
+```text
+design.json holds 5066 bytes and names the document: {
+  "meta": { "name": "Sample plan", "fps": 24, … },
+  "nodes": [ { "id": 1, "kind": "source", "name": "Level", "props": { … } } ]
+```
+
+And `replay.json` holds the command trace **with its parameters** — §27 made
+that decision deliberately, and it is the right one: a reproduction is
+worthless without the parameters. It is also a list of every name and path
+the document ever carried.
+
+Nothing about this was visible from inside the program. The report was
+written, the app died, and the folder sat there.
+
+### The fix
+
+The same rule as §55, applied to the place that matters more.
+
+**The files are created private.** `write_atomic` opens its temporary file
+with `OpenOptions::mode(0o600)` — private from the moment it exists — and
+renames it into place. It used to be `std::fs::write`, which creates its file
+with the umask: measured `0664` on this account, so the design was on disk in
+a world-readable file between two adjacent calls.
+
+**The report's own folder is `0700`.** It is created by this call, so it is
+this tool's to protect.
+
+**A folder that was already there keeps its permissions.** `CRAFTKIT_CRASH_DIR`
+can name one that other people use too — a shared CI artifact directory, a
+team folder — and §55's rule applies unchanged: only a folder the tool made
+is the tool's to make private.
+
+After the fix, at the same default path:
+
+```text
+default crash folder: /home/…/.local/share/craftkit/crashes
+after:  0700
+report folder 0700
+  report.json  0600
+  design.json  0600
+  replay.json  0600
+```
+
+The report is still readable by the person it is for. `craftkit-cli crashes
+show` prints it to stdout, so **sharing a report never needed the file to be
+world-readable** — a copy carries the user's own umask with it.
+
+### The lesson
+
+**The most private thing a program writes should be the thing it writes when
+something goes wrong.** The design is copied to disk automatically, without
+being asked for, at exactly the moment nobody is thinking about who else is
+on the machine. Every other write in this tree is a file the user chose a
+place for; this one is not.
+
+The second lesson is about repetition. §55 found the *launch token* changing
+the permissions of a directory it did not own. The crash folder had no rule
+at all — and it holds a far bigger prize. **A rule that appears once is a
+coincidence; a rule that appears twice is a convention.** The second
+appearance is what turns "the token file is private" into "what this program
+writes is private", and it took a second measurement to notice that the
+convention did not exist yet.
+
+### What now holds it
+
+Three mutations, and the tests they bite:
+
+| Mutation | Caught by |
+|---|---|
+| the report's folder is left readable by other users | `a_crash_report_is_not_readable_by_other_users` |
+| the design is written readable by other users | `a_crash_report_is_not_readable_by_other_users` |
+| a crash folder the tool did not create is made private anyway | `a_crash_folder_that_was_already_there_keeps_its_permissions` |
+
+---
+
+## 58. The crash report's id was not the id the code's own type promised
+
+`CrashReport::id` has one line of documentation:
+
+```rust
+/// A sortable identifier: `20250907-093012-7f3a`.
+pub id: String,
+```
+
+and `docs/recipes/fix-a-crash.md` says the same thing. The code produced
+something else.
+
+### The measurements
+
+The id was built like this:
+
+```rust
+let mixed = unix ^ (salt << 20) ^ nanos;
+let secs = unix % 100_000_000;
+format!("{secs:08}-{:04x}", mixed & 0xffff)
+```
+
+which gives:
+
+```text
+id the code produces: 92491655-8d92
+id the docs promise: 20250907-093012-7f3a
+```
+
+No date, no time of day, no milliseconds — a number that happens to be
+seconds-since-the-epoch, taken modulo a hundred million.
+
+**And it was not sortable**, which the documentation says it is. The first
+part is `unix % 100_000_000`, so it restarts every 1 157 days:
+
+```text
+a crash one second before the wrap: 99999999-d1ff
+a crash one second after  the wrap: 00000000-d200
+string order puts the LATER one first: true
+```
+
+`list_in` sorts the ids as strings, so once a crash folder crossed that
+boundary the newest reports were listed first and the oldest last — exactly
+backwards, and wrong for the reports a person is looking for.
+
+### The worse half: a second crash destroyed the first
+
+The id's low bits come from the sub-second clock, so two crashes in the same
+second can land on the same id. And `write_to` created the folder with
+`create_dir_all` and wrote the three files into it — so a second report with
+the same id **overwrote the first**.
+
+Measured, 200 crashes in one second:
+
+```text
+200 crashes in one second -> 198 report folders, 3 229 182 bytes
+```
+
+Two reports were gone. And deliberately:
+
+```text
+two crashes with the same id -> 1 folder(s): ["20250907-093012-7f3a"]
+the folder now holds: the SECOND crash
+the first crash's report is gone: true
+```
+
+A crash report is the only evidence that a crash happened. It is written by
+the panic hook, on every unclean exit, with no idea whether another one is
+about to arrive. **The second crash took the first one's evidence.**
+
+### And a test was relying on it
+
+The control crate's crash-replay test plants a report whose recorded design
+does not match what its commands build, so the replay can be seen to say so.
+It planted that report by **writing it over the honest one** and then asking
+for the id — which only worked because a second report with the same id
+overwrote the first.
+
+```rust
+let mut lying = report.clone();
+lying.design = serde_json::json!({ "meta": { "name": "lies" }, "nodes": [] });
+craftkit_engine::crash::write_to(&dir, &lying).expect("the report is written");
+let request = Request::new(10, Method::Crashes)
+    .with_params(json!({ "action": "replay", "id": lying.id.clone() }));
+```
+
+The test failed the moment the defect was fixed, because the honest report
+was still there to be replayed. It now writes the lying report as its own
+report, under its own name. **A test that sets up its scenario with the
+defect cannot be the test that catches it** — and this one had been quietly
+certifying the defect all along.
+
+### The fix
+
+**The id is the documented one.** `YYYYMMDD-HHMMSS-xxxx`, in **UTC** so the
+same crash gets the same id on every machine, with four hex digits of
+sub-second position so two crashes in the same second usually differ and the
+ids sort into the order things happened.
+
+The date arithmetic is written out — the tree has no date library and this is
+arithmetic, not a dependency. The epoch is shifted to 0000-03-01, which puts
+the leap day at the end of a year and makes every month the same length; the
+era is 400 years wide because 400 years hold exactly 146 097 days. The result
+is pinned against dates anybody can check:
+
+| Unix seconds | UTC |
+|---|---|
+| 0 | 1970-01-01 00:00:00 |
+| 951 782 400 | 2000-02-29 00:00:00 |
+| 1 234 567 890 | 2009-02-13 23:31:30 |
+| 1 709 164 800 | 2024-02-29 00:00:00 |
+| 4 102 444 800 | 2100-01-01 00:00:00 |
+
+**A report is never overwritten.** If the folder is already there, the report
+is filed beside it — `…-7f3a-2` — and the id inside `report.json` is made to
+match the folder it is in, so the report and its name never disagree.
+
+After the fix, the same 200 crashes:
+
+```text
+200 crashes in one second -> 200 report folders
+first id: 20261020-102425-0088
+last  id: 20261020-102425-ffb4
+the report's id field: "20261020-102425-0088"
+the folder's name:      20261020-102425-0088
+```
+
+### What is still open
+
+The crash folder is now private and complete, and it is still **the only
+unbounded writer in the tree**. The undo stack has a byte budget (§52), the
+trace has one, the command log has a count — and the crash folder has
+neither. Measured: a report of the sample document is 16 309 bytes (the
+design is 5 066 of them, and `report.json` carries the base document too), so
+a crash loop — an application that panics on launch, relaunched by a
+supervisor — writes a full copy of the design every time and nothing ever
+prunes it. Measured, 200 crashes in one second:
+
+```text
+198 report folders, 3 229 182 bytes total (16 309 bytes per report)
+  report.json     11 241 bytes
+  design.json      5 066 bytes
+  replay.json          2 bytes
+```
+
+(Two of the two hundred reports were lost to an id collision — §58 — so the
+folder held 198 of them.) Nothing in the tree deletes a report, and that is
+deliberate for now: deleting somebody's evidence is a decision, not a
+default. It is recorded here rather than left as a surprise.
+
+### The lesson
+
+**An identifier that says nothing is not an identifier.** `92491655-8d92` is
+opaque: it does not say when the crash happened, and it is not the format the
+type beside it documents. The code and its own documentation had been
+disagreeing, and nothing in the tree compares them.
+
+The second half is the one that costs something: **an append-only folder must
+not be writable twice.** Every other writer in this tree is careful about
+overwriting — §35 checks that a command's effect survives the file, §47 checks
+that a replay lands on the right document, §50 checks that the writer refuses
+a document the reader would refuse. The crash folder was the one place where
+a second write silently destroyed the first, and it was the place where the
+evidence mattered most.
+
+### What now holds it
+
+Three mutations, and the tests they bite:
+
+| Mutation | Caught by |
+|---|---|
+| the id stops carrying a date | `the_id_is_the_documented_format` |
+| the date is a day out | `the_date_is_right_for_a_known_day` |
+| a second crash destroys the first crash's report | `a_second_crash_does_not_destroy_the_first` |
+
+---
+
+## 59. The frame size was capped per side, and the area was not
+
+`ui.render` and `ui.screenshot` draw a frame and answer with it as a PNG. The
+size is hostile input like any other — it arrives from an agent, a script or a
+file — and `crates/ui/src/raster.rs` says so:
+
+> `width` and `height` arrive from an agent, a script or a file, and a zero or
+> a hundred-thousand would either divide by zero or **allocate until the
+> process dies**.
+
+There was a cap. It was on each side:
+
+```rust
+pub const MIN_SIZE: usize = 64;
+pub const MAX_SIZE: usize = 8192;
+```
+
+### The measurements
+
+8192 on each side is allowed. 8192 on each side is **67 108 864 pixels**, and
+a frame holds four bytes per pixel.
+
+```text
+1180x720:  50.8ms  png     251 212 bytes  peak RSS  10 136 KiB
+2048x2048: 223.7ms  png   1 100 579 bytes  peak RSS  24 812 KiB
+4096x4096: 940.1ms  png   3 005 688 bytes  peak RSS  77 536 KiB
+8192x8192: 3.52s    png  11 091 593 bytes  peak RSS 301 028 KiB
+```
+
+**301 MB of resident memory**, for one picture of a three-node sample
+document. The pixel buffer alone is 268 435 456 bytes. On the build machines
+this program is meant to run on — the app's own documentation calls itself
+*"a usable headless host"* on a build machine — that is the allocation the
+limit's own words were about.
+
+In the running application, over the control channel:
+
+```text
+the render finished at 6.34 s, reply 14 789 463 bytes
+```
+
+**14 789 463 bytes on one line.** The protocol caps a *request* line at 1 MiB
+(`MAX_LINE`), and the reply was 14 times that.
+
+And the app was not answering anything else while it drew:
+
+```text
+a session.stats issued 1.0 s into the render came back after 6.27 s
+```
+
+The session is behind a mutex, and the shell holds it for the whole frame —
+it has to, because a panel can run a command through the shell. So one
+request from one agent froze the application for six seconds and a half.
+
+### The fix
+
+**A limit on each side is not a limit on the whole.** The memory a frame costs
+is its *pixels*, so the budget is in pixels:
+
+```rust
+pub const MAX_PIXELS: usize = 16_777_216;   // 4096 × 4096
+```
+
+16 777 216 keeps every frame the tool draws itself, a retina-sized one and a
+4K one; it refuses the one that hurts. The per-side cap stays, so a wide
+frame is still allowed — 8192 × 2048 is inside the budget.
+
+After the fix, in the running application:
+
+```text
+8192x8192: refused in 0.01s — a frame may be at most 16777216 pixels; asked for 8192x8192, which is 67108864
+4096x4096: ok in 1.86s, reply 4008255 bytes
+```
+
+The refusal is immediate and names both the limit and what was asked for, and
+the largest reply the channel can produce is now 4 MB rather than 14.8.
+
+The documentation is corrected too. `skills/craftkit-checking/SKILL.md` said
+*"lines are capped at 1 MiB"*, and `docs/recipes/add-a-control-channel-method.md`
+said *"one JSON object per line, in and out"* next to `MAX_LINE` — both of
+which read as though the limit applied to replies as well. It does not: a
+reply may be a picture. Both now say **request** lines, and say how to read a
+reply that is 4 MB of base64.
+
+### What is still open
+
+The render still happens while the session is locked, so the application is
+unresponsive for as long as a frame takes. The pixel budget cut the worst case
+from 6.3 s to 1.9 s; it did not remove it. The reason it cannot simply be
+moved out of the lock is structural: `Shell` holds `&mut Session` because a
+panel may run a command through it, so a render is not a read. Making the
+headless render path a read — a shell that cannot act — would let the frame
+be drawn from a snapshot outside the lock. That is a change to the UI crate's
+shape, not a cap, and it is recorded here rather than pretended away.
+
+### The lesson
+
+**A limit in the wrong unit is not a limit.** The cap was expressed in *sides*
+because that is how the request names the size — `width` and `height` — and
+the memory is in *pixels*. Every other limit in this tree is expressed in the
+unit it actually bounds: bytes for a file (§49), bytes for a document (§52),
+bytes for the undo stack (§52), pixels for a frame. This one was expressed in
+the unit the *caller* used and the memory did not.
+
+And the smaller half, which is the same lesson from the other side: **a
+limit that is not stated in the direction it applies is not a limit.** The
+channel bounded its reads and said nothing about its writes, and the prose
+that described the channel could not tell a reader which was which.
+
+### What now holds it
+
+One mutation, and the test that bites:
+
+| Mutation | Caught by |
+|---|---|
+| a frame's area stops being bounded | `a_frame_that_is_too_big_in_pixels_is_refused` |
+
+The mutation makes the check unreachable, and the test then renders the frame
+it was supposed to be refused — which takes 7.5 seconds and 301 MB. The gate
+notices the missing refusal, and the cost notices it too.
+
+---
+
+## 60. A tick could be wider than a reply, and the panic was inside a macro
+
+`Tick` is the type every time in this program is stored as. It is an `i128`,
+and its arithmetic **saturates**: the pattern document promises that a
+hostile or nonsensical time *"becomes the nearest representable time; it never
+wraps, **never panics**, and never produces a time in the past from an
+addition"*.
+
+It panicked.
+
+### The measurements
+
+The `time` parameter is a number of seconds, and `craftkit_core::finite`
+accepts anything up to `MAX_MAGNITUDE` — 10^9 seconds. One second is
+254 016 000 000 ticks, so the largest accepted time is **2.54016 × 10^20
+ticks**.
+
+A reply is JSON, and a JSON number holds an `i64` or a `u64` and nothing
+else: at most **1 844 674 407 370 955 161** ticks. So the parameter's range
+reaches far past what a reply can carry, and the boundary is at
+
+```text
+1 844 674 407 370 955 161 / 254 016 000 000 = 72 623.7 seconds
+```
+
+Every accepted time above 72 623.7 seconds produced a tick no reply could
+hold:
+
+```text
+key.set with a hostile time:
+  time 72624:   ok: keyed `amount` at 72624.000s
+  time 100000:  ok: keyed `amount` at 100000.000s
+  time 100000000: Err("internal"): `key.set` failed unexpectedly (called `Result::unwrap()` on an `Err` value: Error("number out of range", line: 0, column: 0)); your document is unchanged
+  time 18446744073709551616t: Err("internal"): … (the same)
+  time -99999999999999999999t: Err("internal"): … (the same)
+doc.range {"end":1000000000.0,"start":0} -> Err("internal"): `doc.range` failed unexpectedly (called `Result::unwrap()` on an `Err` value: …); your document is unchanged
+```
+
+The user is told *"failed unexpectedly"* and shown a serde error with a line
+and a column. Nothing says *time*, nothing says *too large*, and nothing says
+which parameter.
+
+Two things were working: the document was unchanged (the rollback held) and
+the application did not crash (`Session::execute`'s `catch_unwind` held). The
+command panicked, the boundary caught it, and the user got a message about a
+`Result` in a macro they have never heard of.
+
+### Where the panic was, and why the lint did not see it
+
+The reply was built with `serde_json::json!`:
+
+```rust
+serde_json::json!({ "node": node, "path": path, "time": time.raw(), "value": value })
+```
+
+`json!` converts an interpolated expression with `serde_json::to_value(…)` and
+**`.unwrap()`s it — inside the macro expansion**. The house deny is
+`#![deny(clippy::unwrap_used, …)]`, and clippy cannot see an `unwrap` that
+exists only after a macro expands. So the rule that exists to stop exactly
+this was, for this case, not running.
+
+There were **seven** places in the tree that put a tick into a `json!`:
+`commands.rs` (three), `control/src/server.rs`, `engine/src/session.rs`,
+`io/src/format.rs` and `engine/src/crash.rs`. And one of them had already hit
+the wall and worked around it locally:
+
+```rust
+at: i64::try_from(session.at().raw()).unwrap_or(0),
+```
+
+The crash reporter had to clamp the playhead to an `i64` so its own report
+could be written. That is the fingerprint of a problem nobody had named.
+
+### The other half: the format is wider than the model
+
+The file format can hold **more** than the model would. A bare integer in a
+file is read straight into an `i128` — `serde_json` has a path for that — so
+a file can name an instant that no JSON number holds. Measured, before the
+fix: a file whose `start` was 18446744073709551616 was written, read back
+and **loaded**, and the document validated. That document's playhead could
+not be reported by any reply.
+
+### The fix
+
+**The model's tick range is the range a reply can hold.** `Tick::MIN` is
+`i64::MIN` and `Tick::MAX` is `u64::MAX` — the integers a JSON number holds.
+They were `i128::MIN / 4` and `i128::MAX / 4`, which is 2.3 × 10^18 times
+wider.
+
+So saturation now lands on a representable value, the promise the pattern
+document makes is true again, and the panic is unreachable:
+
+```text
+key.set with a hostile time:
+  time 72624:   ok: keyed `amount` at 72624.000s
+  time 100000000: ok: keyed `amount` at 72620402.155s
+  time 1000000000: Err("internal"): `key.set` failed unexpectedly (the command declared that it mutates the document but changed nothing); your document is unchanged
+```
+
+No panic, anywhere. (The second message is the no-op detector doing its job:
+the time saturated onto the key that was already there, so the document
+really did not change. It is a confusing message for a hostile input, and it
+is recorded below.)
+
+**And the reader refuses what the model will not hold.** A file whose range
+is outside the model's range is refused, by name:
+
+```text
+refused: the document in this file is not valid: bad metadata: the document's range is outside what a time can be: 18446744073709551616t..18446744073709551617t
+```
+
+The writer refuses the same document, so §50's contract holds for ticks too:
+the two are one contract with two halves.
+
+### What is still open
+
+Two things, both recorded rather than pretended away.
+
+**The parameter's range is wider than the tick's.** `time` accepts 10^9
+seconds; a tick can carry 72 623.7. So a hostile time saturates rather than
+being refused, which is the documented contract ("an out-of-range time is
+clamped, not an error to handle at every call site") — but the message the
+user gets when the clamped time collides with an existing key is *"the command
+declared that it mutates the document but changed nothing"*, which does not
+mention time at all. A cap of 72 623 seconds on the `time` parameter would
+make it honest, and would also refuse a timeline longer than twenty hours,
+which might be a real thing somebody wants.
+
+**Six `json!` sites carry a tick** and now rely on the model's range being
+the reply's range. That is true, and it is true for a reason nobody wrote
+down at the site. A helper that carried a tick safely — a `Tick` that knows
+how to become a `Value` — would make the six sites independent of the bound
+and would put the rule in one place.
+
+### The lesson
+
+**A saturation has to land somewhere the rest of the system can carry.** The
+arithmetic was right: it saturated, it did not wrap, it did not go negative.
+It saturated into a value that nothing else in the program could hold, and
+the program had no way to say so.
+
+The second lesson is the one that should change how the tree is written:
+**a lint cannot see inside a macro.** `json!` is used everywhere in this tree
+to build replies, and every `json!` that interpolates a `u64` larger than
+`i64::MAX`, or an `i128` at all, carries a hidden `unwrap`. The house deny
+was written to stop exactly that and could not. The answer is not to remove
+the deny — it is to know which macros hide one, and to keep the values that
+go into them inside the range the macro can carry.
+
+And the third is the one about this file: **the promise was in a pattern
+document, and the pattern document was right.** *"never panics"* was written
+down, checked by nobody, and was false for six years. §10 found two doc
+comments in one file describing a saturation rule that did not exist; this is
+the same shape again, one level up: a pattern document describing a rule the
+code did not keep.
+
+### What now holds it
+
+Three mutations, and the tests they bite:
+
+| Mutation | Caught by |
+|---|---|
+| a tick can be wider than a reply can carry | `a_hostile_time_does_not_panic_the_command_that_reports_it` |
+| a document whose range no reply can carry is accepted | `a_document_whose_range_is_outside_what_a_time_can_be_is_refused` |
+| a file whose range is too far out is read back | `a_file_whose_range_is_too_far_out_is_refused` |
+
+The suite caught one mistake of mine along the way, which is worth recording
+because it is the kind that would otherwise have been filed as a gap in the
+code. The second and third rows share a mutation — the same line in
+`crates/model/src/document.rs` — and I wrote them as one `swap` followed by
+two `expect_catch` calls. But `expect_catch` **restores the tree after every
+case**, so the second gate ran against an unmutated tree, passed, and was
+reported as MISSED. The run exited non-zero and said which gate. One swap
+serves exactly one gate; the rule is now in the script's header, and the
+script has a check that finds any gate without a mutation of its own.
+
+---
+
+## 61. The file said when it was written, and never said anything
+
+The smallest finding in this file, and the one that took the least measuring.
+
+### The measurements
+
+Every design file carries a header:
+
+```json
+"meta": { "written_by": "craftkit 0.1.0", "written_at": 0, "pending": [] },
+```
+
+and the field's own doc comment said:
+
+```rust
+/// The tick at which it was written. Ticks, never seconds — see
+/// `craftkit-core`.
+pub written_at: i128,
+```
+
+It is **always zero**. `Meta::now()` writes `written_at: zero()`, and nothing
+in the tree reads the field at all — before the fix, the field and its
+neighbours read like this:
+
+```text
+$ grep -rn written_at --include=*.rs .
+crates/io/src/format.rs:106:    pub written_at: i128,
+crates/io/src/format.rs:114:/// The default for [`Meta::written_at`], so a file written before the field
+crates/io/src/format.rs:124:            written_at: zero(),
+crates/io/src/store.rs:126:///   "meta": { "written_by": "a person", "written_at": 0, "pending": [] },
+crates/io/src/store.rs:153:///   "meta": { "written_by": "a person", "written_at": 0, "pending": [] },
+```
+
+So a file says it was written at tick zero, and claims that zero is a time.
+
+### Why the zero is right
+
+Because a file's bytes have to depend on the document and on nothing else.
+Saving the same plan twice has to give the same file, or every save is a
+change and a saved plan does not diff cleanly — and there is a test for
+exactly that:
+
+```rust
+fn the_text_form_is_stable_so_saves_diff_cleanly() {
+    let doc = sample();
+    let a = save_text(&doc).expect("text");
+    let b = save_text(&doc).expect("text");
+    assert_eq!(a, b);
+```
+
+A clock reading in that header would break it on every save. The `craftkit-io`
+crate has no clock in it at all — no `SystemTime`, no `UNIX_EPOCH` — which is
+not an accident but a consequence: the crate that writes the file does not
+know what time it is.
+
+**So the behaviour is right and the doc comment is wrong.** And the reason it
+is right is written down in neither the comment nor the format's design
+document, which shows `"written_at": 0` in its example without a word about
+it. The next person to read that comment would reasonably "fix" the field to
+carry a write time, and the only thing that would stop them is a failing
+test whose name does not mention the field.
+
+### The fix
+
+The comment now says what the field is, and why it cannot be what it is
+called:
+
+```rust
+/// **Always zero.** Reserved.
+///
+/// The field is called `written_at` and the format is a tick count, but it
+/// does not carry a write time, and it must not: a file's bytes have to
+/// depend on the document and on nothing else, so that saving the same
+/// plan twice gives the same file and a saved plan diffs cleanly.
+```
+
+### The lesson
+
+**A field's name is a promise, and a doc comment that repeats the name is not
+a description.** `written_at` says what the field is for and `written_at:
+0` says it is not there. The two were in the same struct, one line apart, and
+nothing noticed — because a reader who already knows the format reads the
+name and skips the comment, and a reader who does not know it reads the
+comment and believes it.
+
+This is the third instance of the shape §53 named: prose that points at real
+code and describes it wrongly. §53's two documents described the old
+fingerprint correctly and in detail; §4 claimed a permission was set before
+the content when it was set after; and here a one-line comment described a
+field that does not exist. **The common thread is that the prose was written
+by someone reading the code, and reading the code is not the same as
+measuring it.** §62 is the fourth, and it is the same shape again: a counter
+whose own doc comment said *"since the process started"* while the storage
+three lines below it was a `thread_local!` cell.
+
+### What now holds it
+
+A test, not a mutation — and that is the right instrument here:
+
+| Property | Held by |
+|---|---|
+| saving the same document twice gives the same bytes | `the_text_form_is_stable_so_saves_diff_cleanly` |
+
+There is no mutation to write, because the thing that could break it — a
+clock in the header — cannot be introduced by changing one line: the crate
+that writes the file does not know what time it is. The property is held by
+the absence of a mechanism, and the test is what says so.
+
+---
+
+## 62. The counter that reports recoveries counted only the thread that asked
+
+The kernel keeps two counters side by side. One of them was wired to the wrong wire.
+
+### The measurements
+
+`crates/kernel/src/lib.rs` keeps two numbers:
+
+- `DEPTH` — how deep the current thread is inside a guarded call. `guarded()`
+  reads it.
+- `RECOVERED` — how many panics the boundary has caught. `recovered_count()`
+  reads it.
+
+The second one existed for a stated purpose, written on the counter itself:
+
+```rust
+/// Panics recovered by this boundary since the process started. Exposed so
+/// the engine can tell "the kernel recovered from something" from "nothing
+/// unusual happened" without parsing a log.
+static RECOVERED: Cell<u64> = const { Cell::new(0) };
+```
+
+**Since the process started.** It was a `thread_local!` cell, so it counted
+since the *thread* started.
+
+Measured with a probe against the real code — one panic recovered on a worker
+thread, then the count read on the main thread:
+
+```text
+main thread before          : 0
+worker thread recovered     : true (is_internal=true)
+worker thread after         : 1
+main thread after           : 0
+main - worker               : -1
+```
+
+And the engine's statistic — the thing the counter was for — after that
+recovery:
+
+```text
+stats on main thread        : Ok(Object {"commands": Number(0), "failures": Number(0),
+                                          "kernel_recoveries": Number(0), "nodes": Number(0),
+                                          "undo_depth": Number(0)})
+```
+
+`kernel_recoveries: 0`, one recovery into the bargain.
+
+### The two threads are never the same thread
+
+In the running app the counter and the work are on different threads:
+
+- The **UI thread** evaluates the document. `Shell::node_list` asks the session
+  for its plan, the session evaluates, and every filter node goes through
+  `apply_gain`, which is wrapped in the kernel's `guard`.
+- The **control channel's thread** answers `session.stats`. The channel spawns
+  one thread per connection and names it `craftkit-control`.
+
+Measured in the running application, with a control connection open:
+
+```text
+=== threads while a control connection is open ===
+  craftkit             tid=35293     <- the main thread: the window, the frame, the evaluation
+  craftkit             tid=35294
+  ...
+  craftkit-contro      tid=35783     <- the control channel's connection thread
+{"id":1,"ok":true,"message":"1 command(s), 0 failure(s)","data":{"commands":1,"failures":0,
+ "kernel_recoveries":0,"nodes":3,"undo_depth":0}}
+```
+
+(The kernel truncates a thread's name to fifteen characters, which is why
+`craftkit-control` reads as `craftkit-contro`.)
+
+So the counter could only ever report recoveries that happened on the thread
+doing the reading, and the reading is not where the work is.
+
+### A negative result worth keeping
+
+**In the tree as it stands the counter can never move at all.** The only
+guarded operation the application calls is `apply_gain`, and its arithmetic is
+total: it refuses a non-finite input and saturates its output. `evaluate_chain`
+and `measure_run` are called by their own tests and by nothing else.
+
+That does not make the defect hypothetical, and it is worth saying why. The
+kernel crate exists so that an untrusted implementation can be plugged in
+later — `crates/kernel/src/ops.rs` says the guard is "the seam where an
+untrusted node implementation would be plugged in", and the crate's own module
+doc says the rule is "if a call can panic and its code is not in this
+workspace, it goes through `guard`". The counter is the tripwire for that day,
+and it was wired to the wrong wire.
+
+**A statistic that cannot move is not evidence of health** — and a statistic
+that could only move on the reading thread would not have been evidence of
+health either.
+
+### The fix
+
+`RECOVERED` is now a process-wide atomic. `DEPTH` stays thread-local, because
+depth *is* a per-thread question: "am I inside a guarded call?" is about this
+thread's stack, while "has the kernel recovered from a panic?" is about the
+process. The two counters answer different questions, and giving them the same
+scope would have been wrong in one direction or the other.
+
+```rust
+static RECOVERED: AtomicU64 = AtomicU64::new(0);
+```
+
+The increment saturates rather than wraps, so the number cannot quietly go
+back to zero and read as "nothing has ever gone wrong".
+
+The command's own doc string now says what the number is, because the other
+counters in that reply are per-session and this one is not:
+
+```rust
+doc: "Counters for the running session: commands, failures, undo depth, kernel recoveries (process-wide).",
+```
+
+### The lesson
+
+**A counter's scope is part of its meaning.** `recovered_count()` had a number,
+a name and a doc comment, and the three did not agree about which process the
+number was counting.
+
+There is a second lesson, and it is the one §53 named: the doc comment said
+*"since the process started"*, and it was not. That is the **fourth** instance
+of prose that points at real code and describes it wrongly — after §53's
+fingerprint, §4's permissions and §61's `written_at`. The common thread is
+that the prose was written by someone reading the code, and reading the code
+is not the same as measuring it: the doc comment and the `thread_local!` were
+three lines apart, in the same block, and the block read as though it were one
+thing.
+
+The two counters sit next to each other and look interchangeable. They are not:
+one asks about a thread and the other asks about a process. **Two numbers next
+to each other are not the same question, and a statistic is only as good as the
+scope it was measured in.**
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A recovery on one thread is counted on another | `a_recovery_on_one_thread_is_counted_on_another` |
+| The session statistics count a recovery from another thread | `the_session_statistics_count_a_recovery_that_happened_on_another_thread` |
+| A guarded call on another thread does not guard this one | `being_guarded_on_one_thread_does_not_guard_another` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the counter goes back to being thread-local, and the kernel test catches it;
+- the statistics stop reading the counter, and the engine test catches it.
+
+There is no screenshot, and there could not be one: nothing on screen changes.
+The defect is in which thread counts, and its whole effect is on a number in a
+JSON reply. The evidence above is a JSON reply, a thread listing and a probe.
+
+---
+
+## 63. The token comparison lost every length difference of 256
+
+The one place in the tree that decides whether a peer may talk to the
+application folded a length difference into a byte.
+
+### The measurements
+
+`crates/control/src/token.rs` compares the presented token with the launch
+token:
+
+```rust
+pub fn matches(&self, presented: &str) -> bool {
+    let a = self.0.as_bytes();
+    let b = presented.as_bytes();
+    let mut diff = (a.len() ^ b.len()) as u8;
+    let n = a.len().max(b.len());
+    for i in 0..n {
+        diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0);
+    }
+    diff == 0
+}
+```
+
+`diff` is a `u8` because it accumulates *byte* differences. The length
+difference is not a byte — it is a count of bytes, and it was folded into the
+same accumulator with `as u8`. A difference that is a multiple of 256 does not
+fit, and the truncation threw it away.
+
+Measured against the **running application**, over the real control channel,
+with the token the application had itself written:
+
+```text
+the token is 64 characters long
+
+  the token itself          -> ACCEPTED
+  a wrong token             -> refused
+  the token + 1 NUL         -> refused
+  the token + 255 NULs      -> refused
+  the token + 256 NULs      -> ACCEPTED
+  the token + 257 NULs      -> refused
+  the token + 512 NULs      -> ACCEPTED
+  the token + 1024 NULs     -> ACCEPTED
+```
+
+A scan of every padding from 0 to 1024 bytes gave exactly:
+
+```text
+accepted NUL-padding lengths from 0..1024:
+  [0, 256, 512, 768, 1024]
+
+every accepted length is a multiple of 256: True
+the multiples of 256 up to 1024 are all accepted: True
+```
+
+**The rule is exact: a presented token is accepted when it is the token, or
+when it is the token followed by a multiple of 256 NUL bytes.**
+
+### Why NUL bytes are the ones that work
+
+The loop treats a byte that is not there as zero:
+
+```rust
+diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+```
+
+so a NUL byte and a missing byte are the same value to it. That is fine on its
+own — the *length* is what has to catch it — and the length is exactly what
+the truncation lost.
+
+The NULs have to be written as `\u0000`, because the channel's own parser
+refuses a raw control character inside a string. That is no obstacle: every
+JSON encoder writes a NUL that way, so the padding arrives as an ordinary
+JSON string.
+
+### What it cost, honestly
+
+The acceptance set is `{token} ∪ {token + 256k NUL bytes}`. A peer still has
+to know the token, so **this is not a way in for somebody who does not have
+it** — the secret is still required, in full, as a prefix. What it is, is a
+comparison that answers *"yes"* to a string that is not the token, in the one
+place the project calls a promise, and a `Token` that compares equal to a
+different `Token`.
+
+That is worth having measured and fixed rather than argued about, because the
+next version of this comparison might be the one where the extra bytes are not
+required to be NUL. The property that was broken is *"this and nothing else"*,
+and it was broken by a truncation rather than by a decision.
+
+### The fix
+
+The accumulator is a `usize` now:
+
+```rust
+let mut diff = a.len() ^ b.len();
+let n = a.len().max(b.len());
+for i in 0..n {
+    diff |= usize::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+}
+diff == 0
+```
+
+`a.len() ^ b.len()` is zero only when the lengths are equal, and the `|=`
+below can never clear a bit it did not set, so a length difference of **any**
+size survives to the end. The comparison is still constant-time over the
+longer of the two, which is what it was before; it is now also exact.
+
+Measured again against the running application, with the fix in:
+
+```text
+=== after the fix ===
+  the token itself            -> ACCEPTED
+  the token +     1 NULs      -> refused
+  the token +   255 NULs      -> refused
+  the token +   256 NULs      -> refused
+  the token +   257 NULs      -> refused
+  the token +   512 NULs      -> refused
+  the token +  1024 NULs      -> refused
+  the token +  4096 NULs      -> refused
+```
+
+### The lesson
+
+**A difference measured in the wrong unit is not a difference.** The length of
+a string is a count of bytes; `diff` held eight bits of it; and the part that
+did not fit was discarded without a word. This is §59's shape in a new place —
+a limit in the unit it does not bound — except that here the unit was not a
+limit but an *accumulator*, and a byte accumulator was asked to hold a count.
+
+There is a second lesson, and it is the sharper one. The comparison was made
+constant-time, and the module's own justification for that was:
+
+> Constant-time. Not because an attacker on loopback can usefully time a
+> 128-bit comparison, but because the alternative is one `==` that someone
+> eventually copies into a path where it matters.
+
+**The `==` it replaced was exact.** The rewrite for a non-functional property
+silently dropped a functional one, and the argument for making the rewrite —
+"the alternative is a `==`" — is an argument for a comparison that was
+*right*. Nobody wrote down the trade, because the trade was not noticed.
+
+**A rewrite for a non-functional property must keep the functional one.** A
+constant-time comparison has to be *constant-time and exact*, and a test that
+checks that one wrong token is refused has not checked the space of tokens
+that are accepted. The property to test is "this and nothing else", and it has
+to be said in those words.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A token with padding on the end is not a token | `a_token_with_trailing_nuls_is_not_a_token` |
+| A token is not accepted because its own tail is NULs | `a_token_is_not_accepted_because_its_tail_is_nuls` |
+| The channel refuses a connection that presents a padded token | `a_connection_with_a_padded_token_is_closed` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the accumulator goes back to a `u8`, and the token's own test catches it;
+- the length is not folded in at all, and the channel's test catches it.
+
+There is no screenshot, and there could not be one: nothing on screen changes.
+The evidence above is a JSON reply, a scan of a thousand padding lengths, and
+a pair of tests.
+
+---
+
+## 64. The limit that bounded the read was credited with bounding the memory
+
+Three readers of untrusted JSON had three unrelated limits, and the largest
+of them bought a gigabyte of memory.
+
+### The measurements
+
+The tree's limits are applied **while reading** — §49's fix, and a good one.
+The reader keeps at most `max` bytes of the line and drops the rest, so a
+peer that sends a gigabyte without a newline costs a buffer.
+
+But the line is then **parsed**, and the parse is what costs memory. The
+limits were written as if reading and parsing were the same thing:
+
+- `crates/control/src/protocol.rs` — `MAX_LINE`, 1 MiB;
+- `crates/mcp/src/rpc.rs` — `MAX_MESSAGE`, 4 MiB;
+- `apps/craftkit-cli/src/cli.rs` — the script limit, 32 MiB.
+
+And four places said so in as many words. `crates/io/src/format.rs`:
+
+> It is applied **while reading**, in [`crate::store::load`], so that a file
+> of any size costs at most this much memory — a cap checked after the read
+> has already paid for what it was meant to prevent.
+
+`crates/core/src/readers.rs`:
+
+> so a line of any length costs at most `max` bytes of memory
+
+Measured against the real tools, with the real limits:
+
+```text
+=== craftkit-cli run, a 32 000 063-byte script ===
+Maximum resident set size (kbytes): 1034584        <- 1 010 MiB
+
+=== craftkit-cli mcp, a 2 600 064-byte message ===
+Maximum resident set size (kbytes): 87024          <- 85 MiB
+```
+
+**A 32 MiB script made the tool use a gigabyte of memory.** A scan of the
+shape confirmed the ratio: the worst case is a JSON array of small numbers,
+because a number is two bytes of text and a parsed value is thirty-two bytes
+— it has to carry its own type — and the vector holding the list can be
+twice its length.
+
+```text
+  1000 keys: serialised        12781 bytes, in memory about       83890 bytes -> 6.6x
+```
+
+The text limit was not wrong about the *read*. It was wrong about what it
+was for.
+
+### Why the document path was the exception
+
+A design file is read under a 64 MiB cap, and the document it holds is
+measured against `MAX_DOCUMENT_BYTES` — 32 MiB of memory — by
+`Document::validate`. That is §52's work, and it is why the document path
+is the one place in the tree where the bytes of a file and the bytes of what
+it holds are two different numbers with the *tighter* one on the memory.
+
+**The tree already knew how to do this and had done it once.** The three raw
+JSON readers were the ones that had not.
+
+### The fix
+
+One number, in `crates/core/src/lib.rs`, and every reader of untrusted JSON
+derives its limit from it:
+
+```rust
+pub const JSON_EXPANSION: usize = 32;
+pub const MAX_JSON_MEMORY_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;
+```
+
+- the control channel's line limit: 1 MiB, unchanged, now derived;
+- the MCP server's message limit: 4 MiB → **1 MiB**;
+- the CLI's script limit: 32 MiB → **1 MiB**.
+
+Measured again with the fix in place:
+
+```text
+=== craftkit-cli run, the same 32 000 063-byte script ===
+craftkit-cli: could not read /tmp/bigscript2.json: the input is 32000063 bytes; the limit is 1048576
+Maximum resident set size (kbytes): 4136
+
+=== a script just under the new limit: 1 040 063 bytes ===
+Maximum resident set size (kbytes): 36836          <- 36 MiB, a factor of 35
+```
+
+**The worst case fell from 1 010 MiB to 36 MiB.** The number that is left is
+the expansion the constant names, and the constant is checked against the
+real size of a parsed value rather than against a number somebody typed:
+
+```rust
+let worst = std::mem::size_of::<serde_json::Value>();
+assert!(JSON_EXPANSION >= worst, "…");
+```
+
+so if `serde_json`'s value ever grows, the text limit has to be re-derived
+with it.
+
+Two smaller things came with it:
+
+- `document_from_json` takes the value **by value**. It used to take it by
+  reference and clone it, and the clone was a second copy of a structure that
+  can be a gigabyte.
+- `replay_as_script` refuses to print a replay script that is too big to be
+  read back, and says which command replays it directly. Printing a script
+  that could not be run, or printing one without its base, would both have
+  been worse than saying so.
+
+And the four claims that the read was the memory are corrected, in the four
+places they were made.
+
+### The lesson
+
+**A cap on the input is not a cap on the memory.** §49 fixed *when* the caps
+are applied — while reading, not after — and the prose written in the same
+edit went one step further and said the read *was* the memory. It was not:
+reading is cheap and parsing is not, and the two differ by a factor that
+depends on the shape of the input.
+
+**A limit in the wrong unit is not a limit** — which the tree has now learned
+twice, in two different units: §59's pixels and §63's bytes. The third time,
+the unit was not wrong but *incomplete*: the number was right, and it was
+answering a question nobody had asked.
+
+**Three unrelated numbers are three unrelated decisions.** 1 MiB, 4 MiB and
+32 MiB were each chosen for a different reader and none of them was written
+down as what it was for, so nobody could see that the largest one was
+thirty-two times looser than the others. One derived number and one budget
+is the whole fix, and the test that keeps it honest is three lines long.
+
+**The path that had already solved it was the evidence.** The document path
+measures its own memory (§52) and the raw JSON paths did not, and the
+difference between them was the size of the gap.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A text limit fits the memory budget once the parse has expanded it | `the_json_text_limit_fits_the_memory_budget` |
+| The expansion covers the real size of a parsed value | `the_expansion_covers_the_size_of_a_parsed_value` |
+| The control channel's line limit is the tree's limit | `the_line_limit_is_the_tree_s_json_limit` |
+| The MCP server's message limit is the tree's limit | `the_message_limit_is_the_tree_s_json_limit` |
+| The CLI's script limit is the tree's limit | `the_script_limit_is_the_tree_s_json_limit` |
+| A script over the limit is refused, and the message says what the limit is | `an_oversized_script_is_refused_with_the_limit_in_the_message` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the MCP server's message limit goes back to being a number of its own, and
+  its test catches it;
+- the CLI's script limit goes back to being a number of its own, and its test
+  catches it.
+
+There is no screenshot, and there could not be one: nothing on screen changes.
+The evidence above is a pair of measurements before and after, and a pair of
+tests.
+
+---
+
+## 65. The number between two keys was never checked
+
+The tree checks every number that enters it. The number *between* two numbers
+was not one of them.
+
+### The measurements
+
+`craftkit_core::Value` documents its invariants:
+
+```rust
+/// Invariants the constructors maintain:
+///
+/// - `Num` is always finite and within [`crate::MAX_MAGNITUDE`].
+```
+
+and `MAX_MAGNITUDE` says why the range exists at all:
+
+> A stored `f64` is written to a JSON file and read back by a future version
+> of the program. Past this magnitude, the arithmetic that follows stops being
+> meaningful long before it stops being finite, so the reader refuses it.
+
+So every stored number is within ±1 000 000 000. The keyframes of an animated
+property are stored numbers, so they are. But the number *between* two keys is
+not stored — it is computed — and `blend` built it directly:
+
+```rust
+(V::Num(x), V::Num(y)) => V::Num(x + (y - x) * t),
+```
+
+`V::Num` is the variant, not the constructor. The constructor is `Value::num`,
+and that is the one that refuses an out-of-range number.
+
+The `t` in that expression is the *eased* progress, and an easing is allowed
+to overshoot on purpose — `Easing::checked` says so:
+
+> out_y is deliberately allowed outside 0..=1: that is how an ease-out
+> overshoots, and clamping it would make every easing preset a lie.
+
+So the curve overshoots, and the value overshot with it. Measured, through the
+real evaluator, on a document whose two keys are ±`MAX_MAGNITUDE` and whose
+first key carries a checked bezier that overshoots:
+
+```text
+MAX_MAGNITUDE = 1000000000
+frame   0: largest resolved |value| = 1000000000,   level_out = 1000000000    (outside the range: false)
+frame   8: largest resolved |value| =  885352521,   level_out =  885352521    (outside the range: false)
+frame  12: largest resolved |value| = 1331603073,   level_out = 1331603073    (outside the range: true)
+frame  16: largest resolved |value| = 1497942087,   level_out = 1497942087    (outside the range: true)
+frame  20: largest resolved |value| = 1398236998,   level_out = 1398236998    (outside the range: true)
+frame  24: largest resolved |value| = 1000000000,   level_out = 1000000000    (outside the range: false)
+```
+
+**A number 1.5 times the limit the tree allows a number to be**, in the plan
+that the window draws and that `plan.evaluate` hands to an agent.
+
+### And a second claim, in the same place, that was false
+
+The evaluator's own comment on a filter node's refusal said:
+
+> A refusal here means the incoming level was already non-finite, which cannot
+> happen while every level comes from `apply_gain`.
+
+**Not every level comes from `apply_gain`.** A *source* node takes its `amount`
+directly:
+
+```rust
+NodeKind::Source => {
+    if let Ok(amount) = amount_of(&props, diag, node) {
+        level_out = amount;
+    }
+}
+```
+
+which is right — a source sets the level rather than scaling it — and it means
+the source's level is its amount, unchecked, out of range, at 1 497 942 087.
+
+So the hole was in the value *and* in the sentence about the value, and the
+sentence was what would have stopped anybody looking.
+
+### The fix
+
+The interpolation clamps to the range the constructors hold to:
+
+```rust
+(V::Num(x), V::Num(y)) => {
+    V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
+}
+```
+
+The colour branch already clamped to 0..=255; the number branch did not, and
+the number branch is the one the tree has a limit for.
+
+**The overshoot is still an overshoot.** Clamping the *value* does not flatten
+the *curve*: an ordinary value is nowhere near the limit, so the shape of the
+easing is untouched — and there is a test that says so, because "clamp the
+value" and "clamp the curve" are different decisions and only one of them was
+made.
+
+And the evaluator's comment now says what is true: a source's level comes from
+its amount, and that amount is in range because every stored number is and
+because the number between two keys is clamped to the same range.
+
+### The lesson
+
+**An interpolation is a second door into the value, and only one of them was
+checked.** The tree checks every number that *enters* — through a constructor,
+through a reader, through a command parameter. The number between two of them
+*leaves*, and it was built by a line that did not go through the constructor
+that holds the invariant. The invariant was written down, and it was true of
+every constructor and false of the type.
+
+**An overshoot in the curve is not a licence for the value to leave the
+range.** The overshoot is deliberate — it is what an ease-out *is* — and the
+range is also deliberate. Both can be honoured at once: the curve may go past
+its endpoints, and the number it produces stays a number the tree can store,
+write and read back.
+
+**And the sentence was the thing that would have stopped the search.** "Every
+level comes from `apply_gain`" is the kind of claim that saves an afternoon —
+when it is true. It was false here, and it was false in the same file as the
+bug, three lines above it. §62's lesson, again, in a new place: prose that
+points at real code and describes it wrongly. That is the **sixth** instance
+— after §53's fingerprint, §4's permissions, §61's `written_at`, §62's
+recovery counter and §64's read.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| An overshooting easing stays inside the range a stored number may take | `an_overshooting_easing_stays_inside_the_range_a_stored_number_may_take` |
+| The clamp does not flatten the overshoot of an ordinary value | `the_clamp_does_not_flatten_the_overshoot_of_an_ordinary_value` |
+| An animated amount never takes the level out of range | `an_animated_amount_never_takes_the_level_out_of_range` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the interpolation stops clamping, and the model's test catches it;
+- the interpolation stops clamping, and the evaluator's test catches it.
+
+There is no screenshot, and there could not be one: the number is out of range
+in a plan, and a plan is drawn as a level bar that clamps it for the screen
+anyway. The evidence above is a measurement through the real evaluator and a
+pair of tests.
+
+---
+
+## 66. The widget names leaked a kilobyte a frame
+
+Every widget that matters carries a name, so an agent can find it:
+`toolbar.node.add`, `nodes.row.4`, `node.7.prop.amount`. The name is how an
+agent says "that button" without guessing a pixel.
+
+The names were `&'static str`:
+
+```rust
+pub struct AutomationId(pub &'static str);
+
+pub fn toolbar(command_id: &str) -> Self {
+    AutomationId(Box::leak(format!("toolbar.{command_id}").into_boxed_str()))
+}
+```
+
+`Box::leak` is the only way to get a `&'static str` without paying for it — and
+"without paying for it" is the whole problem. The box is never freed. The
+process keeps it for as long as it runs.
+
+**And the names are built every frame.** Not once a session: every frame, the
+toolbar builds one name per command (21 of them), each node row builds two,
+each property editor one, each keyframe row one. `Box::leak` in a per-frame
+path is not a small leak; it is a *rate*.
+
+### The measurements
+
+Drawn with the real `craftkit_ui::frame`, in a loop, against the real sample
+session (probe at `/tmp/probe66`):
+
+```text
+frames drawn      : 1000      RSS growth 1052 kB   -> 1077 bytes/frame
+second run: 3000 frames, 3168 kB, 1081 bytes per frame      (linear -> a leak, not noise)
+per second @60fps : 63 kB
+per hour @60fps   : 221 MB
+```
+
+The second run is the one that matters. Noise does not scale with the number
+of frames, and 1081 bytes a frame over 3 000 frames is 1081 bytes a frame over
+1 000. It is linear, so it is a leak and not a measurement of the allocator.
+
+**221 MB an hour**, for a window that is simply open and nobody is touching.
+
+### Why nobody saw it
+
+**The app does not repaint on its own.** egui redraws on demand — on input, on
+a change, when a frame was asked for — so a leak in the egui path only shows
+up if the draw loop is *driven*. A person using the app produces a few frames a
+second at most, so the process grows by a few kilobytes a second and the
+window looks perfectly healthy.
+
+The raster path (`ui.render`, `ui.click`) does draw frames on demand, and it
+runs at the same rate — but that path is driven by an agent, and an agent
+closes the connection when it is done.
+
+So the measurement had to be made by driving the frame loop directly. That is
+why this section has a probe and not a screenshot: **the leak has no
+appearance.** There is nothing to photograph and nothing to compare.
+
+### The fix
+
+The name owns its bytes:
+
+```rust
+pub struct AutomationId(pub String);
+```
+
+and the four builders use `format!` instead of `Box::leak`.
+
+**The identity rule did not change, and did not need to.** egui identifies a
+widget by an `Id`, and an `Id` hashes the *bytes* it is given, not the address
+of the string that holds them: the old code hashed a `&'static str` and the new
+code hashes the same bytes out of a `String`. So the same widget keeps the
+same identity across frames. This is worth saying out loud because the
+alternative was one line away and would have been a disaster: an id built from
+the *pointer* would make every widget a different widget every frame — the
+focus would be lost, a scroll would jump, a dragged widget would drop the
+drag — and every one of those would look like a different bug.
+
+One consequence: a lookup could no longer answer with a borrowed `&str` that
+points into something which dies. The click handler used to answer with a name
+borrowed from the registry, and the registry is a local that dies at the end of
+the frame. The answer is owned now (`Click.hit: Option<String>`), and the
+control channel's `ui.click` reply carries the owned name.
+
+### The gate
+
+`#![forbid(unsafe_code)]` is the tree's rule and it is the right one. The
+honest way to count a program's allocations is a counting global allocator,
+and that needs `unsafe impl GlobalAlloc` — which this crate may not write. So
+the gate measures the kernel's own answer instead:
+
+- `/proc/self/statm`'s second field is this process's resident pages: memory
+  the allocator has not handed back, which is what a leak *is*;
+- the measurement runs in a **child process**, because a leak is only visible
+  against a baseline, and a baseline is only worth anything in a process that
+  has done nothing else.
+
+Measured on the fixed tree: **0 bytes** for 200 000 names × 4 builders. With
+the leak back: **25 411 584 bytes** — twenty-four times the 1 MiB limit the
+gate sets.
+
+The gate is Linux-only, and the reason is stated rather than hidden: there is
+no portable equivalent of `/proc/self/statm` without a new dependency or an
+`unsafe` call, and the crate forbids `unsafe`.
+
+### The lesson
+
+**A `Box::leak` in a per-frame path is a leak.** `Box::leak` is the only way
+to make a `&'static str` without paying for it, and the price is not paid at
+all: it is paid by the process, forever, at the rate the frame runs. The
+`&'static str` was convenient — it is `Copy`, and the registry's lookups were
+written against one — and the convenience was the bug.
+
+**A name that is stable and a name that is owned are two different questions.**
+The old design answered "stable" with immortality, and immortality also
+answered "owned", so the two looked like one question. They are not: the
+identity comes from the *contents* of the name, and the contents can be owned.
+
+**The app does not repaint on its own, so a leak in the egui path is
+invisible in the running app.** Not slow, not subtle — *invisible*. A person
+cannot see it and a screenshot cannot show it, because the symptom is not
+pixels, it is the absence of pixels the process will not give back. The
+evidence for this one is a probe, and the probe had to drive the draw loop
+itself.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A widget name owns its bytes | `a_widget_name_owns_its_bytes` |
+| Building a widget name does not cost the process memory | `building_a_widget_name_does_not_leak_memory` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the widget names leak their bytes again — and the gate measures 25 411 584
+  bytes against a limit of 1 048 576.
+
+There is no screenshot, and there could not be one: the leak has no appearance.
+The evidence is a measurement of the process's own resident pages, before and
+after, in a process that did nothing else.
+
+---
+
+## 67. The service worker precached a bundle that nothing checked
+
+The browser build has exactly two hand-written files: `index.html` and `sw.js`.
+Both of them hold a copy of the bundle's name, and the name is the one thing
+that decides whether the page works.
+
+The page imports it:
+
+```html
+const { default: init } = await import("./dist/craftkit_web.js");
+```
+
+and the service worker precaches it:
+
+```js
+const SHELL = [
+  "./",
+  "./index.html",
+  "./sw.js",
+  "./dist/craftkit_web.js",
+  "./dist/craftkit_web_bg.wasm",
+];
+```
+
+`cargo xtask web` checked the **page's** copy against the one constant:
+
+```rust
+pub fn bundle_path() -> String {
+    format!("./dist/{}.js", crate::wasm::BUNDLE_NAME)
+}
+```
+
+and it never looked at the **worker's** copy. The two were the same string
+because somebody typed them the same way, and the gate's job — which is
+exactly this — was to make sure they stayed the same.
+
+### The measurements
+
+**Rename the worker's copy** — the two `dist/` paths in `sw.js` become
+`craftkit_web_v2.js` and `craftkit_web_v2_bg.wasm`, files that do not exist:
+
+```text
+── web
+   ok: the canvas, the bundle path and the worker's rules all agree
+   ok: apps/craftkit-web/sw.js parses
+```
+
+Green. And the gate's own sentence says the two agree.
+
+**Rename the constant** — `wasm::BUNDLE_NAME` becomes `craftkit_web2`, so
+*both* files now name a file that will not exist:
+
+```text
+error: 1 problem(s) in the browser build:
+   • apps/craftkit-web/index.html: no import of `./dist/craftkit_web2.js`.
+```
+
+One problem. The page is reported. The worker is not — and the worker is the
+one that decides what is in the cache when the network is gone.
+
+### What it costs
+
+The service worker's job is to have the application ready when the network is
+not there. It gets there in two ways, and this breaks one of them:
+
+- **The precache.** The install step fetches each entry of `SHELL` and stores
+  it. A name that does not exist fails, and the failure is swallowed:
+
+  ```js
+  SHELL.map((url) => cache.add(url).catch((e) => console.warn("not cached", url, e)))
+  ```
+
+  A `console.warn` is not a report. Nobody reads the console of a page they
+  are trying to use.
+
+- **The runtime cache.** Every same-origin 200 is stored as it goes past. This
+  one usually saves the day — but **not on the first visit**. The page registers
+  the worker *after* it has imported the bundle:
+
+  ```js
+  const { default: init } = await import("./dist/craftkit_web.js");
+  await init();
+  // ... and only then:
+  navigator.serviceWorker.register("./sw.js");
+  ```
+
+  so the very first request for the bundle never went through the worker and
+  was never put in the Cache API. The precache is the only thing that puts it
+  there on a first visit.
+
+So the shape of the failure is: **the page is cached and the application is
+not**. A user who goes offline gets the page — and the page cannot start,
+because the module it imports is not in the cache and the network is gone. The
+page's own failure box says *"craftkit did not start"*, which is §11's fix
+doing its job, and the reason is in the console.
+
+And it is **intermittent**, which is worse than a clean breakage: once the
+worker has been controlling the page for a visit, the runtime cache has the
+bundle and offline works. So the symptom is "offline is flaky", and the cause
+is a line in a list that nobody looks at twice.
+
+### The fix
+
+The worker has a copy of the bundle's name, and now that copy is derived from
+the same constant as the page's:
+
+```rust
+/// The path the bundler writes the wasm module to.
+///
+/// The bundle is two files: the JavaScript module the page imports and the
+/// wasm behind it. `wasm-bindgen --out-name` writes both, and the second one
+/// is named after the first. §67.
+pub fn wasm_path() -> String {
+    format!("./dist/{}_bg.wasm", crate::wasm::BUNDLE_NAME)
+}
+```
+
+**Both** files have to be in the shell — the JavaScript module the page
+imports and the wasm behind it — and the shell is **parsed**, not searched
+for:
+
+```rust
+pub fn worker_shell(worker: &str) -> Vec<String> { … }
+pub fn worker_caches_the_bundle(worker: &str) -> bool { … }
+```
+
+Parsing matters for the reason the canvas id has its own function: a
+substring search over the whole worker stays true when the bundle's name
+survives in a comment, and a check that a comment can satisfy is not a check.
+A line that is only a comment is not an entry either.
+
+The gate's success message now says what it checks:
+
+```text
+ok: the canvas, the bundle path, the worker's shell and its rules all agree
+```
+
+and it is true.
+
+One more thing: the gate's own test fixture used to spell the bundle's name
+out, so a rename of the constant would have made the *fixture* wrong rather
+than the gate. It is built from the derived paths now.
+
+### The lesson
+
+**Two copies of one name: check both, or the gate is a claim about one of
+them.** The page and the worker each held the bundle's name. The gate checked
+one of them and reported on the agreement of two. A gate that checks half of
+what it claims is worse than one that checks none, because the message says
+"all agree".
+
+**A gate's success message is a claim about the tree, and it has to be
+true.** *"the canvas, the bundle path and the worker's rules all agree"* was
+false: the bundle path in the worker disagreed with the page's, and the gate
+had no way to know. §62's lesson, in a new place — the sentence that stops
+somebody looking was the sentence the gate printed.
+
+**A warning swallowed by a `.catch` is not a report.** The install step
+prints `console.warn("not cached", …)` and carries on, which is the right
+behaviour for a missing file and the wrong behaviour for a *wrong name*. The
+difference between the two is not visible at the point where the two are
+handled, so it has to be checked somewhere else — which is what the gate is
+for.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The wasm path is derived from the bundler's name | `the_wasm_path_is_derived_from_the_bundlers_name` |
+| A worker that precaches a different bundle is caught | `a_worker_that_precaches_a_different_bundle_is_caught` |
+| A bundle named only in a comment is not in the shell | `a_bundle_named_only_in_a_comment_is_not_in_the_shell` |
+| The worker in the tree precaches the bundle the page imports | `the_worker_in_the_tree_precaches_the_bundle_the_page_imports` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the worker precaches a bundle that does not exist — and `cargo xtask web`
+  reports it.
+
+There is no screenshot: the failure is a page that cannot start when the
+network is gone, which needs a browser with the network switched off. The
+evidence is the gate's own output, before and after, and the mutation.
+
+---
+
+## 68. The undo budget counted the memory it had just given back
+
+§52 put a budget on the undo stack, because 128 snapshots of a 12 MiB document
+cost 1.5 GiB. The budget is the right shape: it bounds the memory rather than
+the number of steps.
+
+A budget is only a budget if it counts what is really held.
+
+### The accounting
+
+The history holds two stacks and one number:
+
+```rust
+pub struct History {
+    undo: Vec<Entry>,
+    redo: Vec<Entry>,
+    /// The memory both stacks hold together.
+    bytes: usize,
+}
+```
+
+Every place that lets go of an entry gives its memory back. `pop_undo` and
+`pop_redo` move an entry from one stack to the other and the total does not
+change; `drop_oldest_undo` subtracts; `clear` sets the count to zero.
+
+One place did not:
+
+```rust
+pub fn push(&mut self, doc: Document, label: &str) {
+    self.redo.clear();
+    …
+}
+```
+
+`push` is where a **new** edit arrives, and a new edit makes the undone branch
+unreachable — so the redo stack is thrown away. `self.redo.clear()` frees that
+memory, and the budget kept counting it.
+
+So the number grew by the size of a discarded branch on every edit after an
+undo, and the budget was then enforced against a phantom: it dropped undo
+steps to make room for memory that no longer existed.
+
+### The measurements
+
+**The history on its own**, with a full-size document (10 000 nodes, measured
+at 3 905 077 bytes) and the budget of 67 108 864 bytes:
+
+```text
+history: after 21 edit/undo cycles the undo stack is EMPTY
+history: the budget says 66339399 bytes (1.0x the budget) for stacks holding nothing
+```
+
+Twenty-one cycles. And the number the budget reports — 66 339 399 bytes, 99%
+of the whole budget — is for **two empty stacks**.
+
+**The real session**, with the same document and the shape a person actually
+produces (a few edits, then undo them all, then a few more):
+
+```text
+session: round  1: the undo depth after 8 edits was   8 (it should be 8), and 8 of them could be undone
+session: round  2: the undo depth after 8 edits was   8 (it should be 8), and 8 of them could be undone
+session: round  3: the undo depth after 8 edits was   5 (it should be 8), and 5 of them could be undone
+session: undo has already lost steps in round 3.
+```
+
+**Three rounds of eight edits, and three of the eight steps are already
+gone.** The steps are not reported as lost: the undo stack is simply shorter,
+and the oldest steps are the ones that disappear — which is exactly what the
+budget is *supposed* to do when the document is large, so nothing looks wrong.
+
+And the end of it, which is the part a person would meet:
+
+```text
+history: after 21 edit/undo cycles the undo stack is EMPTY
+```
+
+**Undo stops working.** Not "undo is slower", not "undo is shallower": the
+command answers *"there is nothing to undo"*, and the person has no way to
+know that the stack was emptied by a budget counting memory it had already
+given back.
+
+### The fix
+
+The discarded branch gives its memory back at the moment it is discarded:
+
+```rust
+/// Forget the redo branch, and give its memory back.
+///
+/// The budget counts the memory the two stacks hold *together*, so a stack
+/// that is emptied has to be subtracted from it — the same way
+/// [`drop_oldest_undo`] does.
+fn clear_redo(&mut self) {
+    for entry in self.redo.drain(..) {
+        self.bytes = self.bytes.saturating_sub(entry.bytes);
+    }
+}
+```
+
+With it, the same probe says:
+
+```text
+history: cycle  25: undo steps kept  21, the budget says     66339399 bytes
+history: cycle  50: undo steps kept  21, the budget says     66339399 bytes
+history: cycle 125: undo steps kept  21, the budget says     66339399 bytes
+session: round 20: the undo depth after 8 edits was   8 (it should be 8), and 8 of them could be undone
+```
+
+Twenty-one steps, and the budget says 66 339 399 bytes — which is exactly
+21 × 3 159 019, the size of the twenty-one copies the stacks hold. The
+number and the stacks agree, and the undo depth holds for twenty rounds.
+
+**The number is now the sum of what is held**, which is the whole point of a
+budget.
+
+### A note on the unit
+
+The 3 159 019 is not the 3 905 077 of the document the copies were made from,
+and that is not a bug: a copy carries no spare capacity, so it really is
+smaller than the document it was copied from. The budget counts the copies it
+holds, and 21 copies really do cost 66 MB. It is worth knowing, because it is
+the kind of difference that makes a test's expectation wrong for a reason that
+has nothing to do with the test.
+
+### The lesson
+
+**A budget is only a budget if it counts what is really held.** The number was
+right in every individual operation and wrong in the only operation that
+mattered — the one that *frees* memory. Every other path gave the memory
+back; the one that threw a whole stack away did not.
+
+**A budget that is too pessimistic is a bug too, and it hides as a missing
+feature.** The symptom was not "the app used too much memory" — it was "undo
+does nothing", which reads as a missing feature and not as an accounting
+error. The budget was doing its job perfectly: it was enforcing a number that
+was wrong.
+
+**The stack that grows is not the one that leaks.** The redo stack is the
+smaller of the two, and it is the one that is thrown away — so the leak is in
+the *removal*, and it only shows up after an undo. A budget that is only ever
+tested by pushing never sees it.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The budget counts the memory the stacks hold | `the_budget_counts_the_memory_the_stacks_hold` |
+| A discarded redo branch gives its memory back | `a_discarded_redo_branch_gives_its_memory_back` |
+| Undo still works after many edits that discard a redo branch | `undo_still_works_after_many_edits_that_discard_a_redo_branch` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the undo budget counts the memory it has just freed — and the accounting
+  test catches it;
+- undo stops working once the redo branches pile up — and the symptom test
+  catches it.
+
+There is no screenshot, and there could not be one: the bug is that a
+*feature* is missing. The evidence is the depth of the undo stack before and
+after, through the real session, and the number the budget reports for two
+empty stacks.
+
+---
+
+## 69. The failure counter counted the last 256 commands and called them the session
+
+The command log is a bounded ring, on purpose:
+
+```rust
+/// How many log entries are kept.
+///
+/// Bounded, because a long session can run for days and the log exists to
+/// explain the last few minutes, not to be a file.
+pub const MAX_ENTRIES: usize = 256;
+```
+
+That is a good design: the log is for explaining *the last few minutes*, and a
+session that runs for days must not grow a log for every minute of it.
+
+The counters were taken over that ring.
+
+### The measurements
+
+Three hundred refusals and one success, through the real session:
+
+```text
+300 commands were refused, and one succeeded.
+the reply says: 256 command(s), 255 failure(s)
+the data says:  {"commands":256,"failures":255,"kernel_recoveries":0,"nodes":1,"undo_depth":1}
+
+the log holds 256 entries
+```
+
+**Three hundred and one commands ran. The reply says 256.**
+
+And the two numbers are wrong in a way that is worse than being wrong by a
+little: they are wrong by *exactly the amount that has fallen out of the
+ring*, and they stop moving there. A session that has run ten thousand
+commands reports 256, and a session that has run ten thousand failures reports
+255. The number is not a little stale — it is **frozen**.
+
+The doc on the count said what it meant:
+
+```rust
+/// How many commands failed since the session opened.
+pub fn failures(&self) -> usize {
+    self.entries.iter().filter(|e| !e.ok).count()
+}
+```
+
+"Since the session opened", over a ring of the last 256 commands. The doc was
+false, and it was false in the direction that makes the number look like a
+total — which is exactly why nobody looked.
+
+And the command count was the ring's *length*:
+
+```rust
+format!("{} command(s), {} failure(s)", s.log().entries().len(), s.log().failures()),
+```
+
+`session.stats` is the command an agent asks to find out what the session has
+done. It answered with the size of the ring.
+
+### The fix
+
+The log keeps two counters that are **not** bounded, because the questions
+they answer are not bounded:
+
+```rust
+pub struct LogBook {
+    entries: Vec<LogEntry>,
+    seq: u64,
+    /// How many commands have failed since the session opened.
+    ///
+    /// Counted here rather than derived from `entries`, because the entries are
+    /// a bounded ring of the last [`MAX_ENTRIES`] commands: a count taken over
+    /// the ring is a count of the last 256 commands, and it was reported as
+    /// "since the session opened". §69.
+    failures: usize,
+}
+```
+
+`seq` was already there — it numbers the entries, and it counts every command
+— and it was simply not being asked. Now it is:
+
+```rust
+/// How many commands have run since the session opened.
+///
+/// Every command, not only the ones still in the ring. §69.
+pub fn total(&self) -> u64 {
+    self.seq
+}
+```
+
+and the statistics read the totals:
+
+```rust
+format!("{} command(s), {} failure(s)", s.log().total(), s.log().failures()),
+```
+
+The same probe, after:
+
+```text
+300 commands were refused, and one succeeded.
+the reply says: 301 command(s), 300 failure(s)
+the data says:  {"commands":301,"failures":300,"kernel_recoveries":0,"nodes":1,"undo_depth":1}
+
+the log holds 256 entries
+```
+
+**301 commands, 300 failures, and the ring still holds 256 entries.** The
+bounded part is bounded; the count is not.
+
+### The lesson
+
+**A bounded store and a count over it are two different things.** The ring
+answers *"what happened just now?"*. A counter answers *"how much has
+happened?"*. One of them is allowed to be bounded and the other is not, and
+the failure count was the wrong one of the two.
+
+**A frozen number is worse than a wrong one.** A number that is off by a
+little gets corrected by the next reading. A number that stops at 256 and
+stays there looks like a *total* — it is round, it is stable, and it is the
+kind of number a person stops questioning. §61's `written_at` was the same
+shape: a field that always said zero.
+
+**A counter's scope is part of its meaning, and this is the second time.** §62
+found a counter that counted only the thread that asked while its doc said
+*"since the process started"*. This one counted only the last 256 commands
+while its doc said *"since the session opened"*. Both were true as counts and
+false as claims, and in both cases the claim was the only thing wrong.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The failure count is every failure, not only the ones in the ring | `the_failure_count_is_every_failure_and_not_only_the_ones_in_the_ring` |
+| The command total is every command, not only the ones in the ring | `the_total_is_every_command_and_not_only_the_ones_in_the_ring` |
+| Clearing forgets the failures too | `clearing_forgets_the_failures_too` |
+| The statistics count every command | `the_session_statistics_count_every_command_and_not_only_the_last_two_hundred_and_fifty_six` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the failure counter counts only the commands in the ring — and the log's own
+  test catches it;
+- the statistics count only the commands in the ring — and the command's own
+  test catches it.
+
+There is no screenshot: the numbers are in a JSON reply. The evidence is the
+reply itself, before and after, through the real session.
+
+---
+
+## 70. The trace's budget was in bytes of text, and the trace holds the parsed value
+
+§52 bounded the undo stack in bytes, because a count of steps is not a bound
+on memory. The command trace was bounded the same way, with the same
+reason:
+
+```rust
+/// How many bytes of command trace a session keeps for a crash report.
+///
+/// Bounded because the trace is in memory for the whole session — but bounded
+/// by **size**, not by a count of commands.
+pub const MAX_TRACE_BYTES: usize = 256 * 1024;
+```
+
+The reason is memory. The unit is text.
+
+### What the trace holds
+
+A trace step is the command id and the parameters **as they were given**:
+
+```rust
+pub struct TraceStep {
+    command: String,
+    params: serde_json::Value,
+}
+```
+
+and the size of a step was measured by serialising it:
+
+```rust
+fn step_size(step: &TraceStep) -> usize {
+    serde_json::to_string(step).map(|s| s.len()).unwrap_or(0)
+}
+```
+
+So the budget counted **bytes of JSON text**, while what the trace holds is the
+**parsed** value — and §64 already measured what that costs:
+
+> a JSON number is two bytes of text and thirty-two bytes of memory
+
+The tree had the constant for this. `craftkit_core::JSON_EXPANSION` is 32, and
+§64's rule is written down: *"a limit written in bytes of text has to be read
+as a limit in bytes of memory thirty-two times larger."*
+
+### The measurements
+
+A payload of 40 000 numbers — the text of one step, and the trace's whole
+budget:
+
+```text
+the trace holds 1 step(s)
+the trace's text is      228958 bytes
+the budget is            262144 bytes
+the process grew by      3632 kB
+so the memory per byte of text is 16.2x
+```
+
+**229 KB of text, 3.6 MB of memory.** The budget held, and the memory it was
+supposed to bound was sixteen times bigger.
+
+And the budget could not bound even *that*:
+
+```text
+the payload is 2688926 bytes of JSON text
+the command was refused: true
+the trace holds 1 step(s)
+the trace's text is 2688958 bytes
+the budget is 262144 bytes
+the process grew by      15252 kB
+the budget was exceeded by 2426782 bytes
+```
+
+**One step of 2.7 MB of text — ten times the budget — was kept whole, and it
+cost 15 MB of memory.** The reason is the loop that keeps the trace inside
+its budget:
+
+```rust
+while self.trace.len() > 1 && self.trace_bytes > crate::MAX_TRACE_BYTES {
+```
+
+`len() > 1` — the loop drops the *oldest* step and keeps the last one, because
+the last one is the command that was running when the crash happened. So a
+step that is bigger than the whole budget cannot be dropped: there is nothing
+else to drop, and the one that is there is the one that matters.
+
+And it is kept for the rest of the session, because the trace is the
+reproduction — it is not written off at the end of a command.
+
+### The fix
+
+**Two things, because there are two defects.**
+
+The budget now says what it bounds, and is derived from the memory it may
+hold — the same shape §64 gave the readers of untrusted JSON:
+
+```rust
+/// How much memory the command trace may hold.
+///
+/// The trace is in memory for the whole session, and what it holds is the
+/// **parsed** parameters of every command — not the text they arrived as.
+pub const MAX_TRACE_MEMORY_BYTES: usize = 8 * 1024 * 1024;
+
+/// How many bytes of command trace a session keeps for a crash report.
+pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;
+```
+
+The number is the same — 8 MiB at the tree's own expansion is 256 KiB of
+text — but what it *means* is now written down.
+
+**And a step that does not fit is refused**, before the document is cloned
+and before the step is copied:
+
+```rust
+if step_bytes > crate::MAX_TRACE_BYTES {
+    let err = EngineError::Param {
+        id: id.to_string(),
+        source: craftkit_core::ParamError::new(
+            "params",
+            format!(
+                "they are {step_bytes} bytes of JSON, and the crash report's trace keeps at \
+                 most {} — a command that cannot be recorded cannot be reproduced",
+                crate::MAX_TRACE_BYTES
+            ),
+        ),
+    };
+    self.log.record(id, false, &err.to_string());
+    return Err(err);
+}
+```
+
+The same probe, after:
+
+```text
+the command was refused: true
+the trace holds 0 step(s)
+the process grew by      2748 kB
+```
+
+The trace holds nothing, and the process grew by the caller's own payload
+instead of by a second copy of it that would have lived for the rest of the
+session.
+
+**Refusing the command, rather than dropping the step, is the point.** A
+command that cannot be recorded cannot be reproduced — so it does not run, and
+the crash report is complete. Dropping the step instead would have left the
+report unable to reproduce the very command that crashed.
+
+Every command a person or a script can legitimately run is far inside the
+budget: a property's text is capped at 64 KiB by the model, and the budget is
+256 KiB. The refusal is for the input nobody meant to send.
+
+One consequence worth writing down: a crash report written *before* this rule
+can hold a step the engine would now refuse, so `crashes replay` reports that
+step as a failure rather than pretending it ran.
+
+### The lesson
+
+**A budget written in bytes of text is a budget in bytes of memory that
+many times larger.** §64 found this for the readers of untrusted JSON and
+gave the tree a constant for it. The trace was the one place that still
+counted text and called it memory — and the constant was already there, one
+crate away.
+
+**A loop that cannot drop the last step cannot bound it either.** The trace
+keeps the newest step on purpose — it is the one that was running when the
+crash happened — and that deliberate exception meant a step bigger than the
+whole budget was kept whole. A bound with an exception is not a bound.
+
+**The exception and the bound have to be checked separately.** "We drop the
+oldest until it fits" is only a bound if what is left *fits*, and the code
+that says so has to say it about the last step too.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A command whose parameters do not fit in the trace is refused | `a_command_whose_parameters_do_not_fit_in_the_trace_is_refused` |
+| The trace never holds more than its budget | `the_trace_never_holds_more_than_its_budget` |
+| The trace's budget is derived from the memory budget | `the_trace_budget_is_derived_from_the_memory_budget` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- a command too big for the trace is not refused — and the engine's own test
+  catches it;
+- the trace budget is a number of its own again — and the derivation test
+  catches it.
+
+There is no screenshot: the defect is a number of bytes in memory. The
+evidence is the process's own resident pages before and after, and the size
+of the trace.
+
+---
+
+## 71. The evidence file's own numbers were ninety cases out of date
+
+This file is the record of what the audit found, and it ends with a list of the
+ways prose has lied. It had three counters of its own, and all three were
+wrong.
+
+### The measurements
+
+**§1's verification claim.** The first section says what re-running the
+mutation script proves:
+
+> Verified by re-running the mutation script: **28 of 29 caught**, and the
+> nineteenth is the wasm limitation below
+
+The script ran **122** cases by the time §71 was written. So the claim was
+ninety-three cases out of date, and "the nineteenth" pointed at a case that had
+moved. The claim is not *approximately* right: it says the instrument has
+twenty-nine rules, and the instrument has a hundred and twenty-two.
+
+And the paragraph immediately below it states the rule the file broke:
+
+> The number in that line is computed by counting the cases the script runs,
+> not written by hand.
+
+**The counters in the last section.** Item 8 of "Suggested order" counts the
+prose-drift instances and says how many sections they were found in:
+
+> Six instances in sixty-six sections …
+> Seven instances in sixty-seven sections.
+> Eight instances in sixty-eight sections.
+
+Three sentences, written on three different days, each one stale the moment the
+next section was added — and each stale by exactly one, which is how you can
+tell they were written by hand rather than computed.
+
+**Nothing checked any of it.** `cargo xtask lists` reads the prose in `docs/`,
+`skills/`, `AGENTS.md`, `README.md` and `CONTRIBUTING.md` — and
+`KNOWN-GAPS.md` is not among them, which is defensible (this file is a
+working document) but it means the file that tracks prose drift has no gate on
+its own prose.
+
+### The fix
+
+**The document carries no number of its own.** §1 now says what the run
+proves without putting a count in it:
+
+> Verified by re-running the mutation script: **every case caught**, and the
+> one that is not is the wasm limitation below …
+
+and says why:
+
+> This paragraph deliberately carries **no number of its own**. It used to say
+> "28 of 29 caught", which was true on the day it was written and was **ninety
+> cases out of date** by the time the next section was added — a hand-written
+> count of a thing that grows is stale by construction.
+
+The counters in item 8 lost their section counts for the same reason. The
+*number of instances* stayed — nine is a fact about the findings, and the
+person who finds the tenth writes it down — but the "in N sections" clause was
+a number about a document that grows, and it went stale every time.
+
+**The script's ratio is now checked, not asserted.** The sentence "computed by
+counting the cases the script runs, not written by hand" is a claim about the
+instrument, and it was the one claim in §1 that nothing enforced. `cargo xtask
+lists` now reads the script and checks it:
+
+```rust
+pub fn mutation_ratio_is_computed(text: &str) -> Vec<String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let Some(index) = lines.iter().position(|l| l.contains("%d/%d caught")) else {
+        return vec!["the mutation script prints no closing ratio at all".to_string()];
+    };
+    let arguments = lines.get(index + 1).copied().unwrap_or_default();
+    …
+}
+```
+
+The ratio must come from `"${#CAUGHT[@]}"` and `"$CASES"` — the arrays the
+run filled in — and a literal fails.
+
+### The one thing that cannot be done here
+
+**This gate has no mutation case, and the reason is the medium rather than the
+will.** bash reads a script as it goes, so a file that changes under a running
+script is a corrupted run: the shell's read offset no longer matches the file,
+and the run reads the wrong bytes. Every other mutation in the suite writes to
+a file that is not the script doing the writing — `scripts/live-window-check.sh`
+is mutated because it is *invoked*, not because it is *running*. The
+instrument cannot be mutated by itself.
+
+So the check is proved the way the tree proves a check that cannot be
+mutated: with a **fabricated copy**. The test makes a script whose ratio is
+written by hand and requires the check to reject it — the same shape as §26's
+fabricated-id case.
+
+That is a smaller guarantee than a mutation, and it says so here rather than
+letting the matrix imply otherwise.
+
+### The lesson
+
+**A number written by hand about a thing that grows is stale by
+construction.** The script's ratio is a fact about a run; the run prints it.
+A copy of it in a document is a snapshot of a run, and a snapshot that is not
+labelled as one is a claim.
+
+**The file that tracks prose drift has prose drift in its own counters** — and
+that is worth more than the individual numbers. §8 asks "how is prose kept
+true?", and the answer it was reaching for is now visible from the inside: the
+counters were kept true by *writing them down again*, which is the process
+the question is about.
+
+**A gate that cannot be mutated must say so.** There is exactly one gate in the
+tree that is proved by a fabricated copy rather than by a mutation, and it is
+the gate about the instrument that cannot be mutated while it runs. Saying that
+is part of the result.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The instrument's closing ratio is computed, not written by hand | `the_mutation_script_computes_its_own_closing_ratio` |
+| A ratio written by hand is caught | `a_closing_ratio_written_by_hand_is_caught` |
+
+and **no mutation**, for the reason above: the instrument cannot be mutated
+while it is running.
+
+There is no screenshot, and there could not be one: the defect is a number in
+a document. The evidence is the script's own output against the document's
+claim — 122 cases against "28 of 29".
+
+---
+
+## 72. The crash report reader parsed sixty-four megabytes of text into a tree
+
+§48 put a bound on a crash report's **file**: at most 64 MiB, read through the
+shared bounded reader, so a huge file costs one buffer rather than one huge
+allocation. The bound was on the **text**. What the reader did with the text
+was a different question, and nobody had asked it.
+
+### What the reader held
+
+```rust
+pub struct CrashReport {
+    /// The document at the moment of the crash.
+    pub design: serde_json::Value,
+    /// The document the trace starts from.
+    pub base: serde_json::Value,
+    …
+}
+```
+
+A report is **input**: `docs/recipes/fix-a-crash.md` asks for `report.json`
+from whoever had the crash, so the file arrives from another machine. §48
+said exactly that, and capped the file — and the cap is what made the
+question sharp, because the file was then parsed into a `serde_json::Value`,
+and §64 had already measured what a value costs:
+
+> a JSON number is two bytes of text and thirty-two bytes of memory
+
+So the 64 MiB the reader accepted was a **two gigabyte** budget. The limit
+written to keep a hostile file out was the thing that let the hostile file in:
+a report of sixty-six megabytes cost a gigabyte and a quarter of memory to
+read, on the machine of the person who had the crash.
+
+### The measurements
+
+Before the change, with `/usr/bin/time -v` on the real `craftkit-cli crashes
+show`:
+
+```text
+a 59 200 132-byte report:    804 028 kB of resident memory
+a 66 000 101-byte report:  1 260 292 kB of resident memory, 2.37 s
+```
+
+The second report's design was thirty-three million numbers — a design that is
+not a design, in a file that is a valid report. Nothing refused it, because a
+tree holds anything.
+
+After the change, the same file and the same command:
+
+```text
+a 66 000 101-byte report:     67 796 kB of resident memory, 0.04 s
+```
+
+Eighteen times less memory, fifty-nine times less time — and the report is
+now **refused**, with a message that names the file and the reason.
+
+The gate's own numbers, on a smaller hostile report of 32 000 178 bytes
+(sixteen million numbers where the nodes should be):
+
+```text
+read as a document:  the process peaked at  35 381 248 bytes, and the report was refused
+read as a tree:      the process peaked at 547 860 480 bytes
+```
+
+And on a **legitimate** report — 2 003 nodes, 3 895 915 bytes of text:
+
+```text
+read as a document:    9 986 048 bytes of resident memory, 12.8 ms
+read as a tree:       30 064 640 bytes of growth,      54.9 ms
+```
+
+A tree costs three times as much on an honest report and seventeen times as
+much on a hostile one. The difference is the hostile one: a tree has to be
+**finished** before anybody can say the file is not a document, and a document
+is refused at the first number.
+
+### The fix
+
+**The report carries documents, not trees.**
+
+```rust
+pub struct CrashReport {
+    /// The document at the moment of the crash.
+    pub design: craftkit_model::Document,
+    /// The document the trace starts from.
+    pub base: craftkit_model::Document,
+    …
+}
+```
+
+The file format does not change: a document's serialization and a value's are
+the same shape, so a report the old tree wrote still reads — with one
+difference in the bytes, because a value's map is sorted and a document's is
+not. `a_report_the_old_tree_wrote_still_reads` writes a report through a
+value and reads it back, because a bug report collected on one version has to
+be readable on the next.
+
+The comparison the replay makes changed with it. It used to compare the
+*serialized forms*, which is why it had to skip the id counter by hand; it now
+compares the two documents:
+
+```rust
+if recorded.meta == replayed.meta && recorded.nodes == replayed.nodes {
+    return Vec::new();
+}
+```
+
+and the counter is not part of a document's serialization at all — `next_id` is
+`#[serde(skip)]`, and the reader reseats it (§48), so two documents with the
+same nodes and the same settings are the same document whatever their counters
+say.
+
+**And the reader has a budget that says what it bounds.** The cap on the text
+was already there; what was missing was the number that says what the text
+costs:
+
+```rust
+pub fn report_memory_budget(text_bytes: usize) -> usize {
+    text_bytes.saturating_add(2 * craftkit_model::limits::MAX_DOCUMENT_BYTES)
+}
+```
+
+The report's design is a document, and one document may hold
+`MAX_DOCUMENT_BYTES` — thirty-two mebibytes. Reading the report costs the
+text as well, because the text is held while it is parsed, and the reader's
+own room on top of that. So the budget is the text plus twice the document's:
+one for the document, one for the reader. A reader that starts building a tree
+crosses it long before the tree is finished.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A report whose design is not a document is refused | `a_report_whose_design_is_not_a_document_is_refused` |
+| A report the old tree wrote still reads | `a_report_the_old_tree_wrote_still_reads` |
+| Reading a report costs no more than its text and one document | `reading_a_report_costs_no_more_than_its_text_and_one_document` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the report is read into a JSON tree before it is read as a report — the old
+  shape exactly, and it **compiles**, because the report's own types did not
+  change, so only a measurement can catch it. Measured: the peak goes from
+  35 381 248 bytes to 547 860 480.
+
+The measurement is of the **peak**, in a child process that has done nothing
+else, because that is what a reader's cost is. It is Linux-only: a counting
+global allocator would say the same thing everywhere, but the crate forbids
+`unsafe` and `unsafe impl GlobalAlloc` is unsafe, so one cannot be written —
+the same wall §66 found.
+
+There is no screenshot: the defect is a number of bytes in memory. The
+evidence is the process's own resident pages, before and after, on both
+shapes of the same read.
+
+### The lesson
+
+**A report is input, not output.** Everything else in the crash folder is
+written by this tree and is therefore whatever this tree made it. The report
+is the one file in the folder that arrives from somewhere else, and it was the
+one file read into the most expensive representation available. An input is
+read into the type it claims to be.
+
+**A cap on the text is not a cap on the memory.** §64 found this for the
+readers of untrusted JSON, §70 found it for the command trace, and this is
+the third: the report's cap was on bytes of text and the parse was
+thirty-two times bigger. The constant that says so —
+`craftkit_core::JSON_EXPANSION` — was one crate away the whole time, and the
+reader that needed it most was the one that could kill the machine of the
+person who had the crash.
+
+**The type of a field is a budget.** `serde_json::Value` reads like a
+neutral container and is not one: it costs thirty-two bytes for every two
+bytes of text, it holds anything, and it makes "is this file a report?"
+answerable only after the whole file has been read. A field typed as the
+model's own document is a different kind of decision: it says what the file
+must be, and it makes the reader's cost proportional to the text.
+
+---
+
+## 73. The size estimate did not count a property's value, and a file was a third door into it
+
+Two defects, one cause: a value can be made in three ways, and only two of
+them were checked.
+
+### The three doors
+
+`craftkit_core::Value` documents its own invariants:
+
+> - `Num` is always finite and within [`crate::MAX_MAGNITUDE`].
+> - `Text` is always within [`crate::MAX_TEXT`].
+> - `List` is always within `MAX_LIST` entries.
+
+and the doc says which doors exist:
+
+> The constructors are not the only way a value is made: a value can also be
+> *interpolated* between two of them …
+
+Two doors: the constructors, and the interpolator. §65 found the second one
+and closed it — the interpolator now clamps to the same range, because an
+interpolation "is not one of the numbers the tree checked".
+
+**The third door is deserialization**, and it was the widest one. A file is
+deserialized straight into the model: `Document` → `Node` → `Property` →
+`Value`, and no constructor runs on the way in. The invariants above were
+kept by three constructors and by nothing else.
+
+So a hand-written file could put into a property:
+
+| Value | The constructors say | The file said |
+|---|---|---|
+| `{"t":"num","v":1e300}` | `MAX_MAGNITUDE` is 1 × 10⁹ | **accepted** |
+| `{"t":"text","v":"x" × 8 388 608}` | `MAX_TEXT` is 65 536 | **accepted** |
+| `{"t":"list","v":[… 10 000 items …]}` | `MAX_LIST` is 4 096 | **accepted** |
+
+All three measured, through the real reader (`craftkit_io::load_text`).
+
+And the evaluator's comment says, of the number it uses:
+
+> The amount is in range because every number the tree stores is …
+
+That was false. A file stores numbers the tree never checked.
+
+### The second defect: the estimate
+
+The same hole was open in the budget. §52 gave the document a byte budget and
+the undo stack a byte budget, and both are measured with the document's own
+size estimate — whose contract is:
+
+> Never under-estimates: a budget a document can lie about is not a budget.
+
+The estimate counted a property's **label** and its **keyframes**. It did not
+count the property's **value**:
+
+```rust
+pub fn estimated_bytes(&self) -> usize {
+    std::mem::size_of::<Property>()
+        + self.label.capacity()
+        + self.keys.keys().iter().map(|k| size_of::<Key>() + k.value.estimated_bytes()).sum::<usize>()
+}
+```
+
+And §52's own mutation says why it was missed the first time:
+
+> The count that matters is the keyframes' — that is where a document's memory
+> goes.
+
+That sentence was true of an honest document and false of a hostile one, and
+it is the sentence that stopped the looking.
+
+### The measurements
+
+A file with one hundred properties, each holding a text of 64 KiB — every
+value **inside** its own limit, so nothing but the estimate was wrong:
+
+```text
+the file is 6 561 564 bytes of text
+the document holds      30 258 bytes by its own estimate
+the values really hold 6 556 800 bytes
+```
+
+**Two hundred and seventeen times short.** The document budget (32 MiB) and
+the undo budget (64 MiB) were both measured with that number.
+
+The consequence, through the real session — two hundred commands, each
+pushing a snapshot onto the undo stack:
+
+```text
+after 200 commands the undo stack holds 128 step(s)
+the undo budget is 67108864
+the process grew by 870211584 bytes
+```
+
+**Eight hundred and thirty megabytes**, against a budget of sixty-four, and
+the stack was at its maximum of 128 steps: the budget never bound, because
+the number it was measuring was a lie.
+
+### The fix
+
+**The value is counted.**
+
+```rust
+pub fn estimated_bytes(&self) -> usize {
+    std::mem::size_of::<Property>()
+        + self.label.capacity()
+        + self.value.estimated_bytes()
+        + self.keys.keys().iter().map(|k| size_of::<Key>() + k.value.estimated_bytes()).sum::<usize>()
+}
+```
+
+**And a deserialized value is held to the same rules.** `craftkit_core` grows
+a check, and the model calls it for every value in a document:
+
+```rust
+pub fn check(&self, what: &str) -> Result<(), crate::CoreError> { … }
+```
+
+```rust
+p.value.check(&p.label)?;
+for key in p.keys.keys() {
+    key.value.check(&p.label)?;
+}
+```
+
+The reader refuses the file instead of believing it:
+
+```text
+the document in this file is not valid: invalid: node n1:
+the value of amount is out of range: 1e300 (allowed -1000000000..=1000000000)
+```
+
+and the budget binds again:
+
+```text
+the document holds  6 587 058 bytes by its own estimate
+after 200 commands the undo stack holds 9 step(s)
+the process grew by 80019456 bytes
+```
+
+**Ten times less memory, and the stack holds nine steps instead of a hundred
+and twenty-eight.**
+
+### The sentences
+
+Four sentences were wrong, and they are the reason the defect survived:
+
+- the estimate's own doc — *"Never under-estimates"* — with the value not
+  counted;
+- §52's mutation comment — *"the count that matters is the keyframes'"*;
+- the evaluator — *"every number the tree stores is"* in range;
+- the interpolator — *"the keys are numbers the tree checked"*.
+
+All four are now true, and all four were false in the same way: they said
+what the tree *did* rather than what it *checked*.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The estimate counts a property's value | `the_size_estimate_counts_the_property_value` |
+| A value that breaks an invariant is caught | `a_value_that_breaks_an_invariant_is_caught` |
+| A document with a value the constructors would refuse is invalid | `a_value_the_constructors_would_refuse_is_refused` |
+| A file whose value is out of range is refused | `a_file_whose_value_is_out_of_range_is_refused` |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the size estimate does not count the property's value — and the estimate
+  test catches it;
+- a value that breaks an invariant is accepted — and the file reader's test
+  catches it.
+
+There is no screenshot: the defect is a number of bytes in memory and a
+number in a file. The evidence is the process's own resident pages and the
+reader's own refusal.
+
+### The lesson
+
+**An invariant kept by a constructor is only kept on the paths that call the
+constructor.** The doc said "the constructors maintain" — which was honest —
+and everything downstream read it as "the tree maintains". A file does not
+call a constructor, and a file is the only way a document arrives from
+outside.
+
+**When you find the doors, count them.** §65 found the interpolator and
+wrote it down as *the* second door. Writing down a door you have closed is
+how the next one gets missed: the sentence "the constructors are not the only
+way" became "the constructors and the interpolator", and the third was
+neither guessed nor counted.
+
+**A budget is measured with an estimate, and the estimate is part of the
+budget.** §52's contract — "never under-estimates" — was not false; it was
+*unimplemented*, and the sentence above it was the implementation. The
+mutation that should have caught it zeroed the keyframes' count, which is
+where an honest document's memory is; the value's count, where a hostile
+document's is, was never in the mutation because nobody had looked.
+
+---
+
+## 74. The limits table had a limit that nothing enforced
+
+`crates/model/src/lib.rs` has a module called `limits`, and two documents
+quote it as the tree's list of safety limits:
+
+> | Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32,
+> `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16,
+> `MAX_NAME` 255, `MAX_EDGES` 20 000 …
+
+— `docs/architecture.md`, and `docs/recipes/add-a-saved-field.md`, which tells
+an agent adding a field to *use* the limits in that table.
+
+One of them was not a limit at all.
+
+```rust
+/// Edges the reverse index may hold.
+pub const MAX_EDGES: usize = 20_000;
+```
+
+### The measurement
+
+A count of the tree's own limits, and where each one is used:
+
+| Limit | Used in code |
+|---|---|
+| `MAX_NODES` | 4 places |
+| `MAX_DEPTH` | 2 |
+| `MAX_PROPERTIES` | 1 |
+| `MAX_KEYS` | 2 |
+| `MAX_PATH_SEGMENTS` | 2 |
+| `MAX_NAME` | 6 |
+| `MAX_DOCUMENT_BYTES` | 4 |
+| **`MAX_EDGES`** | **0** |
+
+Every limit in the tree was checked the same way — a name, then every place
+the name appears in the Rust sources — and `MAX_EDGES` appeared in exactly
+one: its own declaration.
+
+**There is no reverse index.** `Document::index_of` is a scan:
+
+```rust
+pub fn index_of(&self, id: NodeId) -> Option<usize> {
+    self.nodes.iter().position(|n| n.id == id)
+}
+```
+
+The constant bounded a thing that does not exist, and the thing it was
+supposed to bound — a node lookup — is bounded already, by `MAX_NODES`.
+
+### Why it mattered
+
+The number was wrong in a way that is easy to act on. An agent reading the
+architecture table is told the tree caps something at 20 000; the recipe
+tells it to cap a new field with a limit *from that table*. A cap taken from
+a limit that enforces nothing is a cap in a comment: the file it protects
+still reads whatever it holds.
+
+And the sentence is a false one, which is the shape §53, §61, §62, §64, §65,
+§67, §69, §71 and §73 all found: **"Edges the reverse index may hold"**
+describes an index the tree does not have.
+
+### The fix
+
+**The limit is gone.** A table of limits should list limits that are
+enforced, and the lookup it was meant to bound is bounded by `MAX_NODES`.
+
+**And the table now says so.** `cargo xtask lists` reads the table and checks
+that every constant in it is used in code somewhere else in the tree:
+
+```rust
+pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> { … }
+```
+
+A mention in a comment is not enforcement, and neither is a mention in prose,
+so both are left out: the check reads the code, with the comments removed.
+
+The check is proved the way the tree proves a check that reads a file it
+cannot change — the §26 shape — with a **fabricated copy**: a limits table
+with a constant in it that nothing uses, and no code that uses it. The check
+has to report it, and the same tree with the limit used has to be clean.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Every limit in the model's table is enforced in code | `every_limit_in_the_table_is_enforced` |
+| A limit nobody enforces is caught | `a_limit_nobody_enforces_is_caught` |
+| A limit only a comment mentions is still caught | `a_limit_only_a_comment_mentions_is_still_caught` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the limits table grows a limit nobody enforces — and `cargo xtask lists`
+  catches it.
+
+### The honest limit of the gate
+
+**It is one-sided.** The check says every limit in the table is enforced; it
+does not say every limit *named in prose* is in the table. A document that
+quotes a limit the code no longer has is not caught by this check — the
+existing prose check compares a named constant's **value** with the code's,
+and a constant the code does not have has no value to compare.
+
+That is a real gap and it is written down rather than papered over: the two
+documents that quoted `MAX_EDGES` were updated by hand, and the next one
+would not be caught. The general shape — *a name in prose that the code does
+not have* — is the same one §26 closed for commands, and it is a bigger
+change than this section's.
+
+### The lesson
+
+**A limit in a table of limits is a claim that something enforces it.** The
+table is the tree's answer to "what bounds this?", and an entry in it that
+bounds nothing makes the answer wrong in the way that is easiest to act on:
+the number is there, it is plausible, and using it feels like using the
+system.
+
+**A check that reads the tree can be proved with a copy of the tree.** The
+mutation script cannot mutate the file it is running, and the same is true
+of a check that reads the tree's own source: the honest proof is a
+fabricated tree with the defect in it. §71 said so for the script's own
+ratio; this is the same shape for a check that reads the limits table.
+
+**A constant nobody uses is a sentence, and the sentence has a name.** The
+way this was found was counting: every limit in the tree, and where each one
+is used. The count was one line of `grep` per limit, and it found a limit
+that had been in the table, quoted in two documents, for as long as the
+documents had been quoting it.
+
+---
+
+## 75. The crash recipe quoted a report that no longer existed
+
+§72 changed the crash report's shape: `design` and `base` became
+`craftkit_model::Document` instead of `serde_json::Value`. The engine's own
+documentation was updated in the same change. **The recipe was not.**
+
+`docs/recipes/fix-a-crash.md` — the document somebody opens when their
+application crashed — quoted the whole struct:
+
+```rust
+pub struct CrashReport {
+    pub id: String,
+    pub unix: u64,
+    pub command: String,     // which command was running, when one was
+    pub message: String,
+    pub design: serde_json::Value,   // the document at the moment of the crash
+    pub base: serde_json::Value,     // the document the trace starts from
+    pub replay: Vec<ReplayStep>,     // the commands, oldest first
+    pub dropped: usize,              // commands the trace could not keep
+    pub at: i64,                     // the playhead, in ticks
+}
+```
+
+Two of those fields were wrong. The recipe went on describing a report that
+the tree could not produce, and it is the *recipe*: the one place a person is
+told what a crash report looks like.
+
+### Why nothing noticed
+
+Because the block was not marked. §40 built the contract for this in the
+tree's own words:
+
+> A fenced block whose info string says `exact` is a claim that it is the
+> source, word for word, and this check holds that claim: every function such
+> a block quotes must be the function in the file the block names, line for
+> line, in both directions.
+
+The recipe's block said nothing of the kind, so it was an *illustration* —
+and an illustration is allowed to drift. That is the right default: most
+blocks in the tree are illustrations with elisions in them, and a gate that
+held them all would cry wolf.
+
+The hole was that **only functions were held to the contract**. A type is
+quoted as often as a function is, and a struct's shape rots the same way:
+`design` became a document and the quote still said a JSON tree.
+
+### The fix
+
+**The quote is right, and it says it is exact.**
+
+```rust exact
+// crates/engine/src/crash.rs
+pub struct CrashReport {
+    pub id: String,
+    pub unix: u64,
+    pub command: String,     // which command was running, when one was
+    pub message: String,
+    pub design: craftkit_model::Document,   // the document at the moment of the crash
+    pub base: craftkit_model::Document,     // the document the trace starts from
+    pub replay: Vec<ReplayStep>,     // the commands, oldest first
+    pub dropped: usize,              // commands the trace could not keep
+    pub at: i64,                     // the playhead, in ticks
+}
+```
+
+**And a struct is held to the contract too.** The check that §40 built now
+compares the fields of a quoted struct with the fields of the struct in the
+source — the same names, in the same order, with the same types — and it
+reads **every** prose file, not only the pattern documents, because the file
+that broke it was a recipe:
+
+```rust
+pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String> { … }
+```
+
+Three other blocks that already matched the source are marked `exact` too —
+`CommandSpec` in the command pattern, `DocumentMeta` in the saved-field
+recipe, and `Tick` in the time pattern — so the contract covers four quotes
+rather than one. `Tick` is a **tuple** struct, and a tuple struct has no
+field names: the comparison is on the types, in order, because the type is
+the whole claim (`Tick(i128)` is why the tree's time is exact).
+
+The check is proved the way the tree proves a check that reads the tree: with
+a **fabricated copy**. A document with an exact block quoting a struct, and a
+source file with the struct in it — the quote's type drifted, then fixed.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A quoted struct that drifted is caught | `a_quoted_struct_that_drifted_is_caught` |
+| A quoted field the source does not have is caught | `a_quoted_field_the_source_does_not_have_is_caught` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- an exact quote of a struct is not the struct in the source — and
+  `cargo xtask lists` catches it.
+
+### The honest limit of the gate
+
+**Only a block that says `exact` is held to it.** An unmarked quote is an
+illustration and may drift — and one of them must: the control-channel
+recipe shows a `Method` enum with one variant and an elision, as an example
+of a change to make, and the variant it names does not exist yet. Marking
+that one exact would be a lie, so it is not marked.
+
+So the gate holds the quotes that *claim* to be exact. What it cannot do is
+notice a quote that should have been exact and is not — the same one-sidedness
+§74's gate has, and the same answer: a rule, not a check.
+
+### The lesson
+
+**This tree caused this drift, one section after writing the rule about it.**
+§73's lesson was "when you find the doors, count them", and item 8 has said
+since §53 that *"a change to a mechanism re-reads the documents that describe
+it"*. §72 changed a type and did not re-read the one document that quotes it
+— in the same stretch, by the same hand, while writing that rule down for
+the eleventh time. **The twelfth instance is the one the tree made itself**
+(§74 was the eleventh), and that is worth more than the ones before it: the
+rule was not wrong, it was not adopted.
+
+**A quote that says it is exact is checked; a quote that does not is an
+illustration.** The difference between the two is a word in the fence, and
+the word is a contract. §40 already had that contract for functions; §75
+extends it to types, because a struct's shape rots exactly as a function's
+body does, and the recipe that broke was quoting a struct.
+
+**A type is quoted as often as a function.** The tree's gate covered one of
+the two and not the other, and the uncovered one is the one a *recipe* uses:
+a recipe shows you a shape so you can write against it, and a shape that is
+two refactorings out of date is worse than no shape at all.
+
+---
+
+## 76. The crash report was not written for the crash the report is for
+
+The panic hook's own comment says what it is for:
+
+> This is for the panics that escape anyway — a panic on the render thread, a
+> panic in a widget, a poisoned lock turned into an unwrap somewhere we do
+> not own.
+
+**A panic in the drawing code is the most likely crash there is.** And it
+wrote nothing at all.
+
+### The measurement
+
+The hook takes the session with `try_lock`, and the reason is sound:
+
+> **It must not block for long.** The session may be locked by the thread that
+> panicked. `try_lock` is used rather than `lock` for exactly that reason: a
+> hook that waits for a lock held by a dead thread is a hang that looks like a
+> freeze.
+
+And the render path holds that lock for the length of a frame:
+
+```rust
+let Ok(mut session) = self.session.lock() else { … };
+let _ = craftkit_ui::frame(ctx, &mut session, &tokens);
+```
+
+So a panic in a widget happens **while the lock is held**, the hook's
+`try_lock` fails, and the hook writes nothing. Measured, with the real hook
+and a real panic on a thread that held the lock:
+
+```text
+reports written: 0
+```
+
+The report exists for the case the hook cannot serve. The document the user
+was working on was there, in the session, one lock away.
+
+### The promises
+
+Three sentences promised a report for crashes that get none:
+
+- the engine's module doc: *"the engine writes both, automatically, on every
+  unclean exit"*;
+- the same file: *"Called from the panic handler and from the unclean-exit
+  path"*;
+- the recipe: *"The engine writes a report on every unclean exit and from the
+  panic hook."*
+
+**There is no unclean-exit path.** The only writer in the tree is the
+desktop app's panic hook: a process that is killed, or that loses the power,
+writes nothing, and there is no code that could notice — catching a signal
+needs `unsafe` FFI, and this tree forbids `unsafe` (`#![forbid(unsafe_code)]`).
+
+### The fix
+
+**The render path catches its own panics**, while the session is still in
+hand, and writes the report from there:
+
+```rust
+fn draw_guarded(
+    session: &mut Session,
+    dir: Option<&std::path::Path>,
+    draw: impl FnOnce(&mut Session),
+) -> Result<(), String> { … }
+```
+
+The application survives it too: a panic in a widget is a bug, not a reason to
+lose the work, and the report is the evidence.
+
+**And the promises are corrected.** The engine's doc, and the recipe, now say
+what is true: a report is written when a panic is *caught* — by the hook, or
+by the render path — and a process that is killed writes nothing.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A panic in the drawing code writes a report | `a_panic_in_the_drawing_code_writes_a_report` |
+| A frame that does not panic writes no report | `a_frame_that_does_not_panic_writes_no_report` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- a panic in the drawing code writes no report — and the app's own test
+  catches it.
+
+### Two smaller things this found
+
+**A `&Box<dyn Any>` is not a `&dyn Any`.** The message out of a caught panic
+came out as "a panic with no message", because
+
+```rust
+message_from_payload(&payload)      // the box, not the value inside it
+```
+
+coerces to a trait object of the **box**, and the downcast inside the box
+never matches. `payload.as_ref()` reaches the value. The same function, called
+with two types that look the same, and one of them silently wrong.
+
+**The panic hook is process-global, so two tests that panic interfere.** The
+hook writes a report for *any* panic, including one another test caught, so a
+test that counts the reports in its folder can see a stranger's — and worse,
+the hook that ran for one test's panic was the one *another* test had
+installed, with that test's folder, so the report landed in the wrong
+directory. The suite was flaky before this section, and the new test made it
+fire. The tests that touch the hook now take a lock, and the hook test counts
+the reports that are *its* panic, by message.
+
+### The lesson
+
+**A lock held for the length of a frame is a lock held for the length of a
+crash.** The hook's `try_lock` is right — a blocking lock would deadlock on
+the panicking thread — and the conclusion that follows from it was not drawn:
+if the crashing thread holds the lock, the crash report has to be written by
+the crashing thread, before it lets go.
+
+**The case a document names is the case to test.** The hook's comment named
+"a panic in a widget" as the reason it exists, and the test suite never
+produced one. The test that was missing was not hard; it was the shape of
+the real thing — a panic on a thread that holds the lock.
+
+**"On every unclean exit" is a promise about a path that does not exist.**
+Three sentences said it, and the tree has exactly one writer. A promise about
+a path is a promise about code, and the code was not there. This is the
+thirteenth prose-drift instance, and the first one that was a promise about
+*behaviour* rather than about a value.
+
+---
+
+## 77. The prose counted the commands by hand
+
+§71 found the evidence file's own numbers ninety cases out of date, and drew
+a rule from it:
+
+> **A number written by hand about a thing that grows is stale by
+> construction.**
+
+The tree has a thing that grows — the command registry — and three documents
+counted it by hand:
+
+> The registry currently holds 21 commands across seven areas — `document`,
+> `node`, `property`, `keyframes`, `playback`, `history`, `debug` — from
+> `doc.rename` to `session.stats`.
+
+— `docs/patterns/everything-is-a-command.md`, and:
+
+> Every entry point reaches the same 21 commands.
+
+— `AGENTS.md`.
+
+All the numbers are right today: the registry has 21 commands and 7 areas.
+They are wrong the moment a command is added, and **nothing would have said
+so**: the tree's gate checks that a document never names a command the
+registry lacks (§26), and that is the wrong direction — a *missing* name is
+caught, a *count* is not.
+
+The third was the sharpest, because it was not even a claim about the
+registry's size — it was a piece of *advice*:
+
+> | the registry entry | `crates/engine/src/command.rs:219` | `&NODE_ENABLE,` in
+> `(area, id)` order, and `21` becomes `22` |
+
+An agent reading the playbook is told to add a row and to bump a number that
+is written down three files away. The row does not carry a number; the array
+just grows. The line now says "the array grows by one".
+
+The `Area` enum's variants are the areas, so "7 areas" is a number about a
+thing that grows too, and it was written in words — which no check can see.
+
+### The fix
+
+**The numbers are checked against the code.**
+
+```rust
+pub fn counts_in_prose_match_the_code(root: &Path) -> Result<Vec<String>, String> { … }
+```
+
+The registry's commands are read from the source — the same way §26's check
+reads them, and for the same reason: the build tool should not have to be the
+thing it builds — and the areas are the `Area` enum's variants.
+
+A number in prose is a count when it is a run of digits, in its own token,
+immediately before the noun: "21 commands", "7 areas". A number inside a
+longer token — "v1.21 commands" — is not a count, and the check says so
+rather than crying wolf.
+
+**And the areas are written in digits**, because a number in words is
+invisible to a check that reads digits. That is the honest limit of this
+gate, and it is written down: "seven areas" would pass unchecked, so the
+prose says "7 areas" and the gate can see it.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The numbers in the prose are the code's numbers | `the_numbers_in_the_prose_are_the_codes_numbers` |
+| A count in prose that is wrong is caught | `a_count_in_prose_that_is_wrong_is_caught` |
+| A number inside a token is not a count | `a_number_inside_a_token_is_not_a_count` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the number of commands is not the registry's number — and `cargo xtask lists`
+  catches it.
+
+### The lesson
+
+**A check in one direction does not cover the other.** §26's check says a
+document may not name a command that does not exist; it says nothing about
+how many commands exist, and a count is the same kind of claim as a name. The
+gate was not wrong — it was *one-sided*, and the one side it did not cover is
+the side that rots.
+
+**The rule from §71 was written about a document and not applied to the
+code.** The rule is general — a number about a growing thing — and the tree
+had two instances of it, in the two documents an agent reads first. Writing
+the rule down is not the same as obeying it, and §71's own lesson was that
+the file broke the rule two lines below the stale number.
+
+**A number in words is a number no check can see.** "seven areas" reads
+better than "7 areas", and it hides. The fix was not to make the check
+understand words; it was to write the number the way a check can read it, and
+to say which numbers the gate cannot see.
+
+**And a count can hide in a shape the check does not look for.** The check
+reads a number immediately before the word "commands"; the playbook's "21
+becomes 22" is a number with no noun at all ✗ — and it was found by reading
+the document, not by the check. The check sees the counts it can see; the
+others are a reading.
+
+---
+
+## 78. The pattern document said "two boundaries, and no more", and the tree had four
+
+`docs/patterns/one-trust-boundary.md` is the tree's rule for catching
+panics, and it is unambiguous:
+
+> **Two boundaries, with distinct jobs, and no more.**
+>
+> | Boundary | Catches | Restores | Answers with |
+> |---|---|---|---|
+> | `craftkit_kernel::guard`, … | panics in code craftkit does not own | nothing | `KernelError::Internal` |
+> | `Session::execute` | everything else … | the pre-command document snapshot | `EngineError::Internal` |
+
+and, further down:
+
+> If a `catch_unwind` appears in production code outside the two boundaries
+> above, it is a bug in the design, not a safety net.
+
+**The tree had three such boundaries before §76, and four after it.** The
+count, from the source:
+
+| File | `catch_unwind` | In the document? |
+|---|---|---|
+| `crates/kernel/src/lib.rs` | the guard | yes |
+| `crates/engine/src/session.rs` | `Session::execute` | yes |
+| `crates/control/src/server.rs` | the `ui.*` handler | **no** |
+| `apps/craftkit/src/main.rs` | the render path (§76) | **no** |
+
+The third is not an accident and not a mistake: the code argues for it at the
+call site —
+
+> The handler is host code, not ours, running with the session locked.
+> Without a boundary here a panic in it would drop the connection with no
+> reply at all, and an agent would be left guessing whether its request had
+> arrived.
+
+— and the *document* never heard of it. The fourth is §76's own: the render
+path catches a panic in the drawing code, because the panic hook cannot (the
+thread that draws holds the session's lock).
+
+So the tree's rule was a **false sentence twice over**: it said "two" when
+there were three, and it said "no more" about a rule that had already been
+broken by a well-argued boundary.
+
+The document was also wrong about a third thing, in the same file:
+
+> `evaluate_chain` is a separate entry point that walks a whole chain; it
+> validates its input up front and returns an ordinary `KernelError::Failed`
+> for anything that leaves the finite world, and **it is not inside a guard**.
+
+It is inside a guard — `crates/kernel/src/ops.rs:93`:
+
+```rust
+guard("evaluating the chain", || evaluate_chain_inner(input))
+```
+
+with a comment saying why the boundary is *there* rather than one frame out
+from it.
+
+### The fix
+
+**The document lists the boundaries that exist**, each with its job and its
+reason — and the two that are not about a foreign implementation say so:
+
+> The last two are here because of a **lock**, and neither of them is a
+> general safety net.
+
+**And the tree is held to the document.** `cargo xtask lists` reads every
+Rust file, and:
+
+- a file with a `catch_unwind` in its production code must be a declared
+  boundary;
+- a declared boundary must be named in the pattern document.
+
+A fifth boundary has to be written down before it is written.
+
+The scan skips the tests (a test may catch a panic to assert that it was
+caught ✓), the comments (a comment that says `catch_unwind` is not a call
+✓), and the string literals — which is not a detail: the check's own needle
+is a string, and a check that flagged itself would be a check nobody trusts
+✓.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Every boundary that catches a panic is declared | `every_boundary_that_catches_a_panic_is_declared` |
+| An undeclared boundary is caught | `an_undeclared_boundary_is_caught` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- a boundary that catches a panic is not declared — and `cargo xtask lists`
+  catches it.
+
+### The lesson
+
+**A rule with a number in it is a rule that rots.** "Two boundaries, and no
+more" is a *count*, and a count about a thing that grows is stale by
+construction — §71's lesson, again, in a different document. The third
+boundary was not a mistake: it was better than no boundary, and it was
+argued for in the code. What was missing was the *bookkeeping*, and a
+document that says "no more" is the last place a reader looks for a third.
+
+**A rule that is broken by a good change is a rule that is wrong.** §76
+added a boundary because the tree needed one, and the document — which
+forbids the very thing the change was for — was not re-read. The honest
+order is the other way round: a change that adds a boundary has to say why
+it is not a bug in the design, in the place that says what a bug in the
+design looks like.
+
+**A check that reads a document can hold the code to it.** The document was
+not wrong because nobody looked hard enough; it was wrong because "two
+boundaries" is a claim no one could check. Now it is a list, and the list
+is checked both ways: a boundary the document does not know about, and a
+boundary the document names that is not in the tree.
+
+**This is the fourteenth prose-drift instance, and the second one this tree
+caused itself** — the first was §75. Both times, the sentence that was wrong
+was the one that described the thing being changed.
+
+---
+
+## 79. The format document's example file was never loaded by anything
+
+`docs/design/file-format.md` is the document that describes the `.craftkit`
+file, and it opens with a promise:
+
+> Everything here was read out of the code and checked by loading a
+> hand-written file, so if it disagrees with `crates/io/src/format.rs` or
+> `crates/model/src/`, the code is right and this file is out of date.
+
+and then it shows a file, and says:
+
+> That is a complete, loadable file. `craftkit-cli eval` on it reports one
+> node, 12 frames at 24 fps, and no diagnostics.
+
+**Nothing checked it.** The document's own words — "checked by loading a
+hand-written file" — describe a *process* that nobody was doing.
+
+The claims are true today. Measured, with the real CLI on the document's own
+example:
+
+```text
+left where it was
+1 node(s), 12 frame(s) at 24 fps
+```
+
+and the diagnostics are empty. But three claims about a hand-written file, in
+the one document that describes the format, with no gate behind them, is the
+same shape as every other gap in this file: **a promise the tree does not
+keep**.
+
+And it nearly stopped being true. §73 changed what a file may contain — the
+values in it are now held to the same limits the constructors keep — and the
+example is a file with values in it. It survived that change by luck: its
+numbers are small. A file with a value past the limit would have been
+refused, and the document would have gone on saying "that is a complete,
+loadable file".
+
+### The fix
+
+**The example is loaded, and the three claims are checked.**
+
+```rust
+#[test]
+fn the_formats_example_file_is_what_the_document_says() {
+    // the first json block in the document
+    // load it
+    // one node; twelve frames at 24 fps; no diagnostics
+}
+```
+
+The test lives beside the other test about this document — the one that
+checks the "what is *not* in the file" section — because it is the same kind
+of thing: a statement about the document, checked against the code.
+
+**And the document's value table now says what the reader enforces.** §73
+made the reader hold a file's values to the constructors' limits, and the
+table said only "a finite number" — which is what a number a hundred million
+times past the limit *is*. It now says what the reader does, and says that a
+file like that is refused.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The format's example file is what the document says | `the_formats_example_file_is_what_the_document_says` |
+
+and one mutation in `scripts/mutation-test-gates.sh`:
+
+- the format's example file is not what the document says — and the CLI's own
+  test catches it.
+
+### The lesson
+
+**A document that shows a file should load it.** The example is the only part
+of the format's documentation a reader can *run*, and it was the only part
+with nothing behind it. Everything else in the document is a description,
+which a reader can check against the code by reading; the example is a
+*claim*, and claims are what gates are for.
+
+**"Checked by hand" is a process, and a process is not a check.** The
+document says its contents were "checked by loading a hand-written file" —
+which was true, once, by somebody. §53's lesson, again: a statement about
+what somebody did is a description, and it rots the moment the thing changes.
+
+**The example is the part of the documentation that breaks first.** A
+paragraph about the format can be wrong in a way that only misleads; an
+example that no longer loads is a *broken instruction*, and the reader who
+follows it gets an error instead of a plan. §73 was one rule change away
+from turning this document's example into an error message.
+
+---
+
+## 80. The guard against the fingerprint forgetting a field was a list of the same fields
+
+The evaluator's cache is content-addressed: a node's state is reused only when
+the node still hashes the same. That hash — `Node::fingerprint` — is
+**hand-written**, because hashing the serialised form cost 52 ms where the
+evaluation it saved cost 7 µs (§53). The price of a hand-written hash is
+stated in the file that holds it:
+
+> A hand-written hash has to be updated by hand every time the model grows a
+> field, and a forgotten field is a **silent wrong answer**: the cache would
+> serve a state computed from the old value, and nothing would say so.
+
+A forgotten field is not a slow path or a wrong error message. It is the engine
+serving a **stale answer** and calling it current.
+
+### The measurement
+
+One line was removed from `crates/model/src/fingerprint.rs`:
+
+```rust
+fn hash_key(h: &mut Fnv, key: &Key) {
+    h.write_i128(key.time.raw());
+    hash_value(h, &key.value);
+    hash_easing(h, &key.ease);   // ← removed
+}
+```
+
+and then the whole workspace was tested:
+
+```text
+cargo test --workspace --profile ci
+workspace test exit=0
+```
+
+**Every test passed.** Not "the interesting ones" — every one of them, in every
+crate, including the evaluator's own cache tests, the engine's restore test and
+the model's fingerprint test.
+
+The consequence is not hypothetical. A keyframe's easing is the *curve* between
+two values, and a document with two keys and an easing between them evaluates
+to a different number when the easing changes. With the line gone, the cache
+does not see the change: the plan keeps the curve from before the edit, and the
+engine reports it as current.
+
+### Why nothing noticed
+
+The file's own doc said:
+
+> why `the_fingerprint_sees_every_part_of_the_node` checks each part in turn —
+> a test that fails if a part of the node stops being part of the hash.
+
+That sentence was false for the keyframe's parts, and the reason is in the
+test:
+
+```rust
+let _ = p.keys.set(Key::new(Tick::from_raw(9), Value::Num(5.0), Easing::Hold).expect("key"));
+```
+
+A keyframe is three fields — **when**, **what** and **how**. The test changed
+all three at once, so it proved that *at least one* of them was read. The hash
+could forget the easing entirely and the fingerprint would still move, because
+the time and the value moved as well — and the same was true of the time and
+of the value.
+
+That is one half of the gap. The other half is worse, because it is structural:
+**the guard was a hand-written list of the same fields the hand-written hash
+covers.** A list like that drifts with the thing it checks — the two are
+written by the same reading of the same code, and a field the model grows is
+added to neither, or to both by the same forgetting. The test could not have
+caught the forgetting it shared.
+
+And the claim was not in one place. The same sentence — *"a test beside the
+hash checks that every part of a node is part of it"* — was in
+`docs/architecture.md` and in `docs/design/file-format.md` as well. A reader
+checking one of the three would have found the claim repeated, true-looking,
+and not the gap under it.
+
+### The fix
+
+**Three things, each holding down a different half.**
+
+1. **The model test changes one field at a time.** The keyframe's time, value
+   and easing are now three separate checks, and a group's list of properties
+   is checked for both its length and its contents. `the_fingerprint_sees_every_part_of_the_node`
+   says "each part below is changed on its own" — now it is true.
+
+2. **A new gate reads the tree.** `cargo xtask lists` grew
+   `fingerprint_sees_every_field`: every field of every type the fingerprint
+   walks is checked against the hash's **own source**. A field the model grows
+   and the hash forgets is a gate failure, not a silent wrong answer, and the
+   gate says which field:
+
+   ```text
+   • the fingerprint does not hash `Property`'s field `unremembered`
+     (crates/model/src/fingerprint.rs)
+   ```
+
+   The types it checks are **derived**, not listed: the hash's blocks are found
+   by their shape (a method called `fingerprint` or `hash_into`, a free
+   function that hashes one type), and the fields come from the struct
+   definitions. There is no second list to keep in step.
+
+3. **The evaluator gets a behavioural test.** The mechanism is worth less than
+   the consequence, so the consequence is asserted too:
+   `a_changed_easing_is_not_served_from_the_cache` changes only the easing and
+   requires the cache to miss.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A keyframe's time, value and easing are each seen on their own | `craftkit-model` test |
+| A group's properties are seen, and emptying it is seen | `craftkit-model` test |
+| Every field the fingerprint walks is a field the hash reads | `cargo xtask lists` |
+| A changed easing is not served from the cache | `craftkit-eval` test |
+
+and two mutations in `scripts/mutation-test-gates.sh`:
+
+- the fingerprint forgets the keyframe's easing — and the evaluator's test
+  catches it;
+- the fingerprint forgets a field the model has — and the `lists` gate catches
+  it.
+
+### The honest limit of the gate
+
+The check sees that a field is **read**. It cannot see that the read reaches
+the hash: a hash that read `self.id` and then hashed something else would
+satisfy it. The name is the evidence, and a name is weaker than a value.
+
+Two kinds of type are not covered by the field check, both on purpose:
+
+* An **enum** is matched exhaustively by the hash, so a new variant is a
+  compile error rather than a silent wrong answer.
+* A **tuple struct** is reached through an accessor — `Keyframes` is
+  `Keyframes(Vec<Key>)` — and the check reads fields, not accessors. What it
+  holds is checked through `Key`.
+
+### The lesson
+
+**A guard that is a hand-written list of the same thing it checks drifts with
+it.** The list and the hash are written by the same reading of the same code,
+and they are forgotten together. A guard has to be **derived** from the thing
+it guards, or it is a second copy with the same blind spot.
+
+**A check that changes three things at once proves that one of them is
+read.** This is the whole gap, and it is a shape that recurs: §53's own
+fingerprint test changed a key's time, value and easing together and passed
+for a hash that read only the time. "Changed on its own" is a stronger
+requirement than "changed", and it is the one that matches the claim.
+
+**The claim in the doc was the cheapest evidence available, and it was
+false.** The file said a test would fail if a part of the node stopped being
+part of the hash. Reading that sentence takes a second; running the mutation
+takes a minute. The sentence was written by somebody reading the code, and
+every other sentence in this list that was wrong was written the same way.
+
+---
+
+## 81. The first real format change could not be made: three guards forbade the state the machinery exists for
+
+The house rule is one sentence long — *"a change that saves something new in a
+design adds ONE file, `crates/doc/src/format/pending/<name>.rs`"* — and the
+machinery for it is real: a directory, a table, a `step` function, a fold
+script, a pattern document and a recipe.
+
+§81 made the change. **The suite went red, seven times, and three of the
+failures were the guards themselves firing on correct work.** Two of them said
+something false about the code while they did it.
+
+### The measurement
+
+The recipe (`docs/recipes/change-the-file-format.md`) is the longest document
+in the tree about this, so it is what was followed: one file in `pending/`, a
+`FILES` entry, a `mod`, a `step`, and the reader left alone.
+
+```text
+cargo test -p craftkit-io
+test format::pending::tests::every_pending_file_is_wired_into_apply ... FAILED
+test format::pending::tests::every_listed_change_is_declared_and_applied ... FAILED
+test format::pending::tests::applying_nothing_leaves_the_document_alone ... FAILED
+test format::pending::tests::the_files_on_disk_and_the_table_agree ... FAILED
+test format::tests::this_builds_own_file_round_trips ... FAILED
+test store::tests::a_document_the_reader_can_read_back_is_written ... FAILED
+test store::tests::a_document_round_trips_through_a_file ... FAILED
+test result: FAILED. 28 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+And the recipe's own worked example **does not compile**:
+
+```text
+error[E0308]: mismatched types
+  --> crates/io/src/format/pending/mute_flag_to_node_field.rs:20:9
+   |
+20 |     let Ok(enabled) = PropPath::parse("enabled") else { return };
+   |     ^^^^^^^^^^^   -------------------------- this expression has type `Option<PropPath>`
+   |                    expected `Option<PropPath>`, found `Result<_, _>`
+```
+
+`PropPath::parse` returns an `Option`. The recipe says `Result`. The example
+is not compiled by anything — a `rust` block in a markdown file is not a
+doctest — so it sat there wrong.
+
+The release script refused the change too:
+
+```text
+$ ./scripts/fold-format-pending.sh
+pending format changes (1):
+  • mute_flag_to_node_field
+error: mute_flag_to_node_field is not listed in crates/io/src/format/pending.rs; add it to FILES and to apply() first.
+fold dry-run exit=1
+```
+
+### Why nothing noticed
+
+**The naming was three different things in three places.**
+
+| Where | What it said the name is |
+|---|---|
+| the recipe, step 1 | the file is `snake_case`, the `FILES` entry is kebab-case |
+| the pattern document, step 3 | `"example-name" => example_name::step(doc)` |
+| `every_pending_name_is_a_plausible_file_name` | lower-case letters, digits and `-` |
+
+Rust module names are `snake_case`, and `mod example-name;` does not compile.
+So the rule accepted a name that could not be built and refused the names that
+could — and following the recipe exactly (`"mute-flag-to-node-field"` in the
+table, `mute_flag_to_node_field.rs` on disk) failed
+`the_files_on_disk_and_the_table_agree`, which wants them to be *the same
+word*.
+
+**The guards forbade the state instead of checking it.**
+
+```rust
+assert!(
+    FILES.is_empty(),
+    "there are pending changes ({}); call each one's `step` from `apply`",
+    FILES.join(", ")
+);
+```
+
+That is a tripwire wired to the wrong side: it fires the moment a change
+exists, and its advice is advice the person had already taken. And:
+
+```rust
+assert!(
+    source.contains(&format!("{name}::step(doc)")),
+    "pending/{name}.rs is declared but `apply` never calls its `step`, so the \
+     migration does not run and an older design loads without its rewrite"
+);
+```
+
+The recipe's wiring is `Some(mute_flag_to_node_field::step)` and the pattern
+document's is `name => name::step(doc)`. Neither is the string the test looks
+for, and the second one is not valid Rust under the first one's naming. So
+the test's message — *"`apply` never calls its `step`"* — was **false**: `apply`
+did call it.
+
+**And the reader rewrote files it had just written.** `pending::apply` ran
+every step on every file, including a file this build wrote — so the file did
+not read back as it was written, which is what the three round-trip failures
+were. The file's own header records which changes it has had
+(`Meta::pending`), and the reader **never read it**: a field in `Format`
+nobody reads, in a file whose doc says *"Every field in [`Format`] is here
+because some command reads it. A field nobody reads is a field that will
+drift."*
+
+### The fix
+
+**One name, everywhere.** The file, the `FILES` entry and the `mod` are the
+same word in `snake_case`. The name rule now says what it means, and what it
+means is what Rust requires.
+
+**Guards that ask questions.**
+
+| Guard | Before | After |
+|---|---|---|
+| `every_pending_file_is_wired_into_apply` | the table must be **empty** | every listed change **has a step** (`step_for(name).is_some()`) |
+| `every_listed_change_is_declared_and_applied` | the source contains `{name}::step(doc)` | the source contains `{name}::step` — every shape of the wiring |
+| `every_pending_name_is_a_plausible_file_name` | lower-case, digits and `-` | `snake_case`, and it starts with a letter, so it is a module |
+| `applying_nothing_leaves_the_document_alone` | `apply` leaves the document alone | renamed `applying_no_steps_leaves_the_document_alone`: the *empty-step* case |
+
+**The reader gives a file only the changes it has not had.** `Meta::pending`
+is read now, and `apply` takes the file's list. A file this build wrote
+records every change this build has, so it is not rewritten when it is read
+back.
+
+**And the rule is testable *now*.** `File::from_text_with` and
+`pending::apply_steps` take the steps as an argument, so a test can read a
+file with a step of its own and see which steps the file is given. The test
+`a_file_is_given_only_the_changes_it_has_not_had` is not vacuous: it drives
+the reader with a synthetic step and a header that names it.
+
+**And a number in prose had to go.** The recipe and the playbook both said
+how many lines `crates/io/src/format/pending.rs` was, and the tree's
+line-count gate kept those numbers true — which meant that **every format
+change had to edit two documents** to keep a number right. The one-file rule
+exists because two people changing the format at once must not be editing the
+same file; a line count in a recipe puts them both in it, and every format
+change ends in a merge conflict over a number that carries no information the
+reader needs. The numbers are gone. "It is the rule" is the claim; the count
+was decoration.
+
+The gate itself stays — `prose_line_counts_match_the_files` still catches a
+wrong count, and its own tests (a fabricated tree with a wrong count, and one
+with a number inside a token) prove it — but the tree no longer has a count
+for it to catch, and that is the point: a checked number that every change has
+to update is a number in the way.
+
+**After the fix**, the same change — snake_case throughout — gives:
+
+```text
+cargo test -p craftkit-io
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+and the fold script's dry run exits 0. `cargo test --workspace` exits 0 with
+the change in place, and so does `cargo xtask ci` — **the first time the tree
+has ever carried a pending change at all**, and the first time the whole
+machinery has ever run.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The name is one word, and it is a Rust module | `every_pending_name_is_a_plausible_file_name` |
+| The table and the directory agree | `the_files_on_disk_and_the_table_agree` |
+| Every listed change has a step, and is declared | two `pending.rs` tests |
+| A file is given only the changes it has not had | `a_file_is_given_only_the_changes_it_has_not_had` |
+| The changes a file still needs are worked out | `a_file_that_has_had_a_change_is_not_had_it_again` |
+| A file this build wrote reads back unchanged | the three round-trip tests |
+| A line count in prose is the file's length | `cargo xtask lists` — with no count left to catch, on purpose |
+
+and two mutations in `scripts/mutation-test-gates.sh`: the reader forgetting
+what the file has had, and the list of changes a file still needs.
+
+### The open half — the release, and it is the owner's
+
+The script folds a change into `crates/io/src/format/pending/v<N>/`, empties
+`FILES` and puts `apply` back to "the loop with no arms". After that **nothing
+calls a folded step**: the files are not compiled (there is no `mod v2;`), not
+called, and **nothing in the tree reads a `v<N>/` folder**. The recipe
+describes the other half — `crates/io/src/format/v2/` and a reader that
+dispatches on the version the file claims.
+
+So a design written before a change would load **without its rewrite** after
+the release, unless the reader is edited by hand to understand the older
+shape — which is the one-diff edit the whole scheme exists to avoid.
+
+Which of the two is the intent is a decision about the release, and the release
+is the owner's. The script now says so out loud instead of letting the next
+release produce dead code quietly, and the question is item 15 below.
+
+### The lesson
+
+**A tripwire wired to the wrong side fires on the work it is meant to
+protect.** "The list must be empty" is not a check that the wiring is right;
+it is a check that nothing has happened yet.
+
+**A guard that quotes a spelling asks for one spelling.** The test wanted
+`{name}::step(doc)`, the recipe wrote `Some(name::step)`, and the pattern
+document wrote a third thing — and the test's message claimed the step was
+never called, when it was. A guard should look for what all the right answers
+have in common.
+
+**A name is one thing, and three documents were free to disagree about it.**
+The file, the table entry and the module were allowed to be different words,
+and the release script compared one of them with another.
+
+**The field that records the state is not read by the code that needs it.**
+`Meta::pending` was written on every save and read on no save, in a file whose
+own doc says a field nobody reads is a field that will drift.
+
+**A guard that cannot be exercised is not a guard.** The whole machinery had
+never run: the list had been empty since version 1 (§45), the guards were
+vacuous, and the first real change was the first execution — of code whose
+rules three documents described differently.
+
+---
+
+## 82. The control channel's method list was written out by hand in three places, and one of them was wrong
+
+The control channel is how an agent drives the application. Its **methods**
+are the wire contract: `engine.execute`, `engine.describe`, `session.state`,
+`diagnostics.list`, `diagnostics.crash_reports`, `ping`, `shutdown` and `ui`
+(`ui.click`, `ui.screenshot`, `ui.render`).
+
+Those eight names are written down in the code, in `Method::as_str`. They were
+also written down **by hand**, in three documents.
+
+### The measurement
+
+| Where | What it says |
+|---|---|
+| `crates/control/src/protocol.rs` | the eight, in `Method::as_str` |
+| `docs/recipes/add-a-control-channel-method.md` | a table of all eight ✓ |
+| `skills/craftkit-checking/SKILL.md` | "Methods, **exactly**": all eight ✓ |
+| `AGENTS.md` | **five of the eight** ✗ |
+
+`AGENTS.md` said:
+
+> Its methods are `engine.execute`, `engine.describe`, `session.state`,
+> `diagnostics.list` and `ui` (`ui.click`, `ui.screenshot`, `ui.render`).
+
+`diagnostics.crash_reports`, `ping` and `shutdown` were missing. The sentence
+has no "and a few more" in it — it reads as the whole list, and it is the
+document every agent reads first.
+
+The skill's list was complete, and it cited its source:
+
+> Methods, exactly (`protocol.rs:59-67`): …
+
+Lines 59 to 67 of `protocol.rs` are the tail of `as_str` and the head of
+`parse` — a fragment, not the list. The list runs from 53 to 60.
+
+### Why nothing noticed
+
+**A list in prose is a second copy of the code.** Three copies of the method
+names, written at three times, by three hands — and nothing compared any of
+them. §77 found the same shape in a *count* ("21 commands"), §80 found it in a
+*list of fields*, and this is the same thing again in a list of *names*: a
+hand-written copy of something the code already knows.
+
+**The one citation that could have been checked was not.** §39's check covers
+citations that name a **test** — "`the_fingerprint_is_stable` asserts it" —
+because a test name is a name that can be looked up. A citation that names
+*lines* (`protocol.rs:59-67`) names a place, and nothing checked places: the
+lines it pointed at were a fragment of the thing it claimed to point at.
+
+**The one list that could have been compared was not.** The recipe's table is
+a table: eight rows, one name each. A table is comparable. Nothing compared
+it.
+
+### The fix
+
+A new `lists` check, `control_methods_are_listed`, with two rules:
+
+* **The recipe's table is exactly the code's methods** — in both directions.
+  A method the code has and the table does not is a gap; a method the table
+  has and the code does not is a name an agent would send and get an error
+  for.
+* **A paragraph that names more than half of the methods names them all.**
+  The threshold is what keeps this from firing on a paragraph that mentions a
+  method in passing: `docs/agent-playbook.md` names three in its examples and
+  is not talking about the set.
+
+The names come from the code — `Method::as_str`'s arms — so the list is
+derived, not copied, and there is no second list of methods to keep in step.
+
+And the prose is corrected: `AGENTS.md` names all eight, and the skill's
+citation now names the **symbol** (`Method::all()` in
+`crates/control/src/protocol.rs`) rather than a line range — and a symbol
+citation *is* checked, by the check that a symbol claimed to be in a file is
+in it.
+
+The check finds the old `AGENTS.md` on the real tree:
+
+```text
+• AGENTS.md: line 200 names 5 of the 8 methods and not `diagnostics.crash_reports`
+• AGENTS.md: line 200 names 5 of the 8 methods and not `ping`
+• AGENTS.md: line 200 names 5 of the 8 methods and not `shutdown`
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The recipe's table is the code's method list, both ways | `cargo xtask lists` |
+| A paragraph that names most of the methods names them all | `cargo xtask lists` |
+| The tree's method list is right today | `the_control_methods_are_listed_in_the_prose` |
+
+and a mutation in `scripts/mutation-test-gates.sh`: a method taken out of
+`AGENTS.md`'s list.
+
+### The lesson
+
+**A list in prose is a copy of the code, and a copy rots.** Three copies of
+eight names, one of them wrong, and no comparison anywhere. The fix is not
+"write the list more carefully" — it is to make the copy *derived*, or to
+check it.
+
+**A citation that names a place is a promise nobody keeps.** `protocol.rs:
+59-67` was the shape §39 does not check, and it was wrong in the way a
+placeholder citation always is: it points at *something* near the thing.
+
+**A threshold is what lets a check about prose be a check.** "Every paragraph
+must name every method" would fire on every document that mentions one. "A
+paragraph that names more than half of them is talking about the set" fires
+on exactly the sentences that claim to be the list.
+
+---
+
+## 83. The registry advertised seven keyboard shortcuts, and the tree bound none
+
+`CommandSpec` has a `shortcut` field, and the house rules list it as part of
+the command's shape: id, label, area, icon, **shortcut**, parameters, doc,
+enabled. Seven commands declare a chord.
+
+### The measurement
+
+```text
+Ctrl+N   Del   F2   M   Ctrl+D   Ctrl+Z   Ctrl+Shift+Z
+```
+
+All seven are unique ✓. And **nothing binds them**:
+
+```text
+$ grep -rn "key_pressed\|consume_key\|Keyboard\|hotkey" crates/ui/src crates/engine/src apps/craftkit/src
+(no matches)
+```
+
+The UI crate is 2496 lines and has no key handling at all — no `Key::` check,
+no `key_pressed`, no shortcut parser. The only `egui::Key` in the tree is a
+synthetic event in a test. The application is the same: pressing `Ctrl+Z` in
+the window does nothing.
+
+What the tree *says* about those chords:
+
+| Where | What it says | The truth |
+|---|---|---|
+| `CommandSpec::shortcut`'s doc | "The key chord, in the form **the UI's shortcut parser** understands." | there is no shortcut parser ✗ |
+| `skills/craftkit-editing/SKILL.md` | "key chord the UI's parser understands" | the same claim ✗ |
+| the MCP tool description | "**Keyboard: Ctrl+Z**" | the app binds no keys ✗ |
+| `docs/architecture.md` | "The UI toolbar, **a keyboard shortcut**, a CLI script, the control channel and the MCP tool all land on step 3" | one of those five front ends does not exist ✗ |
+
+The MCP line is the one with teeth. A tool description is what an agent reads
+to decide what to tell a person, and "Keyboard: Ctrl+Z" reads as *send them
+here*. The person presses `Ctrl+Z` and nothing happens, and the tree has
+promised otherwise.
+
+### Why nothing noticed
+
+**The field had exactly one reader, and the reader was the advertisement.**
+`spec.shortcut` is read in one place — the MCP description — and the thing
+that read it never checked whether the thing it read was true. The
+advertisement was exercised; the *claim* was not.
+
+**A specification cannot fail a test.** There is no implementation to be
+wrong: the chords are notes to self, and a note to self is not a fact about
+the tree. So the tree could say "the UI's shortcut parser" for as long as it
+liked — the parser was not there, and the sentence about it was the only
+place the tree claimed otherwise.
+
+### The fix
+
+**The documentation says what is true.** The chord is the chord the command is
+*advertised* with; the tree binds no keys; the MCP description repeats it and
+says so.
+
+**The advertisement stops claiming a binding.**
+
+```text
+Intended keyboard: Ctrl+Z (this build binds no keys)
+```
+
+**And the specification is checked.** A new test in the engine:
+`the_advertised_shortcuts_are_unique_and_well_formed` — no two commands on
+one chord, and every chord is `[Ctrl+][Shift+]<key>`, with `Ctrl` before
+`Shift`. A specification with two commands on one chord, or a chord nobody
+could parse, is a specification nobody could implement.
+
+A second test, in the MCP crate: a tool description that mentions a chord
+also says the build binds no keys.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| No two commands advertise the same chord | `the_advertised_shortcuts_are_unique_and_well_formed` |
+| Every chord is `[Ctrl+][Shift+]<key>` | the same |
+| A tool description does not claim a binding | `a_tool_description_does_not_claim_a_key_the_build_does_not_bind` |
+
+and a mutation in `scripts/mutation-test-gates.sh`: two commands advertising
+one chord.
+
+### The open half — the binding, and it is the owner's
+
+The chords are a specification, and a specification is not a feature. Binding
+them is a decision with questions in it: which commands get one, what a chord
+does about a command that needs parameters (`Ctrl+N` is `node.add`, which
+needs a name and a kind — does it open a dialog, like a toolbar click?), and
+what happens when two commands want the same chord. The tree's rule is that
+only a toolbar click starts an interactive tool, and a key press is a
+toolbar click in another shape — so the rule has an answer, but the *product*
+does not yet.
+
+So the decision is recorded as item 16 below: **bind the chords, or drop the
+field.** What is not on the table is the middle state §83 found — a chord in
+the registry, advertised to agents as a keyboard shortcut, bound to nothing.
+
+### The lesson
+
+**A specification can lie in the tree's voice.** The doc said "the UI's
+shortcut parser", and the tree has no shortcut parser. A specification has no
+implementation to fail a test, so the sentences *about* it are the only place
+the claim lives — and they were not claims anybody checked.
+
+**An advertisement is a promise.** "Keyboard: Ctrl+Z" in a tool description is
+the tree telling an agent to send a person to a key. The tree has to be able
+to answer for every word it publishes, and the honest word here was "intended".
+
+**A field with one reader needs the reader to check something.** The chord
+was read to be repeated, and repeating a claim is not the same as checking it.
+
+---
+
+## 84. The history's memory budget was enforced on push and not on undo
+
+§52 gave the undo and redo stacks a **memory** budget, because a count of
+entries is not a bound on memory. §68 found that the budget counted memory
+that had been freed. §84 found that the budget was not checked on half the
+paths that hold memory.
+
+### The measurement
+
+`push` checks:
+
+```rust
+while self.bytes + bytes > MAX_HISTORY_BYTES {
+    if self.undo.is_empty() { break; }
+    self.drop_oldest_undo();
+}
+```
+
+`pop_undo` — the path a person takes when they undo — did not:
+
+```rust
+pub fn pop_undo(&mut self, current: Document) -> Option<Document> {
+    let entry = self.undo.pop()?;
+    self.bytes -= entry.bytes;
+    let bytes = current.estimated_bytes();
+    self.bytes += bytes;
+    self.redo.push(Entry { label: entry.label.clone(), doc: current, bytes });
+    Some(entry.doc)
+}
+```
+
+An undo moves the **current** document into the redo stack. The current
+document is not the snapshot it replaces: it is whatever the person has been
+editing, and it can be **larger**. So the two stacks could hold more than the
+budget allows, and the budget's own report said so:
+
+```text
+the history held 67936429 bytes, and the budget is 67108864
+```
+
+67 936 429 bytes against a 67 108 864-byte budget — an overshoot of 827 565
+bytes in the measurement, and up to the size of the whole current document
+(32 MiB, the model's own limit) in the worst case: a history holding 64 MiB of
+snapshots, undone into a 32 MiB document, holds 96 MiB against a 64 MiB
+budget.
+
+### Why nothing noticed
+
+**The budget had a test, and the test exercised the path that checked it.**
+`the_history_keeps_its_memory_within_a_budget` pushes and pushes ✓ — it never
+undoes with a document bigger than the one it replaced ✓.
+
+**Both stacks count together, so the arithmetic looked right.** `self.bytes`
+is correct at every line — the number reported *is* what the history holds.
+What was missing was the *check*, not the count. §68 was the same shape: the
+count was right and the check was not.
+
+### The fix
+
+The undo and redo paths trim now, through one helper:
+
+```rust
+fn trim_to_budget(&mut self) {
+    while self.bytes > MAX_HISTORY_BYTES {
+        if !self.undo.is_empty() {
+            self.drop_oldest_undo();
+        } else if !self.redo.is_empty() {
+            self.drop_oldest_redo();
+        } else {
+            break;
+        }
+    }
+}
+```
+
+The undo steps go first, because the redo entry that was just pushed is the
+newest state there is and the oldest undo step is the one a person is least
+likely to want — which is the same rule `push` already followed ("Drop the
+oldest, not the newest: recent steps are the ones a person is likely to
+want").
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The history stays inside its budget, whoever moves a document | `undoing_does_not_take_the_history_over_its_budget` |
+| The budget counts what the stacks hold | `the_budget_counts_the_memory_the_stacks_hold` |
+
+and a mutation in `scripts/mutation-test-gates.sh`: the undo path not
+trimming.
+
+### The lesson
+
+**A budget has to be enforced on every path that holds memory.** The budget
+was checked where the memory arrives and not where the memory *moves*, and a
+move can enlarge what is held.
+
+**A test that exercises one path proves that path.** The budget test pushed
+138 documents and never undid; the undo path was untested against the budget,
+and a budget with one checked path is a budget with a hole in it.
+
+---
+
+## 85. A property had several names, and the model could not agree on which one it had
+
+§83 found that the tree advertised shortcuts it did not bind. §85 found
+something worse in the one place every command goes through: **the model had
+several ways to name a property, and they disagreed with each other.** A
+property could be read by a path that could not write it, listed under a path
+that pointed at a different property, and created under a path that named
+nothing at all.
+
+The command that showed it is one line:
+
+```text
+prop.set { node: 1, path: "@5", value: 42 }   →   Ok("`@5` = 42")
+```
+
+where property 5 was the nested property `a/b`. It reported success, and it
+did something else.
+
+### The measurement
+
+**1. The read side and the write side resolved an id differently.** The model's
+two resolvers are one screen apart:
+
+```rust
+// find — the read side
+PathSeg::Uid(_) => None,          // …except in the last position, where
+                                  // find_uid_in searches the whole subtree
+// find_mut — the write side
+let idx = index_of_seg(&group.nodes, last)?;
+// …and index_of_seg's uid arm:
+//     PathSeg::Uid(id) => nodes.iter().position(|n| matches!(n, PropNode::Prop(p) if p.id == *id)),
+//     …the direct children only
+```
+
+Measured on a document where property 5 sat one group down:
+
+```text
+find("@5")     = Some((5, "b", "1"))
+find_mut("@5") = None
+```
+
+So the property could be **read** by `@5` and not **written** by it. The engine
+writes, so `prop.set @5` fell through to "there is no such property" and
+**invented** one. Before the fix:
+
+```text
+prop.set { node: 1, path: "@5", value: 42 }  →  Ok("`@5` = 42")
+flat after: [("enabled", 1, "true"), ("amount", 2, "1"), ("tint", 3, "#8caad2"),
+             ("label", 4, ""), ("a/b", 5, "1"), ("5", 6, "42")]
+```
+
+The nested property kept its old value — the path named the wrong thing — and
+the root gained a second property labelled `5`. The command reported success.
+After the fix the same command sets the property the path names and creates
+nothing:
+
+```text
+prop.set { node: 1, path: "@5", value: 42 }  →  Ok("`@5` = 42")
+flat after: [("enabled", 1, "true"), ("amount", 2, "1"), ("tint", 3, "#8caad2"),
+             ("label", 4, ""), ("a/b", 5, "42")]
+```
+
+**2. The listing and the parser disagreed about how deep a property tree may
+be.** The listing stopped at the path limit; the validator did not. The
+boundary, measured group by group:
+
+| groups | `flatten()` gives | the deepest path | the parser accepts it | `validate()` |
+|---|---|---|---|---|
+| 15 | 1 property | 16 segments | yes | ok |
+| 16 | 1 property | **17 segments** | **no** | ok |
+| 17 | **0 properties** | — | — | **ok** |
+
+Three things in one table. A tree of sixteen groups published a path the
+parser refuses. A tree of seventeen groups published **nothing at all** — and
+`validate` called it good. That tree is a document that holds a property the
+file keeps, the UI does not list, and the evaluator never reads.
+
+**3. The listing counted names exactly; the resolver counted them loosely.**
+Two sibling properties called `Amount` and `amount`:
+
+```text
+validate()   = Ok(())
+flat         = "Amount" (id 1), "amount" (id 2)
+find("amount") = Some((1, "Amount"))
+```
+
+The second property's published path resolved to the **first** one, so the
+second had no name of its own.
+
+**4. The engine had a second path parser.** The engine's own comment claimed
+otherwise, twenty-seven lines above the helper it sat on — and the same file
+had a parser of its own:
+
+```rust
+/// Find a property by path, using the model's own grammar rather than a
+/// hand-rolled split.
+///
+/// One addressing scheme, one implementation. A second parser here would be a
+/// second thing to keep in step with `craftkit-model`.
+fn find_mut<'a>(group: &'a mut PropGroup, path: &str) -> Option<&'a mut Property> { … }
+```
+
+and further down the file:
+
+```rust
+fn insert_at(group: &mut PropGroup, path: &str, prop: Property, id_of: &'static str) -> … {
+    let segs: Vec<&str> = path.split('/').map(str::trim).filter(|s| !s.is_empty()).collect();
+    …
+    current.push_group(PropGroup::new(*seg, *seg));   // every segment is a literal id
+```
+
+So `prop.set` read every segment as a literal name:
+
+```text
+prop.set { node: 1, path: "effects/#2/amount", value: 7 }  →  Ok
+   … made a group whose id was literally "#2"
+find("effects/#2/amount") = None          ← the property it just made cannot be read back
+
+prop.set { node: 1, path: "@99", value: 1 }  →  Ok
+   … made a property labelled "99" (id 6)
+
+prop.set { node: 1, path: "g0/g1/…/g19/leaf", value: 1 }  →  Ok
+   … made twenty groups and a property
+   flatten()               = 4 properties      ← the new one is not among them
+   PropPath::parse(the path) = None             ← and no path can name it
+   the file mentions "leaf" = true              ← and the file keeps it
+```
+
+Setting that last path a second time made a **second** `leaf`: the lookup
+still failed, so the insertion ran again. The file grew by a property that
+nothing could read, and the command said `Ok` both times.
+
+### Why nothing noticed
+
+**The model's own test asked a weaker question.** There was one, and it was
+about exactly this:
+
+```rust
+fn flatten_produces_paths_that_resolve_back() {
+    for (path, _) in &flat {
+        assert!(g.find(path).is_some(), "flattened path {path} does not resolve");
+    }
+}
+```
+
+*Some* property, not *the* property. A path that resolves to the wrong one
+passes. The name of the test says what it meant to check, and it did not check
+that.
+
+**Three pieces of code had three ideas of what a path is, and no test asked
+them to agree.** The listing (`flatten`), the parser (`PropPath::parse`) and
+the validator (`PropGroup::validate`) each had their own idea, and the only
+relationship between them was the *number* `MAX_PATH_SEGMENTS` — used by the
+first two, ignored by the third, which used `MAX_DEPTH` instead. Two limits
+for two different trees is fine; two limits for one tree is a hole.
+
+**The engine's second parser was invisible because it was inside a command.**
+`prop.set` was tested with the paths a person types — `amount`, `custom/thing`.
+Nothing tested a path the grammar cannot describe, because nothing in the tree
+said such a path was possible.
+
+**A comment can be a promise nobody keeps.** The claim "one addressing scheme,
+one implementation" sat directly above a helper that used the model's
+grammar — and directly above a second parser, twenty-seven lines further
+down, that did not. §82's lesson (cite the symbol, not the line) applies to
+code as well: the sentence was true of the function it sat on and false of the
+file it sat in.
+
+### The fix
+
+**One name-matching rule, in one place.** A group's id and a property's label
+both match case-insensitively, and every part of the model asks that one
+function:
+
+```rust
+fn node_matches(node: &PropNode, name: &str) -> bool {
+    match node {
+        PropNode::Group(g) => g.id.eq_ignore_ascii_case(name),
+        PropNode::Prop(p) => p.matches(name),
+    }
+}
+```
+
+The listing's occurrence counter now counts the way the resolver counts, so a
+published path points at the property it names.
+
+**The tree is as deep as a path is long.** The property tree is bounded by
+`MAX_PATH_SEGMENTS`, and a tree deeper than that is **refused** rather than
+truncated:
+
+```rust
+if depth >= limits::MAX_PATH_SEGMENTS {
+    return Err(CoreError::LimitReached { limit: "property depth" });
+}
+```
+
+`MAX_DEPTH` is now what it always should have been — the depth of the **node
+graph**, which is the evaluator's rule.
+
+**What this costs.** A property tree deeper than fifteen groups used to be
+legal, and a file holding one is now **refused** by the reader rather than
+loaded with its deepest properties invisible. That is the direction §50 set
+("the writer must not write what the reader refuses"), and the writer agrees:
+the model refuses to build such a tree. No file this tree has ever written has
+one — the engine could not make one without a path of more than sixteen
+segments, and that path was refused — but a file made by hand, or by an older
+build that allowed it, will not open. The honest trade is a refused file over
+a file that holds a property nothing can reach.
+
+**The write side resolves an id the way the read side does.** `find_mut` looks
+for a uid anywhere below the group it is addressing, so a property that can be
+read by `@5` can be written by `@5`.
+
+**The model creates properties.** The engine's hand-rolled parser is gone; the
+model owns the grammar, so the model owns the creation:
+
+```rust
+pub fn insert(&mut self, path: &PropPath, id: u64, value: Value) -> Result<(), CoreError>
+```
+
+A path that names an **id** or a **position** names something that already
+exists, so it can change a property but not create one, and it is refused:
+
+```text
+prop.set { node: 1, path: "@99", value: 7 }
+  → `path` `@99` names a property by its id, and there is no property with that id to create
+prop.set { node: 1, path: "effects/#2/amount", value: 7 }
+  → `path` `#2` names the 2nd child of this group, and a new group has no position yet
+prop.set { node: 1, path: "g0/…/g15/leaf", value: 1 }
+  → `path` `…` is not a path this build accepts: a path has at most 16 segments, and every
+    segment must name a property or a group
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Every property the tree holds is named by a path the parser accepts | `every_property_the_tree_holds_is_named_by_a_path_the_parser_accepts` |
+| A tree deeper than a path is refused, not truncated | `a_tree_deeper_than_a_path_is_refused_rather_than_truncated` |
+| A path names the property the listing published it for | `a_path_names_the_property_the_listing_published_it_for` |
+| The read side and the write side resolve an id the same way | `the_read_side_and_the_write_side_resolve_a_uid_the_same_way` |
+| A path that names an id or a position cannot create anything | `a_path_that_names_an_id_or_a_position_cannot_create_anything`, `an_id_that_names_no_property_cannot_create_anything`, `a_path_that_names_a_position_cannot_create_anything` |
+| A property set by its id is the property the id names | `a_property_set_by_its_id_is_the_property_the_id_names` |
+| A path too long to name is refused | `a_path_too_long_to_name_is_refused` |
+| A created property is readable by the path that created it | `a_created_property_is_readable_by_the_path_that_created_it` (model and engine) |
+
+and six mutations in `scripts/mutation-test-gates.sh`: the property tree
+deeper than a path, the listing counting names exactly, the write side
+resolving an id differently, an id naming a property that can be created, a
+path longer than the tree is deep, and a group created under a name the path
+does not name.
+
+### The lesson
+
+**One thing, one implementation — and check the claim is true of the file, not
+of the function.** "One addressing scheme, one implementation" was true of
+`find_mut` and false of `commands.rs`.
+
+**A path is a name, and the code that resolves a name and the code that
+publishes one have to be the same code.** Here they were three: the listing,
+the parser and the validator, plus a fourth in the engine. Every one of them
+had its own idea, and no test asked them to agree.
+
+**"Is it there?" is a weaker question than "is it the right one?"** The model's
+test asked the first and the bug was the second.
+
+**A command that reports success has done what it said.** `prop.set @5`
+reported "`@5` = 42" and set a different property. The rule the tree already
+has — a refused command leaves nothing half-applied — did not cover it,
+because the command did not fail: it succeeded at the wrong thing.
+
+**Prose drift, instance nineteen.** The agent playbook said "the tests start at
+line 960" about `crates/engine/src/commands.rs`, and §85's edits moved them.
+The line is now the place — "its tests are at the end of the file" — and the
+gate that checks the old shape still catches a document that names a line.
+
+---
+
+## 86. The live-window check read the token the last run left behind
+
+§85's verification ran `scripts/live-window-check.sh` and it failed, with a
+complaint about the control channel:
+
+```text
+live-window: window 0x5000005 (pid 57692)
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+IndexError: list index out of range
+live-window: FAIL — the commands over the control channel did not all succeed
+```
+
+The driver had sent one request and received **nothing at all**: the server
+closed the connection without a reply. The check had nothing to do with the
+window, and the failure said nothing about the window.
+
+### The measurement
+
+The token file **outlives the process that wrote it**. The control server
+replaces it on the next launch and never removes it — the tree says so in
+`crates/control/src/token.rs`:
+
+> the token file outlives the process that wrote it
+
+and the script waited for the file to *exist*:
+
+```bash
+TOKEN_FILE="$HOME/.local/share/craftkit/control/$PORT.token"
+for _ in $(seq 1 60); do
+    [ -s "$TOKEN_FILE" ] && break
+    …
+done
+TOKEN=$(cat "$TOKEN_FILE")
+```
+
+The file from the previous run is still there, non-empty, **before this app
+has written anything** — so the wait was satisfied at once and the script
+sent the *previous* run's token. The server refused it and closed the
+connection, and the driver read an empty reply.
+
+The port is fixed (`CRAFTKIT_LIVE_PORT`, default 47711), so the file is
+almost always there from the last run: the check fails on the first run after
+another one and passes on the ones after that, when the app has already
+replaced the file. **A check that fails for a reason that has nothing to do
+with what it checks is worse than no check**: it teaches people to re-run it
+and to ignore the failures, and it is exactly the §1 failure in the other
+direction.
+
+Reproduced on demand, with the stale file planted by hand:
+
+```bash
+printf '%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" \
+    > ~/.local/share/craftkit/control/47711.token
+./scripts/live-window-check.sh
+```
+
+### The fix
+
+The wait is for the file to hold a token that is **not** the one that was
+already there:
+
+```bash
+wait_for_token() { # path old-token pid [tries]
+    local path="$1" old="$2" pid="$3" tries="${4:-60}"
+    local now
+    for _ in $(seq 1 "$tries"); do
+        if [ -s "$path" ]; then
+            now=$(cat "$path")
+            if [ "$now" != "$old" ]; then
+                printf '%s' "$now"
+                return 0
+            fi
+        fi
+        kill -0 "$pid" 2>/dev/null || return 2
+        sleep 0.5
+    done
+    return 1
+}
+```
+
+and the script's self-test now has two cases for it, because a fix to a check
+that is not itself checked is a wish:
+
+| Case | Says |
+|---|---|
+| `a token left over from the last run is not this app's` | the wait takes the *new* token, not the one that was there |
+| `a token that never changes is not waited for` | a file that never changes is not a token, and the wait gives up |
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The check reads this app's token, not the last run's | two `live-window-check.sh --self-test` cases |
+| The check fails loudly when the app never writes a token | `wait_for_token`'s status 1 and 2 |
+
+and a mutation in `scripts/mutation-test-gates.sh`: the wait taking any token
+in the file.
+
+### The lesson
+
+**A file that outlives its writer is not evidence of the writer.** The token
+file is the app's, but between one run and the next it holds a token that
+belongs to a process that is gone. "The file exists" and "the file is *this
+app's*" are different claims, and the script only asked the first one.
+
+**A check that fails for the wrong reason is a check that gets ignored.** The
+first run of the live-window check after §85 failed, and the obvious reading
+was "my change broke the control channel". It had not: three later runs
+passed with the same numbers, and the cause turned out to be a file left in
+`~/.local/share`. Finding that out took a measurement; without one it would
+have been a coin flip.
+
+**The self-test is the only part of a shell script that can be checked
+without a display**, so a rule the script enforces belongs there. §56 put the
+window-picking rule in the self-test; §86 puts the token rule next to it.
+
+---
+
+## 87. The end-to-end MCP test threw the server's own words away
+
+§86 was a check that failed for the wrong reason. This is the other half of
+it: a check that cannot say **why** it failed.
+
+### The measurement
+
+One run of `cargo xtask ci` failed in the tests phase:
+
+```text
+error: test failed, to rerun pass `-p craftkit-cli --test mcp_stdio`
+```
+
+and the test's own message was:
+
+```text
+the server keeps its end open: Os { code: 32, kind: BrokenPipe, message: "Broken pipe" }
+```
+
+Which says the pipe broke. It does not say **that the server had already
+died**, what it printed before it died, or how it exited — because the test
+threw all of that away:
+
+```rust
+let mut child = Command::new(BIN)
+    .arg("mcp")
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())          // ← the server's words, into nothing
+    .spawn()
+```
+
+and nothing ever asked the child for its exit status. So the failure said:
+*something* broke, and the person reading it had to guess.
+
+The failure did not reproduce: **15** runs of that test on its own and **3**
+runs of the whole workspace were green, and the machine was under memory
+pressure at the time (17.5 GB of 32 GB used, right after a forty-minute
+build-heavy run), which is the likeliest reason — a spawn that failed, or a
+child that was killed. **That is a guess, and it is recorded as one.** What
+is not a guess is that the next occurrence would have said exactly as little.
+
+### The fix
+
+The server's stderr goes to a file, and every failure path asks the child what
+became of it:
+
+```rust
+/// What the server said, and what became of it.
+fn complaint(&mut self) -> String {
+    let status = self.child.try_wait().ok().flatten();
+    let said = std::fs::read_to_string(&self.log).unwrap_or_default();
+    let said = said.trim();
+    if said.is_empty() {
+        format!("the server said nothing; its status is {status:?}")
+    } else {
+        format!("the server said: {said}; its status is {status:?}")
+    }
+}
+```
+
+A **file**, not a pipe: a pipe nobody reads fills up, and then the server
+blocks writing to it — which would look exactly like the hang this file
+exists to catch.
+
+The same message now comes out of a write that fails, because that is the
+first thing to fail when the server is gone:
+
+```text
+the server stopped listening (Broken pipe (os error 32)) — the server said nothing;
+its status is Some(ExitStatus(unix_wait_status(9)))
+```
+
+which says what the old one did not: the server was **killed**, and it said
+nothing on the way out.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The end-to-end MCP test says what the server said and how it exited | `complaint` in `apps/craftkit-cli/tests/mcp_stdio.rs`, used by `send` and `expect_reply` |
+| The server's stderr is captured rather than discarded | `Stdio::from(err)` in `Server::start` |
+
+There is no mutation for this one, and the matrix says so: the property only
+shows itself **when the test fails**, so a mutation that removed the capture
+would leave every test green. A check that cannot fail is §1's subject; a
+check whose *diagnostics* cannot fail is the same thing one level down, and
+the honest entry is *nothing* rather than a mutation that would measure
+nothing.
+
+### The lesson
+
+**The tree's own rule about error messages applies to the checks too.** The
+engine's error type says it: "an error message is not a shrug". A test that
+fails with "a reply to the call" is a shrug.
+
+**A check that cannot say why it failed gets re-run and believed less.** The
+failure here looked like a product defect — the MCP server had died — and
+the honest answer was "I do not know, and the test threw the evidence away".
+
+**Record the guess as a guess.** The likeliest cause is the machine, not the
+tree; saying so is not the same as saying so is the cause.
+
+---
+
+## 88. A property's name could be something the path grammar cannot write
+
+§85 fixed the model's disagreement about how a property is named. It did not
+close the door through which a **name** enters the tree: a file can carry a
+label or a group id that the grammar reads as something else, and the tree
+accepted it.
+
+### The measurement
+
+A file, written by hand, with one property whose label is `a/b`:
+
+```text
+the file loaded
+validate()   = Ok(())
+the listing published the path "a/b"
+PropPath::parse("a/b") = Some   ← it parses — as two segments
+… and it resolves to: None      ← and to nothing at all
+```
+
+So the listing published a path that named **no property**, and the property
+it was published for was unreachable by any command. The whole family, each
+measured the same way:
+
+| Label | the file loads | the listing publishes | the parser reads it as | resolves to |
+|---|---|---|---|---|
+| `a/b` | yes | `a/b` | two segments | **nothing** |
+| `@5` | yes | `@5` | an id | **nothing** |
+| `#2` | yes | `#2` | a position | **nothing** |
+| `amount#2` | yes | `amount#2` | the *second* `amount` | **the wrong property** |
+| `C#` | yes | `C#` | — | **the parser refuses it** |
+| `a@b` | yes | `a@b` | the name `a@b` | the property ✓ |
+| `ok` | yes | `ok` | the name `ok` | the property ✓ |
+
+And the command's answer, with the file's property in the tree:
+
+```text
+--- before: [("a/b", 1, "2")]
+=== prop.set a/b -> Ok("`a/b` = 99")
+--- after:  [("a/b", 1, "2"), ("a/b", 2, "99")]
+--- validate: Ok(())
+```
+
+**The command reported success and did something else.** The property the path
+named still holds `2`; a *second* property was created, and it publishes the
+same path `a/b`. The node now has two properties with one name, the UI shows
+two rows with the same path, and the plan has two entries with the same path.
+Editing the row on screen would create another one each time.
+
+### Why nothing noticed
+
+**§85's invariant was checked on trees the model built.** The new tests
+covered the depth, the id and the case, and every one of them built its tree
+from names the grammar can write. A name that the grammar cannot write was
+never in a test — because nothing in the tree said such a name was possible.
+
+**The reader validates the document, and the document said this was fine.**
+`PropGroup::check` refused an empty label, an oversized one and a duplicate
+group id, and it had no rule about a name the *path grammar* cannot write.
+The validator and the grammar were two pieces of code about the same thing,
+and only one of them knew about the grammar.
+
+**A file is deserialized straight into the model.** Nothing constructs a
+property when it is read — the label arrives as text and is accepted — so a
+file is the one place where an arbitrary name can appear. §73 made the same
+argument for numbers ("a file is not built by a constructor: it is
+deserialized straight into the model"); the rule was not carried across to
+names.
+
+### The fix
+
+**A name must be writable, and the check asks the grammar.**
+
+```rust
+pub fn is_written_as_it_is(name: &str) -> bool {
+    matches!(parse_seg(name), Some(PathSeg::Match(parsed, 1)) if parsed == name)
+}
+```
+
+The name is parsed as a segment and has to come back as the same plain name.
+**A round trip, not a list of characters**: a list of forbidden characters
+would be a second copy of the grammar, and it would rot the moment the
+grammar grows a form — §80's lesson, learned twice.
+
+A name that cannot be written plainly can still be written with an explicit
+occurrence — the grammar's own way of saying "this name, the first one" — so
+`a#b` and `C#` are published as `a#b#1` and `C##1`, and those read back as
+exactly those names. Only three shapes are refused, and the reason is asked of
+the grammar rather than kept beside it:
+
+| Name | Why it is refused |
+|---|---|
+| `a/b` | `/` separates the segments of a path |
+| `@5` | `@` marks an id, and an id is not a name |
+| `#2` | `#` marks a position, and a position is not a name |
+
+The tree refuses such a name in [`PropGroup::validate`], so **the reader
+refuses the file** — with the name and the reason in the message:
+
+```text
+the document in this file is not valid: invalid: node n1: the property label `a/b`
+cannot be written as a path: `/` separates the segments of a path
+```
+
+and the engine refuses to work with such a document too, so a command cannot
+create the second property that used to appear:
+
+```text
+prop.set { node: 1, path: "a/b", value: 99 }
+  → the command left the document in a state the file format refuses: invalid: node n1:
+    the property label `a/b` cannot be written as a path: `/` separates the segments
+    of a path; your document is unchanged
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A name the grammar cannot write is refused | `a_name_the_grammar_cannot_write_is_refused`, `a_label_the_grammar_cannot_write_is_refused`, `a_group_id_the_grammar_cannot_write_is_refused` |
+| The reason a name is refused comes from the grammar | `the_reason_a_name_is_refused_comes_from_the_grammar` |
+| A name is published as the shortest spelling that parses back | `a_name_is_published_as_the_shortest_spelling_that_parses_back`, `display_round_trips_through_parse_for_names_the_grammar_cannot_write_plainly` |
+| Every property is named by a path that names **it** | `every_property_is_named_by_a_path_that_names_it` |
+| A file carrying such a name is refused | `a_file_carrying_a_name_the_grammar_cannot_write_is_refused` |
+| A path the grammar cannot read is refused | `a_path_the_grammar_cannot_read_is_refused` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: a property label the
+grammar cannot write being accepted anyway, a group id the grammar cannot
+write being accepted anyway, and a name being published as a spelling that
+does not parse back.
+
+### The lesson
+
+**A fix that closes one door and leaves the next one open is half a fix.**
+§85's invariant was "every property is named by exactly one path" — and it was
+true of every tree the model built, and false of every tree a file could
+carry. The hole was not in the rule; it was in the *input*.
+
+**The rule and the thing that checks it must know about each other.** The
+validator refused duplicate group ids because the *resolver* would be
+ambiguous; it did not refuse a name the *grammar* cannot write because
+nobody connected those two facts. A validator that checks one rule and not
+the neighbouring one is a validator with a hole the size of the gap between
+the rules.
+
+**Ask the grammar, do not keep a copy of it.** "A name may not contain `/`,
+`@` or `#`" is a second copy of the grammar, and it would be wrong the moment
+the grammar grew a form. "The name must come back from the parser as itself"
+cannot be wrong that way.
+
+**What a command reports is what it did.** `prop.set { path: "a/b" }` said
+"`a/b` = 99" and created a different property. §85 found the same shape in
+the id form; §88 found it in the label form. Two of the same bug is a
+pattern, and the pattern is worth more than either instance.
+
+---
+
+## 89. The frame rate's ceiling was written five times, and the two that decided anything disagreed
+
+§88 found a name the grammar could not write. §89 found a **number** written
+five times, with two different values — and the two copies that decided
+anything were not the two that decided everything.
+
+### The measurement
+
+The ceiling was in five places:
+
+| Where | What it said |
+|---|---|
+| `crates/core/src/tick.rs` — `FrameRate::new` | refuses 0 and **anything above 1000** |
+| `crates/engine/src/commands.rs` — `doc.range` | refuses anything outside **1..=240** |
+| the same command's parameter doc | "1..=240" |
+| `crates/ui/src/shell.rs` — a comment | "validated to 1..=240 by `doc.range`" |
+| `docs/design/file-format.md`, `docs/patterns/exact-time-not-float-seconds.md` | "refuses 0 and > 1000" |
+
+So the **reader** accepted a thousand frames per second and the **command**
+accepted two hundred and forty. Measured, rate by rate:
+
+| fps | the reader | the command |
+|---|---|---|
+| 240 | loads | accepted |
+| **241** | **loads** | **refused** — "241 is not between 1 and 240" |
+| **500** | **loads** | **refused** |
+| **1000** | **loads** | **refused** |
+| 1001 | refused | refused |
+
+And the sharpest symptom, on a document that carries 500 fps:
+
+```text
+doc.range { fps: 500 }  →  Err(`doc.range` rejected its parameters: `fps` 500 is not
+                             between 1 and 240)
+```
+
+**The command cannot set the rate the document already has.** A file could
+carry a frame rate that no command could ever set — not even to the value it
+already had.
+
+### Why nothing noticed
+
+**Nothing compared the two.** The two limits sat in different crates, for
+different reasons — "a rate of zero divides by zero" (the core) and "how fast
+may a plan run" (the command) — and each was defensible on its own. What was
+not defensible was that the *document* answered to the first and the
+*command* to the second, and the two answers overlapped only up to 240.
+
+**The number was in prose three times, and no gate covered it.** The §74 gate
+compares a **named** constant in prose with the code — `` `MAX_NODES` 10 000 ``
+— and the frame rate's ceiling was never a named constant, so "refuses 0 and
+anything above 1000" was prose nobody could check.
+
+**The UI's comment recorded the wrong number**, and the UI is where a person
+would look: it said the rate is "validated to 1..=240 by `doc.range`" — which
+was true of the command and false of the reader, and false of the file the
+panel was drawing.
+
+### The fix
+
+**One limit, in the model's table**, where the document's other limits live:
+
+```rust
+// crates/model/src/lib.rs
+/// The fastest a document may run.
+pub const MAX_FRAME_RATE: u32 = 1_000;
+```
+
+**The core keeps the check that has to live next to the type** — a rate of
+zero divides by zero — and the *policy* lives in the model:
+
+```rust
+// crates/core/src/tick.rs
+pub const fn new(fps: u32) -> Result<Self, crate::CoreError> {
+    if fps == 0 {
+        return Err(crate::CoreError::LimitReached { limit: "frame rate" });
+    }
+    Ok(Self(fps))
+}
+```
+
+**The command uses the model's number**, not a copy of it:
+
+```rust
+if f < 1 || f > i64::from(limits::MAX_FRAME_RATE) {
+    return Err(EngineError::Param {
+        …
+        format!("{f} is not between 1 and {}", limits::MAX_FRAME_RATE),
+    });
+}
+```
+
+The comparison is on the `i64` the parameter is, **not on a cast of it**:
+casting first would let 4 294 967 297 become one frame per second.
+
+**The prose stops quoting the number.** The parameter doc says "Frame rate in
+frames per second" — like every other parameter doc — and the range is in the
+error message, which is where a caller meets it. The two documents and the
+UI's comment now name the symbol instead of the value.
+
+**The value is 1000**, the reader's: no file that opens today stops opening.
+Whether 1000 or 240 is the right ceiling is the owner's; it is now *one*
+number in *one* place, so the answer is a one-line change.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The command can set any rate a document may carry | `the_command_can_set_any_rate_a_document_may_carry` |
+| A document may not carry a rate above the model's | `an_unusable_frame_rate_is_refused` |
+| A rate of zero is refused where the type is | `frame_rate_zero_is_rejected_rather_than_dividing_by_it` |
+
+and two mutations in `scripts/mutation-test-gates.sh`: the command's ceiling
+not being the model's, and the model accepting a rate the command refuses.
+
+### The lesson
+
+**Two limits for one thing is a hole; two limits for one thing in *different
+crates* is a hole with a plausible-looking shape.** The core's 1000 and the
+command's 240 each looked like a deliberate choice about a different
+question, and neither was wrong on its own. What was wrong was that the
+*document* was governed by one and the *command* by the other.
+
+**A number in prose is only safe if it is a number the code can be asked
+about.** The §74 gate works by naming the constant; a limit that is written
+out in five places and named in none of them is five chances to be wrong, and
+the tree's own gate could not see a single one of them.
+
+**A comment that records a number is a copy of a number.** The UI's comment
+was the most misleading of the five: it was true of the command, false of the
+reader, and written in the place a person would look to find out what the
+file in front of them was allowed to say.
+
+---
+
+## 90. The tree promises exact frame boundaries and does not deliver them for every rate it accepts
+
+§89's measurement had a second number in it: the tree's own tick rate does
+not divide by every frame rate it accepts.
+
+### The measurement
+
+`TICKS_PER_SECOND` is 254 016 000 000, and a frame is that divided by the
+rate — an **integer** division:
+
+```text
+fps   24: ticks per frame = 10584000000 (remainder  0 of 24) — exact
+fps   25: ticks per frame = 10160640000 (remainder  0 of 25) — exact
+fps   30: ticks per frame =  8467200000 (remainder  0 of 30) — exact
+fps  240: ticks per frame =  1058400000 (remainder  0 of 240) — exact
+fps   11: ticks per frame =  23092363636 (remainder 4 of 11) — TRUNCATED
+fps   13: ticks per frame =  19539692307 (remainder 9 of 13) — TRUNCATED
+fps   17: ticks per frame =  14942117647 (remainder 1 of 17) — TRUNCATED
+```
+
+and the error is not a rounding of one frame — it **grows**:
+
+```text
+fps 11: after 1000 frames the boundary is 363 ticks early
+fps 13: after 1000 frames the boundary is 692 ticks early
+```
+
+A tick is 3.9 ns, so that is 1.4 µs after ninety seconds at 11 fps — and
+fifty-six milliseconds after an hour. The playhead's frame number is visible,
+so the drift is visible too.
+
+The claim that is not kept is the tree's own, in the module that is called
+"Exact time":
+
+> Because it is a power of two times an integer, conversions between ticks and
+> frame boundaries — including the 29.97 fps NTSC drop-frame timebase — are
+> exact integer arithmetic with **no accumulated rounding**.
+
+For a rate that divides the tick rate, that is true. For a rate that does not,
+the conversion is a truncation and the rounding accumulates.
+
+### Why nothing noticed
+
+**The rates people use divide evenly.** 24, 25, 30, 50, 60, 120, 240 — every
+one of them is exact, so the promise holds for every document anyone has
+actually made. The tree has no test that says so, and no test that would have
+noticed if it stopped being true.
+
+**Nothing in the tree asks whether a rate is exact.** The tick rate is a
+power of two times an integer; whether a *rate* divides it is a fact the
+model could state and never did.
+
+### The fix
+
+**The model can now say whether a rate is exact**, and the answer is derived
+rather than listed:
+
+```rust
+/// Whether a rate divides the tick rate exactly.
+///
+/// A frame boundary is exact only when the rate divides `TICKS_PER_SECOND`
+/// with no remainder. Otherwise the ticks per frame are truncated, and the
+/// error grows with the number of frames. §90.
+pub const fn is_exact(self) -> bool {
+    TICKS_PER_SECOND % self.0 as i128 == 0
+}
+```
+
+**The promise is corrected to what the tree keeps.** The tick is exact — that
+is the tree's real claim, and it is what "Exact time" means: a time is a
+count, not a float. The *frame boundary* is exact for the rates that divide
+the tick rate, and is short by less than a tick per frame for the others,
+which is why the error grows. The document says so, in the place that
+promised it.
+
+**The owner's question stays open**, because it is a product question and not
+a bug: *should a document be allowed a rate whose frame boundaries are not
+exact?* If not, the rule is already derived — `FrameRate::is_exact` — and the
+reader and the command can refuse those rates with it. The answer is
+recorded in "Suggested order" below.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Whether a rate is exact is a fact the model can state | `FrameRate::is_exact` |
+| The tree's own default rate is exact | `the_default_rate_divides_the_tick_rate_exactly` |
+| A frame boundary at an exact rate is the exact time | `an_exact_rate_places_a_frame_boundary_exactly` |
+| The promise in prose is the promise the code keeps | the module doc of `crates/core/src/tick.rs` |
+
+### The lesson
+
+**"Exact time" is a claim about the tick, and the tick is exact.** A frame
+boundary is a *derived* quantity, and a derived quantity inherits the limits
+of the representation it is derived from. The module said "exact time" and
+meant it; the paragraph underneath it over-claimed by one step.
+
+**A promise that holds for every rate anyone uses is not a promise.** It is a
+lucky sample. The tree's rates divide evenly, so the tree looked exact — and
+nothing ever asked whether that was a property of the *rates* or of the
+*users*.
+
+**A drift that grows is a different animal from a rounding.** Rounding is
+bounded; truncation in a conversion is not. The distinction is worth one
+sentence in the code that does the conversion.
+
+---
+
+## What enforces what
+
+The point of this list is that a rule with nothing behind it is a wish. Every
+row says who catches the violation, and the middle column is either a mutation
+in `scripts/mutation-test-gates.sh` — the only kind of evidence that has ever
+caught a gate quietly stopping — or the honest word *nothing*.
+
+| Rule | Enforced by | Caught by |
+|---|---|---|
+| A crate depends only on strictly lower layers | `cargo xtask layers` | 3 mutations |
+| No embedded image; every asset attributed | `cargo xtask assets` | 3 mutations |
+| **No source outside Rust** | `cargo xtask assets` | 1 mutation — §6 |
+| Crate roots carry the deny attribute and `forbid(unsafe_code)` | `cargo xtask lists` | 2 mutations |
+| Documented layer table matches cargo metadata | `cargo xtask lists` | 2 mutations |
+| Sorted workspace member list | `cargo xtask lists` | 1 mutation |
+| **Prose cites code that still exists** | `cargo xtask lists` | 1 mutation — §7 |
+| A format change on disk is registered and applied | `craftkit-io` tests | 1 mutation — §5 |
+| **Control channel is loopback-only** | `craftkit-control` tests | 3 mutations — §4, §21 |
+| `cargo xtask ci` runs what it reports running | `xtask` tests + the closing line | 2 mutations — §2 |
+| The canvas, the bundle path and the worker's rules agree | `cargo xtask web` | 4 mutations |
+| A browser build is at least attempted | `cargo xtask wasm` | 4 mutations, 1 un-catchable — §11, §13, §22 |
+| **A green compile check says the bundle is not built** | `wasm::post_build_note` | 1 mutation — §13 |
+| **An unverifiable bundler counts as blocked, not ready** | `doctor::bundler_status` | 1 mutation — §22 |
+| **A mutation's target is snapshotted and restored** | `guarded` in the mutation script | probe mutation — §23 |
+| **A mutation that does not apply stops the run** | `swap` in the mutation script | the self-test's second half — §46 |
+| **A stop request ends the MCP server, not just says ok** | `craftkit-mcp` test + `mcp_stdio.rs` | 2 mutations — §24 |
+| **The failure box names the command that builds the page** | `cargo xtask web` | 1 mutation — §25 |
+| **A document never names a command the registry lacks** | `cargo xtask lists` | 1 mutation — §26 |
+| **The prose walk descends into every subdirectory** | the fabricated-id case above | 1 mutation — §26 |
+| **The crash folder can be relocated, so the pipeline is testable** | `crash_pipeline.rs` | 1 mutation — §27 |
+| **The help shows the script format it requires** | `usage_tests` | 1 mutation — §28 |
+| **The save note is a count, not the plan** | `stash_note_tests` | 1 mutation — §31 |
+| **The ui method name decides what the request does** | `the_ui_action_comes_from_the_method_name` | 1 mutation — §32 |
+| **A click's reply does not claim to have clicked** | `click_message` | 1 mutation — §32 |
+| **A control-channel example in prose could be sent** | `cargo xtask lists` | 1 mutation — §32 |
+| **A document reference in prose resolves** | `cargo xtask lists` | 1 mutation — §34 |
+| **Every command's effect survives the file** | `command_effects_survive_the_file` | 1 mutation — §35 |
+| **A citation names a symbol, not a bare line** | `cargo xtask lists` | 1 mutation — §36 |
+| **The README's layer table matches the code** | `readme_layers` | 1 mutation — §37 |
+| **The CLI's help lists every subcommand** | `the_help_lists_every_subcommand_the_parser_accepts` | 1 mutation — §38 |
+| **A symbol claimed to be in a file is in it** | `symbol_file_claims` | 1 mutation — §39 |
+| **An exact block quotes the code it claims to — functions and structs** | `quoted_code_matches_the_source` | 3 mutations — §40, §75 |
+| **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
+| **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
+| **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
+| **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
+| **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
+| **A command that changes nothing is refused** | `a_command_that_says_it_changes_the_document_and_does_not_is_an_error` | 1 mutation — §44 |
+| **A refusal and a panic are both logged** | `a_refused_command_is_logged_as_a_failure` | 2 mutations — §44 |
+| **The pending steps run in order, each seeing the last** | `the_steps_run_in_order_and_each_sees_the_previous_one` | 1 mutation — §45 |
+| **A citation that names a test points at that test** | `citations_of_tests_point_at_the_test` | 1 mutation — §45 |
+| **A restore cannot serve a state from the document it replaced** | `a_restore_cannot_serve_a_state_from_the_document_it_replaced` | 1 mutation — §40 |
+| **A crash report replays onto the document its commands were relative to** | `a_session_that_opened_a_document_replays_onto_it` | 1 mutation — §47 |
+| **A replay says whether it reproduced the design** | `a_replay_says_whether_it_reproduced_the_document` | 3 mutations — §47 |
+| **The trace keeps the parameters exactly** | `the_trace_keeps_the_parameters_exactly` | 1 mutation — §47 |
+| **A bounded trace says how many commands it dropped** | `a_long_session_reports_how_many_commands_it_dropped` | 1 mutation — §47 |
+| **Opening a document clears the undo stack of the previous one** | `opening_a_document_clears_the_undo_stack` | 1 mutation — §47 |
+| The control channel's crash replay says the same | `the_crash_replay_says_whether_it_reproduced_the_document` | 1 test — §47 |
+| **A crash report file is read within a bound** | `a_report_larger_than_the_limit_is_refused` | 1 mutation — §48 |
+| **A replay runs at most a bounded number of steps** | `a_replay_with_too_many_steps_is_refused_before_it_runs` | 1 mutation — §48 |
+| **A report's base is validated like a design** | `a_report_with_a_corrupt_base_is_refused` | 1 mutation — §48 |
+| **A limit is applied before the allocation** | `a_bounded_read_never_asks_for_more_than_the_limit` | 1 mutation — §49 |
+| **The bytes a reader keeps never exceed the limit** | `the_bytes_kept_never_exceed_the_limit` | 1 mutation — §49 |
+| **The writer refuses a document the reader would refuse** | `the_writer_refuses_a_document_the_reader_would_refuse` | 1 mutation — §50 |
+| **A command may not leave a document the file format refuses** | `leaves_a_document_the_file_would_refuse` | 1 mutation — §50 |
+| **A group id may repeat at a different depth** | `a_group_id_may_repeat_at_a_different_depth` | 1 mutation — §50 |
+| **Two groups with one id among siblings are refused** | `two_siblings_with_the_same_id_are_refused` | 1 mutation — §50 |
+| **A command's effect survives the file, at two depths** | `a_group_name_at_two_depths_survives_the_file` | 1 mutation — §50 |
+| **The writer never writes a file the reader would refuse** | `a_document_too_large_to_read_back_is_not_written` | 1 mutation — §51 |
+| **The writer's limit stops the text while it is written** | `the_writer_keeps_no_more_than_the_limit` | 1 mutation — §51 |
+| **A document over the byte limit is refused** | `a_document_over_the_byte_limit_is_refused` | 1 mutation — §52 |
+| **The size estimate counts the content** | `the_history_keeps_its_memory_within_a_budget` | 1 mutation — §52 |
+| **The undo stack keeps its memory within a budget** | `the_history_keeps_its_memory_within_a_budget` | 1 mutation — §52 |
+| **The fingerprint sees every part of the node** | `the_fingerprint_sees_every_part_of_the_node` | 1 mutation — §53 |
+| **A changed keyframe invalidates the evaluator's cache** | `a_node_whose_keyframes_changed_is_not_served_from_the_cache` | 1 mutation — §53 |
+| **A second instance does not take the first one's token file** | `a_second_instance_does_not_take_the_first_ones_token_file` | 1 mutation — §54 |
+| Prose names real test symbols | *nothing* — §29 | a sweep found it; a gate would be a heuristic |
+| **The page imports a bundle the build actually produced** | `cargo xtask web` + a CI step | 2 mutations — §11 |
+| **Every command carries a label, a doc string and typed params** | a doc-test on `catalogue()` | doctest — §14 |
+| The `.craftkit` shapes a hand-written file needs | doc-tests on `save_text`/`load_text` | doctests — §14 |
+| MCP tools track the engine catalogue | `craftkit-mcp` test | assertion, not a mutation |
+| **Every easing returns its documented value** | `craftkit-model` tests | 1 mutation — §8 |
+| **A source sets the level; the chain starts at unity** | `craftkit-eval` tests | 2 mutations — §9 |
+| Gain saturation and chain refusal stay deliberately different | `craftkit-kernel` tests | 1 test — §10 |
+| A panicking command restores the document | `craftkit-engine` tests | 4 dedicated tests |
+| A crash report is written before the process dies | `apps/craftkit` panic hook | 1 test |
+| The control channel's token file is `0600` | `craftkit-control` test | — |
+| **A directory the tool did not create keeps its permissions** | `craftkit-control` tests | 1 mutation — §55 |
+| **The token file is private whatever the directory's mode** | `craftkit-control` tests | 2 mutations — §55 |
+| **A token file that already exists is replaced, not kept** | `craftkit-control` tests | 1 mutation — §55 |
+| **The live-window check measures this app's window** | `live-window-check.sh --self-test` | 1 mutation — §56 |
+| **A crash report holds the design, and the design is private** | `craftkit-engine` tests | 3 mutations — §57 |
+| **A crash report's id says when it happened, and sorts** | `craftkit-engine` tests | 2 mutations — §58 |
+| **A second crash never destroys the first crash's report** | `craftkit-engine` tests | 1 mutation — §58 |
+| **A frame's area is bounded, not just its sides** | `craftkit-ui` tests | 1 mutation — §59 |
+| **A tick is never wider than a reply can carry** | `craftkit-core` + `craftkit-engine` tests | 1 mutation — §60 |
+| **A file whose range no reply can carry is refused** | `craftkit-model` + `craftkit-io` tests | 2 mutations — §60 |
+| **Saving the same plan twice gives the same file** | `craftkit-io` test | 1 test — §61 |
+| **A recovery on one thread is counted on another** | `craftkit-kernel` test | 1 mutation — §62 |
+| **The statistics count a recovery from another thread** | `craftkit-engine` test | 1 mutation — §62 |
+| **A guarded call on another thread does not guard this one** | `craftkit-kernel` test | 1 test — §62 |
+| **A token with padding on the end is not a token** | `craftkit-control` test | 1 mutation — §63 |
+| **The channel refuses a padded token** | `craftkit-control` test | 1 mutation — §63 |
+| **A text limit fits the memory budget once the parse has expanded it** | `craftkit-core` test | 2 mutations — §64 |
+| **The expansion covers the real size of a parsed value** | `craftkit-core` test | 1 test — §64 |
+| **The control channel's line limit is the tree's limit** | `craftkit-control` test | 1 mutation — §64 |
+| **The MCP server's message limit is the tree's limit** | `craftkit-mcp` test | 1 mutation — §64 |
+| **The CLI's script limit is the tree's limit** | `craftkit-cli` test | 1 mutation — §64 |
+| **An overshooting easing stays inside the range a stored number may take** | `craftkit-model` test | 1 mutation — §65 |
+| **An animated amount never takes the level out of range** | `craftkit-eval` test | 1 mutation — §65 |
+| **A widget name owns its bytes** | `craftkit-ui` test | 1 test — §66 |
+| **Building a widget name does not cost the process memory** | `craftkit-ui` test | 1 mutation — §66 |
+| **The worker precaches the bundle the page imports** | `cargo xtask web` + `xtask` tests | 1 mutation — §67 |
+| **The undo budget counts the memory the stacks hold** | `craftkit-engine` tests | 2 mutations — §68 |
+| **A discarded redo branch gives its memory back** | `craftkit-engine` test | 1 mutation — §68 |
+| **The failure count is every failure, not only the ones in the ring** | `craftkit-engine` test | 1 mutation — §69 |
+| **The statistics count every command** | `craftkit-engine` test | 1 mutation — §69 |
+| **A command too big for the trace is refused** | `craftkit-engine` test | 1 mutation — §70 |
+| **The trace's budget is derived from the memory budget** | `craftkit-engine` test | 1 mutation — §70 |
+| **The instrument's closing ratio is computed, not written by hand** | `cargo xtask lists` | the fabricated-ratio case — no mutation: the instrument cannot be mutated while it runs — §71 |
+| **A report whose design is not a document is refused** | `craftkit-engine` test | 1 test — §72 |
+| **A report the old tree wrote still reads** | `craftkit-engine` test | 1 test — §72 |
+| **Reading a report costs no more than its text and one document** | `craftkit-engine` test | 1 mutation — §72 |
+| **The size estimate counts a property's value** | `craftkit-model` test | 1 mutation — §73 |
+| **A value that breaks an invariant is caught** | `craftkit-core` test | 1 test — §73 |
+| **A document with a value the constructors would refuse is invalid** | `craftkit-model` test | 1 test — §73 |
+| **A file whose value is out of range is refused** | `craftkit-io` test | 1 mutation — §73 |
+| **Every limit in the model's table is enforced in code** | `cargo xtask lists` | 1 mutation — §74 |
+| **A panic in the drawing code writes a report** | `craftkit` test | 1 mutation — §76 |
+| **A number of commands in prose is the registry's number** | `cargo xtask lists` | 1 mutation — §77 |
+| **Every boundary that catches a panic is declared** | `cargo xtask lists` | 1 mutation — §78 |
+| **The format's example file is what the document says** | `craftkit-cli` test | 1 mutation — §79 |
+| **A keyframe's time, value and easing are each seen on their own** | `craftkit-model` test | 1 mutation — §80 |
+| **Every field the fingerprint walks is a field the hash reads** | `cargo xtask lists` | 1 mutation — §80 |
+| **A changed easing is not served from the cache** | `craftkit-eval` test | 1 mutation — §80 |
+| **A pending change's name is one word, and it is a module** | `every_pending_name_is_a_plausible_file_name` | 1 mutation — §81 |
+| **Every listed change has a step, and is declared** | two `pending.rs` tests | 1 mutation — §81 |
+| **A file is given only the changes it has not had** | `craftkit-io` test | 1 mutation — §81 |
+| **The control channel's methods are the methods the prose lists** | `cargo xtask lists` | 1 mutation — §82 |
+| **No two commands advertise the same chord** | `craftkit-engine` test | 1 mutation — §83 |
+| **The history stays inside its memory budget, whoever moves a document** | `craftkit-engine` test | 1 mutation — §84 |
+| **Every property the tree holds is named by a path the parser accepts** | `craftkit-model` test | 1 mutation — §85 |
+| **A tree deeper than a path is refused, not truncated** | `craftkit-model` test | 1 mutation — §85 |
+| **A path names the property the listing published it for** | `craftkit-model` test | 1 mutation — §85 |
+| **The read side and the write side resolve an id the same way** | `craftkit-model` test | 1 mutation — §85 |
+| **A path that names an id or a position cannot create anything** | model and engine tests | 2 mutations — §85 |
+| **A property set by its id is the property the id names** | `craftkit-engine` test | 1 mutation — §85 |
+| **A path too long to name is refused** | `craftkit-engine` test | 1 mutation — §85 |
+| **A created property is readable by the path that created it** | model and engine tests | — |
+| **The live-window check reads this app's token, not the last run's** | `live-window-check.sh --self-test` | 1 mutation — §86 |
+| **The end-to-end MCP test says what the server said and how it exited** | `apps/craftkit-cli/tests/mcp_stdio.rs` | *nothing* — it only shows itself when the test fails — §87 |
+| **A name the grammar cannot write is refused, and the reason comes from the grammar** | model and io tests | 3 mutations — §88 |
+| **Every property is named by a path that names it** | `craftkit-model` test | 1 mutation — §88 |
+| **The command can set any rate a document may carry** | `craftkit-engine` test | 2 mutations — §89 |
+| **Whether a rate is exact is a fact the model can state** | `craftkit-core` test | 1 mutation — §90 |
+| A wrong or missing token is refused | `craftkit-control` tests | — |
+| **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
+| Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
+| `ui.click` reports, it does not act | `click_message` | 1 mutation — §17, §32 |
+| No commercial product's data, code or artwork | *nothing* | a gate cannot read provenance |
+| Independent of any other project's source | *nothing* | a process, not a check |
+
+The three `nothing` rows are not oversights, and there were four until §32. The
+last two cannot be checked by
+any tool: whether a measurement came from a commercial CAD package is a question
+about where someone got it, and a rule that pretends otherwise is worse than one
+that admits it. §17's `ui.click` was checkable in principle and documented
+instead, on the grounds that the useful behaviour is the absence of a capability
+and a test for "this does not happen" is a test that can be deleted by the person
+it constrains. §32 found that the reasoning was right and the *sentence* was not:
+the one thing the caller reads said `clicked`. That is now
+`click_message`, mutation-tested.
+Prose-cited test symbols (§29) could be gated, and deliberately are not: every
+rule that separates `the_pending_list_is_sorted` from `catch_unwind` is a
+heuristic that would eventually flag something real, and a gate that cries wolf
+is this document's §1 in a new costume.
+
+Where the middle column says *a test* rather than a mutation, the honest reading
+is: the property is checked, but nothing yet proves the check still bites. That
+is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web`,
+`ci`, `io` and `control`, and it is why adding a mutation is the first item in
+`CONTRIBUTING.md`'s gate rule.
+
+## Suggested order, if someone picks this up
+
+1. ~~**Run `scripts/mutation-test-gates.sh` in CI.**~~ **Done.** The `mutation`
+   job in `.github/workflows/ci.yml` breaks each rule and requires the gate to
+   notice, and asserts `--self-test` fails before it trusts the full run. Every
+   gap in §1 was found by this script, and a gate nobody has ever seen fail is a
+   gate nobody can vouch for. §2 is the argument: the gate that runs all the
+   other gates was the one nobody was checking, and §3 is the reason the job
+   checks the instrument as well.
+2. ~~**Get a real browser into the loop.**~~ **Done, and it paid.** §11 — the
+   page was a 404 that four green checks sat in front of, because nothing
+   produced the bundle and a gate's error message asserted a falsehood about
+   what `wasm-bindgen` names its output. The page now builds, loads and renders
+   in headless Chrome. §17's remaining limit is narrower: there is still no
+   *interaction* test in a real browser.
+3. ~~**Add a coverage gate.**~~ **Deliberately not.** §15 explains why: the rule
+   it would enforce is already enforced, more strongly, by the mutation script —
+   a mutation proves a line is reached *and* that reaching it matters, where a
+   percentage proves only the first. `ci.rs`'s remaining 50% cannot be raised by
+   a test at all, because those phases shell out to cargo.
+4. ~~**Write doc-tests for the format and the command schemas.**~~ **Done.** §14 —
+   four doc-tests now pin the tagged-value, externally-tagged-property and
+   capitalised-hint shapes, a hand-written file round-trips, the bare-number
+   error message the document quotes is asserted verbatim, and every command in
+   the registry carries a label, a doc string and typed params.
+5. ~~**Get a real display into the loop.**~~ **Done, and it paid more than the
+   browser did.** §21 — the window never repainted after a command, so the engine
+   said five nodes while the screen showed three, with `ok: true` on the reply
+   and nothing anywhere reporting a problem. `scripts/live-window-check.sh` now
+   drives the real binary on a real display and compares the window's own
+   pixels; it exits 77 rather than 0 when there is no display, because a check
+   that reports success where it could not run is the defect it was written to
+   catch.
+6. **Decide whether `save`/`open` belongs in the command registry.** §18 is a
+   design question with a real cost either way, and it should be a decision
+   rather than an accident. §33 sharpens what it costs: **nothing in the tree can
+   write a design today.** The desktop app opens one and cannot save it, the
+   only caller of `craftkit_io::save` is a test, and the sole signal that work is
+   being lost is a line on stderr that a GUI launch shows nobody. The write path
+   itself is finished and tested — this is a wire-up, not a feature — so the
+   decision is about *where the call lives*, not about building anything.
+   §47 took the sting out of the *open* half of it: opening a file used to
+   leave the previous document's undo stack behind, so the first Ctrl+Z after
+   opening a file replaced the file with an empty document. `Session::load_document`
+   clears the undo stack, the log and the command trace now, and the crash
+   report replays onto the document it was made from. §50 took the sting out
+   of the *write* half: the writer now refuses a document the reader would
+   refuse, and the engine refuses to leave such a document behind in the first
+   place — so wiring `save` up is now safe rather than dangerous. §51 closed
+   the size half: the writer will not write a file the reader would refuse,
+   and it will not build the text to find out. The decision
+   about where `open` and `save` live is still open — it is a decision, not a
+   bug.
+7. **Decide whether the engine's per-command clone is worth a redesign.**
+   §52 measured it: 205 µs for a clone of a 19 MiB document, and about
+   1.9 ms of engine overhead per command — the price of being able to put
+   the design back when a command fails or panics. Removing the clone means
+   copy-on-write — sharing the property tree between the snapshot and the
+   live document and cloning only the branch a command writes — which is a
+   change to the model's ownership rules and should be a decision rather than
+   an accident. §53 is the arc that shows how to find such a cost: measure
+   the thing you are optimising against the thing you are paying.
+8. **Decide how prose is kept true.** `cargo xtask lists` checks that prose
+   *points at* code that exists — a file, a line, a symbol, a test — and that
+   is all it checks. §53 changed the evaluator's fingerprint and two documents
+   went on describing the old one in detail, correctly, pointing at real
+   code: *"It is FNV-1a over the document's serde form"*, and the argument
+   for why. Nothing noticed. A gate that checks what prose *says* is a
+   heuristic (§29 says so), so the cheap alternative is a rule: a change to a
+   mechanism re-reads the documents that describe it. That is a process, not a
+   check, and it is the same shape as the decision in item 6 — it should be a
+   decision rather than an accident.
+   §55 is the second instance, and it is the one that makes the case: §4 had
+   already *checked* the token file's privacy — a test, a mode, a sentence
+   saying the permissions were set *before* the content — and the sentence was
+   wrong. A section that verifies a mechanism and then describes it is still a
+   description, and §4's description was written by the same process that
+   checked it, from the same reading of the code. Two instances in fifty-three
+   sections is not a rate; it is a shape. The cheap rule would have caught
+   both: **a change to a mechanism re-reads the documents that describe it.**
+   §61 is the third — a field called `written_at` that is always zero, with a
+   doc comment saying it is a time — and §62 is the fourth: a counter whose
+   doc comment said *"since the process started"* while the code was a
+   `thread_local!` cell, three lines away. §64 is the fifth: a doc comment
+   saying that a read bounded the *memory*, when the read bounded the *text*
+   and the parse was thirty-two times bigger. §65 is the sixth, and it is the
+   worst of the six: the evaluator's comment said *"every level comes from
+   `apply_gain`"*, three lines above the source node that takes its level from
+   somewhere else, and the thing that sentence would have stopped somebody
+   looking for was the bug. Six instances, every one of them a sentence written
+   by someone reading the code rather than measuring it. The rule now has six
+   chances to have prevented something, and nobody has adopted it.
+   §67 is the seventh, and it is the first one a *machine* said out loud: the
+   web gate printed "the canvas, the bundle path and the worker's rules all
+   agree" while the worker's copy of the bundle path disagreed with the page's
+   — and the gate had no way to know, because it only ever looked at one of
+   the two copies.
+   §69 is the eighth: a doc comment that said *"how many commands failed
+   since the session opened"* over a ring of the last 256 commands, so the
+   number was frozen at 255 and the sentence was the only thing wrong.
+   §71 is the ninth, and it is this file: §1's own "28 of 29 caught" was
+   ninety cases out of date, and the counters in these very sentences went
+   stale every time a section was added. Nine instances, and the ninth is the
+   list of them.
+   §73 is the tenth, and it is the worst of them because it was a **budget**:
+   four sentences in four files said what the tree *did* rather than what it
+   *checked* — the estimate's own "never under-estimates", §52's "the count
+   that matters is the keyframes'", the evaluator's "every number the tree
+   stores is", and the interpolator's "the keys are numbers the tree checked"
+   — and the budget they described was not binding: a document was estimated
+   at two hundred and seventeen times less than it was, and the undo stack
+   grew to eight hundred and thirty megabytes against a sixty-four-megabyte
+   budget. Ten instances, and the tenth is the one where the sentences were
+   about the very thing that was broken.
+   §74 is the eleventh: a limit in the table of limits that bounded "the
+   reverse index" — and there is no reverse index. §75 is the twelfth, and it
+   is the one this tree caused itself: §72 changed the crash report's shape
+   and the recipe that quotes it — the document a person reads when their
+   application crashed — went on quoting the old one, in the same stretch, by
+   the same hand, while this very item was being written down for the tenth
+   time. The rule was never wrong; it was never adopted.
+   §76 is the thirteenth: three sentences promised a crash report "on every
+   unclean exit", and the tree has no unclean-exit path at all — the only
+   writer is the panic hook.
+   §78 is the fourteenth, and it is the second one this tree caused itself:
+   the pattern document said "**two boundaries, with distinct jobs, and no
+   more**" while the tree had three, and §76's own fix added the fourth. A
+   rule with a number in it is a rule that rots, and this one rotted twice
+   without anybody re-reading it. Fourteen instances, and the last two are
+   the tree contradicting itself in the act of documenting it.
+   §80 is the fifteenth, and it is the one where the sentence named the
+   guard that did not work: the fingerprint's file said a test would fail "if
+   a part of the node stops being part of the hash", and the test it named
+   would not — removing the keyframe's easing from the hash left **every test
+   in the workspace green**. Fifteen instances, and the fifteenth is a
+   sentence about the very check that was supposed to catch it.
+   §81 is the sixteenth, and it is three sentences in one document about the
+   format change: the recipe's worked example did not compile (`PropPath::parse`
+   returns an `Option`, the recipe said a `Result`), the pattern document's
+   example used a name that is not a Rust identifier, and the recipe's naming
+   rule contradicted the test that enforced it. Sixteen instances, and the
+   sixteenth is the only one where **no working change could be written at
+   all**.
+   §82 is the seventeenth, and it is a list: `AGENTS.md` said "Its methods are
+   …" and named five of the eight the code has. Seventeen instances, and the
+   seventeenth is the one an agent reads first.
+   §83 is the eighteenth, and it is a claim about a parser: the shortcut
+   field's doc said "in the form the UI's shortcut parser understands", and
+   the tree has no shortcut parser and binds no keys at all. Eighteen
+   instances, and the eighteenth is the only one whose sentence promised
+   something *elsewhere in the tree* that was never built.
+9. **Decide how long a crash report lives.** §58 left one thing open, and it
+   is the only unbounded writer left in the tree: the undo stack has a byte
+   budget (§52), the trace has one, the command log has a count, and the
+   crash folder has neither. A report of the sample document is 16 309 bytes,
+   so an application that panics on launch and is relaunched by a supervisor
+   writes a full copy of the design every time, and nothing prunes it. The
+   obvious fix is to keep the newest *n* reports and drop the rest, and the
+   reason it has not been done is not difficulty: **deleting somebody's
+   evidence is a decision, not a default.** What *n* should be, and whether
+   the folder should have a byte budget like the undo stack rather than a
+   count, are choices with a cost either way. §57 made the folder private and
+   §58 made it complete; neither of those is the same as making it finite.
+10. **Decide what "private" means for the files this program writes.** §55
+    and §57 found the same thing twice: a file this program writes holds
+    something its owner did not choose to publish — a launch token, a copy of
+    the design — and the permissions were whatever the umask said. A rule
+    that appears once is a coincidence; a rule that appears twice is a
+    convention, and the convention is now: **what this program writes is
+    private, and a directory the program did not create is not the program's
+    to change.** The next file this program writes should follow it without
+    anyone having to measure the mode again. The one file that does not
+    follow it is the design the user saves where they choose — and *that* one
+    is deliberately left alone, because a document the user put somewhere is
+    the user's business, not the program's.
+11. **Decide what may go into a `json!`.** §60 found that `serde_json::json!`
+    hides an `unwrap` inside the macro, where the house deny cannot see it,
+    and that seven places in the tree put a tick into one — relying on the
+    model's tick range being exactly the range a JSON number holds. That is
+    true today and is true for a reason nobody wrote down at the site. A
+    helper that carried a tick safely would put the rule in one place and
+    would make the seven sites independent of the bound. The same question
+    applies to every `json!` in the tree that interpolates a number: a `u64`
+    above `i64::MAX` fails the same way, and there are more of those than
+    there are ticks. The related open question is the `time` parameter's
+    range: it accepts 10^9 seconds where a tick carries 72 623.7, so a
+    hostile time saturates — which is the documented contract — and the
+    message the user gets is about the document not changing, not about the
+    time.
+12. **Decide what a comparison has to be.** §63 found that the constant-time
+    rewrite of the token comparison silently traded away exactness: the
+    length difference was folded into a `u8` accumulator, every difference
+    that was a multiple of 256 was lost, and a peer that presented the token
+    followed by 256 NUL bytes was authenticated by the real control channel.
+    The rewrite's own justification — *"the alternative is one `==` that
+    someone eventually copies into a path where it matters"* — is a
+    comparison that was **right**, so the rewrite was a trade nobody wrote
+    down. The cheap rule would be: **a rewrite for a non-functional property
+    must keep the functional one**, and the property to test is *"this and
+    nothing else"*, because a test that checks one wrong token is refused
+    has not checked the space of tokens that are accepted. The same question
+    applies to every other comparison in the tree that was made constant-time
+    or made tolerant for a reason, and there is no standing rule saying which
+    of them are allowed to be inexact.
+13. **Decide how a big crash report's base is carried.** §64 brought the
+    CLI's script limit down from 32 MiB to 1 MiB, because the parse of a
+    script costs up to thirty-two times its size and the old limit bought a
+    gigabyte of memory. A script is one file, so it carries two very
+    different things — a list of command invocations, which are small, and a
+    base document, which can be thirty-two megabytes of memory — under one
+    limit, and the two need limits an order of magnitude apart. The current
+    answer is that the base is in the script if it fits and the tool says so
+    if it does not, pointing at `craftkit-cli crashes replay <id>`, which
+    replays it directly. The other answer is that the base travels beside
+    the script rather than inside it, and that is a change to what
+    `crashes replay --script` prints and what `craftkit-cli run` reads — a
+    decision about a tool's output shape, not a bug. §72 took the sting out of
+    one half of it: the crash reader now reads a report as a **document** and
+    refuses one whose design is not a document, so a hostile report costs its
+    text rather than thirty-two times its text. What is left of the question
+    is the *shape* of the output, and one number the tree still does not
+    derive: the report's own text cap is 64 MiB, and with the reader costing
+    about four times its text that is a 256 MiB budget — above the 32 MiB a
+    document may hold, and above the 32 MiB every other reader of untrusted
+    JSON in the tree allows itself. Whether a crash report deserves its own,
+    larger budget is a decision; that the cap should be *derived* from a
+    memory budget rather than written by hand is not.
+14. **Decide whether the running app should report its own memory.** §66 found
+    a leak that cost 221 MB an hour, and nobody could see it, because egui
+    only redraws on demand: a leak in the drawing path is *invisible* in a
+    running application — not slow, not subtle, invisible — and the raster
+    path that would have shown it is driven by an agent that closes the
+    connection when it is done. The gate now measures the process's resident
+    pages in a child process, which is honest and narrow: it covers one
+    function, on Linux, and it says nothing about the window's own draw loop,
+    or about what a long session does to the undo stack, the log or the
+    command trace. The cheap alternative is a rule rather than a check — *a
+    per-frame path allocates and frees, and a per-frame path that allocates a
+    `Box::leak` is a bug* — but the same shape as item 8, it has to be adopted
+    rather than merely stated. The bigger question is whether the app should
+    *say* how big it has got: a status line with the process's resident size,
+    or a warning once it passes a threshold, would turn "invisible" into
+    "visible" for every future leak and not just this one.
+15. **Decide what a folded format change is.** §81 fixed the half that could
+    be fixed — the naming, the guards, the reader — and left the release
+    half open, because it is a decision about the release and the release is
+    the owner's. The script folds a change into
+    `crates/io/src/format/pending/v<N>/`, empties the table and puts `apply`
+    back to "the loop with no arms"; **nothing in the tree then reads a
+    `v<N>/` folder**, and no folded step is compiled or called. The recipe
+    describes the other half: `crates/io/src/format/v2/` and a reader that
+    dispatches on the version the file claims. So the choice is between
+    *history* — the folded files are a record of what changed, and the reader
+    is edited by hand to understand the older shape — and *mechanism* — the
+    folded files stay callable, the reader dispatches on the version, and an
+    old design keeps loading through its rewrite. The second is what the
+    one-file-per-change rule is for; the first is what the script does today.
+    Either way the answer belongs in `docs/patterns/format-changes.md`, and
+    until it is there, a release silently drops the rewrite.
+16. **Decide whether the shortcuts are bound or dropped.** §83 found seven
+    chords in the registry — `Ctrl+N`, `Del`, `F2`, `M`, `Ctrl+D`, `Ctrl+Z`,
+    `Ctrl+Shift+Z` — and **nothing in the tree binds a key**: no shortcut
+    parser, no key handling in the UI, no key press that does anything. The
+    chords were advertised to agents through the MCP tool descriptions as
+    "Keyboard: Ctrl+Z", which is the tree sending a person to a key that does
+    nothing. The documentation now says what is true — a chord is the chord a
+    command is *advertised* with, and the tree binds no keys — and the chords
+    are checked for uniqueness and shape, so the specification is one somebody
+    could implement. What is left is the decision: **bind them, or drop the
+    field.** Binding is a product question: which commands get a chord, what
+    a chord does about a command that needs parameters (`Ctrl+N` is
+    `node.add`, which needs a name and a kind), and what a key press means
+    beside the rule that only a toolbar click starts an interactive tool.
+17. **Decide the frame rate's ceiling, and whether an inexact rate is allowed.**
+    §89 found the ceiling written in five places with two values — the reader
+    accepted 1000 fps and the command 240 — and made it one number
+    (`craftkit_model::limits::MAX_FRAME_RATE`, now 1000 so that no file which
+    opens today stops opening). The *value* is the owner's: 240 is the
+    sensible ceiling for a plan, 1000 is the one the reader had. §90 found the
+    second half: a rate that does not divide the tick rate (11, 13, 17) has a
+    truncated number of ticks per frame, and the error **grows** — 363 ticks
+    after a thousand frames, 56 ms after an hour at 11 fps. The tick is exact
+    either way, and the promise in the code has been corrected to say so; what
+    is open is whether a document may carry a rate whose frame boundaries are
+    not exact. If not, the rule is already derived — `FrameRate::is_exact` —
+    and the reader and the command can refuse those rates with it.

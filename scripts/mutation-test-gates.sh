@@ -1,0 +1,1990 @@
+#!/usr/bin/env bash
+# Mutation-test the gates: does each one actually catch the thing it claims?
+#
+# A gate that cannot fail is worse than no gate — it teaches people to trust a
+# check that has never checked anything. Every rule below is broken on purpose,
+# the gate is run, and the tree is restored.
+#
+# # Safety, and why there are so many words about it
+#
+# Two ways this script can lie, both of which it has already done once:
+#
+# 1. **A mutation that does not apply.** Three of the mutations below silently
+#    did nothing once because an anchor string had moved. The output still
+#    looked plausible — a gate was reported MISSED that had never been handed a
+#    broken tree. So every mutation goes through `swap`, which exits with an
+#    error if the text it is looking for is not there. A mutation that changes
+#    nothing is a bug in this script, not a result.
+# 2. **A tree left changed.** An earlier version backed each file up as it went,
+#    so a second mutation to the same file captured an already-broken copy and
+#    the run ended with a duplicated TOML block in `crates/model/Cargo.toml`.
+#    So a pristine snapshot is taken *before* any mutation, the whole mutable
+#    surface is restored between cases, and the run ends by comparing
+#    checksums and failing loudly if anything differs.
+#
+# 3. **A run that reports failures and still succeeds.** The closing summary
+#    printed `N gate(s) MISSED their mutation` in red and then exited 0. In CI
+#    that is a green build with the instrument shouting inside it. So the exit
+#    status is part of the result, and `--self-test` asserts the negative: it
+#    runs one synthetic case that must miss and fails if the script does not.
+#
+# 4. **One swap, one gate.** `expect_catch` restores the tree after every
+#    case, so a mutation serves exactly one gate. Two gates under one swap
+#    means the second one runs against an unmutated tree, passes, and is
+#    reported as MISSED — which looks exactly like a gap in the code and is
+#    not one. It happened, in §60's case, and was found because the run exits
+#    non-zero when a gate is missed. Write the swap again for the second gate.
+#
+# 5. **Do not run the other gates while this one is running.** This script
+#    mutates the tree and restores it between cases, so a `cargo xtask ci` run
+#    at the same time reads a half-mutated tree. It happened: the `tests`
+#    phase failed while the `lists` phase passed, which is the signature of a
+#    tree that was being changed underneath it rather than a tree that was
+#    wrong. For the same reason, do not edit a file in `FILES` while this
+#    script runs: the restore at the end puts the file back the way it was
+#    when the run started, and the edit is lost without a word.
+#
+#   scripts/mutation-test-gates.sh
+#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero
+
+set -uo pipefail
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Every file a mutation may write to.
+readonly FILES=(
+    Cargo.toml
+    ATTRIBUTION.md
+    docs/architecture.md
+    crates/core/Cargo.toml
+    crates/core/src/lib.rs
+    crates/core/src/readers.rs
+    crates/core/src/value.rs
+    crates/core/src/tick.rs
+    crates/model/Cargo.toml
+    crates/model/src/lib.rs
+    crates/model/src/property.rs
+    crates/io/src/lib.rs
+    crates/io/src/format.rs
+    crates/io/src/store.rs
+    crates/io/src/format/pending.rs
+    crates/kernel/src/lib.rs
+    crates/ui/src/lib.rs
+    crates/ui/src/automation.rs
+    crates/ui/src/raster.rs
+    crates/mcp/src/server.rs
+    crates/mcp/src/rpc.rs
+    crates/engine/src/crash.rs
+    crates/engine/src/commands.rs
+    crates/engine/src/history.rs
+    crates/engine/src/lib.rs
+    crates/engine/src/log.rs
+    crates/engine/src/session.rs
+    crates/control/src/server.rs
+    crates/control/src/protocol.rs
+    crates/control/src/token.rs
+    crates/model/src/keyframe.rs
+    crates/model/src/document.rs
+    crates/model/src/fingerprint.rs
+    crates/model/src/path.rs
+    crates/eval/src/evaluate.rs
+    apps/craftkit/src/main.rs
+    apps/craftkit-cli/src/main.rs
+    apps/craftkit-cli/src/args.rs
+    apps/craftkit-cli/src/cli.rs
+    apps/craftkit-web/src/main.rs
+    xtask/src/ci.rs
+    xtask/src/doctor.rs
+    xtask/src/lists.rs
+    docs/recipes/add-an-icon.md
+    docs/recipes/change-the-file-format.md
+    docs/recipes/fix-a-crash.md
+    docs/design/file-format.md
+    docs/patterns/clone-before-edit.md
+    docs/patterns/everything-is-a-command.md
+    docs/agent-playbook.md
+    AGENTS.md
+    README.md
+    apps/craftkit-web/index.html
+    xtask/src/wasm.rs
+    apps/craftkit-web/sw.js
+    scripts/live-window-check.sh
+)
+# Created rather than edited, so restoring means removing them.
+readonly EPHEMERAL=(
+    crates/unlisted
+    crates/ui/assets-probe.png
+    crates/ui/build-probe.py
+    crates/io/src/format/pending/probe.rs
+)
+
+SNAPSHOT="$(mktemp -d)"
+cleanup() {
+    restore
+    rm -rf "$SNAPSHOT"
+}
+trap cleanup EXIT
+
+readonly GREEN=$'\033[32m'
+readonly RED=$'\033[31m'
+readonly YELLOW=$'\033[33m'
+readonly RESET=$'\033[0m'
+
+snapshot() {
+    for f in "${FILES[@]}"; do
+        mkdir -p "$SNAPSHOT/$(dirname "$f")"
+        cp -a "$f" "$SNAPSHOT/$f"
+    done
+}
+
+restore() {
+    for f in "${FILES[@]}"; do
+        cp -a "$SNAPSHOT/$f" "$f" 2>/dev/null
+        # `cp -a` preserves the *snapshot's* timestamp, which predates the
+        # binaries this script's own gates just built. Cargo compares mtimes, so
+        # after a run it would keep the mutated `xtask` and the next `cargo
+        # xtask` would run stale code — a gate reporting on a build that is no
+        # longer what is on disk. Touching after the copy is the fix, and the
+        # bug was found because a real failure appeared here that no source in
+        # the tree could explain.
+        touch "$f" 2>/dev/null
+    done
+    for e in "${EPHEMERAL[@]}"; do
+        rm -rf "$e"
+    done
+}
+
+# A checksum of the mutable surface, so the script can prove it changed nothing.
+fingerprint() {
+    for f in "${FILES[@]}"; do
+        printf '%s ' "$f"
+        cksum < "$f" 2>/dev/null || printf 'missing'
+    done
+}
+
+# Replace `old` with `new` in `file`; fail loudly if it did not match.
+swap() {
+    guarded "$1"
+    # The python below exits non-zero when the anchor is not there. That has
+    # to stop the *script*, not just the mutation: a case that changed
+    # nothing is handed to the gate as an unmutated tree, the gate passes,
+    # and the case is reported as a MISSED result — which is a result about
+    # the gate, when it is a bug in this file. The header has said so since
+    # the guard was added; §46 is the run where it did not.
+    if ! python3 - "$1" "$2" "$3" <<'PYSWAP'
+import sys
+path, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path).read()
+if old not in text:
+    sys.exit(
+        "MUTATION DID NOT APPLY\n"
+        f"  file: {path}\n"
+        f"  looking for: {old!r}\n"
+        "  This is a bug in scripts/mutation-test-gates.sh: the anchor moved.\n"
+        "  A mutation that changes nothing makes every result below meaningless."
+    )
+open(path, "w").write(text.replace(old, new, 1))
+PYSWAP
+    then
+        printf '\n%sTHE MUTATION DID NOT APPLY, SO THE RUN IS VOID.%s\n' "$RED" "$RESET" >&2
+        printf '  Fix the anchor, or the case. The results below are about nothing.\n' >&2
+        exit 1
+    fi
+}
+
+# Append one line to a file.
+append() {
+    guarded "$1"
+    printf '%s\n' "$2" >> "$1"
+}
+
+# A mutation may only touch a file the snapshot knows about.
+#
+# This guard exists because the whitelist had already let one through. `FILES`
+# is a list, `restore` and `fingerprint` walk it, and a mutation against a file
+# that was not on it was restored by nothing and checked by nothing: the tree
+# kept the broken source, and the run still printed "Tree unchanged" and exited
+# 0. What noticed was the next ordinary `cargo test` — not the script that made
+# the mess, which is the worst way for it to be noticed.
+#
+# So `FILES` is the contract, not a convenience: a mutation outside it is a
+# mutation this script cannot put back, and it refuses rather than guessing.
+guarded() {
+    local target="$1" known
+    for known in "${FILES[@]}"; do
+        [ "$known" = "$target" ] && return 0
+    done
+    printf '%sMUTATION TARGET IS NOT SNAPSHOTTED%s\n  %s\n\n%s\n%s\n' \
+        "$RED" "$RESET" "$target" \
+        "  It is not in FILES, so snapshot() never copied it, restore() cannot put it" \
+        "  back and fingerprint() never looks at it. Add it to FILES first." >&2
+    exit 1
+}
+
+declare -a CAUGHT=()
+declare -a MISSED=()
+CASES=0
+
+# Expect a gate to REJECT the mutated tree.
+expect_catch() {
+    local label="$1" gate="$2" out rc
+    CASES=$((CASES + 1))
+    out="$(eval "$gate" 2>&1)"; rc=$?
+    restore
+    if [[ $rc -ne 0 ]]; then
+        printf '  %scaught%s  %s\n' "$GREEN" "$RESET" "$label"
+        CAUGHT+=("$label")
+    else
+        printf '  %sMISSED%s  %s\n' "$RED" "$RESET" "$label"
+        printf '          %s\n' "$(printf '%s' "$out" | tail -1 | cut -c1-88)"
+        MISSED+=("$label")
+    fi
+}
+
+# Expect a gate NOT to reject the tree, for a rule it cannot enforce.
+expect_miss() {
+    local label="$1" gate="$2" why="$3" out rc
+    CASES=$((CASES + 1))
+    out="$(eval "$gate" 2>&1)"; rc=$?
+    restore
+    if [[ $rc -eq 0 ]]; then
+        printf '  %sknown%s   %s\n' "$YELLOW" "$RESET" "$label"
+        printf '          not catchable: %s\n' "$why"
+    else
+        printf '  %schanged%s %s — now caught; update the boundary in xtask/src/wasm.rs\n' \
+            "$GREEN" "$RESET" "$label"
+    fi
+}
+
+# Report what happened and exit with the truth.
+#
+# The exit status is part of the result, not a formality: this script is a gate,
+# and a gate that prints its failures and then returns success is the one thing
+# it exists to prevent. `finish` is a function so `--self-test` below can drive
+# the same path rather than a lookalike of it.
+finish() {
+    local status=0
+    echo
+    if [[ ${#MISSED[@]} -eq 0 ]]; then
+        printf '%s%d/%d caught.%s The `known` line is a limit of wasm32 itself, not a gate that passed.\n' \
+            "$GREEN" "${#CAUGHT[@]}" "$CASES" "$RESET"
+    else
+        printf '%s%d of %d gate(s) MISSED their mutation:%s\n' "$RED" "${#MISSED[@]}" "$CASES" "$RESET"
+        for f in "${MISSED[@]}"; do printf '   • %s\n' "$f"; done
+        printf '\n%sA gate that cannot fail is worse than no gate.%s Fix the gate, or the check.\n' \
+            "$RED" "$RESET"
+        status=1
+    fi
+
+    if [[ "$(fingerprint)" != "$BEFORE" ]]; then
+        printf '\n%sThe script left the tree changed.%s That is a bug in this script.\n' "$RED" "$RESET"
+        status=1
+    else
+        printf '\nTree unchanged.\n\n'
+    fi
+    exit $status
+}
+
+snapshot
+readonly BEFORE="$(fingerprint)"
+
+# ------------------------------------------------------------- self-test ----
+# Prove the script fails when a gate stops catching, without running any cargo.
+#
+# This is the negative of the whole exercise, so it is the one thing worth
+# asserting cheaply: a synthetic case that is guaranteed to miss, driven through
+# the real `expect_catch` and the real `finish`. If someone makes the exit
+# status zero again, CI runs this and goes red.
+if [[ "${1:-}" == "--self-test" ]]; then
+    echo
+    echo "-- self-test: a missed mutation must make this script fail"
+    expect_catch "synthetic: a gate that never rejects" "true"
+    if [[ ${#MISSED[@]} -eq 0 ]]; then
+        printf '%sself-test FAILED: the missed mutation was not recorded at all%s\n' "$RED" "$RESET"
+        exit 2
+    fi
+    # The other half, and the one that bit in §46: a mutation whose anchor is
+    # not in the file must stop the run. Reported as a missed *gate*, it is a
+    # result about the gate when it is a bug in this file. The subshell keeps
+    # the snapshot alive for the parent, which still has a tree to restore.
+    echo
+    echo "-- self-test: a mutation that does not apply must stop the run"
+    if ( swap docs/architecture.md 'a line that is not in the file at all' 'x' ) >/dev/null 2>&1; then
+        printf '%sself-test FAILED: a mutation that did not apply did not stop the run%s\n' "$RED" "$RESET"
+        exit 2
+    fi
+    finish
+fi
+
+echo
+echo "── Does each gate catch the thing it claims?"
+echo
+
+# ---------------------------------------------------------------- layers ----
+append crates/core/Cargo.toml 'craftkit-engine = { workspace = true }'
+expect_catch "layers: L0 core gains an L4 dependency" "cargo xtask layers"
+
+append crates/model/Cargo.toml 'egui = { workspace = true }'
+expect_catch "layers: L1 model names egui" "cargo xtask layers"
+
+mkdir -p crates/unlisted/src
+printf '[package]\nname = "craftkit-unlisted"\nversion.workspace = true\nedition.workspace = true\npublish = false\n' \
+    > crates/unlisted/Cargo.toml
+: > crates/unlisted/src/lib.rs
+expect_catch "layers: a workspace crate with no table row" "cargo xtask layers"
+
+# ---------------------------------------------------------------- assets ----
+printf '\211PNG\r\n\032\nnot really a png' > crates/ui/assets-probe.png
+expect_catch "assets: a PNG in the tree with no ATTRIBUTION row" "cargo xtask assets"
+
+append crates/ui/src/lib.rs 'const _PROBE: &[u8] = include_bytes!("assets-probe.png");'
+expect_catch "assets: include_bytes! of an image" "cargo xtask assets"
+
+append ATTRIBUTION.md '| `ghost.png` | an icon that never existed | original |'
+expect_catch "assets: an ATTRIBUTION row with no file" "cargo xtask assets"
+
+# `AGENTS.md` says "Rust only", and nothing checked it: `is_asset` knows about
+# binary and media formats, so a Python helper inside a crate, a stray `.js` in
+# the web app and a `deploy.sh` all left `cargo xtask ci` green. The rule was
+# also already untrue as written — the tree holds two shell scripts and the CI
+# workflow beyond the two JavaScript files it named.
+printf 'print("not rust")\n' > crates/ui/build-probe.py
+expect_catch "assets: a Python file appears inside a crate" "cargo xtask assets"
+
+# ----------------------------------------------------------------- lists ----
+# Removing a line, so the replacement is empty rather than a no-op.
+swap crates/kernel/src/lib.rs '#![forbid(unsafe_code)]' '// removed on purpose'
+
+# Dropping one lint: still a deny attribute, still plausible, and `todo!()`
+# would now compile in this crate.
+swap crates/io/src/lib.rs '    clippy::todo,
+' ''
+
+expect_catch "lists: a crate root drops #![forbid(unsafe_code)]" "cargo xtask lists"
+
+swap crates/io/src/lib.rs '    clippy::todo,
+' ''
+expect_catch "lists: a crate root drops one lint from its deny attribute" "cargo xtask lists"
+
+swap docs/architecture.md '| L4 | `craftkit-engine` |' '| L7 | `craftkit-engine` |'
+expect_catch "lists: the documented layer table moves a crate" "cargo xtask lists"
+
+swap docs/architecture.md '| L5 | `craftkit-mcp` | core, model, engine |' '| L5 | `craftkit-mcp` | core, engine |'
+expect_catch "lists: a dependency column drifts from cargo metadata" "cargo xtask lists"
+
+swap Cargo.toml '    "apps/*",
+    "crates/*",' '    "crates/*",
+    "apps/*",'
+expect_catch "lists: the workspace member list is unsorted" "cargo xtask lists"
+
+# Prose points at code by line number, and line numbers rot the moment anything
+# above them moves. The tree carried ninety such citations and nothing looked at
+# any of them; five pointed at blank lines or braces and two more pointed at the
+# import block of the file whose logic they claimed to quote. Some of that drift
+# was caused by this audit editing the very files it cited.
+append docs/architecture.md 'See `crates/core/src/lib.rs:9999` for the root.'
+expect_catch "lists: prose cites a line that is not in the file" "cargo xtask lists"
+
+# --------------------------------------------------------------------- io ----
+# A format change is one file in `format/pending/`, and the migration it holds
+# only runs if it is also listed in the `FILES` table. An unlisted file was
+# invisible to all four pending tests, because the test that looked like it
+# checked this asserted only that the table was empty. The design then loads
+# without its rewrite — not an error, just wrong values.
+mkdir -p crates/io/src/format/pending
+printf '//! Probe: a format change nobody registered.\n\npub fn step(doc: &mut craftkit_model::Document) {\n    let _ = doc;\n}\n' \
+    > crates/io/src/format/pending/probe.rs
+expect_catch "io: a format change on disk that the table never applies" \
+    "cargo test -p craftkit-io --profile ci"
+
+# ------------------------------------------------------------------ model ----
+# The one class of thing this audit had not found: not a check that cannot fail,
+# but a *computation nothing checked the answer to*. Replacing `easeInOut` and
+# both bezier presets with a linear ramp — gutting the bisection solver, the
+# most numerically involved code in the timeline — failed exactly one test in
+# the workspace, and that one only covered `Hold`.
+swap crates/model/src/keyframe.rs \
+    '        Easing::EaseInOut => smoothstep(linear),
+        Easing::Bezier { out_x, out_y } => bezier_progress(linear, out_x as f64, out_y as f64),' \
+    '        Easing::EaseInOut => linear,
+        Easing::Bezier { .. } => linear,'
+expect_catch "model: every easing silently becomes linear" "cargo test -p craftkit-model --profile ci"
+
+# ------------------------------------------------------------------- eval ----
+# Two of the evaluator's load-bearing rules were anchored, but only inside a test
+# named for the cache: "a source sets the level, it does not multiply it" and
+# "the chain starts at unity". Both were caught, and both were one careless edit
+# to an unrelated test away from being caught at all. Now each has its own name.
+swap crates/eval/src/evaluate.rs '                    level_out = amount;' \
+    '                    level_out = apply_gain(level_in, amount).unwrap_or(level_in);'
+expect_catch "eval: a source multiplies instead of setting the level" \
+    "cargo test -p craftkit-eval --profile ci"
+
+swap crates/eval/src/evaluate.rs 'pub const START_LEVEL: f64 = 1.0;' \
+    'pub const START_LEVEL: f64 = 0.5;'
+expect_catch "eval: the chain stops starting at unity" "cargo test -p craftkit-eval --profile ci"
+
+# ---------------------------------------------------------------- control ----
+# The control channel is a token-guarded JSON endpoint that runs engine
+# commands. `allow_remote` is the only thing between it and every interface on
+# the machine, and its default was untested: the loopback test passed a hardcoded
+# `false` instead of the real default, so flipping it left all 41 tests green.
+swap crates/control/src/server.rs \
+    'Self { port, token, allow_remote: false, ui: None, after: None, token_dir: None }' \
+    'Self { port, token, allow_remote: true, ui: None, after: None, token_dir: None }'
+expect_catch "control: the default stops being loopback-only" \
+    "cargo test -p craftkit-control --profile ci"
+
+# The realistic way the boundary goes is not a flipped default but somebody
+# setting the flag where the server is built.
+append apps/craftkit/src/main.rs \
+    '// let options = ServerOptions { allow_remote: true, ..Default::default() };'
+expect_catch "control: a binary sets the flag that opens the channel to the network" \
+    "cargo test -p craftkit-control --profile ci"
+
+# A command that runs on the socket thread leaves the window painting the frame
+# it already had, because the session is behind a mutex the frame loop never
+# sees. The hook is the only thing that tells it. Dropping `Method::Execute`
+# from it is exactly the bug: `ui.*` still repaints, every command silently
+# does not, and no test in the workspace fails unless one asks whether the hook
+# fires.
+swap crates/control/src/server.rs \
+    'matches!(method, Method::Execute | Method::Ui)' \
+    'matches!(method, Method::Ui)'
+expect_catch "control: a command stops telling the window the document changed" \
+    "cargo test -p craftkit-control --profile ci"
+
+# A document naming a command the registry has never heard of. The nearest real
+# command to the one `docs/recipes/add-a-command.md` used to list is `node.mute`.
+#
+# This case does two jobs, and the second is the reason it is written in a
+# subdirectory. `prose_files` did not recurse, so the walk behind every
+# `file.rs:12` check opened `docs/*.md` — three files — and never one of the
+# fifteen under `recipes/`, `design/` and `patterns/`, 49 citations in all. It
+# said nothing about that, because a walk that looks almost nowhere looks like a
+# walk that looked everywhere.
+#
+# Planting the defect where only a *recursive* walk can see it is what locks the
+# recursion down. If someone flattens the walk again, this case stops being
+# caught, the run reports it MISSED and exits non-zero — which is the instrument
+# doing the one thing it is for.
+#
+# There is deliberately no second case for "remove the recursion". Removing it
+# genuinely changes what the gate can see, so the gate passing is then correct
+# and no mutation can honestly assert otherwise; a case written to pretend
+# otherwise would be a gate asserting that it is worse than it is.
+append docs/recipes/add-an-icon.md \
+    'The shape matches `node.frobnicate`.'
+expect_catch "lists: a document names a command that does not exist" "cargo xtask lists"
+
+# `craftkit-cli mcp` is the one subcommand no test executed, because it blocks on
+# stdio — which is what a pipe is for. The server promised in its own doc
+# comment to end "or `shutdown` arrives", acknowledged `shutdown` with a
+# success, and then served the next request anyway: a method that reported
+# success without doing the thing it names.
+swap crates/mcp/src/server.rs \
+    '    let stop = request.method == "shutdown";' \
+    '    let stop = false;'
+expect_catch "mcp: shutdown says ok and then keeps serving" \
+    "cargo test -p craftkit-cli --profile ci --test mcp_stdio"
+
+# The other half: the stop must not travel inside the reply, or a client that
+# sends `shutdown` as a notification would be ignored.
+swap crates/mcp/src/server.rs \
+    '    Answer { reply: if is_notification { None } else { Some(response) }, stop }' \
+    '    Answer { reply: if is_notification { None } else { Some(response) }, stop: false }'
+expect_catch "mcp: a shutdown sent as a notification is silently ignored" \
+    "cargo test -p craftkit-mcp --profile ci shutdown"
+
+# `craftkit-cli crashes` reads the crash folder a person is told to open first
+# when the app dies, and on a machine where nothing has crashed that folder is
+# empty — so the command had never run against a real report.
+# `CRAFTKIT_CRASH_DIR` is what makes the whole pipeline testable without
+# touching anybody's home, and nothing else depends on it.
+swap crates/engine/src/crash.rs \
+    '    if let Some(dir) = std::env::var_os(CRASH_DIR_ENV) {' \
+    '    if let Some(dir) = std::env::var_os("CRAFTKIT_NOT_THE_CRASH_DIR") {'
+expect_catch "crash: the crash folder can no longer be relocated, so the pipeline is untestable" \
+    "cargo test -p craftkit-cli --profile ci --test crash_pipeline"
+
+# The crash report is a **reproduction**, and the four ways it used to stop
+# being one were all silent. §47.
+#
+# The verdict first: a replay that ends somewhere else has to say so. With the
+# comparison gone, the reply is "reproduced" for every report, including the
+# ones that reproduced nothing.
+swap crates/engine/src/crash.rs \
+    '        reproduced: differences.is_empty(),' \
+    '        reproduced: true,'
+expect_catch "crash: a replay that does not reproduce the design is called a reproduction" \
+    "cargo test -p craftkit-engine --profile ci replay"
+
+# The base. The recorded commands are relative to the document they ran
+# against, so a replay that starts from an empty session rebuilds a document
+# that never existed — and said nothing about it.
+swap crates/engine/src/crash.rs \
+    '    session.load_document(checked_document(report.base)?);' \
+    '    let _ = checked_document(report.base)?;'
+expect_catch "crash: the replay starts from an empty session instead of the report's base" \
+    "cargo test -p craftkit-engine --profile ci replay"
+
+# The parameters. The trace used to be a line of text cut off after a couple of
+# hundred characters, and the replay ran the command with whatever survived the
+# parse — an empty parameter object, usually.
+swap crates/engine/src/session.rs \
+    '        let step = TraceStep { command: id.to_string(), params: params.clone() };' \
+    '        let step = TraceStep { command: id.to_string(), params: serde_json::Value::Object(Default::default()) };'
+expect_catch "crash: the trace keeps the parameters" \
+    "cargo test -p craftkit-engine --profile ci keeps_the_parameters_exactly"
+
+# The trace has to start again when a document is loaded, or it holds commands
+# that were relative to a document that is gone.
+swap crates/engine/src/session.rs \
+    '        self.history.clear();
+        self.log.clear();
+        self.reset_trace();' \
+    '        self.history.clear();
+        self.log.clear();'
+expect_catch "crash: opening a document does not start the command trace again" \
+    "cargo test -p craftkit-engine --profile ci starts_the_trace_again"
+
+# The undo stack belongs to the document it was made from. Without this, the
+# first Ctrl+Z after opening a file replaced the file with the previous
+# document's history.
+swap crates/engine/src/session.rs \
+    '        self.history.clear();
+        self.log.clear();
+        self.reset_trace();' \
+    '        self.log.clear();
+        self.reset_trace();'
+expect_catch "crash: opening a document keeps the undo stack of the previous one" \
+    "cargo test -p craftkit-engine --profile ci clears_the_undo_stack"
+
+# And the same verdict at the surface a person reads: the CLI.
+swap apps/craftkit-cli/src/cli.rs \
+    '            if outcome.reproduced {' \
+    '            if true {'
+expect_catch "crash: the CLI calls a divergence a reproduction" \
+    "cargo test -p craftkit-cli --profile ci --test crash_pipeline"
+
+# A bounded trace cannot hold every command, so the report says how many it
+# dropped. Without the count, a partial replay reads as a whole one.
+swap crates/engine/src/crash.rs \
+    '        dropped: session.trace_dropped(),' \
+    '        dropped: 0,'
+expect_catch "crash: a trace that dropped commands does not say so" \
+    "cargo test -p craftkit-engine --profile ci dropped"
+
+# A crash report is *input*: the recipe asks for `report.json` from whoever
+# had the crash, so the file arrives from another machine. §48.
+swap crates/engine/src/crash.rs \
+    '    let path = dir.join(sanitize(id)).join("report.json");
+    let body = read_bounded(&path, MAX_REPORT_BYTES)?;' \
+    '    let path = dir.join(sanitize(id)).join("report.json");
+    let body = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;'
+expect_catch "crash: a report file of any size is read" \
+    "cargo test -p craftkit-engine --profile ci larger_than_the_limit"
+
+# And the same for the steps, which the replay *runs*. The cost is quadratic,
+# so the bound has to be checked before the first step, not after.
+swap crates/engine/src/crash.rs \
+    '    if report.replay.len() > MAX_REPLAY_STEPS {' \
+    '    if false {'
+expect_catch "crash: a replay runs as many steps as the report holds" \
+    "cargo test -p craftkit-engine --profile ci too_many_steps"
+
+# And the base has to be a document the model would accept. The design reader
+# refuses a document with two nodes sharing an id; this one did not.
+swap crates/engine/src/crash.rs \
+    '    doc.validate().map_err(|e| format!("the report'"'"'s base design is not usable: {e}"))?;' \
+    ''
+expect_catch "crash: a report with a corrupt base is replayed anyway" \
+    "cargo test -p craftkit-engine --profile ci corrupt_base"
+
+# A report is **input**: it arrives from another machine. Its design used to
+# be read as a JSON tree, and a tree costs thirty-two times the text it was
+# parsed from — a 66 000 101-byte report cost 1 260 292 KiB of resident
+# memory. Read as a document, the same report costs 67 796 KiB, and a report
+# whose design is not a document is refused by the format instead of being
+# materialised first. §72.
+#
+# The mutation is the old shape exactly: the file is parsed into a tree, and
+# the report is read out of the tree. It compiles — the report's own types
+# did not change — so only a *measurement* can catch it.
+swap crates/engine/src/crash.rs \
+    '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+    serde_json::from_str(&body).map_err(|e| format!("{} is not a readable report: {e}", path.display()))' \
+    '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+    let tree: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
+    serde_json::from_value(tree).map_err(|e| format!("{} is not a readable report: {e}", path.display()))'
+expect_catch "crash: the report is read into a JSON tree before it is read as a report" \
+    "cargo test -p craftkit-engine --profile ci reading_a_report_costs"
+
+# Every limit in this tree was checked in the *parser*, after the bytes were
+# already in memory. §49.
+#
+# The shared reader is the one that applies the limit while reading. Take the
+# limit away and the file is read whole before it is refused — the memory the
+# cap was meant to prevent is spent anyway.
+swap crates/core/src/readers.rs \
+    '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
+    '    reader.read_to_string(&mut out).map_err(io_error)?;'
+expect_catch "io: a bounded read is not bounded" \
+    "cargo test -p craftkit-core --profile ci a_bounded_read_never_asks_for_more_than_the_limit"
+
+# The line reader keeps at most `max` bytes and drops the rest; without the
+# drop, one long line is one long allocation. The first version of this case
+# mutated a branch that the *error* also depended on, and the test passed
+# anyway -- the error was the same either way, and the difference was in the
+# memory. The mutation now moves the property the test can see.
+swap crates/core/src/readers.rs \
+    '    let take = room.min(chunk.len());' \
+    '    let take = chunk.len();'
+expect_catch "io: a long line is kept instead of dropped" \
+    "cargo test -p craftkit-core --profile ci the_bytes_kept_never_exceed_the_limit"
+
+# The engine's document and the file's document are the same thing. §50.
+#
+# The engine's backstop: a command that leaves a document the file reader
+# would refuse has to be refused and rolled back.
+swap crates/engine/src/session.rs \
+    '                    if let Err(e) = self.doc.validate() {
+                        self.restore(snapshot, before_dirty);
+                        let err = EngineError::Internal {
+                            id: id.to_string(),
+                            detail: format!(
+                                "the command left the document in a state the file format refuses: {e}"
+                            ),
+                        };
+                        self.log.record(id, false, &err.to_string());
+                        return Err(err);
+                    }
+' \
+    ''
+expect_catch "engine: a command may leave a document the file reader refuses" \
+    "cargo test -p craftkit-engine --profile ci leaves_a_document_the_file_would_refuse"
+
+# The model's group-id rule. It was stricter than its own reason: two groups
+# with the same id under one parent are ambiguous, and the same id at two
+# depths is not -- and a command can create that.
+swap crates/model/src/property.rs \
+    '            if let PropNode::Group(g) = node
+                && siblings.iter().any(|id| id.eq_ignore_ascii_case(&g.id))
+            {
+                return Err(CoreError::LimitReached { limit: "duplicate group id" });
+            }' \
+    '            if let PropNode::Group(g) = node
+                && false
+            {
+                return Err(CoreError::LimitReached { limit: "duplicate group id" });
+            }'
+expect_catch "model: two groups with one id are allowed among siblings" \
+    "cargo test -p craftkit-model --profile ci two_siblings_with_the_same_id_are_refused"
+
+# The same rule, the other way round: the *old* rule, restored exactly. The
+# group ids are threaded through the recursion, so the check is tree-wide
+# again -- and the same id at two depths is refused. This is the mutation
+# that says the "a group id may repeat at a different depth" test is really
+# asking the question it claims to ask.
+swap crates/model/src/property.rs \
+    '        self.check(0, &mut prop_ids, &mut 0)?;' \
+    '        let mut group_ids: Vec<String> = Vec::new();
+        self.check(0, &mut prop_ids, &mut group_ids, &mut 0)?;'
+swap crates/model/src/property.rs \
+    '    fn check(&self, depth: usize, prop_ids: &mut Vec<u64>, total: &mut usize) -> Result<(), CoreError> {' \
+    '    fn check(
+        &self,
+        depth: usize,
+        prop_ids: &mut Vec<u64>,
+        group_ids: &mut Vec<String>,
+        total: &mut usize,
+    ) -> Result<(), CoreError> {'
+swap crates/model/src/property.rs \
+    '        let mut siblings: Vec<&str> = Vec::new();
+        for node in &self.nodes {
+            if let PropNode::Group(g) = node
+                && siblings.iter().any(|id| id.eq_ignore_ascii_case(&g.id))
+            {
+                return Err(CoreError::LimitReached { limit: "duplicate group id" });
+            }
+            if let PropNode::Group(g) = node {
+                siblings.push(&g.id);
+            }
+        }' \
+    '        for node in &self.nodes {
+            if let PropNode::Group(g) = node
+                && group_ids.iter().any(|id| id.eq_ignore_ascii_case(&g.id))
+            {
+                return Err(CoreError::LimitReached { limit: "duplicate group id" });
+            }
+            if let PropNode::Group(g) = node {
+                group_ids.push(g.id.clone());
+            }
+        }'
+swap crates/model/src/property.rs \
+    '                    g.check(depth + 1, prop_ids, total)?;' \
+    '                    g.check(depth + 1, prop_ids, group_ids, total)?;'
+expect_catch "model: the same group id at two depths is refused again" \
+    "cargo test -p craftkit-model --profile ci a_group_id_may_repeat_at_a_different_depth"
+
+# The group a path names is the group that is created: the id is the name.
+#
+# The first version of this mutation changed the group's *label* and left the
+# id alone -- and the test passed. The resolver matches on the id
+# (`index_of_seg` compares with `eq_ignore_ascii_case`), so a group called
+# `trigger#2` under the id `trigger` still answered to `trigger/lead`, and
+# the mutation measured nothing. The id is what the path names, so the id is
+# what the mutation moves.
+#
+# The group is made by the model now -- the engine used to split the path
+# string itself -- so the mutation moved with it. §85.
+swap crates/model/src/property.rs \
+    '                    self.push_group(PropGroup::new(name.clone(), name.clone()));' \
+    '                    self.push_group(PropGroup::new(format!("{}#2", name), name.clone()));'
+expect_catch "engine: a group is created under a name the path does not name" \
+    "cargo test -p craftkit-cli --profile ci a_group_name_at_two_depths_survives_the_file"
+
+# The writer must not write what the reader refuses.
+swap crates/io/src/store.rs \
+    '    doc.validate().map_err(|e| SaveError::Format(FormatError::InvalidDocument(e.to_string())))?;' \
+    ''
+expect_catch "io: the writer writes a document the reader would refuse" \
+    "cargo test -p craftkit-io --profile ci the_writer_refuses_a_document_the_reader_would_refuse"
+
+# The reader has a limit and the writer did not, so the writer could produce a
+# file the reader refuses. §51.
+#
+# The limit is the whole of the fix: take it away and the writer goes back to
+# producing text of any size.
+swap crates/io/src/format.rs \
+    '        self.to_text_bounded(MAX_FILE_BYTES)' \
+    '        self.to_text_bounded(usize::MAX)'
+expect_catch "io: the writer writes a file too large to read back" \
+    "cargo test -p craftkit-io --profile ci a_document_too_large_to_read_back_is_not_written"
+
+# The limit has to stop the text *while* it is written, not after: §49's
+# lesson, in the writer. A writer that keeps the chunk it refused has spent
+# the memory the limit was meant to prevent.
+swap crates/io/src/format.rs \
+    '        if self.seen > self.max {' \
+    '        if false {'
+expect_catch "io: the writer keeps the bytes it refused" \
+    "cargo test -p craftkit-io --profile ci the_writer_keeps_no_more_than_the_limit"
+
+# Every limit in the model was a count, and the product of the counts was
+# never written down. §52.
+#
+# The document's byte limit: a document over it is refused. The mutation
+# compares against a number nothing can reach, so the check never fires --
+# and the variable stays used, so the test fails for the right reason rather
+# than because the tree would not compile.
+swap crates/model/src/document.rs \
+    '        if bytes > limits::MAX_DOCUMENT_BYTES {' \
+    '        if bytes > usize::MAX {'
+expect_catch "model: a document over the byte limit is accepted" \
+    "cargo test -p craftkit-model --profile ci a_document_over_the_byte_limit_is_refused"
+
+# The estimate the budget is measured in. An estimate that does not count the
+# content is not an estimate, and a budget measured in one is not a budget.
+#
+# The first version of this mutation zeroed `Value::estimated_bytes`, which
+# under-counted the values and was MISSED: the estimate was still large
+# enough for the budget to bind, so nothing noticed. The count that matters
+# is the keyframes' — that is where a document's memory goes.
+#
+# That last sentence was itself the defect §73 found: the keyframes are where
+# an *honest* document's memory goes, and the property's own value was not
+# counted at all, so a document full of large values was estimated at
+# kilobytes. The comment is corrected below, and the value has its own
+# mutation.
+swap crates/model/src/property.rs \
+    '                .map(|k| std::mem::size_of::<Key>() + k.value.estimated_bytes())' \
+    '                .map(|_k| 0)'
+expect_catch "model: the size estimate does not count the content" \
+    "cargo test -p craftkit-engine --profile ci the_history_keeps_its_memory_within_a_budget"
+
+# The property's own value, which the estimate did not count. §73.
+#
+# Measured: a document whose properties held 6 556 800 bytes of text was
+# estimated at 30 258 bytes, so the undo budget (64 MiB) never bound and the
+# stack grew to 128 steps and 830 MB of memory. With the value counted the
+# same document is estimated at 6 587 058 bytes and the stack holds 9.
+swap crates/model/src/property.rs \
+    '            + self.label.capacity()
+            + self.value.estimated_bytes()' \
+    '            + self.label.capacity()'
+expect_catch "model: the size estimate does not count the property's value" \
+    "cargo test -p craftkit-model --profile ci the_size_estimate_counts_the_property_value"
+
+# The value's invariants are kept by its constructors, and a file is
+# deserialized straight into the model: no constructor runs, so nothing
+# checked the number. A file could carry a number a hundred million times
+# past the limit, and the evaluator's comment says every number the tree
+# stores is in range. §73.
+swap crates/model/src/property.rs \
+    '                    p.value.check(&p.label)?;' \
+    ''
+expect_catch "model: a value that breaks an invariant is accepted" \
+    "cargo test -p craftkit-io --profile ci a_file_whose_value_is_out_of_range_is_refused"
+
+# The format document's example file. §79: "That is a complete, loadable
+# file. `craftkit-cli eval` on it reports one node, 12 frames at 24 fps, and
+# no diagnostics." — three claims about a hand-written file, in the one
+# document that describes the format, and nothing checked them.
+swap docs/design/file-format.md \
+    '"meta": { "name": "Hand written", "fps": 24,' \
+    '"meta": { "name": "Hand written", "fps": 30,'
+expect_catch "docs: the format's example file is not what the document says" \
+    "cargo test -p craftkit-cli --profile ci the_formats_example_file_is_what_the_document_says"
+
+# A boundary that catches a panic, and the pattern document that declares
+# it. §78: the document said "two boundaries, with distinct jobs, and no
+# more", and the tree had three — the control channel's `ui.*` handler was
+# argued for in the code and missing from the document — and §76 added a
+# fourth. A boundary has to be written down before it is written.
+swap xtask/src/lists.rs \
+    '        "crates/engine/src/session.rs",
+        "crates/control/src/server.rs",
+        "apps/craftkit/src/main.rs",' \
+    '        "crates/engine/src/session.rs",
+        "apps/craftkit/src/main.rs",'
+expect_catch "docs: a boundary that catches a panic is not declared" \
+    "cargo xtask lists"
+
+# A number of commands in prose, that is not the registry's number. §71's
+# lesson: a number written by hand about a thing that grows is stale by
+# construction. The registry grows — every command added makes "21 commands"
+# wrong — and the two documents that said it were both written by hand, with
+# nothing to notice when the count changed.
+swap docs/patterns/everything-is-a-command.md \
+    'The registry currently holds 21 commands across 7 areas' \
+    'The registry currently holds 22 commands across 7 areas'
+expect_catch "prose: the number of commands is not the registry's number" \
+    "cargo xtask lists"
+
+# A panic in the drawing code. §76: the render path holds the session's lock
+# for the length of a frame, so a panic in a widget happens while the lock is
+# held — and the panic hook runs on the panicking thread and uses `try_lock`,
+# so it could not write a report even if it tried. Measured: a panic while the
+# session was locked wrote *no report at all*, and the hook's own comment used
+# to name that case as the one it existed for. The render path catches it now,
+# because that is the one place that can still see the session.
+swap apps/craftkit/src/main.rs \
+    '    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(session)));' \
+    '    let outcome: Result<(), Box<dyn std::any::Any + Send>> = Ok(());
+    draw(session);'
+expect_catch "desktop: a panic in the drawing code writes no report" \
+    "cargo test -p craftkit --profile ci a_panic_in_the_drawing_code_writes_a_report"
+
+# A quoted struct that is not the one in the source. §75: the crash recipe
+# quoted the whole of `CrashReport`, §72 changed two of its field types, and
+# the recipe — the document a person reads when their application crashed —
+# went on describing the old shape. A block marked `exact` is a claim that it
+# is the source, and the gate holds it to that.
+swap docs/recipes/fix-a-crash.md \
+    '    pub design: craftkit_model::Document,   // the document at the moment of the crash' \
+    '    pub design: serde_json::Value,   // the document at the moment of the crash'
+expect_catch "prose: an exact quote of a struct is not the struct in the source" \
+    "cargo xtask lists"
+
+# A limit in the model's table that nothing enforces. §74: `MAX_EDGES` was in
+# the table for years and bounded "the reverse index" — and there is no
+# reverse index: `Document::index_of` is a scan, bounded by `MAX_NODES`. Two
+# documents quoted the limit as one of the tree's hard limits, and an agent
+# told "`MAX_EDGES` is 20 000" caps something with it and believes it is
+# protected. A limit nobody enforces is a wish.
+swap crates/model/src/lib.rs \
+    '    /// The longest node name, in bytes.
+    pub const MAX_NAME: usize = 255;' \
+    '    /// The longest node name, in bytes.
+    pub const MAX_NAME: usize = 255;
+    /// Edges the reverse index may hold.
+    pub const MAX_EDGES: usize = 20_000;'
+expect_catch "model: the limits table grows a limit nobody enforces" \
+    "cargo xtask lists"
+
+# The undo stack's memory budget. Both halves of it: the loop that drops the
+# oldest steps, and the check that refuses a step that does not fit.
+swap crates/engine/src/history.rs \
+    '        while self.bytes + bytes > MAX_HISTORY_BYTES {' \
+    '        while false {'
+swap crates/engine/src/history.rs \
+    '        if self.bytes + bytes > MAX_HISTORY_BYTES {' \
+    '        if false {'
+expect_catch "engine: the undo stack ignores its memory budget" \
+    "cargo test -p craftkit-engine --profile ci the_history_keeps_its_memory_within_a_budget"
+
+# `run` and `snapshot` take a script, and the shape was documented only in this
+# file's module comment — which nobody reading `--help`, or an error message,
+# ever sees. A tool built to be driven by an agent, whose one required input
+# format was invisible from the tool.
+#
+# The mutation removes the heading rather than rewording it. A first attempt
+# replaced `SCRIPT FORMAT` with `SCRIPT FORMAT IS A SECRET`, and it did not
+# bite: the test's own guard is a substring check, so it happily matched the
+# mangled text. That is §1's substring disease, caught the day it was written,
+# and it is why the mutation changes what the guard looks for.
+swap apps/craftkit-cli/src/main.rs \
+    'SCRIPT FORMAT (`run` and `snapshot`):' \
+    'SEE THE MODULE DOC:'
+expect_catch "cli: the help stops showing the script format it requires" \
+    "cargo test -p craftkit-cli --profile ci usage_tests"
+
+# The web page's save button said `saved {text} bytes under …` where it meant
+# `text.len()`. Nothing was wrong in a test, because no test read the note; it
+# took a real click in a real browser to see a 7 KB plan fill the panel and push
+# the toolbar off the window.
+swap apps/craftkit-web/src/main.rs \
+    '    format!("saved {} bytes under “{STASH_KEY}”", text.len())' \
+    '    format!("saved {text} bytes under “{STASH_KEY}”")'
+expect_catch "web: the save note carries the whole plan instead of its size" \
+    "cargo test -p craftkit-web --profile ci stash_note"
+
+# `ui.click` parsed to `Method::Ui` and was then never read: the host took the
+# action from `params.action`, which defaulted to `render`. The request an agent
+# is told to send drew a 1180×720 PNG and answered `rendered 1180x720`, ok: true,
+# having clicked nothing. Put the action back in front of the method name.
+swap crates/control/src/protocol.rs \
+    '            "ui.click" => Some(UiAction::Click),' \
+    '            "ui.click" => None,'
+expect_catch "control: the ui.click method name stops deciding what a ui request does" \
+    "cargo test -p craftkit-control --profile ci ui_action"
+
+# The click reply said `clicked \`toolbar.node.duplicate\`` — three in a row
+# against a live app, with the document byte-identical afterwards. A click is a
+# hit test; the sentence must not claim the other thing.
+swap apps/craftkit/src/main.rs \
+    '        Some(name) => format!(
+            "`{name}` is at that point; a click reports where it landed and does not activate \
+             anything — run it with `engine.execute`"
+        ),' \
+    '        Some(name) => format!("clicked `{name}`"),'
+expect_catch "desktop: the click reply claims to have clicked" \
+    "cargo test -p craftkit --profile ci click"
+
+# The playbook's click example was `{"method":"ui.render","params":{"action":
+# "click"}}` for months. It worked by accident, and the docs taught it twice.
+swap docs/agent-playbook.md \
+    '{"id":3,"method":"ui.click","params":{"x":120,"y":240}}' \
+    '{"id":3,"method":"ui.render","params":{"action":"click","x":120,"y":240}}'
+expect_catch "prose: a control-channel example that could not be sent" \
+    "cargo xtask lists"
+
+# `AGENTS.md` told every agent that `docs/control-protocol.md` has the wire
+# format. That file has never existed, and `citation_drift` only looks at `.rs`.
+swap AGENTS.md \
+    '`docs/agent-playbook.md` has the wire format' \
+    '`docs/control-protocol.md` has the wire format'
+expect_catch "prose: a document points at a document that is not in the tree" \
+    "cargo xtask lists"
+
+# A citation that names a line but not a file: 13 of the 24 in the tree were
+# wrong, and `citation_drift` could not see one of them, because `name.rs:12`
+# has a name in it and `:12` does not.
+swap docs/recipes/add-an-icon.md \
+    '`an_unknown_icon_is_reported_not_drawn` asserts' \
+    '`an_unknown_icon_is_reported_not_drawn` (`:300`) asserts'
+expect_catch "prose: a citation names a line and no file" \
+    "cargo xtask lists"
+
+# The README has a second copy of the layer table, in a different shape from
+# the one in docs/architecture.md. Only the architecture one was checked, so the
+# README's was decoration.
+swap README.md \
+    'crates/kernel   L2   the numeric kernel, behind the panic guard' \
+    'crates/kernel   L3   the numeric kernel, behind the panic guard'
+expect_catch "the README's layer table drifts from the code" \
+    "cargo xtask lists"
+
+# A subcommand the parser accepts and the help never mentions: an agent reads
+# the help, so a subcommand that is not in it does not exist as far as anybody
+# driving this tool is concerned. The help and the parser are two spellings of
+# one list, and nothing kept them in step.
+swap apps/craftkit-cli/src/args.rs \
+    '        "mcp" => {' \
+    '        "export" => Err(UsageError::UnknownSubcommand("export".into())),
+        "mcp" => {'
+expect_catch "cli: the help stops listing every subcommand the parser accepts" \
+    "cargo test -p craftkit-cli --profile ci usage_tests"
+
+# A recipe that named a test that does not exist, in the same sentence as the
+# right one: `every_command_has_an_icon_it_can_draw` for
+# `every_command_has_an_icon_this_set_can_draw`.
+swap docs/recipes/add-an-icon.md \
+    '(in `crates/ui/src/icons.rs`) fails the moment' \
+    '(the `every_command_has_an_icon_it_can_draw` test in `crates/ui/src/icons.rs`) fails the moment'
+expect_catch "prose: a symbol claimed to be in a file is not in it" \
+    "cargo xtask lists"
+
+# A command that says it is read-only and writes to the document anyway. The
+# `mutates` flag is what an agent reads before using a command as a probe.
+swap crates/engine/src/commands.rs \
+    '    run: |s, p| {
+        let rate = s.document().meta.frame_rate();' \
+    '    run: |s, p| {
+        s.doc_mut().meta.name = "written by a read-only command".to_string();
+        let rate = s.document().meta.frame_rate();'
+expect_catch "a read-only command writes to the document" \
+    "cargo test -p craftkit-engine --profile ci read_only"
+
+# A command that changes the document in a way the format does not carry loses
+# its work when the file is closed — quietly, because the command reported
+# success. `muted` is the smallest field that proves it.
+swap crates/model/src/document.rs \
+    '    /// Whether the evaluator skips it.
+    pub muted: bool,' \
+    '    /// Whether the evaluator skips it.
+    #[serde(skip)]
+    pub muted: bool,'
+expect_catch "the format stops carrying a command's effect" \
+    "cargo test -p craftkit-cli --profile ci --test command_effects_survive_the_file"
+
+# The rollback is four statements, and two of them were pinned by no test at
+# all: deleting either of these left every test in the workspace green. The
+# plan the window draws is the plan the restore leaves behind, and a document
+# that arrives from outside — the app opening a file — is not a command, so
+# `execute`'s success path never recomputes it. This is the §21 bug in a new
+# place: the engine says one thing and the screen says another.
+swap crates/engine/src/session.rs \
+    '        self.recompute();
+        self.dirty = dirty;' \
+    '        self.dirty = dirty;'
+expect_catch "engine: a rollback does not re-evaluate the plan" \
+    "cargo test -p craftkit-engine --profile ci re_evaluates_the_plan"
+
+# The other one: a rollback that leaves a save prompt for changes it rolled
+# back. No command sets the flag today, so this is a precaution — and a
+# precaution nobody checks is a comment.
+swap crates/engine/src/session.rs \
+    '        self.dirty = dirty;' \
+    '        let _ = dirty;'
+expect_catch "engine: a rollback does not put the dirty flag back" \
+    "cargo test -p craftkit-engine --profile ci dirty_flag"
+
+# The safety limits, as the documents state them. These are the numbers that
+# bound a hostile file, and they are written down in three places so that an
+# agent coding against them uses the right ones. All twenty of the claims
+# were true — by luck, because nothing compared them with the code.
+swap docs/architecture.md \
+    '`MAX_DEPTH` 32' \
+    '`MAX_DEPTH` 33'
+expect_catch "prose: a limit in prose is not the constant's value" \
+    "cargo xtask lists"
+
+# The same limit in a table, where the value and the constant are in
+# different cells.
+swap docs/patterns/clone-before-edit.md \
+    '| Undo entries kept | 128 |' \
+    '| Undo entries kept | 127 |'
+expect_catch "prose: a limit in a table cell is not the constant's value" \
+    "cargo xtask lists"
+
+# The "did this command actually change anything?" check. The engine compares
+# the document with the snapshot it took before the command, and a command
+# that declares `mutates: true` and writes nothing is a bug. No command in
+# the tree did that, so nothing ever reached the check: deleting it left
+# every test in the workspace green.
+swap crates/engine/src/session.rs \
+    '                    if self.doc == snapshot {' \
+    '                    if false {'
+expect_catch "engine: a command that changes nothing is allowed" \
+    "cargo test -p craftkit-engine --profile ci says_it_changes_the_document"
+
+# The rollback in that branch, which is what puts the dirty flag back.
+swap crates/engine/src/session.rs \
+    '                        self.restore(snapshot, before_dirty);
+                        let err = EngineError::Internal {' \
+    '                        let err = EngineError::Internal {'
+expect_catch "engine: a refused no-op leaves the dirty flag set" \
+    "cargo test -p craftkit-engine --profile ci marks_the_project_dirty"
+
+# The refusal path's log entry. The log test used an unknown id, which fails
+# in the lookup and never reaches the rollback.
+swap crates/engine/src/session.rs \
+    '                self.log.record(id, false, &e.to_string());
+' ''
+expect_catch "engine: a refused command is not logged" \
+    "cargo test -p craftkit-engine --profile ci refused_command_is_logged"
+
+# The panic path's log entry, for the same reason.
+swap crates/engine/src/session.rs \
+    '                self.log.record(id, false, &err.to_string());
+                Err(err)' \
+    '                Err(err)'
+expect_catch "engine: a panicking command is not logged" \
+    "cargo test -p craftkit-engine --profile ci panicking_command_is_logged"
+
+# The pending-change mechanism. `FILES` has been empty since version 1, so
+# `apply` had never run a step and nothing tested the order the module
+# promises: "step functions run in order, each seeing what the previous one
+# produced". The first real format change would have been the first
+# execution.
+swap crates/io/src/format/pending.rs \
+    '    for step in steps {' \
+    '    for step in steps.iter().rev() {'
+expect_catch "io: the pending steps do not run in order" \
+    "cargo test -p craftkit-io --profile ci steps_run"
+
+# A citation that names a test, and the line it points at. Four of them
+# pointed 9, 52, 100 and 147 lines away from the test they name.
+swap docs/recipes/change-the-file-format.md \
+    '`the_files_on_disk_and_the_table_agree` (both in
+`crates/io/src/format/pending.rs`).' \
+    '`the_files_on_disk_and_the_table_agree` (both in
+`crates/io/src/format/pending.rs:89`).'
+expect_catch "prose: a citation that names a test points at the wrong line" \
+    "cargo xtask lists"
+
+# ------------------------------------------------------------------- prose ---
+# A pattern document that quotes a function and calls the block `exact` is
+# claiming to be the source, word for word. The block used to say "the four
+# restore statements", and said "one", "two" and "three" in three other
+# places: a number in a sentence is not a citation, and `citation_drift` only
+# reads `file.rs:12`. Quoting the code instead of counting it is what makes
+# the claim checkable, and this is the check.
+swap crates/engine/src/session.rs \
+    '        self.dirty = dirty;' \
+    '        self.dirty = true;'
+expect_catch "prose: the function a document quotes is not the function in the file" \
+    "cargo xtask lists"
+
+# The other direction: the document loses a line the function has. A quote
+# that has quietly been edited is exactly what the marker is there to catch.
+swap docs/patterns/clone-before-edit.md \
+    '    self.evaluator.invalidate();
+    self.recompute();
+    self.dirty = dirty;' \
+    '    self.evaluator.invalidate();
+    self.dirty = dirty;'
+expect_catch "prose: a quoted function loses a line in the document" \
+    "cargo xtask lists"
+
+# The line count a document gives a file. `crates/io/src/format/pending.rs`
+# was "110 lines" in the playbook and "98 lines" in a recipe, and it is 174:
+# two documents disagreeing about one file, and both wrong.
+swap docs/recipes/change-the-file-format.md \
+    'Read `crates/io/src/format/pending.rs` top to bottom. It is the rule.' \
+    'Read `crates/io/src/format/pending.rs` top to bottom. It is 999 lines and it is the rule.'
+expect_catch "prose: a line count in prose is not the file's length" \
+    "cargo xtask lists"
+
+# The other form: the line where a file's tests begin.
+#
+# The playbook used to name the line itself ("the tests start at line 960"),
+# and every change to the file moved it. It now names the *place* — the tests
+# module at the end of the file — so the claim cannot rot; and the gate still
+# catches a document that names a line, because the mutation below is exactly
+# that: a document that names a line, and names it wrongly.
+swap docs/agent-playbook.md \
+    'its tests are at the end of the file' \
+    'the tests start at line 900'
+expect_catch "prose: the line a document names is not where the tests start" \
+    "cargo xtask lists"
+
+# Code that prose attributes to a file. The crash recipe used to say "the two
+# `self.doc = snapshot;` lines in `crates/engine/src/session.rs`", and §40
+# deleted those lines: the restore is one function now. Nothing checked code
+# quoted in prose, so the recipe kept quoting code that no longer exists.
+swap docs/recipes/fix-a-crash.md \
+    'the `Session::restore` function in `crates/engine/src/session.rs`' \
+    'the two `self.doc = snapshot;` lines in `crates/engine/src/session.rs`'
+expect_catch "prose: a statement prose attributes to a file is not a line of it" \
+    "cargo xtask lists"
+
+# The other form: a method that is not in the file it is attributed to.
+swap docs/recipes/fix-a-crash.md \
+    'the `Session::restore` function in `crates/engine/src/session.rs`' \
+    'the `Session::restore_snapshot` function in `crates/engine/src/session.rs`'
+expect_catch "prose: a method prose attributes to a file is not in it" \
+    "cargo xtask lists"
+
+# The token file is the promise that a port answers to a token, so the instance
+# that holds the port is the only one that may write it. §54.
+#
+# The mutation publishes *before* the bind, which is what the app used to do:
+# a second instance, which cannot bind, replaced the running instance's token
+# with its own, and every request to the running app was refused with "a bad
+# token".
+swap crates/control/src/server.rs \
+    '    let (port, server) = serve(session, options)?;' \
+    '    let _ = write_token_file(dir.as_deref(), requested, &token)?;
+    let (port, server) = serve(session, options)?;'
+expect_catch "control: a second instance takes the first one's token file" \
+    "cargo test -p craftkit-control --profile ci a_second_instance_does_not_take_the_first_ones_token_file"
+
+# The live-window check measures the window of *this* application. It used to
+# take the first window named "craftkit", which with a second instance running
+# is the other instance's window: the check then reported "the engine changed
+# and the window did not", a confident diagnosis of a bug that was not there.
+# The pid is what tells the windows apart. §56.
+swap scripts/live-window-check.sh \
+    '        if [ -n "${pids[$i]}" ] && [ "${pids[$i]}" = "$want" ]; then' \
+    '        if [ -n "${pids[$i]}" ]; then'
+expect_catch "live-window: the check stops telling one instance from another" \
+    "./scripts/live-window-check.sh --self-test"
+
+# A crash report holds the user's design — the document as it was and every
+# command that was run against it — and it was written world-readable: the
+# folder 0775 and the files 0664, both measured. §57.
+swap crates/engine/src/crash.rs \
+    '    restrict(&dir, true);' \
+    '    let _ = &dir;'
+expect_catch "engine: the crash report's folder is left readable by other users" \
+    "cargo test -p craftkit-engine --profile ci a_crash_report_is_not_readable_by_other_users"
+
+# The files are created private rather than created open and locked down
+# afterwards, so the design is never on disk in a file another user can read.
+swap crates/engine/src/crash.rs \
+    '        .mode(0o600)' \
+    '        .mode(0o644)'
+expect_catch "engine: the crash report's design is written readable by other users" \
+    "cargo test -p craftkit-engine --profile ci a_crash_report_is_not_readable_by_other_users"
+
+# A folder that was already there belongs to whoever made it. `CRAFTKIT_CRASH_DIR`
+# can name one that other people use too.
+swap crates/engine/src/crash.rs \
+    '    if base_is_ours {
+        restrict(base, true);
+    }' \
+    '    let _ = base_is_ours;
+    restrict(base, true);'
+expect_catch "engine: a crash folder the tool did not create is made private anyway" \
+    "cargo test -p craftkit-engine --profile ci a_crash_folder_that_was_already_there_keeps_its_permissions"
+
+# The crash report's id is what says when the crash happened, and what sorts
+# the reports into order. It was a number with no date in it, restarting every
+# 1 157 days, and not the format `CrashReport::id` documents. §58.
+swap crates/engine/src/crash.rs \
+    '    format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}-{:04x}", (nanos >> 8) & 0xffff)' \
+    '    let _ = (year, month, day, hour, minute, second);
+    format!("{:08}-{:04x}", unix % 100_000_000, (nanos >> 8) & 0xffff)'
+expect_catch "engine: the crash report's id stops carrying a date" \
+    "cargo test -p craftkit-engine --profile ci the_id_is_the_documented_format"
+
+# The date arithmetic, one day out.
+swap crates/engine/src/crash.rs \
+    '    let z = days + 719_468;' \
+    '    let z = days + 719_467;'
+expect_catch "engine: the crash report's date is a day out" \
+    "cargo test -p craftkit-engine --profile ci the_date_is_right_for_a_known_day"
+
+# A report is the only evidence a crash happened. Two crashes in the same
+# second landed on the same id, and the second overwrote the first.
+swap crates/engine/src/crash.rs \
+    '    while dir.exists() {' \
+    '    while false && dir.exists() {'
+expect_catch "engine: a second crash destroys the first crash's report" \
+    "cargo test -p craftkit-engine --profile ci a_second_crash_does_not_destroy_the_first"
+
+# The frame size was capped per side and the area was not, so 8192 × 8192 was
+# allowed: 67 million pixels, 268 MB of pixels, 301 MB of resident memory, and
+# a 14 789 463-byte reply — while the session was locked for the duration.
+# §59.
+swap crates/ui/src/raster.rs \
+    '    let pixels = width.saturating_mul(height);
+    if pixels > MAX_PIXELS {' \
+    '    let pixels = width.saturating_mul(height);
+    if false && pixels > MAX_PIXELS {'
+expect_catch "ui: a frame's area stops being bounded" \
+    "cargo test -p craftkit-ui --profile ci a_frame_that_is_too_big_in_pixels_is_refused"
+
+# The model's tick range was wider than a JSON number's, so saturating a
+# hostile time produced a value no reply could hold — and `json!` failed
+# inside the macro, where the lint that forbids `unwrap` cannot see it. §60.
+swap crates/core/src/tick.rs \
+    '    pub const MAX: Tick = Tick(u64::MAX as i128);' \
+    '    pub const MAX: Tick = Tick(i128::MAX / 4);'
+expect_catch "core: a tick can be wider than a reply can carry" \
+    "cargo test -p craftkit-engine --profile ci a_hostile_time_does_not_panic_the_command_that_reports_it"
+
+# The reader has to refuse a file whose range no reply could carry.
+#
+# The swap is repeated for the second gate on purpose: `expect_catch` restores
+# the tree after every case, so one swap serves exactly one gate. Writing the
+# two gates under one swap made the second one run against an unmutated tree —
+# and the suite said so, which is the whole point of it.
+swap crates/model/src/document.rs \
+    '        if self.meta.start < craftkit_core::Tick::MIN || self.meta.end > craftkit_core::Tick::MAX {' \
+    '        if false && (self.meta.start < craftkit_core::Tick::MIN || self.meta.end > craftkit_core::Tick::MAX) {'
+expect_catch "model: a document whose range no reply can carry is accepted" \
+    "cargo test -p craftkit-model --profile ci a_document_whose_range_is_outside_what_a_time_can_be_is_refused"
+
+swap crates/model/src/document.rs \
+    '        if self.meta.start < craftkit_core::Tick::MIN || self.meta.end > craftkit_core::Tick::MAX {' \
+    '        if false && (self.meta.start < craftkit_core::Tick::MIN || self.meta.end > craftkit_core::Tick::MAX) {'
+expect_catch "io: a file whose range is too far out is read back" \
+    "cargo test -p craftkit-io --profile ci a_file_whose_range_is_too_far_out_is_refused"
+
+# The token file is private because the *file* is private. The old code kept
+# it private by making the directory 0700 instead, and a directory is not the
+# tool's to make private unless the tool made it: pointing
+# `CRAFTKIT_CONTROL_DIR` at a shared directory turned it from 0755 into 0700
+# behind the user's back, and dropped the setgid bit on the way. §55.
+swap crates/control/src/token.rs \
+    '        if ours {
+            restrict(parent, true).map_err(|e| format!("could not protect {}: {e}", parent.display()))?;
+        }' \
+    '        let _ = ours;
+        restrict(parent, true).map_err(|e| format!("could not protect {}: {e}", parent.display()))?;'
+expect_catch "control: a directory the tool did not create is made private anyway" \
+    "cargo test -p craftkit-control --profile ci a_directory_that_was_already_there_keeps_its_permissions"
+
+# The file is created 0600, so the secret is never on disk in a file another
+# user can read — not even for the length of the chmod that used to follow
+# the write.
+swap crates/control/src/token.rs \
+    '        .mode(0o600)' \
+    '        .mode(0o644)'
+expect_catch "control: the token file is created readable by other users" \
+    "cargo test -p craftkit-control --profile ci the_token_file_is_private_in_a_shared_directory"
+
+# The tool's own directory is still made private. The file's own mode is what
+# keeps the secret, but the directory is the tool's to protect.
+swap crates/control/src/token.rs \
+    '    let mode = if dir { 0o700 } else { 0o600 };' \
+    '    let mode = if dir { 0o755 } else { 0o600 };'
+expect_catch "control: the tool's own directory is left readable by other users" \
+    "cargo test -p craftkit-control --profile ci a_directory_the_tool_creates_is_private"
+
+# The token is written into a fresh file and moved into place, so a token file
+# left over from a previous launch is replaced rather than kept. A file that
+# survives its launch names a token the app does not answer to — the same
+# family as §54, where the file held a token and the port did not.
+swap crates/control/src/token.rs \
+    '    std::fs::rename(temp, path).map_err(|e| {' \
+    '    if path.exists() {
+        let _ = std::fs::remove_file(temp);
+        return Ok(());
+    }
+    std::fs::rename(temp, path).map_err(|e| {'
+expect_catch "control: a token file that already exists is not replaced" \
+    "cargo test -p craftkit-control --profile ci a_token_file_left_over_from_a_previous_launch_is_replaced"
+
+# The evaluator's cache is content-addressed, which is what makes clearing it
+# on a restore belt and braces rather than a correctness requirement. Stop
+# hashing the node's properties and the cache starts serving states that
+# belong to a document that no longer exists.
+#
+# The fingerprint moved to the model in §53 — a structural hash costs a tenth
+# of what hashing the serialised form did — so the mutation moved with it.
+swap crates/model/src/fingerprint.rs \
+    '        h.write_u64(self.nodes.len() as u64);
+        for node in &self.nodes {
+            match node {
+                PropNode::Prop(p) => {
+                    h.write_u8(0);
+                    p.hash_into(h);
+                }
+                PropNode::Group(g) => {
+                    h.write_u8(1);
+                    g.hash_into(h);
+                }
+            }
+        }' \
+    '        h.write_u64(self.nodes.len() as u64);'
+expect_catch "eval: the fingerprint stops looking at the node's properties" \
+    "cargo test -p craftkit-eval --profile ci"
+
+# The same break, one field over: the node's *name* stops being part of its
+# fingerprint. Every test in the evaluator still passes — they all change
+# values and positions — and only the engine's own test sees it, because it
+# is the only one that renames a node and then puts the document back.
+swap crates/model/src/fingerprint.rs \
+    '        h.write_str(&self.name);' \
+    '        // MUTATED: the name is no longer part of the fingerprint.'
+expect_catch "engine: a restore is served a state from the document it replaced" \
+    "cargo test -p craftkit-engine --profile ci a_restore_cannot_serve"
+
+# The keyframes. A hand-written hash is most likely to forget the part that
+# is hardest to see, and nothing in the tree checked it: the other cache
+# tests change a property's value or move a node, and none of them changed a
+# *keyframe*. §53.
+swap crates/model/src/fingerprint.rs \
+    '        self.keys.hash_into(h);' \
+    '        // MUTATED: the keyframes are no longer part of the fingerprint.'
+expect_catch "eval: the fingerprint stops looking at the keyframes" \
+    "cargo test -p craftkit-eval --profile ci a_node_whose_keyframes_changed_is_not_served_from_the_cache"
+
+# -------------------------------------------------------------------- ci ----
+# `ci` used to run the cheap gates from `PHASES` and then call the tests and the
+# wasm check separately. Deleting that one call left it printing "ci green — …,
+# tests, wasm" and exiting 0, because the closing line was a string literal
+# rather than a record of what had run. Both halves are checked here.
+swap xtask/src/ci.rs '    Phase { name: "tests", run: tests },
+    Phase { name: "wasm", run: wasm::run },
+' ''
+expect_catch "ci: the tests and wasm phases vanish from the run" "cargo xtask ci"
+
+# The closing line itself: naming a phase that did not run is the whole defect,
+# so put it back the way it was and check the summary catches it.
+swap xtask/src/ci.rs '        Ok(crate::Outcome::Skipped) => skipped.push(phase.name),' \
+    '        Ok(crate::Outcome::Skipped) => ran.push(phase.name),'
+expect_catch "ci: a skipped phase is counted as one that ran" "cargo xtask ci"
+
+# ------------------------------------------------------------------- web ----
+# The *element's* id, not merely the first mention of the name. An earlier
+# mutation renamed only the CSS selector, changed nothing the browser cares
+# about, and taught us that a substring search can be fooled by the name
+# surviving elsewhere in the file.
+swap apps/craftkit-web/index.html '<canvas id="craftkit-canvas"' '<canvas id="c-canvas"'
+expect_catch "web: the canvas element's id is renamed (the name survives elsewhere)" \
+    "cargo xtask web"
+
+swap apps/craftkit-web/index.html '#craftkit-canvas {' '#not-the-canvas {'
+expect_catch "web: the stylesheet stops sizing the canvas" "cargo xtask web"
+
+swap apps/craftkit-web/sw.js 'if (url.origin !== self.location.origin) return;' '// removed'
+expect_catch "web: the service worker would serve another origin" "cargo xtask web"
+
+swap apps/craftkit-web/sw.js 'if (request.method !== "GET") return;' '// removed'
+expect_catch "web: the service worker would answer a non-GET" "cargo xtask web"
+
+# The bug a real browser found and every compile check was green through: the
+# page imported `craftkit_web.js`, `wasm-bindgen` wrote `craftkit-web.js`, and
+# the load was a 404. The name is one constant now; move it and the page's
+# import no longer matches what the bundler is asked to emit.
+swap apps/craftkit-web/index.html 'craftkit_web.js' 'craftkit-web.js'
+expect_catch "web: the page imports a bundle name the bundler does not emit" "cargo xtask web"
+
+swap xtask/src/wasm.rs 'pub const BUNDLE_NAME: &str = "craftkit_web";' \
+    'pub const BUNDLE_NAME: &str = "craftkit-web";'
+expect_catch "web: the bundler is told to emit a name the page does not import" "cargo xtask web"
+
+# The failure box a broken page shows is the only instruction its reader ever
+# sees, and it named `cargo xtask wasm` — the command that checks and writes
+# nothing. §11's fix corrected the authoring comments in the same file and left
+# this copy, which is exactly the two-spellings bug §11 is about.
+swap apps/craftkit-web/index.html \
+    '1. The bundle is missing.        Run:  cargo xtask bundle' \
+    '1. The bundle is missing.        Run:  cargo xtask wasm'
+expect_catch "web: the failure box tells the reader to run a command that builds nothing" \
+    "cargo xtask web"
+
+# ------------------------------------------------------------------ wasm ----
+# The boundary this gate enforces is written down in xtask/src/wasm.rs.
+swap crates/model/src/lib.rs 'pub mod document;' 'pub mod document;
+
+/// Looks harmless; is not.
+pub fn host_only() -> u32 {
+    std::env::var("HOME").map(|_| 1u32).unwrap_or(0)
+}'
+expect_miss "wasm: a library crate calls std::env in a lower layer" \
+    "cargo xtask wasm" \
+    "host-only std calls compile for wasm32 and fail at run time instead, so compiling cannot find them"
+
+# The class this gate *does* catch: a cfg branch that stopped compiling. Nothing
+# else builds a wasm32 branch until somebody opens the page.
+swap crates/model/src/lib.rs 'pub mod document;' 'pub mod document;
+
+/// Only compiled in a browser build, and broken.
+#[cfg(target_arch = "wasm32")]
+pub fn browser_only() -> u32 {
+    let n: u32 = "not a number";
+    n
+}'
+expect_catch "wasm: a cfg(wasm32) branch stopped compiling" "cargo xtask wasm"
+
+# `wasm` is a compile check and writes nothing, so it is green on a machine
+# where the page's JavaScript cannot be produced at all. The phase now says so.
+#
+# Mutating the sentence, not the printing: a check that grepped `cargo xtask
+# wasm`'s output would pass on a machine with a matching wasm-bindgen CLI and
+# fail on one without, so it would be reporting the checkout rather than the
+# tree. `post_build_note` is pure for the same reason.
+swap xtask/src/wasm.rs \
+    'blocker.map(|reason| {' \
+    'None::<&str>.map(|reason| {'
+expect_catch "wasm: a green compile check stops saying the bundle is unbuilt" \
+    "cargo test -p xtask --profile ci post_build_note"
+
+# `doctor` and `cargo xtask bundle` each answered "can this machine produce the
+# bundle?" with their own copy of the rule, and the copies disagreed: when the
+# wasm-bindgen crate version could not be read out of Cargo.lock, `bundle` read
+# that as "no blocker" and carried on with a CLI it had checked against nothing,
+# while `doctor` filed it as `info`. They now share `bundler_status`.
+#
+# This mutation puts the old, unsafe reading back. Nothing else notices: the
+# lockfile here parses, so only the test knows the difference.
+swap xtask/src/doctor.rs \
+    '    let Some(want) = crate_version else {
+        return Bundler::Blocked(format!(
+            "the wasm-bindgen crate version could not be read from Cargo.lock, so the CLI {cli} \
+             cannot be checked against it"
+        ));
+    };' \
+    '    let Some(want) = crate_version else {
+        return Bundler::Ready;
+    };'
+expect_catch "wasm: an unreadable crate version counts as a working bundler again" \
+    "cargo test -p xtask --profile ci bundler_status"
+
+# The counter that reports recovered kernel panics was a `thread_local!` cell,
+# so it counted the recoveries of the thread that *asked* — and the thread that
+# asks is the control channel's, while the kernel's work happens on the UI
+# thread. The counter was structurally incapable of reporting the thing it
+# exists to report. §62.
+#
+# The swap replaces the whole block: the storage, the increment and the read.
+# One swap, one gate — so the engine's own test, which would also fail under
+# this swap, is given its own swap below rather than a second gate here.
+swap crates/kernel/src/lib.rs \
+    'static RECOVERED: AtomicU64 = AtomicU64::new(0);
+
+/// Count one recovered panic.
+///
+/// Saturating rather than wrapping: the count is a lifetime statistic, and a
+/// number that silently went back to zero would be read as "nothing has ever
+/// gone wrong".
+fn note_recovered() {
+    let _ = RECOVERED.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some(v.saturating_add(1)));
+}
+
+/// How many panics this boundary has recovered since the process started.
+///
+/// The count is **process-wide**: a recovery on any thread is visible from any
+/// other. See the note on [`RECOVERED`] for why it cannot be per-thread.
+pub fn recovered_count() -> u64 {
+    RECOVERED.load(Ordering::Relaxed)
+}' \
+    'thread_local! {
+    static RECOVERED: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Count one recovered panic.
+fn note_recovered() {
+    RECOVERED.with(|c| c.set(c.get().saturating_add(1)));
+}
+
+/// How many panics this boundary has recovered since the process started.
+pub fn recovered_count() -> u64 {
+    RECOVERED.with(|c| c.get())
+}'
+expect_catch "kernel: the recovery counter counts only the thread that asks" \
+    "cargo test -p craftkit-kernel --profile ci a_recovery_on_one_thread_is_counted_on_another"
+
+# The other end of the same wire: the session's statistics stop reading the
+# counter at all. The counter can be perfect and the reply can still lie, and
+# the reply is what an agent reads.
+swap crates/engine/src/commands.rs \
+    '                "kernel_recoveries": craftkit_kernel::recovered_count(),' \
+    '                "kernel_recoveries": 0,'
+expect_catch "engine: the statistics stop counting recovered kernel panics" \
+    "cargo test -p craftkit-engine --profile ci the_session_statistics_count_a_recovery_that_happened_on_another_thread"
+
+# The token comparison folded the length difference into a `u8` accumulator, so
+# every length difference that was a multiple of 256 was lost — and the token
+# followed by 256 NUL bytes was accepted as the token, by the real control
+# channel. The accumulator is a `usize` now. §63.
+swap crates/control/src/token.rs \
+    '        let mut diff = a.len() ^ b.len();
+        let n = a.len().max(b.len());
+        for i in 0..n {
+            // Wrapping so an index past the shorter slice contributes zero
+            // rather than panicking — and the length is already folded into
+            // `diff` above.
+            diff |= usize::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+        }' \
+    '        let mut diff = (a.len() ^ b.len()) as u8;
+        let n = a.len().max(b.len());
+        for i in 0..n {
+            // Wrapping so an index past the shorter slice contributes zero
+            // rather than panicking — and the length is already folded into
+            // `diff` above.
+            diff |= u8::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+        }'
+expect_catch "control: the token comparison loses a length difference of 256" \
+    "cargo test -p craftkit-control --profile ci a_token_with_trailing_nuls_is_not_a_token"
+
+# The other half of the same mistake: the length is not folded in at all, so
+# the comparison only ever looks at the bytes and never at how many there are.
+swap crates/control/src/token.rs \
+    '        let mut diff = a.len() ^ b.len();' \
+    '        let mut diff = 0usize;'
+expect_catch "control: the token comparison forgets that the lengths differ" \
+    "cargo test -p craftkit-control --profile ci a_connection_with_a_padded_token_is_closed"
+
+# The three readers of untrusted JSON had three unrelated limits — 1 MiB,
+# 4 MiB and 32 MiB — and the largest of them bought a gigabyte of memory,
+# because none of them was written down as what it was for. They are derived
+# from one budget now. §64.
+swap crates/mcp/src/rpc.rs \
+    'pub const MAX_MESSAGE: usize = craftkit_core::MAX_JSON_TEXT_BYTES;' \
+    'pub const MAX_MESSAGE: usize = 4 * 1024 * 1024;'
+expect_catch "mcp: the message limit is a number of its own again" \
+    "cargo test -p craftkit-mcp --profile ci the_message_limit_is_the_tree_s_json_limit"
+
+swap apps/craftkit-cli/src/cli.rs \
+    'pub const MAX_SCRIPT_BYTES: usize = craftkit_core::MAX_JSON_TEXT_BYTES;' \
+    'pub const MAX_SCRIPT_BYTES: usize = 32 * 1024 * 1024;'
+expect_catch "cli: the script limit is a number of its own again" \
+    "cargo test -p craftkit-cli --profile ci the_script_limit_is_the_tree_s_json_limit"
+
+# The number *between* two keyframes is not one of the numbers the tree
+# checked, and an easing's overshoot is deliberate — so the interpolation has
+# to clamp to the range the constructors hold to. It did not, and a source
+# node took its level to 1 497 942 087. §65.
+swap crates/model/src/keyframe.rs \
+    '        (V::Num(x), V::Num(y)) => {
+            V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
+        }' \
+    '        (V::Num(x), V::Num(y)) => V::Num(x + (y - x) * t),'
+expect_catch "model: the interpolation stops clamping to the range" \
+    "cargo test -p craftkit-model --profile ci an_overshooting_easing_stays_inside_the_range"
+
+swap crates/model/src/keyframe.rs \
+    '        (V::Num(x), V::Num(y)) => {
+            V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
+        }' \
+    '        (V::Num(x), V::Num(y)) => V::Num(x + (y - x) * t),'
+expect_catch "eval: a source takes the level out of range" \
+    "cargo test -p craftkit-eval --profile ci an_animated_amount_never_takes_the_level_out_of_range"
+
+# The widget names were `&'static str` made by `Box::leak`, and they are built
+# every frame — the toolbar's, every node row's, every property editor's — so
+# the process grew by a kilobyte a frame: 221 MB an hour at sixty frames a
+# second. The names are owned now. §66.
+#
+# The leak comes back in the shape that only a measurement can see: the name
+# leaks a copy of its bytes *and* owns another one, so the type still says
+# `String` and everything still compiles. The gate measures the process's own
+# resident pages, in a child process, because a leak is only visible against a
+# baseline and a baseline is only worth anything in a process that has done
+# nothing else.
+swap crates/ui/src/automation.rs \
+    '    pub fn toolbar(command_id: &str) -> Self {
+        AutomationId(format!("toolbar.{command_id}"))
+    }
+
+    /// The name for the row of node `id`.
+    pub fn node_row(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("nodes.row.{}", id.get()))
+    }
+
+    /// The name for the editor of `path` on node `id`.
+    pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
+        AutomationId(format!("node.{}.prop.{}", id.get(), path))
+    }
+
+    /// The name for the keyframe row of `path` on node `id`.
+    pub fn keyframe(id: craftkit_core::NodeId, path: &str) -> Self {
+        AutomationId(format!("node.{}.key.{}", id.get(), path))
+    }' \
+    '    pub fn toolbar(command_id: &str) -> Self {
+        AutomationId(Box::leak(format!("toolbar.{command_id}").into_boxed_str()).to_string())
+    }
+
+    /// The name for the row of node `id`.
+    pub fn node_row(id: craftkit_core::NodeId) -> Self {
+        AutomationId(Box::leak(format!("nodes.row.{}", id.get()).into_boxed_str()).to_string())
+    }
+
+    /// The name for the editor of `path` on node `id`.
+    pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
+        AutomationId(Box::leak(format!("node.{}.prop.{}", id.get(), path).into_boxed_str()).to_string())
+    }
+
+    /// The name for the keyframe row of `path` on node `id`.
+    pub fn keyframe(id: craftkit_core::NodeId, path: &str) -> Self {
+        AutomationId(Box::leak(format!("node.{}.key.{}", id.get(), path).into_boxed_str()).to_string())
+    }'
+expect_catch "ui: the widget names leak their bytes again" \
+    "cargo test -p craftkit-ui --profile ci building_a_widget_name_does_not_leak_memory"
+
+# The page and the service worker each hold a copy of the bundle's name. The
+# page's copy was checked and the worker's was not, so the worker could
+# precache a file that does not exist — and the gate said the two agreed. §67.
+swap apps/craftkit-web/sw.js \
+    '  "./dist/craftkit_web.js",
+  "./dist/craftkit_web_bg.wasm",' \
+    '  "./dist/craftkit_web_v2.js",
+  "./dist/craftkit_web_v2_bg.wasm",'
+expect_catch "web: the worker precaches a bundle that does not exist" \
+    "cargo xtask web"
+
+# The undo stack's budget counts the memory the two stacks hold together, and
+# `push` clears the redo stack when a new edit arrives — the undone branch is
+# unreachable, and its memory is gone. The budget kept counting it, so every
+# edit after an undo added a phantom, and the budget trimmed the undo stack
+# against it: on a full-size document, undo stopped working. §68.
+swap crates/engine/src/history.rs \
+    '    fn clear_redo(&mut self) {
+        for entry in self.redo.drain(..) {
+            self.bytes = self.bytes.saturating_sub(entry.bytes);
+        }
+    }' \
+    '    fn clear_redo(&mut self) {
+        self.redo.clear();
+    }'
+expect_catch "engine: the undo budget counts the memory it has just freed" \
+    "cargo test -p craftkit-engine --profile ci the_budget_counts_the_memory_the_stacks_hold"
+
+# The same mistake, seen as the person who meets it: the undo stack is trimmed
+# against a phantom until it is empty, and undo stops doing anything.
+swap crates/engine/src/history.rs \
+    '    fn clear_redo(&mut self) {
+        for entry in self.redo.drain(..) {
+            self.bytes = self.bytes.saturating_sub(entry.bytes);
+        }
+    }' \
+    '    fn clear_redo(&mut self) {
+        self.redo.clear();
+    }'
+expect_catch "engine: undo stops working once the redo branches pile up" \
+    "cargo test -p craftkit-engine --profile ci undo_still_works_after_many_edits_that_discard_a_redo_branch"
+
+# The command log is a bounded ring of the last 256 commands, and the failure
+# count was taken over the ring while its own doc said "since the session
+# opened". A session that had run three hundred commands reported 256 of them
+# and 255 of the failures. §69.
+swap crates/engine/src/log.rs \
+    '    pub fn failures(&self) -> usize {
+        self.failures
+    }' \
+    '    pub fn failures(&self) -> usize {
+        self.entries.iter().filter(|e| !e.ok).count()
+    }'
+expect_catch "engine: the failure counter counts only the commands in the ring" \
+    "cargo test -p craftkit-engine --profile ci the_failure_count_is_every_failure_and_not_only_the_ones_in_the_ring"
+
+# The other half of the same reply: the command count was the ring's length,
+# so it stopped at 256 and stayed there.
+swap crates/engine/src/commands.rs \
+    '                "commands": s.log().total(),' \
+    '                "commands": s.log().entries().len(),'
+expect_catch "engine: the statistics count only the commands in the ring" \
+    "cargo test -p craftkit-engine --profile ci the_session_statistics_count_every_command_and_not_only_the_last_two_hundred_and_fifty_six"
+
+# The command trace holds the *parsed* parameters, and its budget was written
+# in bytes of text: a parsed JSON value costs up to thirty-two times its text,
+# and the loop that keeps the trace inside its budget keeps the last step, so
+# one big step was kept whole — 2.7 MB of text, 15 MB of memory, for a budget
+# of 256 KiB. §70.
+swap crates/engine/src/session.rs \
+    '        if step_bytes > crate::MAX_TRACE_BYTES {' \
+    '        if step_bytes > usize::MAX {'
+expect_catch "engine: a command too big for the trace is not refused" \
+    "cargo test -p craftkit-engine --profile ci a_command_whose_parameters_do_not_fit_in_the_trace_is_refused"
+
+# And the budget itself: the same number, but written out on its own instead
+# of derived from the memory it is supposed to bound.
+swap crates/engine/src/lib.rs \
+    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;' \
+    'pub const MAX_TRACE_BYTES: usize = 256 * 1024;'
+expect_catch "engine: the trace budget is a number of its own again" \
+    "cargo test -p craftkit-engine --profile ci the_trace_budget_is_derived_from_the_memory_budget"
+
+# The fingerprint forgets a field, and the guard that should have noticed
+# drifts with it. §80: the keyframe's easing was in the hash but not in the
+# hash's own test — the test changed a key's time, value and easing together,
+# so the fingerprint moved whatever else was read. Removing the easing left
+# **every test in the workspace green**, and the evaluator's cache went on
+# serving the curve from before the edit.
+swap crates/model/src/fingerprint.rs \
+    '    hash_value(h, &key.value);
+    hash_easing(h, &key.ease);' \
+    '    hash_value(h, &key.value);'
+expect_catch "model: the fingerprint forgets the keyframe's easing" \
+    "cargo test -p craftkit-eval --profile ci a_changed_easing_is_not_served_from_the_cache"
+
+# The other half of the same gap: the model grows a field, and the hash does
+# not read it. Nothing in the tree noticed, because the guard was a list of
+# the same fields the hash covers — a list that drifts with the thing it
+# checks. The `lists` gate reads the tree, so it sees the field.
+swap crates/model/src/property.rs \
+    '    pub hint: PropHint,' \
+    '    pub hint: PropHint,
+    /// A field the hash does not read.
+    pub unremembered: u8,'
+expect_catch "model: the fingerprint forgets a field the model has" \
+    "cargo xtask lists"
+
+# A file is given only the changes it has not had. §81: the reader applied
+# every pending change to every file, including the files it had just
+# written, so a file did not read back as it was written — and the round-trip
+# tests caught it the moment a real pending change existed, which is a day
+# that had not come.
+swap crates/io/src/format.rs \
+    '        pending::apply_steps(&mut file.document, &already, steps);' \
+    '        let _ = &already;
+        pending::apply_steps(&mut file.document, &[], steps);'
+expect_catch "io: a file is given a change it has already had" \
+    "cargo test -p craftkit-io --profile ci a_file_is_given_only_the_changes_it_has_not_had"
+
+# The rule itself: the list of changes a file still needs.
+swap crates/io/src/format/pending.rs \
+    '    names.iter().copied().filter(|name| !already.iter().any(|a| a == name)).collect()' \
+    '    names.iter().copied().collect()'
+expect_catch "io: the changes a file still needs are not worked out" \
+    "cargo test -p craftkit-io --profile ci a_file_that_has_had_a_change_is_not_had_it_again"
+
+# The control channel's methods, as the code has them and as the prose has
+# them. §82: `AGENTS.md` said "Its methods are \u{2014}" and listed five of the
+# eight, so a reader of the agent's own contract would not know that `ping`,
+# `shutdown` or `diagnostics.crash_reports` existed.
+swap AGENTS.md \
+    '`diagnostics.list`, `diagnostics.crash_reports`, `ping`,' \
+    '`diagnostics.list`,'
+expect_catch "prose: a list of the control methods is missing one" \
+    "cargo xtask lists"
+
+# The chords the registry advertises, and the specification they are. §83:
+# the tree binds no keys at all, and the field's own doc named "the UI's
+# shortcut parser" — a parser that does not exist. The chords are the only
+# thing the field is read for, so two commands on one chord is a
+# specification nobody could implement.
+swap crates/engine/src/commands.rs \
+    '    shortcut: Some("M"),' \
+    '    shortcut: Some("Ctrl+N"),'
+expect_catch "engine: two commands advertise the same chord" \
+    "cargo test -p craftkit-engine --profile ci the_advertised_shortcuts_are_unique_and_well_formed"
+
+# The history's memory budget, on the undo path. §84: `push` enforced the
+# budget and the undo path did not, so an undo that moved a bigger document
+# into the redo stack left the two stacks holding more than the budget allows
+# — measured at 67 936 429 bytes against a 67 108 864-byte budget.
+swap crates/engine/src/history.rs \
+    '        self.trim_to_budget();
+        Some(entry.doc)
+    }
+
+    /// Take the state to restore, moving it to the undo stack.' \
+    '        Some(entry.doc)
+    }
+
+    /// Take the state to restore, moving it to the undo stack.'
+expect_catch "engine: an undo does not trim the history to its budget" \
+    "cargo test -p craftkit-engine --profile ci undoing_does_not_take_the_history_over_its_budget"
+
+# A property is named by a path, and a path is at most `MAX_PATH_SEGMENTS`
+# segments long. The property tree was allowed to be deeper than that — it was
+# bounded by `MAX_DEPTH`, which is the *node graph's* depth — and the listing
+# stopped where the path stopped, so a deeper tree validated and then
+# published nothing at all for its deepest property. Measured: a tree of
+# seventeen groups validated, and `flatten` returned no properties for it.
+# §85.
+swap crates/model/src/property.rs \
+    '        if depth >= limits::MAX_PATH_SEGMENTS {' \
+    '        if depth > limits::MAX_DEPTH {'
+expect_catch "model: the property tree may be deeper than a path can name" \
+    "cargo test -p craftkit-model --profile ci a_tree_deeper_than_a_path_is_refused_rather_than_truncated"
+
+# The listing counted name occurrences exactly; the resolver counted them
+# case-insensitively. Two siblings called `Amount` and `amount` were both
+# published as a first, so the second property's published path resolved to
+# the *first* one, and the second had no path of its own. §85.
+swap crates/model/src/property.rs \
+    '    let count = seen.iter().filter(|s| s.eq_ignore_ascii_case(&label)).count() + 1;' \
+    '    let count = seen.iter().filter(|s| *s == &label).count() + 1;'
+expect_catch "model: the listing counts names exactly while the resolver counts them loosely" \
+    "cargo test -p craftkit-model --profile ci a_path_names_the_property_the_listing_published_it_for"
+
+# The read side looked for an id *anywhere below* the group it was addressing;
+# the write side looked only among that group's direct children. The engine
+# writes, so `prop.set @5` — where property 5 sat one group down — answered
+# "there is no such property" by inventing another one, and reported success.
+# §85.
+swap crates/model/src/property.rs \
+    '        if let PathSeg::Uid(id) = last {
+            return find_uid_in_mut(&mut group.nodes, *id);
+        }' \
+    '        if let PathSeg::Uid(id) = last {
+            let _ = id;
+        }'
+expect_catch "model: the write side resolves an id differently from the read side" \
+    "cargo test -p craftkit-engine --profile ci a_property_set_by_its_id_is_the_property_the_id_names"
+
+# An id names a property that already exists; ids are the model's to assign.
+# The engine used to read the segment as a literal name and create a property
+# labelled after it — a property the grammar could not describe, so nothing
+# could read it back. §85.
+swap crates/model/src/property.rs \
+    '            PathSeg::Uid(id) => {
+                return Err(CoreError::BadPath(format!(
+                    "`@{id:x}` names a property by its id, and there is no property with that id to create"
+                )));
+            }' \
+    '            PathSeg::Uid(id) => {
+                format!("{id:x}")
+            }'
+expect_catch "model: an id names a property that can be created" \
+    "cargo test -p craftkit-engine --profile ci an_id_that_names_no_property_cannot_create_anything"
+
+# A path may not be longer than the property tree may be deep. With the limit
+# loosened, `prop.set` accepted a path of twenty-one segments, built the tree
+# anyway, and was stopped by the validator afterwards — the command's answer
+# came from the backstop, not from the grammar. §85.
+swap crates/model/src/path.rs \
+    '        if parts.is_empty() || parts.len() > limits::MAX_PATH_SEGMENTS {' \
+    '        if parts.is_empty() || parts.len() > limits::MAX_PATH_SEGMENTS + 1 {'
+expect_catch "model: a path may be longer than a property tree may be deep" \
+    "cargo test -p craftkit-engine --profile ci a_path_too_long_to_name_is_refused"
+
+# The token file outlives the process that wrote it, so the file from the last
+# run is still there when the app starts. The live-window check used to wait
+# for the file to *exist* and read that one — and the server refused it, so
+# the check failed with a complaint about the control channel and a driver
+# that had received nothing at all. §86.
+swap scripts/live-window-check.sh \
+    '            if [ "$now" != "$old" ]; then' \
+    '            if [ -n "$now" ]; then'
+expect_catch "live-window: a token left over from the last run is taken for this app's" \
+    "scripts/live-window-check.sh --self-test"
+
+# A name — a property's label or a group's id — becomes a path segment, so a
+# name the grammar reads as something else is a name the grammar cannot
+# write. The tree used to accept one: a file with the label `a/b` loaded, the
+# listing published the path `a/b`, and `prop.set { path: "a/b" }` created a
+# *second* property instead of changing the one on screen. §88.
+swap crates/model/src/property.rs \
+    '                    if let Some(why) = crate::path::why_not_writable(&p.label) {' \
+    '                    if let Some(why) = None::<String>.filter(|_| false) {'
+expect_catch "model: a property label the grammar cannot write is accepted anyway" \
+    "cargo test -p craftkit-io --profile ci a_file_carrying_a_name_the_grammar_cannot_write_is_refused"
+
+# The same rule for a group's id.
+swap crates/model/src/property.rs \
+    '                    if let Some(why) = crate::path::why_not_writable(&g.id) {' \
+    '                    if let Some(why) = None::<String>.filter(|_| false) {'
+expect_catch "model: a group id the grammar cannot write is accepted anyway" \
+    "cargo test -p craftkit-model --profile ci a_group_id_the_grammar_cannot_write_is_refused"
+
+# The listing publishes a path, and the path has to be one the grammar can
+# read. A name the grammar cannot write plainly is published with an explicit
+# occurrence; without that, the published path names nothing at all. §88.
+swap crates/model/src/path.rs \
+    '                PathSeg::Match(name, n) => write!(f, "{}", segment_spelling(name, *n))?,' \
+    '                PathSeg::Match(name, n) => write!(f, "{name}")?,'
+expect_catch "model: a name is published as a spelling that does not parse back" \
+    "cargo test -p craftkit-model --profile ci every_property_is_named_by_a_path_that_names_it"
+
+# The frame rate's ceiling was written in five places, and the two that
+# decided anything disagreed: the reader accepted a thousand frames per second
+# and the command accepted two hundred and forty. A document could therefore
+# hold a rate that no command could set -- not even the rate it already had.
+# §89.
+swap crates/engine/src/commands.rs \
+    '                if f < 1 || f > i64::from(limits::MAX_FRAME_RATE) {' \
+    '                if f < 1 || f > 240 {'
+expect_catch "engine: the command's frame rate ceiling is not the model's" \
+    "cargo test -p craftkit-engine --profile ci the_command_can_set_any_rate_a_document_may_carry"
+
+# And the other way round: the model accepting a rate the command refuses.
+swap crates/model/src/document.rs \
+    '        if craftkit_core::FrameRate::new(self.meta.fps).is_err() || self.meta.fps > limits::MAX_FRAME_RATE {' \
+    '        if craftkit_core::FrameRate::new(self.meta.fps).is_err() {'
+expect_catch "model: a document may carry a frame rate the command refuses" \
+    "cargo test -p craftkit-engine --profile ci the_command_can_set_any_rate_a_document_may_carry"
+
+# Whether a rate divides the tick rate exactly is a fact the model can state.
+# If it says "exact" for a rate that does not divide it, the tree promises
+# exact frame boundaries it does not deliver -- and the error grows with the
+# number of frames. §90.
+swap crates/core/src/tick.rs \
+    '        TICKS_PER_SECOND % self.0 as i128 == 0' \
+    '        true'
+expect_catch "core: a rate that does not divide the tick rate is called exact" \
+    "cargo test -p craftkit-core --profile ci a_rate_that_does_not_divide_the_tick_rate_is_inexact"
+
+# ------------------------------------------------------------------ done ----
+restore
+finish

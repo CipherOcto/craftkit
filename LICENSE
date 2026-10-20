@@ -1,0 +1,27 @@
+craftkit is licensed under either of
+
+    MIT, at your option, or
+    Apache License, Version 2.0
+
+at your option.
+
+This file states the choice rather than reproducing the two texts. A licence is
+a legal instrument, and a paraphrase of one is not a licence: shipping a
+transcription that differs from the canonical text in a single word would be
+worse than shipping none. The authoritative texts are at
+
+    MIT:         https://spdx.org/licenses/MIT.html
+    Apache-2.0:  https://www.apache.org/licenses/LICENSE-2.0
+
+and the SPDX expression recorded in every `Cargo.toml` in this workspace is
+
+    license = "MIT OR Apache-2.0"
+
+which is the machine-readable form of the choice above, and the form that
+`cargo` publishes, `cargo deny` checks and downstream consumers read.
+
+When you copy this project, add the two licence files from those URLs to the
+repository root. That is the one step in the copying instructions in README.md
+that this scaffold cannot do for you.
+
+See ATTRIBUTION.md for the provenance of every file and every dependency.
