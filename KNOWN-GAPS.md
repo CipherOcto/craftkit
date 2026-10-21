@@ -14838,6 +14838,31 @@ the replay put the playhead at 1270080000000, outside the design's range 0..2540
 
 Five seconds into a one-second design.
 
+### The live evidence
+
+The same thing, driven through the running application over the control
+channel. A report is written whose base is a one-second design and whose
+playhead is five seconds in — the shape a report written across a
+`doc.range` command has — and the app is asked to replay it:
+
+```text
+diagnostics.crash_reports {"action": "replay", "id": "20250101-000000-0001"}
+```
+
+Before the fix:
+
+```text
+replay says: at=1270080000000 start=0 end=254016000000 inside_the_design=False
+```
+
+After the fix:
+
+```text
+replay says: at=254016000000 start=0 end=254016000000 inside_the_design=True
+```
+
+Same report, same app, same request; the only difference is the clamp.
+
 ### Why nothing noticed
 
 **The rule was written about the front ends and was checked about the front
