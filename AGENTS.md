@@ -183,7 +183,7 @@ a change step.
 
 ## Driving craftkit
 
-Every entry point reaches the same 22 commands.
+Every entry point reaches the same 23 commands.
 
 ```bash
 # list them, with every parameter

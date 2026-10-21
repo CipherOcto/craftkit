@@ -74,7 +74,7 @@ fn cases() -> Vec<Case> {
 /// The commands that are not in the table, and why.
 ///
 /// The second half is the interesting one. Three of these are session state and
-/// are *deliberately* absent from the file; four read or report and change
+/// are *deliberately* absent from the file; five read or report and change
 /// nothing at all. Listing them with a reason is what makes a new command a
 /// decision rather than an oversight: `the_registry_and_this_table_agree` fails
 /// on any id that appears in neither list.
@@ -83,6 +83,7 @@ const NOT_IN_THE_FILE: &[(&str, &str)] = &[
     ("history.undo", "undo history is session state and is never written to a file"),
     ("history.redo", "undo history is session state and is never written to a file"),
     ("diagnostics.list", "reads the plan and changes nothing"),
+    ("key.list", "reads a property's keyframes and changes nothing"),
     ("plan.evaluate", "computes the plan and changes nothing"),
     ("session.stats", "reports counters and changes nothing"),
 ];

@@ -27,8 +27,8 @@ use egui::{Color32, Rect, Stroke, Ui, Vec2};
 
 /// Every icon name this set can draw, sorted.
 pub const ALL: &[&str] = &[
-    "arrows", "broom", "copy", "curve", "info", "key", "key-off", "mute", "pencil", "play", "plus", "range",
-    "redo", "swap", "trash", "undo", "value", "warning",
+    "arrows", "broom", "copy", "curve", "info", "key", "key-off", "keys", "mute", "pencil", "play", "plus",
+    "range", "redo", "swap", "trash", "undo", "value", "warning",
 ];
 
 /// Whether this set can draw `name`.
@@ -55,6 +55,7 @@ pub fn draw(ui: &mut Ui, name: &str, rect: Rect, tint: Color32) -> bool {
         "redo" => p.redo(),
         "key" => p.key(),
         "key-off" => p.key_off(),
+        "keys" => p.keys(),
         "broom" => p.broom(),
         "curve" => p.curve(),
         "play" => p.play(),
@@ -201,6 +202,16 @@ impl Painter<'_> {
         self.circle((0.34, 0.40), 0.16);
         self.path(&[(0.44, 0.54), (0.76, 0.84)]);
         self.line((0.60, 0.60), (0.86, 0.26));
+    }
+
+    fn keys(&self) {
+        // Three marks on a line: the keyframes of a property, on the timeline
+        // they live on. The single key is a bow and a shaft; a *list* of them
+        // is marks on a rail, and that is a different shape to say so.
+        self.line((0.12, 0.74), (0.88, 0.74));
+        self.disc((0.26, 0.74), 0.07);
+        self.disc((0.50, 0.74), 0.07);
+        self.disc((0.74, 0.74), 0.07);
     }
 
     fn broom(&self) {

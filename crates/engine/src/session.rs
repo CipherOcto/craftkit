@@ -766,6 +766,7 @@ mod tests {
     const READ_ONLY_CASES: &[(&str, &str)] = &[
         ("playback.seek", r#"{"frame": 48}"#),
         ("diagnostics.list", "{}"),
+        ("key.list", r#"{"node": 1, "path": "amount"}"#),
         ("plan.evaluate", "{}"),
         ("session.stats", "{}"),
     ];
@@ -774,7 +775,7 @@ mod tests {
     ///
     /// The `mutates` flag is a promise: *"this is safe to use as a probe"*. The
     /// test that used to guard it checked **one** command — `plan.evaluate` —
-    /// while the registry has four read-only commands, so three of them were
+    /// while the registry has five read-only commands, so four of them were
     /// unguarded. A read-only command that wrote to the document would have
     /// been caught by nobody, and the flag is exactly what an agent reads
     /// before using a command as a probe.

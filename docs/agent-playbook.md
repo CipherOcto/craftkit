@@ -442,7 +442,7 @@ So: **`node.enable`**, label `"Enable node"`, `Area::Node`.
 | Piece | File | What |
 | --- | --- | --- |
 | the spec | `crates/engine/src/commands.rs`, in the `// ---- node ----` section, alphabetically | the whole `CommandSpec` |
-| the registry entry | `crates/engine/src/command.rs`, the `ALL` list | `&NODE_ENABLE,` in `(area, id)` order, and `21` becomes `22` |
+| the registry entry | `crates/engine/src/command.rs`, the `ALL` list | `&NODE_ENABLE,` in `(area, id)` order, and `22` becomes `23` |
 | the icon | `crates/ui/src/icons.rs` | the name in `ALL`, a `Painter` method, a `draw` arm |
 | the behaviour | `run` in `commands.rs` | `Session::execute` does the rest |
 | the test | `crates/engine/src/commands.rs`, `mod tests` | calls the command with its own parameters |

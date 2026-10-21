@@ -305,6 +305,11 @@ impl<'a> Shell<'a> {
                 ui.label(
                     RichText::new(format!("{} keyframe(s)", prop.keys.len())).color(tokens.text_dim).small(),
                 );
+                // **When** the keyframes are. §117: the panel said how many
+                // there were and not when any of them was, and the times were
+                // in the model, in the file and in three commands' parameters
+                // — on no screen.
+                ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());
                 let key = AutomationId::clear_keys(id, &path);
                 let response = ui.small_button("clear keys");
                 self.automation.publish(key, response.rect, true);
@@ -520,6 +525,26 @@ pub fn note_preview(note: &str) -> String {
     let mut out: String = note.chars().take(NOTE_PREVIEW_CHARS).collect();
     out.push('…');
     out
+}
+
+/// When a property's keyframes are, as one line of text.
+///
+/// The times in seconds, in the order the model keeps them. §117: the panel
+/// said how many keyframes a property had and not **when** any of them was,
+/// and the times were in the model, in the file and in three commands'
+/// parameters — on no screen.
+///
+/// The line is bounded and the cut is marked, so nobody reads it as the whole
+/// list: the same rule as the note's preview (§110).
+pub fn keyframe_times(keys: &[craftkit_model::Key]) -> String {
+    const TIMES_IN_A_LINE: usize = 8;
+    let times: Vec<String> =
+        keys.iter().take(TIMES_IN_A_LINE).map(|k| format!("{:.3}s", k.time.seconds_f64())).collect();
+    let mut line = times.join(", ");
+    if keys.len() > TIMES_IN_A_LINE {
+        line.push_str(", …");
+    }
+    line
 }
 
 /// Where the playhead is, in the two numbers a design is measured in.
@@ -1172,6 +1197,58 @@ mod tests {
             below(&second),
             "the timeline says the same thing about two playheads a hundred frames apart"
         );
+    }
+
+    /// The panel says when the keyframes are.
+    ///
+    /// §117: the panel said how many keyframes a property had and not **when**
+    /// any of them was, and the times were in the model, in the file and in
+    /// three commands' parameters — on no screen.
+    ///
+    /// The comparison is on the pixels **between** the property's editor and
+    /// the "clear keys" button: that band holds the count and the times, and
+    /// the count is the same in both frames — the two designs have two
+    /// keyframes each, at 1 s and at 2 s.
+    #[test]
+    fn the_panel_says_when_the_keyframes_are() {
+        let (first_png, first, id) = frame_with_keys(&[1.0, 2.0]);
+        let (second_png, _second, _) = frame_with_keys(&[1.0, 3.0]);
+        let property =
+            first.rect(AutomationId::property(id, "amount").as_str()).expect("the property has a rectangle");
+        let clear =
+            first.rect(AutomationId::clear_keys(id, "amount").as_str()).expect("the button has a rectangle");
+        let band = |png: &[u8]| {
+            crop(png, property.left(), property.bottom(), property.width(), clear.top() - property.bottom())
+        };
+        assert_ne!(
+            band(&first_png),
+            band(&second_png),
+            "the panel says the same thing about two sets of keyframes"
+        );
+    }
+
+    /// A design with keys on a property, drawn with that property selected.
+    ///
+    /// The times are the keyframes' times in seconds. §117.
+    fn frame_with_keys(times: &[f64]) -> (Vec<u8>, Automation, NodeId) {
+        let mut session = Session::sample();
+        let id = session.document().nodes[0].id;
+        for (index, time) in times.iter().enumerate() {
+            session
+                .execute(
+                    "key.set",
+                    &serde_json::json!({
+                        "node": id.get(),
+                        "path": "amount",
+                        "value": index.to_string(),
+                        "time": time,
+                    }),
+                )
+                .expect("the key can be set");
+        }
+        let state = ShellState { selected: Some(id), ..ShellState::default() };
+        let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
+        (frame.png, frame.automation, id)
     }
 
     /// The readout says the frame and the time.

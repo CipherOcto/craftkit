@@ -62,15 +62,15 @@ uppercase, no abbreviations borrowed from another product. Area prefixes come fr
 `session.stats` are cross-cutting, and a shared prefix would name them after the
 panel instead of after what they do.
 
-The 22 ids today, sorted by (area, id) — the registry's own order
+The 23 ids today, sorted by (area, id) — the registry's own order
 (`crates/engine/src/command.rs`):
 
 ```text
 doc.note        node.add        prop.reset      key.clear      playback.seek
 doc.range       node.duplicate  prop.set        key.ease       history.redo
-doc.rename      node.kind                       key.remove     history.undo
-                node.move                       key.set       diagnostics.list
-                node.mute                                      plan.evaluate
+doc.rename      node.kind                       key.list       history.undo
+                node.move                       key.remove     diagnostics.list
+                node.mute                       key.set       plan.evaluate
                 node.remove                                    session.stats
                 node.rename
 ```
@@ -224,7 +224,7 @@ original coordinates in `0.0..=1.0`, using `line`, `path`, `circle`, `disc`, `re
   (`the_name_list_is_sorted_and_free_of_duplicates`, in `crates/ui/src/icons.rs`), then write the
   painter method. Lower-case ASCII with `-`, dotted names allowed
   (`every_name_is_dotted_lower_case`, in `crates/ui/src/icons.rs`).
-- `mute` (`icons.rs:152`) is the shortest complete example. `docs/recipes/add-an-icon.md`
+- `mute` (in `icons.rs`, in `Painter`) is the shortest complete example. `docs/recipes/add-an-icon.md`
   is the full recipe.
 
 ---

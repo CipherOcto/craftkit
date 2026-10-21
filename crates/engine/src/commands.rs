@@ -727,6 +727,74 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
     },
 };
 
+/// How many keyframe times a message names before it says "…".
+///
+/// The message is a sentence on a status bar; the **data** carries the whole
+/// list. §117: the times were in the document, in the file and in three
+/// commands' parameters, and no reply and no screen said when they were.
+const KEY_TIMES_IN_A_MESSAGE: usize = 8;
+
+/// When a property's keyframes are, as one line of text.
+///
+/// The times in seconds, in the order the model keeps them (sorted). §117.
+fn key_times_line(keys: &[craftkit_model::Key]) -> String {
+    let times: Vec<String> =
+        keys.iter().take(KEY_TIMES_IN_A_MESSAGE).map(|k| format!("{:.3}s", k.time.seconds_f64())).collect();
+    let mut line = times.join(", ");
+    if keys.len() > KEY_TIMES_IN_A_MESSAGE {
+        // The cut is marked, so nobody reads the line as the whole list.
+        line.push_str(", …");
+    }
+    line
+}
+
+pub static KEY_LIST: CommandSpec = CommandSpec {
+    id: "key.list",
+    label: "List keyframes",
+    area: Area::Keyframes,
+    icon: Icon("keys"),
+    shortcut: None,
+    doc: "List a property's keyframes: when each one is, what it holds and how it is left.",
+    params: &[
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
+        ParamDoc::opt("node_name", Doc::Text, "…or its name."),
+        ParamDoc::req("path", Doc::PropertyPath, "The property path."),
+    ],
+    mutates: false,
+    undoable: false,
+    enabled: has_nodes,
+    run: |s, p| {
+        let id = node_by_id_or_name(s.document(), p)?;
+        let path = required_path(p, "path")?;
+        let node = s.document().get(id).ok_or_else(|| EngineError::Param {
+            id: KEY_LIST.id.to_string(),
+            source: craftkit_core::ParamError::new("node", format!("there is no node {}", id.get())),
+        })?;
+        let parsed = parse_path(&path, KEY_LIST.id)?;
+        let prop = node.props.find(&parsed).ok_or_else(|| EngineError::Param {
+            id: KEY_LIST.id.to_string(),
+            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+        })?;
+        let keys: Vec<serde_json::Value> = prop
+            .keys
+            .keys()
+            .iter()
+            .map(|k| {
+                serde_json::json!({
+                    "time": k.time.raw(),
+                    "seconds": k.time.seconds_f64(),
+                    "value": k.value,
+                    "ease": k.ease.name(),
+                })
+            })
+            .collect();
+        Ok(Outcome::with(
+            format!("{} keyframe(s) on `{path}`: {}", keys.len(), key_times_line(prop.keys.keys())),
+            serde_json::json!({ "node": id.get(), "path": path, "keyframes": keys }),
+        ))
+    },
+};
+
 // ---------------------------------------------------------------- playback --
 
 pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
@@ -1788,6 +1856,51 @@ mod tests {
         let mut s = session();
         ok(&mut s, "playback.seek", json!({ "frame": 24 }));
         assert_eq!(s.at().frames_i64(s.document().meta.frame_rate()), 24);
+    }
+
+    /// The keyframes of a property can be listed.
+    ///
+    /// §117: the keyframes' times were in the document, in the file and in
+    /// three commands' parameters — and no reply said when they were. An
+    /// agent asked to remove "the keyframe" had to guess an instant.
+    #[test]
+    fn the_keyframes_of_a_property_can_be_listed() {
+        let mut s = session();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": "0.25", "time": 1.0 }));
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": "0.75", "time": 2.0 }));
+        let outcome =
+            s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the keys can be listed");
+        let keys = outcome.data["keyframes"].as_array().expect("the keyframes");
+        assert_eq!(keys.len(), 2, "{outcome:?}");
+        assert_eq!(keys[0]["seconds"], json!(1.0), "{outcome:?}");
+        assert_eq!(keys[1]["seconds"], json!(2.0), "{outcome:?}");
+        assert_eq!(keys[0]["value"]["v"], json!(0.25), "{outcome:?}");
+        assert_eq!(keys[0]["ease"], json!("linear"), "{outcome:?}");
+    }
+
+    /// The listing says when the keyframes are.
+    ///
+    /// §117: the message is what `craftkit-cli run` prints and what the
+    /// status bar shows, so it has to carry the times too.
+    #[test]
+    fn the_listing_says_when_the_keyframes_are() {
+        let mut s = session();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": "0.25", "time": 1.5 }));
+        let outcome =
+            s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the keys can be listed");
+        assert!(outcome.message.contains("1.500s"), "{}", outcome.message);
+    }
+
+    /// The listing refuses a property that is not there.
+    ///
+    /// §117: a command that reports success without changing anything is how
+    /// an agent concludes it has done something it has not.
+    #[test]
+    fn the_listing_refuses_a_property_that_is_not_there() {
+        let mut s = session();
+        let err =
+            s.execute("key.list", &json!({ "node": 1, "path": "no.such.property" })).expect_err("refused");
+        assert!(err.to_string().contains("no.such.property"), "{err}");
     }
 
     /// The range command says when it moved the playhead.

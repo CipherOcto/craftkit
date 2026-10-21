@@ -12358,6 +12358,109 @@ have read, after the schema had already refused to let it send one.
 
 ---
 
+## 117. The keyframes were in the document, in three commands, and in no reply and on no screen
+
+### The measurement
+
+Three commands address a keyframe **by its instant**:
+
+| Command | What it does with the instant |
+|---|---|
+| `key.set` | writes the key at that instant |
+| `key.remove` | removes the key at that instant |
+| `key.ease` | changes how the key at that instant is left |
+
+All three take a `time`. And the tree had **no way to ask when the keys
+were**:
+
+- **No command listed them.** The registry held twenty-two commands, and
+  none of them answered *"when are this property's keyframes?"*.
+- **`key.clear` reported the count, not the times.** *"cleared 3
+  keyframe(s)"* — and the three it removed are gone.
+- **The state carried the plan, and the plan carries the value and a flag.**
+  `Resolved` has the path, the id, the value at the playhead and
+  `animated: true` — and no times.
+- **The window's properties panel said "3 keyframe(s)"** — a count — and
+  **not when any of them was**.
+
+So an agent asked to *"remove the keyframe"* had to guess an instant. The
+guess was refused honestly — *"`amount` has no key there"* — but there was
+nothing to find the right one with. And a person asked *"when does this
+property change?"* had to open the `.craftkit` file.
+
+### Why nothing noticed
+
+**The commands that take an instant never needed one.** `key.set` writes a
+key at the playhead; `key.remove` and `key.ease` take one; every use in the
+tree, in the tests and in the window, was a use that *had* the instant
+already. The parameter was never empty, so nobody asked what an empty one
+means.
+
+**The count is not the times.** "3 keyframe(s)" is true, and it is the
+answer to a different question. §110's shape again: the design's note was
+in the file and in the model and nowhere else — and this time the thing
+that was nowhere else was the part of the design that *changes*.
+
+**A tree built for agents had no agent's way in.** The whole point of the
+command registry is that an agent reaches everything through it. The
+keyframes were the one thing in the document that the registry could not
+reach — and the reachability was not checked, because there was no list of
+what the registry must reach.
+
+### The fix
+
+**A command that lists them.** `key.list` — the twenty-third — is read-only
+and says when each keyframe is (in ticks and in seconds), what it holds and
+how it is left:
+
+```json
+{ "node": 1, "path": "amount", "keyframes": [
+  { "time": 254016000000, "seconds": 1.0, "value": { "t": "num", "v": 0.25 }, "ease": "linear" }
+] }
+```
+
+**The message carries the times too**, because the message is what
+`craftkit-cli run` prints and what the status bar shows — and the data is
+for the machines. *"2 keyframe(s) on `amount`: 1.000s, 2.000s"*.
+
+**The panel draws them.** The properties panel says the count *and* the
+times, under the editor. The line is bounded and the cut is marked, the
+same rule as the note's preview (§110).
+
+**A new icon.** `keys` — three marks on a line: the keyframes of a
+property, on the timeline they live on. The single key is a bow and a
+shaft; a *list* of them is marks on a rail.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The keyframes of a property can be listed | `the_keyframes_of_a_property_can_be_listed` |
+| The listing says when the keyframes are | `the_listing_says_when_the_keyframes_are` |
+| The listing refuses a property that is not there | `the_listing_refuses_a_property_that_is_not_there` |
+| The panel says when the keyframes are | `the_panel_says_when_the_keyframes_are` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the listing does
+not say when the keyframes are; the listing's message does not say when the
+keyframes are; and the panel does not say when the keyframes are.
+
+### The lesson
+
+**The address of a thing and the list of the things are the same
+obligation.** Three commands took an instant as a parameter, and nothing
+could produce one. A parameter that nothing can supply is a parameter the
+caller has to guess.
+
+**A count is not the thing it counts.** "3 keyframe(s)" was true and
+useless: the question was *when*, and the answer was three times.
+
+**Everything a command can change must be readable through a command.**
+That is the tree's own rule ("everything is a command"), and the keyframes
+were the one part of the document that broke it — not by refusing, but by
+being unreachable.
+
+---
+
 ---
 
 ## What enforces what
@@ -12624,6 +12727,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The node parameter is a whole number** | `craftkit-mcp` test | 1 mutation — §116 |
 | **A node may be addressed by its name** | `craftkit-engine` test | 1 mutation — §116 |
 | **The catalogue's listing names the alternative** | `craftkit-cli` test | 1 mutation — §116 |
+| **The keyframes of a property can be listed** | `craftkit-engine` test | 1 mutation — §117 |
+| **The listing says when the keyframes are** | `craftkit-engine` test | 1 mutation — §117 |
+| **The listing refuses a property that is not there** | `craftkit-engine` test | — |
+| **The panel says when the keyframes are** | `craftkit-ui` test | 1 mutation — §117 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

@@ -279,7 +279,7 @@ pub fn all() -> &'static [&'static CommandSpec] {
 /// length: adding a command without adding it to the count is a compile error,
 /// not a silently truncated list. The order is checked by
 /// `the_catalogue_is_sorted_and_free_of_duplicates`.
-static ALL: [&CommandSpec; 22] = [
+static ALL: [&CommandSpec; 23] = [
     &DOC_NOTE,
     &DOC_RANGE,
     &DOC_RENAME,
@@ -294,6 +294,7 @@ static ALL: [&CommandSpec; 22] = [
     &PROP_SET,
     &KEY_CLEAR,
     &KEY_EASE,
+    &KEY_LIST,
     &KEY_REMOVE,
     &KEY_SET,
     &PLAYBACK_SEEK,
@@ -778,7 +779,7 @@ mod tests {
         }
         assert!(pairs > 0, "no command in the tree has a parameter with an alternative");
         // The two pairs the tree has, spelled out.
-        assert_eq!(pairs, 13, "the tree's pairs: node/node_name twelve times, seconds/frame once");
+        assert_eq!(pairs, 14, "the tree's pairs: node/node_name thirteen times, seconds/frame once");
     }
 
     #[test]

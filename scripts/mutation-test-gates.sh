@@ -85,6 +85,7 @@ readonly FILES=(
     crates/mcp/src/rpc.rs
     crates/mcp/src/tools.rs
     crates/engine/src/crash.rs
+    crates/engine/src/command.rs
     crates/engine/src/commands.rs
     crates/engine/src/history.rs
     crates/engine/src/params.rs
@@ -2992,6 +2993,37 @@ swap apps/craftkit-cli/src/cli.rs \
     '    let alternative = String::new();'
 expect_catch "cli: the catalogue's listing does not name the alternative" \
     "cargo test -p craftkit-cli --profile ci a_parameter_with_an_alternative_says_which_one"
+
+# The keyframes' times were in the document, in the file and in three
+# commands' parameters -- and no reply said when they were. §117.
+swap crates/engine/src/commands.rs \
+    '                serde_json::json!({
+                    "time": k.time.raw(),
+                    "seconds": k.time.seconds_f64(),
+                    "value": k.value,
+                    "ease": k.ease.name(),
+                })' \
+    '                serde_json::json!({
+                    "time": k.time.raw(),
+                })'
+expect_catch "engine: the listing does not say when the keyframes are" \
+    "cargo test -p craftkit-engine --profile ci the_keyframes_of_a_property_can_be_listed"
+
+# ...and the message -- what `craftkit-cli run` prints and what the status bar
+# shows -- did not say it either. §117.
+swap crates/engine/src/commands.rs \
+    '            format!("{} keyframe(s) on `{path}`: {}", keys.len(), key_times_line(prop.keys.keys())),' \
+    '            format!("{} keyframe(s) on `{path}`", keys.len()),'
+expect_catch "engine: the listing's message does not say when the keyframes are" \
+    "cargo test -p craftkit-engine --profile ci the_listing_says_when_the_keyframes_are"
+
+# The panel said how many keyframes a property had and not when any of them
+# was. §117.
+swap crates/ui/src/shell.rs \
+    '                ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());' \
+    '                let _ = keyframe_times(prop.keys.keys());'
+expect_catch "ui: the panel does not say when the keyframes are" \
+    "cargo test -p craftkit-ui --profile ci the_panel_says_when_the_keyframes_are"
 
 restore
 finish
