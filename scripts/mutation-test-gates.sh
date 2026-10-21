@@ -77,6 +77,7 @@ readonly FILES=(
     crates/io/src/store.rs
     crates/io/src/format/pending.rs
     crates/kernel/src/lib.rs
+    crates/ui/Cargo.toml
     crates/ui/src/lib.rs
     crates/ui/src/automation.rs
     crates/ui/src/shell.rs
@@ -389,6 +390,16 @@ expect_catch "layers: L0 core gains an L4 dependency" "cargo xtask layers"
 
 append crates/model/Cargo.toml 'egui = { workspace = true }'
 expect_catch "layers: L1 model names egui" "cargo xtask layers"
+
+# `AGENTS.md` says the shell depends on egui and nothing else - no windowing,
+# no renderer - and the layer gate only refused a UI toolkit *below* L6. The
+# shell is L6, so a window in the shell was not a violation of anything, and
+# the rule had nothing behind it.
+swap crates/ui/Cargo.toml \
+    'egui = { workspace = true }' \
+    'egui = { workspace = true }
+eframe = { workspace = true }'
+expect_catch "layers: the shell takes a window" "cargo xtask layers"
 
 mkdir -p crates/unlisted/src
 printf '[package]\nname = "craftkit-unlisted"\nversion.workspace = true\nedition.workspace = true\npublish = false\n' \

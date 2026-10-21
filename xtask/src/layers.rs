@@ -95,6 +95,15 @@ pub const UI_CRATES: &[&str] = &["egui*", "eframe", "egui-wgpu", "wgpu", "winit"
 /// The first layer allowed to name a UI crate.
 pub const UI_MIN_LAYER: u8 = 6;
 
+/// The UI crates the shell itself may name.
+///
+/// `egui` is the toolkit the shell draws with. Everything else in
+/// [`UI_CRATES`] is a window or a renderer, and the whole point of the shell
+/// being a crate of its own is that the same panels can be drawn in a window,
+/// headlessly, or in a browser — which they cannot be if the shell owns the
+/// window. §131.
+pub const UI_CRATE_ALLOWED: &[&str] = &["egui"];
+
 /// Whether `name` is a workspace crate in the table.
 pub fn classify(name: &str) -> Option<Class> {
     TABLE.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
@@ -146,6 +155,8 @@ pub enum Violation {
     Upward { krate: String, dep: String, from: u8, to: u8, kind: DepKind },
     /// A UI toolkit below [`UI_MIN_LAYER`].
     UiBelow { krate: String, dep: String, layer: u8 },
+    /// A window or a renderer in the shell crate itself. §131.
+    WindowingInTheUiCrate { krate: String, dep: String },
 }
 
 impl std::fmt::Display for Violation {
@@ -168,6 +179,14 @@ impl std::fmt::Display for Violation {
                  L{UI_MIN_LAYER} and above.\n\
                  \x20     A value crate that needs a Vec2 needs its own tiny vector type, not \
                  egui's."
+            ),
+            Violation::WindowingInTheUiCrate { krate, dep } => write!(
+                f,
+                "{krate} depends on `{dep}`: the shell owns its panels, not its window.\n\
+                 \x20     The shell may depend on {} and nothing else — no windowing, no \
+                 renderer — which is what lets the same panels run in a window, headlessly, \
+                 and in a browser.",
+                UI_CRATE_ALLOWED.join(", ")
             ),
         }
     }
@@ -216,8 +235,15 @@ pub fn check(crates: &[Krate]) -> Vec<Violation> {
                         }
                     }
                 }
-            } else if layer < UI_MIN_LAYER && is_ui_crate(&dep.name) {
-                out.push(Violation::UiBelow { krate: krate.name.clone(), dep: dep.name.clone(), layer });
+            } else if is_ui_crate(&dep.name) {
+                if layer < UI_MIN_LAYER {
+                    out.push(Violation::UiBelow { krate: krate.name.clone(), dep: dep.name.clone(), layer });
+                } else if layer == UI_MIN_LAYER && !UI_CRATE_ALLOWED.contains(&dep.name.as_str()) {
+                    out.push(Violation::WindowingInTheUiCrate {
+                        krate: krate.name.clone(),
+                        dep: dep.name.clone(),
+                    });
+                }
             }
         }
     }
@@ -369,6 +395,34 @@ mod tests {
     fn a_downward_dependency_is_fine() {
         let crates = vec![krate("craftkit-engine", &[("craftkit-model", DepKind::Normal, true)])];
         assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
+    }
+
+    /// §131: the shell may depend on `egui` and nothing else.
+    ///
+    /// `AGENTS.md` says the shell "depends on `egui` and nothing else — no
+    /// windowing, no renderer — which is what lets the same panels run in a
+    /// window, headlessly, and in a browser". The rule had nothing behind it:
+    /// the layer gate refused a UI toolkit *below* L6, and the shell *is* L6,
+    /// so a window in the shell was not a violation of anything.
+    #[test]
+    fn the_shell_may_not_own_a_window() {
+        // egui is the toolkit the shell draws with.
+        let crates = vec![krate("craftkit-ui", &[("egui", DepKind::Normal, false)])];
+        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
+
+        // A window is not.
+        let crates = vec![krate("craftkit-ui", &[("eframe", DepKind::Normal, false)])];
+        let violations = check(&crates);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(matches!(violations[0], Violation::WindowingInTheUiCrate { .. }), "{violations:?}");
+
+        // And neither is a renderer.
+        let crates = vec![krate("craftkit-ui", &[("wgpu", DepKind::Normal, false)])];
+        assert_eq!(check(&crates).len(), 1, "a renderer in the shell");
+
+        // The apps are exempt: they are the ones that own the window.
+        let crates = vec![krate("craftkit", &[("eframe", DepKind::Normal, false)])];
+        assert!(check(&crates).is_empty(), "the app owns the window");
     }
 
     #[test]

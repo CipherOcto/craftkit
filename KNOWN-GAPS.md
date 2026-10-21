@@ -14263,6 +14263,128 @@ down reads the same shape, and it reads one.
 
 ---
 
+## 131. The rule that the shell may not own a window had nothing behind it
+
+### The measurement
+
+`AGENTS.md` says:
+
+> **The UI is thin.** Panels read engine state and act through
+> `session.execute`. A panel never writes to the document, never calls the
+> evaluator, never caches a value the evaluator computes. `crates/ui` depends
+> on `egui` and nothing else — no windowing, no renderer — which is what lets
+> the same panels run in a window, headlessly, and in a browser.
+
+`cargo xtask layers` is the gate that owns the rules about crates. It refuses
+a **UI toolkit below L6**: `egui*`, `eframe`, `egui-wgpu`, `wgpu`, `winit`,
+`rfd`, `accesskit*`.
+
+`crates/ui` **is** L6. So the rule, as the gate read it, did not apply to the
+crate the rule is about.
+
+Measured, by adding `eframe` to `crates/ui`'s dependencies and running the
+gate that owns the rule:
+
+```
+$ cargo xtask layers
+── layers
+   ok: every crate depends only on lower layers
+```
+
+The gate that owns the rule passed. The rule had nothing behind it: a window
+in the shell was not a violation of anything, and the shell is the one crate
+the rule is about.
+
+### Why nothing noticed
+
+**The rule was written as a description, and the gate that checks descriptions
+is not the gate that checks the tree's shape.** "depends on `egui` and nothing
+else" is true today, and it reads like a fact about the tree rather than a
+promise about it. The promise is what needs holding down.
+
+**The layer gate's own rule was about the other direction.** It exists so that
+a *value* crate does not reach for egui's `Vec2` — that is what its message
+says. The shell reaching for a window is the same shape of mistake one layer
+up, and the gate stopped exactly where it was told to.
+
+**Nothing else looks.** The wasm build may notice some windowing crates,
+because they do not build for a browser — but that is the browser saying so,
+not the rule, and it says nothing about a crate that does build for a browser.
+A rule enforced by an accident is not a rule.
+
+### The fix
+
+**`cargo xtask layers` now refuses a window in the shell.** The UI crate may
+name `egui` and nothing else from the UI list; every other crate keeps the
+rule it had:
+
+```rust
+pub const UI_CRATE_ALLOWED: &[&str] = &["egui"];
+```
+
+The new violation says what the rule is *for*, because a violation that only
+says "not allowed" teaches nothing:
+
+```
+craftkit-ui depends on `eframe`: the shell owns its panels, not its window.
+     The shell may depend on egui and nothing else — no windowing, no renderer — which is what lets the same panels run in a window, headlessly, and in a browser.
+```
+
+The apps are exempt, and they were always going to be: they are the ones that
+own the window.
+
+**And the sentence in `AGENTS.md` is now true as written.** It said the shell
+"depends on `egui` and nothing else", and the shell depends on nine things —
+`serde`, `serde_json`, `log`, `egui`, `image` and four crates of this tree.
+What the rule means is *no other UI toolkit*, and that is what it says now.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The shell may not own a window | `the_shell_may_not_own_a_window` in `xtask` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: *layers: the shell takes
+a window*, which adds `eframe` to `crates/ui`'s dependencies. Proven to fail
+without the fix — the gate passed with `eframe` in the shell, and fails with
+it.
+
+### What is still open
+
+**"A panel never calls the evaluator" has nothing behind it either.** The
+shell depends on `craftkit-eval` and uses two of its *types* — `Plan` and
+`Severity` — but nothing stops it from calling `evaluate_once` and evaluating
+the document itself, which would be the evaluator's answer reaching the screen
+by a second road. The tree does not do it, and the sentence is true; nothing
+would say so if it did.
+
+**The other two claims hold for structural reasons, which is better than a
+gate.** "A panel never writes to the document" is enforced by the engine's
+API: the only mutable accessor, `Session::doc_mut`, is `pub(crate)` to the
+engine, so the shell cannot reach it. "Never caches a value the evaluator
+computes" holds by what `ShellState` is — seven fields, and not one of them
+an evaluator's answer — but that is an inspection, not a guarantee: nothing
+stops a ninth field from being one.
+
+### The lesson
+
+**A rule about a crate and a rule about the tree are different rules.** The
+layer gate checked the tree's *shape* — which crate depends on which — and the
+rule was about one crate's *contents*. The gate did its job exactly as it was
+written, and the rule it did not cover was the rule that mattered.
+
+**The rule that is about the crate everyone looks at is the one that is
+uncovered.** The shell is the crate the whole tree is built around: it is the
+one the apps draw, the one the rasteriser renders, the one the automation
+registry describes. A rule about *it* was the rule with the fewest checks.
+
+**A description that is true today is a promise about tomorrow.** "depends on
+`egui` and nothing else" was true when it was written and would have stayed
+true through any number of changes, because nothing asked whether it still
+was.
+
+---
+
 ---
 
 ## What enforces what
@@ -14578,6 +14700,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The wheel scrolls the node list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §128 |
 | **A reused node still reports its problem** | `craftkit-eval` test | 1 mutation — §129 |
 | **A module path in prose names a module this tree has** | `cargo xtask lists` | 1 mutation — §130 |
+| **The shell may not own a window** | `cargo xtask layers` | 1 mutation — §131 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
