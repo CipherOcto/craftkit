@@ -3247,9 +3247,14 @@ expect_catch "ui: the panel draws a locked property's editor in full colour" \
 # The properties panel had no scroll area at all, so a node with more
 # properties than the panel is tall put the rest of them below the panel's
 # bottom edge, where nobody could see them and nobody could reach them. §126.
+#
+# The anchor carries the line above it, because the node list's scroll area
+# says the same thing (§128) and `swap` replaces the **first** match.
 swap crates/ui/src/shell.rs \
-    '        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
-    '        ScrollArea::neither().show(ui, |ui| {'
+    '        let mut automation = std::mem::take(&mut self.automation);
+        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
+    '        let mut automation = std::mem::take(&mut self.automation);
+        ScrollArea::neither().show(ui, |ui| {'
 expect_catch "ui: the properties panel's rows do not scroll" \
     "cargo test -p craftkit-ui --profile ci the_properties_panel_scrolls_to_the_properties_that_do_not_fit"
 
@@ -3257,9 +3262,14 @@ expect_catch "ui: the properties panel's rows do not scroll" \
 # to, and a scroll area narrower than the panel answers the wheel only over
 # that narrower strip — so the wheel did not reach the list from the panel's
 # edge. §126.
+#
+# The anchor carries the line above it, because the node list's scroll area
+# says the same thing (§128) and `swap` replaces the **first** match.
 swap crates/ui/src/shell.rs \
-    '        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
-    '        ScrollArea::vertical().show(ui, |ui| {'
+    '        let mut automation = std::mem::take(&mut self.automation);
+        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
+    '        let mut automation = std::mem::take(&mut self.automation);
+        ScrollArea::vertical().show(ui, |ui| {'
 expect_catch "ui: the properties panel's scroll area shrinks to its content" \
     "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_list_from_across_the_panel"
 
@@ -3304,6 +3314,19 @@ swap crates/ui/src/shell.rs \
     '    let levels: HashMap<NodeId, f64> = HashMap::new();'
 expect_catch "ui: the node list shows every level as zero" \
     "cargo test -p craftkit-ui --profile ci the_node_list_carries_the_level_the_plan_resolved"
+
+# The node list's scroll area had the same defect the properties panel's had
+# and was never told about it: egui shrinks a scroll area to the width of its
+# content, and a scroll area narrower than the panel answers the wheel only
+# over that narrower strip — so the wheel did nothing over the panel's
+# right-hand margin. §128.
+swap crates/ui/src/shell.rs \
+    '        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
+            for row in rows {' \
+    '        ScrollArea::vertical().show(ui, |ui| {
+            for row in rows {'
+expect_catch "ui: the node list's scroll area shrinks to its content" \
+    "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_node_list_from_across_the_panel"
 
 restore
 finish

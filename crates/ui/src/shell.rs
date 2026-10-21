@@ -387,7 +387,15 @@ impl<'a> Shell<'a> {
         let to_mute = std::cell::Cell::new(None);
         let to_remove = std::cell::Cell::new(None);
 
-        ScrollArea::vertical().show(ui, |ui| {
+        // `[false, true]`: do not shrink across, shrink down.
+        //
+        // egui's scroll area shrinks to the width of its content unless it is
+        // told not to, and a scroll area narrower than the panel answers the
+        // wheel only over that narrower strip. The properties panel was told
+        // in §126; the node list was not, so the wheel did nothing over the
+        // panel's right-hand margin, and the scroll bar was not at the panel's
+        // edge. §128.
+        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
             for row in rows {
                 let id = row.id;
                 let is_selected = selected == Some(id);
@@ -2594,6 +2602,82 @@ mod tests {
                 state.status
             );
         }
+    }
+
+    // --- §128: the scroll areas that shrink to their content ----------------
+
+    /// The wheel scrolls the node list from anywhere across the panel.
+    ///
+    /// §128: egui's scroll area shrinks to the width of its content unless
+    /// it is told not to, and a scroll area narrower than the panel answers
+    /// the wheel only over that narrower strip. The properties panel was told
+    /// in §126; the node list never was, so the wheel did nothing over the
+    /// panel's right-hand margin.
+    ///
+    /// The panel is drawn here with a width the test knows, because the point
+    /// of the test is the **strip between the content and the panel's edge**,
+    /// and a test that cannot say where the panel ends cannot say whether the
+    /// pointer was over the list or over the margin.
+    #[test]
+    fn the_wheel_scrolls_the_node_list_from_across_the_panel() {
+        const PANEL: f32 = 240.0;
+
+        let mut doc = craftkit_model::Document::empty("probe");
+        for n in 0..40 {
+            doc.add_node(format!("node {n}"), craftkit_model::NodeKind::Source).expect("the node");
+        }
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        let first = session.document().nodes[0].id;
+
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+
+        // The width the panel gives the list, measured as the list draws it.
+        let mut available = 0.0f32;
+        let draw = |shell: &mut Shell, input: egui::RawInput, available: &mut f32| {
+            shell.automation.clear();
+            let _ = ctx.run(input, |ctx| {
+                egui::SidePanel::left("nodes").exact_width(PANEL).show(ctx, |ui| {
+                    *available = ui.available_width();
+                    shell.node_list(ui, &tokens);
+                });
+            });
+            shell.automation.clone()
+        };
+
+        let plain = egui::RawInput { screen_rect: Some(screen()), ..Default::default() };
+        let before = draw(&mut shell, plain, &mut available);
+        let name = AutomationId::node_row(first);
+        let start = before.rect(name.as_str()).expect("the first row has a rectangle");
+
+        // How wide is the content? The widest thing the list draws.
+        let mut content = 0.0f32;
+        for published in before.names() {
+            if let Some(rect) = before.rect(published) {
+                content = content.max(rect.right());
+            }
+        }
+        assert!(
+            content < available - 4.0,
+            "the content is {content:.1} points wide and the panel gives {available:.1}: \
+             there is no margin for the test to aim at"
+        );
+
+        // The pointer is over the panel's right-hand margin: over the panel,
+        // and over no row at all.
+        let edge = egui::pos2(available - 2.0, start.center().y);
+        let mut after = before.clone();
+        for _ in 0..20 {
+            after = draw(&mut shell, wheel_at(edge), &mut available);
+        }
+        let moved = after.rect(name.as_str()).expect("the first row still has a rectangle").top();
+        assert!(
+            moved < start.top() - 50.0,
+            "the list did not scroll from the panel's edge: the first row is still at y={moved:.0}, \
+             and the content ends at x={content:.1} while the panel gives {available:.1}"
+        );
     }
 
     // --- §127: the node list's rows ---------------------------------------

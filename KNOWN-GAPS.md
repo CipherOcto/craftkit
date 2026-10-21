@@ -13858,6 +13858,138 @@ therefore what made it fixable, and therefore what made it holdable.
 
 ---
 
+## 128. The node list's scroll area shrank to its content, and the wheel did nothing over the panel's margin
+
+### The measurement
+
+§126 found that egui's scroll area **shrinks to the width of its content**
+unless it is told not to, and fixed the properties panel with
+`auto_shrink([false, true])`. The node list has the same shape and never got
+the same treatment.
+
+Measured in a headless frame, with the node list drawn in a panel of a width
+the test knows (240 points) and forty nodes in it:
+
+| | |
+|---|---|
+| the panel's width | 240 points |
+| the content reaches | x = 214.8 |
+| the wheel at x = 234 — over the panel, over no row | **the list did not move** (y = 35.0 → 35.0) |
+| the wheel at x = 40 — over the content | the list **scrolled** (y = 35.0 → −98.0) |
+
+So the scroll area was narrower than the panel, and the strip between the
+content and the panel's edge was dead to the wheel.
+
+### Why nothing noticed
+
+**The node rows are wide.** Every row carries a sixty-four-point level bar
+and two buttons, so the content reaches 215 of the panel's 240 points. The
+dead strip is about twenty-five points wide in that arrangement — and in the
+**real window** it is two or three, because the panel is wider there and the
+rows are as wide as they are. The wheel happens to work over almost the whole
+panel, so a person never finds the strip.
+
+**The properties panel's content was narrow.** A property editor is 39
+points wide (§126), so the same bug left a 250-point strip of that panel
+dead — and §126 found it there. The defect is the same; how much of the
+panel it kills depends on how wide the content happens to be.
+
+**The scroll bar is not where a scroll bar is.** Shrunk to its content, the
+scroll area's scroll bar is drawn at the content's edge, a few points inside
+the panel. Nothing in the screen says that is wrong.
+
+### The fix
+
+**`crates/ui/src/shell.rs` now says `auto_shrink([false, true])` for the node
+list too** — do not shrink across, shrink down. The scroll area is then as
+wide as the panel, its scroll bar is at the panel's edge, and the wheel
+answers anywhere across the list.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The wheel scrolls the node list from anywhere across the panel | `the_wheel_scrolls_the_node_list_from_across_the_panel` in `craftkit-ui` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: the node list's scroll
+area shrinks to its content.
+
+The mutation's anchor had to be made unique when the fix landed: §126's
+mutation for the properties panel was written against a line that the node
+list now shares, and `swap` replaces the **first** match — so §126's case
+would have gone on mutating the wrong panel and stopped biting. Both anchors
+carry the line above them now, and both cases are caught.
+
+**The mutation suite is what noticed.** The first full run after the fix
+reported:
+
+```
+1 of 281 gate(s) MISSED their mutation:
+   • ui: the properties panel's rows do not scroll
+```
+
+That case swaps the scroll area for `ScrollArea::neither()` — and with the
+node list's scroll area carrying the same text and coming first in the file,
+the swap had landed on the **node list**. The properties panel was untouched,
+its gate passed, and the case was silently testing nothing. The suite's
+report is the only thing that said so: the gate itself cannot tell that it
+is no longer being aimed at the panel it is about.
+
+### What is still open
+
+**The problems panel has the same defect, and it is the worst case of the
+three.** The diagnostics are much narrower than the central panel, so a
+scroll area that shrinks to them answers the wheel only over the text.
+
+Measured in the real window, with a design of ten thousand nodes and the
+wheel turned at a series of points across the central panel:
+
+| the wheel at | the problems list |
+|---|---|
+| x = 300 | moved |
+| x = 400 | moved |
+| x = 500 | did not move |
+| x = 600, 700, 800, 900 | **did not move at all** |
+
+The central panel runs from 236 to 1010, and the diagnostics end at about
+530. So the wheel was dead over **most of the panel** while a list of ten
+thousand problems sat there.
+
+**It is not fixed here, and the reason is the honest one.** The problems
+list publishes nothing, so there is no name to look up and no rectangle to
+compare; and the shape of a frame settles over several frames in ways that a
+behavioural comparison cannot tell apart from a scroll — two attempts to
+write a gate for it produced a gate that passed for the wrong reason (it was
+matching the *status bar's* clip rectangle, which is wide for an unrelated
+reason) and a gate that passed with the fix removed. A gate that cannot fail
+is worse than no gate, and a change nobody can observe is a change nobody
+can vouch for.
+
+So the fix waits for the list to be **observable**: the problems panel would
+have to publish its rows, which is a small change and one that also answers
+what an agent may read off the screen.
+
+### The lesson
+
+**The same defect can be glaring in one panel and invisible in another.** The
+properties panel's content was 39 points wide and the node list's is 215, so
+the identical mistake cost a person 250 points of dead panel in one place and
+two points in the other. "Nobody noticed" is not evidence that a defect is
+small.
+
+**A fix that changes the text of a line can change what a mutation bites.**
+§126's mutation was aimed at a line the node list now shares, and the
+mutation script replaces the first match — so the case would have gone on
+mutating the wrong panel and stopped catching anything, and the run would
+have said "caught" while testing nothing. The anchor is part of the case.
+
+**A gate that cannot fail is worse than no gate.** Two attempts to write one
+for the problems list passed while the fix was removed. The second one passed
+because the frame's layout settles over several frames, and a comparison
+between two consecutive frames cannot tell a settling layout from a scroll.
+
+---
+
 
 ---
 
@@ -14171,6 +14303,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The node list carries the level the plan resolved** | `craftkit-ui` test | 1 mutation — §127 |
 | **The node list does not scan the plan once per node** | `craftkit-ui` test | 1 mutation — §127 |
 | **The node list draws the rows the collector found** | `craftkit-ui` test | 1 mutation — §127 |
+| **The wheel scrolls the node list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §128 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -14713,3 +14846,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     first. Which one is right depends on how often the plan is rebuilt and
     how often it is asked, and nobody has measured the second against the
     first.
+23. **Decide what an agent may read off the screen.** §128 measured that the
+    problems panel publishes **nothing**: its rows are drawn and no name
+    carries them, so an agent that asks "what does the screen say?" is told
+    about the toolbar, the node rows and the property editors, and not about
+    the problems. An agent can get the diagnostics from `plan.evaluate` — so
+    nothing is lost that cannot be got another way — but the screen and the
+    registry disagree about what is on the screen, which is the same drift
+    §126 recorded for the properties panel. Making the list observable would
+    also make it possible to gate: the problems panel's scroll area shrinks
+    to its content, so the wheel does nothing over most of the central panel
+    while a list of ten thousand problems sits there, and there is no gate
+    for that today. The choice is: publish the rows as a name per diagnostic,
+    or leave the panel as the one part of the screen an agent cannot see.
