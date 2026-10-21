@@ -13174,6 +13174,196 @@ listing fifty thousand of them took eight seconds before the fix.
 
 ---
 
+
+## 123. The properties panel copied the selected node's whole property tree, on every frame, to draw four things
+
+### The measurement
+
+The properties panel shows the selected node: one editor per property, the
+number of keyframes the property has, and the times of the first eight of them
+(§117). It is drawn on **every frame**.
+
+It also **copied** the node's whole property tree on every frame. The copy took
+every property's label, its value and **every keyframe's value** with it — and
+the panel drew four things out of it: the path, the value, the count and the
+first eight times.
+
+Measured on the panel alone — its own layout, the node selected, the fastest of
+nine rounds — with one property whose keyframes carry values:
+
+| the panel alone | 1 keyframe | 100 | 1 000 | 10 000 |
+|---|---|---|---|---|
+| the values are numbers | 20 µs | 22 µs | 29 µs | 78 µs |
+| the values are text | 20 µs | 28 µs | 71 µs | **484 µs** |
+
+The panel's cost grew with the number of keyframes it does not draw: **twenty-
+four times** from one keyframe to ten thousand, when the values were text. A
+text value is the worst case, because every one of them is a separate
+allocation; a number is the best case, because copying it copies nothing but
+the bits.
+
+The same defect inside a whole frame — the frame with the node selected minus
+the same frame without it, which is the panel's own work. The keyframe values
+are text here, which is the worst case for a copy:
+
+| the panel's own cost in a frame | before | after |
+|---|---|---|
+| one property, 10 000 keyframes | 488 µs | **23 µs** |
+| 200 properties, 1 000 keyframes each | 12.1 ms | **1.62 ms** |
+| 100 properties, 10 000 keyframes each (a million keyframes) | **51.5 ms** | **0.87 ms** |
+| 1 000 properties, one keyframe each | 7.15 ms | 6.87 ms |
+| 5 000 properties, one keyframe each | 37.3 ms | 37.8 ms |
+
+The last two rows did not move, and that is the point: the copy is paid in
+**keyframes**, and a node with many properties and few keyframes pays it
+almost nothing. A node with a million keyframes paid it fifty-one milliseconds
+a frame.
+
+### Why nothing noticed
+
+**The copy was correct.** Everything the panel drew was exactly what it drew
+before. Nothing about the *output* changed; only the cost of producing it.
+
+**The cost is only visible at a shape nobody draws.** A hand-made plan has a
+handful of properties and a handful of keyframes. The copy is paid in
+keyframes, and the model's own limits allow ten thousand keyframes on a
+property and fifty thousand properties on a node — a document the model
+*accepts*.
+
+**§122's own numbers had the answer in them and did not say so.** §122
+measured "the shell draws in" at 103.7 ms for a node with five thousand
+properties, and the listing inside it took 83.1 ms. The remaining twenty
+milliseconds were never explained. They were the copy and the widgets
+together, and the copy was the smaller half at that shape — because five
+thousand properties with one keyframe each is not where the copy lives.
+
+### The fix
+
+**The panel borrows the tree.** The model's own listing hands out references
+(`flatten` returns `Vec<(PropPath, &Property)>`), and the panel draws from the
+borrow. The borrow of the session has to end before the panel can run a
+command — `Shell::run` takes `&mut self` — and the panel collects its edits
+and runs them **after** the loop that draws, so the borrow is over by then.
+
+The panel still reads the keyframe **times** where they are and still draws
+the count. It never copies a keyframe's value.
+
+After, the panel alone:
+
+| the panel alone | 1 keyframe | 100 | 1 000 | 10 000 |
+|---|---|---|---|---|
+| the values are numbers | 19 µs | 20 µs | 20 µs | 21 µs |
+| the values are text | 19 µs | 20 µs | 20 µs | **20 µs** |
+
+**Flat.** The panel's cost no longer depends on how many keyframes the node
+has.
+
+**In the running application.** A design with two nodes — one whose property
+carries three hundred and fifty keyframes of 64 KiB of text each, one whose
+property carries none — opened in the real app, and the two selections asked
+for over the control channel, **paired back to back** so that everything they
+share (the fresh font atlas, the raster, the machine's load at that moment)
+cancels:
+
+| the same paired frames, in the running app | the keyed node | the plain node | the panel's own cost |
+|---|---|---|---|
+| before | 129.6 ms | 112.8 ms | **+15.6 ms a frame** |
+| after | 121.3 ms | 119.6 ms | −0.2 ms a frame |
+| after, the run again | 120.8 ms | 121.1 ms | −0.5 ms a frame |
+
+The panel's copy cost fifteen and a half milliseconds a frame in the real
+application. After the fix there is nothing left to measure.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The properties panel does not copy the keyframes it does not draw | `the_properties_panel_does_not_copy_the_keyframes_it_does_not_draw` in `craftkit-ui` |
+| The properties panel does not copy the keyframe values | `the_properties_panel_does_not_copy_the_keyframe_values` |
+| The panel publishes one editor for each property and no other | `the_panel_publishes_one_editor_for_each_property_and_no_other` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the properties panel
+copies the properties again; the properties panel copies the keyframes to draw
+their times; and the panel publishes a property's label instead of its path.
+
+The first two were measured against the gates that must catch them: the copy
+restored makes the panel **25.2 times** as slow with ten thousand keyframes as
+with one, and the keyframes copied to draw their times makes it **162.2 times**
+as slow with 64 KiB values as with one byte. Both gates refuse anything above
+eight times, so both are caught with room to spare.
+
+### The lesson
+
+**A copy that is never read is a copy that is always paid for.** The panel
+copied every keyframe's value to draw a count and eight times.
+
+**Measure the marginal cost.** The panel's own work is the difference between
+a frame with the node selected and one without it; measuring a frame on its
+own measures the whole window.
+
+**A shape nobody draws is a shape nobody hits.** The model's limits allow a
+node with a million keyframes on it, and no test — and no hand-made plan —
+has ever made one.
+
+---
+
+## 124. Three more gaps the copy was hiding — open
+
+Fixing §123 measured three things that are **not** fixed. Each of them is in
+the code this section touched, and each is recorded here rather than left in a
+comment.
+
+### The properties panel drew every property of the selected node, on every frame
+
+`egui` lays out a widget per property, and the panel asks for one per property
+of the node. A node with five thousand properties therefore lays out five
+thousand widgets a frame: **37.8 ms**, measured, and unchanged by §123
+because the copy was not what that cost.
+
+The fix is a virtualised list — draw the rows that are on screen and no more —
+and it is a real piece of work: the panel's rows are the model's own paths
+(§85), and a row's height depends on whether the property is animated and how
+many widgets it has. A gate for it would have to measure the panel's cost
+against the number of *properties*, the way §123's measures it against the
+number of keyframes.
+
+### The timeline walked every keyframe of every node, on every frame
+
+The marks want the instants (§122), so the window walks the tree itself — and
+it walks **every** key of **every** node, on every frame, and paints a mark
+for each. A document with a million keyframes: **29 ms a frame**, measured as
+the frame with nothing selected, so it is paid whether or not a node is
+selected. The copy §123 removed was fifty-one milliseconds on top of that.
+
+The marks are drawn on a rail a few hundred pixels wide, so a million of them
+are a million of something nobody can see. The fix is to draw the marks that
+are **near the playhead** and let the rest go — but "near" is a rule nobody
+has written down yet, and it changes what the timeline means.
+
+### A locked property is not greyed in the UI, though the model says it is
+
+`Property::locked` says:
+
+> Whether a user may change this. A locked property is greyed in the UI and
+> refused by `property.set`, so the rule lives in the document rather than in
+> every caller.
+
+The second half is true — `prop.set` refuses a locked property and says
+*"`amount` is locked"*. The first half is **false**: `crates/ui` never reads
+`locked` at all. The panel draws a locked property as an ordinary editor; a
+person edits it, the command refuses, and the status line says so.
+
+This is the **forty-first** prose-drift instance (item 8 of "Suggested order"):
+a source comment describing a behaviour the code does not have.
+
+The fix is small — `egui` can draw a widget disabled, and the automation
+registry already carries an `enabled` flag, so a locked property's editor could
+be published as disabled and drawn greyed. That is what the sentence says, and
+it is what an agent asking "what is at this point?" needs to be told. It has
+not been done yet.
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -13472,6 +13662,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Listing a node's properties is not quadratic** | `craftkit-model` test | 1 mutation — §122 |
 | **A listing of many siblings numbers the duplicates** | `craftkit-model` test | 1 mutation — §122 |
 | **A keyframe inside a group is marked on the rail** | `craftkit-ui` test | 1 mutation — §122 |
+| **The properties panel does not copy the keyframes it does not draw** | `craftkit-ui` test | 1 mutation — §123 |
+| **The properties panel does not copy the keyframe values** | `craftkit-ui` test | 1 mutation — §123 |
+| **The panel publishes one editor for each property and no other** | `craftkit-ui` test | 1 mutation — §123 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -13779,6 +13972,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    the documents that describe it* — was not wrong, and the sentence was not
    rewritten, because nothing asked. Forty instances, and the fortieth is the
    one where the sentence described the very thing that was fixed.
+   §124 is the forty-first, and the first one a **doc comment on a field**:
+   `Property::locked` says *"A locked property is greyed in the UI and refused
+   by `property.set`"*, and only the second half is true — `crates/ui` never
+   reads `locked`. A comment on a field is read by the next person to change
+   the field, which makes it a document; a document that is wrong is worse than
+   no document, because it is believed.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

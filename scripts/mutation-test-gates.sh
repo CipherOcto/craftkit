@@ -3181,5 +3181,31 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the marks skip the keyframes inside a group" \
     "cargo test -p craftkit-ui --profile ci a_keyframe_inside_a_group_is_marked_on_the_rail"
 
+# The properties panel copied the selected node's whole property tree on every
+# frame — every property, with every keyframe's value — to draw a path, a
+# value, a count and the first eight times. §123.
+swap crates/ui/src/shell.rs \
+    '        let rows = node.props.flatten();' \
+    '        let rows: Vec<(String, craftkit_model::Property)> = node.props.flatten().into_iter().map(|(path, prop)| (path.to_string(), prop.clone())).collect();'
+expect_catch "ui: the properties panel copies the properties again" \
+    "cargo test -p craftkit-ui --profile ci the_properties_panel_does_not_copy_the_keyframes_it_does_not_draw"
+
+# The panel copied the keyframes to draw their times, and the copy took every
+# keyframe's value with it — a value can be 64 KiB of text. §123.
+swap crates/ui/src/shell.rs \
+    '                ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());' \
+    '                let keys: Vec<craftkit_model::Key> = prop.keys.keys().to_vec();
+                ui.label(RichText::new(keyframe_times(&keys)).color(tokens.text_dim).small());'
+expect_catch "ui: the properties panel copies the keyframes to draw their times" \
+    "cargo test -p craftkit-ui --profile ci the_properties_panel_does_not_copy_the_keyframe_values"
+
+# The panel published a property's label instead of its path, so a property
+# inside a group was published under a name no command could address. §123.
+swap crates/ui/src/shell.rs \
+    '            let path = path.to_string();' \
+    '            let path = prop.label.clone();'
+expect_catch "ui: the panel publishes a property's label instead of its path" \
+    "cargo test -p craftkit-ui --profile ci the_panel_publishes_one_editor_for_each_property_and_no_other"
+
 restore
 finish

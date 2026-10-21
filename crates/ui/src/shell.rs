@@ -460,10 +460,15 @@ impl<'a> Shell<'a> {
 
         // The model's own flatten, so the panel cannot invent a second view of
         // the property tree.
-        let rows: Vec<(String, craftkit_model::Property)> =
-            node.props.flatten().into_iter().map(|(path, prop)| (path.to_string(), prop.clone())).collect();
+        //
+        // The rows **borrow** the tree. They used to **copy** it — every
+        // property of the node, with every keyframe's value, on every frame —
+        // and the panel draws four things out of them: the path, the value,
+        // the number of keyframes and the first eight times. §123.
+        let rows = node.props.flatten();
 
         for (path, prop) in rows {
+            let path = path.to_string();
             let widget = AutomationId::property(id, &path);
             match &prop.value {
                 craftkit_core::Value::Bool(b) => {
@@ -1601,6 +1606,152 @@ mod tests {
         let state = ShellState { selected: Some(id), ..ShellState::default() };
         let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
         (frame.png, frame.automation, id)
+    }
+
+    /// A node with one property and `keys` keyframes on it.
+    ///
+    /// Each keyframe's value is `value_bytes` of text: a **text** value is
+    /// the worst case for a copy, because every one of them is a separate
+    /// allocation, and a number is the best case, because copying it copies
+    /// nothing but the bits. §123.
+    fn node_with_keyframes(keys: usize, value_bytes: usize) -> (craftkit_model::Document, NodeId) {
+        let mut doc = craftkit_model::Document::empty("probe");
+        let id = doc.add_node("One", craftkit_model::NodeKind::Source).expect("the node");
+        let node = doc.get_mut(id).expect("the node");
+        let mut property = craftkit_model::Property::new(
+            1,
+            "amount",
+            craftkit_core::Value::num("amount", 0.5).expect("a number"),
+        );
+        let text = "x".repeat(value_bytes);
+        let mut list = craftkit_model::Keyframes::new();
+        for k in 0..keys {
+            let time = craftkit_core::Tick::from_raw(k as i128 * 1_000_000_000);
+            let value = craftkit_core::Value::text("amount", text.clone()).expect("a text");
+            let key = craftkit_model::Key::new(time, value, craftkit_model::Easing::Linear).expect("a key");
+            list.set(key).expect("the key is set");
+        }
+        property.keys = list;
+        node.props.push(property);
+        let id = doc.nodes[0].id;
+        (doc, id)
+    }
+
+    /// How long the properties panel takes, on its own.
+    ///
+    /// The panel is drawn by itself, in its own layout, with the node
+    /// selected — so what is measured is the panel's work and not the
+    /// window's. §123.
+    ///
+    /// The **fastest** of several rounds, because a preempted round says
+    /// nothing about the code. §101's shape.
+    fn panel_alone(document: craftkit_model::Document, id: NodeId) -> f64 {
+        let mut session = Session::new("probe");
+        session.load_document(document);
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+        shell.state.selected = Some(id);
+        // The first frame lays out; the later ones place.
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens));
+        });
+        let mut best = f64::MAX;
+        for _ in 0..9 {
+            let start = std::time::Instant::now();
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens));
+            });
+            best = best.min(start.elapsed().as_secs_f64());
+        }
+        best
+    }
+
+    /// The properties panel does not copy the keyframes it does not draw.
+    ///
+    /// §123: the panel used to **copy** the selected node's whole property
+    /// tree on every frame — every property, with every keyframe's value —
+    /// and it draws four things out of it: the path, the value, the number
+    /// of keyframes and the first eight times.
+    ///
+    /// Measured: a property with ten thousand text-valued keyframes cost the
+    /// panel 484 µs a frame, and a property with one cost 20 µs. The
+    /// difference was the copy.
+    ///
+    /// The test is **relative**, so it does not depend on how fast the
+    /// machine is: ten thousand keyframes must not cost eight times what one
+    /// costs. §101's shape — the fastest of several rounds, because a
+    /// preempted round says nothing about the code.
+    #[test]
+    fn the_properties_panel_does_not_copy_the_keyframes_it_does_not_draw() {
+        let one = node_with_keyframes(1, 16);
+        let many = node_with_keyframes(10_000, 16);
+        let few = panel_alone(one.0, one.1);
+        let much = panel_alone(many.0, many.1);
+        let ratio = much / few.max(f64::MIN_POSITIVE);
+        assert!(
+            ratio < 8.0,
+            "the properties panel took {ratio:.1}x as long with 10000 keyframes as with 1: \
+             it is copying the keyframes it does not draw"
+        );
+    }
+
+    /// The properties panel does not copy the keyframe **values** either.
+    ///
+    /// §123: the copy took the values with it, and a value can be as large
+    /// as the model allows — 64 KiB of text. A property with two hundred
+    /// such keyframes made the panel copy twelve megabytes a frame to draw
+    /// a number, a count and eight times.
+    ///
+    /// The shape is the same as the gate above, on the other axis: the
+    /// **size** of what is copied, not the number of things.
+    #[test]
+    fn the_properties_panel_does_not_copy_the_keyframe_values() {
+        let small = node_with_keyframes(200, 1);
+        let big = node_with_keyframes(200, 64 * 1024);
+        let few = panel_alone(small.0, small.1);
+        let much = panel_alone(big.0, big.1);
+        let ratio = much / few.max(f64::MIN_POSITIVE);
+        assert!(
+            ratio < 8.0,
+            "the properties panel took {ratio:.1}x as long with 64 KiB keyframe values as with 1 byte: \
+             it is copying the keyframe values it does not draw"
+        );
+    }
+
+    /// The panel's editors are the model's own paths — one for each property.
+    ///
+    /// §123: the panel used to copy the node's whole property tree on every
+    /// frame. The copy is gone, and the paths it draws are still the model's
+    /// own: the panel cannot invent a second view of the tree, and it does
+    /// not publish an editor for anything the model does not hold.
+    #[test]
+    fn the_panel_publishes_one_editor_for_each_property_and_no_other() {
+        let mut session = Session::sample();
+        let id = session.document().nodes[0].id;
+        let created = session.execute(
+            "prop.set",
+            &serde_json::json!({ "node": id.get(), "path": "custom/thing", "value": 7 }),
+        );
+        assert!(created.is_ok(), "{created:?}");
+
+        let registry = draw_selected(&mut session, id);
+        let prefix = format!("node.{}.prop.", id.get());
+        let published: Vec<String> =
+            registry.names().into_iter().filter(|n| n.starts_with(&prefix)).map(|n| n.to_string()).collect();
+        let paths: Vec<String> = session
+            .node(id)
+            .map(|n| n.props.flatten().into_iter().map(|(path, _)| path.to_string()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            published.len(),
+            paths.len(),
+            "the panel published {published:?} for the model's {paths:?}"
+        );
+        for path in &paths {
+            let name = format!("{prefix}{path}");
+            assert!(published.contains(&name), "the panel published no editor for `{path}`: {published:?}");
+        }
     }
 
     /// A keyframe inside a group is marked on the rail.
