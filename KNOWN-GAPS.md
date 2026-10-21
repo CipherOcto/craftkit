@@ -12461,6 +12461,176 @@ being unreachable.
 
 ---
 
+## 118. The toolbar ran every command with no parameters, and seventeen of its twenty-one buttons could only be refused
+
+### The measurement
+
+The toolbar is the app's most visible surface, and it draws a button for every
+command in the registry. It ran each of them like this:
+
+```rust
+self.run(spec.id, serde_json::json!({}));
+```
+
+**With no parameters at all.** Twenty-three commands, twenty-one buttons (the
+two history buttons are disabled on a fresh session, so they publish no
+rectangle), and this is what pressing each one said:
+
+| Command | What the button said |
+|---|---|
+| `doc.rename` | *"`name` this parameter is required"* |
+| `doc.note` | *"`text` give the note's text; an empty text clears the note"* |
+| `doc.range` | *"`start` give at least one of `start`, `end` or `fps`"* |
+| `node.remove`, `node.rename`, `node.mute`, `node.kind`, `node.move`, `node.duplicate` | *"pass `node` (an id) or `node_name` (a name)"* |
+| `prop.set`, `prop.reset` | *"pass `node` (an id) or `node_name` (a name)"* |
+| `key.set`, `key.remove`, `key.clear`, `key.ease`, `key.list` | *"pass `node` (an id) or `node_name` (a name)"* |
+| `playback.seek` | *"pass `seconds` or `frame`"* |
+
+**Seventeen of twenty-one buttons could only refuse.** The four that worked
+were the four that take no parameters: `node.add` (*"added filter `filter
+4`"*), `diagnostics.list` (*"0 problem(s)"*), `plan.evaluate` and
+`session.stats`.
+
+So the toolbar was a strip of twenty-one buttons of which **four did
+something and seventeen said no**. And the *only* way to reach the other
+eighteen commands was a script, the CLI, the control channel or the MCP
+server — the interfaces for people and agents who are not looking at a
+window.
+
+### Why nothing noticed
+
+**The refusal was honest.** Every one of those messages says exactly what was
+missing and exactly how to give it. A defect that reports itself accurately
+is very easy to mistake for a feature: the status bar was never *wrong*, only
+unhelpful, and the status bar is the one thing on the screen that is
+supposed to be right.
+
+**The four that worked looked like the toolbar worked.** A test that pressed
+*Add node* and saw a node appear would have concluded that the toolbar calls
+the registry. It does — with an empty parameter object.
+
+**No test pressed a toolbar button.** The UI tests pressed the *timeline*
+(§115), read the *panel* (§117) and looked at the *nodes* (§99, §100) — and
+not one of them pressed a button in the toolbar, because every button in it
+was a button that needed something the test had no way to supply.
+
+**The tree named the mechanism that was missing.** Four places said that
+interactive work belongs to `ui.start`:
+
+- `AGENTS.md`: *"Only a toolbar click (`ui.start`) may start an interactive
+  tool."*
+- `crates/engine/src/lib.rs`: *"Interactive work is a different entry point
+  (`ui.start`), which the front ends own."*
+- `crates/engine/src/session.rs`: *"Those are interactive concerns and belong
+  to `ui.start`, which the front ends call instead."*
+- `docs/patterns/everything-is-a-command.md`: *"Those are interactive
+  concerns and belong to `ui.start`, which a front end calls instead."*
+
+**There is no `ui.start` in the tree.** There was no interactive entry point at
+all: the tree had a rule about who may ask a question and no way to ask one.
+
+### The fix
+
+**The registry says what a command asks a person for.** A new field on
+`CommandSpec`:
+
+```rust
+/// The parameters a person is asked for when the command is started from
+/// the interface.
+pub asks: &'static [&'static str],
+```
+
+It is a separate field from `params` because the two differ on purpose:
+`node.add` takes a name, a kind and an amount and is perfectly happy with
+none of them, while `doc.range` takes three optional parameters and refuses
+to run with none of them. Three gates hold it honest — every name in `asks` is
+a parameter of that command, no command asks for the same parameter twice,
+and every parameter a command cannot do without is one it asks for.
+
+**The engine turns what a person typed into what the reader accepts.**
+`craftkit_engine::params::text_to_param` is the one place that decides what a
+number, a name or a time means — the readers are strictly typed, so a second
+parser in the interface would be a second answer to the same question. A
+node's name goes to `node_name` and a node's id to `node`, because a
+parameter with an alternative is one parameter in two spellings (§116). A
+time is left as text, because only the reader knows the document's frame rate
+and so only the reader can say what `12f` means.
+
+**The shell opens a form.** `Shell::start` is the interactive counterpart of
+`Session::execute`, and it is the only path that asks a question:
+
+- a command that asks for nothing runs at once;
+- a command whose parameters the shell already knows — the node the person is
+  looking at — runs at once;
+- a command that needs anything else opens a **form**: one field per asked
+  parameter, pre-filled with what the shell knows, and an OK that runs the
+  command with what was typed.
+
+The form's colours come from `theme::Tokens` like everything else the shell
+draws, and its title is drawn by the shell rather than by `egui`, whose own
+title is a second palette at a dimmer setting.
+
+**The prose names the thing that exists.** The four `ui.start` mentions now
+say what the mechanism is: the front end's own entry point, which asks for
+the parameters and then calls `execute`.
+
+### The evidence, in the real window
+
+The real binary, a real display, a real mouse and a real keyboard:
+
+1. Press **Rename plan** in the toolbar. The form opens in the middle of the
+   window: the command's label, the field `name`, the parameter's own help
+   line (*"The new name."*), an empty field, and OK and Cancel.
+2. Click the field and type **Renamed in the live window**. The field takes
+   the text.
+3. Press **OK**. The form closes, the plan's title in the central panel
+   reads **Renamed in the live window**, and the status bar says *"renamed to
+   `Renamed in the live window`"* — and says **unsaved**, because the
+   document changed.
+
+Before the change, step 1 put *"renamed to …"* nowhere and left the status
+bar saying *"`name` this parameter is required"*.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| No toolbar button is refused for wanting a parameter | `no_toolbar_button_is_refused_for_wanting_a_parameter` |
+| A button that needs parameters opens a form | `a_button_that_needs_parameters_opens_a_form` |
+| A button that needs a node asks for one | `a_button_that_needs_a_node_asks_for_one` |
+| A button whose parameters the shell knows runs at once | `a_button_whose_parameters_the_shell_knows_runs_the_command` |
+| The form runs the command when it is filled in | `the_form_runs_the_command_when_it_is_filled_in` |
+| The form says what is wrong with what was typed | `the_form_says_what_is_wrong_with_what_was_typed` |
+| The form is on the screen when it is open | `a_frame_with_a_form_is_not_the_frame_without_one` |
+| What a person typed becomes what the reader accepts | `text_to_param`'s tests in `craftkit-engine` |
+| Every name a command asks for is one of its parameters | `every_name_a_command_asks_for_is_a_parameter_of_that_command` |
+| A command never asks for the same parameter twice | `a_command_never_asks_for_the_same_parameter_twice` |
+| Every parameter a command needs is one it asks for | `every_parameter_a_command_needs_is_one_it_asks_for` |
+
+and six mutations in `scripts/mutation-test-gates.sh`: the toolbar runs a
+command with no parameters; the catalogue no longer says what a command asks
+for; a command that needs a parameter does not ask for it; the form's OK
+button does not run the command; a node's name no longer goes to the name
+spelling; and the form is not on the screen.
+
+### The lesson
+
+**A button that is refused is a button that does nothing, and a refusal that
+says exactly what is missing is very easy to mistake for a feature.** The
+status bar was never wrong. It was the toolbar that was.
+
+**What a command takes and what an interface can supply are the same
+question.** Seventeen commands took parameters that no interface could
+produce, and the only interface in the tree — the one with the buttons on it
+— had no way to ask.
+
+**A name in prose is not a mechanism.** Four places said `ui.start`; there
+was no `ui.start`. That is the thirty-ninth instance of the shape item 8
+describes, and the first one whose subject was a **piece of behaviour** rather
+than a sentence about one.
+
+---
+
 ---
 
 ## What enforces what
@@ -12731,6 +12901,17 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The listing says when the keyframes are** | `craftkit-engine` test | 1 mutation — §117 |
 | **The listing refuses a property that is not there** | `craftkit-engine` test | — |
 | **The panel says when the keyframes are** | `craftkit-ui` test | 1 mutation — §117 |
+| **No toolbar button is refused for wanting a parameter** | `craftkit-ui` test | 1 mutation — §118 |
+| **A button that needs parameters opens a form** | `craftkit-ui` test | 1 mutation — §118 |
+| **A button that needs a node asks for one** | `craftkit-ui` test | — |
+| **A button whose parameters the shell knows runs at once** | `craftkit-ui` test | — |
+| **The form runs the command when it is filled in** | `craftkit-ui` test | 1 mutation — §118 |
+| **The form says what is wrong with what was typed** | `craftkit-ui` test | — |
+| **The form is on the screen when it is open** | `craftkit-ui` test | 1 mutation — §118 |
+| **What a person typed becomes what the reader accepts** | `craftkit-engine` test | 1 mutation — §118 |
+| **Every name a command asks for is one of its parameters** | `craftkit-engine` test | — |
+| **A command never asks for the same parameter twice** | `craftkit-engine` test | — |
+| **Every parameter a command needs is one it asks for** | `craftkit-engine` test | 1 mutation — §118 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -13022,6 +13203,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    and the thirty-seventh and the thirty-eighth are the only ones whose
    subject is the **shape of a value** — a type and a flag that say what a
    caller may send, checked by reading the code that reads them.
+   §118 is the thirty-ninth, and it is the first one whose subject is a **piece
+   of behaviour** rather than a sentence about one. Four places said that
+   interactive work belongs to `ui.start` — in `AGENTS.md`, in the engine's own
+   module doc, in `Session::execute`'s comment and in the pattern document —
+   and the tree had no `ui.start`, no interactive entry point and no way to
+   ask a question. The prose was not describing something that had drifted; it
+   was describing something that had **never been built**. Thirty-nine
+   instances, and the thirty-ninth is the only one where the sentence pointed
+   at a *missing mechanism* rather than at a mechanism that had changed.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

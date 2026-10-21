@@ -101,7 +101,9 @@ Adding behaviour anywhere else — a special case in the UI, a bespoke MCP tool,
 flag on the CLI — is the mistake this rule exists to prevent. Add a command.
 
 **Programmatic calls never open dialogs.** `engine.execute` runs the JSON form.
-Only a toolbar click (`ui.start`) may start an interactive tool.
+Only a front end's own entry point may ask a question — in this tree that is
+`craftkit_ui::shell::Shell::start`, which collects the parameters a command
+needs and then runs it. §118.
 
 ---
 

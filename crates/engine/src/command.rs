@@ -148,6 +148,15 @@ impl ParamDoc {
     ) -> Self {
         Self { name, kind, required: false, help, alternative: Some(alternative) }
     }
+
+    /// Whether a person has to fill this in before the command can run.
+    ///
+    /// A required parameter has to be filled in, and so does one that has an
+    /// alternative: the pair is required, even though neither half is.
+    /// §116, §118.
+    pub const fn needed(&self) -> bool {
+        self.required || self.alternative.is_some()
+    }
 }
 
 /// One command.
@@ -167,6 +176,19 @@ pub struct CommandSpec {
     /// `the_advertised_shortcuts_are_unique_and_well_formed`, so the
     /// specification is one somebody could implement.
     pub shortcut: Option<&'static str>,
+    /// The parameters a person is asked for when the command is started from
+    /// the interface.
+    ///
+    /// The parameter table says what the command **takes**; this says what
+    /// the **interactive path** asks for. The two differ on purpose:
+    /// `node.add` takes a name, a kind and an amount and is perfectly happy
+    /// with none of them, while `doc.range` takes three optional parameters
+    /// and refuses to run with none of them. §118.
+    ///
+    /// A name in this list is a parameter of this command. A gate keeps it
+    /// that way, and keeps every required parameter in it — a command whose
+    /// form cannot ask for what it needs would ask for the wrong thing.
+    pub asks: &'static [&'static str],
     pub params: &'static [ParamDoc],
     /// One line for `commands --json` and the MCP tool description.
     pub doc: &'static str,
@@ -210,6 +232,15 @@ impl CommandSpec {
         self.params.iter().map(|p| p.name).collect()
     }
 
+    /// The parameters the interactive path asks for, in the order it asks.
+    ///
+    /// A name in [`CommandSpec::asks`] that is not a parameter of this
+    /// command is **dropped**, not invented: the form shows what the
+    /// command declares, and a gate refuses a name that is not one of them.
+    pub fn ask_params(&self) -> Vec<&'static ParamDoc> {
+        self.asks.iter().filter_map(|name| self.params.iter().find(|p| p.name == *name)).collect()
+    }
+
     /// A one-line description for a listing.
     pub fn signature(&self) -> String {
         if self.params.is_empty() {
@@ -231,6 +262,7 @@ impl CommandSpec {
             "mutates": self.mutates,
             "undoable": self.undoable,
             "doc": self.doc,
+            "asks": self.asks,
             "params": self.params.iter().map(|p| {
                 let mut param = serde_json::json!({
                     "name": p.name,
@@ -325,6 +357,7 @@ pub static TEST_PANIC: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Panics on purpose. Registered only in test builds.",
+    asks: &[],
     params: &[ParamDoc::opt("how", Doc::Number, "Which kind of panic to raise.")],
     mutates: true,
     undoable: false,
@@ -364,6 +397,7 @@ pub static TEST_HALF_APPLY: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Changes the document and then refuses. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: false,
@@ -413,6 +447,7 @@ pub static TEST_NOOP: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Changes nothing and declares that it mutates. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: true,
@@ -435,6 +470,7 @@ pub static TEST_DIRTY_NOOP: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Marks the project dirty and changes nothing. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: true,
@@ -462,6 +498,7 @@ pub static TEST_INVALIDATE: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Leaves the document in a state the file reader refuses. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: false,
@@ -496,6 +533,7 @@ pub static TEST_WRITE_WHILE_READ_ONLY: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Changes the document and declares that it does not mutate it. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: false,
     undoable: false,
@@ -525,6 +563,7 @@ pub static TEST_INVALIDATE_WHILE_READ_ONLY: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "Leaves the document in a state the file reader refuses and declares that it does not mutate it. Registered only in test builds.",
+    asks: &[],
     params: &[],
     mutates: false,
     undoable: false,
@@ -831,6 +870,74 @@ mod tests {
                 panic!("`{chord}` is advertised by both {other} and {}", spec.id);
             }
             seen.push((spec.id, chord));
+        }
+    }
+
+    /// Every name a command asks for is a parameter of that command.
+    ///
+    /// The interactive path asks for the parameters by name, and a name that
+    /// is not a parameter would be a field that fills nothing. §118.
+    #[test]
+    fn every_name_a_command_asks_for_is_a_parameter_of_that_command() {
+        for spec in all() {
+            for name in spec.asks {
+                assert!(
+                    spec.params.iter().any(|p| p.name == *name),
+                    "`{}` asks for `{name}`, which is not one of its parameters",
+                    spec.id
+                );
+            }
+        }
+    }
+
+    /// A command is not asked for the same parameter twice.
+    ///
+    /// Two fields for one parameter would be two answers to one question,
+    /// and only one of them would be read. §118.
+    #[test]
+    fn a_command_never_asks_for_the_same_parameter_twice() {
+        for spec in all() {
+            let mut seen: Vec<&str> = Vec::new();
+            for name in spec.asks {
+                assert!(!seen.contains(name), "`{}` asks for `{name}` twice", spec.id);
+                seen.push(name);
+            }
+        }
+    }
+
+    /// Every parameter a command cannot do without is one it asks for.
+    ///
+    /// A required parameter that the form does not ask for is a parameter
+    /// the person cannot supply, and the command would be refused for a
+    /// reason the form never mentioned. §118.
+    #[test]
+    fn every_parameter_a_command_needs_is_one_it_asks_for() {
+        for spec in all() {
+            for param in spec.params {
+                if !param.needed() {
+                    continue;
+                }
+                assert!(
+                    spec.asks.contains(&param.name),
+                    "`{}` needs `{}` but does not ask for it",
+                    spec.id,
+                    param.name
+                );
+            }
+        }
+    }
+
+    /// A command that asks for nothing is a command that runs when it is
+    /// clicked.
+    ///
+    /// The other half of the rule: a command that asks for parameters has a
+    /// form, and the form is the only way it is started. §118.
+    #[test]
+    fn a_command_that_asks_for_nothing_has_no_form() {
+        for spec in all() {
+            if spec.asks.is_empty() {
+                assert!(spec.ask_params().is_empty(), "`{}` asks for nothing but has parameters", spec.id);
+            }
         }
     }
 }

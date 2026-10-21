@@ -12,6 +12,8 @@
 use craftkit_core::{Color, NodeId, ParamError, Params, Value};
 use serde_json::Value as Json;
 
+use crate::command::ParamDoc;
+
 /// The documented type of one parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Doc {
@@ -51,6 +53,91 @@ impl Doc {
             Doc::Time => "time",
             Doc::PropertyPath => "property-path",
             Doc::Easing => "easing",
+        }
+    }
+}
+
+/// What a person typed, and the parameter it belongs to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Typed {
+    /// The parameter the value belongs to.
+    ///
+    /// Not always the one that was asked for. A parameter with an
+    /// alternative is **one parameter in two spellings** (§116), and which
+    /// spelling the text belongs to depends on the text: an id belongs to
+    /// `node` and a name belongs to `node_name`.
+    pub name: &'static str,
+    /// The value, ready for the reader.
+    pub value: Json,
+}
+
+/// Turn what a person typed into the JSON a command's reader accepts.
+///
+/// The readers are strictly typed — `p.num`, `p.text`, `p.bool` — so an
+/// interface that collects text has to convert it somewhere, and the place
+/// that does it has to be the same place that decides what a value means.
+/// A second parser, in the interface, would be a second answer to "what
+/// does this field mean", and the two would drift. §118.
+///
+/// The empty string is **not** a value: a field the person left blank is
+/// one the caller did not give, and the caller decides what to do about a
+/// parameter it did not give. This function is only asked about text that
+/// is there.
+///
+/// # Errors
+///
+/// The message says what was wrong with the text, in the same words the
+/// readers use, so a person sees one kind of complaint whether the text
+/// came from the keyboard or from a script.
+pub fn text_to_param(param: &ParamDoc, text: &str) -> Result<Typed, String> {
+    let trimmed = text.trim();
+    match param.kind {
+        Doc::Number => {
+            let n: f64 = trimmed.parse().map_err(|_| format!("`{trimmed}` is not a number"))?;
+            if !n.is_finite() {
+                return Err(format!("`{trimmed}` is not a finite number"));
+            }
+            Ok(Typed { name: param.name, value: serde_json::json!(n) })
+        }
+        Doc::Bool => {
+            let b = match trimmed.to_ascii_lowercase().as_str() {
+                "true" | "yes" | "on" | "1" => true,
+                "false" | "no" | "off" | "0" => false,
+                _ => {
+                    return Err(format!("`{trimmed}` is not a yes or a no; write true or false"));
+                }
+            };
+            Ok(Typed { name: param.name, value: serde_json::json!(b) })
+        }
+        Doc::NodeRef => {
+            // An id is a whole number and a name is anything else, so the text
+            // says which spelling it is. The alternative is the name
+            // spelling — §116 made `node` and `node_name` one parameter in
+            // two spellings — and a name here is not a mistake: it is the
+            // other spelling of the same parameter.
+            if !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) {
+                let id: u64 = trimmed
+                    .parse()
+                    .map_err(|_| format!("`{trimmed}` is not a node id; ids are whole numbers"))?;
+                Ok(Typed { name: param.name, value: serde_json::json!(id) })
+            } else {
+                match param.alternative {
+                    Some(alternative) => Ok(Typed { name: alternative, value: serde_json::json!(trimmed) }),
+                    None => Err(format!("`{trimmed}` is a name, not an id")),
+                }
+            }
+        }
+        // A time is given as text because a time has three spellings —
+        // seconds, a frame (`12f`) and raw ticks (`120t`) — and the reader
+        // knows the document's frame rate, so only the reader can say which
+        // instant the text means. §118.
+        Doc::Time => Ok(Typed { name: param.name, value: serde_json::json!(trimmed) }),
+        // The rest are text as they are: the reader checks the shape.
+        // `node-kind`, `easing` and `color` are all words, and a word the
+        // reader refuses is refused with the reader's own list of the words
+        // it accepts.
+        Doc::Text | Doc::Color | Doc::NodeKind | Doc::PropertyPath | Doc::Easing => {
+            Ok(Typed { name: param.name, value: serde_json::json!(trimmed) })
         }
     }
 }
@@ -142,7 +229,120 @@ pub fn kind_of(v: &Json) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ParamDoc;
     use serde_json::json;
+
+    /// A parameter that takes a node, by id or by name.
+    fn node_param() -> ParamDoc {
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name")
+    }
+
+    #[test]
+    fn a_number_is_read_as_a_number() {
+        let param = ParamDoc::req("fps", Doc::Number, "The frame rate.");
+        let typed = text_to_param(&param, " 24 ").expect("a number");
+        assert_eq!(typed.name, "fps");
+        assert_eq!(typed.value, json!(24.0));
+    }
+
+    #[test]
+    fn a_number_that_is_not_a_number_says_so() {
+        let param = ParamDoc::req("fps", Doc::Number, "The frame rate.");
+        let message = text_to_param(&param, "twenty four").expect_err("not a number");
+        assert!(message.contains("not a number"), "{message}");
+    }
+
+    #[test]
+    fn a_number_that_is_not_finite_is_refused() {
+        let param = ParamDoc::req("fps", Doc::Number, "The frame rate.");
+        let message = text_to_param(&param, "inf").expect_err("not finite");
+        assert!(message.contains("finite"), "{message}");
+    }
+
+    #[test]
+    fn a_yes_or_a_no_is_read_as_a_bool() {
+        let param = ParamDoc::opt("muted", Doc::Bool, "Whether it is muted.");
+        assert_eq!(text_to_param(&param, "yes").expect("yes").value, json!(true));
+        assert_eq!(text_to_param(&param, "no").expect("no").value, json!(false));
+        assert_eq!(text_to_param(&param, "TRUE").expect("true").value, json!(true));
+    }
+
+    #[test]
+    fn a_yes_or_a_no_that_is_neither_says_what_to_write() {
+        let param = ParamDoc::opt("muted", Doc::Bool, "Whether it is muted.");
+        let message = text_to_param(&param, "maybe").expect_err("neither");
+        assert!(message.contains("true"), "{message}");
+    }
+
+    #[test]
+    fn a_node_id_and_a_node_name_are_the_same_parameter_in_two_spellings() {
+        // The whole number is the id spelling and the name is the name
+        // spelling: §116 made them one parameter, and the text says which
+        // one it is.
+        let param = node_param();
+        let by_id = text_to_param(&param, "7").expect("an id");
+        assert_eq!(by_id.name, "node");
+        assert_eq!(by_id.value, json!(7));
+
+        let by_name = text_to_param(&param, "Delay").expect("a name");
+        assert_eq!(by_name.name, "node_name");
+        assert_eq!(by_name.value, json!("Delay"));
+    }
+
+    #[test]
+    fn a_number_that_is_not_a_whole_number_is_a_name_and_the_reader_says_so() {
+        // The rule is "a whole number is an id, anything else is a name" —
+        // so `7.5` is a name, and the reader is the one that says whether
+        // there is a node by that name. The converter does not decide that.
+        let param = node_param();
+        let typed = text_to_param(&param, "7.5").expect("a name");
+        assert_eq!(typed.name, "node_name");
+        assert_eq!(typed.value, json!("7.5"));
+
+        let document = doc();
+        let by_name = json!({ "node_name": "7.5" });
+        let params = Params::new(&by_name);
+        let error = node_by_id_or_name(&document, &params).expect_err("no such node");
+        let message = error.to_string();
+        assert!(message.contains("no node named"), "{message}");
+    }
+
+    #[test]
+    fn a_name_where_there_is_no_alternative_is_refused() {
+        // The alternative is what makes a name a spelling rather than a
+        // mistake. Without one, a name has nowhere to go.
+        let param = ParamDoc::req("node", Doc::NodeRef, "The node's id.");
+        let message = text_to_param(&param, "Delay").expect_err("a name is not an id");
+        assert!(message.contains("name"), "{message}");
+    }
+
+    #[test]
+    fn a_time_is_left_to_the_reader_that_knows_the_frame_rate() {
+        // The reader decides what `12f` means, because only it knows the
+        // document's frame rate. Converting it here would move that
+        // knowledge to a place that cannot have it.
+        let param = ParamDoc::req("seconds", Doc::Time, "The instant.");
+        let typed = text_to_param(&param, "12f").expect("a time");
+        assert_eq!(typed.name, "seconds");
+        assert_eq!(typed.value, json!("12f"));
+    }
+
+    #[test]
+    fn a_word_is_a_word_and_the_reader_checks_it() {
+        let param = ParamDoc::req("kind", Doc::NodeKind, "The kind.");
+        let typed = text_to_param(&param, "filter").expect("a word");
+        assert_eq!(typed.name, "kind");
+        assert_eq!(typed.value, json!("filter"));
+    }
+
+    #[test]
+    fn an_empty_text_is_not_a_value() {
+        // The caller decides what an absent parameter means; this function
+        // is only asked about text that is there.
+        let param = ParamDoc::req("name", Doc::Text, "The name.");
+        let typed = text_to_param(&param, "   ").expect("blank text");
+        assert_eq!(typed.value, json!(""));
+    }
 
     /// `Params` borrows its JSON. A macro that owned the value inside itself
     /// would not help — the borrow would outlive the block — so each test binds

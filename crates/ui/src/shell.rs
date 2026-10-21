@@ -18,7 +18,7 @@
 use egui::{Context, Layout, Rect, RichText, ScrollArea, Ui, Vec2};
 
 use craftkit_core::NodeId;
-use craftkit_engine::{Area, Session, all};
+use craftkit_engine::{Area, ParamDoc, Session, all};
 
 use crate::automation::{Automation, AutomationId, Widget};
 use crate::icons;
@@ -26,10 +26,11 @@ use crate::theme::Tokens;
 
 /// What the shell remembers between frames.
 ///
-/// Selection, the transient status line, and the text of the "key at the
-/// playhead" fields — the things a person typed and the app must not forget
-/// because it redrew. The document lives in the [`Session`]; a second copy
-/// here would be a second thing to go stale.
+/// Selection, the transient status line, the text of the "key at the
+/// playhead" fields, and the form a command's parameters are collected in —
+/// the things a person typed and the app must not forget because it
+/// redrew. The document lives in the [`Session`]; a second copy here would
+/// be a second thing to go stale.
 ///
 /// §105: this was "selection and the status line", and the desktop app drew
 /// every frame with a *new* shell, so the selection was gone before the next
@@ -49,6 +50,39 @@ pub struct ShellState {
     pub key_path: String,
     /// The value typed into the "key at the playhead" field.
     pub key_value: String,
+    /// The form a command's parameters are collected in, if one is open.
+    ///
+    /// It is here and not in the document because it is not part of the
+    /// design: it is what the person is typing into, and a form rebuilt
+    /// every frame would lose every keystroke. §118.
+    pub prompt: Option<Prompt>,
+}
+
+/// A form: the parameters of one command, waiting to be filled in.
+///
+/// §118: the toolbar used to run every command with an empty parameter
+/// object, so seventeen of its twenty-one buttons could only be refused.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Prompt {
+    /// The command the form is for.
+    pub command: String,
+    /// One field per parameter the command asks for.
+    pub fields: Vec<PromptField>,
+    /// What went wrong the last time the person pressed OK.
+    pub error: Option<String>,
+}
+
+/// One field of a [`Prompt`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct PromptField {
+    /// The command's own declaration of this parameter.
+    ///
+    /// The form holds the declaration rather than a copy of it, so a field
+    /// cannot drift from the parameter it fills — and the conversion of what
+    /// was typed is the engine's, because the engine is what reads it.
+    pub param: ParamDoc,
+    /// What the person has typed.
+    pub text: String,
 }
 
 /// The shell.
@@ -88,18 +122,95 @@ impl<'a> Shell<'a> {
     /// The single funnel. Every panel goes through it, so a failure reads the
     /// same wherever it came from and `is_error` is trustworthy.
     pub fn run(&mut self, command: &str, params: serde_json::Value) {
+        let _ = self.try_run(command, params);
+    }
+
+    /// Run one command and say whether it worked.
+    ///
+    /// The form needs to know: a command that was refused keeps the form
+    /// open, with the refusal in it. §118.
+    fn try_run(
+        &mut self,
+        command: &str,
+        params: serde_json::Value,
+    ) -> Result<craftkit_engine::Outcome, craftkit_engine::EngineError> {
         match self.session.execute(command, &params) {
             Ok(outcome) => {
                 self.state.status = outcome.message.clone();
                 self.state.status_is_error = false;
                 log::info!("{command}: {}", outcome.message);
+                Ok(outcome)
             }
             Err(e) => {
                 self.state.status = e.to_string();
                 self.state.status_is_error = true;
                 log::warn!("{command} refused: {e}");
+                Err(e)
             }
         }
+    }
+
+    /// Start a command from the interface.
+    ///
+    /// This is the interactive counterpart of [`Session::execute`], and the
+    /// only path that may ask a question. A command that needs parameters
+    /// opens a **form** for them; a command that needs none runs at once.
+    ///
+    /// The shell knows one thing the engine cannot see: which node the
+    /// person is looking at. A command that addresses a node is given it,
+    /// so "Mute" is one click with a node selected and two without.
+    ///
+    /// §118: the toolbar used to call `run` with an empty parameter object,
+    /// so seventeen of its twenty-one buttons could only be refused.
+    pub fn start(&mut self, command: &str) {
+        let Some(spec) = craftkit_engine::get(command) else {
+            self.state.status = format!("there is no command named `{command}`");
+            self.state.status_is_error = true;
+            return;
+        };
+        let mut fields: Vec<PromptField> = spec
+            .ask_params()
+            .into_iter()
+            .map(|param| PromptField { param: *param, text: String::new() })
+            .collect();
+        // The node the person is looking at, for a command that addresses one.
+        if let Some(id) = self.state.selected
+            && let Some(field) = fields.iter_mut().find(|f| f.param.name == "node")
+        {
+            field.text = id.get().to_string();
+        }
+        // Everything the command asks for is in hand: run it. A command that
+        // asks for nothing has an empty list here, and runs too.
+        if fields.iter().all(|f| !f.text.trim().is_empty()) {
+            match self.params_for(&fields) {
+                Ok(params) => self.run(command, params),
+                Err(e) => {
+                    self.state.prompt = Some(Prompt { command: command.to_string(), fields, error: Some(e) });
+                }
+            }
+            return;
+        }
+        self.state.prompt = Some(Prompt { command: command.to_string(), fields, error: None });
+    }
+
+    /// The JSON a set of filled-in fields is worth.
+    ///
+    /// The conversion is the engine's, because the engine is what reads the
+    /// result: one place decides what a number, a name or a time means.
+    /// §118.
+    fn params_for(&self, fields: &[PromptField]) -> Result<serde_json::Value, String> {
+        let mut map = serde_json::Map::new();
+        for field in fields {
+            if field.text.trim().is_empty() {
+                if field.param.needed() {
+                    return Err(format!("`{}` is required", field.param.name));
+                }
+                continue;
+            }
+            let typed = craftkit_engine::params::text_to_param(&field.param, &field.text)?;
+            map.insert(typed.name.to_string(), typed.value);
+        }
+        Ok(serde_json::Value::Object(map))
     }
 
     /// Draw one frame.
@@ -112,6 +223,92 @@ impl<'a> Shell<'a> {
         egui::SidePanel::left("nodes").show(ctx, |ui| self.node_list(ui, tokens));
         egui::SidePanel::right("properties").show(ctx, |ui| self.properties(ui, tokens));
         egui::CentralPanel::default().show(ctx, |ui| self.plan_and_timeline(ui, tokens));
+        // The form is drawn last, so it is on top of the panels it is about.
+        self.prompt_window(ctx, tokens);
+    }
+
+    /// The form, if one is open.
+    ///
+    /// It is a floating window rather than a panel: the panels are the
+    /// design, and the form is a question about it. §118.
+    fn prompt_window(&mut self, ctx: &Context, tokens: &Tokens) {
+        let Some(mut prompt) = self.state.prompt.take() else { return };
+        let mut fields = std::mem::take(&mut prompt.fields);
+        let command = prompt.command.clone();
+        let label = craftkit_engine::get(&command).map(|s| s.label).unwrap_or("Command");
+        let mut automation = std::mem::take(&mut self.automation);
+        let mut submit = false;
+        let mut cancel = false;
+
+        egui::Window::new("")
+            .collapsible(false)
+            .resizable(false)
+            .title_bar(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                // The form's colours come from the theme, like everything
+                // else the shell draws. `egui`'s own defaults are a second
+                // palette, and a dialog in a different palette is a dialog
+                // that does not look like the window it is in. §118.
+                ui.visuals_mut().window_fill = tokens.surface;
+                ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, tokens.border);
+                ui.visuals_mut().override_text_color = Some(tokens.text);
+                ui.visuals_mut().weak_text_color = Some(tokens.text_dim);
+                // The title is drawn here rather than by the window, so it is
+                // the theme's colour and not `egui`'s dimmed one.
+                ui.label(RichText::new(label).strong().color(tokens.text));
+                for field in fields.iter_mut() {
+                    ui.label(RichText::new(field.param.name).color(tokens.text));
+                    ui.label(RichText::new(field.param.help).color(tokens.text_dim).small().weak());
+                    let response =
+                        ui.add(egui::TextEdit::singleline(&mut field.text).hint_text(field.param.name));
+                    automation.publish(
+                        AutomationId::prompt_field(&command, field.param.name),
+                        response.rect,
+                        true,
+                    );
+                }
+                if let Some(error) = &prompt.error {
+                    ui.label(RichText::new(error).color(tokens.error));
+                }
+                ui.horizontal(|ui| {
+                    let ok = ui.button("OK");
+                    automation.publish(AutomationId::prompt_ok(), ok.rect, true);
+                    if ok.clicked() {
+                        submit = true;
+                    }
+                    let no = ui.button("Cancel");
+                    automation.publish(AutomationId::prompt_cancel(), no.rect, true);
+                    if no.clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+
+        self.automation = automation;
+        prompt.fields = fields;
+
+        if cancel {
+            self.state.prompt = None;
+            return;
+        }
+        if !submit {
+            self.state.prompt = Some(prompt);
+            return;
+        }
+        match self.params_for(&prompt.fields) {
+            Ok(params) => match self.try_run(&prompt.command, params) {
+                Ok(_) => self.state.prompt = None,
+                Err(e) => {
+                    prompt.error = Some(e.to_string());
+                    self.state.prompt = Some(prompt);
+                }
+            },
+            Err(e) => {
+                prompt.error = Some(e);
+                self.state.prompt = Some(prompt);
+            }
+        }
     }
 
     fn toolbar(&mut self, ui: &mut Ui, tokens: &Tokens) {
@@ -125,7 +322,10 @@ impl<'a> Shell<'a> {
                     let id = AutomationId::toolbar(spec.id);
                     let enabled = (spec.enabled)(self.session);
                     if self.button(ui, tokens, id, spec.icon.0, spec.label, enabled) {
-                        self.run(spec.id, serde_json::json!({}));
+                        // `start`, not `run`: a command that needs
+                        // parameters is asked for them, and a command that
+                        // needs none runs at once. §118.
+                        self.start(spec.id);
                     }
                 }
             }
@@ -1328,5 +1528,216 @@ mod tests {
             with.png, other.png,
             "two designs whose notes differ have the same frame: the note is not on the screen"
         );
+    }
+
+    /// The form is on the screen when it is open.
+    ///
+    /// A form that is open and not drawn is a form the person cannot answer,
+    /// and every other test here would still pass: the state says there is a
+    /// prompt, and the picture says there is not. §118.
+    #[test]
+    fn a_frame_with_a_form_is_not_the_frame_without_one() {
+        let mut session = Session::sample();
+        let spec = craftkit_engine::get("doc.rename").expect("the command");
+        let asked = spec.ask_params();
+        let param = **asked.first().expect("the name");
+
+        let open = ShellState {
+            prompt: Some(Prompt {
+                command: "doc.rename".to_string(),
+                fields: vec![PromptField { param, text: "Renamed by the form".to_string() }],
+                error: None,
+            }),
+            ..Default::default()
+        };
+        let with = crate::raster::render(&mut session, 600, 400, &open).expect("the frame renders");
+        let without =
+            crate::raster::render(&mut session, 600, 400, &ShellState::default()).expect("the frame renders");
+
+        assert_ne!(with.png, without.png, "the form is not on the screen");
+    }
+
+    /// Click a named widget and say where it was.
+    ///
+    /// Two frames: the first lays the panels out and the second places them,
+    /// so the rectangle is the one the person would click.
+    fn click_named(
+        ctx: &Context,
+        session: &mut Session,
+        tokens: &Tokens,
+        state: &mut ShellState,
+        name: &str,
+    ) {
+        one_frame(ctx, session, tokens, state, egui::RawInput::default());
+        let automation = one_frame(ctx, session, tokens, state, egui::RawInput::default());
+        let rect =
+            automation.rect(name).unwrap_or_else(|| panic!("`{name}` is on the screen and can be clicked"));
+        press_at(ctx, session, tokens, state, rect.center().x, rect.center().y);
+    }
+
+    /// Type into the field of a form.
+    ///
+    /// The text goes in as egui's own text event, so the widget that has the
+    /// focus is the one that receives it — the same path a keyboard takes.
+    fn type_into(
+        ctx: &Context,
+        session: &mut Session,
+        tokens: &Tokens,
+        state: &mut ShellState,
+        name: &str,
+        text: &str,
+    ) {
+        one_frame(ctx, session, tokens, state, egui::RawInput::default());
+        let automation = one_frame(ctx, session, tokens, state, egui::RawInput::default());
+        let rect =
+            automation.rect(name).unwrap_or_else(|| panic!("`{name}` is on the screen and can be clicked"));
+        // The click gives the field the focus.
+        press_at(ctx, session, tokens, state, rect.center().x, rect.center().y);
+        let input =
+            egui::RawInput { events: vec![egui::Event::Text(text.to_string())], ..Default::default() };
+        one_frame(ctx, session, tokens, state, input);
+    }
+
+    /// A button that needs parameters opens a form instead of being refused.
+    ///
+    /// §118: the toolbar ran every command with an empty parameter object,
+    /// so pressing "Rename plan" said *"`name` this parameter is
+    /// required"* and changed nothing.
+    #[test]
+    fn a_button_that_needs_parameters_opens_a_form() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("doc.rename").as_str());
+
+        let prompt = state.prompt.as_ref().expect("the form is open");
+        assert_eq!(prompt.command, "doc.rename");
+        assert_eq!(prompt.fields.len(), 1, "the form asks for the name and nothing else");
+        assert_eq!(prompt.fields[0].param.name, "name");
+        assert!(!state.status_is_error, "the form is not a refusal: {}", state.status);
+        assert_eq!(session.document().meta.name, "Sample plan", "nothing was renamed");
+    }
+
+    /// The form runs the command when it is filled in.
+    ///
+    /// The whole point of the form: the parameters the person typed are the
+    /// parameters the command runs with, and the command is the engine's.
+    #[test]
+    fn the_form_runs_the_command_when_it_is_filled_in() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("doc.rename").as_str());
+        type_into(
+            &ctx,
+            &mut session,
+            &tokens,
+            &mut state,
+            AutomationId::prompt_field("doc.rename", "name").as_str(),
+            "Renamed by the form",
+        );
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::prompt_ok().as_str());
+
+        assert_eq!(session.document().meta.name, "Renamed by the form");
+        assert!(state.prompt.is_none(), "the form closed when the command ran");
+        assert!(!state.status_is_error, "{}", state.status);
+    }
+
+    /// A command whose parameters the shell knows runs at once.
+    ///
+    /// The shell knows which node the person is looking at, so "Mute" is
+    /// one click with a node selected — and two without, because then the
+    /// form has to ask which node.
+    #[test]
+    fn a_button_whose_parameters_the_shell_knows_runs_the_command() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(first), ..Default::default() };
+
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("node.mute").as_str());
+
+        assert!(state.prompt.is_none(), "the shell knew the node, so no form was needed");
+        assert!(session.document().get(first).expect("the node is there").muted);
+        assert!(!state.status_is_error, "{}", state.status);
+    }
+
+    /// A command that needs a node asks for one when nothing is selected.
+    #[test]
+    fn a_button_that_needs_a_node_asks_for_one() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("node.mute").as_str());
+
+        let prompt = state.prompt.as_ref().expect("the form is open");
+        assert_eq!(prompt.command, "node.mute");
+        assert_eq!(prompt.fields.len(), 1);
+        assert_eq!(prompt.fields[0].param.name, "node");
+        assert!(prompt.fields[0].text.is_empty(), "nothing is selected, so nothing to offer");
+    }
+
+    /// The form says what is wrong with what was typed.
+    ///
+    /// A refusal the form cannot show is a refusal the person has to guess
+    /// about. §118.
+    #[test]
+    fn the_form_says_what_is_wrong_with_what_was_typed() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("doc.range").as_str());
+        type_into(
+            &ctx,
+            &mut session,
+            &tokens,
+            &mut state,
+            AutomationId::prompt_field("doc.range", "fps").as_str(),
+            "lots",
+        );
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::prompt_ok().as_str());
+
+        let prompt = state.prompt.as_ref().expect("the form stays open");
+        let error = prompt.error.as_deref().expect("the form says what is wrong");
+        assert!(error.contains("not a number"), "{error}");
+    }
+
+    /// No toolbar button is refused for wanting a parameter.
+    ///
+    /// This is the whole of §118, as a test: every command in the registry
+    /// has a button, and pressing a button either runs its command or opens
+    /// the form that asks for what it needs. Never a refusal.
+    #[test]
+    fn no_toolbar_button_is_refused_for_wanting_a_parameter() {
+        for spec in all() {
+            let mut session = Session::sample();
+            let ctx = Context::default();
+            let tokens = Tokens::dark();
+            let mut state = ShellState::default();
+
+            one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+            let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+            let id = AutomationId::toolbar(spec.id);
+            // A disabled button has no rectangle, and cannot be pressed.
+            // §107.
+            let Some(rect) = automation.rect(id.as_str()) else { continue };
+            press_at(&ctx, &mut session, &tokens, &mut state, rect.center().x, rect.center().y);
+
+            assert!(
+                !state.status.contains("rejected its parameters"),
+                "the toolbar refused `{}` for wanting a parameter: {}",
+                spec.id,
+                state.status
+            );
+        }
     }
 }

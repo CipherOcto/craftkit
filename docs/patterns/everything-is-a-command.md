@@ -25,6 +25,7 @@ pub struct CommandSpec {
     pub area: Area,
     pub icon: Icon,
     pub shortcut: Option<&'static str>,
+    pub asks: &'static [&'static str],
     pub params: &'static [ParamDoc],
     pub doc: &'static str,
     pub mutates: bool,
@@ -41,6 +42,13 @@ Three fields do the load-bearing work:
   disagree. `Session::execute` feeds `CommandSpec::param_names()` to
   `Params::deny_unknown`, which means an undeclared key is refused by the
   registry rather than by each command remembering to check.
+- **`asks`** says which of those parameters a **person** is asked for when the
+  command is started from the interface. It is a separate field because the two
+  differ on purpose: `node.add` takes a name, a kind and an amount and is happy
+  with none of them, and `doc.range` takes three optional parameters and
+  refuses to run with none of them. A name in `asks` that is not a parameter of
+  the command is refused by a gate, and so is a parameter the command cannot do
+  without that `asks` does not ask for. §118.
 - **`mutates`** decides whether the snapshot becomes an undo entry, whether the
   document is marked dirty, and whether the evaluator re-runs. A read-only
   command must not mark the project dirty.
@@ -75,6 +83,7 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
     icon: Icon("pencil"),
     shortcut: None,
     doc: "Give the plan a new name.",
+    asks: &["name"],
     params: &[ParamDoc::req("name", Doc::Text, "The new name.")],
     mutates: true,
     undoable: true,
@@ -99,9 +108,16 @@ front end.
 The second half of the rule:
 
 **`execute` never opens a dialog, prompts, or touches the clipboard.** Those are
-interactive concerns and belong to `ui.start`, which a front end calls instead.
-A programmatic caller — a script, an agent, the CLI — has no way to answer a
-modal question, so a command that asks one is a command that hangs.
+interactive concerns and belong to the front end's own entry point —
+`craftkit_ui::shell::Shell::start`, which asks the person for the parameters
+the command needs and then calls `execute`. A programmatic caller — a script, an
+agent, the CLI — has no way to answer a modal question, so a command that asks
+one is a command that hangs. §118.
+
+**And the entry point has to exist.** The tree named `ui.start` in four places
+for years and built nothing by that name, so the toolbar ran every command with
+an empty parameter object and seventeen of its twenty-one buttons could only be
+refused. §118.
 
 ## In the code
 

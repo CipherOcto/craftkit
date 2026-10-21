@@ -28,6 +28,7 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
     icon: Icon("pencil"),
     shortcut: None,
     doc: "Give the plan a new name.",
+    asks: &["name"],
     params: &[ParamDoc::req("name", Doc::Text, "The new name.")],
     mutates: true,
     undoable: true,
@@ -48,6 +49,7 @@ pub static DOC_NOTE: CommandSpec = CommandSpec {
     icon: Icon("info"),
     shortcut: None,
     doc: "Set the plan's note: the paragraph that says why the plan is the way it is.",
+    asks: &["text"],
     params: &[ParamDoc::req("text", Doc::Text, "The note. An empty text clears the note.")],
     mutates: true,
     undoable: true,
@@ -83,6 +85,7 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
     icon: Icon("range"),
     shortcut: None,
     doc: "Set the plan's start and end instants and its frame rate.",
+    asks: &["start", "end", "fps"],
     params: &[
         ParamDoc::opt("start", Doc::Time, "First instant. Defaults to the current start."),
         ParamDoc::opt("end", Doc::Time, "One past the last instant. Defaults to the current end."),
@@ -183,6 +186,7 @@ pub static NODE_ADD: CommandSpec = CommandSpec {
     icon: Icon("plus"),
     shortcut: Some("Ctrl+N"),
     doc: "Add a node to the end of the plan and return its id.",
+    asks: &[],
     params: &[
         ParamDoc::opt("name", Doc::Text, "The node's name. Defaults to `<kind> <n>`."),
         ParamDoc::opt("kind", Doc::NodeKind, "One of source, filter, sink, cue, comment."),
@@ -222,6 +226,7 @@ pub static NODE_REMOVE: CommandSpec = CommandSpec {
     icon: Icon("trash"),
     shortcut: Some("Del"),
     doc: "Delete a node. Returns what was removed.",
+    asks: &["node"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -250,6 +255,7 @@ pub static NODE_RENAME: CommandSpec = CommandSpec {
     icon: Icon("pencil"),
     shortcut: Some("F2"),
     doc: "Rename a node. Names need not be unique; ids are what commands should address.",
+    asks: &["node", "name"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -276,6 +282,7 @@ pub static NODE_MUTE: CommandSpec = CommandSpec {
     icon: Icon("mute"),
     shortcut: Some("M"),
     doc: "Mute or unmute a node. A muted node passes the level through untouched.",
+    asks: &["node"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -306,6 +313,7 @@ pub static NODE_KIND: CommandSpec = CommandSpec {
     icon: Icon("swap"),
     shortcut: None,
     doc: "Change what a node does.",
+    asks: &["node", "kind"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -336,6 +344,7 @@ pub static NODE_MOVE: CommandSpec = CommandSpec {
     icon: Icon("arrows"),
     shortcut: None,
     doc: "Move a node to another position. Position matters: a level flows from node to node.",
+    asks: &["node", "index"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -369,6 +378,7 @@ pub static NODE_DUPLICATE: CommandSpec = CommandSpec {
     icon: Icon("copy"),
     shortcut: Some("Ctrl+D"),
     doc: "Copy a node, its properties and its keyframes, directly below the original.",
+    asks: &["node"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -405,6 +415,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
     icon: Icon("value"),
     shortcut: None,
     doc: "Set one property of a node by path. Creates the property if it does not exist.",
+    asks: &["node", "path", "value"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -486,6 +497,7 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
     icon: Icon("undo"),
     shortcut: None,
     doc: "Remove a property's keyframes, leaving its stored value.",
+    asks: &["node", "path"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -524,6 +536,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
     doc: "Key a property at an instant, creating it if absent. The stored value is \
           set to the same value, so clearing the keys later leaves that number rather \
           than whatever the property happened to hold.",
+    asks: &["node", "path", "value"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -600,6 +613,7 @@ pub static KEY_REMOVE: CommandSpec = CommandSpec {
     doc: "Remove the keyframe at an instant. Refuses when there is no key there: \
           a command that reports success without changing anything is how an \
           agent concludes it has done something it has not.",
+    asks: &["node", "path"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -644,6 +658,7 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
     icon: Icon("broom"),
     shortcut: None,
     doc: "Remove every keyframe from a property.",
+    asks: &["node", "path"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -678,6 +693,7 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
     icon: Icon("curve"),
     shortcut: None,
     doc: "Change how a keyframe is left.",
+    asks: &["node", "path", "easing"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -755,6 +771,7 @@ pub static KEY_LIST: CommandSpec = CommandSpec {
     icon: Icon("keys"),
     shortcut: None,
     doc: "List a property's keyframes: when each one is, what it holds and how it is left.",
+    asks: &["node", "path"],
     params: &[
         ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
@@ -804,6 +821,7 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
     icon: Icon("play"),
     shortcut: None,
     doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
+    asks: &["seconds"],
     params: &[
         ParamDoc::either("seconds", Doc::Time, "The instant to go to, in seconds.", "frame"),
         ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
@@ -844,6 +862,7 @@ pub static HISTORY_UNDO: CommandSpec = CommandSpec {
     icon: Icon("undo"),
     shortcut: Some("Ctrl+Z"),
     doc: "Step back one change.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: false,
@@ -868,6 +887,7 @@ pub static HISTORY_REDO: CommandSpec = CommandSpec {
     icon: Icon("redo"),
     shortcut: Some("Ctrl+Shift+Z"),
     doc: "Step forward one undone change.",
+    asks: &[],
     params: &[],
     mutates: true,
     undoable: false,
@@ -894,6 +914,7 @@ pub static PLAN_EVALUATE: CommandSpec = CommandSpec {
     icon: Icon("play"),
     shortcut: None,
     doc: "Evaluate the document at an instant and return the whole plan.",
+    asks: &[],
     params: &[ParamDoc::opt("at", Doc::Time, "The instant. Defaults to the playhead.")],
     mutates: false,
     undoable: false,
@@ -913,6 +934,7 @@ pub static DIAGNOSTICS_LIST: CommandSpec = CommandSpec {
     icon: Icon("warning"),
     shortcut: None,
     doc: "List what the evaluator has to say about the current plan.",
+    asks: &[],
     params: &[],
     mutates: false,
     undoable: false,
@@ -943,6 +965,7 @@ pub static SESSION_STATS: CommandSpec = CommandSpec {
     icon: Icon("info"),
     shortcut: None,
     doc: "Counters for the running session: commands, failures, undo depth, undo memory, kernel recoveries (process-wide).",
+    asks: &[],
     params: &[],
     mutates: false,
     undoable: false,

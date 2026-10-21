@@ -378,7 +378,8 @@ impl Session {
     ///
     /// Note what this does **not** do: it never opens a dialog, prompts, or
     /// touches the clipboard. Those are interactive concerns and belong to
-    /// `ui.start`, which the front ends call instead.
+    /// the front end's own entry point, which asks for the parameters and
+    /// then calls this. §118.
     ///
     /// # What a command costs
     ///

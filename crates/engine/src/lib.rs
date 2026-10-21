@@ -16,8 +16,9 @@
 //!    way to change a document — not a UI-only path, not a "just this once"
 //!    helper that bypasses the registry.
 //! 2. **Programmatic calls never open dialogs.** [`Session::execute`] is
-//!    synchronous and total. Interactive work is a *different* entry point
-//!    (`ui.start`), which the front ends own.
+//!    synchronous and total. Interactive work is a *different* entry point,
+//!    which the front ends own: it asks the person for the parameters and
+//!    then calls this. §118.
 //! 3. **Clone before edit.** A mutating command runs against a snapshot, and the
 //!    snapshot is restored on both an error and a panic.
 //! 4. **Read parameters through [`craftkit_core::Params`].** Never index a

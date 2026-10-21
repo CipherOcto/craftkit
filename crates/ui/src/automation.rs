@@ -136,6 +136,24 @@ impl AutomationId {
         AutomationId(format!("node.{}.keys.{}.clear", id.get(), path))
     }
 
+    /// The name for the field of `param` in the form for `command`.
+    ///
+    /// The form is a set of widgets like any other, and an agent that can
+    /// name them can fill them in. §118.
+    pub fn prompt_field(command: &str, param: &str) -> Self {
+        AutomationId(format!("prompt.{command}.{param}"))
+    }
+
+    /// The name for the form's "OK" button.
+    pub fn prompt_ok() -> Self {
+        AutomationId("prompt.ok".to_string())
+    }
+
+    /// The name for the form's "Cancel" button.
+    pub fn prompt_cancel() -> Self {
+        AutomationId("prompt.cancel".to_string())
+    }
+
     /// The `egui` id, so two widgets cannot collide.
     ///
     /// Salted with the crate name so a name shared with some other egui

@@ -3025,5 +3025,59 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the panel does not say when the keyframes are" \
     "cargo test -p craftkit-ui --profile ci the_panel_says_when_the_keyframes_are"
 
+# The toolbar ran every command with an empty parameter object, so seventeen
+# of its twenty-one buttons could only be refused. §118.
+swap crates/ui/src/shell.rs \
+    '                        self.start(spec.id);' \
+    '                        self.run(spec.id, serde_json::json!({}));'
+expect_catch "ui: the toolbar runs a command with no parameters" \
+    "cargo test -p craftkit-ui --profile ci no_toolbar_button_is_refused_for_wanting_a_parameter"
+
+# The engine stopped saying what a command asks a person for, so the form
+# had nothing to show. §118.
+swap crates/engine/src/command.rs \
+    '        self.asks.iter().filter_map(|name| self.params.iter().find(|p| p.name == *name)).collect()' \
+    '        Vec::new()'
+expect_catch "engine: the catalogue no longer says what a command asks for" \
+    "cargo test -p craftkit-ui --profile ci no_toolbar_button_is_refused_for_wanting_a_parameter"
+
+# A command that needs a parameter stopped asking for it, so the form could
+# not ask for what the command cannot do without. §118.
+swap crates/engine/src/commands.rs \
+    '    asks: &["name"],' \
+    '    asks: &[],'
+expect_catch "engine: a command that needs a parameter does not ask for it" \
+    "cargo test -p craftkit-engine --profile ci every_parameter_a_command_needs_is_one_it_asks_for"
+
+# The form's OK button stopped running the command, so the form asked a
+# question and never did anything with the answer. §118.
+swap crates/ui/src/shell.rs \
+    '                    if ok.clicked() {
+                        submit = true;
+                    }' \
+    '                    if ok.clicked() {
+                        submit = false;
+                    }'
+expect_catch "ui: the form's OK button does not run the command" \
+    "cargo test -p craftkit-ui --profile ci the_form_runs_the_command_when_it_is_filled_in"
+
+# A node's name went to `node` instead of `node_name`, so the two spellings
+# of one parameter stopped being two spellings. §116, §118.
+swap crates/engine/src/params.rs \
+    '                    Some(alternative) => Ok(Typed { name: alternative, value: serde_json::json!(trimmed) }),' \
+    '                    Some(_alternative) => Ok(Typed { name: param.name, value: serde_json::json!(trimmed) }),'
+expect_catch "engine: a node's name no longer goes to the name spelling" \
+    "cargo test -p craftkit-engine --profile ci a_node_id_and_a_node_name_are_the_same_parameter_in_two_spellings"
+
+# The form stopped being drawn, so the state said there was a form and the
+# screen said there was not. §118.
+swap crates/ui/src/shell.rs \
+    '        // The form is drawn last, so it is on top of the panels it is about.
+        self.prompt_window(ctx, tokens);' \
+    '        // The form is drawn last, so it is on top of the panels it is about.
+        let _ = &self.state.prompt;'
+expect_catch "ui: the form is not on the screen" \
+    "cargo test -p craftkit-ui --profile ci a_frame_with_a_form_is_not_the_frame_without_one"
+
 restore
 finish
