@@ -111,6 +111,7 @@ readonly FILES=(
     xtask/src/ci.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
+    docs/recipes/add-a-command.md
     docs/recipes/add-an-icon.md
     docs/recipes/change-the-file-format.md
     docs/recipes/fix-a-crash.md
@@ -3532,6 +3533,17 @@ swap crates/engine/src/commands.rs \
     '        let _asked = p.bool("muted")?;
         let muted = !node_mut(s, id, NODE_MUTE.id)?.muted;'
 expect_catch "engine: a command declares a parameter it never reads" \
+    "cargo xtask lists"
+
+# The recipe for adding a command quotes the command it wants you to copy.
+# The quote had drifted: it was missing a field, so it did not compile, and
+# it taught the two mistakes sections 93 and 116 were about. The block now
+# says it is exact, and the gate compares statics as well as functions and
+# structs. §140.
+swap docs/recipes/add-a-command.md \
+    '        ParamDoc::either("node", Doc::NodeRef, "The node'"'"'s id, or its name.", "node_name"),' \
+    '        ParamDoc::req("node", Doc::NodeRef, "The node'"'"'s id."),'
+expect_catch "prose: a quoted command spec is not the one in the code" \
     "cargo xtask lists"
 
 restore

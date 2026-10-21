@@ -110,7 +110,7 @@ or a design file. Indexing panics on a missing or out-of-range key, and the
 caller gets an `internal` error instead of being told which key was wrong.
 
 **Check:** read every parameter through `craftkit_core::Params` — `p.text`,
-`p.bool`, `p.int`, `p.num`, `p.num_in`, `p.raw` — or through
+`p.bool`, `p.int`, `p.num`, `p.num_in`, `p.raw_json` — or through
 `crates/engine/src/params.rs` (`node_by_id_or_name`, `value_for`, `kind_of`).
 This is rule 4 in `crates/engine/src/lib.rs`, and it is not negotiable.
 

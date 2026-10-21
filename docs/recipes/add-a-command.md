@@ -31,7 +31,8 @@ reviewer reading top to bottom sees a sorted manual.
 `node.mute` (`NODE_MUTE` in `crates/engine/src/commands.rs`) is the closest template for
 anything that addresses a node and flips a boolean:
 
-```rust
+```rust exact
+// crates/engine/src/commands.rs
 pub static NODE_MUTE: CommandSpec = CommandSpec {
     id: "node.mute",
     label: "Mute node",
@@ -39,8 +40,9 @@ pub static NODE_MUTE: CommandSpec = CommandSpec {
     icon: Icon("mute"),
     shortcut: Some("M"),
     doc: "Mute or unmute a node. A muted node passes the level through untouched.",
+    asks: &["node"],
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id, or its name.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::opt("muted", Doc::Bool, "True to mute, false to unmute. Defaults to the opposite."),
     ],
@@ -53,11 +55,12 @@ pub static NODE_MUTE: CommandSpec = CommandSpec {
             Some(b) => b,
             None => !node_mut(s, id, NODE_MUTE.id)?.muted,
         };
-        node_mut(s, id, NODE_MUTE.id)?.muted = muted;
+        let changed = node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);
         Ok(Outcome::with(
             if muted { "muted" } else { "unmuted" },
             serde_json::json!({ "id": id.get(), "muted": muted }),
-        ))
+        )
+        .unchanged_if(!changed))
     },
 };
 ```
@@ -71,7 +74,7 @@ Rules the surrounding code already enforces and you must match:
 - **The first parameter is the subject** and must be required if any parameter
   is. See `every_parameter_is_documented_and_uniquely_named`.
 - **Read every parameter through `Params`.** `p.text`, `p.bool`, `p.int`,
-  `p.num`, `p.num_in`, `p.raw`. Never `p.as_object().unwrap()["x"]`.
+  `p.num`, `p.num_in`, `p.raw_json`. Never `p.as_object().unwrap()["x"]`.
 - **Return an error, do not clamp.** `doc.range` (`DOC_RANGE` in `crates/engine/src/commands.rs`)
   returns a `EngineError::Param` naming the parameter and the range rather than
   silently substituting `24`.
@@ -157,7 +160,7 @@ needs a new condition, add it there.
 the `ALL` list in `crates/engine/src/command.rs`:
 
 ```rust
-static ALL: [&CommandSpec; 21] = [
+static ALL: [&CommandSpec; 23] = [
     …
     &NODE_MUTE,
     &NODE_ENABLE,   // new
@@ -168,7 +171,7 @@ static ALL: [&CommandSpec; 21] = [
 
 Two things at once, both required:
 
-1. **Bump the declared length** from `21` to `22`. The array is a `static` with
+1. **Bump the declared length** from `23` to `24`. The array is a `static` with
    an explicit length so that `all()` returns `&'static [&'static CommandSpec]`
    rather than a reference to a temporary. The declared length is also what makes
    "added the spec, forgot the table" a compile error instead of a silently
@@ -247,7 +250,7 @@ checks that tell you *which command* is wrong, not *why*.
 | Spec written but not added to `ALL` | The compiler, via the declared array length | A clean build where the command simply does not exist. |
 | `ALL` entry out of order | `the_catalogue_is_sorted_and_free_of_duplicates` | Every later PR conflicts on this array. |
 | Id not dotted lower case, or not matching its area | `every_id_is_dotted_lower_case_and_starts_with_its_area` | The CLI listing and the MCP tool list drift out of sync with the ids scripts use. |
-| A parameter read but not declared in `params` | `every_parameter_is_documented_and_uniquely_named` *if* you notice — but see below | **The command is unusable.** |
+| A parameter read but not declared in `params` | `cargo xtask lists` (the readers are derived from the tree) | **The command is unusable.** |
 | First parameter optional while another is required | `every_parameter_is_documented_and_uniquely_named` | An agent cannot tell what the command operates on. |
 | Empty `doc`, empty `help`, empty `label` | `every_id_is_dotted_lower_case_and_starts_with_its_area` and `every_parameter_is_documented_and_uniquely_named` | The MCP tool description and the CLI `--help` say nothing. |
 | `mutates: true` on a read-only command | `every_read_only_command_leaves_the_document_alone` (in `crates/engine/src/session.rs`) if it is used as a probe | Every probe dirties the document and pushes undo. |
@@ -283,10 +286,13 @@ So a `node.enable` that reads `p.bool("on")` but documents `enabled` returns
 required, *and* an agent that correctly sends `{"node":1,"enabled":true}` gets
 `bad-parameter: unknown parameter 'enabled'`. Nothing works, nothing panics,
 nothing looks like a bug in your `run` function, and the parameter table looks
-perfectly reasonable. The existing test `every_parameter_is_documented_and_uniquely_named`
-only checks that what you declared has help text and a unique name — it does
-not check that what you *read* is declared. That gap is why your own test has
-to actually call the command with its own parameters.
+perfectly reasonable. The test `every_parameter_is_documented_and_uniquely_named` only checks that
+what you declared has help text and a unique name — it does not check that
+what you *read* is declared. `cargo xtask lists` does, since §139: it finds
+the readers by looking for the functions that take a `&Params`, and it refuses
+a command that reads a parameter it does not declare. Your own test should
+still call the command with its own parameters — that is what proves the
+*values* are right, which no gate can see.
 
 ### The other three worth naming
 

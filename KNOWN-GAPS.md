@@ -15689,6 +15689,162 @@ half names the half that is already loud.
 
 ---
 
+## 140. The recipe for adding a command taught the two bugs the tree had already fixed
+
+### The measurement
+
+`docs/recipes/add-a-command.md` is the document an agent follows to add a
+command to craftkit. It quotes a command to copy:
+
+> `node.mute` (`NODE_MUTE` in `crates/engine/src/commands.rs`) is the closest
+> template for anything that addresses a node and flips a boolean
+
+The quote had drifted from the code in **three** places. Diffed against the
+real `NODE_MUTE`:
+
+```text
+-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
++        ParamDoc::either("node", Doc::NodeRef, "The node's id, or its name.", "node_name"),
+-        node_mut(s, id, NODE_MUTE.id)?.muted = muted;
++        let changed = node_mut(s, id, NODE_MUTE.id)?.set_muted(muted);
+```
+
+and one field missing altogether: `asks`.
+
+**The quote does not compile.** Pasting it into the engine is the proof:
+
+```text
+error[E0063]: missing field `asks` in initializer of `CommandSpec`
+```
+
+So the document that tells you how to add a command gives you a command that
+does not build. That is loud, at least — you find out in a minute.
+
+The two edits are worse, because they compile and they are **the bugs the tree
+had already fixed**:
+
+- **`ParamDoc::req("node", …)` instead of `ParamDoc::either("node", …,
+  "node_name")`** — the command it teaches cannot address a node by name. That
+  is §116's defect, and §116 is the section that fixed it.
+- **`node_mut(s, id, …)?.muted = muted;` instead of `set_muted(muted)`** — the
+  model cannot report whether the value changed, so the command never says
+  "changed nothing" and the engine's "declared that it mutates the document
+  but changed nothing" check (§93, §44) never fires. That is §93's defect, and
+  §93 is the section that fixed it.
+
+**The recipe also named an API that does not exist.** Its rules list said to
+read parameters through "`p.text`, `p.bool`, `p.int`, `p.num`, `p.num_in`,
+`p.raw`" — and `p.raw` was renamed to `p.raw_json` in §136. So did the
+playbook (§136 renamed the method and updated `AGENTS.md` and the skill, and
+missed two documents).
+
+And its step 5 said the catalogue was `static ALL: [&CommandSpec; 21]` and to
+"bump the declared length from `21` to `22`". The catalogue has **23**
+commands.
+
+### Why nothing noticed
+
+**The quote was not marked exact.** The tree has a gate for this: a block
+marked ```` ```rust exact ```` is compared with the code it names, and the
+gate says *"every exact block quotes the code it claims to"*. The recipe's
+block was a plain ```` ```rust ```` block — a copy, and nothing said so.
+
+The gate compares **functions and structs**. A command spec is neither: it is a
+`pub static`, and a static that was never compared was a static nobody
+checked.
+
+**The other numbers were in the wrong shape.** The gate *"every number of
+commands in prose is the registry's number"* looks for the phrase *"N
+commands"*. The recipe says *"21"* — inside an array type. A number in a
+sentence and a number in a type are the same number, and only one of them is
+a claim the gate can read.
+
+**A rename leaves prose behind.** §136 renamed a public method and updated
+the two documents it knew about. There is no gate that says *"a method named
+in prose still exists"*: the symbol gate checks claims that **name a file**,
+and `p.raw` names none.
+
+### The fix
+
+**The quote is the code.** The recipe's block is the current `NODE_MUTE`, and
+it says so:
+
+````text
+```rust exact
+// crates/engine/src/commands.rs
+pub static NODE_MUTE: CommandSpec = CommandSpec {
+…
+```
+````
+
+**The gate compares statics too.** `statics_in` and `static_in` read a
+`pub static` out of a block and out of the source, and the comparison is
+**line for line** — a command spec is quoted whole, because a command that is
+one field out of date is a command that does not compile.
+
+The drift is caught with both sides shown:
+
+```text
+crates/engine/src/commands.rs: the block at line 35 quotes `NODE_MUTE`, and it is not the one in
+crates/engine/src/commands.rs
+     the document says:
+     …
+     the file says:
+     …
+     Quote the code, or stop calling the block exact.
+```
+
+**The other numbers and names are right**: `p.raw_json`, `23` commands, and
+the step that says what to bump.
+
+### What now holds it
+
+One mutation in `scripts/mutation-test-gates.sh` — *"prose: a quoted command
+spec is not the one in the code"* — which makes the recipe's block stale again
+and runs `cargo xtask lists`.
+
+And the gate it uses is the old one, extended: *"every exact block quotes the
+code it claims to"*, which had two mutations of its own (§40, §75) and now
+covers a third shape of quoted code.
+
+### What is still open
+
+**A block that is not marked exact is not checked.** The recipe's other code
+blocks — the `ALL` array, the `deny_unknown` snippet, the test example — are
+still plain blocks. They are *illustrations* rather than quotes, and each one
+is a copy that can drift. The gate can only check a copy that says it is one.
+
+**The number of commands in prose is still only read in one shape.** *"21
+commands"* would be caught; *"21"* inside `[&CommandSpec; 21]` is not. The
+recipe's step 5 now says 23, and nothing checks it. A gate for "a number in
+an array type in prose is the array's length" is possible, and it is not
+written.
+
+**A method named in prose is still not checked.** `p.raw_json` is right today
+and `p.raw` was wrong yesterday, and the gate that noticed said nothing. The
+narrow version — the tree's own `p.` convention for a `Params` — would be
+checkable: a method the tree's source never calls is not a method the prose
+should name. It is not written.
+
+### The lesson
+
+**A copy in a document is a copy of the code, and it is checked only if it
+says so.** The recipe's block was a copy, the gate existed, and the block did
+not claim to be exact — so the gate never looked at it. The marker was the
+whole difference.
+
+**The gate that compares code has to know every shape of code.** It compared
+functions and structs and not statics, and the tree's central artefact — a
+command — is a static. A gate that covers two of three shapes looks complete
+and is not.
+
+**A rename has a second half, and the second half is prose.** §136 renamed
+`Params::raw` to `Params::raw_json` and updated two of the four documents
+that named it. The two it missed were the two a person reads *before* writing
+code.
+
+---
+
 ---
 
 ## What enforces what
@@ -15732,7 +15888,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The README's layer table matches the code** | `readme_layers` | 1 mutation — §37 |
 | **The CLI's help lists every subcommand** | `the_help_lists_every_subcommand_the_parser_accepts` | 1 mutation — §38 |
 | **A symbol claimed to be in a file is in it** | `symbol_file_claims` | 1 mutation — §39 |
-| **An exact block quotes the code it claims to — functions and structs** | `quoted_code_matches_the_source` | 3 mutations — §40, §75 |
+| **An exact block quotes the code it claims to — functions, structs and statics** | `quoted_code_matches_the_source` | 4 mutations — §40, §75, §140 |
 | **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |

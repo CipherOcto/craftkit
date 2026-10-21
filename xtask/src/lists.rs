@@ -2735,7 +2735,8 @@ pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String
             };
             let quoted = functions_in(&block);
             let structs = structs_in(&block);
-            if quoted.is_empty() && structs.is_empty() {
+            let statics = statics_in(&block);
+            if quoted.is_empty() && structs.is_empty() && statics.is_empty() {
                 problems.push(format!(
                     "{relative}: the block at line {number} is marked exact but quotes no code"
                 ));
@@ -2769,10 +2770,74 @@ pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String
                     )),
                 }
             }
+            for (name, lines) in statics {
+                match static_in(&code, &name) {
+                    None => problems.push(format!(
+                        "{relative}: the block at line {number} quotes `{name}`, and {source} has no static of that name"
+                    )),
+                    Some(original) if original == lines => {}
+                    Some(original) => problems.push(format!(
+                        "{relative}: the block at line {number} quotes `{name}`, and it is not the one in {source}\n     \
+                         the document says:\n{}\n     the file says:\n{}",
+                        indent(&lines),
+                        indent(&original)
+                    )),
+                }
+            }
         }
     }
     problems.sort();
     Ok(problems)
+}
+
+/// The statics a block quotes, as (name, lines).
+///
+/// A static is quoted **whole**: the recipe for adding a command shows the
+/// command, and a command that is one field out of date is a command that
+/// does not compile. §140.
+fn statics_in(block: &[String]) -> Vec<(String, Vec<String>)> {
+    let mut found = Vec::new();
+    for (index, line) in block.iter().enumerate() {
+        let Some(rest) = after_visibility(line.trim()) else { continue };
+        let Some(rest) = rest.strip_prefix("static ") else { continue };
+        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        if name.is_empty() {
+            continue;
+        }
+        found.push((name, static_lines(block, index)));
+    }
+    found
+}
+
+/// A static in `code`, by name.
+fn static_in(code: &str, name: &str) -> Option<Vec<String>> {
+    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+    let index = lines.iter().position(|line| {
+        let Some(rest) = after_visibility(line.trim()) else { return false };
+        let Some(rest) = rest.strip_prefix("static ") else { return false };
+        let found: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        found == name
+    })?;
+    Some(static_lines(&lines, index))
+}
+
+/// The lines of a static, from its `static` line to the `};` that closes it.
+fn static_lines(lines: &[String], start: usize) -> Vec<String> {
+    let indent = lines[start].len() - lines[start].trim_start().len();
+    let mut out = vec![lines[start].trim().to_string()];
+    for line in &lines[start + 1..] {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let own = line.len() - line.trim_start().len();
+        if trimmed == "};" && own == indent {
+            out.push(trimmed.to_string());
+            break;
+        }
+        out.push(trimmed.to_string());
+    }
+    out
 }
 
 /// The structs a block quotes, as (name, fields).
