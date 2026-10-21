@@ -167,6 +167,19 @@ pub enum Widget {
     Found { rect: Rect, enabled: bool },
 }
 
+/// What is at a point.
+///
+/// The name, and whether it can be clicked. The two go together because they
+/// are one fact about the screen: a button that is greyed out is on the
+/// screen, and pressing it does nothing. §107.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hit<'a> {
+    /// The widget's name.
+    pub name: &'a str,
+    /// Whether the widget can be clicked.
+    pub enabled: bool,
+}
+
 /// What the shell published this frame.
 ///
 /// Rebuilt every frame and dropped after, so a widget that disappears does not
@@ -277,14 +290,29 @@ impl Automation {
     /// This is what makes `ui.click` answerable: an agent that knows a button
     /// exists can ask where it is, and an agent given a point can ask what is
     /// there, without either of them guessing.
-    pub fn at(&self, x: f32, y: f32) -> Option<&str> {
+    ///
+    /// The answer carries **whether the widget can be clicked**, because that is
+    /// half of what is at a point: a disabled button is on the screen and
+    /// cannot be pressed, and an answer that left that out would send an agent
+    /// to press something that does not move. §107.
+    pub fn at(&self, x: f32, y: f32) -> Option<Hit<'_>> {
         if !x.is_finite() || !y.is_finite() {
             return None;
         }
         self.entries
             .iter()
             .rfind(|(_, rect, _)| rect.contains(egui::pos2(x, y)))
-            .map(|(id, _, _)| id.0.as_str())
+            .map(|(id, _, enabled)| Hit { name: id.0.as_str(), enabled: *enabled })
+    }
+
+    /// The names of the widgets that are on the screen but cannot be clicked.
+    ///
+    /// Sorted, so the answer is the same every time. §107.
+    pub fn disabled_names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> =
+            self.entries.iter().filter(|(_, _, enabled)| !*enabled).map(|(id, _, _)| id.0.as_str()).collect();
+        names.sort_unstable();
+        names
     }
 
     /// The rectangle at `name`, if it is there and enabled.
@@ -390,6 +418,37 @@ mod tests {
             assert_ne!(bar, AutomationId::property(craftkit_core::NodeId(1), path));
         }
         assert_ne!(bar, AutomationId::node_row(craftkit_core::NodeId(1)));
+    }
+
+    /// The answer at a point says whether the widget can be clicked.
+    ///
+    /// §107: the answer was the name and nothing else, so a click on a
+    /// greyed-out button said "that button is at that point" — and the button
+    /// could not be pressed. The same question asked by name was answered
+    /// properly, so the two ways of asking disagreed about one widget.
+    #[test]
+    fn the_answer_at_a_point_says_whether_it_can_be_clicked() {
+        let mut a = Automation::new();
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
+        a.publish(AutomationId::toolbar("history.undo"), rect, false);
+        let hit = a.at(5.0, 5.0).expect("there is a widget at that point");
+        assert_eq!(hit.name, "toolbar.history.undo");
+        assert!(!hit.enabled, "the widget is disabled and the answer does not say so");
+        assert_eq!(a.disabled_names(), vec!["toolbar.history.undo"]);
+    }
+
+    /// Only the widgets that cannot be clicked are in the list of the dead ones.
+    #[test]
+    fn only_the_widgets_that_cannot_be_clicked_are_in_the_dead_list() {
+        let mut a = Automation::new();
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
+        a.publish(AutomationId::toolbar("node.add"), rect, true);
+        a.publish(AutomationId::toolbar("history.undo"), rect, false);
+        // The topmost widget at that point is the last one published there.
+        let hit = a.at(5.0, 5.0).expect("there is a widget at that point");
+        assert_eq!(hit.name, "toolbar.history.undo");
+        assert!(!hit.enabled, "the topmost widget there is the disabled one");
+        assert_eq!(a.disabled_names(), vec!["toolbar.history.undo"]);
     }
 
     #[test]

@@ -351,6 +351,13 @@ named … on screen". To ask about a screen with a node selected, send
 `"selected": <node id>`; the reply says which node it drew, and a node that is
 not in the document is refused. §106.
 
+**Some widgets are on the screen but cannot be clicked.** The reply carries a
+`disabled` list of the names that are there but dead — a greyed-out Undo
+button, for one. A click on one is refused, by name and by point alike, and
+says so. Before §107 a click by point said "that button is at that point"
+while a click by name said "it is on screen but disabled": one question, two
+answers. §107.
+
 **The method name is the action.** `ui.render`/`ui.screenshot`/`ui.click` each
 mean themselves; only the bare `ui` reads `params.action`, and giving both a
 method and a disagreeing `action` is refused. This is the shape that matters:

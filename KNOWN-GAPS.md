@@ -11031,6 +11031,136 @@ agreeing with each other.
 
 ---
 
+## 107. One question, two answers: a greyed-out button was on the screen and could not be pressed
+
+§104 made `ui.click` take a name *or* a point. It said: "a name is a name, a
+point is a point, and the two spellings must not disagree". This is the
+section where they did.
+
+### The measurement
+
+On the running app, over the control channel, with nothing to undo:
+
+```
+ui.click {"name": "toolbar.history.undo"}
+  -> ok: false | `toolbar.history.undo` is on screen but disabled, so there is
+                   nothing to click
+
+ui.click {"x": 1015.1, "y": 32.0}          # the middle of that same button
+  -> ok: true  | `toolbar.history.undo` is at that point; a click reports where
+                   it landed and does not activate anything
+```
+
+**The same widget, the same moment, two answers.** Asked by name, the click was
+refused: the button is on the screen and cannot be clicked. Asked by point —
+at the button's own centre — the click was accepted and the button was
+reported as the thing that was there.
+
+And the reply that lists the screen did not say which of its widgets were
+dead:
+
+```
+ui.widgets -> 34 names, 34 rectangles
+ui.click {"name": "toolbar.history.undo"} -> refused
+```
+
+The Undo button had a rectangle in the map, a name in the list, and no way to
+be pressed. The only way to find out was to try.
+
+### Why nothing noticed
+
+**The registry knew and the accessors dropped it.** `Automation` has carried
+`enabled` on every entry since it was written, and `Widget::Found` carries it
+too. But `Automation::at()` answered with the **name** and threw the flag
+away, and `Automation::rects()` answered with the **rectangle** and threw it
+away. Two of the three ways of asking about the registry could not say
+whether a widget is live.
+
+**The two clicks were written a week apart.** §104's by-name refusal was
+written to answer "what if the caller named a disabled widget?"; the by-point
+path answered "what is at this point?" and was written before the registry
+knew about `enabled` at all. Neither was wrong where it stood; the wrongness
+was in the *combination*, and nothing had ever asked the combination.
+
+**A greyed-out button looks like a button.** In the picture, in the list of
+names, in the map of rectangles — it is there, and it is the only kind of
+button there is in the picture.
+
+### The fix
+
+**One rule, in one place.** The rule that a disabled widget cannot be clicked
+now lives in the **click**, which is the thing that clicks. §104's separate
+refusal in the by-name path is gone — not because it was wrong, but because
+two spellings of one rule is how they come to disagree, and they did.
+
+**The registry's answers keep the flag.** `Automation::at()` answers with a
+`Hit` — the name *and* whether it can be clicked — and `Automation::disabled_names()`
+lists the widgets that are on the screen and dead.
+
+**The reply says which are dead.** `ui.widgets` and `ui.render` carry a
+`disabled` list beside the names and the rectangles, so an agent does not have
+to find out by trying.
+
+**Both ways of asking refuse the same thing, in the same words.** A click by
+name and a click by point on a disabled widget now give the same message —
+and a widget that is *not there at all* is still a different refusal, because
+"it is there but dead" and "it is not there" are different facts (§104).
+
+Measured on the running app, after the fix:
+
+```
+ui.widgets -> disabled: ['toolbar.history.redo', 'toolbar.history.undo']
+ui.click {"name": "toolbar.history.undo"} -> refused | `toolbar.history.undo`
+    is on screen but disabled, so there is nothing to click
+ui.click {"x": 1015.1, "y": 32.0}         -> refused | the same words
+ui.click {"name": "nodes.row.1"}           -> ok | `nodes.row.1` is at that point
+ui.click {"name": "nodes.row.9999"}        -> refused | there is no widget named
+    `nodes.row.9999` on screen
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A click on a disabled widget is refused | `a_click_on_a_disabled_widget_is_refused` |
+| A click on a disabled widget is refused however it is asked for | `a_click_on_a_disabled_widget_is_refused_how_it_is_asked_for` |
+| The widgets reply says which widgets cannot be clicked | `the_widgets_reply_says_which_widgets_cannot_be_clicked` |
+| The answer at a point says whether it can be clicked | `the_answer_at_a_point_says_whether_it_can_be_clicked` |
+| Only the widgets that cannot be clicked are in the dead list | `only_the_widgets_that_cannot_be_clicked_are_in_the_dead_list` |
+| A widget that is not there is refused differently from one that is dead | `a_disabled_widget_is_not_the_same_as_one_that_is_not_there` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: a click on a disabled
+widget is not refused; the answer at a point does not say whether it can be
+clicked; the dead list is the list of the live ones; a widget that is not
+there is refused as though it were disabled.
+
+### The lesson
+
+**One question, one answer — however it is asked.** §104 made a name and a
+point two spellings of the same act, and this is what that costs: two
+spellings, two code paths, two answers, and a bug that only exists in the
+gap between them.
+
+**The rule was in the registry the whole time.** Not "the registry should
+have known" — it knew, and three of its four accessors could not say so. A
+fact that is stored but cannot be *asked for* is a fact that the tree has,
+and its users do not.
+
+**A disabled control is not a missing control, and both are not a control that
+works.** Three different states, three different answers, and the tree has to
+be able to tell them apart — which is why the refusal says *which* one it is.
+
+**A restored file with an old timestamp is a stale build.** This section was
+measured wrong once: a scratch script that restored a mutated file with
+`cp -a` — which keeps the backup's old timestamp — left cargo believing the
+crate was unchanged, so the next build kept the **mutated** code and the
+measurement said the fix had inverted the list. The project's own mutation
+script has known this for a while: its `restore` **touches** every file it
+puts back, for exactly this reason. A measurement of a tree that was put back
+by hand is a measurement of the wrong tree unless the timestamps say so too.
+
+---
+
 ---
 
 ## What enforces what
@@ -11253,6 +11383,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The channel reports the window's screen over the socket** | `craftkit` test | 1 mutation — §106 |
 | **A selected node that is not there is refused** | `craftkit` test | 1 mutation — §106 |
 | **A `selected` that is not a node id is refused** | `craftkit` test | — |
+| **A click on a disabled widget is refused** | `craftkit-ui` test | 1 mutation — §107 |
+| **A click on a disabled widget is refused however it is asked for** | `craftkit` test | — |
+| **The widgets reply says which widgets cannot be clicked** | `craftkit` test | 1 mutation — §107 |
+| **The answer at a point says whether it can be clicked** | `craftkit-ui` test | 1 mutation — §107 |
+| **Only the widgets that cannot be clicked are in the dead list** | `craftkit-ui` test | — |
+| **A widget that is not there is refused differently from one that is dead** | `craftkit-ui` test | 1 mutation — §107 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

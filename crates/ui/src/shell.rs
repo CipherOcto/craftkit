@@ -785,7 +785,7 @@ mod tests {
                 assert!(rect.width() > 0.0, "`{name}` has no width: {rect:?}");
                 let centre = rect.center();
                 assert_eq!(
-                    registry.at(centre.x, centre.y),
+                    registry.at(centre.x, centre.y).map(|hit| hit.name),
                     Some(name.as_str()),
                     "`{name}` is published but the registry answers for something else there"
                 );
@@ -851,7 +851,7 @@ mod tests {
             };
             let centre = rect.center();
             assert_eq!(
-                registry.at(centre.x, centre.y),
+                registry.at(centre.x, centre.y).map(|hit| hit.name),
                 Some(name),
                 "the registry publishes `{name}` but answers for something else at its centre"
             );

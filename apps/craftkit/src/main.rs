@@ -389,6 +389,7 @@ fn ui_request(
                             ("height".to_string(), Json::from(frame.height)),
                             ("widgets".to_string(), Json::from(frame.automation.names())),
                             ("rects".to_string(), rects(&frame.automation)),
+                            ("disabled".to_string(), Json::from(frame.automation.disabled_names())),
                             ("selected".to_string(), selected.map(Json::from).unwrap_or(Json::Null)),
                         ]
                         .into_iter()
@@ -455,6 +456,7 @@ fn ui_request(
                         [
                             ("widgets".to_string(), Json::from(frame.automation.names())),
                             ("rects".to_string(), rects(&frame.automation)),
+                            ("disabled".to_string(), Json::from(frame.automation.disabled_names())),
                             ("width".to_string(), Json::from(frame.width)),
                             ("height".to_string(), Json::from(frame.height)),
                             ("selected".to_string(), selected.map(Json::from).unwrap_or(Json::Null)),
@@ -997,8 +999,78 @@ mod tests {
         assert!(response.message.as_deref().unwrap_or("").contains("node id"), "{:?}", response.message);
     }
 
-    /// The channel, over a socket, reports the screen the window is showing.
+    /// A click on a disabled widget is refused, however it is asked for.
     ///
+    /// §107: the click by point said "that button is at that point", and the
+    /// button was greyed out; the click by name said "it is on screen but
+    /// disabled, so there is nothing to click". One question, two answers.
+    #[test]
+    fn a_click_on_a_disabled_widget_is_refused_how_it_is_asked_for() {
+        let mut session = craftkit_engine::Session::sample();
+        let state = craftkit_ui::shell::ShellState::default();
+
+        // Where the disabled Undo button is, from the widgets reply.
+        let widgets = ui_request(
+            &mut session,
+            &ui_request_params("ui", serde_json::json!({ "action": "widgets" })),
+            &state,
+        );
+        let rects = widgets
+            .data
+            .as_ref()
+            .and_then(|d| d.get("rects"))
+            .and_then(|v| v.as_object())
+            .expect("the rectangles");
+        let rect = rects
+            .get("toolbar.history.undo")
+            .and_then(|v| v.as_array())
+            .expect("the undo button's rectangle");
+        let x = rect[0].as_f64().expect("an x") + rect[2].as_f64().expect("a width") / 2.0;
+        let y = rect[1].as_f64().expect("a y") + rect[3].as_f64().expect("a height") / 2.0;
+
+        let by_point = ui_request(
+            &mut session,
+            &ui_request_params("ui", serde_json::json!({ "action": "click", "x": x, "y": y })),
+            &state,
+        );
+        let by_name = ui_request(
+            &mut session,
+            &ui_request_params(
+                "ui",
+                serde_json::json!({ "action": "click", "name": "toolbar.history.undo" }),
+            ),
+            &state,
+        );
+        assert!(!by_point.ok, "a click on a disabled widget was accepted: {:?}", by_point.message);
+        assert!(!by_name.ok, "a click on a disabled widget was accepted: {:?}", by_name.message);
+        assert_eq!(
+            by_point.message, by_name.message,
+            "the two ways of asking about one widget gave two answers"
+        );
+        assert!(by_point.message.as_deref().unwrap_or("").contains("disabled"), "{:?}", by_point.message);
+    }
+
+    /// The widgets reply says which of the widgets cannot be clicked.
+    ///
+    /// §107: the reply listed every widget and where it was, and a greyed-out
+    /// button looked exactly like a live one — so the only way to find out was
+    /// to try to click it.
+    #[test]
+    fn the_widgets_reply_says_which_widgets_cannot_be_clicked() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui", serde_json::json!({ "action": "widgets" }));
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
+        assert!(response.ok, "the widgets reply was refused: {:?}", response.message);
+        let data = response.data.as_ref().expect("the reply carries data");
+        let disabled = data.get("disabled").and_then(|v| v.as_array()).expect("the dead widgets");
+        let names: Vec<&str> = disabled.iter().filter_map(|v| v.as_str()).collect();
+        assert!(
+            names.contains(&"toolbar.history.undo"),
+            "the undo button cannot be clicked with nothing to undo, and the reply does not say so: {names:?}"
+        );
+    }
+
+    /// The channel, over a socket, reports the screen the window is showing.    ///
     /// §106: the channel and the window share one shell state, so what the
     /// channel says is on screen is what the person is looking at. Before this,
     /// the channel drew a shell of its own — always the empty one, so the

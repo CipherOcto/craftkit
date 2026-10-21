@@ -221,6 +221,15 @@ pub fn click(
     }
 
     let before = shell.automation.clone();
+    // What is at that point, and whether it can be clicked. The two questions
+    // have to be asked together: a disabled button is on the screen and
+    // pressing it does nothing, and §107 is the section that says so.
+    let hit = before.at(x, y);
+    if let Some(found) = hit
+        && !found.enabled
+    {
+        return Err(format!("`{}` is on screen but disabled, so there is nothing to click", found.name));
+    }
     let down = egui::RawInput {
         screen_rect: Some(screen_rect),
         events: vec![egui::Event::PointerButton {
@@ -235,7 +244,7 @@ pub fn click(
 
     Ok(Click {
         point: [x, y],
-        hit: before.at(x, y).map(str::to_string),
+        hit: hit.map(|found| found.name.to_string()),
         clicked: shell.automation.clone(),
         state: shell.state.clone(),
     })
@@ -282,15 +291,14 @@ pub fn click_name(
 
 /// The rectangle of the widget with this name, or say why there is not one.
 ///
-/// A widget that is on screen but **disabled** is a different thing from a
-/// widget that is not there: the first is on the screen and cannot be
-/// clicked, and the second is not on the screen at all. §104.
+/// A widget that is on screen but **disabled** is not refused here: the rule
+/// that a disabled widget cannot be clicked lives in [`click`], which is the
+/// thing that clicks. Two spellings of one rule is how they come to disagree
+/// — and §107 is the section where they did, because the by-name refusal and
+/// the by-point refusal answered one question two ways. §104, §107.
 fn widget_rect(automation: &crate::automation::Automation, name: &str) -> Result<egui::Rect, String> {
     match automation.known(name) {
-        crate::automation::Widget::Found { rect, enabled: true } => Ok(rect),
-        crate::automation::Widget::Found { rect: _, enabled: false } => {
-            Err(format!("`{name}` is on screen but disabled, so there is nothing to click"))
-        }
+        crate::automation::Widget::Found { rect, .. } => Ok(rect),
         crate::automation::Widget::Missing => Err(format!("there is no widget named `{name}` on screen")),
     }
 }
@@ -932,6 +940,29 @@ mod tests {
         );
     }
 
+    /// A click on a disabled widget is refused, and says so.
+    ///
+    /// §107: the click by point answered "that button is at that point", and
+    /// the button was greyed out — a widget that cannot be pressed. The click
+    /// by name said so properly, so the two ways of asking the same question
+    /// gave two different answers about the same widget.
+    #[test]
+    fn a_click_on_a_disabled_widget_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        // The Undo button is disabled when there is nothing to undo.
+        let frame = render(&mut session, 600, 400, &empty()).expect("renders");
+        let crate::automation::Widget::Found { rect, enabled } =
+            frame.automation.known("toolbar.history.undo")
+        else {
+            panic!("the undo button is not on the screen");
+        };
+        assert!(!enabled, "the undo button should be disabled with nothing to undo");
+        let err =
+            click(&mut session, rect.center().x, rect.center().y, 600, 400, &empty()).expect_err("refused");
+        assert!(err.contains("disabled"), "{err}");
+        assert!(err.contains("toolbar.history.undo"), "the refusal should name it: {err}");
+    }
+
     /// A name that is not on screen is refused, and says so.
     #[test]
     fn a_click_by_a_name_that_is_not_there_is_refused() {
@@ -967,14 +998,17 @@ mod tests {
     /// §104: the registry carries whether a widget can be clicked, and a
     /// disabled widget that answers "there is no such widget" would send an
     /// agent looking for something that is right there.
+    ///
+    /// §107: the refusal lives in the click, which is the thing that clicks —
+    /// and the two ways of asking now answer the same way.
     #[test]
     fn a_disabled_widget_is_not_the_same_as_one_that_is_not_there() {
-        let mut automation = crate::automation::Automation::new();
-        let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
-        automation.publish(crate::automation::AutomationId("off".to_string()), rect, false);
-        let err = widget_rect(&automation, "off").expect_err("refused");
+        let mut session = craftkit_engine::Session::sample();
+        // The Undo button is disabled when there is nothing to undo.
+        let err = click_name(&mut session, "toolbar.history.undo", 600, 400, &empty()).expect_err("refused");
         assert!(err.contains("disabled"), "{err}");
-        let missing = widget_rect(&automation, "nope").expect_err("refused");
+        // A name that is not there at all is a different refusal.
+        let missing = click_name(&mut session, "nodes.row.9999", 600, 400, &empty()).expect_err("refused");
         assert!(missing.contains("no widget named"), "{missing}");
     }
 

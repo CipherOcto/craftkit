@@ -349,6 +349,14 @@ document is refused rather than answered with an empty panel. Selecting a node
 is a *screen*, not a command: it changes nothing in the document, so it is
 not in the undo stack and there is no command for it. §106.
 
+**Some of the widgets on the screen cannot be clicked.** A greyed-out Undo
+button is on the screen, and pressing it does nothing. The reply carries a
+**`disabled`** list of the names that are there but dead, so you do not have to
+find out by trying. A click on one of them is **refused**, by name and by
+point alike, and says so — before §107 a click by point answered *"that button
+is at that point"* while a click by name said *"it is on screen but disabled"*,
+and one question had two answers. §107.
+
 Headless, through the CLI:
 
 ```bash

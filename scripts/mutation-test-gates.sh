@@ -2588,5 +2588,49 @@ swap apps/craftkit/src/main.rs \
 expect_catch "ui: a selected node that is not there is accepted" \
     "cargo test -p craftkit --profile ci a_selected_node_that_is_not_there_is_refused"
 
+# The click by point answered "that button is at that point" for a button
+# that was greyed out -- a widget that cannot be pressed. The click by name
+# said so properly, so one question had two answers. §107.
+swap crates/ui/src/raster.rs \
+    '    if let Some(found) = hit
+        && !found.enabled
+    {
+        return Err(format!("`{}` is on screen but disabled, so there is nothing to click", found.name));
+    }' \
+    '    if let Some(found) = hit
+        && !found.enabled
+        && false
+    {
+        return Err(format!("`{}` is on screen but disabled, so there is nothing to click", found.name));
+    }'
+expect_catch "ui: a click on a disabled widget is not refused" \
+    "cargo test -p craftkit-ui --profile ci a_click_on_a_disabled_widget_is_refused"
+
+# The registry answered with the name and dropped the flag it already held,
+# so the answer at a point could not say whether the widget can be clicked.
+# §107.
+swap crates/ui/src/automation.rs \
+    '            .map(|(id, _, enabled)| Hit { name: id.0.as_str(), enabled: *enabled })' \
+    '            .map(|(id, _, _)| Hit { name: id.0.as_str(), enabled: true })'
+expect_catch "ui: the answer at a point does not say whether it can be clicked" \
+    "cargo test -p craftkit-ui --profile ci the_answer_at_a_point_says_whether_it_can_be_clicked"
+
+# The list of the widgets that cannot be clicked was the list of the ones
+# that can -- so a greyed-out button looked exactly like a live one. §107.
+swap crates/ui/src/automation.rs \
+    '            self.entries.iter().filter(|(_, _, enabled)| !*enabled).map(|(id, _, _)| id.0.as_str()).collect();' \
+    '            self.entries.iter().filter(|(_, _, enabled)| *enabled).map(|(id, _, _)| id.0.as_str()).collect();'
+expect_catch "ui: the dead list is the list of the live ones" \
+    "cargo test -p craftkit --profile ci the_widgets_reply_says_which_widgets_cannot_be_clicked"
+
+# A widget that is not there at all is refused as though it were on the
+# screen but disabled -- so the two refusals said the same thing about two
+# different situations. §104's rule, and §107's. §107.
+swap crates/ui/src/raster.rs \
+    '        crate::automation::Widget::Missing => Err(format!("there is no widget named `{name}` on screen")),' \
+    '        crate::automation::Widget::Missing => Err(format!("`{name}` is on screen but disabled, so there is nothing to click")),'
+expect_catch "ui: a widget that is not there is refused as though it were disabled" \
+    "cargo test -p craftkit-ui --profile ci a_click_by_a_name_that_is_not_there_is_refused"
+
 restore
 finish
