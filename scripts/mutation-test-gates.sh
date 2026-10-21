@@ -1062,6 +1062,16 @@ swap docs/recipes/add-an-icon.md \
 expect_catch "prose: a citation names a line and no file" \
     "cargo xtask lists"
 
+# `AGENTS.md` says "a panel never calls the evaluator", and nothing held it:
+# the shell depends on craftkit-eval for two of its types, and could have
+# called the evaluator itself - which would put a second road to the answer
+# on the screen and cost every frame an evaluation of the whole document.
+swap crates/ui/src/shell.rs \
+    'pub fn node_rows(document: &craftkit_model::Document, plan: Option<&craftkit_eval::Plan>) -> Vec<NodeRow> {' \
+    'pub fn node_rows(document: &craftkit_model::Document, plan: Option<&craftkit_eval::Plan>) -> Vec<NodeRow> {
+    let _ = craftkit_eval::evaluate_once(document, craftkit_core::Tick::ZERO);'
+expect_catch "ui: the shell evaluates the document" "cargo xtask lists"
+
 # `AGENTS.md` told every agent that any new canvas calls `navigation::handle`.
 # This tree has no canvas, no camera and no `navigation` module: the rule named
 # a module that was never built here, and nothing checked it - the symbol

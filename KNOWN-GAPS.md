@@ -14385,6 +14385,131 @@ was.
 
 ---
 
+## 132. The rule that a panel never calls the evaluator had nothing behind it
+
+### The measurement
+
+`AGENTS.md` says, in the paragraph about the UI being thin:
+
+> A panel never writes to the document, never calls the evaluator, never caches
+> a value the evaluator computes.
+
+Three claims. What holds them:
+
+| the claim | what holds it |
+|---|---|
+| never writes to the document | **the engine's API** — the only mutable accessor, `Session::doc_mut`, is `pub(crate)` to the engine, so the shell cannot reach it |
+| never calls the evaluator | **nothing** |
+| never caches a value the evaluator computes | **an inspection** — `ShellState` has seven fields and not one of them is an evaluator's answer |
+
+The middle one had nothing at all. `crates/ui` depends on `craftkit-eval` — it
+uses two of its *types*, `Plan` and `Severity` — so the shell holds both the
+document and the evaluator's crate, and the two ways to evaluate a document
+from outside `craftkit-eval` are one call away:
+
+```rust
+craftkit_eval::evaluate_once(document, at)   // the function
+Evaluator::new().evaluate(document, at)       // the struct
+```
+
+Nothing in the tree called either. A shell that did would not look wrong: it
+would draw the same panels, with the same levels, from the same document. It
+would put a **second road to the answer** on the screen, and it would cost
+every frame a fresh evaluation of the whole document — measured on the
+ten-thousand-node design, **7.3 ms** at best and **13.3 ms** at worst (§129's
+probe), against a frame that already costs about 52 ms for the node list
+alone (§127).
+
+### Why nothing noticed
+
+**The rule is about a call, and the tree's gates are about shapes.** The layer
+gate reads the crate graph; the fingerprint gate reads the model's fields;
+the prose gates read documents. A rule about a *call* inside a function is the
+one shape none of them looks at.
+
+**The tree obeys it, and obeying it looks like holding it.** The shell has
+never evaluated the document, so the rule has never been tested — and a rule
+that has never been broken is a rule nobody has checked.
+
+**The two roads would agree.** A shell that evaluated the document would draw
+the same levels the plan holds, so the difference would not be *what* is on
+the screen; it would be what the frame costs, and how many places the answer
+can come from.
+
+### The fix
+
+**`cargo xtask lists` now checks that the shell does not evaluate the
+document.** The check is on the **names**, and the names are exact: the two
+ways to evaluate a document from outside `craftkit-eval` are
+`evaluate_once` and `Evaluator`, and there is no third.
+
+```rust
+const EVALUATOR_NAMES: &[&str] = &["evaluate_once", "Evaluator"];
+```
+
+**Comments and strings do not count.** A doc comment that says the word is
+saying the opposite, and a string that carries the word is a label. The
+check therefore reads the file with its comments and its string contents
+blanked out — and it keeps every line, because a check that names a line has
+to name the **file's** line. (The helper that already existed for this,
+`code_only`, removes a block comment whole, newlines and all, so the line
+numbers of what is left are not the file's; this one keeps them.)
+
+The tests are not the panels: a test may name the evaluator to prove that the
+shell does not call it, so the check stops at the test module.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The shell may read the plan and may not evaluate the document | `the_shell_may_read_the_plan_and_may_not_evaluate` in `xtask` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: *ui: the shell evaluates
+the document*, which adds one line to `node_rows`:
+
+```rust
+let _ = craftkit_eval::evaluate_once(document, craftkit_core::Tick::ZERO);
+```
+
+It compiles, and the gate says:
+
+```
+crates/ui/src/shell.rs: line 841 names `evaluate_once`: the shell may read the plan, but it may not evaluate the document
+```
+
+### What is still open
+
+**"Never caches a value the evaluator computes" is an inspection, not a
+guarantee.** `ShellState` holds no evaluator's answer today, and nothing
+stops a ninth field from being one. A gate for it would have to read the
+struct's fields and know which types the evaluator produces — which is a
+judgement about what a field *means*, and the tree's own rule is that such a
+judgement is a heuristic that eventually flags something real (§29).
+
+**The rule is checked in one direction.** The gate says the shell does not
+evaluate the document; it does not say the shell does not *cache* an answer,
+nor that the engine is the only place the plan is computed. The tree's
+structure is what says the last one: `Session` owns the evaluator and
+nothing else holds one.
+
+### The lesson
+
+**A rule about a call needs a gate that reads calls.** Every other rule in
+this document is about a shape the tree has — a file, a crate, a field, a
+document — and every one of those can be read. "Never calls the evaluator" is
+about a *verb*, and the gates read nouns.
+
+**Two roads to an answer are worse than one even when they agree.** The shell
+evaluating the document would have drawn the same picture. The cost would
+have been a frame that pays for the whole document to draw a panel, and an
+answer that could come from two places and drift.
+
+**A rule nobody has broken is a rule nobody has checked.** The tree obeyed
+this one from the day it was written. That is not evidence that the rule
+holds — it is evidence that the tree has never had the chance to break it.
+
+---
+
 ---
 
 ## What enforces what
@@ -14701,6 +14826,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A reused node still reports its problem** | `craftkit-eval` test | 1 mutation — §129 |
 | **A module path in prose names a module this tree has** | `cargo xtask lists` | 1 mutation — §130 |
 | **The shell may not own a window** | `cargo xtask layers` | 1 mutation — §131 |
+| **The shell may read the plan and may not evaluate the document** | `cargo xtask lists` | 1 mutation — §132 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

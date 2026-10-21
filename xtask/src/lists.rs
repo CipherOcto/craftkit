@@ -965,6 +965,160 @@ fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// The names that evaluate a document from outside `craftkit-eval`.
+///
+/// `evaluate_once` is the function; `Evaluator` is the struct whose `evaluate`
+/// method does the same thing. Those two are the whole of it: everything else
+/// `craftkit-eval` offers the outside world is a type or a number.
+const EVALUATOR_NAMES: &[&str] = &["evaluate_once", "Evaluator"];
+
+/// The shell may read the plan; it may not evaluate the document.
+///
+/// `AGENTS.md`: "A panel never writes to the document, never calls the
+/// evaluator, never caches a value the evaluator computes."
+///
+/// The first half is enforced by the engine's API: the only mutable accessor,
+/// `Session::doc_mut`, is `pub(crate)` to the engine, so the shell cannot
+/// reach it. The third half holds by what `ShellState` is. The middle half
+/// had nothing behind it: `crates/ui` depends on `craftkit-eval` for two of
+/// its *types* — `Plan` and `Severity` — and could have called the evaluator
+/// itself, which would put a second road to the answer on the screen and
+/// cost every frame an evaluation of the whole document. §132.
+///
+/// The check is on the **names**, and the names are exact. Comments and
+/// strings do not count: a doc comment that says the word is saying the
+/// opposite.
+pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for path in rust_files(&root.join("crates/ui/src")) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        // The tests are not the panels: a test may name the evaluator to
+        // prove that the shell does not call it.
+        let production = match text.find("\nmod tests {") {
+            Some(at) => &text[..at],
+            None => &text[..],
+        };
+        let code = code_lines_kept(production);
+        let relative = relative_name(root, &path);
+        for name in EVALUATOR_NAMES {
+            if !has_word(&code, name) {
+                continue;
+            }
+            let line = code.lines().position(|l| has_word(l, name)).map_or(1, |n| n + 1);
+            problems.push(format!(
+                "{relative}: line {line} names `{name}`: the shell may read the plan, but it may \
+                 not evaluate the document"
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The source with its comments and its string contents blanked out, and
+/// every line kept.
+///
+/// `code_only` removes a block comment whole — newlines and all — so the line
+/// numbers of what is left are not the file's. This keeps them: a check that
+/// names a line has to name the **file's** line.
+fn code_lines_kept(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut in_block = false;
+    let mut in_line = false;
+    while let Some(c) = chars.next() {
+        if in_line {
+            if c == '\n' {
+                in_line = false;
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_block {
+            if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                in_block = false;
+                out.push(' ');
+            } else if c == '\n' {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_string {
+            if escaped {
+                escaped = false;
+                out.push(' ');
+                continue;
+            }
+            match c {
+                '\\' => {
+                    escaped = true;
+                    out.push(' ');
+                }
+                '"' => {
+                    in_string = false;
+                    out.push(' ');
+                }
+                '\n' => out.push('\n'),
+                _ => out.push(' '),
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(' ');
+            }
+            '/' if chars.peek() == Some(&'/') => {
+                chars.next();
+                in_line = true;
+                out.push(' ');
+                out.push(' ');
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                in_block = true;
+                out.push(' ');
+                out.push(' ');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Whether `code` contains `name` as a whole word.
+///
+/// A whole word, because `Evaluator` is not `Evaluators` and `evaluate_once`
+/// is not `evaluate_once_at`.
+fn has_word(code: &str, name: &str) -> bool {
+    let bytes = code.as_bytes();
+    let mut at = 0usize;
+    while at < code.len() {
+        let Some(found) = code[at..].find(name) else { break };
+        let start = at + found;
+        let end = start + name.len();
+        let before = start == 0 || !is_word_byte(bytes[start - 1]);
+        let after = end >= bytes.len() || !is_word_byte(bytes[end]);
+        if before && after {
+            return true;
+        }
+        at = end;
+    }
+    false
+}
+
+/// Whether a byte is part of an identifier.
+fn is_word_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
 /// Citations in prose that provably no longer point at anything.
 ///
 /// The mechanically detectable half, and deliberately only that half. A
@@ -2789,6 +2943,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     Name a module this tree has, or drop the name.")),
     );
 
+    // The shell, and the evaluator it may read but not call. §132.
+    problems.extend(
+        the_shell_does_not_evaluate(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     The engine owns the evaluation; the shell reads the plan.")),
+    );
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -2801,8 +2962,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              number of commands in prose is the registry's number, every boundary that \
              catches a panic is declared in the pattern document, every field the \
              fingerprint hashes is a field the model has, the control channel's \
-             methods are the methods the prose lists, and every module path in prose \
-             names a module this tree has",
+             methods are the methods the prose lists, every module path in prose \
+             names a module this tree has, and the shell never evaluates the \
+             document",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -3959,6 +4121,40 @@ mod tests {
             "craftkit-ui"
         );
         assert_eq!(package_name("[dependencies]\nimage = \"0.25\""), "");
+    }
+
+    /// The shell may read the plan, and may not evaluate the document.
+    ///
+    /// §132: `AGENTS.md` says "A panel never writes to the document, never
+    /// calls the evaluator, never caches a value the evaluator computes". The
+    /// first half is enforced by the engine's API and the third by what
+    /// `ShellState` is; the middle half had nothing behind it.
+    #[test]
+    fn the_shell_may_read_the_plan_and_may_not_evaluate() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_shell_does_not_evaluate(&root).expect("runs").is_empty(),
+            "the shell evaluates the document"
+        );
+
+        // The names are whole words: `Evaluator` is not `Evaluators`.
+        assert!(has_word("craftkit_eval::Evaluator::new()", "Evaluator"));
+        assert!(!has_word("craftkit_eval::Evaluators::new()", "Evaluator"));
+        assert!(has_word("let _ = evaluate_once(doc, at);", "evaluate_once"));
+        assert!(!has_word("let _ = evaluate_once_at(doc, at);", "evaluate_once"));
+
+        // A comment is not a call: the doc comment may say the opposite.
+        let commented = "/// The shell never calls the Evaluator.\nfn panel() {}\n";
+        assert!(!has_word(&code_lines_kept(commented), "Evaluator"));
+
+        // A string is not a call either.
+        let named = "fn panel() { let _ = \"the Evaluator\"; }\n";
+        assert!(!has_word(&code_lines_kept(named), "Evaluator"));
+
+        // And the lines are kept, so a report names the file's line.
+        let code = code_lines_kept("fn one() {}\n/* two\n   three */\nfn four() {}\n");
+        assert_eq!(code.lines().count(), 4, "the line count changed");
+        assert!(code.lines().nth(3).is_some_and(|l| l.contains("four")));
     }
 
     /// A module path in prose that names nothing this tree has.
