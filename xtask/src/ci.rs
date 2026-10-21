@@ -145,14 +145,29 @@ pub fn run(root: &Path) -> Result<(), String> {
     // The first failure. See "What it stops at" above.
     for phase in PHASES {
         match (phase.run)(root) {
-            Ok(crate::Outcome::Ran) => ran.push(phase.name),
-            Ok(crate::Outcome::Skipped) => skipped.push(phase.name),
+            Ok(outcome) => record(outcome, phase.name, &mut ran, &mut skipped),
             Err(e) => return Err(format!("`{}` failed\n\n{e}", phase.name)),
         }
     }
 
     println!("{}", summary(started.elapsed().as_secs_f64(), &ran, &skipped));
     Ok(())
+}
+
+/// Record what a phase did.
+///
+/// A phase that could not run is **skipped**, and a skipped phase is not one
+/// that ran: the closing line says which is which, and a phase that is
+/// counted as having run when it did not is a gate that lies about itself.
+///
+/// This is a function of its own so that the rule can be pinned by a test:
+/// the loop it came from was three lines inside a function that runs the whole
+/// build, and nothing could check what it did. §102.
+fn record<'a>(outcome: crate::Outcome, name: &'a str, ran: &mut Vec<&'a str>, skipped: &mut Vec<&'a str>) {
+    match outcome {
+        crate::Outcome::Ran => ran.push(name),
+        crate::Outcome::Skipped => skipped.push(name),
+    }
 }
 
 #[cfg(test)]
@@ -189,6 +204,27 @@ mod tests {
             "a skipped phase must not be listed as one that ran: {line}"
         );
         assert!(line.contains("skipped, not passed: wasm"), "{line}");
+    }
+
+    /// A phase that could not run is not counted as one that ran.
+    ///
+    /// §102: the rule lived inside the loop that runs the whole build, where
+    /// nothing could check it, and the mutation that broke it was reported as
+    /// caught only because it left a variable unused — which the clippy phase
+    /// refuses, so the *build* failed and the rule was never tested at all.
+    ///
+    /// The rule is a function now, and this is its test.
+    #[test]
+    fn a_phase_that_could_not_run_is_not_counted_as_one_that_ran() {
+        let mut ran: Vec<&str> = Vec::new();
+        let mut skipped: Vec<&str> = Vec::new();
+        record(crate::Outcome::Skipped, "wasm", &mut ran, &mut skipped);
+        assert_eq!(ran, Vec::<&str>::new(), "a skipped phase was counted as one that ran");
+        assert_eq!(skipped, vec!["wasm"]);
+
+        record(crate::Outcome::Ran, "tests", &mut ran, &mut skipped);
+        assert_eq!(ran, vec!["tests"]);
+        assert_eq!(skipped, vec!["wasm"], "a skipped phase was forgotten");
     }
 
     #[test]

@@ -44,6 +44,15 @@
 #    script runs: the restore at the end puts the file back the way it was
 #    when the run started, and the edit is lost without a word.
 #
+#    And do not edit **this script** while it runs. Bash reads a script
+#    incrementally, so an edit in the middle of a run leaves the shell
+#    reading at a byte offset that is no longer the start of a command: the
+#    next `swap` looks for an anchor that is not there, and the run stops
+#    with "THE MUTATION DID NOT APPLY, SO THE RUN IS VOID". The run says so
+#    — it is honest about it — but the run is gone, and it is gone after the
+#    twenty minutes it took to get there. It happened, in §102's own
+#    measurement.
+#
 #   scripts/mutation-test-gates.sh
 #   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero
 
@@ -223,17 +232,46 @@ guarded() {
 
 declare -a CAUGHT=()
 declare -a MISSED=()
+declare -a BROKE=()
 CASES=0
 
+# Does the output say the tree did not compile?
+#
+# §102: a gate that fails because the **build** broke has not tested anything.
+# The gate rejects the tree, the script calls the case caught, and the rule
+# the case claims to protect is untested — the test never ran, because there
+# was nothing to run it against. A broken build is not a catch; it is a
+# mutation that says nothing.
+#
+# The patterns are the ones cargo prints for a compilation failure, and not
+# the ones it prints for a failing test: a test failure says "error: test
+# failed, to rerun pass ...", which is a catch.
+did_not_compile() {
+    printf '%s' "$1" | grep -qE 'error\[E[0-9]+\]|error: could not compile|error: aborting due to'
+}
+
 # Expect a gate to REJECT the mutated tree.
+#
+# The third argument says whether a **compilation failure** is the catch. It is
+# "no" by default, because a tree that does not compile has no test to run
+# and so has not tested the rule. The one gate whose *subject* is a
+# compilation says "yes": for it, a build that breaks is the thing it exists
+# to notice. §102.
 expect_catch() {
-    local label="$1" gate="$2" out rc
+    local label="$1" gate="$2" compile_is_catch="${3:-no}"
+    local out rc
     CASES=$((CASES + 1))
     out="$(eval "$gate" 2>&1)"; rc=$?
     restore
     if [[ $rc -ne 0 ]]; then
-        printf '  %scaught%s  %s\n' "$GREEN" "$RESET" "$label"
-        CAUGHT+=("$label")
+        if [[ "$compile_is_catch" == "yes" ]] || ! did_not_compile "$out"; then
+            printf '  %scaught%s  %s\n' "$GREEN" "$RESET" "$label"
+            CAUGHT+=("$label")
+        else
+            printf '  %sBROKE%s  %s\n' "$YELLOW" "$RESET" "$label"
+            printf '          the tree did not compile, so no test ran: the rule is untested\n'
+            BROKE+=("$label")
+        fi
     else
         printf '  %sMISSED%s  %s\n' "$RED" "$RESET" "$label"
         printf '          %s\n' "$(printf '%s' "$out" | tail -1 | cut -c1-88)"
@@ -265,14 +303,23 @@ expect_miss() {
 finish() {
     local status=0
     echo
-    if [[ ${#MISSED[@]} -eq 0 ]]; then
+    if [[ ${#MISSED[@]} -eq 0 && ${#BROKE[@]} -eq 0 ]]; then
         printf '%s%d/%d caught.%s The `known` line is a limit of wasm32 itself, not a gate that passed.\n' \
             "$GREEN" "${#CAUGHT[@]}" "$CASES" "$RESET"
     else
-        printf '%s%d of %d gate(s) MISSED their mutation:%s\n' "$RED" "${#MISSED[@]}" "$CASES" "$RESET"
-        for f in "${MISSED[@]}"; do printf '   • %s\n' "$f"; done
-        printf '\n%sA gate that cannot fail is worse than no gate.%s Fix the gate, or the check.\n' \
-            "$RED" "$RESET"
+        if [[ ${#MISSED[@]} -gt 0 ]]; then
+            printf '%s%d of %d gate(s) MISSED their mutation:%s\n' "$RED" "${#MISSED[@]}" "$CASES" "$RESET"
+            for f in "${MISSED[@]}"; do printf '   • %s\n' "$f"; done
+            printf '\n%sA gate that cannot fail is worse than no gate.%s Fix the gate, or the check.\n' \
+                "$RED" "$RESET"
+        fi
+        if [[ ${#BROKE[@]} -gt 0 ]]; then
+            printf '%s%d of %d mutation(s) broke the build, so no gate ran:%s\n' \
+                "$RED" "${#BROKE[@]}" "$CASES" "$RESET"
+            for f in "${BROKE[@]}"; do printf '   • %s\n' "$f"; done
+            printf '\n%sA mutation that does not compile tests nothing.%s Fix the mutation, so it compiles.\n' \
+                "$RED" "$RESET"
+        fi
         status=1
     fi
 
@@ -311,6 +358,19 @@ if [[ "${1:-}" == "--self-test" ]]; then
     echo "-- self-test: a mutation that does not apply must stop the run"
     if ( swap docs/architecture.md 'a line that is not in the file at all' 'x' ) >/dev/null 2>&1; then
         printf '%sself-test FAILED: a mutation that did not apply did not stop the run%s\n' "$RED" "$RESET"
+        exit 2
+    fi
+    # The third half, and it is §102: a gate that fails because the **build**
+    # broke has not tested anything. The tree did not compile, so no test
+    # ran, so the rule the case claims to protect is untested — and the script
+    # used to call that a catch. A synthetic gate that prints what cargo
+    # prints for a compilation failure is enough to prove the classification.
+    echo
+    echo "-- self-test: a gate that fails on a broken build is not a catch"
+    expect_catch "synthetic: a gate that fails because the tree did not compile" \
+        "bash -c 'echo \"error[E0308]: mismatched types\"; echo \"error: could not compile\"; exit 1'"
+    if [[ ${#BROKE[@]} -eq 0 ]]; then
+        printf '%sself-test FAILED: a broken build was counted as a caught mutation%s\n' "$RED" "$RESET"
         exit 2
     fi
     finish
@@ -629,7 +689,7 @@ expect_catch "crash: the report is read into a JSON tree before it is read as a 
 # cap was meant to prevent is spent anyway.
 swap crates/core/src/readers.rs \
     '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
-    '    reader.read_to_string(&mut out).map_err(io_error)?;'
+    '    reader.take(u64::MAX).read_to_string(&mut out).map_err(io_error)?;'
 expect_catch "io: a bounded read is not bounded" \
     "cargo test -p craftkit-core --profile ci a_bounded_read_never_asks_for_more_than_the_limit"
 
@@ -1420,13 +1480,17 @@ expect_catch "eval: the fingerprint stops looking at the keyframes" \
 swap xtask/src/ci.rs '    Phase { name: "tests", run: tests },
     Phase { name: "wasm", run: wasm::run },
 ' ''
-expect_catch "ci: the tests and wasm phases vanish from the run" "cargo xtask ci"
+expect_catch "ci: the tests and wasm phases vanish from the run" \
+    "cargo test -p xtask --profile ci the_phases_are_the_documented_ones_and_come_first"
 
 # The closing line itself: naming a phase that did not run is the whole defect,
 # so put it back the way it was and check the summary catches it.
-swap xtask/src/ci.rs '        Ok(crate::Outcome::Skipped) => skipped.push(phase.name),' \
-    '        Ok(crate::Outcome::Skipped) => ran.push(phase.name),'
-expect_catch "ci: a skipped phase is counted as one that ran" "cargo xtask ci"
+swap xtask/src/ci.rs '        crate::Outcome::Ran => ran.push(name),
+        crate::Outcome::Skipped => skipped.push(name),' \
+    '        crate::Outcome::Ran => ran.push(name),
+        crate::Outcome::Skipped => ran.push(name),'
+expect_catch "ci: a skipped phase is counted as one that ran" \
+    "cargo test -p xtask --profile ci a_phase_that_could_not_run_is_not_counted_as_one_that_ran"
 
 # ------------------------------------------------------------------- web ----
 # The *element's* id, not merely the first mention of the name. An earlier
@@ -1489,7 +1553,7 @@ pub fn browser_only() -> u32 {
     let n: u32 = "not a number";
     n
 }'
-expect_catch "wasm: a cfg(wasm32) branch stopped compiling" "cargo xtask wasm"
+expect_catch "wasm: a cfg(wasm32) branch stopped compiling" "cargo xtask wasm" "yes"
 
 # `wasm` is a compile check and writes nothing, so it is green on a machine
 # where the page's JavaScript cannot be produced at all. The phase now says so.
@@ -2101,7 +2165,7 @@ expect_catch "engine: a parameter that was given but is empty says it is require
 swap crates/engine/src/session.rs \
     '        let per_parameter: Vec<(String, Vec<serde_json::Value>)> = command::ids()' \
     '        let per_parameter: Vec<(String, Vec<serde_json::Value>)> = Vec::new();
-        let _unused = command::ids()'
+        let _unused: Vec<(String, Vec<serde_json::Value>)> = command::ids()'
 expect_catch "engine: a documented parameter is never fired with a hostile value" \
     "cargo test -p craftkit-engine --profile ci every_documented_parameter_is_fired_with_a_hostile_value"
 

@@ -10399,6 +10399,151 @@ will believe it.
 sensitive.** The kernel's `measure` and the CI's own clock report times; they
 do not assert on them.
 
+## 102. A mutation that did not compile was counted as a caught mutation
+
+The mutation script is this tree's evidence that its gates work. Its report
+says *N of M caught*, in green, and it says nothing about **why** a case was
+caught.
+
+Five of them were caught by a **build failure**.
+
+### The measurement
+
+`expect_catch` asked one question: did the gate exit non-zero? Yes → "caught".
+
+A tree that does not compile has no test to run. The gate exits non-zero
+because *cargo* failed, not because the rule was broken — so the case says
+"caught" while the rule it names was never tested at all.
+
+Measured, by teaching the script a third outcome, **BROKE**:
+
+```
+5 of 194 mutation(s) broke the build, so no gate ran:
+   • io: a bounded read is not bounded
+   • ci: the tests and wasm phases vanish from the run
+   • ci: a skipped phase is counted as one that ran
+   • wasm: a cfg(wasm32) branch stopped compiling
+   • engine: a documented parameter is never fired with a hostile value
+```
+
+They are not all the same kind of thing, and one of them is not a defect at
+all:
+
+**"a bounded read is not bounded"** removed `reader.take(max as u64 + 1)`.
+`take` consumes its receiver **by value**, so without it the binding `reader`
+is never mutated — and `reader.read_to_string(&mut out)` needs `&mut reader`.
+The tree did not compile. The case was "caught" because the crate would not
+build.
+
+**"the tests and wasm phases vanish from the run"** deleted two elements of
+`PHASES`, which leaves the `tests` and `wasm::run` functions unreferenced.
+`cargo xtask ci` runs clippy with `-D warnings`, so the dead functions are
+refused and the ci gate fails — at the **clippy** phase, before the test that
+pins the phase list ever runs.
+
+**"a skipped phase is counted as one that ran"** had the same shape:
+`let mut skipped` is never mutated, so `unused_mut` is refused, and the ci
+gate fails before it reaches the tests. And this one is the worst of the
+five: **the rule it names was not protected by anything at all.** The xtask's
+tests check `summary()`, which takes the two lists as *arguments* — so no
+test could see what the *loop* did with a skipped phase. The case has been
+reporting "caught" since §2 — the case is from §2's own work — and what it was
+catching was its own broken build.
+
+**"a cfg(wasm32) branch stopped compiling"** is *supposed* to break the
+build: the gate is `cargo xtask wasm`, and a wasm32 branch that no longer
+compiles is exactly what that gate exists to notice. Here a broken build
+**is** the catch.
+
+**"a documented parameter is never fired with a hostile value"** replaced the
+head of a chain with two statements, which left the chain's type
+unconstrained — so the tree needed a type annotation it did not have.
+
+### Why nothing noticed
+
+**The question was the exit code.** One question, one bit: did the gate fail?
+A build failure and a rule failure are the same bit, and the bit is all the
+script looked at.
+
+**"Caught" was printed in green.** The report's own colours said the rule was
+protected. Five cases in green that protected nothing — and the report's
+closing line counted them.
+
+**A mutation that breaks the build is easy to write by accident.** Removing
+a line is the easiest way to mutate anything, and whether it compiles depends
+on the line: `reader.take(...)` consumes its receiver, `let mut` wants a
+mutation, a chain wants an annotation.
+
+### The fix
+
+**Three outcomes, not two.** caught, MISSED, and **BROKE** — and a BROKE case
+fails the run like a MISSED one, with a message that says what to do: *"A
+mutation that does not compile tests nothing."*
+
+**The exception is explicit.** A gate whose subject *is* a compilation says
+so — `expect_catch "…" "cargo xtask wasm" "yes"` — so the one case that must
+break the build still counts, and the reason is written down at the call
+site rather than guessed at.
+
+**Five mutations repaired, so that each tests its rule:**
+
+| Case | Repaired to |
+|---|---|
+| a bounded read is not bounded | `take(u64::MAX)` — the limit is gone, the code compiles |
+| the tests and wasm phases vanish | gated by the **test** that pins the phase list, not by the whole `ci` run, which refuses the dead code first |
+| a skipped phase is counted as one that ran | the rule is now a **function** (`record`) with its own test, and the mutation points at it |
+| a documented parameter is never fired | the chain keeps its type |
+| a cfg(wasm32) branch stopped compiling | unchanged: the compile failure *is* the catch, and it now says so |
+
+**And the self-test has a third half**: a gate that prints what cargo prints
+for a compilation failure must be classified BROKE, not caught. The self-test
+is the negative of the whole exercise, and this is the third way it can be
+wrong.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A mutation that does not compile is not a catch | the mutation script's third outcome, and its self-test's third half |
+| A skipped phase is not counted as one that ran | `a_phase_that_could_not_run_is_not_counted_as_one_that_ran` |
+| The phase list is the documented one | `the_phases_are_the_documented_ones_and_come_first` |
+
+and five mutations repaired so that each breaks **production code** rather
+than the build.
+
+### The lesson
+
+**A gate that failed is not the same as a gate that failed for the right
+reason.** §101 was the same shape in the other direction: a gate that failed
+when it should not have. Both are the same mistake — the harness asked a
+question that could not tell the two situations apart.
+
+**A mutation must break the code, not the build.** The build is not the
+rule; the build is the thing that runs the rule. A mutation that stops the
+rule from running has not tested it, and it is not a catch.
+
+**"Caught" is a claim, and green is a colour.** The report said "caught" and
+printed it in green, and for five cases the sentence was false. A report that
+says *why* it caught something is worth more than a report that says only
+that it did.
+
+**A rule with no test of its own is protected by nothing.** The skipped-phase
+case had a gate, a mutation and a green tick, and the rule was untested —
+because the mutation that broke it had broken the build instead, and the
+build failing is exactly what a gate notices. The rule was moved into a
+function of its own so that it could be pinned, and the pinning is now a
+test with a name.
+
+**And the harness's own rules have to be written down where they are
+obeyed.** The script's header warned against editing a file in `FILES` while
+it runs. It did not warn against editing **the script**, which is worse: bash
+reads a script incrementally, so an edit in the middle leaves the shell
+reading at a byte offset that is no longer a command, and the run stops with
+*"THE MUTATION DID NOT APPLY, SO THE RUN IS VOID"*. The run says so — it is
+honest — but the run is gone, and it is gone after the twenty minutes it
+took to get there. It happened, in this section's own measurement. The
+header says it now.
+
 ---
 
 ---
@@ -10603,6 +10748,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every published name answers at its own centre** | `craftkit-ui` test | 1 mutation — §100 |
 | **A name never promises a widget that is not drawn** | `craftkit-ui` test | 1 mutation — §100 |
 | **A timing gate does not fail when the machine is busy** | `craftkit-ui` test, measured under load | the §98 mutation — §101 |
+| **A mutation that does not compile is not a catch** | the mutation script | its third outcome, and the self-test's third half — §102 |
+| **A skipped phase is not counted as one that ran** | `xtask` test | 1 mutation — §102 |
+| **The phase list is the documented one** | `xtask` test | 1 mutation — §102 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
