@@ -448,14 +448,8 @@ pub static PROP_SET: CommandSpec = CommandSpec {
         let at = s.at();
         let node = node_mut(s, id, PROP_SET.id)?;
         let parsed = parse_path(&path, PROP_SET.id)?;
-        let changed = match node.props.find_mut(&parsed) {
+        let changed = match writable(&mut node.props, &parsed, PROP_SET.id)? {
             Some(existing) => {
-                if existing.locked {
-                    return Err(EngineError::Param {
-                        id: PROP_SET.id.to_string(),
-                        source: craftkit_core::ParamError::new("path", format!("`{path}` is locked")),
-                    });
-                }
                 let mut changed = existing.set_value(value.clone());
                 if animated {
                     key_now(existing, at, PROP_SET.id)?;
@@ -511,7 +505,7 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let node = node_mut(s, id, PROP_RESET.id)?;
         let parsed = parse_path(&path, PROP_RESET.id)?;
-        let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
+        let prop = writable(&mut node.props, &parsed, PROP_RESET.id)?.ok_or_else(|| EngineError::Param {
             id: PROP_RESET.id.to_string(),
             source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
@@ -584,7 +578,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
 
         let node = node_mut(s, id, KEY_SET.id)?;
         let parsed = parse_path(&path, KEY_SET.id)?;
-        let prop = match node.props.find_mut(&parsed) {
+        let prop = match writable(&mut node.props, &parsed, KEY_SET.id)? {
             Some(p) => p,
             None => {
                 // The model creates it, by the model's grammar. §85.
@@ -651,7 +645,7 @@ pub static KEY_REMOVE: CommandSpec = CommandSpec {
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
         let node = node_mut(s, id, KEY_REMOVE.id)?;
         let parsed = parse_path(&path, KEY_REMOVE.id)?;
-        let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
+        let prop = writable(&mut node.props, &parsed, KEY_REMOVE.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_REMOVE.id.to_string(),
             source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
@@ -693,7 +687,7 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let node = node_mut(s, id, KEY_CLEAR.id)?;
         let parsed = parse_path(&path, KEY_CLEAR.id)?;
-        let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
+        let prop = writable(&mut node.props, &parsed, KEY_CLEAR.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_CLEAR.id.to_string(),
             source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
@@ -736,7 +730,7 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         })?;
         let node = node_mut(s, id, KEY_EASE.id)?;
         let parsed = parse_path(&path, KEY_EASE.id)?;
-        let prop = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Param {
+        let prop = writable(&mut node.props, &parsed, KEY_EASE.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_EASE.id.to_string(),
             source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
@@ -1199,6 +1193,28 @@ fn key_now(prop: &mut Property, at: Tick, id_of: &'static str) -> Result<(), Eng
     })?)?;
     Ok(())
 }
+
+/// The property a path names, for **writing**.
+///
+/// A locked property is refused, and the refusal is the **model's** — the
+/// lock is a rule of the document, and every writer comes through this one
+/// door. §124: six commands write a property, and five of them did not ask,
+/// so a locked property could be keyed, unkeyed, cleared and re-eased — and
+/// keyed with a **new value**, which is the one thing a lock is for.
+///
+/// `Ok(None)` means there is no such property. The caller decides what that
+/// means: `prop.set` and `key.set` create it, the rest refuse.
+fn writable<'a>(
+    group: &'a mut PropGroup,
+    parsed: &PropPath,
+    id_of: &'static str,
+) -> Result<Option<&'a mut Property>, EngineError> {
+    group.find_writable(parsed).map_err(|e| EngineError::Param {
+        id: id_of.to_string(),
+        source: craftkit_core::ParamError::new("path", e.to_string()),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1556,6 +1572,98 @@ mod tests {
         // And the listing publishes it under that path.
         let listed = node.props.flatten();
         assert!(listed.iter().any(|(p, _)| p.to_string() == "custom/thing"), "{listed:?}");
+    }
+
+    /// A locked property may not be written.
+    ///
+    /// §124: six commands write a property — `prop.set`, `prop.reset`,
+    /// `key.set`, `key.remove`, `key.clear` and `key.ease` — and only
+    /// `prop.set` asked the lock. The other five changed a locked property
+    /// anyway, and `key.set` changed its **value**, which is the one thing a
+    /// lock is for. The lock was a word in a comment and a `bool` in the
+    /// model.
+    ///
+    /// The rule now lives in the model (`PropGroup::find_writable`), and
+    /// every writer comes through that one door — so this test walks all six
+    /// of them and asks the same question of each.
+    ///
+    /// Each command is asked at an instant where it **would** have worked: the
+    /// keyframe is at a tick the test names exactly, because a command that
+    /// refused for want of a keyframe would be refusing for the wrong reason.
+    #[test]
+    fn a_locked_property_may_not_be_written() {
+        // A named type: the same tuple written out is more than clippy's
+        // `type_complexity` will look at.
+        type Attempt = (&'static str, fn(u64) -> Json);
+        let attempts: [Attempt; 6] = [
+            ("prop.set", |n| json!({ "node": n, "path": "amount", "value": 9 })),
+            ("key.set", |n| json!({ "node": n, "path": "amount", "value": 7, "time": "2000000000t" })),
+            ("key.remove", |n| json!({ "node": n, "path": "amount", "time": "1000000000t" })),
+            ("key.clear", |n| json!({ "node": n, "path": "amount" })),
+            ("key.ease", |n| json!({ "node": n, "path": "amount", "easing": "hold", "time": "1000000000t" })),
+            ("prop.reset", |n| json!({ "node": n, "path": "amount" })),
+        ];
+        for (command, params) in attempts {
+            // **A fresh session for each command**, so one command that got
+            // through cannot leave the next one a document that is already
+            // changed.
+            let mut s = session_with_a_locked_property();
+            let id = s.document().nodes[0].id;
+            let before = locked_property_state(&s, id);
+            let err = s.execute(command, &params(id.get())).expect_err("a locked property was written");
+            assert!(err.to_string().contains("locked"), "{command} said: {err}");
+            assert_eq!(locked_property_state(&s, id), before, "{command} changed a locked property");
+        }
+    }
+
+    /// A session with one node whose only property is locked and keyed.
+    ///
+    /// The keyframe is there so that the commands that *remove* keys have
+    /// something to remove: without one, `key.remove` would fail for want of
+    /// a key and the test would pass for the wrong reason. §124.
+    fn session_with_a_locked_property() -> Session {
+        let mut doc = craftkit_model::Document::empty("probe");
+        let id = doc.add_node("One", NodeKind::Source).expect("the node");
+        {
+            let node = doc.get_mut(id).expect("the node");
+            let property =
+                Property::new(1, "amount", craftkit_core::Value::num("amount", 0.5).expect("value"));
+            let mut keys = craftkit_model::Keyframes::new();
+            keys.set(
+                Key::new(
+                    Tick::from_raw(1_000_000_000),
+                    craftkit_core::Value::num("amount", 0.25).expect("value"),
+                    Easing::Linear,
+                )
+                .expect("the key"),
+            )
+            .expect("the key is set");
+            let mut property = property;
+            property.keys = keys;
+            node.props.push(property.locked());
+        }
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        session
+    }
+
+    /// What a locked property holds: its value, how many keys, and how the
+    /// key leaves.
+    fn locked_property_state(s: &Session, id: craftkit_core::NodeId) -> String {
+        let node = s.document().get(id).expect("the node");
+        let property = node
+            .props
+            .flatten()
+            .into_iter()
+            .find(|(path, _)| path.to_string() == "amount")
+            .map(|(_, property)| property)
+            .expect("the property");
+        format!(
+            "{:?}/{:?}/{:?}",
+            property.value,
+            property.keys.len(),
+            property.keys.keys().iter().map(|k| k.ease).collect::<Vec<_>>()
+        )
     }
 
     /// Setting a property that is already there changes that property, and

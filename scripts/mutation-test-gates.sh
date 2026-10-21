@@ -3207,5 +3207,42 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the panel publishes a property's label instead of its path" \
     "cargo test -p craftkit-ui --profile ci the_panel_publishes_one_editor_for_each_property_and_no_other"
 
+# The model handed a locked property out without asking about the lock, so
+# five of the six commands that write a property changed it anyway — and one
+# of them changed its value. §124.
+swap crates/model/src/property.rs \
+    '        if prop.locked {
+            return Err(CoreError::BadData(format!("`{path}` is locked")));
+        }
+        Ok(Some(prop))' \
+    '        Ok(Some(prop))'
+expect_catch "model: the model hands a locked property out without asking" \
+    "cargo test -p craftkit-engine --profile ci a_locked_property_may_not_be_written"
+
+# The panel published a locked property's editor as an ordinary one, so an
+# agent asking "can this be clicked?" was told it could. §124.
+swap crates/ui/src/shell.rs \
+    '            let enabled = !prop.locked;' \
+    '            let enabled = true;'
+expect_catch "ui: the panel publishes a locked property's editor as enabled" \
+    "cargo test -p craftkit-ui --profile ci a_locked_property_s_editor_is_published_as_disabled"
+
+# The panel drew a locked property's editor in full colour, which is what the
+# model says it does not do. §124.
+swap crates/ui/src/shell.rs \
+    '                    let response = ui.add_enabled(
+                        enabled,
+                        egui::Slider::new(&mut value, -100.0..=100.0)
+                            .text(path.clone())
+                            .clamping(egui::SliderClamping::Never),
+                    );' \
+    '                    let response = ui.add(
+                        egui::Slider::new(&mut value, -100.0..=100.0)
+                            .text(path.clone())
+                            .clamping(egui::SliderClamping::Never),
+                    );'
+expect_catch "ui: the panel draws a locked property's editor in full colour" \
+    "cargo test -p craftkit-ui --profile ci a_locked_property_is_drawn_greyed"
+
 restore
 finish

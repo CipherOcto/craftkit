@@ -13305,11 +13305,181 @@ own measures the whole window.
 node with a million keyframes on it, and no test — and no hand-made plan —
 has ever made one.
 
+Two things this section measured are **not** fixed and are written up as §125:
+the panel lays out a widget for every property of the node, and the timeline
+walks every keyframe of every node, on every frame.
+
 ---
 
-## 124. Three more gaps the copy was hiding — open
+## 124. A locked property was not locked: five of the six commands that write one ignored the lock
 
-Fixing §123 measured three things that are **not** fixed. Each of them is in
+### The measurement
+
+`Property::locked` says:
+
+> Whether a user may change this. A locked property is greyed in the UI and
+> refused by `property.set`, so the rule lives in the document rather than in
+> every caller.
+
+Six commands write a property: `prop.set`, `prop.reset`, `key.set`,
+`key.remove`, `key.clear` and `key.ease`. **One** of them asked the lock.
+
+Measured, on a node whose only property is locked and carries one keyframe,
+each command asked to write it in turn — each on a fresh document, and at an
+instant where the command **would** have worked:
+
+| the command | before the fix | the property afterwards |
+|---|---|---|
+| `prop.set` | refused: "`amount` is locked" | unchanged |
+| `key.set` | **ok: "keyed `amount` at 0.008s"** | **the value changed from 0.5 to 7.0**, and a second keyframe appeared |
+| `key.remove` | **ok: "removed the key on `amount`"** | **the keyframe is gone** |
+| `key.clear` | **ok: "cleared 1 keyframe(s)"** | **the keyframe is gone** |
+| `key.ease` | **ok: "`amount` eased hold"** | **the easing changed** |
+| `prop.reset` | **ok: "removed 1 keyframe(s) from `amount`"** | **the keyframe is gone** |
+
+The lock was a word in a comment and a `bool` in the model. A property the
+document says a person may not change could have its **value** changed — by
+`key.set`, which sets the stored value as well as the key — and its animation
+changed four ways. Every one of the five reported success.
+
+And the first half of the sentence was false as well: `crates/ui` never read
+`locked` at all, so the panel drew a locked property exactly like an ordinary
+one — in full colour, with an editor that could be dragged, and published it to
+the automation registry as an ordinary editor that could be clicked.
+
+### Why nothing noticed
+
+**Nothing could turn the lock on.** No command sets it. Only a file can carry
+`"locked": true`, and only the model's own `Property::locked()` builder can
+turn it on. So in practice a lock was something a file brought with it, and
+nothing in the tree ever looked at it again.
+
+**The one caller that did check was not tested either.** `prop.set` refused a
+locked property and said so, and **no test anywhere** asserted it. The
+model's own test — `a_locked_property_is_marked_so_the_ui_and_the_engine_agree`
+— checked only that the flag is set. Its name states the *purpose* of the flag,
+and the purpose was not real: the engine did not agree with itself, and the UI
+was not in it at all.
+
+**The rule was in every caller, and there was one caller.** The sentence says
+the rule lives in the document "rather than in every caller" — and the code
+had the check inline in one command, so a second command that wrote a property
+had no reason to ask.
+
+**The UI could not have shown it.** The panel had no way to know a property
+was locked: it never read the flag. So a person looking at the screen had no
+warning either, and an agent reading the registry was told the editor could
+be clicked.
+
+### The fix
+
+**The rule lives in the model, and there is one door.** The model gained
+
+```rust
+pub fn find_writable(&mut self, path: &PropPath) -> Result<Option<&mut Property>, CoreError>
+```
+
+which resolves a path for writing and **refuses a locked property**. Every
+command that writes a property comes through it — `prop.set`, `prop.reset`,
+`key.set`, `key.remove`, `key.clear`, `key.ease` — so a command cannot change
+a locked property by forgetting to check. The refusal names the property and
+says it is locked, and `prop.set`'s message is **unchanged**:
+
+> `prop.set` rejected its parameters: `path` `amount` is locked
+
+**The panel greys a locked property.** Its editor is drawn disabled, and the
+registry publishes it as disabled — so an agent asking "what is at this point?"
+is told it cannot be clicked (§107's rule, applied to a lock). The "clear
+keys" button is greyed as well, because `prop.reset` refuses a locked
+property.
+
+**The sentence is now true in full.** It said a locked property is *greyed in
+the UI* and *refused by `property.set`*, and that the rule lives *in the
+document rather than in every caller*. Both halves were false before: the UI
+had never heard of the flag, and the rule was in one command's body. Both are
+true now, and the last clause is true in the strictest reading — the rule is
+in the model, and every command that writes a property comes through the one
+door that enforces it.
+
+After, all six commands refuse and the property is untouched:
+
+| the command | after the fix | the property afterwards |
+|---|---|---|
+| `prop.set` | refused: "`amount` is locked" | unchanged |
+| `key.set` | refused: "`amount` is locked" | unchanged |
+| `key.remove` | refused: "`amount` is locked" | unchanged |
+| `key.clear` | refused: "`amount` is locked" | unchanged |
+| `key.ease` | refused: "`amount` is locked" | unchanged |
+| `prop.reset` | refused: "`amount` is locked" | unchanged |
+
+**In the running application.** A design with one node whose `amount` property
+is locked, opened in the real window, and the node selected so the properties
+panel was open. The control channel's own answer — the registry's list of the
+widgets on the screen that **cannot** be clicked — before and after:
+
+| the widgets the channel names as disabled | before | after |
+|---|---|---|
+| `node.1.prop.amount` | — | **`node.1.prop.amount`** |
+| `node.1.keys.amount.clear` | — | **`node.1.keys.amount.clear`** |
+
+Before, the only disabled widgets in the window were the toolbar's undo and
+redo. A locked property's editor was published as an ordinary one that could
+be clicked.
+
+And on the screen, the slider for the locked `amount` and its "clear keys"
+button are drawn **greyed**, while the ordinary `enabled` checkbox beside them
+is not:
+
+| the properties panel | before | after |
+|---|---|---|
+| the `amount` slider's handle | full colour | **greyed** |
+| the "clear keys" button | full colour | **greyed** |
+| the `enabled` checkbox | full colour | full colour — it is not locked |
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A locked property may not be written | `a_locked_property_may_not_be_written` in `craftkit-engine` |
+| A locked property's editor is published as disabled | `a_locked_property_s_editor_is_published_as_disabled` in `craftkit-ui` |
+| A locked property is drawn greyed | `a_locked_property_is_drawn_greyed` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the model hands a
+locked property out without asking; the panel publishes a locked property's
+editor as enabled; and the panel draws a locked property's editor in full
+colour.
+
+The engine gate walks **all six** commands, each on a fresh document and at an
+instant where it would have worked, so one mutation — the model forgetting the
+lock — is caught by the one gate that covers all six writers. The two UI gates
+are aimed apart: the registry's flag and the colour on the screen are two
+different facts, and each mutation breaks one and not the other.
+
+### What is still open
+
+**Nothing can turn the lock on.** `Property::locked()` exists, a file can carry
+`"locked": true`, and the flag is in the document's fingerprint — but no
+command sets it. Whether a command should be able to lock a property, and
+which ones, is a decision nobody has written down.
+
+### The lesson
+
+**A rule in every caller is a rule in no caller.** The sentence said the rule
+lives in the document; the code had it in one command, and five other commands
+that wrote the same thing had no reason to ask.
+
+**A flag nobody reads is a flag that is not there.** `locked` was in the model,
+in the file format and in the fingerprint — and the UI had never heard of it.
+
+**The lock a property carries is the lock the document enforces.** `key.set`
+changed a locked property's *value*, which is the one thing a lock is for, and
+it did so while reporting success.
+
+---
+
+## 125. Two more gaps the properties panel was hiding — open
+
+Fixing §123 measured two things that are **not** fixed. Each of them is in
 the code this section touched, and each is recorded here rather than left in a
 comment.
 
@@ -13339,28 +13509,6 @@ The marks are drawn on a rail a few hundred pixels wide, so a million of them
 are a million of something nobody can see. The fix is to draw the marks that
 are **near the playhead** and let the rest go — but "near" is a rule nobody
 has written down yet, and it changes what the timeline means.
-
-### A locked property is not greyed in the UI, though the model says it is
-
-`Property::locked` says:
-
-> Whether a user may change this. A locked property is greyed in the UI and
-> refused by `property.set`, so the rule lives in the document rather than in
-> every caller.
-
-The second half is true — `prop.set` refuses a locked property and says
-*"`amount` is locked"*. The first half is **false**: `crates/ui` never reads
-`locked` at all. The panel draws a locked property as an ordinary editor; a
-person edits it, the command refuses, and the status line says so.
-
-This is the **forty-first** prose-drift instance (item 8 of "Suggested order"):
-a source comment describing a behaviour the code does not have.
-
-The fix is small — `egui` can draw a widget disabled, and the automation
-registry already carries an `enabled` flag, so a locked property's editor could
-be published as disabled and drawn greyed. That is what the sentence says, and
-it is what an agent asking "what is at this point?" needs to be told. It has
-not been done yet.
 
 ---
 
@@ -13665,6 +13813,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The properties panel does not copy the keyframes it does not draw** | `craftkit-ui` test | 1 mutation — §123 |
 | **The properties panel does not copy the keyframe values** | `craftkit-ui` test | 1 mutation — §123 |
 | **The panel publishes one editor for each property and no other** | `craftkit-ui` test | 1 mutation — §123 |
+| **A locked property may not be written** | `craftkit-engine` test | 1 mutation — §124 |
+| **A locked property's editor is published as disabled** | `craftkit-ui` test | 1 mutation — §124 |
+| **A locked property is drawn greyed** | `craftkit-ui` test | 1 mutation — §124 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

@@ -470,31 +470,40 @@ impl<'a> Shell<'a> {
         for (path, prop) in rows {
             let path = path.to_string();
             let widget = AutomationId::property(id, &path);
+            // A locked property is **greyed**: its editor is drawn disabled and
+            // cannot be edited, and the registry says so — §107's rule, applied
+            // to a lock. §124: the model said a locked property was greyed in
+            // the UI, and the UI had never heard of `locked`.
+            let enabled = !prop.locked;
             match &prop.value {
                 craftkit_core::Value::Bool(b) => {
                     let mut value = *b;
-                    let response = ui.checkbox(&mut value, path.clone());
-                    self.automation.publish(widget, response.rect, true);
+                    let response = ui.add_enabled(enabled, egui::Checkbox::new(&mut value, path.clone()));
+                    self.automation.publish(widget, response.rect, enabled);
                     if response.changed() {
                         edits.push((path.clone(), serde_json::Value::Bool(value)));
                     }
                 }
                 craftkit_core::Value::Num(n) => {
                     let mut value = *n;
-                    let response = ui.add(
+                    let response = ui.add_enabled(
+                        enabled,
                         egui::Slider::new(&mut value, -100.0..=100.0)
                             .text(path.clone())
                             .clamping(egui::SliderClamping::Never),
                     );
-                    self.automation.publish(widget, response.rect, true);
+                    self.automation.publish(widget, response.rect, enabled);
                     if response.changed() {
                         edits.push((path.clone(), serde_json::Value::from(value)));
                     }
                 }
                 craftkit_core::Value::Color(c) => {
                     let mut rgb = [c.r, c.g, c.b];
-                    let response = ui.color_edit_button_srgb(&mut rgb);
-                    self.automation.publish(widget, response.rect, true);
+                    // The colour button is a function of the `Ui`, not a
+                    // widget, so it cannot be wrapped by `add_enabled` — it is
+                    // drawn in a scope that is disabled instead.
+                    let response = ui.add_enabled_ui(enabled, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
+                    self.automation.publish(widget, response.rect, enabled);
                     if response.changed() {
                         edits.push((
                             path.clone(),
@@ -504,8 +513,9 @@ impl<'a> Shell<'a> {
                 }
                 other => {
                     let mut text = other.display();
-                    let response = ui.add(egui::TextEdit::singleline(&mut text).hint_text(path.clone()));
-                    self.automation.publish(widget, response.rect, true);
+                    let response = ui
+                        .add_enabled(enabled, egui::TextEdit::singleline(&mut text).hint_text(path.clone()));
+                    self.automation.publish(widget, response.rect, enabled);
                     if response.changed() {
                         edits.push((path.clone(), serde_json::Value::from(text)));
                     }
@@ -522,8 +532,10 @@ impl<'a> Shell<'a> {
                 // — on no screen.
                 ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());
                 let key = AutomationId::clear_keys(id, &path);
-                let response = ui.small_button("clear keys");
-                self.automation.publish(key, response.rect, true);
+                // The button cannot work on a locked property — `prop.reset`
+                // refuses one — so it is greyed and says so. §124.
+                let response = ui.add_enabled(enabled, egui::Button::new("clear keys").small());
+                self.automation.publish(key, response.rect, enabled);
                 if response.clicked() {
                     actions
                         .push(("prop.reset", serde_json::json!({ "node": id.get(), "path": path.clone() })));
@@ -1478,6 +1490,85 @@ mod tests {
             }
         }
         out
+    }
+
+    /// A frame with one node whose only property is locked — or not.
+    ///
+    /// §124: the model says a locked property is greyed in the UI, and the UI
+    /// had never heard of `locked`. The two frames differ in one thing, so a
+    /// difference in the pixels is the lock and nothing else.
+    fn frame_with_a_locked_property(locked: bool) -> (Vec<u8>, Automation, NodeId) {
+        let mut doc = craftkit_model::Document::empty("probe");
+        let id = doc.add_node("One", craftkit_model::NodeKind::Source).expect("the node");
+        {
+            let node = doc.get_mut(id).expect("the node");
+            let property = craftkit_model::Property::new(
+                1,
+                "amount",
+                craftkit_core::Value::num("amount", 0.5).expect("a number"),
+            );
+            node.props.push(if locked { property.locked() } else { property });
+        }
+        let id = doc.nodes[0].id;
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        let state = ShellState { selected: Some(id), ..ShellState::default() };
+        let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
+        (frame.png, frame.automation, id)
+    }
+
+    /// A locked property's editor is published as disabled.
+    ///
+    /// §124: the registry carries an `enabled` flag for every widget it holds
+    /// (§107), and it said *enabled* for a property nobody may change — so an
+    /// agent asking "can this be clicked?" was told it could.
+    #[test]
+    fn a_locked_property_s_editor_is_published_as_disabled() {
+        let (_, registry, id) = frame_with_a_locked_property(true);
+        let name = AutomationId::property(id, "amount");
+        match registry.known(name.as_str()) {
+            Widget::Found { enabled: false, .. } => {}
+            other => panic!("the editor of a locked property is published as {other:?}"),
+        }
+        // And an ordinary property's editor is still published as enabled, so
+        // the flag says something about the lock and not about the registry.
+        let (_, registry, id) = frame_with_a_locked_property(false);
+        let name = AutomationId::property(id, "amount");
+        match registry.known(name.as_str()) {
+            Widget::Found { enabled: true, .. } => {}
+            other => panic!("the editor of an ordinary property is published as {other:?}"),
+        }
+    }
+
+    /// A locked property is drawn greyed.
+    ///
+    /// §124: the model says *"A locked property is greyed in the UI"*, and the
+    /// sentence was false — the panel drew a locked property exactly like an
+    /// ordinary one, in full colour, with an editor that could be dragged.
+    ///
+    /// The comparison is between two frames that differ in one thing: the same
+    /// node, the same property, the same value, one of them locked.
+    #[test]
+    fn a_locked_property_is_drawn_greyed() {
+        let (locked_png, locked, id) = frame_with_a_locked_property(true);
+        let (free_png, free, _) = frame_with_a_locked_property(false);
+        // The rectangle comes from the full lookup, not from `rect()`: that one
+        // answers only for a widget that can be clicked, and a locked
+        // property's editor cannot be (§107).
+        let rect_of =
+            |registry: &Automation| match registry.known(AutomationId::property(id, "amount").as_str()) {
+                Widget::Found { rect, .. } => rect,
+                other => panic!("the property has no rectangle: {other:?}"),
+            };
+        let rect = rect_of(&locked);
+        let same_rect = rect_of(&free);
+        assert_eq!(rect, same_rect, "the two editors are not in the same place");
+        let band = |png: &[u8]| crop(png, rect.left(), rect.top(), rect.width(), rect.height());
+        assert_ne!(
+            band(&locked_png),
+            band(&free_png),
+            "a locked property is drawn exactly like an ordinary one"
+        );
     }
 
     /// The timeline can reach both ends of the design.

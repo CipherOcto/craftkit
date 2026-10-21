@@ -621,6 +621,30 @@ impl PropGroup {
         }
     }
 
+    /// Resolve a path to a property for **writing**.
+    ///
+    /// A locked property is refused, and the refusal is the **model's**: the
+    /// lock is a rule of the document, and this is the one door a writer comes
+    /// through — so a command cannot change a locked property by forgetting to
+    /// check.
+    ///
+    /// `Ok(None)` means there is no such property, and the caller may create
+    /// it. A property the model has just created is never locked.
+    ///
+    /// §124: six commands write a property, and only one of them asked the
+    /// lock. The other five changed a locked property anyway — one of them
+    /// changed its **value**, which is the one thing a lock is for.
+    pub fn find_writable(&mut self, path: &PropPath) -> Result<Option<&mut Property>, CoreError> {
+        let prop = match self.find_mut(path) {
+            Some(prop) => prop,
+            None => return Ok(None),
+        };
+        if prop.locked {
+            return Err(CoreError::BadData(format!("`{path}` is locked")));
+        }
+        Ok(Some(prop))
+    }
+
     /// Every property below here as `(path, &Property)`, for the UI, the
     /// evaluator and the dumps.
     ///
