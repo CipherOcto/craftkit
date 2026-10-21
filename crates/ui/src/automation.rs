@@ -454,6 +454,15 @@ mod tests {
     /// is: a second batch of the same size must not cost twice as much as the
     /// first. Linear costs the same; quadratic costs four times as much,
     /// because the second batch scans a list twice as long.
+    ///
+    /// §101: and each side is measured **several times, keeping the fastest
+    /// round**. A round can be preempted — by a sibling test binary, by a
+    /// build, by whatever else the machine is doing — and a preempted round
+    /// says nothing about the code. Measured under load: two rounds of the
+    /// *same* code gave ratios of 0.01 and 72, so the test failed about half
+    /// the time on a busy machine. The fastest round is the least disturbed
+    /// one, and the fastest round of a quadratic implementation is still
+    /// three times its first batch, so the mutation is still caught.
     #[test]
     fn publishing_a_widget_does_not_cost_more_than_the_widgets_before_it() {
         let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
@@ -464,10 +473,18 @@ mod tests {
             }
             start.elapsed()
         };
-        let mut registry = Automation::new();
-        let first = batch(&mut registry, 0);
-        let second = batch(&mut registry, 5_000);
-        let ratio = second.as_secs_f64() / first.as_secs_f64().max(f64::MIN_POSITIVE);
+        // How many rounds to measure. Eight is enough for the fastest round
+        // to be a quiet one on a loaded machine, and the whole test still
+        // takes about twenty milliseconds.
+        const ROUNDS: usize = 8;
+        let mut first = f64::MAX;
+        let mut second = f64::MAX;
+        for _ in 0..ROUNDS {
+            let mut registry = Automation::new();
+            first = first.min(batch(&mut registry, 0).as_secs_f64());
+            second = second.min(batch(&mut registry, 5_000).as_secs_f64());
+        }
+        let ratio = second / first.max(f64::MIN_POSITIVE);
         assert!(
             ratio < 2.0,
             "the second batch of 5000 widgets took {ratio:.1}x as long as the first: \

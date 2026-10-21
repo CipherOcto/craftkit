@@ -10276,6 +10276,129 @@ list of names. §99 taught that the registry and the shell can disagree about
 covered.** Every question anybody asked about the registry was about the
 toolbar. The buttons in the node list had never been on anybody's list.
 
+## 101. A timing gate that failed when the machine was busy
+
+§98 made the automation registry's duplicate check a lookup and wrote a test
+to prove it: the second batch of five thousand names must not cost twice as
+much as the first. The test's own comment said *"The test is **relative**, so
+it does not depend on how fast the machine is"*.
+
+It did not depend on how fast the machine was. It depended on how **busy** the
+machine was, and it failed about four times in ten when it was.
+
+### The measurement
+
+Sixteen processes spinning, and the same correct code measured twice:
+
+| Round | First batch | Second batch | Ratio |
+|---|---|---|---|
+| 0 | 51.4 ms | 2.0 ms | 0.04 |
+| 1 | 155.9 ms | 1.8 ms | 0.01 |
+| 3 | 1.5 ms | 106.2 ms | **72.0** |
+| 4 | 1.5 ms | 87.4 ms | **59.4** |
+| 5 | 103.7 ms | 1.9 ms | 0.02 |
+
+Two rounds of the *same* code, differing by a factor of seven thousand. The
+first batch is the one that got the CPU, or it did not; the second batch is
+the one that did.
+
+So the test, run ten times under that load, on code that is **correct**:
+
+```
+1: the second batch took 42.4x as long as the first   FAILED
+2: ok      3: ok      4: ok      5: ok      6: ok
+7: the second batch took  4.6x as long as the first   FAILED
+8: ok      9: the second batch took  3.3x as long as the first   FAILED
+10: the second batch took 44.2x as long as the first  FAILED
+
+OLD TEST FAILURES: 4 / 10
+```
+
+And the failure it reported was **the mutation's own message**: *"the
+registry is scanning what it has already published"*. A gate that reports the
+wrong reason is worse than a gate that fails to run: it teaches people that
+the message means something.
+
+### Why nothing noticed
+
+**The machine was quiet.** A gate that only misbehaves when something else
+is running is a gate that is right on the developer's desk and wrong in CI,
+where a build, a test binary and the runner all compete for the same cores.
+
+**The comment promised the wrong thing.** "Does not depend on how fast the
+machine is" is true of a *relative* measurement — and the ratio did not depend
+on the machine's speed. It depended on the machine's **load**, which the
+comment never mentioned and which the measurement never controlled for. The
+sentence was reassuring and wrong, which is the §64 shape: a sentence about
+the property the code did not have.
+
+**It failed once, and was put down to the machine.** The first §100 run of
+`cargo xtask ci` failed on exactly this test, on a tree where nothing had
+changed. Re-running it passed. The comfortable reading is "the machine was
+busy" — which is *true*, and is also the bug.
+
+### The fix
+
+**Measure the least disturbed round, not the last one.** The test now runs
+eight rounds and keeps the **fastest** measurement of each side. A preempted
+round says nothing about the code; the fastest round is the one that was
+least disturbed.
+
+The same ten runs under the same load, with the fix:
+
+```
+NEW TEST FAILURES: 0 / 10
+```
+
+And the mutation is still caught — under the same load, with the scan put
+back:
+
+```
+the second batch of 5000 widgets took 3.8x as long as the first   FAILED
+the second batch of 5000 widgets took 2.9x as long as the first   FAILED
+the second batch of 5000 widgets took 3.6x as long as the first   FAILED
+```
+
+The quadratic implementation's *fastest* round is still three times its
+first batch, because the quadratic work is the thing being measured and it
+dominates any scheduling noise. The margin is the same; the noise is gone.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A timing gate does not fail when the machine is busy | `publishing_a_widget_does_not_cost_more_than_the_widgets_before_it` |
+
+and the §98 mutation — the scan put back — still fails it, under load, every
+time.
+
+There is no new mutation here, and the reason is worth saying: **a mutation
+that breaks the *test* rather than the production code is not a mutation.**
+The §98 case already covers the rule; what was wrong was the instrument, not
+the rule.
+
+### The lesson
+
+**A measurement needs a rule for what to keep.** The test kept one number,
+and one number from a preempted round is noise. The rule that works here is
+the one every benchmark already knows: **keep the fastest run**, because the
+fastest run is the one that was not interrupted.
+
+**"Does not depend on how fast the machine is" is not "does not depend on the
+machine".** The relative measurement was right about speed and blind to load.
+A sentence about what a measurement does *not* depend on is a claim about the
+world, and it needs the same care as the measurement.
+
+**A gate that fails at random is a gate that trains people to ignore it.**
+The failure mode here was not a missed mutation — it was a *false* one, with
+a message that named a bug that was not there. The cost of that is not the
+false failure; it is that the next time the gate says the same thing, nobody
+will believe it.
+
+**This tree has exactly one timing-sensitive gate, and now it is not
+sensitive.** The kernel's `measure` and the CI's own clock report times; they
+do not assert on them.
+
 ---
 
 ---
@@ -10479,6 +10602,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The key fields have names** | `craftkit-ui` test | 1 mutation — §100 |
 | **Every published name answers at its own centre** | `craftkit-ui` test | 1 mutation — §100 |
 | **A name never promises a widget that is not drawn** | `craftkit-ui` test | 1 mutation — §100 |
+| **A timing gate does not fail when the machine is busy** | `craftkit-ui` test, measured under load | the §98 mutation — §101 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -10671,6 +10795,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    Twenty instances, and the last two are the tree contradicting itself in the
    act of documenting it — a promise about the frame and a promise about a
    widget, both made by the same code that broke them.
+   §101 is the twenty-first, and it is a sentence about a *test*: the timing
+   test's comment said *"the test is relative, so it does not depend on how
+   fast the machine is"*, and it did not depend on the machine's **speed** — it
+   depended on the machine's **load**, and failed four times in ten when the
+   machine was busy. Twenty-one instances, and the twenty-first is the first
+   one that was a promise about the *checking* rather than about the tree.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
