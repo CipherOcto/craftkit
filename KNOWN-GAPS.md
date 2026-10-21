@@ -13808,8 +13808,10 @@ correctness gate, and they are aimed apart on purpose: the scan-per-node
 mutation still returns **the right levels**, so a gate that only checked the
 levels would not notice it. The gate that notices it measures the
 collection against the way it was done before, **in the same run, on the same
-machine**: the fast way has to be at least eight times cheaper than the scan,
-and it is thirty-six times.
+machine**: the fast way has to be at least four times cheaper than the scan,
+and it is thirty-six times. §134 moved that threshold down, from eight:
+eight was a number read off a quiet machine, and the gate failed on a busy
+one.
 
 ### What is still open
 
@@ -14628,6 +14630,124 @@ proxy's answer changed meaning when the server did the right thing.
 
 ---
 
+## 134. A gate that measured the machine instead of the code
+
+### The measurement
+
+§127's gate for the node list's collection is a timing gate: the production
+way of collecting the rows has to be cheaper than the way it replaced, which
+is the one that asked the plan about every node.
+
+```rust
+assert!(
+    collected * 8.0 < scanned,
+    "collecting the rows of ten thousand nodes took {collected:.6}s, and asking the plan \
+     about every node took {scanned:.6}s: the rows are still collected a scan at a time"
+);
+```
+
+The threshold was **eight**, and it was read off a quiet machine: 1.2 ms
+against 43.7 ms, thirty-six times. A ratio of thirty-six is a number you
+can put a threshold of eight next to and feel safe.
+
+The fast way takes about a millisecond. The scan takes forty. So a moment
+when the machine is busy — a scheduling quantum, a page fault storm, a
+frequency step — is **all** of the fast measurement and a twentieth of the
+slow one, and the ratio collapses.
+
+Measured, on a busy machine:
+
+```
+collecting the rows of ten thousand nodes took 0.009469s, and asking the plan
+about every node took 0.068891s
+```
+
+**7.3 times.** Under the threshold of eight, on a machine that was not
+wrong, with the code thirty-six times faster than the thing it replaced.
+
+### Why nothing noticed
+
+**The threshold was set from the measurement it was supposed to be robust
+against.** Thirty-six on a quiet machine, eight on the threshold — and the
+number that matters is the *worst* ratio the machine can produce, not the
+best one. Nobody measured the worst one, because the worst one only happens
+when the machine is busy, and a busy machine is somebody else's problem.
+
+**`fastest` takes the minimum of nine rounds, which helps and is not
+enough.** The minimum rejects a round that was disturbed. It does not
+reject a *sustained* disturbance, and a sustained one is what a busy machine
+is.
+
+**The failure message was about the code.** *"the rows are still collected a
+scan at a time"* — said by a gate that was measuring how fast the machine
+was.
+
+### The fix
+
+**The fast way is measured in bulk**, so that both sides of the comparison
+span about the same half-second of the machine's time:
+
+```rust
+const CALLS: usize = 32;
+let collected = fastest(9, || {
+    for _ in 0..CALLS {
+        std::hint::black_box(node_rows(session.document(), session.plan()));
+    }
+}) / CALLS as f64;
+```
+
+**And the threshold is four, not eight.** The scan this gate replaces is
+*identical* to the fast way — a ratio of exactly one — so a threshold of
+four is four times the margin over the thing the gate exists to catch. The
+old threshold of eight was not closer to the mutation; it was closer to the
+number on the quiet machine.
+
+Measured after the change: **0 failures of 25** runs of the gate on a busy
+machine.
+
+### What now holds it
+
+The mutation was already in the suite: *ui: the node list asks the plan once
+per node again*, which puts the scan back. It still fails the gate, and now
+it fails it by the right margin — under the mutation the two sides measure
+the same thing, **0.052229s against 0.051710s**, a ratio of one.
+
+### What is still open
+
+**The threshold is still a number read off a machine.** Four is safer than
+eight, and the measurement is now much steadier, but a gate that compares
+two times will always be talking about the machine as well as the code. The
+honest version of this gate would count the work instead of timing it —
+count how many times the production code visits the plan's nodes — and that
+needs the plan to say so. §127's fix made the count one pass; nothing
+*reports* the count.
+
+**Two of the tree's timing gates are like this.** The properties panel's two
+(§123) compare the panel's cost with and without the copy it should not do,
+and their thresholds are eight as well. They have not been seen failing, and
+they have more room than this one did — measured at **1.54** and **0.94**
+against a threshold of eight. The second of those measures a ratio of *less
+than one*, which says the copy is not happening at all: the panel is not
+slower with 64 KiB of keyframe values than with one byte. A gate whose
+number is below one is a gate that has nothing to be nervous about.
+
+### The lesson
+
+**A threshold read off one machine is a threshold the machine sets.** The
+number on the quiet machine was thirty-six; the number on the busy one was
+7.3; and the gate was written for the first and failed on the second.
+
+**The margin belongs to the mutation, not to the measurement.** The gate
+catches a ratio of one. A threshold of four catches it with four times the
+margin, and costs nothing — the extra margin was never buying anything,
+because a ratio of eight was never the thing being looked for.
+
+**A gate that can fail for a second reason will eventually do so.** Two in
+one afternoon (§133 and this one), in two different crates, for two different
+reasons, and neither of them had anything to do with the code it watches.
+
+---
+
 ---
 
 ## What enforces what
@@ -14946,6 +15066,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The shell may not own a window** | `cargo xtask layers` | 1 mutation — §131 |
 | **The shell may read the plan and may not evaluate the document** | `cargo xtask lists` | 1 mutation — §132 |
 | **A server that has exited is not a fault** | `craftkit-cli` test | 1 mutation — §133 |
+| **The rows are not collected a scan at a time, on a busy machine either** | `craftkit-ui` test | 1 mutation — §134 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
