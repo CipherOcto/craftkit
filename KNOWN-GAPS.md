@@ -14510,6 +14510,124 @@ holds — it is evidence that the tree has never had the chance to break it.
 
 ---
 
+## 133. A test that failed when the code did the right thing
+
+### The measurement
+
+`apps/craftkit-cli/tests/mcp_stdio.rs` ends with the test that holds the MCP
+server's promise: a `shutdown` ends the server, and nothing is answered after
+it.
+
+The test wrote a `ping` **after** the shutdown and then read the answer:
+
+```rust
+s.send(r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#);
+assert!(s.reply().is_none(), "the server answered after shutdown");
+assert!(s.wait().is_some(), "the process did not exit after shutdown");
+```
+
+`send` writes to the server's stdin and **panics if the write fails**. And a
+server that has done what it was told — exited — has closed that pipe: the
+write fails with a broken pipe.
+
+So the test failed when the server behaved correctly, and passed when the
+server was still alive.
+
+Measured, with the machine busy — twelve spinning loops on sixteen cores —
+forty runs of the test:
+
+| | failures |
+|---|---|
+| the test as it was | **32 of 40** |
+| the test as it is now | **0 of 40** |
+
+On a quiet machine it failed **once in forty**. That is why it survived: a
+test that fails one time in forty on an idle machine and eighty times in
+forty on a busy one is not a test anybody suspects — it looks like the
+machine.
+
+### Why nothing noticed
+
+**The failure message pointed at the wrong thing.** The panic said *"the
+server stopped listening (Broken pipe) — the server said nothing; its status
+is Some(ExitStatus(unix_wait_status(0)))"*. Every part of that is the server
+behaving correctly: it stopped listening, it said nothing more, and it exited
+with success. The message was written for a server that *died*, and it was
+being read as one.
+
+**The question was right and the way of asking it was wrong.** "Does the
+server answer after the shutdown?" is the right question. "Write to the
+server and see whether the write works" is a different question, and the
+server's answer to it is *"no — and that is what you asked for"*.
+
+**A race with a process's exit is invisible when the machine is fast.** The
+parent's write and the child's exit are two events on two cores, and on an
+idle machine the parent wins.
+
+### The fix
+
+**The write after a shutdown is allowed to fail.** A server that has already
+exited is behaving exactly as it was told, and the broken pipe is the proof
+of it:
+
+```rust
+let ping = r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#;
+let _ = writeln!(s.stdin, "{ping}");
+let _ = s.stdin.flush();
+```
+
+**And the process's ending is waited for with the pipe into it still open.**
+`Child::wait` closes that pipe, and a server that sees end-of-file on stdin
+ends whether or not it was told to — so waiting that way would prove nothing
+about the shutdown. The test polls `try_wait` instead:
+
+```rust
+fn wait_for_exit(&mut self, within: std::time::Duration) -> Option<std::process::ExitStatus> { … }
+```
+
+**And the wait is bounded.** A server that does not end is the failure this
+test exists to catch, and a test that hangs is not a test that catches it.
+
+### What now holds it
+
+The mutation that proves the rule was already in the suite: *mcp: shutdown
+says ok and then keeps serving*, which makes the server ignore the shutdown.
+With the fixed test the server does not end, the bounded wait runs out, and
+the test fails with *"the process did not exit after shutdown"* — verified,
+and the whole `mcp_stdio` binary still fails under that mutation.
+
+### What is still open
+
+**The first symptom was a different flake.** The run that started this was a
+`cargo xtask ci` that failed in `craftkit-ui --lib`. The flake found here is
+in `craftkit-cli`, and the `craftkit-ui` one was caught next. Two gates
+failing for the wrong reason in one afternoon is a habit, not a coincidence:
+a gate that can fail for a reason other than the thing it watches will
+eventually do so.
+
+**A test that writes to a process it expects to die can fail the same way
+again.** The rule the fix follows — *a write to a server that has already
+exited is not a failure* — is now in this one place, and the other three
+tests in the file write to a server that is supposed to stay up ✓. If
+another test ever wants to write to a process it expects to end, it should
+follow the same rule rather than rediscover it.
+
+### The lesson
+
+**A test that fails when the code is right is worse than no test.** It does
+not sit there failing: it fails *sometimes*, on a busy machine, and it takes
+the failure with it into CI, where nobody suspects the machine.
+
+**The broken pipe was the evidence.** A pipe that breaks is a process that
+has gone — which is exactly what the test wanted to see. The test read it as
+a fault because the code around it only knew how to read a fault.
+
+**Ask the question, not a proxy for it.** The question was "does the server
+answer after the shutdown?"; the proxy was "does the write work?"; and the
+proxy's answer changed meaning when the server did the right thing.
+
+---
+
 ---
 
 ## What enforces what
@@ -14827,6 +14945,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A module path in prose names a module this tree has** | `cargo xtask lists` | 1 mutation — §130 |
 | **The shell may not own a window** | `cargo xtask layers` | 1 mutation — §131 |
 | **The shell may read the plan and may not evaluate the document** | `cargo xtask lists` | 1 mutation — §132 |
+| **A server that has exited is not a fault** | `craftkit-cli` test | 1 mutation — §133 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

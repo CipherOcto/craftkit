@@ -101,8 +101,25 @@ impl Server {
         reply.unwrap_or_else(|| panic!("{what} — {complaint}"))
     }
 
-    fn wait(&mut self) -> Option<std::process::ExitStatus> {
-        self.child.wait().ok()
+    /// Wait for the process to end, with the pipe into it still open.
+    ///
+    /// `Child::wait` closes that pipe, and a server that sees end-of-file on
+    /// stdin ends whether or not it was told to — so waiting that way would
+    /// prove nothing about the shutdown. This polls instead, and the pipe
+    /// into the child stays open the whole time.
+    ///
+    /// The wait is bounded, because a server that does not end is the failure
+    /// this is here to catch, and a test that hangs is not a test that
+    /// catches it.
+    fn wait_for_exit(&mut self, within: std::time::Duration) -> Option<std::process::ExitStatus> {
+        let deadline = std::time::Instant::now() + within;
+        while std::time::Instant::now() < deadline {
+            if let Some(status) = self.child.try_wait().ok().flatten() {
+                return Some(status);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        None
     }
 }
 
@@ -200,7 +217,17 @@ fn shutdown_ends_the_server_and_the_reply_before_it_is_still_sent() {
 
     // Nothing more may be answered, and the process must be gone on its own.
     // stdin is held open, so only `shutdown` can end this.
-    s.send(r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#);
+    //
+    // The write is **allowed to fail**. A server that has already exited is
+    // behaving exactly as it was told, and the broken pipe is the proof of
+    // it; the old version panicked on that pipe, so it failed when the
+    // server did the right thing and passed when the server was slow.
+    let ping = r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#;
+    let _ = writeln!(s.stdin, "{ping}");
+    let _ = s.stdin.flush();
+
+    // The process must end on its own, with the pipe into it still open.
+    let status = s.wait_for_exit(std::time::Duration::from_secs(10));
+    assert!(status.is_some(), "the process did not exit after shutdown");
     assert!(s.reply().is_none(), "the server answered after shutdown");
-    assert!(s.wait().is_some(), "the process did not exit after shutdown");
 }
