@@ -42,6 +42,8 @@
 //!   that marks an id or a position — is refused, because the listing would
 //!   publish a path that means something else. §88.
 
+use std::collections::BTreeMap;
+
 use crate::keyframe::{Key, Keyframes};
 use crate::limits;
 use crate::path::{PathSeg, PropPath};
@@ -313,9 +315,22 @@ pub struct PropGroup {
 /// group id or a property label with `eq_ignore_ascii_case`. A counter that
 /// compared exactly would number `Amount` and `amount` as two firsts, and the
 /// second one's published path would resolve to the first. §85.
-fn occurrence(label: String, seen: &mut Vec<String>) -> PathSeg {
-    let count = seen.iter().filter(|s| s.eq_ignore_ascii_case(&label)).count() + 1;
-    seen.push(label.clone());
+///
+/// The counts are kept in a **map**, keyed by the ASCII-lowercased label. A
+/// list of the labels seen so far was scanned for every sibling, and the
+/// scan made the listing quadratic: a node with five thousand properties took
+/// 37 ms to list, and the evaluator lists every node on every plan — and the
+/// window lists them again on every frame. §122.
+///
+/// The map is only ever **counted** in, never read in order, so a hash map's
+/// random iteration order cannot reach a path; a `BTreeMap` keeps that
+/// obvious.
+fn occurrence(label: String, seen: &mut BTreeMap<String, usize>) -> PathSeg {
+    // `eq_ignore_ascii_case` folds exactly the ASCII letters, so folding them
+    // here groups the same labels together the same way.
+    let key = label.to_ascii_lowercase();
+    let count = seen.get(&key).copied().unwrap_or(0) + 1;
+    seen.insert(key, count);
     PathSeg::Match(label, count)
 }
 
@@ -630,7 +645,7 @@ impl PropGroup {
         // Counted per level: `amount` and `amount#2` are siblings, while
         // `trigger/x` and `trigger/trigger/y` are not competing for the same
         // name space at all.
-        let mut seen: Vec<String> = Vec::new();
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for node in &self.nodes {
             match node {
                 PropNode::Prop(p) => {
@@ -1010,6 +1025,83 @@ mod tests {
                 path
             );
         }
+    }
+
+    /// A listing of many siblings still numbers the duplicates.
+    ///
+    /// §122: the listing counts a name's occurrences among its **siblings**,
+    /// and the count is case-insensitive. The count is now kept in a map
+    /// rather than counted by scanning the siblings seen so far — and a map
+    /// that forgot a sibling would number the duplicates wrongly, and a path
+    /// that names the wrong property resolves to the wrong property.
+    #[test]
+    fn a_listing_of_many_siblings_numbers_the_duplicates() {
+        // Three properties with the same name, each spelled differently: the
+        // count has to fold the case to be right, and the count is among
+        // **siblings**.
+        let g = PropGroup::new("r", "r")
+            .with_prop(Property::new(1, "amount", Value::num("t", 1.0).unwrap()))
+            .with_prop(Property::new(2, "Amount", Value::num("t", 2.0).unwrap()))
+            .with_prop(Property::new(3, "AMOUNT", Value::num("t", 3.0).unwrap()));
+        let paths: Vec<String> = g.flatten().iter().map(|(p, _)| p.to_string()).collect();
+        assert_eq!(
+            paths,
+            vec!["amount".to_string(), "Amount#2".to_string(), "AMOUNT#3".to_string()],
+            "{paths:?}"
+        );
+        for (path, prop) in g.flatten() {
+            assert_eq!(
+                g.find(&path).map(|f| f.id),
+                Some(prop.id),
+                "`{}` resolved to the wrong property",
+                path
+            );
+        }
+    }
+
+    /// Listing a node's properties is not quadratic.
+    ///
+    /// §122: the listing counted a name's occurrences by scanning the
+    /// siblings it had already seen, so listing *n* properties cost *n*
+    /// scans of a growing list. Five thousand properties took 37 ms — and the
+    /// evaluator lists every node on every plan, and the window lists them
+    /// again on every frame.
+    ///
+    /// The test is **relative**, so it does not depend on how fast the
+    /// machine is: four times the properties must not cost sixteen times the
+    /// time. §101's shape — the fastest of several rounds, because a
+    /// preempted round says nothing about the code.
+    #[test]
+    fn listing_a_node_does_not_cost_more_than_listing_a_smaller_one() {
+        let group = |count: usize| {
+            let mut g = PropGroup::new("r", "r");
+            for i in 0..count {
+                g.push(Property::new(i as u64 + 1, format!("p{i}"), Value::num("t", 1.0).unwrap()));
+            }
+            g
+        };
+        let small = group(1_000);
+        let large = group(4_000);
+        // How many rounds to measure. Five is enough for the fastest round
+        // to be a quiet one on a loaded machine, and the whole test still
+        // takes about ten milliseconds.
+        const ROUNDS: usize = 5;
+        let mut first = f64::MAX;
+        let mut second = f64::MAX;
+        for _ in 0..ROUNDS {
+            let start = std::time::Instant::now();
+            std::hint::black_box(small.flatten().len());
+            first = first.min(start.elapsed().as_secs_f64());
+            let start = std::time::Instant::now();
+            std::hint::black_box(large.flatten().len());
+            second = second.min(start.elapsed().as_secs_f64());
+        }
+        let ratio = second / first.max(f64::MIN_POSITIVE);
+        assert!(
+            ratio < 8.0,
+            "listing 4000 properties took {ratio:.1}x as long as listing 1000: \
+             the listing is counting the siblings the slow way"
+        );
     }
 
     /// The read side and the write side must resolve a uid the same way.

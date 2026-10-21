@@ -1919,8 +1919,8 @@ expect_catch "model: the property tree may be deeper than a path can name" \
 # published as a first, so the second property's published path resolved to
 # the *first* one, and the second had no path of its own. §85.
 swap crates/model/src/property.rs \
-    '    let count = seen.iter().filter(|s| s.eq_ignore_ascii_case(&label)).count() + 1;' \
-    '    let count = seen.iter().filter(|s| *s == &label).count() + 1;'
+    '    let key = label.to_ascii_lowercase();' \
+    '    let key = label.clone();'
 expect_catch "model: the listing counts names exactly while the resolver counts them loosely" \
     "cargo test -p craftkit-model --profile ci a_path_names_the_property_the_listing_published_it_for"
 
@@ -3156,6 +3156,30 @@ swap crates/ui/src/shell.rs \
     '            if mark.frame < *frames.start() && mark.frame > *frames.end() {'
 expect_catch "ui: a key outside the design is drawn on the rail" \
     "cargo test -p craftkit-ui --profile ci a_key_outside_the_design_has_no_mark_on_the_rail"
+
+# The model counted a name's occurrences by scanning the siblings it had
+# already seen, so listing a node's properties was quadratic. §122.
+swap crates/model/src/property.rs \
+    '    let count = seen.get(&key).copied().unwrap_or(0) + 1;' \
+    '    let count = seen.keys().filter(|k| k.eq_ignore_ascii_case(&label)).count() + 1;'
+expect_catch "model: the listing counts the siblings the slow way again" \
+    "cargo test -p craftkit-model --profile ci listing_a_node_does_not_cost_more_than_listing_a_smaller_one"
+
+# The count forgot the siblings it had already seen, so a duplicated name was
+# published as a first and resolved to the wrong property. §122.
+swap crates/model/src/property.rs \
+    '    let count = seen.get(&key).copied().unwrap_or(0) + 1;' \
+    '    let count = 1;'
+expect_catch "model: the listing forgets a sibling when counting" \
+    "cargo test -p craftkit-model --profile ci a_listing_of_many_siblings_numbers_the_duplicates"
+
+# The marks stopped looking inside a group, so a keyframe in one was on no
+# screen at all. §122.
+swap crates/ui/src/shell.rs \
+    '            craftkit_model::PropNode::Group(group) => collect_keys(group, selected, rate, out),' \
+    '            craftkit_model::PropNode::Group(_group) => {}'
+expect_catch "ui: the marks skip the keyframes inside a group" \
+    "cargo test -p craftkit-ui --profile ci a_keyframe_inside_a_group_is_marked_on_the_rail"
 
 restore
 finish

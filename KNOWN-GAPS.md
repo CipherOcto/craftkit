@@ -13017,6 +13017,163 @@ thing, drawn one after the other, and the pictures compared.
 
 ---
 
+## 122. The model counted a node's properties the slow way, and every frame paid for it
+
+### The measurement
+
+A node's properties are listed **by path**: the listing is how a command, the
+plan and the window all learn what a node holds. §85 made that listing
+correct — every property named by exactly one path, and the path resolving
+back to the property it names.
+
+It was also, for a node with many properties, **quadratic**. The listing
+counted a name's occurrences among its **siblings** by scanning the siblings
+it had already seen, so listing *n* properties cost *n* scans of a growing
+list. Measured on a document with one node and *n* properties, the same
+machine, the same script, the two configurations back to back:
+
+| *n* properties | the listing | the fingerprint | a cold evaluation | the shell draws in (the node selected) |
+|---|---|---|---|---|
+| 100 | 53.3 µs | 3.7 µs | 126 µs | 585 µs |
+| 1 000 | 3.12 ms | 36.8 µs | 6.82 ms | 7.49 ms |
+| 5 000 | **83.1 ms** | 194 µs | **171.7 ms** | **103.7 ms** |
+
+Ten times the properties cost thirty-one times the time, and five times the
+properties cost twenty-six times the time. That is the shape of a quadratic
+thing, and the fingerprint beside it is the tell: the fingerprint hashes the
+same tree in **194 µs** because it walks the tree *without building a path
+for each property* — and the listing, which builds one, costs four hundred
+times as much.
+
+**The evaluation was the listing.** A cold evaluation of that document took
+171.7 ms, and the listing inside it took 83.1 ms — twice, because the
+evaluator resolves every property's value *and* checks every property's
+keyframes for the ones outside the design's range (§119). So **every
+command** on a document with a five-thousand-property node spent a third of
+a second listing properties.
+
+**And the window paid it on every frame.** The shell draws the properties
+panel for the selected node on every frame, and — since §121 — the
+timeline's marks for **every node** on every frame. The shell's own drawing
+work — the panels, without the rasteriser — took 103.7 ms at five thousand
+properties, and 585 µs at a hundred. `egui` repaints only when something
+asks it to, so a cost like that is not a slow frame; it is a window that
+takes a tenth of a second to answer a mouse.
+
+The model's own limits allow **fifty thousand** properties in one node and
+ten thousand nodes in a document. This is a document the model *accepts*.
+
+### Why nothing noticed
+
+**The listing was correct.** §85's tests are about *which* path names *which*
+property, and every one of them still passes. A quadratic listing gives the
+right answers; it just takes longer and longer to get them.
+
+**The cost is only visible at a size nobody types.** A hand-made plan has a
+handful of properties, and the listing is microseconds. The cost appears
+where the model's limits are, and the limits are not a thing anybody draws.
+
+**Nothing measured the shape that bites.** §103 measured what a *command*
+costs — 23.8 ms on a document at the model's limits — and its document was
+**one node with 32 properties and 10 000 keyframes on each**. The cost there
+is in the *keyframes*: three hundred and twenty thousand of them, sampled on
+every evaluation. The listing of thirty-two properties is nothing. A node
+with five thousand *properties* is a different shape, and nobody had built
+one.
+
+### The fix
+
+**The counts are kept in a map.** The listing counts a name's occurrences in
+a map keyed by the ASCII-lowercased label, so counting a sibling is one
+lookup instead of a scan of everything seen so far. The map is only ever
+counted *in*, never read in order, so no path can depend on a hash order.
+
+**The timeline's marks do not build a path at all.** The marks want the
+*instants*, not the paths — and the model builds a path for every property
+it lists, which is a copy of the tree. The window now walks the tree itself,
+the way the evaluator's own `is_animated` walks it. On a five-thousand-
+property node: **2.18 ms for the listing, 25 µs for the walk.**
+
+After:
+
+| *n* properties | the listing | a cold evaluation | the shell draws in |
+|---|---|---|---|
+| 100 | 35.6 µs | 91.6 µs | 541 µs |
+| 1 000 | 386 µs | 1.02 ms | 4.83 ms |
+| 5 000 | **2.18 ms** | **5.74 ms** | **22.7 ms** |
+
+The listing is **linear** now — eleven times the time for ten times the
+properties — and **thirty-eight times faster** at five thousand. The
+evaluation is **thirty times faster**, and the shell's drawing work is four
+and a half times faster.
+
+**In the running application.** The same design — one node, five thousand
+properties, eight hundred and ninety kilobytes — opened in the real window,
+and ten commands sent over the control channel, each of which changes the
+document and so re-evaluates the plan:
+
+| the same ten commands, in the real window | fastest | median | slowest |
+|---|---|---|---|
+| before | **176 ms** | **189 ms** | 202 ms |
+| after | **17 ms** | **20 ms** | 23 ms |
+
+A tenth of a second per command became a twentieth of one, in the
+application, on a document the model accepts.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Listing a node's properties is not quadratic | `listing_a_node_does_not_cost_more_than_listing_a_smaller_one` in `craftkit-model` |
+| A listing of many siblings numbers the duplicates | `a_listing_of_many_siblings_numbers_the_duplicates` |
+| A keyframe inside a group is marked on the rail | `a_keyframe_inside_a_group_is_marked_on_the_rail` in `craftkit-ui` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the listing counts
+the siblings the slow way again; the listing forgets a sibling when counting;
+and the marks skip the keyframes inside a group.
+
+§85's own mutation — *"the listing counts names exactly while the resolver
+counts them loosely"* — was **re-aimed**, because its anchor was the line
+this change replaced. The first re-aim was wrong: it looked the label up in
+the map without folding the case, which changes nothing for the test's
+order (`Amount` first, `amount` second — the first one's case does not
+matter). The mutation now folds the label *into* the key instead of folding
+the key, which is the same defect in the new shape ✓.
+
+### What is still open
+
+**The properties panel still copies the selected node's properties on every
+frame** — the paths *and* the properties, because the panel publishes a name
+for each editor. That is linear now, and measured: the shell's drawing work
+at five thousand properties is 22.7 ms. What is left in it — the copy, the
+five thousand names it publishes, the tree — was not measured separately, and
+a node with ten thousand keyframes carries ten thousand of them.
+
+**The evaluator's out-of-range check still lists every property on every
+plan**, because the warning names the property's path. Linear now — most of
+the 5.74 ms plan at five thousand properties — but it is a path per property
+on every plan.
+
+### The lesson
+
+**A correct listing can be quadratic.** §85 made the paths right, and every
+test about them still passes; the cost was in *how* the occurrences were
+counted, and nothing about the answers changed.
+
+**Measure the shape, not the size.** §103's document had 32 properties and
+320 000 keyframes; this one has 5 000 properties and 5 000 keyframes. Both
+are at the model's limits, and the costs are in different places: the first
+in the keys, the second in the names. A document at one limit is not a
+document at another.
+
+**A limit nobody draws is a limit nobody hits.** The model allows fifty
+thousand properties in a node; the tree's own tests never built one, and
+listing fifty thousand of them took eight seconds before the fix.
+
+---
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -13312,6 +13469,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A keyframe's mark is where the playhead goes when it is clicked** | `craftkit-ui` test | 1 mutation — §121 |
 | **The rail follows the panel** | `craftkit-ui` test | 1 mutation — §121 |
 | **A key outside the design has no mark on the rail** | `craftkit-ui` test | 1 mutation — §121 |
+| **Listing a node's properties is not quadratic** | `craftkit-model` test | 1 mutation — §122 |
+| **A listing of many siblings numbers the duplicates** | `craftkit-model` test | 1 mutation — §122 |
+| **A keyframe inside a group is marked on the rail** | `craftkit-ui` test | 1 mutation — §122 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

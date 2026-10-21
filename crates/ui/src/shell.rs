@@ -788,6 +788,10 @@ struct KeyMark {
 ///
 /// Every node's keys, not only the selected one's: the timeline is the
 /// design's, and the properties panel speaks for one node at a time. §121.
+///
+/// The tree is walked **without** the model's listing: the listing builds a
+/// path for every property — a copy of the tree — and the timeline redraws on
+/// every frame. §122.
 fn keyframe_marks(
     document: &craftkit_model::Document,
     selected: Option<NodeId>,
@@ -795,13 +799,31 @@ fn keyframe_marks(
 ) -> Vec<KeyMark> {
     let mut marks = Vec::new();
     for node in &document.nodes {
-        for (_, property) in node.props.flatten() {
-            for key in property.keys.keys() {
-                marks.push(KeyMark { frame: key.time.frames_i64(rate), selected: selected == Some(node.id) });
-            }
-        }
+        collect_keys(&node.props, selected == Some(node.id), rate, &mut marks);
     }
     marks
+}
+
+/// The keyframes of one property tree, without a path for each.
+///
+/// The model's own listing is the right answer when a path is wanted, and the
+/// timeline does not want one: it wants the *instants*. §122.
+fn collect_keys(
+    group: &craftkit_model::PropGroup,
+    selected: bool,
+    rate: craftkit_core::FrameRate,
+    out: &mut Vec<KeyMark>,
+) {
+    for node in &group.nodes {
+        match node {
+            craftkit_model::PropNode::Prop(property) => {
+                for key in property.keys.keys() {
+                    out.push(KeyMark { frame: key.time.frames_i64(rate), selected });
+                }
+            }
+            craftkit_model::PropNode::Group(group) => collect_keys(group, selected, rate, out),
+        }
+    }
 }
 
 /// Paint one keyframe's mark on the rail.
@@ -1579,6 +1601,36 @@ mod tests {
         let state = ShellState { selected: Some(id), ..ShellState::default() };
         let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
         (frame.png, frame.automation, id)
+    }
+
+    /// A keyframe inside a group is marked on the rail.
+    ///
+    /// §122: the marks are found by walking the property tree, and a group
+    /// is a different shape from a property — a walk that only looked at the
+    /// properties directly under a node would miss every key inside a group.
+    #[test]
+    fn a_keyframe_inside_a_group_is_marked_on_the_rail() {
+        let mut session = Session::sample();
+        let id = session.document().nodes[0].id;
+        let set = session.execute(
+            "prop.set",
+            &serde_json::json!({ "node": id.get(), "path": "trigger/lead", "value": 0.5 }),
+        );
+        assert!(set.is_ok(), "{set:?}");
+        let keyed = session.execute(
+            "key.set",
+            &serde_json::json!({ "node": id.get(), "path": "trigger/lead", "value": 0.5, "time": 2.0 }),
+        );
+        assert!(keyed.is_ok(), "{keyed:?}");
+
+        let state = ShellState { selected: Some(id), ..ShellState::default() };
+        let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
+        let rect =
+            frame.automation.rect(AutomationId::playhead().as_str()).expect("the playhead has a rectangle");
+        assert!(
+            mark_column(&frame.png, rect, Tokens::dark().accent).is_some(),
+            "the keyframe inside the group is not marked on the rail"
+        );
     }
 
     /// The timeline marks the keyframes.
