@@ -2366,5 +2366,54 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the registry is not rebuilt each frame" \
     "cargo test -p craftkit-ui --profile ci the_registry_holds_the_frame_that_was_drawn"
 
+# The node list drew a mute and a delete button in every row and published
+# neither, so the registry did not know they were there: "what is at this
+# point?" answered *nothing* at the pixels where a button was. §100.
+swap crates/ui/src/shell.rs \
+    '                    let mute = ui.small_button("mute");
+                    automation.publish(AutomationId::node_mute(id), mute.rect, true);' \
+    '                    let mute = ui.small_button("mute");'
+expect_catch "ui: the row's buttons are not published" \
+    "cargo test -p craftkit-ui --profile ci every_node_row_has_its_buttons_named"
+
+# The "clear keys" button was published as `node.<id>.key.<path>` -- the name
+# of a keyframe row, a widget the shell does not draw. A name that promises a
+# widget that is not on screen sends an agent looking for something it will
+# never find. §100.
+swap crates/ui/src/automation.rs \
+    '        AutomationId(format!("node.{}.keys.{}.clear", id.get(), path))' \
+    '        AutomationId(format!("node.{}.key.{}", id.get(), path))'
+expect_catch "ui: the clear-keys button promises a row that is not drawn" \
+    "cargo test -p craftkit-ui --profile ci a_name_never_promises_a_widget_that_is_not_drawn"
+
+# The playhead slider -- the timeline's one control -- was published nowhere.
+# §100.
+swap crates/ui/src/shell.rs \
+    '        self.automation.publish(AutomationId::playhead(), response.rect, true);' \
+    '        let _ = &response;'
+expect_catch "ui: the playhead is not published" \
+    "cargo test -p craftkit-ui --profile ci the_timeline_has_a_name"
+
+# The "key at the playhead" path field was published nowhere, so a field an
+# agent could not name was a field it could not fill. §100.
+swap crates/ui/src/shell.rs \
+    '        self.automation.publish(AutomationId::key_path(), path_field.rect, true);' \
+    '        let _ = &path_field;'
+expect_catch "ui: the key path field is not published" \
+    "cargo test -p craftkit-ui --profile ci the_key_fields_have_names"
+
+# A widget published with another widget's rectangle: the registry answers for
+# the wrong thing at that point, and the name it publishes is a name that does
+# not lead to it. §100.
+swap crates/ui/src/shell.rs \
+    '                    let (level_track, _) = draw_level_bar(ui, tokens, *level);
+                    automation.publish(AutomationId::node_row(id), row, true);
+                    automation.publish(AutomationId::level_bar(id), level_track, true);' \
+    '                    let (_level_track, _) = draw_level_bar(ui, tokens, *level);
+                    automation.publish(AutomationId::node_row(id), row, true);
+                    automation.publish(AutomationId::level_bar(id), row, true);'
+expect_catch "ui: a widget is published with another widget's rectangle" \
+    "cargo test -p craftkit-ui --profile ci every_published_name_answers_at_its_own_centre"
+
 restore
 finish

@@ -37,6 +37,14 @@
 //!    so a lookup for it succeeds and answers with the other widget — in
 //!    another panel, doing something else. The collision is recorded, so it
 //!    can be refused instead of swallowed. §99.
+//!
+//! And one that keeps the registry and the screen in step:
+//!
+//! 5. **A name is a widget that is there.** Every widget the shell draws
+//!    that somebody might click carries a name, so "what is at this point?"
+//!    has an answer for the button under the pointer — and a name never
+//!    promises a widget that is not drawn, because a name that promises one
+//!    sends an agent looking for something that is not there. §100.
 
 use egui::{Id, Rect};
 use std::collections::HashSet;
@@ -74,6 +82,31 @@ impl AutomationId {
         AutomationId(format!("nodes.row.{}", id.get()))
     }
 
+    /// The name for the mute button in the row of node `id`.
+    pub fn node_mute(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("nodes.row.{}.mute", id.get()))
+    }
+
+    /// The name for the delete button in the row of node `id`.
+    pub fn node_remove(id: craftkit_core::NodeId) -> Self {
+        AutomationId(format!("nodes.row.{}.del", id.get()))
+    }
+
+    /// The name for the playhead slider in the timeline.
+    pub fn playhead() -> Self {
+        AutomationId("timeline.playhead".to_string())
+    }
+
+    /// The name for the path field of the "key at the playhead" row.
+    pub fn key_path() -> Self {
+        AutomationId("properties.key.path".to_string())
+    }
+
+    /// The name for the value field of the "key at the playhead" row.
+    pub fn key_value() -> Self {
+        AutomationId("properties.key.value".to_string())
+    }
+
     /// The name for the editor of `path` on node `id`.
     pub fn property(id: craftkit_core::NodeId, path: &str) -> Self {
         AutomationId(format!("node.{}.prop.{}", id.get(), path))
@@ -92,9 +125,15 @@ impl AutomationId {
         AutomationId(format!("node.{}.level", id.get()))
     }
 
-    /// The name for the keyframe row of `path` on node `id`.
-    pub fn keyframe(id: craftkit_core::NodeId, path: &str) -> Self {
-        AutomationId(format!("node.{}.key.{}", id.get(), path))
+    /// The name for the "clear keys" button of `path` on node `id`.
+    ///
+    /// It used to be published as `node.<id>.key.<path>`, which is the name of
+    /// a **keyframe row** — a widget the shell does not draw. A name that
+    /// promises a widget that is not on screen sends an agent looking for
+    /// something it will never find, and the button it does find answers under
+    /// a name that says otherwise. §100.
+    pub fn clear_keys(id: craftkit_core::NodeId, path: &str) -> Self {
+        AutomationId(format!("node.{}.keys.{}.clear", id.get(), path))
     }
 
     /// The `egui` id, so two widgets cannot collide.
@@ -323,7 +362,7 @@ mod tests {
     #[test]
     fn a_property_and_a_keyframe_at_the_same_path_do_not_collide() {
         let prop = AutomationId::property(craftkit_core::NodeId(3), "amount");
-        let key = AutomationId::keyframe(craftkit_core::NodeId(3), "amount");
+        let key = AutomationId::clear_keys(craftkit_core::NodeId(3), "amount");
         assert_ne!(prop, key);
     }
 
@@ -554,7 +593,7 @@ mod tests {
             std::hint::black_box(AutomationId::toolbar("node.add"));
             std::hint::black_box(AutomationId::node_row(craftkit_core::NodeId(1)));
             std::hint::black_box(AutomationId::property(craftkit_core::NodeId(1), "amount"));
-            std::hint::black_box(AutomationId::keyframe(craftkit_core::NodeId(1), "amount"));
+            std::hint::black_box(AutomationId::clear_keys(craftkit_core::NodeId(1), "amount"));
         }
         let after = resident_bytes();
         println!("{GROWTH_MARKER}{}", after.saturating_sub(before));

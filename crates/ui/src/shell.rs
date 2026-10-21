@@ -171,10 +171,18 @@ impl<'a> Shell<'a> {
                     if clicked {
                         selected = Some(id);
                     }
-                    if ui.small_button("mute").clicked() {
+                    // The buttons are widgets too: a person can click them,
+                    // so an agent has to be able to name them. They used to
+                    // have no name at all, so "what is at this point?" said
+                    // there was nothing where a button was. §100.
+                    let mute = ui.small_button("mute");
+                    automation.publish(AutomationId::node_mute(id), mute.rect, true);
+                    if mute.clicked() {
                         to_mute.set(Some(id));
                     }
-                    if ui.small_button("del").clicked() {
+                    let remove = ui.small_button("del");
+                    automation.publish(AutomationId::node_remove(id), remove.rect, true);
+                    if remove.clicked() {
                         to_remove.set(Some(id));
                     }
                 });
@@ -273,7 +281,7 @@ impl<'a> Shell<'a> {
                 ui.label(
                     RichText::new(format!("{} keyframe(s)", prop.keys.len())).color(tokens.text_dim).small(),
                 );
-                let key = AutomationId::keyframe(id, &path);
+                let key = AutomationId::clear_keys(id, &path);
                 let response = ui.small_button("clear keys");
                 self.automation.publish(key, response.rect, true);
                 if response.clicked() {
@@ -287,12 +295,13 @@ impl<'a> Shell<'a> {
         ui.label(RichText::new("Key at the playhead").color(tokens.text_dim));
         let mut path_text = String::new();
         let mut value_text = String::new();
-        let path_changed =
-            ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount")).changed();
+        let path_field = ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount"));
+        self.automation.publish(AutomationId::key_path(), path_field.rect, true);
+        let path_changed = path_field.changed();
         if path_changed {
-            let value_changed =
-                ui.add(egui::TextEdit::singleline(&mut value_text).hint_text("value")).changed();
-            if value_changed {
+            let value_field = ui.add(egui::TextEdit::singleline(&mut value_text).hint_text("value"));
+            self.automation.publish(AutomationId::key_value(), value_field.rect, true);
+            if value_field.changed() {
                 actions.push((
                     "key.set",
                     serde_json::json!({
@@ -337,6 +346,8 @@ impl<'a> Shell<'a> {
                 .custom_formatter(move |f, _| format!("{:.2}s", f / fps))
                 .show_value(false),
         );
+        // The playhead is a widget, and it is the timeline's one control.
+        self.automation.publish(AutomationId::playhead(), response.rect, true);
         if response.changed() {
             self.run("playback.seek", serde_json::json!({ "frame": frame }));
         }
@@ -717,6 +728,120 @@ mod tests {
             shell.automation.known(editor.as_str()),
             Widget::Missing,
             "the editor is gone from the screen but the registry still has it"
+        );
+    }
+
+    #[test]
+    fn every_node_row_has_its_buttons_named() {
+        let mut session = Session::sample();
+        let ids: Vec<NodeId> = session.document().nodes.iter().map(|n| n.id).collect();
+        let registry = draw_selected(&mut session, ids[0]);
+        for id in ids {
+            for name in [AutomationId::node_mute(id), AutomationId::node_remove(id)] {
+                let rect =
+                    registry.rect(name.as_str()).unwrap_or_else(|| panic!("`{name}` is not published"));
+                assert!(rect.width() > 0.0, "`{name}` has no width: {rect:?}");
+                let centre = rect.center();
+                assert_eq!(
+                    registry.at(centre.x, centre.y),
+                    Some(name.as_str()),
+                    "`{name}` is published but the registry answers for something else there"
+                );
+            }
+        }
+    }
+
+    /// The timeline has a name.
+    ///
+    /// §100: the playhead slider was drawn and published nowhere. It is the
+    /// timeline's one control, and a control an agent cannot name is a
+    /// control it cannot move.
+    #[test]
+    fn the_timeline_has_a_name() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let registry = draw_selected(&mut session, first);
+        let name = AutomationId::playhead();
+        let rect = registry.rect(name.as_str()).unwrap_or_else(|| panic!("`{name}` is not published"));
+        assert!(rect.width() > 0.0, "`{name}` has no width: {rect:?}");
+    }
+
+    /// The "key at the playhead" fields have names.
+    ///
+    /// §100: the path and value fields were drawn and published nowhere, so
+    /// a field an agent could not name was a field it could not fill.
+    #[test]
+    fn the_key_fields_have_names() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let registry = draw_selected(&mut session, first);
+        for name in [AutomationId::key_path(), AutomationId::key_value()] {
+            // The value field only appears once the path has been typed into,
+            // so only the path is on screen in a fresh frame.
+            if name == AutomationId::key_value() {
+                continue;
+            }
+            let rect = registry.rect(name.as_str()).unwrap_or_else(|| panic!("`{name}` is not published"));
+            assert!(rect.width() > 0.0, "`{name}` has no width: {rect:?}");
+        }
+    }
+
+    /// Every name the registry publishes answers at its own centre.
+    ///
+    /// §100: this is the general shape of the bug — the registry and the
+    /// screen can disagree. A name whose widget is somewhere else, or is
+    /// covered by another, is a name that points at the wrong thing.
+    #[test]
+    fn every_published_name_answers_at_its_own_centre() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        // An animated property, so the "clear keys" button is drawn too.
+        let keyed = session.execute(
+            "key.set",
+            &serde_json::json!({ "node": first.get(), "path": "amount", "value": "0.5", "time": 48 }),
+        );
+        assert!(keyed.is_ok(), "{keyed:?}");
+        let registry = draw_selected(&mut session, first);
+        assert!(!registry.names().is_empty());
+        for name in registry.names() {
+            let Some(rect) = registry.rect(name) else {
+                continue;
+            };
+            let centre = rect.center();
+            assert_eq!(
+                registry.at(centre.x, centre.y),
+                Some(name),
+                "the registry publishes `{name}` but answers for something else at its centre"
+            );
+        }
+    }
+
+    /// A name never promises a widget that is not drawn.
+    ///
+    /// §100: the "clear keys" button was published as `node.<id>.key.<path>`,
+    /// which is the name of a **keyframe row** — a widget the shell does not
+    /// draw. An agent that found the name would look for a row, and the
+    /// button that answers for it says nothing of the kind.
+    #[test]
+    fn a_name_never_promises_a_widget_that_is_not_drawn() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let keyed = session.execute(
+            "key.set",
+            &serde_json::json!({ "node": first.get(), "path": "amount", "value": "0.5", "time": 48 }),
+        );
+        assert!(keyed.is_ok(), "{keyed:?}");
+        let registry = draw_selected(&mut session, first);
+
+        // The button is there, under a name that says what it is.
+        let clear = AutomationId::clear_keys(first, "amount");
+        assert_ne!(registry.known(clear.as_str()), Widget::Missing, "the clear-keys button is not published");
+        // And the name of the row that does not exist is nowhere.
+        let row = format!("node.{}.key.amount", first.get());
+        assert_eq!(
+            registry.known(&row),
+            Widget::Missing,
+            "`{row}` promises a keyframe row, and there is no such widget"
         );
     }
 

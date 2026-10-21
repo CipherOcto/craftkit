@@ -10160,6 +10160,122 @@ look.
 numbers matched. What sees it is a *record of the conflict*, not a count of the
 things.
 
+## 100. The shell drew buttons the registry could not name
+
+The registry's own doc makes a claim: *"Every widget that matters carries an
+[`AutomationId`] — a stable dotted name like `toolbar.node.add` or
+`nodes.row.4`."*
+
+The node list draws, in every row: the node's name, a level bar, a **mute**
+button and a **delete** button. The first two were published. The buttons were
+not — and neither were the playhead slider or the two "key at the playhead"
+fields.
+
+One name was worse than missing: the **clear keys** button was published as
+`node.<id>.key.<path>`, which is the name of a *keyframe row* — a widget the
+shell does not draw.
+
+### The measurement
+
+The registry for the sample document, with one node selected, before the fix:
+**31 names**, and then nothing:
+
+```
+PROBE len: 31
+PROBE bar: Found { rect: [[54.3 61.0] - [118.3 71.0]], enabled: true }
+PROBE at (119.3, 66.0): None
+PROBE at (127.3, 66.0): None
+PROBE at (135.3, 66.0): None
+...
+PROBE at (271.3, 66.0): None
+```
+
+Every point to the right of the level bar answers *nothing* — and that is
+exactly where the two buttons are. The picture says otherwise: rendering the
+shell at 1200 × 400 shows a **mute** and a **del** button on every one of the
+three rows, and the playhead handle on the timeline, and the registry names
+none of them.
+
+After the fix the same scan answers:
+
+```
+PROBE len: 39
+PROBE at (127.3, 66.0): Some("nodes.row.1.mute")
+PROBE at (183.3, 66.0): Some("nodes.row.1.del")
+PROBE at (223.3, 66.0): Some("timeline.playhead")
+```
+
+### Why nothing noticed
+
+**The registry was never asked about a button.** The tests asked *"is this
+command's button there?"* — and every command's button is in the toolbar,
+which is fully published. The node list's own buttons were never in the set of
+things anybody looked for. A registry that covers the toolbar completely and
+the rest of the screen not at all still passes every question of the first
+kind.
+
+**A name that promises a widget that is not there fails quietly.**
+`node.1.key.amount` resolves: the name is in the registry, the lookup
+succeeds, and what it points at is a button labelled "clear keys". Nothing
+about the lookup is wrong; the *promise* is.
+
+**The picture is the evidence nobody looked at.** A rendering of the node list
+has six buttons in it. The registry is a text structure, and nobody rendered
+the two side by side.
+
+### The fix
+
+Every widget the shell draws that somebody might click now carries a name:
+
+| Widget | Name |
+|---|---|
+| the mute button in a row | `nodes.row.<id>.mute` |
+| the delete button in a row | `nodes.row.<id>.del` |
+| the playhead slider | `timeline.playhead` |
+| the path field of "key at the playhead" | `properties.key.path` |
+| the value field of "key at the playhead" | `properties.key.value` |
+| the clear-keys button | `node.<id>.keys.<path>.clear` |
+
+The last one is a **rename**, not an addition: `node.<id>.key.<path>` said
+"the keyframe row", and there is no such row. A button that has a command
+behind it still needs a name — the registry is about the *screen*, not about
+the commands.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| Every node row has its buttons named | `every_node_row_has_its_buttons_named` |
+| The timeline has a name | `the_timeline_has_a_name` |
+| The key fields have names | `the_key_fields_have_names` |
+| Every published name answers at its own centre | `every_published_name_answers_at_its_own_centre` |
+| A name never promises a widget that is not drawn | `a_name_never_promises_a_widget_that_is_not_drawn` |
+
+and five mutations in `scripts/mutation-test-gates.sh`: the row's buttons are
+not published again; the clear-keys button promises a row again; the playhead
+is not published again; the key path field is not published again; and a
+widget is published with another widget's rectangle.
+
+`every_published_name_answers_at_its_own_centre` is the general shape of the
+bug: **the registry and the screen can disagree**. A name whose widget is
+somewhere else, or is covered by another, points at the wrong thing — and the
+lookup succeeds while it does.
+
+### The lesson
+
+**A registry of widgets is a claim about the screen.** The claim is checkable
+only against the screen, and the screen is a picture while the registry is a
+list of names. §99 taught that the registry and the shell can disagree about
+*one* name; this is the same disagreement at the scale of the whole panel.
+
+**A name that promises nothing is worse than no name.** A missing name says
+"there is no such widget". A name that promises a row that is not there says
+"there is one, over there" — and the agent goes looking.
+
+**Coverage is a set, and a set that is asked about in one direction is not
+covered.** Every question anybody asked about the registry was about the
+toolbar. The buttons in the node list had never been on anybody's list.
+
 ---
 
 ---
@@ -10358,6 +10474,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A property named after the level bar keeps its own editor** | `craftkit-ui` test | 1 mutation — §99 |
 | **A level bar publishes a rectangle with an area** | `craftkit-ui` test | 1 mutation — §99 |
 | **The registry holds the frame that was drawn** | `craftkit-ui` test | 1 mutation — §99 |
+| **Every node row has its buttons named** | `craftkit-ui` test | 1 mutation — §100 |
+| **The timeline has a name** | `craftkit-ui` test | 1 mutation — §100 |
+| **The key fields have names** | `craftkit-ui` test | 1 mutation — §100 |
+| **Every published name answers at its own centre** | `craftkit-ui` test | 1 mutation — §100 |
+| **A name never promises a widget that is not drawn** | `craftkit-ui` test | 1 mutation — §100 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -10476,8 +10597,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    `apply_gain`"*, three lines above the source node that takes its level from
    somewhere else, and the thing that sentence would have stopped somebody
    looking for was the bug. Six instances, every one of them a sentence written
-   by someone reading the code rather than measuring it. The rule now has six
-   chances to have prevented something, and nobody has adopted it.
+   by someone reading the code rather than measuring it. The rule had six
+   chances to have prevented something by then, and nobody has adopted it.
    §67 is the seventh, and it is the first one a *machine* said out loud: the
    web gate printed "the canvas, the bundle path and the worker's rules all
    agree" while the worker's copy of the bundle path disagreed with the page's
@@ -10537,6 +10658,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    the tree has no shortcut parser and binds no keys at all. Eighteen
    instances, and the eighteenth is the only one whose sentence promised
    something *elsewhere in the tree* that was never built.
+   §99 is the nineteenth, and it is the same shape as the eighteenth: the
+   `Automation` struct's doc said *"Rebuilt every frame and dropped after, so
+   a widget that disappears does not linger in the registry and let a click
+   land on stale coordinates"* — and the shell never cleared it, so a widget
+   that disappeared lingered, with the rectangle it had when it was first
+   drawn. The sentence was in the place a reader would look, and the code
+   said something else.
+   §100 is the twentieth, and it is a sentence that named a widget the tree
+   does not draw: the name constructor for the "clear keys" button said
+   *"the name for the keyframe row of `path`"*, and there is no keyframe row.
+   Twenty instances, and the last two are the tree contradicting itself in the
+   act of documenting it — a promise about the frame and a promise about a
+   widget, both made by the same code that broke them.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
