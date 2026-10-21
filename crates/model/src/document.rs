@@ -196,6 +196,27 @@ impl DocumentMeta {
     pub fn duration(&self) -> Tick {
         self.end.sub_ticks(self.start.raw())
     }
+
+    /// The frames the design has: its first frame and its last instant.
+    ///
+    /// **The range, not the duration.** A design that starts one second into
+    /// the timeline and ends five seconds in has frames 24..=120 at 24 fps,
+    /// and its *duration* is 96 frames — a number that says how long the
+    /// design is and nothing about where it is. A timeline built on the
+    /// duration cannot show the design's first frame and cannot reach its
+    /// last one. §115.
+    ///
+    /// The end is included because the engine's own rule for the playhead is
+    /// the closed range `[start, end]`: `playback.seek` clamps to it, and the
+    /// range here is the same rule rather than a second one.
+    pub fn frame_range(&self) -> std::ops::RangeInclusive<i64> {
+        let rate = self.frame_rate();
+        let start = self.start.frames_i64(rate);
+        // A range shorter than one frame has no last frame of its own; the
+        // design still has a place to stand.
+        let end = self.end.frames_i64(rate).max(start);
+        start..=end
+    }
 }
 
 /// A whole document: ordered nodes plus settings.
@@ -493,6 +514,29 @@ mod tests {
         let d = Document::new("test");
         assert!(d.validate().is_ok(), "{:?}", d.validate());
         assert_eq!(d.nodes.len(), 1);
+    }
+
+    /// The design's frames are its range, not its duration.
+    ///
+    /// §115: a design that starts one second in has frames 24..=120 at 24 fps
+    /// and a duration of 96 frames. The two numbers are not the same, and a
+    /// timeline built on the duration cannot show the design's first frame
+    /// and cannot reach its last.
+    #[test]
+    fn the_designs_frames_are_its_range_and_not_its_duration() {
+        let meta = DocumentMeta {
+            start: craftkit_core::Tick::from_seconds_f64(1.0),
+            end: craftkit_core::Tick::from_seconds_f64(5.0),
+            fps: 24,
+            ..DocumentMeta::default()
+        };
+        assert_eq!(*meta.frame_range().start(), 24, "the design's first frame");
+        assert_eq!(*meta.frame_range().end(), 120, "the design's last frame");
+        assert_eq!(meta.duration().frames_i64(meta.frame_rate()), 96, "the design's duration");
+        // A design that starts at zero has the frames its duration says.
+        let plain = DocumentMeta::default();
+        assert_eq!(*plain.frame_range().start(), 0);
+        assert_eq!(*plain.frame_range().end(), 120);
     }
 
     /// A document over the byte limit is refused.

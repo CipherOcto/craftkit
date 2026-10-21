@@ -133,6 +133,7 @@ The restore both branches call is one function, so the two cannot drift apart:
 fn restore(&mut self, doc: craftkit_model::Document, dirty: bool) {
     self.doc = doc;
     self.evaluator.invalidate();
+    self.clamp_playhead_into_range();
     self.recompute();
     self.dirty = dirty;
 }

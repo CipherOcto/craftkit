@@ -615,8 +615,48 @@ impl Session {
     fn restore(&mut self, doc: craftkit_model::Document, dirty: bool) {
         self.doc = doc;
         self.evaluator.invalidate();
+        self.clamp_playhead_into_range();
         self.recompute();
         self.dirty = dirty;
+    }
+
+    /// Keep the playhead inside the design's range.
+    ///
+    /// The playhead is a place **in** the design, and the design's range is
+    /// where that place is. `playback.seek` has always clamped to
+    /// `[start, end]`; this is the same rule applied to the two ways the range
+    /// can move under the playhead — a new range, and a document that arrived
+    /// from outside.
+    ///
+    /// §115: without it, a design that starts one second in leaves the
+    /// playhead at frame 0, before the design's first frame, and the timeline
+    /// then draws a handle at a place the playhead is not.
+    fn clamp_playhead_into_range(&mut self) {
+        let start = self.doc.meta.start;
+        let end = self.doc.meta.end;
+        if self.at < start {
+            self.at = start;
+        } else if self.at > end {
+            self.at = end;
+        }
+    }
+
+    /// Set the design's range, and keep the playhead inside it.
+    ///
+    /// One place, so that the range and the playhead cannot drift apart: a
+    /// command that set the range and left the playhead outside it would be a
+    /// command that put the session in a state nothing else could describe.
+    /// §115.
+    pub(crate) fn set_range(&mut self, start: Tick, end: Tick, fps: u32) -> bool {
+        let changed = self.doc.set_range(start, end, fps);
+        if changed {
+            let was = self.at;
+            self.clamp_playhead_into_range();
+            if self.at != was {
+                self.recompute();
+            }
+        }
+        changed
     }
 
     /// Restore a snapshot. Called by undo and redo.
@@ -789,6 +829,46 @@ mod tests {
         let read = s.snapshot_json().get("fps").and_then(|v| v.as_u64());
         assert_eq!(set, Some(30));
         assert_eq!(read, set, "the state and the command disagree about the rate");
+    }
+
+    /// The playhead follows the design's range.
+    ///
+    /// §115: the playhead is a place **in** the design. `playback.seek` has
+    /// always clamped to the design's range, but a range that moved under the
+    /// playhead left it outside the design — where there is nothing to see,
+    /// and where the timeline draws a handle at a place the playhead is not.
+    #[test]
+    fn a_range_that_moves_under_the_playhead_takes_the_playhead_with_it() {
+        let mut s = sample();
+        assert_eq!(s.at(), s.document().meta.start, "the playhead starts on the design's first frame");
+        // Now the design starts one second in.
+        s.execute("doc.range", &json!({ "start": 1.0 })).expect("the range can be set");
+        assert_eq!(
+            s.at(),
+            s.document().meta.start,
+            "the playhead is outside the design it is supposed to be in"
+        );
+    }
+
+    /// A document that arrives with its own range takes the playhead with it.
+    ///
+    /// §115: opening a design that starts one second in left the playhead
+    /// where it was — at zero, before the design's first frame — and the plan
+    /// was evaluated there.
+    #[test]
+    fn a_document_that_arrives_with_its_own_range_takes_the_playhead_with_it() {
+        let mut s = sample();
+        let mut doc = s.document().clone();
+        doc.meta.start = craftkit_core::Tick::from_seconds_f64(1.0);
+        s.load_document(doc);
+        let meta = &s.document().meta;
+        assert!(
+            s.at() >= meta.start && s.at() <= meta.end,
+            "the playhead at {} ticks is outside the design's range {}..{}",
+            s.at().raw(),
+            meta.start.raw(),
+            meta.end.raw()
+        );
     }
 
     /// Reading the rate does not change it.

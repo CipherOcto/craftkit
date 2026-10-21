@@ -8945,7 +8945,9 @@ fps 13: after 1000 frames the boundary is 692 ticks early
 
 A tick is 3.9 ns, so that is 1.4 µs after ninety seconds at 11 fps — and
 fifty-six milliseconds after an hour. The playhead's frame number is visible,
-so the drift is visible too.
+so the drift is visible too. (§115 made that sentence true: until then the
+frame number was on no screen at all — the slider's value was hidden and the
+formatter that would have written it down never ran.)
 
 The claim that is not kept is the tree's own, in the module that is called
 "Exact time":
@@ -11241,7 +11243,9 @@ guess cost the user their design's settings.
 ### Why nothing noticed
 
 **Nothing in the tree reads it either.** The shell reads `meta.fps` for the
-header and the timeline's scale; the CLI reads it for its own summary. Both
+header and `meta.frame_rate()` for the timeline's frames (§115 changed the
+second half of this sentence: the timeline had no scale, and the frame
+number was on no screen at all); the CLI reads it for its own summary. Both
 read the **model** directly. The API surfaces are the ones that answer
 questions, and none of them was asked.
 
@@ -12046,6 +12050,167 @@ general one: a doc comment's most load-bearing claim is usually about
 
 ---
 
+## 115. The timeline was a duration, and the playhead was a frame
+
+### The measurement
+
+A design from one second to five seconds, at 24 fps:
+
+```text
+design:  start frame 24, end frame 120, duration 96 frames
+```
+
+And the timeline, in `crates/ui/src/shell.rs`:
+
+```rust
+let total = meta.duration().frames_i64(rate).max(1);
+let mut frame = self.session.at().frames_i64(rate);
+egui::Slider::new(&mut frame, 0..=total)
+```
+
+**The slider's range was the duration and the value it held was an absolute
+frame.** Two numbers that are not the same number: 96 is how long the design
+is, 24..=120 is where it is. The slider said the design was frames 0 to 96,
+and the handle it drew was placed by mapping the playhead's frame through
+that range.
+
+What a person got, measured by pressing the ends of the slider and reading
+the playhead back:
+
+| Press | Playhead | Should be |
+|---|---|---|
+| the far right | frame **96** | frame **120** — the design's last frame |
+| the far left | frame **0** | frame **24** — the design's first frame |
+
+The far right stopped **twenty-four frames short** of the end of the design:
+the last second of a five-second animation could not be reached from the
+timeline at all. And the handle was drawn in the wrong place — a quarter of
+the way along the rail, because 24 of 96 is a quarter:
+
+| | the handle |
+|---|---|
+| before | a quarter of the way along the rail |
+| after | at the rail's start, where the design's first frame is |
+
+Three more facts, all measured:
+
+- **The slider's own formatter never ran.** `custom_formatter` was set —
+  `format!("{:.2}s", f / fps)` — and `show_value(false)` was set beside it.
+  egui calls the formatter **for the value it draws**, and the value was
+  hidden: the closure was dead code. The timeline showed no time, and the
+  frame number was shown nowhere at all.
+- **The playhead could sit outside the design.** `doc.range {"start": 1.0}`
+  moved the design's range and left the playhead at frame 0 — before the
+  design's first frame, where there is nothing to see. Opening a design
+  whose range starts one second in did the same thing: the playhead stayed
+  where it was, and the plan was evaluated outside the design.
+- **`playback.seek` clamped; nothing else did.** The engine's rule for the
+  playhead has always been the closed range `[start, end]`. The two ways the
+  range can move under the playhead — a new range, and a document that
+  arrives from outside — did not apply it.
+
+### Why nothing noticed
+
+**The sample design starts at zero.** A design from 0 s to 5 s has frames
+0..=120 and a duration of 120 frames, so the duration and the range are the
+same range, the handle is in the right place, and the far right of the
+slider is the design's last frame. Every design anybody opens by default
+looks like that.
+
+**The playhead's frame number was visible nowhere, so nobody could check the
+handle.** The slider's value was hidden and its formatter never ran; the
+plan's summary showed the tick count and the seconds. The one number the
+handle's position is made of — the frame — was on no screen at all.
+
+**§89 said the frame number was visible.** *"The playhead's frame number is
+visible, so the drift is visible too."* It was not: the number existed in
+the model, in the state and in the arithmetic, and a person could not see
+it. The sentence was checked against the tree by reading the tree, and the
+tree has the number in it.
+
+**The range and the duration are both "the design's length".** A duration of
+96 frames and a range of 96 frames look the same in a printout, and the
+code that used the duration was *about* the design's length — so it read as
+right.
+
+### The fix
+
+**The model owns the answer.** `DocumentMeta::frame_range()` returns the
+design's frames — `start..=end`, at the design's own rate — and the two are
+not the same number:
+
+```rust
+pub fn frame_range(&self) -> std::ops::RangeInclusive<i64> {
+    let rate = self.frame_rate();
+    let start = self.start.frames_i64(rate);
+    // A range shorter than one frame has no last frame of its own; the
+    // design still has a place to stand.
+    let end = self.end.frames_i64(rate).max(start);
+    start..=end
+}
+```
+
+**The timeline uses it.** The slider's range is the design's range, and the
+value is the playhead's absolute frame, clamped into it.
+
+**The engine keeps the playhead in the design.** One rule, in one place:
+`Session::clamp_playhead_into_range`, called from `Session::restore` — the
+one place the document changes under the session — and from the range
+command. `playback.seek` already clamped to the same range, so there is one
+rule and not two.
+
+**The command says when it moved the playhead.** A command that changed two
+things and mentioned one lies by omission, and `doc.range` now says *"range
+1.000s..5.000s at 24 fps; the playhead moved to 1.000s"* when it did.
+
+**The timeline says where the playhead is.** The readout is the shell's own
+label — the frame and the time, side by side — and the slider's formatter is
+gone. egui's own value field was not used: it would be a second widget that
+edits the playhead, and the registry would not name it (§100's rule). The
+readout also makes §89's sentence true: with the frame number and the time
+on the screen together, the drift between them is visible.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The design's frames are its range, not its duration | `the_designs_frames_are_its_range_and_not_its_duration` |
+| The timeline reaches both ends of the design | `the_timeline_can_reach_both_ends_of_the_design` |
+| The timeline says where the playhead is | `the_timeline_says_where_the_playhead_is` |
+| The readout says the frame and the time | `the_playhead_readout_says_the_frame_and_the_time` |
+| A range that moves under the playhead takes it along | `a_range_that_moves_under_the_playhead_takes_the_playhead_with_it` |
+| A document that arrives takes the playhead with it | `a_document_that_arrives_with_its_own_range_takes_the_playhead_with_it` |
+| The range command says when it moved the playhead | `the_range_command_says_when_it_moved_the_playhead` |
+
+and seven mutations in `scripts/mutation-test-gates.sh`: the timeline is the
+duration again; the model's frames are the duration; the readout is not
+drawn; the readout does not say the frame; a range that moves under the
+playhead leaves it there; a document that arrives leaves the playhead outside
+it; and the range command does not say that it moved the playhead.
+
+### The lesson
+
+**A duration and a range are both "how long".** The number that says how long
+a design is and the number that says where it is are different numbers, and
+a widget that holds one while meaning the other is wrong in a way that only
+shows up on a design that does not start at zero.
+
+**A widget that cannot be seen cannot be checked.** The handle's position is
+made of the frame number, and the frame number was on no screen — so the one
+thing a person would have noticed was the one thing they could not name.
+
+**A formatter that is never called is a sentence about a thing that does not
+happen.** egui calls the formatter for the value it draws. Hiding the value
+silently turned the formatter into a comment, and the comment said the
+timeline had a scale.
+
+**A range that moves under the playhead has to take it along.** The engine
+had one rule for the playhead — `[start, end]` — and applied it in one of the
+three places the playhead can move. The rule was right; the coverage was
+not.
+
+---
+
 ---
 
 ## What enforces what
@@ -12300,6 +12465,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The guard depth balances** | `craftkit-kernel` test | 1 mutation — §114 |
 | **A guarded call on one thread does not guard another** | `craftkit-kernel` test | 1 mutation — §62 |
 | **A recovery on one thread is counted on another** | `craftkit-kernel` test | 1 mutation — §62 |
+| **The design's frames are its range, not its duration** | `craftkit-model` test | 1 mutation — §115 |
+| **The timeline reaches both ends of the design** | `craftkit-ui` test | 1 mutation — §115 |
+| **The timeline says where the playhead is** | `craftkit-ui` test | 1 mutation — §115 |
+| **The readout says the frame and the time** | `craftkit-ui` test | 1 mutation — §115 |
+| **The playhead is inside the design** | `craftkit-engine` test | 2 mutations — §115 |
+| **The range command says when it moved the playhead** | `craftkit-engine` test | 1 mutation — §115 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12567,6 +12738,21 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    and the thirty-first to the thirty-third are the only ones whose subject is
    a **caller** rather than the thing itself — which is the one kind of claim
    the tree's gates do not check at all.
+   §115 is the thirty-fourth, the thirty-fifth and the thirty-sixth, and they
+   are all about **a number nobody could see**. §89 said *"The playhead's
+   frame number is visible, so the drift is visible too"* — the frame number
+   was in the model, in the state and in the arithmetic, and on no screen at
+   all: the slider's value was hidden and its formatter, the only thing that
+   would have written it down, never ran. The shell's own comment said *"a
+   zero here would divide by zero, so the panel does not trust it"* — and the
+   panel divided by the frame rate twice, once for the duration and once for
+   the playhead's frame, while the rate it *did* trust (`f64::from(meta.fps).
+   max(1.0)`) was used by the formatter that never ran. And §108 said *"The
+   shell reads `meta.fps` for the header and the timeline's scale"* — the
+   timeline had no scale. Thirty-six instances, and the thirty-fourth to the
+   thirty-sixth are the only ones whose subject is a thing that was **never
+   drawn** — a sentence about a widget, checked by reading the widget's
+   neighbours.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

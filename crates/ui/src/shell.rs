@@ -353,12 +353,16 @@ impl<'a> Shell<'a> {
 
     fn plan_and_timeline(&mut self, ui: &mut Ui, tokens: &Tokens) {
         let meta = &self.session.document().meta;
+        // The frame rate is the design's own, and the panel uses it: the
+        // frames below are counted in it. A rate of zero would divide by
+        // zero, and the model refuses one — the reader refuses a file that
+        // carries one, the command refuses to set one, and the engine's own
+        // commands use the rate the same way. §89.
         let rate = meta.frame_rate();
-        let total = meta.duration().frames_i64(rate).max(1);
-        // The frame rate is checked by the model when the document is read and
-        // when a command changes it, but a zero here would divide by zero, so
-        // the panel does not trust it. §89.
-        let fps = f64::from(meta.fps).max(1.0);
+        // The frames the design **has**: its range, not its duration. §115:
+        // a timeline built on the duration draws the handle in the wrong
+        // place and cannot reach the design's last frames.
+        let frames = meta.frame_range();
 
         ui.horizontal(|ui| {
             ui.label(RichText::new(meta.name.clone()).strong().color(tokens.text));
@@ -378,17 +382,37 @@ impl<'a> Shell<'a> {
         }
         ui.separator();
 
-        let mut frame = self.session.at().frames_i64(rate);
-        let response = ui.add(
-            egui::Slider::new(&mut frame, 0..=total)
-                .custom_formatter(move |f, _| format!("{:.2}s", f / fps))
-                .show_value(false),
-        );
+        // The playhead is a place in the design, so the slider is the design's
+        // range of frames. The value is clamped into it: the engine keeps the
+        // playhead inside the range, and a slider that was handed a value
+        // outside it would draw a handle that lies. §115.
+        let mut frame = self.session.at().frames_i64(rate).clamp(*frames.start(), *frames.end());
+        // The value is not shown: egui would draw it as a number field beside
+        // the rail, and that field is a widget of its own — one the registry
+        // would not name, and one that edits the playhead behind the
+        // command's back. The readout below says the same thing without
+        // being a second control. §115.
+        let response = ui.add(egui::Slider::new(&mut frame, frames.clone()).show_value(false));
         // The playhead is a widget, and it is the timeline's one control.
+        //
+        // The slider is on a line of its own: sharing a line with the readout
+        // below would make the published rectangle cover the readout too, and
+        // a rectangle that covers two widgets is a rectangle that answers for
+        // the wrong one. §115.
         self.automation.publish(AutomationId::playhead(), response.rect, true);
         if response.changed() {
             self.run("playback.seek", serde_json::json!({ "frame": frame }));
         }
+        // Where the playhead is, in both of the numbers a design is measured
+        // in. §115: the slider's own formatter never ran — the value was
+        // hidden — so the timeline said nothing at all about where the
+        // playhead was.
+        let at = self.session.at();
+        ui.label(
+            RichText::new(playhead_readout(at.frames_i64(rate), at.seconds_f64()))
+                .color(tokens.text_dim)
+                .small(),
+        );
 
         let Some(plan) = self.session.plan() else {
             ui.label(RichText::new("No plan yet.").color(tokens.warning));
@@ -496,6 +520,21 @@ pub fn note_preview(note: &str) -> String {
     let mut out: String = note.chars().take(NOTE_PREVIEW_CHARS).collect();
     out.push('…');
     out
+}
+
+/// Where the playhead is, in the two numbers a design is measured in.
+///
+/// The frame number and the time. They are different numbers, and the
+/// design's rate is what turns one into the other — so showing one without
+/// the other hides the drift between them. §89: the tick rate does not
+/// divide by every rate a design may have, and the drift is only visible if
+/// both numbers are on the screen.
+///
+/// §115: the frame number was shown **nowhere**. The slider's value was
+/// hidden, and its formatter — the thing that would have written the time —
+/// never ran, because egui only calls the formatter for the value it draws.
+pub fn playhead_readout(frame: i64, seconds: f64) -> String {
+    format!("frame {frame} · {seconds:.2}s")
 }
 
 /// Whether a widget is present and clickable at `name`.
@@ -1016,6 +1055,135 @@ mod tests {
             automation.rect(AutomationId::key_value().as_str()).is_some(),
             "the typed path was thrown away when the frame was redrawn"
         );
+    }
+
+    /// Press at a point and release it there.
+    ///
+    /// A click is a press and a release, and egui takes its input once per
+    /// frame: the two halves have to be two frames.
+    fn press_at(
+        ctx: &Context,
+        session: &mut Session,
+        tokens: &Tokens,
+        state: &mut ShellState,
+        x: f32,
+        y: f32,
+    ) {
+        for pressed in [true, false] {
+            let input = egui::RawInput {
+                events: vec![egui::Event::PointerButton {
+                    pos: egui::pos2(x, y),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                }],
+                ..Default::default()
+            };
+            one_frame(ctx, session, tokens, state, input);
+        }
+    }
+
+    /// The pixels of a frame in a rectangle.
+    ///
+    /// The frame is a PNG in memory and the rectangle is in the same points
+    /// the frame was drawn in, so the two line up one to one.
+    fn crop(png: &[u8], x: f32, y: f32, w: f32, h: f32) -> Vec<u8> {
+        let image = image::load_from_memory(png).expect("the frame is a png").to_rgba8();
+        let mut out = Vec::new();
+        for row in y as u32..(y + h) as u32 {
+            for column in x as u32..(x + w) as u32 {
+                out.extend_from_slice(&image.get_pixel(column, row).0);
+            }
+        }
+        out
+    }
+
+    /// The timeline can reach both ends of the design.
+    ///
+    /// §115: the slider's range was the design's **duration** — how many
+    /// frames the design is long — and the value it held was an absolute
+    /// frame. A design that starts one second in has frames 24..=120 at 24 fps
+    /// and a duration of 96 frames, so the slider could not show the design's
+    /// first frame and could not reach its last: pressing the far right of it
+    /// stopped at frame 96, twenty-four frames short of the end.
+    #[test]
+    fn the_timeline_can_reach_both_ends_of_the_design() {
+        let mut session = Session::sample();
+        session
+            .execute("doc.range", &serde_json::json!({ "start": 1.0, "end": 5.0 }))
+            .expect("the range can be set");
+        let rate = session.document().meta.frame_rate();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+        // Two frames: the first lays the panels out, the second places them.
+        one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let rect = automation.rect(AutomationId::playhead().as_str()).expect("the playhead has a rectangle");
+
+        press_at(&ctx, &mut session, &tokens, &mut state, rect.right() - 0.5, rect.center().y);
+        assert_eq!(
+            session.at().frames_i64(rate),
+            session.document().meta.end.frames_i64(rate),
+            "the far right of the timeline is not the design's last frame"
+        );
+
+        press_at(&ctx, &mut session, &tokens, &mut state, rect.left() + 0.5, rect.center().y);
+        assert_eq!(
+            session.at().frames_i64(rate),
+            session.document().meta.start.frames_i64(rate),
+            "the far left of the timeline is not the design's first frame"
+        );
+    }
+
+    /// The timeline says where the playhead is.
+    ///
+    /// §115: the slider's own formatter never ran — egui only calls the
+    /// formatter for the value it draws, and the value was hidden — so the
+    /// timeline showed no time and no frame number at all.
+    ///
+    /// The check is on the pixels **below** the slider, because that region
+    /// holds the readout and nothing else: the handle is above it and the
+    /// plan's summary is at the bottom of the panel. A comparison of the
+    /// whole frames would pass even if the readout were never drawn, because
+    /// the handle moves too — §110's lesson, in a new place.
+    #[test]
+    fn the_timeline_says_where_the_playhead_is() {
+        let mut session = Session::sample();
+        session
+            .execute("doc.range", &serde_json::json!({ "start": 1.0, "end": 5.0 }))
+            .expect("the range can be set");
+        let state = ShellState::default();
+
+        session.execute("playback.seek", &serde_json::json!({ "frame": 24 })).expect("the playhead can move");
+        let first = crate::raster::render(&mut session, 600, 400, &state).expect("the frame renders");
+
+        session
+            .execute("playback.seek", &serde_json::json!({ "frame": 120 }))
+            .expect("the playhead can move");
+        let second = crate::raster::render(&mut session, 600, 400, &state).expect("the frame renders");
+
+        let rect =
+            first.automation.rect(AutomationId::playhead().as_str()).expect("the playhead has a rectangle");
+        let below =
+            |frame: &crate::raster::Frame| crop(&frame.png, rect.left(), rect.bottom() + 4.0, 160.0, 14.0);
+        assert_ne!(
+            below(&first),
+            below(&second),
+            "the timeline says the same thing about two playheads a hundred frames apart"
+        );
+    }
+
+    /// The readout says the frame and the time.
+    ///
+    /// Two numbers, because they are two numbers: the frame is the design's
+    /// grid and the time is the wall clock, and the rate is what turns one
+    /// into the other. §89: the drift between them is only visible if both
+    /// are shown.
+    #[test]
+    fn the_playhead_readout_says_the_frame_and_the_time() {
+        assert_eq!(playhead_readout(24, 1.0), "frame 24 · 1.00s");
+        assert_eq!(playhead_readout(0, 0.0), "frame 0 · 0.00s");
     }
 
     #[test]

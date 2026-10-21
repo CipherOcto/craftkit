@@ -79,12 +79,13 @@ The rollback itself is one function, so the two branches cannot drift apart:
 fn restore(&mut self, doc: craftkit_model::Document, dirty: bool) {
     self.doc = doc;
     self.evaluator.invalidate();
+    self.clamp_playhead_into_range();
     self.recompute();
     self.dirty = dirty;
 }
 ```
 
-Three details that are the whole pattern:
+Four details that are the whole pattern:
 
 - **The snapshot is taken for every command, including read-only ones.** One
   unconditional line beats a flag a command has to remember to set.
@@ -94,6 +95,13 @@ Three details that are the whole pattern:
   only after a command succeeds — so this is a precaution against the next one
   that does, and `a_restore_puts_the_dirty_flag_back` is what keeps it from
   quietly becoming a comment.
+- **The playhead follows the document in.** The playhead is a place *in* the
+  design, and a restore puts a different design in place — so the playhead is
+  brought back inside the new design's range. §115: without this line, opening
+  a design that starts one second in left the playhead at zero, before the
+  design's first frame, and the timeline drew a handle at a place the playhead
+  was not. The line is here rather than at each call site because `restore` is
+  the one place the document changes under the session.
 - **`evaluator.invalidate()` accompanies every restore.** The cache belongs to the
   document that produced it, and a restore puts a different document in place.
   This one is belt and braces rather than a correctness requirement, and the

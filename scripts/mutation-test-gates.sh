@@ -1218,12 +1218,14 @@ expect_catch "prose: the function a document quotes is not the function in the f
 
 # The other direction: the document loses a line the function has. A quote
 # that has quietly been edited is exactly what the marker is there to catch.
+#
+# §115 added a line to `restore` — the playhead follows the document in — so
+# this anchor moved with it. The line removed here is still one the function
+# has: `self.recompute();`.
 swap docs/patterns/clone-before-edit.md \
-    '    self.evaluator.invalidate();
-    self.recompute();
-    self.dirty = dirty;' \
-    '    self.evaluator.invalidate();
-    self.dirty = dirty;'
+    '    self.clamp_playhead_into_range();
+    self.recompute();' \
+    '    self.clamp_playhead_into_range();'
 expect_catch "prose: a quoted function loses a line in the document" \
     "cargo xtask lists"
 
@@ -2862,6 +2864,77 @@ swap crates/kernel/src/lib.rs \
 }'
 expect_catch "kernel: the guard depth never unwinds" \
     "cargo test -p craftkit-kernel --profile ci depth_is_balanced_across_nesting_and_early_return"
+
+# The timeline was the design's DURATION -- how many frames the design is
+# long -- while the value it held was an absolute frame. A design that starts
+# one second in has frames 24..=120 and a duration of 96, so the handle was
+# drawn a quarter of the way along the rail and the last twenty-four frames
+# could not be reached at all. §115.
+swap crates/ui/src/shell.rs \
+    '        let response = ui.add(egui::Slider::new(&mut frame, frames.clone()).show_value(false));' \
+    '        let total = meta.duration().frames_i64(rate).max(1);
+        let response = ui.add(egui::Slider::new(&mut frame, 0..=total).show_value(false));'
+expect_catch "ui: the timeline is the duration again" \
+    "cargo test -p craftkit-ui --profile ci the_timeline_can_reach_both_ends_of_the_design"
+
+# ...and the model's own answer was the duration too, so every caller that
+# asked for the design's frames got the wrong ones. §115.
+swap crates/model/src/document.rs \
+    '        let start = self.start.frames_i64(rate);' \
+    '        let start = 0;'
+expect_catch "model: the design's frames are its duration and not its range" \
+    "cargo test -p craftkit-model --profile ci the_designs_frames_are_its_range_and_not_its_duration"
+
+# The readout was computed and never drawn, so the timeline said nothing about
+# where the playhead was -- and the slider's own formatter never ran, because
+# egui only calls it for the value it draws. §115.
+swap crates/ui/src/shell.rs \
+    '        ui.label(
+            RichText::new(playhead_readout(at.frames_i64(rate), at.seconds_f64()))
+                .color(tokens.text_dim)
+                .small(),
+        );' \
+    '        let _ = playhead_readout(at.frames_i64(rate), at.seconds_f64());'
+expect_catch "ui: the timeline does not say where the playhead is" \
+    "cargo test -p craftkit-ui --profile ci the_timeline_says_where_the_playhead_is"
+
+# The readout said the time and not the frame, so the drift between the two --
+# the thing §89 is about -- was invisible. §115.
+swap crates/ui/src/shell.rs \
+    '    format!("frame {frame} · {seconds:.2}s")' \
+    '    format!("{seconds:.2}s")'
+expect_catch "ui: the readout does not say the frame" \
+    "cargo test -p craftkit-ui --profile ci the_playhead_readout_says_the_frame_and_the_time"
+
+# A range that moved under the playhead left it outside the design, where
+# there is nothing to see and where the timeline draws a handle at a place
+# the playhead is not. §115.
+swap crates/engine/src/session.rs \
+    '            let was = self.at;
+            self.clamp_playhead_into_range();
+            if self.at != was {
+                self.recompute();
+            }' \
+    '            let _ = self.at;'
+expect_catch "engine: a range that moves under the playhead leaves it there" \
+    "cargo test -p craftkit-engine --profile ci a_range_that_moves_under_the_playhead_takes_the_playhead_with_it"
+
+# ...and a document that arrived from outside with its own range did the same
+# thing to the playhead. §115.
+swap crates/engine/src/session.rs \
+    '        self.clamp_playhead_into_range();
+        self.recompute();' \
+    '        self.recompute();'
+expect_catch "engine: a document that arrives leaves the playhead outside it" \
+    "cargo test -p craftkit-engine --profile ci a_document_that_arrives_with_its_own_range_takes_the_playhead_with_it"
+
+# The command moved the playhead and did not say so: a command that changed
+# two things and mentioned one lies by omission. §115.
+swap crates/engine/src/commands.rs \
+    '        let message = if at == was_at {' \
+    '        let message = if at != was_at {'
+expect_catch "engine: the range command does not say that it moved the playhead" \
+    "cargo test -p craftkit-engine --profile ci the_range_command_says_when_it_moved_the_playhead"
 
 restore
 finish

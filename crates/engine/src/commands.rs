@@ -148,10 +148,27 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
                 source: craftkit_core::ParamError::new("end", "the end must be after the start"),
             });
         }
-        let changed = s.doc_mut().set_range(start, end, fps);
+        let was_at = s.at();
+        let changed = s.set_range(start, end, fps);
+        let at = s.at();
+        // The range is the design's, and the playhead is a place in it: a
+        // range that moves under the playhead takes the playhead with it.
+        // The command says so when it does, because a command that changed
+        // two things and mentioned one is a command that lies by omission.
+        // §115.
+        let message = if at == was_at {
+            format!("range {:.3}s..{:.3}s at {fps} fps", start.seconds_f64(), end.seconds_f64())
+        } else {
+            format!(
+                "range {:.3}s..{:.3}s at {fps} fps; the playhead moved to {:.3}s",
+                start.seconds_f64(),
+                end.seconds_f64(),
+                at.seconds_f64()
+            )
+        };
         Ok(Outcome::with(
-            format!("range {:.3}s..{:.3}s at {fps} fps", start.seconds_f64(), end.seconds_f64()),
-            serde_json::json!({ "start": start.raw(), "end": end.raw(), "fps": fps }),
+            message,
+            serde_json::json!({ "start": start.raw(), "end": end.raw(), "fps": fps, "at": at.raw() }),
         )
         .unchanged_if(!changed))
     },
@@ -1747,6 +1764,21 @@ mod tests {
         let mut s = session();
         let err = s.execute("doc.range", &json!({ "start": 2.0, "end": 1.0 })).expect_err("refused");
         assert!(err.to_string().contains("end"), "{err}");
+    }
+
+    /// The range command says when it moved the playhead.
+    ///
+    /// §115: the range is the design's and the playhead is a place in it, so
+    /// a range that moves takes the playhead with it. A command that changed
+    /// two things and mentioned one is a command that lies by omission.
+    #[test]
+    fn the_range_command_says_when_it_moved_the_playhead() {
+        let mut s = session();
+        let outcome = s.execute("doc.range", &json!({ "start": 1.0 })).expect("the range can be set");
+        assert!(outcome.message.contains("the playhead moved"), "{}", outcome.message);
+        // A range that leaves the playhead where it is says only the range.
+        let outcome = s.execute("doc.range", &json!({ "end": 6.0 })).expect("the range can be set");
+        assert!(!outcome.message.contains("the playhead moved"), "{}", outcome.message);
     }
 
     #[test]
