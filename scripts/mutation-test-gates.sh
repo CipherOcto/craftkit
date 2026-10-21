@@ -3480,5 +3480,32 @@ swap crates/core/src/ids.rs \
 expect_catch "model: the id counter ceiling is off by one" \
     "cargo test -p craftkit-model --profile ci a_document_whose_ids_reached_the_ceiling_refuses_a_new_node"
 
+# The third half of "a panel never writes to the document, never calls the
+# evaluator, never caches a value the evaluator computes": the shell's state
+# kept a number between frames. A number in the state is a number the design
+# said, and the design can change - so the copy goes stale and nobody can
+# tell. §138.
+swap crates/ui/src/shell.rs \
+    '    /// The last thing that happened, shown in the status bar.
+    pub status: String,' \
+    '    /// The last thing that happened, shown in the status bar.
+    pub status: String,
+    /// A level the shell kept between frames.
+    pub cached_level: f64,'
+expect_catch "ui: the shell caches a value the evaluator computes" \
+    "cargo xtask lists"
+
+# And the same state holding the evaluator's own answer: a plan copied into
+# the shell goes stale the moment the design changes.
+swap crates/ui/src/shell.rs \
+    '    /// The last thing that happened, shown in the status bar.
+    pub status: String,' \
+    '    /// The last thing that happened, shown in the status bar.
+    pub status: String,
+    /// A copy of the plan, kept between frames.
+    pub cached_plan: Option<craftkit_eval::Plan>,'
+expect_catch "ui: the shell keeps a copy of the plan" \
+    "cargo xtask lists"
+
 restore
 finish

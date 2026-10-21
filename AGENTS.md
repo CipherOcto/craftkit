@@ -146,10 +146,11 @@ needs and then runs it. §118.
 - **The UI is thin.** Panels read engine state and act through
   `session.execute`. A panel never writes to the document, never calls the
   evaluator, never caches a value the evaluator computes. All three are
-  checked: `cargo xtask lists` refuses a shell that names the evaluator, and
-  one that puts a document into the session. `crates/ui` depends on `egui` and
-  on no other UI toolkit — no windowing, no renderer — which is what lets the
-  same panels run in a window, headlessly, and in a browser.
+  checked: `cargo xtask lists` refuses a shell that names the evaluator, one
+  that puts a document into the session, and one whose state holds a value the
+  evaluator computes. `crates/ui` depends on `egui` and on no other UI
+  toolkit — no windowing, no renderer — which is what lets the same panels run
+  in a window, headlessly, and in a browser.
 - **One set of camera controls.** This tree has no canvas and no camera: the
   window draws a node graph, a timeline and a properties panel. If a canvas is
   added, it must have **one** set of camera controls — one module that owns

@@ -14402,7 +14402,7 @@ Three claims. What holds them:
 |---|---|
 | never writes to the document | **the engine's API** — the only mutable accessor, `Session::doc_mut`, is `pub(crate)` to the engine, so the shell cannot reach it |
 | never calls the evaluator | **nothing** |
-| never caches a value the evaluator computes | **an inspection** — `ShellState` has seven fields and not one of them is an evaluator's answer |
+| never caches a value the evaluator computes | **an inspection** — `ShellState` has seven fields and not one of them is an evaluator's answer — and the inspection was already wrong: it has six. §138 |
 
 The middle one had nothing at all. `crates/ui` depends on `craftkit-eval` — it
 uses two of its *types*, `Plan` and `Severity` — so the shell holds both the
@@ -15355,6 +15355,172 @@ that was not checked was the one a file could reach.
 
 ---
 
+## 138. The rule that a panel caches no evaluated value was an inspection
+
+### The measurement
+
+`AGENTS.md` says:
+
+> The UI is thin. Panels read engine state and act through `session.execute`.
+> A panel never writes to the document, never calls the evaluator, never
+> caches a value the evaluator computes. **All three are checked**: `cargo
+> xtask lists` refuses a shell that names the evaluator, and one that puts a
+> document into the session.
+
+Two of the three were checked. The third was checked by somebody reading
+`ShellState` once, and the reading was written down as a table row:
+
+| never caches a value the evaluator computes | **an inspection** — `ShellState` has seven fields and not one of them is an evaluator's answer |
+
+**And the inspection was already wrong.** `ShellState` has **six** fields:
+
+```text
+selected: Option<NodeId>
+status: String
+status_is_error: bool
+key_path: String
+key_value: String
+prompt: Option<Prompt>
+```
+
+There is no seventh. The count has been six since §118 landed (commit
+`8205259`, 2026-10-21), and the row that says "seven" was written **after**
+that — in §132 (commit `0eee638`, the same day). So the snapshot was wrong
+about the number it quoted from the moment it was written, and nothing
+noticed, because nothing re-reads it.
+
+That is the whole finding, in one sentence: **a hand-taken inspection of the
+code is a snapshot with a timestamp on it, and the timestamp is the only part
+that is ever checked.**
+
+### What the inspection could not see
+
+The shell's state is what the person is doing: a selection, a status line,
+the text of the fields they are typing into. Everything else the shell shows
+is read from the plan **every frame**, so it cannot go stale.
+
+So the state may hold text, an id, and a flag. It may not hold a number.
+Every number in a design is one of three things:
+
+| what | type | where it comes from |
+|---|---|---|
+| a level or an amount | `f64` | `NodeState::level_in`, `NodeState::level_out`, `Value::Num` |
+| a property's value | `craftkit_core::Value` | `Resolved::value` |
+| an instant | `craftkit_core::Tick` | `Plan::at` |
+
+A number kept between frames is a number the design said — and the design can
+change. The copy goes stale, the screen shows the old number, and **nothing
+says so**: the panel that draws it believes it.
+
+There is a second, quieter shape of the same defect. The shell may *read* the
+plan — that is allowed, and §132's gate is about it. What it may not do is
+**keep** one. A `Plan` in the shell's state is a whole answer copied into a
+frame, and it goes stale exactly the same way.
+
+And the third shape is the one an inspection of `ShellState` alone could not
+see at all: a struct that is not `ShellState` may hold the copy. `Shell`,
+`Frame` and `Click` all carry the shell's state — `Frame` and `Click` are how
+the headless renderer carries the screen's state out of a frame — and a `Plan`
+in any of them is the same stale copy with more indirection.
+
+### The fix
+
+The scope is **found**, not listed. The state is `ShellState`; the structs it
+holds are found by following the field types (`ShellState` holds `Prompt`,
+`Prompt` holds `PromptField`); the structs that hold the state are found the
+same way in the other direction (`Shell`, `Frame`, `Click`). A struct the
+state starts holding is covered the day it is added, with no list to keep.
+
+The rules are then two, with two different scopes:
+
+- **The state holds no number and no value of the design's.** `f64`, `f32`,
+  `craftkit_core::Value` and `craftkit_core::Tick` are refused in `ShellState`,
+  `Prompt` and `PromptField`.
+- **Nothing that carries the state holds the evaluator's answer.** `Plan`,
+  `NodeState`, `Resolved`, `Diagnostic`, `Diagnostics` and `Severity` are
+  refused in the state *and* in everything that carries it.
+
+The two scopes differ because the two kinds of number are different kinds. A
+frame's width, a click's screen coordinate — those describe **the screen**,
+and they are allowed. A level is a number **the design said**, and it is not.
+
+`serde_json::Value` is deliberately **not** refused: it is a JSON blob, a way
+of carrying what the person typed, and not a property.
+
+`NodeRow` shows why the scope had to be drawn where it was. `NodeRow` has a
+`level: f64` in it — a number, from the design — and it is **correct**,
+because a row is rebuilt every frame and thrown away. The line between a row
+and the state is not "does it hold a number", it is "does it survive a frame".
+
+The gate reports the file, the line, the struct, the field and the type:
+
+```text
+error: 1 shared-list problem(s):
+   • crates/ui/src/shell.rs: line 47 gives `ShellState.cached_level` the type `f64`: that is a
+     number the design said, and the design can change
+     The plan is read every frame; the state holds no copy.
+```
+
+### What now holds it
+
+Two mutations in `scripts/mutation-test-gates.sh`:
+
+| Mutation | Gate | Caught by |
+|---|---|---|
+| ui: the shell caches a value the evaluator computes | `cargo xtask lists` | the number branch |
+| ui: the shell keeps a copy of the plan | `cargo xtask lists` | the evaluator-type branch |
+
+Both mutations **compile** — they are a change somebody could plausibly make
+— and each is caught for a different reason, with a different message.
+
+And one test, `the_shell_state_holds_nothing_the_evaluator_computes` in
+`xtask`, which checks the scope as well as the verdict: that `Prompt` and
+`PromptField` are in the state, that `NodeRow` is **not**, that `Shell` and
+`Frame` carry it, and that a `serde_json::Value` is not a design's value.
+
+### What is still open
+
+**The gate reads the type as it is written.** A number behind an alias —
+`type Level = f64;` — is not seen, because the text says `Level`. The same
+hole is in the other direction: an **enum** variant carrying a `Plan` is not
+seen either, because the gate reads structs. Both are narrow, and both are
+the kind of thing a future change would have to notice rather than be
+protected from.
+
+**A number that is not the design's would be refused.** An animation phase or
+a scroll offset kept in the state is not a number the design said — and the
+gate would still refuse it. That is a deliberate trade: the state is *what the
+person is doing*, and a number in it is a design number by default. The way
+to keep one is to not keep it between frames.
+
+**The state is the shell's — and today that covers both front ends.** The
+desktop app's per-frame state *is* `ShellState`
+(`SharedState = Arc<Mutex<craftkit_ui::shell::ShellState>>`), and so is the
+web app's (`Application { state: craftkit_ui::ShellState, … }`). Neither keeps
+a copy of its own. The CLI has no state between frames at all — it runs a
+script and prints what came out — so there is nothing there to cover. A
+**future** front end with a state of its own would need the rule restated for
+it, and the gate would not notice it missing.
+
+### The lesson
+
+**"All three are checked" was a claim about two.** The sentence in `AGENTS.md`
+counted three rules and named two gates, and the gap between the count and
+the gates was not visible — the sentence read as though it were all right.
+
+**An inspection is a snapshot, and snapshots go stale silently.** The §132 row
+said "seven fields" and the code had six. It had had six since before the row
+was written. A gate that re-reads the code cannot be wrong about the number
+of fields; a note in a table can be, and will be, and nothing will say so.
+
+**The scope of a rule is part of the rule.** "Never caches a value the
+evaluator computes" says nothing about *where*, and the answer turned out to
+be: the state, and the things that carry it, and not the things that are
+rebuilt every frame. Writing the scope down is what made the gate possible —
+without it the rule could only have been "look at `ShellState` and see".
+
+---
+
 ---
 
 ## What enforces what
@@ -15680,6 +15846,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A parameter is never indexed** | `cargo xtask lists` | 1 mutation — §136 |
 | **Every clippy setting names a denied lint** | `cargo xtask lists` | 1 mutation — §136 |
 | **An id is unique across the whole document, even at the ceiling** | `craftkit-core` + `craftkit-model` tests | 2 mutations — §137 |
+| **The shell's state holds no value the evaluator computes** | `cargo xtask lists` | 2 mutations — §138 |
+| **A panel never keeps a copy of the plan** | `cargo xtask lists` | 1 mutation — §138 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

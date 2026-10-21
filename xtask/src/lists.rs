@@ -1064,6 +1064,274 @@ pub fn every_test_only_setting_names_a_denied_lint(root: &Path) -> Result<Vec<St
     Ok(problems)
 }
 
+/// The types the evaluator's answers arrive in.
+///
+/// `Plan` is the whole answer, `NodeState` one node's, `Resolved` one
+/// property's, `Diagnostic` one problem's. A shell that holds one of them
+/// holds a **copy** of an answer, and a copy is stale the moment the design
+/// changes. §138.
+const EVALUATOR_TYPES: &[&str] = &["Plan", "NodeState", "Resolved", "Diagnostic", "Diagnostics", "Severity"];
+
+/// The types a design's own value arrives in.
+///
+/// `Value` is what a property holds and `Tick` is the instant a plan was
+/// made at: the two the evaluator hands out inside its own answers.
+const DESIGN_VALUES: &[&str] = &["Value", "Tick"];
+
+/// The numbers a level or an amount is.
+///
+/// `NodeState`'s `level_in` and `level_out` are `f64`, and so is every
+/// `Value::Num`. A number in the shell's state is a number the design said,
+/// and the design can change.
+const EVALUATOR_NUMBERS: &[&str] = &["f64", "f32"];
+
+/// The crates whose types are not the design's.
+///
+/// `serde_json::Value` is a JSON blob — a way of carrying what the person
+/// typed — and not a property. The rule is about the design's values.
+const NOT_DESIGN: &[&str] = &["serde_json"];
+
+/// The shell may not cache a value the evaluator computes.
+///
+/// `AGENTS.md`: "A panel never writes to the document, never calls the
+/// evaluator, never caches a value the evaluator computes."
+///
+/// The first half of that sentence is a gate (§135) and the second is a gate
+/// (§132). The third was an **inspection** of `ShellState` — and an
+/// inspection is a snapshot of the code, taken by somebody, that nobody keeps
+/// taking. §138.
+///
+/// # What is checked, and what is not
+///
+/// The scope is the shell's **state**: `ShellState` and everything it holds.
+/// The state is what the person is doing — a selection, a status line, the
+/// text of the fields they are typing into — and every number in it would be
+/// a number the *design* said, which is stale the moment the design changes.
+/// So the state may hold no number, and no type of the design's.
+///
+/// A type that *carries* the state — `Shell`, `Frame`, `Click` — may hold a
+/// screen coordinate or a frame's size: those numbers describe the screen,
+/// not the design. It may not hold the evaluator's own answer either, because
+/// a plan copied into a frame is a plan that goes stale while the frame is
+/// still on the screen.
+///
+/// The scope is found rather than listed: the state is `ShellState`, the
+/// structs it holds are found by following the field types, and the structs
+/// that hold it are found the same way in the other direction. A struct the
+/// state starts holding is covered the day it is added.
+pub fn the_shell_caches_no_evaluated_value(root: &Path) -> Result<Vec<String>, String> {
+    let structs = ui_structs(root);
+    let mut problems = Vec::new();
+
+    // The anchor. If the state is not where it was, the scope below is empty
+    // and the gate would pass for the wrong reason — which is worse than not
+    // having it.
+    if !structs.iter().any(|s| s.name == "ShellState") {
+        problems.push(
+            "crates/ui/src/shell.rs: there is no `ShellState` to check: the shell's state has \
+             been renamed or moved, and this gate is now watching nothing"
+                .to_string(),
+        );
+        return Ok(problems);
+    }
+
+    let state = reach(&structs, "ShellState", true);
+    let carried = reach(&structs, "ShellState", false);
+
+    for subject in &structs {
+        let holds_state = state.contains(&subject.name);
+        let carries_state = carried.contains(&subject.name);
+        if !holds_state && !carries_state {
+            continue;
+        }
+        for (line, field, ty) in &subject.fields {
+            for value in EVALUATOR_TYPES {
+                if holds_type(ty, value) {
+                    problems.push(format!(
+                        "{file}: line {line} gives `{name}.{field}` the type `{ty}`: the shell \
+                         holds what the person is doing, not a copy of what the evaluator \
+                         computed",
+                        file = subject.file,
+                        name = subject.name,
+                    ));
+                }
+            }
+            if !holds_state {
+                continue;
+            }
+            for value in DESIGN_VALUES {
+                if holds_type(ty, value) {
+                    problems.push(format!(
+                        "{file}: line {line} gives `{name}.{field}` the type `{ty}`: that is a \
+                         value the design said, and the design can change",
+                        file = subject.file,
+                        name = subject.name,
+                    ));
+                }
+            }
+            for value in EVALUATOR_NUMBERS {
+                if holds_type(ty, value) {
+                    problems.push(format!(
+                        "{file}: line {line} gives `{name}.{field}` the type `{ty}`: that is a \
+                         number the design said, and the design can change",
+                        file = subject.file,
+                        name = subject.name,
+                    ));
+                }
+            }
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// A struct in the ui crate, and the fields it declares.
+struct UiStruct {
+    /// The file it is in, relative to the root.
+    file: String,
+    /// The struct's name.
+    name: String,
+    /// Its fields: the file line, the name, and the type as written.
+    fields: Vec<(usize, String, String)>,
+}
+
+/// Every struct the ui crate declares, with its fields.
+///
+/// The fields are read from the source with the comments and the string
+/// contents blanked out, so a type mentioned in a comment is not a type the
+/// struct holds. A **tuple** struct is skipped: its fields are positions,
+/// and the ui crate's one tuple struct holds a name.
+fn ui_structs(root: &Path) -> Vec<UiStruct> {
+    let mut out = Vec::new();
+    for path in rust_files(&root.join("crates/ui/src")) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let code = code_lines_kept(&text);
+        let relative = relative_name(root, &path);
+        let lines: Vec<&str> = code.lines().collect();
+        for (index, line) in lines.iter().enumerate() {
+            let Some(rest) = after_visibility(line.trim()) else { continue };
+            let Some(rest) = rest.strip_prefix("struct ") else { continue };
+            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.is_empty() || !is_braced_struct(&rest[name.len()..]) {
+                continue;
+            }
+            let mut fields = Vec::new();
+            for (offset, inner) in lines.iter().skip(index + 1).enumerate() {
+                let trimmed = inner.trim();
+                if trimmed.starts_with('}') {
+                    break;
+                }
+                if trimmed.is_empty() || trimmed.starts_with("#[") {
+                    continue;
+                }
+                let Some((field, ty)) = trimmed.split_once(':') else { continue };
+                let field = after_visibility(field.trim()).unwrap_or(field.trim());
+                if !is_field_name(field) {
+                    continue;
+                }
+                let ty = ty.split('=').next().unwrap_or(ty).trim().trim_end_matches(',').trim();
+                if ty.is_empty() {
+                    continue;
+                }
+                fields.push((index + offset + 2, field.to_string(), ty.to_string()));
+            }
+            out.push(UiStruct { file: relative.clone(), name, fields });
+        }
+    }
+    out
+}
+
+/// Whether a struct declaration opens a brace — as opposed to a tuple.
+///
+/// The declaration may carry generic parameters: `pub struct Shell<'a> {`.
+/// Those are skipped, and a `->` inside a bound is not the end of them.
+fn is_braced_struct(tail: &str) -> bool {
+    let tail = tail.trim_start();
+    if !tail.starts_with('<') {
+        return tail.starts_with('{');
+    }
+    let mut depth = 0usize;
+    for (at, c) in tail.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => {
+                if at > 0 && tail.as_bytes()[at - 1] == b'-' {
+                    continue;
+                }
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return tail[at + 1..].trim_start().starts_with('{');
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether a word is a field's name.
+///
+/// A field's name is an identifier: `pub selected: Option<NodeId>` has one and
+/// `#[allow(clippy::unwrap_used)]` does not.
+fn is_field_name(word: &str) -> bool {
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else { return false };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The structs reachable from `start` by one relation over the field types.
+///
+/// `downward` finds what the set **holds**: `ShellState` holds `Prompt`.
+/// Otherwise it finds what **holds** the set: `Frame` holds `ShellState`.
+/// Both directions follow the types as they are written, so a struct that
+/// mentions the state by name is in the scope of the rule.
+fn reach(structs: &[UiStruct], start: &str, downward: bool) -> Vec<String> {
+    let mut set = vec![start.to_string()];
+    loop {
+        let mut added = false;
+        for subject in structs {
+            if set.contains(&subject.name) {
+                continue;
+            }
+            let joins = if downward {
+                // Something in the set mentions the subject: the set holds it.
+                structs.iter().any(|holder| {
+                    holder.fields.iter().any(|(_, _, ty)| holds_type(ty, &subject.name))
+                        && set.contains(&holder.name)
+                })
+            } else {
+                // The subject mentions something in the set: it holds the set.
+                subject.fields.iter().any(|(_, _, ty)| set.iter().any(|n| holds_type(ty, n)))
+            };
+            if joins {
+                set.push(subject.name.clone());
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    set
+}
+
+/// Whether a type mentions a name the rule forbids.
+///
+/// A whole word, because `Value` is not `PromptValue` and `Plan` is not
+/// `Planned`. And a path into a crate whose types are **not** the design's
+/// does not count: `serde_json::Value` is a JSON blob and not a property, so
+/// it is replaced before the word is looked for.
+fn holds_type(ty: &str, name: &str) -> bool {
+    let mut text = ty.to_string();
+    for other in NOT_DESIGN {
+        text = text.replace(&format!("{other}::{name}"), "not-the-design");
+    }
+    has_word(&text, name)
+}
+
 /// The names that evaluate a document from outside `craftkit-eval`.
 ///
 /// `evaluate_once` is the function; `Evaluator` is the struct whose `evaluate`
@@ -3220,6 +3488,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A setting that re-enables nothing enforces nothing.")),
     );
 
+    // The shell's state, and the values it may not hold. §138.
+    problems.extend(
+        the_shell_caches_no_evaluated_value(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     The plan is read every frame; the state holds no copy.")),
+    );
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -3235,8 +3510,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              methods are the methods the prose lists, every module path in prose \
              names a module this tree has, the shell never evaluates the \
              document, the shell never writes the document, the raw parameter \
-             reader has two homes, every clippy setting names a denied lint, \
-             and the session offers no way into the design but the registry",
+             reader has two homes, every clippy setting names a denied lint, the \
+             shell's state holds no evaluated value, and the session offers no \
+             way into the design but the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -4697,5 +4973,53 @@ printf '%s%d/%d caught.%s\\n' \\
         let problems = mutation_ratio_is_computed(fabricated);
         assert!(!problems.is_empty(), "a hand-written ratio was not noticed");
         assert!(problems[0].contains("written by hand"), "{problems:?}");
+    }
+
+    /// The shell's state holds nothing the evaluator computes. §138.
+    ///
+    /// `AGENTS.md` says "A panel never writes to the document, never calls
+    /// the evaluator, never caches a value the evaluator computes", and then
+    /// says "All three are checked". Two were. The third was somebody looking
+    /// at `ShellState` once, and the looking was not repeated.
+    #[test]
+    fn the_shell_state_holds_nothing_the_evaluator_computes() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_shell_caches_no_evaluated_value(&root).expect("runs").is_empty(),
+            "the shell's state holds a value the evaluator computes"
+        );
+
+        // The scope is found, not listed, and it is the scope it should be.
+        let structs = ui_structs(&root);
+        let state = reach(&structs, "ShellState", true);
+        let carried = reach(&structs, "ShellState", false);
+        assert!(state.contains(&"ShellState".to_string()), "the state is the state: {state:?}");
+        assert!(state.contains(&"Prompt".to_string()), "the prompt is state: {state:?}");
+        assert!(state.contains(&"PromptField".to_string()), "a field is state: {state:?}");
+        assert!(
+            !state.contains(&"NodeRow".to_string()),
+            "a row is drawn every frame, so it is not state: {state:?}"
+        );
+        assert!(carried.contains(&"Shell".to_string()), "the shell carries it: {carried:?}");
+        assert!(carried.contains(&"Frame".to_string()), "a frame carries it: {carried:?}");
+
+        // A number in the state is a number the design said.
+        assert!(holds_type("f64", "f64"));
+        assert!(holds_type("Option<f64>", "f64"));
+        assert!(holds_type("Vec<f64>", "f64"));
+        // A word: `f64` is not `f64x`, and `Plan` is not `Planned`.
+        assert!(!holds_type("f64x", "f64"));
+        assert!(!holds_type("Planned", "Plan"));
+        assert!(holds_type("Option<craftkit_eval::Plan>", "Plan"));
+        // And a JSON blob is not the design's value.
+        assert!(!holds_type("serde_json::Value", "Value"));
+        assert!(holds_type("craftkit_core::Value", "Value"));
+        assert!(holds_type("Option<Value>", "Value"));
+
+        // And the fields are read with the file's own lines.
+        let shell = structs.iter().find(|s| s.name == "ShellState").expect("the state");
+        let selected = shell.fields.iter().find(|(_, name, _)| name == "selected").expect("a field");
+        assert_eq!(selected.2, "Option<NodeId>", "the type as written: {selected:?}");
+        assert!(selected.0 > 1, "the line is the file's, not the block's: {selected:?}");
     }
 }
