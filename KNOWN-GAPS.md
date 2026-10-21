@@ -15521,6 +15521,174 @@ without it the rule could only have been "look at `ShellState` and see".
 
 ---
 
+## 139. The rule that every parameter you read is declared had nothing behind it
+
+### The measurement
+
+`docs/agent-playbook.md` has thirteen rules an agent is told to keep. Rule 4
+is this one:
+
+> ### 4. Every parameter you read is declared in `params`
+>
+> **Why:** `Session::execute` runs `p.deny_unknown(&spec.param_names())` before
+> calling your `run`. A key you read but did not declare is **not ignored — it
+> is a refusal**, and it takes the whole command down with it.
+>
+> **Check:** call your command with its own parameters in a test.
+> `every_parameter_is_documented_and_uniquely_named` does not catch this.
+
+The rule is **right about the consequence**, and it **names its own gap**: the
+check is a thing a person does by hand, and the tree's test does not do it.
+Nothing did it. `cargo xtask lists` had no check for it, and the tree's own
+test — `every_parameter_is_documented_and_uniquely_named` — checks the help
+text, that no parameter is declared twice, and that the first parameter is one
+that is needed. It does not look at the command's body at all.
+
+The scale of the thing nothing was checking: **23 commands, 56 declared
+parameter entries, 19 distinct names**. Every one of them was a place where
+the two lists could drift, and the two lists were kept in step by hand.
+
+**Today the tree is consistent.** The gate reports **zero** mismatches, and an
+independent probe of the same question — a different parser, reading the same
+file — also reports zero. That is worth saying plainly: §139 did not find a
+broken command. It found a rule with nothing behind it, in a tree where the
+rule happened to be true.
+
+### The two ways it goes wrong
+
+**A parameter read but not declared makes the command unusable.** The engine
+refuses an undeclared parameter, so the value the command needs can never
+arrive. The command is not "slightly wrong": it cannot be called.
+
+Here is `doc.rename` with the name it reads changed from `name` to `title` —
+one word — and a script that does the obvious thing:
+
+```text
+craftkit-cli: step 1/1: `doc.rename` rejected its parameters: `title` this parameter is required
+```
+
+And the caller's second attempt, passing the parameter the error asked for:
+
+```text
+craftkit-cli: step 1/1: `doc.rename` rejected its parameters: `title` unknown parameter (expected one of: name)
+```
+
+The command asks for a parameter it is **refused**, and offers one it never
+reads. There is no call that satisfies it. The error message names the
+parameter the caller cannot supply — the worst kind of message, because it
+sends the reader looking for something that does not exist.
+
+**A parameter declared but not read is the silent one.** `node.mute` declares
+`muted`, reads it, and — with one line changed — ignores it:
+
+```text
+1/1 node.mute: muted
+```
+
+The caller asked for `{"node": 1, "muted": false}` on an unmuted node. Before
+the change the answer was `unmuted`; after it, the node is muted. The command
+**succeeded**, the message is the message it always sends, and the value the
+caller passed was thrown away. Nothing anywhere says so.
+
+That is the direction that matters. The first one is loud: the command is
+broken and says so. The second one is a value the caller believes in.
+
+### The fix
+
+The check is on the **source**, because that is where the truth is: the
+command's `run` body says which names it reads, and its `params` list says
+which names it declares. Both are in the same file, so they cannot drift
+without the gate noticing.
+
+**The readers are derived, not listed.** A reader is a function that takes a
+`&Params` — the only way to read a parameter — or a method of `Params` itself.
+The gate finds them by reading the tree, so a reader that is added is covered
+the day it is added:
+
+```rust
+let is_method = has_word(&block, PARAMS_TYPE);
+let takes_params = signature.contains(&format!("&{PARAMS_TYPE}"));
+```
+
+That is what makes the gate trustworthy. A list of readers written down in
+the gate would be a second list to keep true, and a new helper would slip
+past it silently — the same defect, one level down.
+
+A reader's name argument is the one typed `key: &str`, and its **index**
+matters: a method's receiver is not an argument, so `text(&self, key: &str,
+max: usize)` has its name at index 0 and `node_ref(p: &Params<'_>, key:
+&str)` has its name at index 1.
+
+A reader with **no** name argument of its own reads whatever its own body
+reads: `node_by_id_or_name` takes the document and the parameters and reads
+`node` and `node_name` itself. The gate resolves that by reading its body,
+one level down.
+
+The two halves are told apart, and each has its own message:
+
+```text
+crates/engine/src/commands.rs: line 70 reads the parameter `note`, which `doc.note` does not
+declare: the engine refuses an undeclared parameter, so the command cannot be given the value
+it needs
+```
+
+```text
+crates/engine/src/commands.rs: line 50 declares the parameter `text`, which `doc.note` never
+reads: a caller that passes it is ignored
+```
+
+### What now holds it
+
+Two mutations in `scripts/mutation-test-gates.sh`:
+
+| Mutation | Gate | Caught by |
+|---|---|---|
+| engine: a command reads a parameter it does not declare | `cargo xtask lists` | the loud half |
+| engine: a command declares a parameter it never reads | `cargo xtask lists` | the silent half |
+
+And one test, `a_command_declares_every_parameter_it_reads` in `xtask`, which
+checks the *scope* as well as the verdict: that the gate finds more than
+twenty commands, that the nine `Params` methods and `node_by_id_or_name` are
+among the readers it derived, that a reader with no name argument of its own
+reads `node` and `node_name`, and that `doc.rename` declares `name` and reads
+`name`.
+
+### What is still open
+
+**The gate reads the source as it is written.** A parameter read through a
+macro, or a name built at run time, is not seen. There is no such reader in
+the tree today, and the tree has no macros in command bodies, but the gate
+knows about the readers it can see and not about the ones it cannot.
+
+**The rule is about the registry.** The commands are read from
+`crates/engine/src/commands.rs`, which is where the registry is; a command
+defined somewhere else would not be covered. There is one registry, and it is
+there.
+
+**The engine's refusal is the backstop, and the gate is the reason it is
+enough.** `deny_unknown` protects a *caller* from a command that lies about
+what it accepts; it does not protect a *command* from a body that reads what
+it did not declare. The gate is what covers that side.
+
+### The lesson
+
+**A rule that names its own gap is still a gap.** The playbook said the check
+was manual and said the tree's test did not do it. The prose was honest and
+the tree was unprotected, and the two facts sat next to each other for as long
+as the rule existed.
+
+**A derived list cannot go blind; a written-down list can.** The readers are
+found from the tree, so a new helper is covered on the day it is written. The
+gate would have been much shorter with a list of eleven names in it, and it
+would have been wrong the day somebody wrote the twelfth.
+
+**The two halves of a rule are not the same severity.** "Reads a parameter it
+does not declare" breaks the command and says so. "Declares a parameter it
+never reads" breaks the *caller*, quietly. A rule that only names the first
+half names the half that is already loud.
+
+---
+
 ---
 
 ## What enforces what
@@ -15848,6 +16016,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An id is unique across the whole document, even at the ceiling** | `craftkit-core` + `craftkit-model` tests | 2 mutations — §137 |
 | **The shell's state holds no value the evaluator computes** | `cargo xtask lists` | 2 mutations — §138 |
 | **A panel never keeps a copy of the plan** | `cargo xtask lists` | 1 mutation — §138 |
+| **Every parameter a command reads is declared** | `cargo xtask lists` | 1 mutation — §139 |
+| **Every parameter a command declares is read** | `cargo xtask lists` | 1 mutation — §139 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

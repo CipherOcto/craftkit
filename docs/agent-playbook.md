@@ -120,8 +120,10 @@ This is rule 4 in `crates/engine/src/lib.rs`, and it is not negotiable.
 calling your `run`. A key you read but did not declare is **not ignored — it is
 a refusal**, and it takes the whole command down with it.
 
-**Check:** call your command with its own parameters in a test.
-`every_parameter_is_documented_and_uniquely_named` does not catch this.
+**Check:** `cargo xtask lists` refuses the tree when a command reads a
+parameter it does not declare, and when it declares one it never reads. The
+readers are **derived** from the source — a function that takes a `&Params` is
+a reader — so a new helper is covered the day it is written. §139.
 
 ### 5. Every user-visible behaviour is a command
 

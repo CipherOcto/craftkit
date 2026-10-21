@@ -3507,5 +3507,32 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the shell keeps a copy of the plan" \
     "cargo xtask lists"
 
+# The playbook's rule 4: every parameter a command reads is declared in its
+# `params`. A command that reads one it does not declare cannot be given the
+# value it needs - the engine refuses an undeclared parameter - and the
+# command is dead. §139.
+swap crates/engine/src/commands.rs \
+    '        let name = required_text(p, "name")?;
+        check_name(&name)?;
+        let changed = s.doc_mut().set_name(name.clone());' \
+    '        let name = required_text(p, "title")?;
+        check_name(&name)?;
+        let changed = s.doc_mut().set_name(name.clone());'
+expect_catch "engine: a command reads a parameter it does not declare" \
+    "cargo xtask lists"
+
+# And the other half, which is the silent one: a command that declares a
+# parameter and ignores it. The caller passes the value and the command does
+# something else.
+swap crates/engine/src/commands.rs \
+    '        let muted = match p.bool("muted")? {
+            Some(b) => b,
+            None => !node_mut(s, id, NODE_MUTE.id)?.muted,
+        };' \
+    '        let _asked = p.bool("muted")?;
+        let muted = !node_mut(s, id, NODE_MUTE.id)?.muted;'
+expect_catch "engine: a command declares a parameter it never reads" \
+    "cargo xtask lists"
+
 restore
 finish

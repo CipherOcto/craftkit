@@ -1332,6 +1332,434 @@ fn holds_type(ty: &str, name: &str) -> bool {
     has_word(&text, name)
 }
 
+// ------------------------------------------------------------------ §139 ---
+//
+// `docs/agent-playbook.md` rule 4: *"Every parameter you read is declared in
+// `params`"* — and the rule says its own check is *"call your command with
+// its own parameters in a test"*, and that the test the tree has
+// (`every_parameter_is_documented_and_uniquely_named`) **does not catch it**.
+//
+// The consequence is not a style point. `Session::execute` runs
+// `p.deny_unknown(&spec.param_names())` before the command's `run`, so a
+// parameter a command reads but does not declare is **refused**: the command
+// cannot be given the value it needs, and every caller that tries is told
+// "unknown parameter".
+//
+// A command that *declares* a parameter it never reads is the other half,
+// and it is the silent one: the caller passes the value, the command ignores
+// it, and the caller believes it did something.
+//
+// The check is on the **source**, because that is where the truth is: the
+// command's `run` body says which names it reads, and its `params` list says
+// which names it declares. Both are read from the same file, so they cannot
+// drift without the gate noticing.
+
+/// The name of the type a reader takes.
+///
+/// A **reader** is a function that takes a `&Params` — the only way to read a
+/// parameter — or a method of `Params` itself.
+const PARAMS_TYPE: &str = "Params";
+
+/// The name of the argument that carries the parameter's name.
+///
+/// A reader's name argument is the one typed `key: &str`. A reader without
+/// one reads whatever its own body reads: `node_by_id_or_name` takes the
+/// document and the parameters and reads `node` and `node_name` itself.
+const KEY_ARG: &str = "key: &str";
+
+/// A function in the tree that can read a command parameter.
+struct Reader {
+    /// The file line its `fn` is on.
+    line: usize,
+    /// Its name.
+    name: String,
+    /// The index of its name argument, if it has one.
+    key: Option<usize>,
+    /// Its body, used to work out the names a reader without a name argument
+    /// of its own reads.
+    body: String,
+}
+
+/// A command in the registry, read from the source.
+struct CommandSource {
+    /// The command's id.
+    id: String,
+    /// The file line its declaration is on.
+    line: usize,
+    /// The names it declares.
+    declared: Vec<String>,
+    /// The body of its `run`, and the file line that body starts on.
+    body: String,
+    body_line: usize,
+}
+
+/// The offset of the delimiter that closes the one at `open`.
+///
+/// Strings are stepped over, so a parenthesis inside one does not count, and
+/// the depth never goes below one, so a stray closer cannot underflow.
+fn matching(source: &str, open: usize, left: u8, right: u8) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut depth = 0usize;
+    let mut at = open;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == b'\\' {
+                escaped = true;
+            } else if c == b'"' {
+                in_string = false;
+            }
+        } else if c == b'"' {
+            in_string = true;
+        } else if c == left {
+            depth += 1;
+        } else if c == right {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return Some(at);
+            }
+        }
+        at += 1;
+    }
+    None
+}
+
+/// The `impl` blocks in a source, as (header, first byte, last byte).
+///
+/// The header is what an `impl` says before its brace — `impl Params<'_>` —
+/// and the range is what a function's position is tested against to find the
+/// block it is in.
+fn impl_blocks(source: &str) -> Vec<(String, usize, usize)> {
+    let bytes = source.as_bytes();
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while let Some(found) = source[at..].find("impl") {
+        let start = at + found;
+        at = start + 4;
+        if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+            continue;
+        }
+        let Some(brace) = source[at..].find('{') else { break };
+        let brace = at + brace;
+        let Some(end) = matching(source, brace, b'{', b'}') else { continue };
+        out.push((source[start..brace].trim().to_string(), start, end));
+    }
+    out
+}
+
+/// Every function in a Rust file, with its signature, its body and the block
+/// it is written in.
+fn rust_functions(file: &str, source: &str) -> Vec<(String, usize, String, String, String)> {
+    let bytes = source.as_bytes();
+    let blocks = impl_blocks(source);
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while let Some(found) = source[at..].find("fn ") {
+        let start = at + found;
+        at = start + 3;
+        if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+            continue;
+        }
+        let name: String = source[at..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        if name.is_empty() {
+            continue;
+        }
+        at += name.len();
+        let Some(open) = source[at..].find('(') else { continue };
+        let open = at + open;
+        let Some(close) = matching(source, open, b'(', b')') else { continue };
+        let signature = source[open + 1..close].to_string();
+        let after = close + 1;
+        let brace = source[after..].find('{').map(|i| after + i);
+        let (body, line) = match brace {
+            Some(bs) => {
+                let line = source[..bs].lines().count() + 1;
+                match matching(source, bs, b'{', b'}') {
+                    Some(be) => (source[bs..=be].to_string(), line),
+                    None => (String::new(), line),
+                }
+            }
+            None => (String::new(), source[..open].lines().count() + 1),
+        };
+        // The block the function is written in: the innermost `impl` that
+        // holds it.
+        let block = blocks
+            .iter()
+            .filter(|(_, first, last)| *first < start && start < *last)
+            .max_by_key(|(_, first, _)| *first)
+            .map(|(header, _, _)| header.clone())
+            .unwrap_or_default();
+        out.push((name, line, signature, body, block));
+    }
+    let _ = file;
+    out
+}
+
+/// The arguments of a call, as they are written.
+///
+/// The text between the brackets, split at the commas that are not inside a
+/// bracket or a string.
+fn arguments_of(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut current = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    for c in text.chars() {
+        if in_string {
+            current.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                current.push(c);
+            }
+            '(' | '[' | '{' => {
+                depth += 1;
+                current.push(c);
+            }
+            ')' | ']' | '}' => {
+                depth -= 1;
+                current.push(c);
+            }
+            ',' if depth == 0 => {
+                out.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(c),
+        }
+    }
+    if !current.trim().is_empty() {
+        out.push(current.trim().to_string());
+    }
+    out
+}
+
+/// The string a piece of text is, if it is one.
+fn as_string_literal(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.len() < 2 || !trimmed.starts_with('"') || !trimmed.ends_with('"') {
+        return None;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    if inner.contains('"') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+/// The index of a reader's name argument, if it has one.
+///
+/// The name argument is the one typed `key: &str`. A method's receiver is not
+/// an argument — it is written in the signature and not in the call — so it
+/// does not count: `text(&self, key: &str, max: usize)` has its name at
+/// index 0 and `node_ref(p: &Params<'_>, key: &str)` has its name at index 1.
+fn key_index(signature: &str) -> Option<usize> {
+    arguments_of(signature)
+        .iter()
+        .filter(|arg| !matches!(arg.as_str(), "&self" | "&mut self" | "self"))
+        .position(|arg| arg.starts_with(KEY_ARG) || arg.starts_with("key:&str"))
+}
+
+/// Every reader in the tree.
+///
+/// A reader is a function whose signature takes a `&Params`, or a method of
+/// `Params` itself. The list is **derived**, not written down: a reader that
+/// is added is covered the day it is added, and the gate cannot go blind
+/// because somebody forgot to update a list.
+fn parameter_readers(root: &Path) -> Vec<Reader> {
+    let mut out = Vec::new();
+    for path in rust_files(&root.join("crates")) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let relative = relative_name(root, &path);
+        for (name, line, signature, body, block) in rust_functions(&relative, &text) {
+            let is_method = has_word(&block, PARAMS_TYPE);
+            let takes_params = signature.contains(&format!("&{PARAMS_TYPE}"));
+            if !is_method && !takes_params {
+                continue;
+            }
+            out.push(Reader { line, name, key: key_index(&signature), body });
+        }
+    }
+    out
+}
+
+/// The names a body reads, and where it reads them.
+///
+/// A reader with a name argument contributes the string at that argument. A
+/// reader without one contributes the names its own body reads.
+fn names_read(body: &str, body_line: usize, readers: &[Reader], depth: usize) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    if depth > 3 {
+        return out;
+    }
+    let bytes = body.as_bytes();
+    for reader in readers {
+        let mut at = 0usize;
+        while let Some(found) = body[at..].find(&reader.name) {
+            let start = at + found;
+            at = start + reader.name.len();
+            // The name must stand alone: `text` is not `required_text`.
+            if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+                continue;
+            }
+            // And it must be a call.
+            let Some(open) = body[at..].find('(') else { continue };
+            let open = at + open;
+            if !body[at..open].trim().is_empty() {
+                continue;
+            }
+            let Some(close) = matching(body, open, b'(', b')') else { continue };
+            let call_line = body_line + body[..open].lines().count();
+            match reader.key {
+                Some(index) => {
+                    let args = arguments_of(&body[open + 1..close]);
+                    let Some(arg) = args.get(index) else { continue };
+                    if let Some(name) = as_string_literal(arg) {
+                        out.push((name, call_line));
+                    }
+                }
+                None => {
+                    // A reader with no name argument of its own reads what its
+                    // own body reads — but the read happens **here**, at the
+                    // call site, so that is the line the report names.
+                    for (name, _) in names_read(&reader.body, reader.line, readers, depth + 1) {
+                        out.push((name, call_line));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The commands in the registry, read from the source.
+fn registry_commands(root: &Path) -> Vec<CommandSource> {
+    let path = root.join("crates/engine/src/commands.rs");
+    let Ok(text) = std::fs::read_to_string(&path) else { return Vec::new() };
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut at = 0usize;
+    while let Some(found) = text[at..].find("pub static ") {
+        let start = at + found;
+        at = start + 10;
+        if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+            continue;
+        }
+        let Some(brace) = text[at..].find('{') else { break };
+        let brace = at + brace;
+        let Some(end) = matching(&text, brace, b'{', b'}') else { continue };
+        let block = &text[brace..=end];
+        let line = text[..brace].lines().count() + 1;
+        let Some(id) = block.find("id: \"") else { continue };
+        let id_start = id + 5;
+        let Some(id_end) = block[id_start..].find('"') else { continue };
+        let id = block[id_start..id_start + id_end].to_string();
+
+        // The names the command declares.
+        let mut declared = Vec::new();
+        let mut scan = 0usize;
+        while let Some(found) = block[scan..].find("ParamDoc::") {
+            let mark = scan + found;
+            scan = mark + 10;
+            let Some(open) = block[scan..].find('(') else { break };
+            let open = scan + open;
+            let Some(close) = matching(block, open, b'(', b')') else { continue };
+            let args = arguments_of(&block[open + 1..close]);
+            if let Some(name) = args.first().and_then(|a| as_string_literal(a)) {
+                declared.push(name);
+            }
+        }
+
+        // The body of its `run`.
+        let mut body = String::new();
+        let mut body_line = line;
+        if let Some(run) = block.find("run:") {
+            let after = run + 4;
+            if let Some(brace) = block[after..].find('{') {
+                let open = after + brace;
+                if let Some(close) = matching(block, open, b'{', b'}') {
+                    body = block[open..=close].to_string();
+                    body_line = line + block[..open].lines().count();
+                }
+            }
+        }
+        out.push(CommandSource { id, line, declared, body, body_line });
+    }
+    out
+}
+
+/// Every parameter a command reads is declared, and every parameter it
+/// declares is read.
+///
+/// `docs/agent-playbook.md` rule 4: *"Every parameter you read is declared in
+/// `params`"* — and the rule says its own check is *"call your command with
+/// its own parameters in a test"*, and that the test the tree has does not
+/// catch it. §139.
+///
+/// A parameter a command reads but does not declare is **refused** by
+/// `Session::execute`, which runs `p.deny_unknown(&spec.param_names())`
+/// before the command's `run`: the command cannot be given the value it
+/// needs, and every caller that tries is told "unknown parameter".
+///
+/// A parameter a command declares but never reads is the silent half: the
+/// caller passes the value, the command ignores it, and the caller believes
+/// it did something.
+pub fn every_parameter_a_command_reads_is_declared(root: &Path) -> Result<Vec<String>, String> {
+    let readers = parameter_readers(root);
+    let commands = registry_commands(root);
+    let mut problems = Vec::new();
+
+    if commands.is_empty() {
+        problems.push(
+            "crates/engine/src/commands.rs: no command was found: the gate is watching nothing".to_string(),
+        );
+        return Ok(problems);
+    }
+
+    for command in &commands {
+        let read = names_read(&command.body, command.body_line, &readers, 0);
+        let declared: Vec<&str> = command.declared.iter().map(|s| s.as_str()).collect();
+
+        for (name, line) in &read {
+            if declared.contains(&name.as_str()) {
+                continue;
+            }
+            problems.push(format!(
+                "crates/engine/src/commands.rs: line {line} reads the parameter `{name}`, which \
+                 `{}` does not declare: the engine refuses an undeclared parameter, so the \
+                 command cannot be given the value it needs",
+                command.id
+            ));
+        }
+        for name in &command.declared {
+            if read.iter().any(|(n, _)| n == name) {
+                continue;
+            }
+            problems.push(format!(
+                "crates/engine/src/commands.rs: line {line} declares the parameter `{name}`, \
+                 which `{}` never reads: a caller that passes it is ignored",
+                command.id,
+                line = command.line
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
 /// The names that evaluate a document from outside `craftkit-eval`.
 ///
 /// `evaluate_once` is the function; `Evaluator` is the struct whose `evaluate`
@@ -3495,6 +3923,15 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     The plan is read every frame; the state holds no copy.")),
     );
 
+    // Every parameter a command reads is declared, and every parameter it
+    // declares is read. §139.
+    problems.extend(every_parameter_a_command_reads_is_declared(root)?.into_iter().map(|p| {
+        format!(
+            "{p}\n     A parameter the engine refuses is a command that cannot be used; \
+                     a parameter nobody reads is a value the caller believes in."
+        )
+    }));
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -3511,8 +3948,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              names a module this tree has, the shell never evaluates the \
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
-             shell's state holds no evaluated value, and the session offers no \
-             way into the design but the registry",
+             shell's state holds no evaluated value, every parameter a command \
+             reads is declared, and the session offers no way into the design \
+             but the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -5021,5 +5459,56 @@ printf '%s%d/%d caught.%s\\n' \\
         let selected = shell.fields.iter().find(|(_, name, _)| name == "selected").expect("a field");
         assert_eq!(selected.2, "Option<NodeId>", "the type as written: {selected:?}");
         assert!(selected.0 > 1, "the line is the file's, not the block's: {selected:?}");
+    }
+
+    /// Every parameter a command reads is declared, and every parameter it
+    /// declares is read. §139.
+    ///
+    /// The playbook's rule 4 says its own check is *"call your command with
+    /// its own parameters in a test"*, and says the test the tree has does
+    /// not catch it. The rule was right about itself.
+    #[test]
+    fn a_command_declares_every_parameter_it_reads() {
+        let root = crate::root().expect("root");
+        assert!(
+            every_parameter_a_command_reads_is_declared(&root).expect("runs").is_empty(),
+            "a command reads a parameter it does not declare, or declares one it never reads"
+        );
+
+        // The commands are found, and there are more than a couple of them —
+        // a gate that found one command would pass for the wrong reason.
+        let commands = registry_commands(&root);
+        assert!(commands.len() > 20, "the gate found {} commands", commands.len());
+
+        // The readers are **derived**, not listed: a function that takes a
+        // `&Params` is a reader, and one that is not in any list is still
+        // found.
+        let readers = parameter_readers(&root);
+        for name in ["text", "num", "num_in", "int", "bool", "color", "num_list", "has", "raw_json"] {
+            assert!(
+                readers.iter().any(|r| r.name == name),
+                "`{name}` reads a parameter and the gate does not know it"
+            );
+        }
+        assert!(
+            readers.iter().any(|r| r.name == "node_by_id_or_name"),
+            "the reader that takes a node by id or by name is missing"
+        );
+
+        // A reader without a name argument of its own reads what its body
+        // reads: `node_by_id_or_name` reads `node` and `node_name`.
+        let by_id_or_name = readers.iter().find(|r| r.name == "node_by_id_or_name").expect("it");
+        assert!(by_id_or_name.key.is_none(), "it takes no name of its own");
+        let names = names_read(&by_id_or_name.body, by_id_or_name.line, &readers, 0);
+        let mut read: Vec<&str> = names.iter().map(|(n, _)| n.as_str()).collect();
+        read.sort();
+        assert_eq!(read, vec!["node", "node_name"], "the names it reads: {read:?}");
+
+        // And the two halves of the rule are told apart.
+        let rename = commands.iter().find(|c| c.id == "doc.rename").expect("the command");
+        assert_eq!(rename.declared, vec!["name".to_string()], "the names it declares");
+        let read = names_read(&rename.body, rename.body_line, &readers, 0);
+        assert_eq!(read.len(), 1, "it reads one parameter: {read:?}");
+        assert_eq!(read[0].0, "name", "and it is the one it declares");
     }
 }
