@@ -69,17 +69,53 @@ struct Application {
     /// was replaced by a fresh one each frame, so the selection never
     /// survived a redraw. The state must be handed **in** as well as out.
     state: craftkit_ui::ShellState,
-    /// True once a stash has been written, so the panel can say "saved" rather
-    /// than making the user wonder whether it has ever saved anything.
+    /// What this browser holds, and how the panel last fared.
+    storage: Storage,
+    /// What the panel last drew.
+    ///
+    /// A panel that says something should be able to say what it said: the
+    /// storage panel is the only part of this app whose output no test could
+    /// read, and a line nobody can read is a line nobody can check. §112.
+    said: Vec<PanelLine>,
+}
+
+/// What the browser's storage holds, and what the panel last said about it.
+#[derive(Debug, Clone, PartialEq)]
+struct Storage {
+    /// Whether this browser holds a plan.
+    ///
+    /// §112: this flag existed and was **written three times and read never**,
+    /// and the panel's own line about saving — the one that says whether there
+    /// is anything to come back to — could never be shown, because the note it
+    /// would have sat beside is never empty. It is here because the panel has
+    /// to answer "is there a plan saved here?", and because a flag nobody
+    /// reads is a flag nobody checks.
     saved: bool,
-    /// The last thing the storage panel did, shown under the buttons.
+    /// The note about the last thing the panel did.
     note: String,
+    /// Whether that last thing failed.
+    ///
+    /// The panel's **own** outcome, not the shell's. The panel coloured its
+    /// note by the shell's error flag, which says the last *command* failed —
+    /// so a save the browser refused was drawn in the ordinary colour, and an
+    /// unrelated command's failure coloured the save note. A panel that shows
+    /// another panel's error is a panel that cannot be read. §112.
+    failed: bool,
+}
+
+/// One line of the storage panel.
+#[derive(Debug, Clone, PartialEq)]
+struct PanelLine {
+    /// What it says.
+    text: String,
+    /// Whether it is drawn as a warning.
+    warning: bool,
 }
 
 impl Application {
     fn new(stash: Box<dyn Stash>) -> Self {
-        let (session, note) = restore(stash.get(STASH_KEY).as_deref());
-        Self { session, stash, state: Default::default(), saved: false, note }
+        let (session, storage) = restore(stash.get(STASH_KEY).as_deref());
+        Self { session, stash, state: Default::default(), storage, said: Vec::new() }
     }
 
     /// Draw one frame: the shell, then this host's own storage panel.
@@ -100,57 +136,110 @@ impl Application {
         eframe::egui::TopBottomPanel::bottom("browser-storage").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Save in this browser").clicked() {
-                    self.note = match stash_text(&self.session) {
-                        Ok(text) => match self.stash.set(STASH_KEY, &text) {
-                            Ok(()) => {
-                                self.saved = true;
-                                saved_note(&text)
-                            }
-                            Err(e) => e,
-                        },
-                        Err(e) => e,
-                    };
+                    self.save();
                 }
                 if ui.button("Restore from this browser").clicked() {
-                    self.note = match self.stash.get(STASH_KEY) {
-                        None => "there is nothing saved here yet".to_string(),
-                        Some(text) => {
-                            let (session, note) = restore(Some(&text));
-                            self.session = session;
-                            note
-                        }
-                    };
+                    self.restore_from_browser();
                 }
                 if ui.button("Copy the plan as text").clicked() {
-                    self.note = match stash_text(&self.session) {
-                        Ok(text) => {
-                            ctx.copy_text(text.clone());
-                            format!("copied {} bytes to the clipboard", text.len())
-                        }
-                        Err(e) => e,
-                    };
+                    self.copy(ctx);
                 }
                 if ui.button("Forget").clicked() {
-                    self.stash.remove(STASH_KEY);
-                    self.saved = false;
-                    self.note = "the saved plan is gone; what is on screen is not".to_string();
+                    self.forget();
                 }
             });
-            ui.label(
-                eframe::egui::RichText::new(if self.note.is_empty() {
-                    "This browser holds one plan. Saving is explicit.".to_string()
-                } else {
-                    self.note.clone()
-                })
-                .small()
-                .color(if self.state.status_is_error && !self.note.is_empty() {
+            let lines = storage_lines(&self.storage);
+            self.said = lines.clone();
+            for line in &lines {
+                ui.label(eframe::egui::RichText::new(&line.text).small().color(if line.warning {
                     tokens.warning
                 } else {
                     tokens.text_dim
-                }),
-            );
+                }));
+            }
         });
     }
+
+    /// Save the plan into this browser.
+    ///
+    /// A method rather than code in the button's closure, so that what the
+    /// panel does can be tested without a pointer: the buttons are the one
+    /// part of this app that a test cannot press. §112.
+    fn save(&mut self) {
+        match stash_text(&self.session) {
+            Ok(text) => match self.stash.set(STASH_KEY, &text) {
+                Ok(()) => {
+                    self.storage.saved = true;
+                    self.storage.note = saved_note(&text);
+                    self.storage.failed = false;
+                }
+                Err(e) => {
+                    self.storage.note = e;
+                    self.storage.failed = true;
+                }
+            },
+            Err(e) => {
+                self.storage.note = e;
+                self.storage.failed = true;
+            }
+        }
+    }
+
+    /// Reopen the plan this browser holds.
+    fn restore_from_browser(&mut self) {
+        let (session, storage) = restore(self.stash.get(STASH_KEY).as_deref());
+        self.session = session;
+        self.storage.saved = storage.saved;
+        self.storage.note = storage.note;
+        self.storage.failed = storage.failed;
+    }
+
+    /// Copy the plan as text.
+    fn copy(&mut self, ctx: &eframe::egui::Context) {
+        match stash_text(&self.session) {
+            Ok(text) => {
+                ctx.copy_text(text.clone());
+                self.storage.note = format!("copied {} bytes to the clipboard", text.len());
+                self.storage.failed = false;
+            }
+            Err(e) => {
+                self.storage.note = e;
+                self.storage.failed = true;
+            }
+        }
+    }
+
+    /// Forget the saved plan.
+    fn forget(&mut self) {
+        self.stash.remove(STASH_KEY);
+        self.storage.saved = false;
+        self.storage.note = "the saved plan is gone; what is on screen is not".to_string();
+        self.storage.failed = false;
+    }
+}
+
+/// The lines the storage panel draws.
+///
+/// A function rather than code in the panel's closure, so that what the panel
+/// says can be read without a browser and without a pointer. §112.
+///
+/// Two lines: what this browser holds, and what just happened. The first is
+/// always there — the question "is there a plan saved here?" is the one a user
+/// opens the page to answer, and the note answers it only right after the
+/// action that changed it.
+fn storage_lines(storage: &Storage) -> Vec<PanelLine> {
+    let mut lines = vec![PanelLine {
+        text: if storage.saved {
+            "This browser holds one plan, and it is saved.".to_string()
+        } else {
+            "This browser holds one plan slot, and nothing is saved in it yet.".to_string()
+        },
+        warning: false,
+    }];
+    if !storage.note.is_empty() {
+        lines.push(PanelLine { text: storage.note.clone(), warning: storage.failed });
+    }
+    lines
 }
 
 /// What the panel says after a successful save.
@@ -173,20 +262,45 @@ fn saved_note(text: &str) -> String {
 /// by a quota, hand-edited in devtools, or left over from an older format — and
 /// none of those are reasons to start with a blank window and no explanation.
 /// The fallback is stated in the note instead.
-fn restore(stashed: Option<&str>) -> (Session, String) {
+///
+/// It also says whether the browser holds a plan, because that is a question
+/// the panel has to answer on every frame and not only after an action.
+/// §112.
+fn restore(stashed: Option<&str>) -> (Session, Storage) {
     let Some(text) = stashed else {
-        return (Session::sample(), "opened the sample plan; nothing was saved here yet".into());
+        return (
+            Session::sample(),
+            Storage {
+                saved: false,
+                note: "opened the sample plan; nothing was saved here yet".to_string(),
+                failed: false,
+            },
+        );
     };
     match craftkit_io::load_text(text) {
         Ok(doc) => {
             let name = doc.meta.name.clone();
             let mut session = Session::new(name.clone());
             session.load_document(doc);
-            (session, format!("reopened “{name}” from this browser"))
+            (
+                session,
+                Storage {
+                    // The bytes are there, whether or not they were what the
+                    // user thought they were.
+                    saved: true,
+                    note: format!("reopened “{name}” from this browser"),
+                    failed: false,
+                },
+            )
         }
-        Err(e) => {
-            (Session::sample(), format!("the saved plan would not load ({e}); opened the sample instead"))
-        }
+        Err(e) => (
+            Session::sample(),
+            Storage {
+                saved: true,
+                note: format!("what this browser holds would not load ({e}); opened the sample instead"),
+                failed: true,
+            },
+        ),
     }
 }
 
@@ -365,9 +479,10 @@ mod tests {
 
     #[test]
     fn nothing_stashed_opens_the_sample_and_says_so() {
-        let (session, note) = restore(None);
+        let (session, storage) = restore(None);
         assert_eq!(session.document().nodes.len(), 3, "the sample has three nodes");
-        assert!(note.contains("nothing was saved"), "{note}");
+        assert!(storage.note.contains("nothing was saved"), "{}", storage.note);
+        assert!(!storage.saved, "nothing is saved, and the panel says so");
     }
 
     #[test]
@@ -375,17 +490,20 @@ mod tests {
         let original = Session::sample();
         let text = stash_text(&original).expect("encodes");
 
-        let (session, note) = restore(Some(&text));
+        let (session, storage) = restore(Some(&text));
         assert_eq!(session.document().nodes.len(), original.document().nodes.len());
-        assert!(note.contains("reopened"), "{note}");
+        assert!(storage.note.contains("reopened"), "{}", storage.note);
+        assert!(storage.saved, "the browser holds a plan, and the panel says so");
+        assert!(!storage.failed, "the plan loaded");
         assert!(!session.is_dirty(), "a freshly reopened plan is not unsaved work");
     }
 
     #[test]
     fn a_broken_stash_falls_back_to_the_sample_and_says_why() {
-        let (_, note) = restore(Some("{ this is not a plan"));
-        assert!(note.contains("would not load"), "{note}");
-        assert!(note.contains("sample"), "{note}");
+        let (_, storage) = restore(Some("{ this is not a plan"));
+        assert!(storage.note.contains("would not load"), "{}", storage.note);
+        assert!(storage.note.contains("sample"), "{}", storage.note);
+        assert!(storage.failed, "a stash that would not load is a failure, and the panel says so");
     }
 
     #[test]
@@ -393,9 +511,9 @@ mod tests {
         // Storage can hand back "" for a key it lost. Treating that as "no
         // plan saved" is right, but it must not produce an empty window
         // silently.
-        let (session, note) = restore(Some(""));
+        let (session, storage) = restore(Some(""));
         assert_eq!(session.document().nodes.len(), 3);
-        assert!(note.contains("would not load"), "{note}");
+        assert!(storage.note.contains("would not load"), "{}", storage.note);
     }
 
     #[test]
@@ -429,7 +547,7 @@ mod tests {
         let mut app = Application::new(Box::new(stash::Nowhere));
         draw_frames(&mut app, 3);
         assert_eq!(app.session.document().nodes.len(), 3);
-        assert!(!app.saved, "a host build cannot claim to have saved anything");
+        assert!(!app.storage.saved, "a host build cannot claim to have saved anything");
     }
 
     #[test]
@@ -441,7 +559,113 @@ mod tests {
         let mut app = Application::new(boxed);
         draw_frames(&mut app, 1);
         assert_eq!(app.session.document().nodes.len(), 3);
-        assert!(!app.note.contains("sample"), "it restored, it did not fall back: {}", app.note);
+        assert!(
+            !app.storage.note.contains("sample"),
+            "it restored, it did not fall back: {}",
+            app.storage.note
+        );
+    }
+
+    /// The panel says whether this browser holds a plan.
+    ///
+    /// §112: the flag existed and was written three times and read never, and
+    /// the panel's own line about saving could never be shown — the note it
+    /// would have sat beside is never empty, so the line was dead code the
+    /// moment it was written.
+    #[test]
+    fn the_panel_says_whether_a_plan_is_saved() {
+        let empty = storage_lines(&Storage {
+            saved: false,
+            note: "opened the sample plan; nothing was saved here yet".to_string(),
+            failed: false,
+        });
+        let saved = storage_lines(&Storage {
+            saved: true,
+            note: "saved 7 bytes under “craftkit/plan”".to_string(),
+            failed: false,
+        });
+        assert_ne!(empty[0].text, saved[0].text, "the two states say the same thing");
+        assert!(empty[0].text.contains("nothing is saved"), "{}", empty[0].text);
+        assert!(saved[0].text.contains("it is saved"), "{}", saved[0].text);
+        // The line about the browser is not the note about the last action.
+        assert_eq!(empty.len(), 2, "the panel draws the slot's line and the note");
+        assert_eq!(saved.len(), 2);
+    }
+
+    /// A save the browser refused is drawn as a warning.
+    ///
+    /// §112: the panel coloured its note by the **shell's** error flag, so a
+    /// refused save was drawn in the ordinary colour and an unrelated
+    /// command's failure coloured the save note.
+    #[test]
+    fn a_failed_save_is_drawn_as_a_warning_and_a_successful_one_is_not() {
+        let refused = storage_lines(&Storage {
+            saved: false,
+            note: "this browser has no localStorage to save into".to_string(),
+            failed: true,
+        });
+        let worked = storage_lines(&Storage {
+            saved: true,
+            note: "saved 7 bytes under “craftkit/plan”".to_string(),
+            failed: false,
+        });
+        assert!(refused[1].warning, "a refused save is not a warning: {:?}", refused[1]);
+        assert!(!worked[1].warning, "a saved plan is not a warning: {:?}", worked[1]);
+    }
+
+    /// The panel's outcome is the panel's own, not the shell's.
+    ///
+    /// §112: the panel used to colour its note by `state.status_is_error` —
+    /// the *shell's* last command. A test that pressed the shell's failure
+    /// button and looked at the storage panel would have seen the panel's note
+    /// in the warning colour, with nothing wrong with the panel at all.
+    #[test]
+    fn the_panels_outcome_is_not_the_shells_outcome() {
+        let mut app = Application::new(Box::new(stash::Nowhere));
+        draw_frames(&mut app, 1);
+
+        // The shell's last command failed.
+        app.state.status_is_error = true;
+        app.save();
+        draw_frames(&mut app, 1);
+        let said = &app.said;
+        assert!(!said.is_empty(), "the panel said nothing");
+        let note = said.last().expect("a note");
+        assert!(note.text.contains("nowhere to save"), "the refused save is not on the screen: {said:?}");
+        assert!(note.warning, "the panel's own failure is the panel's own: {said:?}");
+
+        // And a save that worked is not a warning either, even though the
+        // shell is still showing a failure.
+        let (store, boxed) = memory();
+        let mut app = Application::new(boxed);
+        app.state.status_is_error = true;
+        app.save();
+        draw_frames(&mut app, 1);
+        let note = app.said.last().expect("a note");
+        assert!(note.text.contains("saved"), "the save is not on the screen: {:?}", app.said);
+        assert!(!note.warning, "a save that worked is not a warning");
+        // And the panel now says that this browser holds a plan.
+        assert!(app.storage.saved, "the panel saved a plan and does not say so");
+        assert!(app.said[0].text.contains("it is saved"), "{}", app.said[0].text);
+        // The store really does hold it.
+        assert!(store.get(STASH_KEY).is_some(), "the plan was not stored");
+    }
+
+    /// The panel can be read.
+    ///
+    /// §112: the storage panel is the only part of this app whose output no
+    /// test could read. A panel that says something should be able to say what
+    /// it said.
+    #[test]
+    fn the_panel_remembers_what_it_said() {
+        let mut app = Application::new(Box::new(stash::Nowhere));
+        draw_frames(&mut app, 1);
+        assert!(!app.said.is_empty(), "the panel drew nothing to read");
+        assert!(
+            app.said.iter().any(|line| line.text.contains("nothing is saved")),
+            "the panel did not say what this browser holds: {:?}",
+            app.said
+        );
     }
 }
 

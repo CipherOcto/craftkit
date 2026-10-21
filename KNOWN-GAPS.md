@@ -11676,6 +11676,127 @@ the number can be compared by the person the bound was made for.
 
 ---
 
+## 112. The browser panel kept a flag for "a plan is saved here", and its error colour came from the wrong panel
+
+### The measurement
+
+The browser app is the only front end that can save a design: the desktop app
+opens a file and cannot write one (§33), and the browser writes to the
+origin's one plan slot. Its storage panel is the panel that says so.
+
+Measured on the panel's own code:
+
+| Thing | What it did |
+|---|---|
+| `Application::saved` | **written three times, read never** — set on save, cleared on "Forget", and initialised to `false`; the only read in the tree was a test asserting it was `false` |
+| the line *"This browser holds one plan. Saving is explicit."* | **unreachable** — it was the `note.is_empty()` arm, and the note is never empty: `restore` always produces one |
+| the note's colour | `self.state.status_is_error` — the **shell's** last command, not the panel's last action |
+
+The flag's own doc comment said it existed *"so the panel can say 'saved'
+rather than making the user wonder whether it has ever saved anything"*, and
+the panel never said anything of the kind. The line the flag was for was the
+one that could never be shown.
+
+The colour was worse than dead: it was **live and wrong**. The panel drew its
+note in the warning colour when the *shell's* last command had failed — a
+command that has nothing to do with saving — and in the ordinary colour when
+the browser itself had refused to save. A user whose save failed was told
+nothing, and a user whose last command failed was told their save had.
+
+Both pictures are the real panel, drawn headlessly by the app's own frame
+(there is no browser here — §13 — so the app's egui context is rendered to a
+PNG instead):
+
+*Before* — one line, the note, and nothing about the slot:
+
+> opened the sample plan; nothing was saved here yet
+
+*After* — two lines: what this browser holds, and what just happened:
+
+> This browser holds one plan, and it is saved.
+> saved 5667 bytes under "craftkit/plan"
+
+And after a refused save, the note is in the warning colour and the line
+about the slot still says what is true:
+
+> This browser holds one plan slot, and nothing is saved in it yet.
+> **this build has nowhere to save; a browser build does**
+
+### Why nothing noticed
+
+**The panel is the one part of the app no test could read.** The shell
+publishes every widget it draws, so a test can ask what is on the screen;
+the storage panel drew plain egui widgets into a closure and threw the text
+away. A line nobody can read is a line nobody can check, and this panel was
+drawn — and wrong — for the whole life of the browser build.
+
+**A flag that is written looks like a flag that is used.** `saved` was set in
+three places, which reads as "the app tracks whether a plan is saved". It was
+never read, and the only test that mentioned it asserted the *false* case.
+
+**The unreachable line was unreachable for a reason nobody noticed.** The
+panel's fallback text was the `note.is_empty()` arm, and `restore` always
+returns a note — so the arm that described the browser's storage model had
+been dead since the panel was written.
+
+**The colour looked like it belonged to the note.** It was computed from the
+shell's status flag, which is *the shell's* last command. The two panels sit
+in the same window and the flag was right there to read, so nobody asked
+whose error it was.
+
+### The fix
+
+**The panel says whether this browser holds a plan**, always, on every frame —
+the line that was unreachable is now the first of two, and the note is the
+second.
+
+**The panel's outcome is the panel's own.** `Storage::failed` says whether
+the panel's last action failed, and the note is drawn in the warning colour
+when it did. The shell's status flag no longer has anything to do with it.
+
+**The flag is set from the truth.** `restore` reports whether the browser
+holds a plan, whether it loaded, and whether it failed; the panel's buttons
+are now methods (`save`, `restore_from_browser`, `copy`, `forget`), so what
+they do can be tested without a pointer.
+
+**The panel can be read.** The application keeps what it last drew
+(`said`), so a test can ask the panel what it said — the same thing the
+shell's `ShellState.status` does for the shell.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The panel says whether a plan is saved | `the_panel_says_whether_a_plan_is_saved` |
+| A refused save is a warning and a successful one is not | `a_failed_save_is_drawn_as_a_warning_and_a_successful_one_is_not` |
+| The panel's outcome is not the shell's outcome | `the_panels_outcome_is_not_the_shells_outcome` |
+| The panel can be read | `the_panel_remembers_what_it_said` |
+| A reopened plan is reported as saved | `a_stashed_plan_reopens_unchanged` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the panel does not
+say whether a plan is saved; a refused save is not drawn as a warning; a
+reopened plan is not reported as saved; the panel ignores what it knows about
+the stash.
+
+### The lesson
+
+**A panel that says something should be able to say what it said.** Every
+other surface in the tree publishes what it draws — the shell's widgets, the
+automation registry, the window's pixels. The storage panel drew text and
+threw it away, so its two defects (§112) were invisible to every test in the
+workspace.
+
+**A flag that is only written is a promise to nobody.** `saved` was set in
+three places, and the sentence that explained why said the panel would use
+it. The use was never written, and the sentence was believed.
+
+**A colour needs an owner.** The note was coloured by a flag that belonged
+to a different panel. The rule the tree already has — *"the state is
+everything a panel needs"* — is about panels, and this was a panel reaching
+into another panel's state for a signal it did not own.
+
+---
+
 ---
 
 ## What enforces what
@@ -11920,6 +12041,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The CLI says what the design's note is** | `craftkit-cli` test | 1 mutation — §110 |
 | **The state carries the undo stack's depth and its memory** | `craftkit-engine` test | 2 mutations — §111 |
 | **The state and the statistics agree about the undo stack** | `craftkit-engine` test | 1 mutation — §111 |
+| **The browser panel says whether a plan is saved** | `craftkit-web` test | 1 mutation — §112 |
+| **A refused save is a warning and a successful one is not** | `craftkit-web` test | 1 mutation — §112 |
+| **The panel's outcome is not the shell's outcome** | `craftkit-web` test | 1 mutation — §112 |
+| **The panel can be read** | `craftkit-web` test | 1 mutation — §112 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12160,6 +12285,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    it was written from the statistics rather than from the state.
    Twenty-seven instances, and the twenty-seventh is a list of fields written
    from a different object than the one it describes.
+   §112 is the twenty-eighth, and it is a field's doc comment about what
+   *else* would use it: the browser app's `saved` flag said it was there *"so
+   the panel can say 'saved' rather than making the user wonder whether it
+   has ever saved anything"*, and the panel said nothing of the kind — the
+   flag was written three times and read never. Twenty-eight instances, and
+   the twenty-eighth is the only one where the sentence was about a **use**
+   rather than about the thing it described.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

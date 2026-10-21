@@ -129,7 +129,9 @@ wasm-bindgen --target web --out-dir apps/craftkit-web/dist \
 
 Same engine, same commands, same shell. The plan is stashed in `localStorage`
 as ordinary `.craftkit` text, so it moves between a browser and a desktop
-unchanged. Saving is explicit: nothing is written without the button.
+unchanged. Saving is explicit: nothing is written without the button. The
+panel says whether this browser holds a plan, and a save the browser refused
+is drawn in the warning colour.
 
 `craftkit-web --selftest` draws frames headlessly on a machine with no browser
 at all, which is how the web build stays testable in CI.

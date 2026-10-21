@@ -2776,5 +2776,44 @@ swap crates/engine/src/commands.rs \
 expect_catch "engine: the statistics and the state disagree about the undo depth" \
     "cargo test -p craftkit-engine --profile ci the_state_and_the_statistics_agree_about_the_undo_stack"
 
+# The browser panel had a flag for "there is a plan saved here", wrote it three
+# times and read it never, and the line that would have used it could never be
+# shown. §112.
+swap apps/craftkit-web/src/main.rs \
+    '        text: if storage.saved {
+            "This browser holds one plan, and it is saved.".to_string()
+        } else {
+            "This browser holds one plan slot, and nothing is saved in it yet.".to_string()
+        },' \
+    '        text: "This browser holds one plan.".to_string(),'
+expect_catch "ui: the browser panel does not say whether a plan is saved" \
+    "cargo test -p craftkit-web --profile ci the_panel_says_whether_a_plan_is_saved"
+
+# The panel coloured its note by the shell's error flag, so a save the browser
+# refused was drawn in the ordinary colour. §112.
+swap apps/craftkit-web/src/main.rs \
+    '        lines.push(PanelLine { text: storage.note.clone(), warning: storage.failed });' \
+    '        lines.push(PanelLine { text: storage.note.clone(), warning: false });'
+expect_catch "ui: a refused save is not drawn as a warning" \
+    "cargo test -p craftkit-web --profile ci a_failed_save_is_drawn_as_a_warning_and_a_successful_one_is_not"
+
+# The panel did not know that a plan had been reopened, so the line about the
+# browser's slot said there was nothing in it. §112.
+swap apps/craftkit-web/src/main.rs \
+    '                    saved: true,
+                    note: format!("reopened “{name}” from this browser"),' \
+    '                    saved: false,
+                    note: format!("reopened “{name}” from this browser"),'
+expect_catch "ui: a reopened plan is not reported as saved" \
+    "cargo test -p craftkit-web --profile ci a_stashed_plan_reopens_unchanged"
+
+# ...and the panel ignored its own flag when it drew, so the line said the
+# browser was empty whatever the panel knew. §112.
+swap apps/craftkit-web/src/main.rs \
+    '            let lines = storage_lines(&self.storage);' \
+    '            let lines = storage_lines(&Storage { saved: false, ..self.storage.clone() });'
+expect_catch "ui: the browser panel ignores what it knows about the stash" \
+    "cargo test -p craftkit-web --profile ci the_panels_outcome_is_not_the_shells_outcome"
+
 restore
 finish
