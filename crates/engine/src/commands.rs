@@ -857,7 +857,7 @@ pub static SESSION_STATS: CommandSpec = CommandSpec {
     area: Area::Debug,
     icon: Icon("info"),
     shortcut: None,
-    doc: "Counters for the running session: commands, failures, undo depth, kernel recoveries (process-wide).",
+    doc: "Counters for the running session: commands, failures, undo depth, undo memory, kernel recoveries (process-wide).",
     params: &[],
     mutates: false,
     undoable: false,
@@ -869,6 +869,10 @@ pub static SESSION_STATS: CommandSpec = CommandSpec {
                 "commands": s.log().total(),
                 "failures": s.log().failures(),
                 "undo_depth": s.undo_depth(),
+                // The undo stack's memory: the tree bounds it (§52) and
+                // measures it on every push, and until §111 nothing an agent
+                // could ask said how much of it was in use.
+                "undo_bytes": s.history_bytes(),
                 "kernel_recoveries": craftkit_kernel::recovered_count(),
                 "nodes": s.document().nodes.len(),
             }),

@@ -2751,5 +2751,30 @@ swap apps/craftkit-cli/src/cli.rs \
 expect_catch "cli: eval does not say what the design's note is" \
     "cargo test -p craftkit-cli --profile ci eval_says_what_the_design_s_note_is"
 
+# The state carried two booleans about the undo stack, and the depth was in
+# the statistics -- while the state's own doc comment said it was in the
+# state. §111.
+swap crates/engine/src/session.rs \
+    '            "undo_depth": self.undo_depth(),' \
+    '            "undo_depth": 0,'
+expect_catch "engine: the state does not carry the undo depth" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_undo_stack"
+
+# ...and the undo stack's memory was in nothing at all, although the tree
+# bounds it and measures it on every push. §111.
+swap crates/engine/src/session.rs \
+    '            "undo_bytes": self.history.bytes(),' \
+    '            "undo_bytes": 0,'
+expect_catch "engine: the state does not carry the undo stack's memory" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_undo_stack"
+
+# Two objects, one stack: the statistics and the state may not disagree about
+# how deep it is. §111.
+swap crates/engine/src/commands.rs \
+    '                "undo_depth": s.undo_depth(),' \
+    '                "undo_depth": s.undo_depth() + 1,'
+expect_catch "engine: the statistics and the state disagree about the undo depth" \
+    "cargo test -p craftkit-engine --profile ci the_state_and_the_statistics_agree_about_the_undo_stack"
+
 restore
 finish

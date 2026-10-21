@@ -11554,6 +11554,128 @@ paragraph looked covered.
 
 ---
 
+## 111. The state could not say how deep the undo stack was, and four sentences said it could
+
+### The measurement
+
+On the running app, over the control channel, after three commands — two that
+added a node and one that renamed one:
+
+```
+session.state -> {"at": 0, "can_redo": false, "can_undo": true, "comment": "",
+                  "dirty": true, "end": 1270080000000, "fps": 24, "log": [...],
+                  "name": "Sample plan", "nodes": [...], "plan": {...}, "start": 0}
+session.stats -> {"commands": 3, "failures": 0, "kernel_recoveries": 0,
+                  "nodes": 5, "undo_depth": 3}
+```
+
+**Two answers about one stack, in two objects, and the "whole state" had the
+weaker one.** `session.state` — the object whose own doc comment calls it
+*"the whole state, for an API surface that wants it in one object"* — said
+`can_undo: true`. That is a boolean about a stack of **three**. The number
+was in `session.stats`, which is about counters.
+
+And the stack's **memory** was in neither: the undo stack has a 64 MiB
+budget (§52), the tree measures its bytes on every push
+(`History::bytes`), and no API surface could see them. A session at 63 MiB of
+undo stack and a session at 6 KiB of undo stack answered the same questions
+alike.
+
+The documentation said otherwise, in four places:
+
+| Where | What it said |
+|---|---|
+| `Session::snapshot_json`'s own doc | *"'The whole state' means the session's own: … the nodes, **the undo depth**, and the plan."* |
+| the agent playbook | *"It answers with … the nodes, **the undo depth** and the plan."* |
+| the checking skill | the same sentence |
+| the MCP's `craftkit_status` description | *"The running session: … the playhead, **the undo depth**, and whether the document has unsaved changes."* |
+
+Four sentences, one of them the function's own description of itself, and the
+function never had the field. The sentence was written in §108 — the section
+that added the frame rate and the range to the state and rewrote the
+paragraph listing what is in it — and it was written from the *statistics*,
+not from the state.
+
+### Why nothing noticed
+
+**A boolean about a stack and a number about a stack look like the same
+answer.** `can_undo: true` says "there is something to undo", which is true,
+and it is what the window needs to grey out a button. The depth is a
+different question, and it was in the object about counters.
+
+**The statistics were right, and being right is enough to stop the
+question.** `session.stats` said `undo_depth: 3`, and that number was
+correct. Nothing asked whether the *other* object agreed, because the other
+object was not supposed to have the number — until four documents said it
+did.
+
+**Nobody read the state's list against the state.** The list in the doc
+comment was written when the state was new and the writer had the
+statistics open in another window. It is the same shape as §108's "the whole
+state": a list of what an object carries, written from memory.
+
+**The memory was nobody's business — until it was.** §52 gave the undo stack
+a byte budget because the engine clones the whole document for every command
+and keeps 128 of them. The budget is a promise to the *user* ("your
+application will not grow without bound"), and the number in use is the
+thing a person asks about when the application is slow. Nothing could ask.
+
+### The fix
+
+**The state carries the undo stack**: `undo_depth` (how many steps) and
+`undo_bytes` (how much memory they hold), next to the `can_undo` and
+`can_redo` booleans that answer the cheaper question.
+
+**The two objects agree, and a test says so.** §109's rule — two answers
+about one thing must not disagree — applied to the undo depth, in both
+directions: the state and the statistics carry the same numbers, before a
+command and after an undo.
+
+**The four sentences are true now**, and the MCP's description says what the
+state actually carries: the name, the note, the frame rate, the range, the
+nodes, the playhead, the unsaved flag, the undo stack, the log and the plan.
+
+Measured on the running app, after the fix, with the same three commands:
+
+```
+session.state -> {..., "can_redo": false, "can_undo": true,
+                  "undo_bytes": 18285, "undo_depth": 3, ...}
+session.stats -> {"commands": 3, "failures": 0, "kernel_recoveries": 0,
+                  "nodes": 5, "undo_bytes": 18285, "undo_depth": 3}
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The state carries the undo stack's depth and its memory | `the_state_carries_the_undo_stack` |
+| The state and the statistics agree about the undo stack | `the_state_and_the_statistics_agree_about_the_undo_stack` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the state does not
+carry the undo depth; the state does not carry the undo stack's memory; the
+statistics and the state disagree about the undo depth.
+
+### The lesson
+
+**"The whole state" is a promise, and a list of its contents is where the
+promise is kept.** §108 found the first half of this — the word "whole" over
+an object that was not whole — and §111 found the rest: the object still was
+not whole, and the list of what it was supposed to be was written from a
+different object entirely. A list of fields is a claim about a struct, and
+the only way to check it is to read the struct.
+
+**Two answers about one thing are two things to keep in step.** The state and
+the statistics now both carry the undo depth, and a test says they may not
+disagree. Before §111 they did not disagree either — they were *different
+questions*. A number in one place and a boolean in another is a shape that
+looks fine until somebody asks the harder question.
+
+**A budget nobody can see is a promise nobody can check.** §52 bounded the
+undo stack's memory; §111 made the number in use visible, so the bound and
+the number can be compared by the person the bound was made for.
+
+---
+
 ---
 
 ## What enforces what
@@ -11796,6 +11918,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The note is on the screen** | `craftkit-ui` test | 1 mutation — §110 |
 | **The window's note is a glimpse, and says so** | `craftkit-ui` test | 1 mutation — §110 |
 | **The CLI says what the design's note is** | `craftkit-cli` test | 1 mutation — §110 |
+| **The state carries the undo stack's depth and its memory** | `craftkit-engine` test | 2 mutations — §111 |
+| **The state and the statistics agree about the undo stack** | `craftkit-engine` test | 1 mutation — §111 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12021,6 +12145,21 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    its range or its comment. Twenty-five instances, and the twenty-fifth is
    the one where the word "whole" was the whole problem: the sentence was
    true of every field it had and false of the object it described.
+   §110 is the twenty-sixth, and it is a sentence that contradicted the
+   sentence below it: the same doc comment said the document's comment was
+   *not* in the state — *"nothing bounds its length, and this reply is not
+   capped"* — and four lines later said the note was there, whole, with a
+   bound. Two paragraphs, written for two different sections, and the one
+   between them was not touched. Twenty-six instances, and the twenty-sixth
+   is the only one where the tree contradicted itself **inside one doc
+   comment**.
+   §111 is the twenty-seventh, and it is the *same paragraph*: the sentence
+   that listed what the state carries said *the undo depth*, and the state
+   never carried it — the depth was in `session.stats` and the memory was in
+   nothing at all. It was written in §108, which rewrote that very list, and
+   it was written from the statistics rather than from the state.
+   Twenty-seven instances, and the twenty-seventh is a list of fields written
+   from a different object than the one it describes.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

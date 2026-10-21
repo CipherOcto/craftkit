@@ -261,6 +261,15 @@ impl Session {
         self.history.len()
     }
 
+    /// How much memory the undo and redo stacks hold together, in bytes.
+    ///
+    /// The stack has a budget (§52) and this is how much of it is in use.
+    /// Nothing could ask before §111: the tree measured the bytes on every
+    /// push and kept the measurement to itself.
+    pub fn history_bytes(&self) -> usize {
+        self.history.bytes()
+    }
+
     pub fn log(&self) -> &LogBook {
         &self.log
     }
@@ -329,6 +338,12 @@ impl Session {
     /// bound and no way out — it was in the file and in the model and in
     /// nothing else, so the only way to read a design's note was to open the
     /// file. §110.
+    ///
+    /// The **undo stack** is here too: how deep it is, and how much memory it
+    /// holds. The state used to carry only `can_undo` and `can_redo` — two
+    /// booleans about a stack whose depth was in `session.stats` and whose
+    /// memory was in nothing at all — while this very doc comment, and three
+    /// documents outside it, said that the state carried the depth. §111.
     pub fn snapshot_json(&self) -> Json {
         serde_json::json!({
             "name": self.doc.meta.name,
@@ -346,6 +361,8 @@ impl Session {
             })).collect::<Vec<_>>(),
             "can_undo": self.can_undo(),
             "can_redo": self.can_redo(),
+            "undo_depth": self.undo_depth(),
+            "undo_bytes": self.history.bytes(),
             "plan": self.plan.as_ref().map(|p| serde_json::to_value(p).unwrap_or(Json::Null)),
             "log": self.log.entries(),
         })
@@ -871,6 +888,70 @@ mod tests {
         let read = s.snapshot_json().get("comment").and_then(|v| v.as_str()).map(str::to_string);
         assert_eq!(read.as_deref(), Some("two"), "the state kept the old note");
         assert_eq!(s.document().meta.comment, "two");
+    }
+
+    /// The state carries the undo stack: how deep it is, and how much memory
+    /// it holds.
+    ///
+    /// §111: the state carried two **booleans** about a stack whose depth was
+    /// in `session.stats` and whose memory was in nothing at all — while the
+    /// state's own doc comment, and three documents outside it, said that the
+    /// state carried the depth.
+    #[test]
+    fn the_state_carries_the_undo_stack() {
+        let mut s = sample();
+        let state = s.snapshot_json();
+        assert_eq!(
+            state.get("undo_depth").and_then(|v| v.as_u64()),
+            Some(0),
+            "a fresh session has nothing to undo"
+        );
+        assert_eq!(state.get("undo_bytes").and_then(|v| v.as_u64()), Some(0), "and holds no memory for it");
+
+        s.execute("node.add", &json!({ "name": "In", "kind": "source" })).expect("ok");
+        let state = s.snapshot_json();
+        assert_eq!(
+            state.get("undo_depth").and_then(|v| v.as_u64()),
+            Some(1),
+            "one command is one step on the undo stack"
+        );
+        assert_eq!(state.get("can_undo").and_then(|v| v.as_bool()), Some(true));
+        assert!(
+            state.get("undo_bytes").and_then(|v| v.as_u64()).unwrap_or(0) > 0,
+            "the stack is holding a document now: {state}"
+        );
+    }
+
+    /// The state and the statistics agree about the undo stack.
+    ///
+    /// §111: two objects, one stack. §109's rule — two answers about one
+    /// thing must not disagree — applied to the undo depth.
+    #[test]
+    fn the_state_and_the_statistics_agree_about_the_undo_stack() {
+        let mut s = sample();
+        s.execute("node.add", &json!({ "name": "In", "kind": "source" })).expect("ok");
+        s.execute("node.add", &json!({ "name": "Out", "kind": "sink" })).expect("ok");
+
+        let state = s.snapshot_json();
+        let stats = s.execute("session.stats", &json!({})).expect("ok").data;
+        assert_eq!(
+            state.get("undo_depth"),
+            stats.get("undo_depth"),
+            "the state and the statistics disagree about the depth"
+        );
+        assert_eq!(
+            state.get("undo_bytes"),
+            stats.get("undo_bytes"),
+            "the state and the statistics disagree about the memory"
+        );
+
+        // And after an undo, when the depth changes and the redo stack does
+        // not: two answers that still agree.
+        s.execute("history.undo", &json!({})).expect("ok");
+        let state = s.snapshot_json();
+        let stats = s.execute("session.stats", &json!({})).expect("ok").data;
+        assert_eq!(state.get("undo_depth"), stats.get("undo_depth"));
+        assert_eq!(state.get("undo_depth").and_then(|v| v.as_u64()), Some(1));
     }
 
     /// A command that says it does not change the document and changes it is

@@ -312,9 +312,18 @@ and `ui` (aliases `ui.click`, `ui.screenshot`, `ui.render`). There is no
 **`session.state` is how you read the document's parameters.** It answers with
 the document's name, its **frame rate**, its **range** (in raw ticks — 254 016
 000 000 ticks to the second), the playhead, whether there is unsaved work, the
-nodes, the undo depth and the plan. The frame rate used to be reachable only by
-*setting* it, which rewrote the design; the window says "24 fps · 5.00s" in
-its header and nothing an agent could ask said as much. §108.
+nodes, the **undo depth** (and how much memory the undo stack holds) and the
+plan. The frame rate used to be reachable only by *setting* it, which rewrote
+the design; the window says "24 fps · 5.00s" in its header and nothing an
+agent could ask said as much. §108.
+
+**The undo stack is in the state as well.** `can_undo` and `can_redo` say
+whether there is anything to undo; `undo_depth` says how many steps there
+are, and `undo_bytes` says how much memory they hold. The state used to
+carry only the two booleans — the depth was in `session.stats`, and the
+memory was in nothing at all — while this file, the playbook and the MCP's
+`craftkit_status` description all said that the state carried the depth.
+§111.
 
 **`session.state` also carries the log** — the last 256 runs, each with its
 id, whether it worked and what it said. "What has this session done?" used to
