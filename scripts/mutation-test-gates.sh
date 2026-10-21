@@ -917,12 +917,12 @@ expect_catch "docs: a boundary that catches a panic is not declared" \
 
 # A number of commands in prose, that is not the registry's number. §71's
 # lesson: a number written by hand about a thing that grows is stale by
-# construction. The registry grows — every command added makes "22 commands"
-# wrong — and the two documents that said it were both written by hand, with
-# nothing to notice when the count changed.
+# construction. The registry grows — every command added makes the number in
+# the prose wrong — and the documents that say it are written by hand, with
+# nothing to notice when the count changes.
 swap docs/patterns/everything-is-a-command.md \
-    'The registry currently holds 22 commands across 7 areas' \
-    'The registry currently holds 23 commands across 7 areas'
+    'The registry currently holds 23 commands across 7 areas' \
+    'The registry currently holds 24 commands across 7 areas'
 expect_catch "prose: the number of commands is not the registry's number" \
     "cargo xtask lists"
 
