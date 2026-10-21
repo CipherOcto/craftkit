@@ -404,9 +404,12 @@ cargo run -q -p craftkit-cli -- mcp
 
 JSON-RPC 2.0 over stdio, one message per line. `initialize`, `notifications/initialized`,
 `tools/list`, `tools/call`, `ping`, `shutdown`. Tools are generated from the command
-registry: `node.add` → `craftkit_node_add` (`crates/mcp/src/tools.rs:79`), plus two
-built-ins, `craftkit_status` and `craftkit_commands`. A refused command comes back
-with `isError: true` and a *successful* RPC — the two are different failures.
+registry: `node.add` → `craftkit_node_add` (`crates/mcp/src/tools.rs:79`), plus three
+built-ins, `craftkit_status`, `craftkit_commands` and `craftkit_crashes`. The last
+one reads the crash reports this machine has written: `action` is `list`, `show` or
+`replay`, and `show` and `replay` need the report's `id`. §113. A refused command
+comes back with `isError: true` and a *successful* RPC — the two are different
+failures.
 
 ---
 

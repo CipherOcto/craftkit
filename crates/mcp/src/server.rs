@@ -197,6 +197,24 @@ fn call_tool(id: &Json, request: &Request, session: &Mutex<Session>) -> Response
             tool_ok(id, guard.snapshot_json())
         }
         "craftkit_commands" => tool_ok(id, craftkit_engine::catalogue()),
+        "craftkit_crashes" => {
+            // The crash reports are the tree's answer to "my application
+            // crashed", and the agent holding the tool is the one most likely
+            // to be holding it because of a crash. §113.
+            let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");
+            let report_id = arguments.get("id").and_then(Json::as_str);
+            let from = match session.lock() {
+                Ok(guard) => guard.document().meta.name.clone(),
+                Err(_) => {
+                    return tool_error(id, "poisoned", "the session is unavailable", None);
+                }
+            };
+            let dir = craftkit_engine::crash::report_dir();
+            match craftkit_engine::crash::action_in(&dir, action, report_id, &from) {
+                Ok(data) => tool_ok(id, data),
+                Err(e) => tool_error(id, e.kind(), &e.message(), None),
+            }
+        }
         other => Response::failure(
             id.clone(),
             code::METHOD_NOT_FOUND,
@@ -339,6 +357,43 @@ mod tests {
         assert!(list.len() > 10, "{} tools", list.len());
         assert!(list.iter().any(|t| t["name"] == json!("craftkit_node_add")));
         assert!(list.iter().any(|t| t["name"] == json!("craftkit_status")));
+    }
+
+    /// The crash reports are a tool an agent can call.
+    ///
+    /// §113: the tree writes a crash report with the design that crashed and
+    /// the commands that ran, and the CLI and the control channel could both
+    /// read them — but the MCP server had no way to see one, and the MCP
+    /// server is the front end whose reader is an agent.
+    #[test]
+    fn the_crash_reports_are_a_tool_an_agent_can_call() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+        let list = r["result"]["tools"].as_array().expect("tools");
+        assert!(list.iter().any(|t| t["name"] == json!("craftkit_crashes")), "{list:?}");
+
+        // And it answers: the list of the reports this machine has.
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"craftkit_crashes","arguments":{"action":"list"}}}"#,
+        );
+        assert_eq!(r["result"]["isError"], json!(false), "{r}");
+        let content = r["result"]["structuredContent"].as_object().expect("content");
+        assert!(content.contains_key("ids"), "{content:?}");
+    }
+
+    /// An action the tree does not have is refused, in the words the engine
+    /// uses.
+    ///
+    /// §113: the MCP server and the control channel answer with the same
+    /// words now, because they ask the same engine the same question.
+    #[test]
+    fn a_crash_action_that_does_not_exist_is_refused() {
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"craftkit_crashes","arguments":{"action":"delete"}}}"#,
+        );
+        assert_eq!(r["result"]["isError"], json!(true), "{r}");
+        assert_eq!(r["result"]["structuredContent"]["kind"], json!("bad-parameter"));
+        let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(text.contains("not a crash action"), "{text}");
     }
 
     #[test]

@@ -38,8 +38,16 @@ impl Tool {
 
 /// The tools that are not a command.
 ///
-/// `session.state` and `diagnostics.list` are commands already, so they appear
-/// from the registry. These two are about the *server* rather than the document.
+/// Three of them, and they are about the *server* rather than the document:
+/// the running session, the catalogue, and the crash reports this machine
+/// has written.
+///
+/// The comment that used to sit here said *"`session.state` and
+/// `diagnostics.list` are commands already, so they appear from the registry"*.
+/// `diagnostics.list` is a command and does appear from the registry.
+/// `session.state` is **not** a command — it is the control channel's method,
+/// and the registry has no such id — so it did not appear, and the sentence
+/// was wrong about the one thing it was explaining. §113.
 fn built_in() -> Vec<Tool> {
     vec![
         Tool {
@@ -58,6 +66,31 @@ fn built_in() -> Vec<Tool> {
                           takes."
                 .to_string(),
             input_schema: object_schema(&[]),
+        },
+        Tool {
+            name: "craftkit_crashes".to_string(),
+            description: "The crash reports this machine has written. `action` is list, show or \
+                          replay; `show` and `replay` need the report's `id`. A report holds the \
+                          design that crashed and the commands that ran, and `replay` runs those \
+                          commands again and says whether the design comes back the same."
+                .to_string(),
+            input_schema: object_schema(&[
+                (
+                    "action".to_string(),
+                    json!({
+                        "type": "string",
+                        "enum": ["list", "show", "replay"],
+                        "description": "list the reports, show one, or replay one.",
+                    }),
+                ),
+                (
+                    "id".to_string(),
+                    json!({
+                        "type": "string",
+                        "description": "The report's id, from the list. Required for show and replay.",
+                    }),
+                ),
+            ]),
         },
     ]
 }
@@ -205,12 +238,34 @@ mod tests {
     #[test]
     fn every_command_becomes_exactly_one_tool() {
         let tools = all();
-        assert_eq!(tools.len(), command::all().len() + 2);
+        // The built-ins are the three that are not a command: the running
+        // session, the catalogue, and the crash reports. §113.
+        assert_eq!(tools.len(), command::all().len() + 3);
         let mut names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         names.sort_unstable();
         let before = names.len();
         names.dedup();
         assert_eq!(before, names.len(), "two tools share a name");
+    }
+
+    /// The crash reports are a tool.
+    ///
+    /// §113: the tree writes a crash report with the design that crashed and
+    /// the commands that ran, and the CLI and the control channel could both
+    /// read them — but the MCP server, whose reader is an agent, had no way to
+    /// see one.
+    #[test]
+    fn the_crash_reports_are_a_tool() {
+        let tools = all();
+        let tool = tools.iter().find(|t| t.name == "craftkit_crashes").expect("a crash tool");
+        let schema = tool.to_json();
+        let text = schema.to_string();
+        assert!(text.contains("action"), "the tool does not take an action: {text}");
+        assert!(text.contains("id"), "the tool does not take an id: {text}");
+        assert!(
+            text.contains("list") && text.contains("show") && text.contains("replay"),
+            "the tool does not say which actions it has: {text}"
+        );
     }
 
     #[test]

@@ -11797,6 +11797,130 @@ into another panel's state for a signal it did not own.
 
 ---
 
+## 113. The crash reports were written for an agent to read, and the front end whose reader is an agent could not read them
+
+### The measurement
+
+The tree writes a crash report when the application panics: the design that
+crashed, the commands that produced it, and the commands needed to replay it
+(§47, §57, §58). It is a careful piece of work — a private folder, a UTC id
+that sorts, a design file, a replay file, and a replay that says whether the
+document came back the same.
+
+Three of the four front ends could read one:
+
+| Front end | How |
+|---|---|
+| the CLI | `craftkit-cli crashes list \| show <id> \| replay <id>` |
+| the control channel | `diagnostics.crash_reports` with `action`: `list`, `show`, `replay` |
+| the desktop app | it serves the control channel, so it answers too |
+| **the MCP server** | **nothing** |
+
+Measured on the MCP server, over its own stdio transport:
+
+```
+tools/list -> 24 tools: craftkit_status, craftkit_commands, and one per command
+crash tools: []
+```
+
+**Twenty-four tools and not one of them about a crash.** And the MCP server is
+the front end whose reader is an agent: *"An MCP server is a subprocess
+speaking JSON-RPC, for an agent that has a tool-calling loop"* — the reader
+most likely to be holding the tool *because* something crashed, and the one
+surface that could not say what happened.
+
+The two JSON front ends had also drifted into two copies of the same three
+branches. The control channel's `crashes` had its own wording for a missing
+id, its own wording for an unknown action, and its own idea of what a replay
+answer looked like — and the MCP server had none of it.
+
+And the MCP crate's own module doc said:
+
+> The important thing is that **it exposes no new behaviour**. Every tool maps
+> onto a [`craftkit_engine`] command …
+
+which was already half false (two of the twenty-four tools were not commands),
+and the tools module's comment said:
+
+> `session.state` and `diagnostics.list` are commands already, so they appear
+> from the registry.
+
+`diagnostics.list` is a command. **`session.state` is not** — it is the
+control channel's method, and the registry has no such id — so it did not
+appear from the registry, and the sentence was wrong about the one thing it
+was explaining.
+
+### Why nothing noticed
+
+**A crash report is written by the app, and read by a person.** The desktop
+app writes one when it panics, and the tree's own advice to a user is
+`craftkit-cli crashes show <id>` — a command line. The MCP server is a
+subprocess an agent starts; the agent has no reason to know that a crash
+folder exists, and nothing in the tool list mentions one.
+
+**The tool list is generated from the registry, and the crash reports are not
+commands.** The MCP server's tools are one per command plus a handful of
+built-ins, and the crash reports were never a command — so "the tools are
+the commands" was true, and the *capability* was missing. Nothing generated
+the tool because nothing was asked to.
+
+**Two copies of three branches look like one rule.** The control channel's
+`crashes` and the engine's `crash` module were written at different times for
+different transports, and they agreed because they were short. Agreement by
+coincidence is not agreement.
+
+### The fix
+
+**The crash reports are a tool.** `craftkit_crashes` takes an `action`
+(`list`, `show`, `replay`) and an `id`, and answers with the same JSON the
+control channel answers with. The MCP server now publishes 25 tools, and one
+of them is about the crash reports.
+
+**The three actions are one rule, in the engine.** `craftkit_engine::crash::action_in`
+is the dispatcher: the action, the id, the design the caller is looking at, and
+either the answer or a typed failure (`bad-parameter` for a refusal about the
+request, `not-found` for a report that is not there). The control channel asks
+it and the MCP server asks it, so the two cannot drift apart — and a test says
+what each action means.
+
+**The MCP crate's doc is true now.** Three tools are not commands, and the
+doc says which three and why: they read what the engine already knows and
+change nothing.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The crash reports are a tool | `the_crash_reports_are_a_tool` |
+| The tool can be called and answers | `the_crash_reports_are_a_tool_an_agent_can_call` |
+| An action that does not exist is refused | `a_crash_action_that_does_not_exist_is_refused` |
+| The three actions are one rule | `the_crash_actions_are_one_rule` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the crash reports are
+published under a name nobody calls; the tool ignores the action it is given;
+a missing report id is not the refusal it should be; the control channel does
+not ask the engine.
+
+### The lesson
+
+**The front end whose reader is an agent is the one that must be able to ask
+what happened.** The crash pipeline is a whole chapter of the tree's work,
+and the surface an agent holds in its hand could not see any of it.
+
+**Two copies of three branches are two rules.** The dispatcher is in the
+engine now, and the two front ends ask it the same question. The control
+channel's `crashes` had its own wording for every failure; the MCP server
+would have had to invent its own, and the two would have disagreed about what
+"not found" means.
+
+**"Every tool maps onto a command" was true, and the capability was missing
+anyway.** The tools are generated from the registry, so a capability that is
+not a command has to be built by hand — and nobody built it. The rule was
+about the *shape* of a tool, and it said nothing about whether the tool list
+covered what the tree can do.
+
+---
+
 ---
 
 ## What enforces what
@@ -12045,6 +12169,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A refused save is a warning and a successful one is not** | `craftkit-web` test | 1 mutation — §112 |
 | **The panel's outcome is not the shell's outcome** | `craftkit-web` test | 1 mutation — §112 |
 | **The panel can be read** | `craftkit-web` test | 1 mutation — §112 |
+| **The crash reports are a tool an agent can call** | `craftkit-mcp` test | 2 mutations — §113 |
+| **An action that does not exist is refused** | `craftkit-mcp` test | 1 mutation — §113 |
+| **The three crash actions are one rule** | `craftkit-engine` test | 1 mutation — §113 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12292,6 +12419,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    flag was written three times and read never. Twenty-eight instances, and
    the twenty-eighth is the only one where the sentence was about a **use**
    rather than about the thing it described.
+   §113 is the twenty-ninth and the thirtieth, and they are the same kind of
+   sentence in the same crate. The MCP server's module doc said *"Every tool
+   maps onto a [`craftkit_engine`] command"* — and two of the twenty-four
+   tools did not. The tools module's comment said *"`session.state` and
+   `diagnostics.list` are commands already, so they appear from the
+   registry"* — and `session.state` is the control channel's method, not a
+   command, and did not appear from the registry. Thirty instances, and the
+   twenty-ninth and the thirtieth are the only ones where the sentence was
+   about the *shape* of a surface rather than about the surface itself.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

@@ -525,52 +525,26 @@ fn crashes(session: &Session, request: &Request) -> Response {
 /// functions have `_in` variants: the environment variable that relocates the
 /// crash folder is process-wide, so a test that set it would race every other
 /// test in the binary. §47.
+///
+/// The three actions are the engine's, and the answers are the engine's too:
+/// this is a transport, not a second implementation. §113.
 fn crashes_in(session: &Session, request: &Request, dir: &std::path::Path) -> Response {
     let action = request.params.get("action").and_then(Json::as_str).unwrap_or("list");
-    match action {
-        "list" => {
-            Response::ok(&request.id, "crash reports", json!({ "ids": craftkit_engine::crash::list_in(dir) }))
-        }
-        "show" => {
-            let Some(id) = request.params.get("id").and_then(Json::as_str) else {
-                return Response::error(&request.id, "bad-parameter", "`id` is required");
-            };
-            match craftkit_engine::crash::show_in(dir, id) {
-                Ok(report) => Response::ok(
-                    &request.id,
-                    format!("report {id}"),
-                    serde_json::to_value(report).unwrap_or(Json::Null),
+    let id = request.params.get("id").and_then(Json::as_str);
+    let from = session.document().meta.name.clone();
+    match craftkit_engine::crash::action_in(dir, action, id, &from) {
+        Ok(data) => {
+            let message = match action {
+                "show" => format!("report {}", id.unwrap_or("")),
+                "replay" => format!(
+                    "replayed {} step(s) onto the design the report recorded",
+                    data.get("steps").and_then(Json::as_u64).unwrap_or(0)
                 ),
-                Err(e) => Response::error(&request.id, "not-found", e),
-            }
-        }
-        "replay" => {
-            let Some(id) = request.params.get("id").and_then(Json::as_str) else {
-                return Response::error(&request.id, "bad-parameter", "`id` is required");
+                _ => "crash reports".to_string(),
             };
-            let outcome = match craftkit_engine::crash::reproduce_in(dir, id) {
-                Ok(o) => o,
-                Err(e) => return Response::error(&request.id, "not-found", e),
-            };
-            Response::ok(
-                &request.id,
-                format!("replayed {} step(s) onto the design the report recorded", outcome.steps),
-                json!({
-                    "steps": outcome.steps,
-                    "failures": outcome.failures,
-                    "reproduced": outcome.reproduced,
-                    "differences": outcome.differences,
-                    "dropped": outcome.dropped,
-                    "session": outcome.session,
-                    "from": session.document().meta.name,
-                }),
-            )
+            Response::ok(&request.id, message, data)
         }
-        other => Response::error(
-            &request.id,
-            "bad-parameter",
-            format!("`{other}` is not a crash action; try list, show or replay"),
-        ),
+        Err(e) => Response::error(&request.id, e.kind(), e.message()),
     }
 }
 

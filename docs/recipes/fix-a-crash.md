@@ -73,6 +73,12 @@ craftkit-cli crashes show <id>
 craftkit-cli crashes replay <id>
 ```
 
+An agent on the MCP server reads the same reports with the `craftkit_crashes`
+tool: `action` is `list`, `show` or `replay`, and `show` and `replay` need the
+report's `id`. The three actions are the engine's — `crash::action_in` — so
+the CLI, the control channel and the MCP server cannot answer differently
+about the same report. §113.
+
 The engine names exactly this surface: `EngineError::Unknown` says *"run
 `craftkit-cli commands` for the list"*, and `crash::sanitize`'s doc comment says
 `craftkit-cli crashes show …`. The CLI calls `crash::list()`, `crash::show(id)`

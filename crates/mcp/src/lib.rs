@@ -8,12 +8,20 @@
 //! window. An MCP server is a subprocess speaking JSON-RPC, for an agent that
 //! has a tool-calling loop and wants craftkit's capabilities *as tools*.
 //!
-//! The important thing is that **it exposes no new behaviour**. Every tool maps
-//! onto a [`craftkit_engine`] command, and a tool's schema is generated from the
-//! same `ParamDoc` table the CLI help and the docs use. A capability that
-//! exists only over MCP is a capability the guard, the undo snapshot and the
-//! crash reporter do not know about — which is exactly the failure the whole
-//! "everything is a command" rule exists to prevent.
+//! The important thing is that **it exposes no new behaviour**. Every tool that
+//! acts maps onto a [`craftkit_engine`] command, and a tool's schema is
+//! generated from the same `ParamDoc` table the CLI help and the docs use. A
+//! capability that exists only over MCP is a capability the guard, the undo
+//! snapshot and the crash reporter do not know about — which is exactly the
+//! failure the whole "everything is a command" rule exists to prevent.
+//!
+//! Three tools are not commands, and they are about the *server* rather than
+//! the document: the running session (`craftkit_status`), the catalogue
+//! (`craftkit_commands`), and the crash reports this machine has written
+//! (`craftkit_crashes`). They read what the engine already knows and change
+//! nothing — and the crash reports are the tree's answer to "my application
+//! crashed", which is a question an agent asks more often than any other.
+//! §113.
 //!
 //! ## Transport
 //!

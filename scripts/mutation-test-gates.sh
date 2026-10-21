@@ -83,6 +83,7 @@ readonly FILES=(
     crates/ui/src/raster.rs
     crates/mcp/src/server.rs
     crates/mcp/src/rpc.rs
+    crates/mcp/src/tools.rs
     crates/engine/src/crash.rs
     crates/engine/src/commands.rs
     crates/engine/src/history.rs
@@ -2814,6 +2815,38 @@ swap apps/craftkit-web/src/main.rs \
     '            let lines = storage_lines(&Storage { saved: false, ..self.storage.clone() });'
 expect_catch "ui: the browser panel ignores what it knows about the stash" \
     "cargo test -p craftkit-web --profile ci the_panels_outcome_is_not_the_shells_outcome"
+
+# The crash reports were written for an agent to read, and the front end whose
+# reader is an agent could not read them. §113.
+swap crates/mcp/src/tools.rs \
+    '            name: "craftkit_crashes".to_string(),' \
+    '            name: "craftkit_crashs".to_string(),'
+expect_catch "mcp: the crash reports are published under a name nobody calls" \
+    "cargo test -p craftkit-mcp --profile ci the_crash_reports_are_a_tool"
+
+# The tool ignored the action it was given, so every request was a list. §113.
+swap crates/mcp/src/server.rs \
+    '            let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");' \
+    '            let action = "list";'
+expect_catch "mcp: the crash tool ignores the action it is given" \
+    "cargo test -p craftkit-mcp --profile ci a_crash_action_that_does_not_exist_is_refused"
+
+# The shared dispatcher turned a missing id into a different refusal, so the
+# two front ends would not have agreed about it. §113.
+swap crates/engine/src/crash.rs \
+    '        "show" => {
+            let id = id.ok_or(ActionError::MissingId)?;' \
+    '        "show" => {
+            let id = id.unwrap_or_default();'
+expect_catch "engine: a missing report id is not the refusal it should be" \
+    "cargo test -p craftkit-engine --profile ci the_crash_actions_are_one_rule"
+
+# ...and the control channel did not ask the engine at all. §113.
+swap crates/control/src/server.rs \
+    '    match craftkit_engine::crash::action_in(dir, action, id, &from) {' \
+    '    match craftkit_engine::crash::action_in(dir, "list", id, &from) {'
+expect_catch "control: the crash actions are not the engine's" \
+    "cargo test -p craftkit-control --profile ci the_crash_replay_says_whether_it_reproduced_the_document"
 
 restore
 finish

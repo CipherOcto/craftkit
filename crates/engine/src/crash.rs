@@ -48,6 +48,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value as Json, json};
 
 use crate::session::Session;
 
@@ -560,6 +561,79 @@ pub fn reproduce_in(dir: &Path, id: &str) -> Result<ReplayOutcome, String> {
     })
 }
 
+/// What a crash-report action can fail with.
+///
+/// Two kinds, and they are the two the tree already uses for the same two
+/// failures: a refusal about the request (`bad-parameter`) and a report that
+/// is not there (`not-found`). §113.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActionError {
+    /// The action is not one of the three.
+    Unknown(String),
+    /// The action needs a report's id and did not get one.
+    MissingId,
+    /// The report is not there.
+    NotFound(String),
+}
+
+impl ActionError {
+    /// The kind of failure, for the front end that reports it.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ActionError::Unknown(_) | ActionError::MissingId => "bad-parameter",
+            ActionError::NotFound(_) => "not-found",
+        }
+    }
+
+    /// What a person reads.
+    pub fn message(&self) -> String {
+        match self {
+            ActionError::Unknown(action) => {
+                format!("`{action}` is not a crash action; try list, show or replay")
+            }
+            ActionError::MissingId => "`id` is required".to_string(),
+            ActionError::NotFound(e) => e.clone(),
+        }
+    }
+}
+
+/// Run a crash-report action, and answer with JSON.
+///
+/// **One dispatcher for every front end.** The CLI prints the crash reports
+/// for a person, the control channel answers with JSON over a socket, and the
+/// MCP server answers with JSON to a tool-calling agent — and the last two
+/// were two copies of the same three branches, each with its own wording and
+/// its own idea of what a missing id means. The rules about *what* an action
+/// does live here, so the three front ends cannot drift apart. §113.
+///
+/// `from` is the name of the design the caller is looking at, and the replay's
+/// answer says which one — a replay runs against the report's own base, and
+/// the caller should not have to guess whether it replaced their design.
+pub fn action_in(dir: &Path, action: &str, id: Option<&str>, from: &str) -> Result<Json, ActionError> {
+    match action {
+        "list" => Ok(json!({ "ids": list_in(dir) })),
+        "show" => {
+            let id = id.ok_or(ActionError::MissingId)?;
+            let report = show_in(dir, id).map_err(ActionError::NotFound)?;
+            Ok(serde_json::to_value(report).unwrap_or(Json::Null))
+        }
+        "replay" => {
+            let id = id.ok_or(ActionError::MissingId)?;
+            let outcome = reproduce_in(dir, id).map_err(ActionError::NotFound)?;
+            Ok(json!({
+                "steps": outcome.steps,
+                "failures": outcome.failures,
+                "reproduced": outcome.reproduced,
+                "differences": outcome.differences,
+                "dropped": outcome.dropped,
+                "session": outcome.session,
+                "from": from,
+            }))
+        }
+        other => Err(ActionError::Unknown(other.to_string())),
+    }
+}
+
 /// Read a document out of a report's JSON.
 ///
 /// The id counter is **not** part of a document's serialization — it is
@@ -737,6 +811,49 @@ mod tests {
         let report = build(&s, "prop.set", "boom");
         write_to(&dir, &report).expect("written");
         assert_eq!(mode(&dir), 0o700, "the tool's own crash folder is not private");
+    }
+
+    /// The crash actions are one rule, and every front end asks it the same
+    /// way.
+    ///
+    /// §113: the control channel and the MCP server each had their own copy of
+    /// the three branches — list, show, replay — and the copies could drift.
+    /// The dispatcher is in the engine, and it says the same things to both.
+    #[test]
+    fn the_crash_actions_are_one_rule() {
+        let dir = temp_dir("actions");
+        let session = Session::sample();
+        let report = build(&session, "prop.set", "boom");
+        let id = report.id.clone();
+        write_to(&dir, &report).expect("written");
+
+        // list
+        let listed = action_in(&dir, "list", None, "Sample plan").expect("listed");
+        let ids = listed.get("ids").and_then(Json::as_array).expect("ids");
+        assert_eq!(ids.len(), 1, "the folder holds one report: {listed}");
+        assert_eq!(ids[0].as_str(), Some(id.as_str()));
+
+        // show
+        let shown = action_in(&dir, "show", Some(&id), "Sample plan").expect("shown");
+        assert_eq!(shown.get("id").and_then(Json::as_str), Some(id.as_str()));
+
+        // replay
+        let replayed = action_in(&dir, "replay", Some(&id), "Sample plan").expect("replayed");
+        assert_eq!(replayed.get("reproduced").and_then(Json::as_bool), Some(true), "{replayed}");
+        assert_eq!(replayed.get("from").and_then(Json::as_str), Some("Sample plan"));
+
+        // The three failures, and their kinds.
+        let missing = action_in(&dir, "show", None, "Sample plan").expect_err("refused");
+        assert_eq!(missing.kind(), "bad-parameter");
+        assert_eq!(missing, ActionError::MissingId);
+
+        let unknown = action_in(&dir, "delete", None, "Sample plan").expect_err("refused");
+        assert_eq!(unknown.kind(), "bad-parameter");
+        assert!(unknown.message().contains("not a crash action"), "{}", unknown.message());
+
+        let absent =
+            action_in(&dir, "show", Some("19700101-000000-0000"), "Sample plan").expect_err("refused");
+        assert_eq!(absent.kind(), "not-found");
     }
 
     /// The id is the format this type's own documentation promises, and it
