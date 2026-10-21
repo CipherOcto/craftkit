@@ -112,15 +112,41 @@ pub struct ParamDoc {
     pub required: bool,
     /// What it means, in one line. Rendered into the docs and the MCP schema.
     pub help: &'static str,
+    /// The parameter that may be given **instead of this one**.
+    ///
+    /// `node` and `node_name` are one parameter in two spellings, and so are
+    /// `seconds` and `frame`: the command takes either and refuses when it
+    /// has neither. So a parameter with an alternative is **not required by
+    /// itself** — the pair is, and the schema has to say "one of the two".
+    ///
+    /// §116: the catalogue marked the first spelling as required, so the
+    /// published schema told a client it could not use the second one — and
+    /// the tree's own probe called `playback.seek` with `{"frame": 48}`, a
+    /// form its own schema forbade.
+    pub alternative: Option<&'static str>,
 }
 
 impl ParamDoc {
     pub const fn req(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        Self { name, kind, required: true, help }
+        Self { name, kind, required: true, help, alternative: None }
     }
 
     pub const fn opt(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        Self { name, kind, required: false, help }
+        Self { name, kind, required: false, help, alternative: None }
+    }
+
+    /// A parameter the command needs — unless `alternative` is given instead.
+    ///
+    /// The pair is **"one of the two"**: neither is required on its own, and
+    /// the command refuses when it has neither. The schema says so with an
+    /// `anyOf`, and the catalogue says it with this field. §116.
+    pub const fn either(
+        name: &'static str,
+        kind: Doc,
+        help: &'static str,
+        alternative: &'static str,
+    ) -> Self {
+        Self { name, kind, required: false, help, alternative: Some(alternative) }
     }
 }
 
@@ -205,12 +231,21 @@ impl CommandSpec {
             "mutates": self.mutates,
             "undoable": self.undoable,
             "doc": self.doc,
-            "params": self.params.iter().map(|p| serde_json::json!({
-                "name": p.name,
-                "type": p.kind.json_name(),
-                "required": p.required,
-                "help": p.help,
-            })).collect::<Vec<_>>(),
+            "params": self.params.iter().map(|p| {
+                let mut param = serde_json::json!({
+                    "name": p.name,
+                    "type": p.kind.json_name(),
+                    "required": p.required,
+                    "help": p.help,
+                });
+                // The alternative is part of the parameter's meaning: it says
+                // that this one and that one are one parameter in two
+                // spellings. §116.
+                if let Some(alternative) = p.alternative {
+                    param["alternative"] = serde_json::json!(alternative);
+                }
+                param
+            }).collect::<Vec<_>>(),
         })
     }
 }
@@ -579,6 +614,7 @@ pub fn catalogue() -> Json {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn the_catalogue_is_sorted_and_free_of_duplicates() {
@@ -650,16 +686,44 @@ mod tests {
                 seen.push(p.name);
             }
             // The first parameter is the *subject* of the command, so if a
-            // command has any required parameter the first one is required.
-            // Later ones may also be required — `key.set` genuinely needs a path
-            // and a value as well as a node.
-            let required: Vec<bool> = c.params.iter().map(|p| p.required).collect();
-            if required.iter().any(|r| *r) {
+            // command needs anything it needs its subject. Later ones may also
+            // be needed — `key.set` genuinely needs a path and a value as well
+            // as a node.
+            //
+            // A subject with an alternative needs **one of its two
+            // spellings**, not this one: `node` and `node_name` are one
+            // parameter. §116.
+            let needed = |p: &ParamDoc| p.required || p.alternative.is_some();
+            if c.params.iter().any(needed) {
                 assert!(
-                    required.first().copied().unwrap_or(false),
-                    "`{}`'s first parameter should be required",
+                    c.params.first().is_some_and(needed),
+                    "`{}`'s first parameter should be needed",
                     c.id
                 );
+            }
+        }
+    }
+
+    /// An alternative is a parameter of the same command, and it is not
+    /// needed on its own.
+    ///
+    /// §116: the pair is "one of the two". A parameter that is *both* an
+    /// alternative and required would say two things at once, and an
+    /// alternative that names a parameter the command does not have would be
+    /// a name nothing resolves.
+    #[test]
+    fn an_alternative_is_a_parameter_of_the_same_command() {
+        for c in all() {
+            for p in c.params {
+                let Some(alternative) = p.alternative else { continue };
+                let other = c.params.iter().find(|q| q.name == alternative).unwrap_or_else(|| {
+                    panic!(
+                        "`{}`'s parameter `{}` names an alternative `{}` the command does not have",
+                        c.id, p.name, alternative
+                    )
+                });
+                assert!(!other.required, "`{}.{}` is required as well as an alternative", c.id, other.name);
+                assert!(!p.required, "`{}.{}` is required and has an alternative", c.id, p.name);
             }
         }
     }
@@ -680,6 +744,41 @@ mod tests {
         let first = &arr[0];
         assert!(first.get("id").and_then(Json::as_str).is_some());
         assert!(first.get("params").and_then(Json::as_array).is_some());
+    }
+
+    /// The catalogue says which parameter may be given instead of which.
+    ///
+    /// §116: the catalogue marked the first spelling as required, so the
+    /// schema built from it told a client it could not use the second one —
+    /// which the command accepts. The pair has to be in the catalogue, or
+    /// the schema cannot say "one of the two".
+    #[test]
+    fn the_catalogue_says_which_parameter_may_be_given_instead() {
+        let json = catalogue();
+        let arr = json.as_array().expect("an array");
+        let mut pairs = 0;
+        for spec in arr {
+            let params = spec["params"].as_array().expect("params");
+            for p in params {
+                let Some(alternative) = p["alternative"].as_str() else { continue };
+                pairs += 1;
+                assert!(
+                    !p["required"].as_bool().unwrap_or(true),
+                    "`{}`'s parameter `{}` is required and has an alternative",
+                    spec["id"],
+                    p["name"]
+                );
+                assert!(
+                    params.iter().any(|q| q["name"] == json!(alternative)),
+                    "`{}`'s parameter `{}` names an alternative the command does not have",
+                    spec["id"],
+                    p["name"]
+                );
+            }
+        }
+        assert!(pairs > 0, "no command in the tree has a parameter with an alternative");
+        // The two pairs the tree has, spelled out.
+        assert_eq!(pairs, 13, "the tree's pairs: node/node_name twelve times, seconds/frame once");
     }
 
     #[test]

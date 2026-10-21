@@ -223,7 +223,7 @@ pub static NODE_REMOVE: CommandSpec = CommandSpec {
     shortcut: Some("Del"),
     doc: "Delete a node. Returns what was removed.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
     ],
     mutates: true,
@@ -251,7 +251,7 @@ pub static NODE_RENAME: CommandSpec = CommandSpec {
     shortcut: Some("F2"),
     doc: "Rename a node. Names need not be unique; ids are what commands should address.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("name", Doc::Text, "The new name."),
     ],
@@ -277,7 +277,7 @@ pub static NODE_MUTE: CommandSpec = CommandSpec {
     shortcut: Some("M"),
     doc: "Mute or unmute a node. A muted node passes the level through untouched.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::opt("muted", Doc::Bool, "True to mute, false to unmute. Defaults to the opposite."),
     ],
@@ -307,7 +307,7 @@ pub static NODE_KIND: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Change what a node does.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("kind", Doc::NodeKind, "One of source, filter, sink, cue, comment."),
     ],
@@ -337,7 +337,7 @@ pub static NODE_MOVE: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Move a node to another position. Position matters: a level flows from node to node.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("index", Doc::Number, "Destination index, 0-based."),
     ],
@@ -370,7 +370,7 @@ pub static NODE_DUPLICATE: CommandSpec = CommandSpec {
     shortcut: Some("Ctrl+D"),
     doc: "Copy a node, its properties and its keyframes, directly below the original.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
     ],
     mutates: true,
@@ -406,7 +406,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Set one property of a node by path. Creates the property if it does not exist.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req(
             "path",
@@ -487,7 +487,7 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Remove a property's keyframes, leaving its stored value.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
     ],
@@ -525,7 +525,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
           set to the same value, so clearing the keys later leaves that number rather \
           than whatever the property happened to hold.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
         ParamDoc::req("value", Doc::Text, "The value at this key."),
@@ -601,7 +601,7 @@ pub static KEY_REMOVE: CommandSpec = CommandSpec {
           a command that reports success without changing anything is how an \
           agent concludes it has done something it has not.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
         ParamDoc::opt("time", Doc::Time, "The instant. Defaults to the playhead."),
@@ -645,7 +645,7 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Remove every keyframe from a property.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
     ],
@@ -679,7 +679,7 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Change how a keyframe is left.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
         ParamDoc::opt("time", Doc::Time, "Which key. Defaults to the playhead."),
@@ -737,7 +737,7 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Move the playhead. Accepts seconds, a frame number, or raw ticks.",
     params: &[
-        ParamDoc::req("seconds", Doc::Time, "The instant to go to, in seconds."),
+        ParamDoc::either("seconds", Doc::Time, "The instant to go to, in seconds.", "frame"),
         ParamDoc::opt("frame", Doc::Number, "…or a frame number at the plan's rate."),
     ],
     mutates: false,
@@ -1764,6 +1764,30 @@ mod tests {
         let mut s = session();
         let err = s.execute("doc.range", &json!({ "start": 2.0, "end": 1.0 })).expect_err("refused");
         assert!(err.to_string().contains("end"), "{err}");
+    }
+
+    /// A node may be addressed by its name instead of its id.
+    ///
+    /// §116: the catalogue said the id was required, and the schema built
+    /// from it told a client it could not use the name — which the command
+    /// accepts. The tree's own probe called `playback.seek` with
+    /// `{"frame": 48}`, a form its own schema forbade.
+    #[test]
+    fn a_node_may_be_addressed_by_its_name() {
+        let mut s = session();
+        ok(&mut s, "node.rename", json!({ "node_name": "Level", "name": "Loudest" }));
+        assert!(s.document().nodes.iter().any(|n| n.name == "Loudest"), "the rename did not happen");
+    }
+
+    /// The seek may be given a frame instead of a second.
+    ///
+    /// §116: the schema said `seconds` was required, and the tree's own
+    /// probe table calls the command with a frame.
+    #[test]
+    fn the_seek_may_be_given_a_frame() {
+        let mut s = session();
+        ok(&mut s, "playback.seek", json!({ "frame": 24 }));
+        assert_eq!(s.at().frames_i64(s.document().meta.frame_rate()), 24);
     }
 
     /// The range command says when it moved the playhead.

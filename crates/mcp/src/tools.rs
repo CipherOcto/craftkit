@@ -162,6 +162,24 @@ fn schema_for(params: &[command::ParamDoc]) -> Json {
     if !required.is_empty() {
         schema["required"] = Json::Array(required.into_iter().map(Json::from).collect());
     }
+    // A parameter that may be given instead of another one is **one of the
+    // two**, and the schema has to say so: a client that reads `required`
+    // alone would refuse the second spelling — which the command accepts,
+    // and which the tree's own probe uses. §116.
+    //
+    // The pairs are combined with `allOf`, because two pairs are two
+    // separate "one of"s and an `anyOf` over all four names would let a
+    // call through with neither of one of them.
+    let pairs: Vec<Json> = params
+        .iter()
+        .filter_map(|p| p.alternative.map(|alternative| (p.name, alternative)))
+        .map(
+            |(name, alternative)| json!({ "anyOf": [{ "required": [name] }, { "required": [alternative] }] }),
+        )
+        .collect();
+    if !pairs.is_empty() {
+        schema["allOf"] = Json::Array(pairs);
+    }
     schema
 }
 
@@ -191,9 +209,9 @@ fn property_for(kind: Doc, help: &str) -> Json {
         Doc::Bool => {
             map.insert("type".to_string(), json!("boolean"));
         }
-        // Everything else is text on the wire. `node-ref` is addressed by id or
-        // by name, `time` by seconds, frames or ticks, `easing` by preset name —
-        // none of which a JSON Schema number can express honestly.
+        // Everything else is text on the wire. `time` is addressed by
+        // seconds, frames or ticks, `easing` by preset name — none of which
+        // a JSON Schema number can express honestly.
         Doc::Text | Doc::Color => {
             map.insert("type".to_string(), json!("string"));
             if matches!(kind, Doc::Color) {
@@ -201,10 +219,16 @@ fn property_for(kind: Doc, help: &str) -> Json {
             }
         }
         Doc::NodeRef => {
-            map.insert("type".to_string(), json!(["number", "string"]));
+            // A **whole number**, and nothing else. §116: the schema used to
+            // say `["number", "string"]` — "a node id, as a number or as the
+            // node's name" — and the reader refuses a name in this parameter
+            // ("`Level` is a name, not an id; names are resolved by
+            // `node_name`"). A name belongs in `node_name`, which is the
+            // parameter's alternative and is in the schema beside it.
+            map.insert("type".to_string(), json!("number"));
             map.insert(
                 "description".to_string(),
-                json!(format!("{help}. A whole number, or use `node_name`.")),
+                json!(format!("{help} A whole number, or use `node_name`.")),
             );
         }
         Doc::NodeKind => {
@@ -215,7 +239,7 @@ fn property_for(kind: Doc, help: &str) -> Json {
             map.insert("type".to_string(), json!(["number", "string"]));
             map.insert(
                 "description".to_string(),
-                json!(format!("{help}. Seconds as a number, or \"12f\" for frames, \"120t\" for ticks.")),
+                json!(format!("{help} Seconds as a number, or \"12f\" for frames, \"120t\" for ticks.")),
             );
         }
         Doc::PropertyPath => {
@@ -291,10 +315,55 @@ mod tests {
         let arr = json.as_array().expect("array");
         let set = arr.iter().find(|t| t["name"] == json!("craftkit_prop_set")).expect("prop.set is exposed");
         let required = set["inputSchema"]["required"].as_array().expect("required");
-        assert!(required.contains(&json!("node")), "{set}");
+        assert!(required.contains(&json!("path")), "{set}");
+        assert!(required.contains(&json!("value")), "{set}");
         // An optional parameter must not be in `required`, or a client will
         // refuse to call the tool without it.
         assert!(!required.contains(&json!("animated")), "{set}");
+    }
+
+    /// A parameter with an alternative is not required by itself — the pair
+    /// is "one of the two", and the schema has to say so.
+    ///
+    /// §116: the schema listed `node` in `required`, so a client was told
+    /// it could not use `node_name` — which the command accepts, and which
+    /// the tree's own probe uses for `playback.seek`.
+    #[test]
+    fn a_parameter_with_an_alternative_is_one_of_the_two() {
+        let json = tools_json();
+        let arr = json.as_array().expect("array");
+
+        let set = arr.iter().find(|t| t["name"] == json!("craftkit_prop_set")).expect("prop.set is exposed");
+        let required = set["inputSchema"]["required"].as_array().expect("required");
+        assert!(!required.contains(&json!("node")), "the id is one of a pair, not required: {set}");
+        let pairs = set["inputSchema"]["allOf"].as_array().expect("the pair");
+        assert_eq!(pairs.len(), 1, "{set}");
+        let any_of = pairs[0]["anyOf"].as_array().expect("one of");
+        assert_eq!(any_of.len(), 2, "{set}");
+        assert!(any_of[0]["required"].as_array().expect("required").contains(&json!("node")), "{set}");
+        assert!(any_of[1]["required"].as_array().expect("required").contains(&json!("node_name")), "{set}");
+
+        // And the same for the other pair in the tree.
+        let seek =
+            arr.iter().find(|t| t["name"] == json!("craftkit_playback_seek")).expect("the seek is exposed");
+        let pairs = seek["inputSchema"]["allOf"].as_array().expect("the pair");
+        let any_of = pairs[0]["anyOf"].as_array().expect("one of");
+        assert!(any_of[0]["required"].as_array().expect("required").contains(&json!("seconds")), "{seek}");
+        assert!(any_of[1]["required"].as_array().expect("required").contains(&json!("frame")), "{seek}");
+    }
+
+    /// The node parameter is a whole number, and not a name.
+    ///
+    /// §116: the schema said `["number", "string"]` — "a node id, as a
+    /// number or as the node's name" — and the reader refuses a name in
+    /// this parameter (*"`Level` is a name, not an id"*).
+    #[test]
+    fn the_node_parameter_is_a_whole_number() {
+        let json = tools_json();
+        let arr = json.as_array().expect("array");
+        let set = arr.iter().find(|t| t["name"] == json!("craftkit_prop_set")).expect("prop.set is exposed");
+        assert_eq!(set["inputSchema"]["properties"]["node"]["type"], json!("number"), "{set}");
+        assert_eq!(set["inputSchema"]["properties"]["node_name"]["type"], json!("string"), "{set}");
     }
 
     #[test]

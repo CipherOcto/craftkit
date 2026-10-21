@@ -459,7 +459,7 @@ pub static NODE_ENABLE: CommandSpec = CommandSpec {
     shortcut: Some("E"),
     doc: "Enable or disable a node. A disabled node passes its level through untouched.",
     params: &[
-        ParamDoc::req("node", Doc::NodeRef, "The node's id."),
+        ParamDoc::either("node", Doc::NodeRef, "The node's id.", "node_name"),
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::opt("enabled", Doc::Bool, "True to enable, false to disable. Defaults to the opposite."),
     ],

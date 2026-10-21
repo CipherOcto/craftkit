@@ -77,23 +77,23 @@ doc.rename      node.kind                       key.remove     history.undo
 
 ### The shape of a `CommandSpec`
 
-`crates/engine/src/command.rs:128`:
+`crates/engine/src/command.rs`, in `CommandSpec`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `&'static str` | the rule above; the registry is sorted and duplicate-free |
 | `label` | `&'static str` | what a button and an undo entry say |
 | `area` | `Area` | decides the panel and the id prefix |
-| `icon` | `Icon` | `Icon(pub &'static str)` — **a name, not a drawing** (`command.rs:105`) |
+| `icon` | `Icon` | `Icon(pub &'static str)` — **a name, not a drawing** (in `Icon`) |
 | `shortcut` | `Option<&'static str>` | the chord the command is advertised with; the tree binds no keys yet |
-| `params` | `&'static [ParamDoc]` | `ParamDoc { name, kind: Doc, required, help }` |
+| `params` | `&'static [ParamDoc]` | `ParamDoc { name, kind: Doc, required, help, alternative }` — `alternative` names the parameter that may be given **instead**, and then the pair is "one of the two" |
 | `doc` | `&'static str` | one line, used by `commands --json` and the MCP description |
 | `mutates` | `bool` | does it change the document |
 | `undoable` | `bool` | does a success push an undo entry |
 | `enabled` | `fn(&Session) -> bool` | availability right now |
 | `run` | `fn(&mut Session, &Params<'_>) -> Result<Outcome, EngineError>` | the whole behaviour |
 
-`ALL` must stay sorted (`crates/engine/src/command.rs:211`). `get` (same file)
+`ALL` must stay sorted (in `command.rs`, in `ALL`). `get` (same file)
 looks a shipped command up; `lookup` (same file) also resolves the test-only
 `test.panic` in test builds.
 

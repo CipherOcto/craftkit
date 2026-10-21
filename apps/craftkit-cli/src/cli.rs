@@ -68,14 +68,27 @@ fn commands(as_json: bool) -> Result<(), String> {
             && !params.is_empty()
         {
             for p in params {
-                let name = p["name"].as_str().unwrap_or("?");
-                let kind = p["type"].as_str().unwrap_or("?");
-                let required = if p["required"].as_bool().unwrap_or(false) { "" } else { "?" };
-                println!("      {required}{name}: {kind} — {}", p["help"].as_str().unwrap_or(""));
+                println!("{}", param_line(p));
             }
         }
     }
     Ok(())
+}
+
+/// The line the catalogue prints for one parameter.
+///
+/// A `?` marks a parameter that may be left out, and a parameter with an
+/// alternative names the other spelling that may be given instead: the pair
+/// is "one of the two". §116.
+fn param_line(param: &Json) -> String {
+    let name = param["name"].as_str().unwrap_or("?");
+    let kind = param["type"].as_str().unwrap_or("?");
+    let required = if param["required"].as_bool().unwrap_or(false) { "" } else { "?" };
+    let alternative = match param["alternative"].as_str() {
+        Some(other) => format!(" (or give `{other}`)"),
+        None => String::new(),
+    };
+    format!("      {required}{name}: {kind} — {}{alternative}", param["help"].as_str().unwrap_or(""))
 }
 
 // ------------------------------------------------------------------ run --
@@ -372,6 +385,34 @@ fn mcp() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// A parameter with an alternative says which other spelling may be given
+    /// instead.
+    ///
+    /// §116: the catalogue marked the id as required, so the line said
+    /// nothing about the name — and the name is what the command accepts.
+    #[test]
+    fn a_parameter_with_an_alternative_says_which_one() {
+        let with = json!({
+            "name": "node",
+            "type": "node-ref",
+            "required": false,
+            "help": "The node's id.",
+            "alternative": "node_name",
+        });
+        let line = param_line(&with);
+        assert!(line.contains("node_name"), "the line does not name the alternative: {line}");
+        assert!(line.starts_with("      ?node:"), "the line does not mark it optional: {line}");
+
+        let without = json!({
+            "name": "name",
+            "type": "text",
+            "required": true,
+            "help": "The new name.",
+        });
+        let line = param_line(&without);
+        assert!(!line.contains("or give"), "a plain parameter grew an alternative: {line}");
+    }
 
     fn temp(tag: &str) -> PathBuf {
         let dir =

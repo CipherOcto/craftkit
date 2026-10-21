@@ -12211,6 +12211,153 @@ not.
 
 ---
 
+## 116. The catalogue said one spelling of a parameter was required, and the type said the parameter took something the reader refuses
+
+### The measurement
+
+Thirteen commands take one parameter in **two spellings**:
+
+| Spelling | The other | Who says so |
+|---|---|---|
+| `node` — an id | `node_name` — a name | the help: *"…or the node's name."* |
+| `seconds` | `frame` | the help: *"…or a frame number at the plan's rate."* |
+
+The tree says the same thing everywhere it refuses:
+
+> pass `node` (an id) or `node_name` (a name)
+>
+> pass `seconds` or `frame`
+
+And the catalogue said the opposite:
+
+```json
+{ "name": "node",      "required": true,  "type": "node-ref" }
+{ "name": "node_name", "required": false, "type": "text" }
+{ "name": "seconds",   "required": true,  "type": "time" }
+{ "name": "frame",     "required": false, "type": "number" }
+```
+
+**`required: true` on the first spelling, in all thirteen commands.** And the
+MCP builds its tool schemas from that catalogue, so the published schemas
+carried it too — eleven tools with `"required": ["node"]` and one with
+`"required": ["seconds"]`.
+
+Four more measurements, all from the tree itself:
+
+- **The MCP's own test says what that does.** *"An optional parameter must
+  not be in `required`, or a client will refuse to call the tool without
+  it."* The schema did exactly that, to a parameter that had an alternative.
+- **The tree's own probe used the forbidden form.** The engine's read-only
+  probe table calls `playback.seek` with `{"frame": 48}` — the spelling the
+  published schema said it could not send.
+- **The `node-ref` type said the reader took a name.** `Doc::NodeRef`'s doc
+  said *"A node id, as a number or as the node's name"*, and the schema said
+  `["number", "string"]` — and the reader refuses exactly that: *"`Level` is
+  a name, not an id; names are resolved by `node_name`"*.
+- **The published description had two full stops in it.** *"The node's id.. A
+  whole number, or use `node_name`."* — the MCP appends a sentence to a help
+  that already ends in one.
+
+### Why nothing noticed
+
+**The command works.** Every one of the thirteen commands accepts both
+spellings, so every test that calls a command passes. The catalogue is
+*describing* the command, and nothing checked the description against the
+command — the tree's gates check prose against constants, symbols and
+commands (§41, §42, §77), and a boolean in a JSON catalogue is none of those.
+
+**The `?` in the CLI's listing looked like the answer.** The listing printed
+`node` with no `?` and `node_name` with one, which reads as "the id is
+needed, the name is a convenience". The convention was never written down
+anywhere, so nothing said what it meant — and the one place it mattered, the
+place where the listing is *about* parameters, was the place with no rule.
+
+**The schema's `required` is a promise about what a client may send.** A
+client that reads it and finds `node` compulsory will not send `node_name`
+— not because the command refuses it, but because the client never tries.
+The refusal never happens, so the tree never learns that the promise was
+wrong.
+
+**The id and the name are two parameters in the tree, and the pair was read
+as two separate parameters.** `node` is an id and `node_name` is a name, and
+the reader keeps them apart on purpose (*"names are resolved by
+`node_name`"*). Nobody had said where the *pair* is written down, so it was
+written down nowhere.
+
+### The fix
+
+**The catalogue learns the pair.** `ParamDoc` has one more field:
+
+```rust
+/// The parameter that may be given **instead of this one**.
+pub alternative: Option<&'static str>,
+```
+
+and a constructor for it, `ParamDoc::either`, for a parameter the command
+needs *unless the other one is given*. The pair is "one of the two": neither
+is required on its own, and the command refuses when it has neither — which
+it already did.
+
+**The schema says "one of the two".** The MCP's schema builder turns each
+alternative into an `anyOf`:
+
+```json
+"required": ["name"],
+"allOf": [{ "anyOf": [{ "required": ["node"] }, { "required": ["node_name"] }] }]
+```
+
+The `allOf` is there for the general case: two pairs are two separate "one
+of"s, and an `anyOf` over all four names would let a call through with
+neither of one of them.
+
+**The node parameter is a whole number again.** The type said
+`["number", "string"]` and the reader refuses a string there; the name is
+the parameter's alternative, and the schema says so beside it.
+
+**The listing says it too.** The plain catalogue names the other spelling on
+the line — `?node: node-ref — The node's id. (or give `node_name`)` — and
+the CLI's help now explains the `?`:
+
+> A parameter marked `?` is optional. A parameter with an alternative is
+> marked `?` too, and its line names the other spelling: give one of the
+> two.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The catalogue says which parameter may be given instead | `the_catalogue_says_which_parameter_may_be_given_instead` |
+| An alternative is a parameter of the same command | `an_alternative_is_a_parameter_of_the_same_command` |
+| The schema says one of the two | `a_parameter_with_an_alternative_is_one_of_the_two` |
+| The node parameter is a whole number | `the_node_parameter_is_a_whole_number` |
+| A node may be addressed by its name | `a_node_may_be_addressed_by_its_name` |
+| The seek may be given a frame | `the_seek_may_be_given_a_frame` |
+| The listing names the alternative | `a_parameter_with_an_alternative_says_which_one` |
+
+and five mutations in `scripts/mutation-test-gates.sh`: the catalogue does
+not say which parameter may be given instead; the schema does not say that a
+parameter has an alternative; the node parameter says it takes a name again; a
+node cannot be addressed by its name; and the catalogue's listing does not
+name the alternative.
+
+### The lesson
+
+**`required` in a schema is a promise about what a client may send.** It is
+read by the client and obeyed by it, and a promise the command does not
+keep is not a promise at all. The tree already knew this — its own MCP test
+says so — and the schemas were built from a field nobody had checked.
+
+**Two spellings of one parameter need one place to live.** The commands
+already had the pair; the *catalogue* did not, so the catalogue described
+half of it and called the whole of it required.
+
+**A type is a promise about what the reader accepts.** `["number",
+"string"]` said a name was welcome in the id parameter, and the reader's
+own message said it was not — and the message was the one an agent would
+have read, after the schema had already refused to let it send one.
+
+---
+
 ---
 
 ## What enforces what
@@ -12471,6 +12618,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The readout says the frame and the time** | `craftkit-ui` test | 1 mutation — §115 |
 | **The playhead is inside the design** | `craftkit-engine` test | 2 mutations — §115 |
 | **The range command says when it moved the playhead** | `craftkit-engine` test | 1 mutation — §115 |
+| **The catalogue says which parameter may be given instead** | `craftkit-engine` test | 1 mutation — §116 |
+| **An alternative is a parameter of the same command** | `craftkit-engine` test | — |
+| **The schema says one of the two** | `craftkit-mcp` test | 1 mutation — §116 |
+| **The node parameter is a whole number** | `craftkit-mcp` test | 1 mutation — §116 |
+| **A node may be addressed by its name** | `craftkit-engine` test | 1 mutation — §116 |
+| **The catalogue's listing names the alternative** | `craftkit-cli` test | 1 mutation — §116 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12753,6 +12906,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    thirty-sixth are the only ones whose subject is a thing that was **never
    drawn** — a sentence about a widget, checked by reading the widget's
    neighbours.
+   §116 is the thirty-seventh and the thirty-eighth, and they are both about
+   a **type**. `Doc::NodeRef` said *"A node id, as a number or as the node's
+   name"*, and the reader refuses a name in that parameter (*"`Level` is a
+   name, not an id; names are resolved by `node_name`"*); and the catalogue
+   marked the id as **required** in thirteen commands whose own refusal says
+   *"pass `node` (an id) or `node_name` (a name)"*. Thirty-eight instances,
+   and the thirty-seventh and the thirty-eighth are the only ones whose
+   subject is the **shape of a value** — a type and a flag that say what a
+   caller may send, checked by reading the code that reads them.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

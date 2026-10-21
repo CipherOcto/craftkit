@@ -80,6 +80,12 @@ COMMANDS:
 Run `craftkit-cli commands` for the full catalogue with every parameter
 documented. Every one of them is the same command the window's toolbar runs.
 
+COMMAND FORMAT (`commands`):
+    A parameter marked `?` is optional. A parameter with an alternative is
+    marked `?` too, and its line names the other spelling: give one of the
+    two. `node` and `node_name` are one parameter in two spellings, and so
+    are `seconds` and `frame`.
+
 SCRIPT FORMAT (`run` and `snapshot`):
     {\"name\": \"optional\",
      \"commands\": [{\"command\": \"node.add\",

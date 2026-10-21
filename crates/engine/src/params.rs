@@ -22,7 +22,11 @@ pub enum Doc {
     Bool,
     /// `#rrggbb` or `#rrggbbaa`.
     Color,
-    /// A node id, as a number or as the node's name.
+    /// A node id, as a whole number.
+    ///
+    /// Not a name: the reader refuses one here (*"`Level` is a name, not an
+    /// id; names are resolved by `node_name`"*), and the name is the
+    /// parameter's alternative. §116.
     NodeRef,
     /// One of the node kinds.
     NodeKind,

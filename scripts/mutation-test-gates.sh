@@ -87,6 +87,7 @@ readonly FILES=(
     crates/engine/src/crash.rs
     crates/engine/src/commands.rs
     crates/engine/src/history.rs
+    crates/engine/src/params.rs
     crates/engine/src/lib.rs
     crates/engine/src/log.rs
     crates/engine/src/session.rs
@@ -2935,6 +2936,62 @@ swap crates/engine/src/commands.rs \
     '        let message = if at != was_at {'
 expect_catch "engine: the range command does not say that it moved the playhead" \
     "cargo test -p craftkit-engine --profile ci the_range_command_says_when_it_moved_the_playhead"
+
+# The catalogue marked the id as required, so the schema built from it told a
+# client it could not use the name -- which the command accepts, and which the
+# tree's own probe table uses for the seek. §116.
+swap crates/engine/src/command.rs \
+    '                if let Some(alternative) = p.alternative {
+                    param["alternative"] = serde_json::json!(alternative);
+                }' \
+    '                let _ = p.alternative;'
+expect_catch "engine: the catalogue does not say which parameter may be given instead" \
+    "cargo test -p craftkit-engine --profile ci the_catalogue_says_which_parameter_may_be_given_instead"
+
+# ...and so the schema said nothing about the pair either: the client was
+# told it could not use the second spelling, because the first was required.
+swap crates/mcp/src/tools.rs \
+    '    if !pairs.is_empty() {
+        schema["allOf"] = Json::Array(pairs);
+    }' \
+    '    let _ = pairs;'
+expect_catch "mcp: the schema does not say that a parameter has an alternative" \
+    "cargo test -p craftkit-mcp --profile ci a_parameter_with_an_alternative_is_one_of_the_two"
+
+# The node parameter's type said "a number or the node's name", and the reader
+# refuses a name in it -- the name is the parameter's alternative. §116.
+swap crates/mcp/src/tools.rs \
+    '            map.insert("type".to_string(), json!("number"));
+            map.insert(
+                "description".to_string(),
+                json!(format!("{help} A whole number, or use `node_name`.")),
+            );' \
+    '            map.insert("type".to_string(), json!(["number", "string"]));
+            map.insert(
+                "description".to_string(),
+                json!(format!("{help} A whole number, or use `node_name`.")),
+            );'
+expect_catch "mcp: the node parameter says it takes a name again" \
+    "cargo test -p craftkit-mcp --profile ci the_node_parameter_is_a_whole_number"
+
+# The reader stopped resolving the name, so the alternative the catalogue
+# offers was a name nothing answered to. §116.
+swap crates/engine/src/params.rs \
+    '            .find_by_name(&name)' \
+    '            .find_by_name("")'
+expect_catch "engine: a node cannot be addressed by its name" \
+    "cargo test -p craftkit-engine --profile ci a_node_may_be_addressed_by_its_name"
+
+# The catalogue's plain listing dropped the alternative, so a reader of it
+# could not tell that one of the two spellings would do. §116.
+swap apps/craftkit-cli/src/cli.rs \
+    '    let alternative = match param["alternative"].as_str() {
+        Some(other) => format!(" (or give `{other}`)"),
+        None => String::new(),
+    };' \
+    '    let alternative = String::new();'
+expect_catch "cli: the catalogue's listing does not name the alternative" \
+    "cargo test -p craftkit-cli --profile ci a_parameter_with_an_alternative_says_which_one"
 
 restore
 finish
