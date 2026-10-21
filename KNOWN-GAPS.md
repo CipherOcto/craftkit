@@ -11159,6 +11159,22 @@ script has known this for a while: its `restore` **touches** every file it
 puts back, for exactly this reason. A measurement of a tree that was put back
 by hand is a measurement of the wrong tree unless the timestamps say so too.
 
+**The rule, measured.** Cargo rebuilds a file whose timestamp is **newer** than
+the one it recorded, and it does **not** rebuild a file whose timestamp is
+**older** — even when the content changed. Measured on `craftkit-core`: put
+the file's timestamp a minute into the past, change its content, build, and
+cargo says *"Finished in 0.05s"* and keeps the old code. So the danger is
+not "the timestamp changed" but "the timestamp went **backwards**", which is
+exactly what `cp -a` does.
+
+**And the guess that seemed obvious was wrong.** The first guess was that
+cargo compares timestamps at second granularity, so a file changed inside the
+same second as the build would be missed. Measured: a file whose timestamp
+moved forward by 0.4 s — the same second — **is** rebuilt. Cargo compares
+with sub-second precision, and the rule is the *direction* of the timestamp,
+not its resolution. A negative result, and the reason it is written down is
+that it looked measured until it was measured.
+
 ---
 
 ## 108. The frame rate was on the screen and nowhere in the API — and the only way to ask was to change it
