@@ -2873,9 +2873,8 @@ expect_catch "kernel: the guard depth never unwinds" \
 # drawn a quarter of the way along the rail and the last twenty-four frames
 # could not be reached at all. §115.
 swap crates/ui/src/shell.rs \
-    '        let response = ui.add(egui::Slider::new(&mut frame, frames.clone()).show_value(false));' \
-    '        let total = meta.duration().frames_i64(rate).max(1);
-        let response = ui.add(egui::Slider::new(&mut frame, 0..=total).show_value(false));'
+    '            egui::Slider::new(&mut frame, frames.clone())' \
+    '            egui::Slider::new(&mut frame, 0..=meta.duration().frames_i64(rate).max(1))'
 expect_catch "ui: the timeline is the duration again" \
     "cargo test -p craftkit-ui --profile ci the_timeline_can_reach_both_ends_of_the_design"
 
@@ -3124,6 +3123,39 @@ swap apps/craftkit-cli/src/cli.rs \
         }'
 expect_catch "cli: the listing prints the second spelling as its own line" \
     "cargo test -p craftkit-cli --profile ci a_pair_prints_as_one_line_and_the_second_spelling_does_not_print_its_own"
+
+# The keyframes stopped being marked on the rail, so the timeline showed
+# the range and the playhead and nothing else. §121.
+swap crates/ui/src/shell.rs \
+    '        let marks = keyframe_marks(self.session.document(), self.state.selected, rate);' \
+    '        let marks: Vec<KeyMark> = Vec::new();'
+expect_catch "ui: the timeline marks no keyframes" \
+    "cargo test -p craftkit-ui --profile ci the_timeline_marks_the_keyframes"
+
+# The rail stopped spanning the panel and went back to egui's hundred
+# pixels. §121.
+swap crates/ui/src/shell.rs \
+    '        ui.spacing_mut().slider_width = rail_width;' \
+    '        ui.spacing_mut().slider_width = previous_width;'
+expect_catch "ui: the timeline's rail is a stub again" \
+    "cargo test -p craftkit-ui --profile ci the_timeline_rail_follows_the_panel"
+
+# A mark stopped being at the frame it names: every keyframe was drawn in
+# the middle of the rail. §121.
+swap crates/ui/src/shell.rs \
+    '    let share = ((frame - start) as f64 / (end - start) as f64).clamp(0.0, 1.0);' \
+    '    let share = 0.5;'
+expect_catch "ui: a keyframe's mark is not at its frame" \
+    "cargo test -p craftkit-ui --profile ci a_keyframe_mark_is_where_the_playhead_goes_when_it_is_clicked"
+
+# The guard that keeps a key outside the design off the rail stopped
+# firing, so a key the playhead can never reach was drawn on the rail as
+# if it were inside the design. §121.
+swap crates/ui/src/shell.rs \
+    '            if mark.frame < *frames.start() || mark.frame > *frames.end() {' \
+    '            if mark.frame < *frames.start() && mark.frame > *frames.end() {'
+expect_catch "ui: a key outside the design is drawn on the rail" \
+    "cargo test -p craftkit-ui --profile ci a_key_outside_the_design_has_no_mark_on_the_rail"
 
 restore
 finish

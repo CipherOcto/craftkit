@@ -603,7 +603,25 @@ impl<'a> Shell<'a> {
         // would not name, and one that edits the playhead behind the
         // command's back. The readout below says the same thing without
         // being a second control. §115.
-        let response = ui.add(egui::Slider::new(&mut frame, frames.clone()).show_value(false));
+        // The rail spans the panel. §121: egui's default slider is a hundred
+        // pixels wide, and the timeline was one — a stub in a panel seven
+        // hundred pixels across, with the design's frames crammed into a
+        // seventh of it and no room at all for the marks that say where the
+        // keys are.
+        let rail_width = ui.available_width();
+        let previous_width = ui.spacing_mut().slider_width;
+        ui.spacing_mut().slider_width = rail_width;
+        let response = ui.add(
+            egui::Slider::new(&mut frame, frames.clone())
+                .show_value(false)
+                // The handle's shape decides how far inside the rail its
+                // centre can travel, and the marks are placed where it
+                // travels. Pinning the shape here keeps the two in step: a
+                // theme that changed it would move the marks off the frames
+                // they name. §121.
+                .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: HANDLE_ASPECT }),
+        );
+        ui.spacing_mut().slider_width = previous_width;
         // The playhead is a widget, and it is the timeline's one control.
         //
         // The slider is on a line of its own: sharing a line with the readout
@@ -613,6 +631,23 @@ impl<'a> Shell<'a> {
         self.automation.publish(AutomationId::playhead(), response.rect, true);
         if response.changed() {
             self.run("playback.seek", serde_json::json!({ "frame": frame }));
+        }
+        // The design's keyframes, marked on the rail. §121: the timeline
+        // showed the range and the playhead and nothing else, so the only
+        // part of a design that *moves* was on no screen at all — the
+        // properties panel lists the times for the selected node as text
+        // (§117), and the other nodes' keys were nowhere.
+        let marks = keyframe_marks(self.session.document(), self.state.selected, rate);
+        let travel = handle_travel(response.rect);
+        for mark in &marks {
+            // A key outside the design's range has no place on the rail:
+            // there is no frame to put it at. §119's diagnostics name it.
+            if mark.frame < *frames.start() || mark.frame > *frames.end() {
+                continue;
+            }
+            let x = mark_x(travel, mark.frame, *frames.start(), *frames.end());
+            let colour = if mark.selected { tokens.accent } else { tokens.text_dim };
+            paint_mark(ui.painter(), x, response.rect.center().y, colour);
         }
         // Where the playhead is, in both of the numbers a design is measured
         // in. §115: the slider's own formatter never ran — the value was
@@ -693,6 +728,95 @@ fn draw_level_bar(ui: &mut Ui, tokens: &Tokens, level: f64) -> (Rect, Rect) {
     let fill = Rect::from_min_size(rect.min, Vec2::new(width, rect.height()));
     ui.painter().rect_filled(fill, 2.0, tokens.meter(level));
     (rect, fill)
+}
+
+/// The handle's width as a fraction of its radius.
+///
+/// `egui`'s default for a slider's handle. It is pinned here because the
+/// keyframe marks are placed where the handle travels and the handle's
+/// travel depends on its shape: a theme that changed the shape would move
+/// the marks off the frames they name. §121.
+const HANDLE_ASPECT: f32 = 0.75;
+
+/// `egui`'s rule for a handle's radius: the rail's height over this.
+///
+/// The same reason as [`HANDLE_ASPECT`]: the marks and the handle have to
+/// agree on where the handle can be, or a mark would point at a frame the
+/// playhead could not reach.
+///
+/// The number is `egui`'s rule, read from its source — and the test that
+/// clicks a mark and checks where the playhead lands is what says whether it
+/// is still true. §121.
+const HANDLE_RADIUS_DIVISOR: f32 = 2.5;
+
+/// Where the playhead's handle travels along the rail.
+///
+/// `egui` keeps the handle inside the rail's ends, so the handle's centre at
+/// the design's first frame is not at the rail's left edge but a radius in.
+/// The marks use the same travel, or a mark would sit where the handle
+/// cannot go. §121.
+fn handle_travel(rect: Rect) -> egui::Rangef {
+    let radius = rect.height() / HANDLE_RADIUS_DIVISOR * HANDLE_ASPECT;
+    rect.x_range().shrink(radius)
+}
+
+/// Where a frame is on the rail.
+///
+/// The frame's share of the design's range, along the handle's travel.
+///
+/// The share is clamped into the design's range, so this can never answer
+/// with a place off the end of the rail. A key outside the design's range
+/// has no frame to put it at — §119's diagnostics name such a key — and the
+/// caller decides whether to draw it at all. §121.
+fn mark_x(travel: egui::Rangef, frame: i64, start: i64, end: i64) -> f32 {
+    if end <= start {
+        return travel.center();
+    }
+    let share = ((frame - start) as f64 / (end - start) as f64).clamp(0.0, 1.0);
+    travel.min + (travel.max - travel.min) * share as f32
+}
+
+/// One keyframe, as a place on the timeline.
+struct KeyMark {
+    /// The frame the key is at.
+    frame: i64,
+    /// Whether the key belongs to the selected node.
+    selected: bool,
+}
+
+/// The design's keyframes, as places on the timeline.
+///
+/// Every node's keys, not only the selected one's: the timeline is the
+/// design's, and the properties panel speaks for one node at a time. §121.
+fn keyframe_marks(
+    document: &craftkit_model::Document,
+    selected: Option<NodeId>,
+    rate: craftkit_core::FrameRate,
+) -> Vec<KeyMark> {
+    let mut marks = Vec::new();
+    for node in &document.nodes {
+        for (_, property) in node.props.flatten() {
+            for key in property.keys.keys() {
+                marks.push(KeyMark { frame: key.time.frames_i64(rate), selected: selected == Some(node.id) });
+            }
+        }
+    }
+    marks
+}
+
+/// Paint one keyframe's mark on the rail.
+///
+/// A short bar across the rail: a frame's worth of "something is keyed
+/// here", in the accent colour for the selected node's keys and the dim
+/// colour for the rest. §121.
+fn paint_mark(painter: &egui::Painter, x: f32, y: f32, colour: egui::Color32) {
+    let half = 1.5;
+    let tall = 5.0;
+    painter.rect_filled(
+        Rect::from_center_size(egui::pos2(x, y), Vec2::new(half * 2.0, tall * 2.0)),
+        0.0,
+        colour,
+    );
 }
 
 /// Draw one frame, carrying the shell's state from the last one.
@@ -1455,6 +1579,163 @@ mod tests {
         let state = ShellState { selected: Some(id), ..ShellState::default() };
         let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
         (frame.png, frame.automation, id)
+    }
+
+    /// The timeline marks the keyframes.
+    ///
+    /// §121: the timeline showed the range and the playhead and nothing
+    /// else, so the only part of a design that *moves* was on no screen at
+    /// all. The panel listed the times for the selected node as text (§117),
+    /// and the other nodes' keys were nowhere.
+    ///
+    /// The comparison is on the **rail**: the playhead is at the same frame
+    /// in both frames, so the handle is in the same place and any difference
+    /// in the rail is a difference in the marks.
+    #[test]
+    fn the_timeline_marks_the_keyframes() {
+        let (first_png, first, _) = frame_with_keys(&[1.0]);
+        let (second_png, second, _) = frame_with_keys(&[3.0]);
+        let rail = |png: &[u8], registry: &Automation| {
+            let rect =
+                registry.rect(AutomationId::playhead().as_str()).expect("the playhead has a rectangle");
+            crop(png, rect.left(), rect.top(), rect.width(), rect.height())
+        };
+        assert_ne!(
+            rail(&first_png, &first),
+            rail(&second_png, &second),
+            "the timeline marks the same place for two keyframes a hundred frames apart"
+        );
+    }
+
+    /// A keyframe's mark is where the playhead goes when it is clicked.
+    ///
+    /// §121: the mark has to be *at* the frame it names, and the only way to
+    /// know that is to click it. The mark is found in the picture — asking
+    /// the drawing code where it drew the mark would prove only that the
+    /// drawing code agrees with itself.
+    #[test]
+    fn a_keyframe_mark_is_where_the_playhead_goes_when_it_is_clicked() {
+        let mut session = Session::sample();
+        let id = session.document().nodes[0].id;
+        session
+            .execute(
+                "key.set",
+                &serde_json::json!({ "node": id.get(), "path": "amount", "value": 0.5, "time": 2.0 }),
+            )
+            .expect("the key can be set");
+        let rate = session.document().meta.frame_rate();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(id), ..ShellState::default() };
+
+        let frame = crate::raster::render(&mut session, 900, 600, &state).expect("the frame renders");
+        let rect =
+            frame.automation.rect(AutomationId::playhead().as_str()).expect("the playhead has a rectangle");
+        let column =
+            mark_column(&frame.png, rect, tokens.accent).expect("the keyframe is not marked on the rail");
+
+        // The same picture, drawn the same size, so the click lands where the
+        // mark was.
+        let ctx = Context::default();
+        let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0));
+        let sized = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        one_frame(&ctx, &mut session, &tokens, &mut state, sized.clone());
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, sized);
+        assert_eq!(
+            automation.rect(AutomationId::playhead().as_str()),
+            Some(rect),
+            "the picture and the click are not the same layout"
+        );
+
+        press_at(&ctx, &mut session, &tokens, &mut state, column as f32 + 0.5, rect.center().y);
+        assert_eq!(
+            session.at().frames_i64(rate),
+            48,
+            "clicking the mark did not put the playhead on the frame the mark named"
+        );
+    }
+
+    /// The rail follows the panel.
+    ///
+    /// §121: egui's default slider is a hundred pixels wide, and the
+    /// timeline's rail was one — a stub in a panel seven hundred pixels
+    /// across, with the design's frames crammed into a seventh of it.
+    #[test]
+    fn the_timeline_rail_follows_the_panel() {
+        let mut session = Session::sample();
+        let narrow = rail_width(&mut session, 900, 600);
+        let wide = rail_width(&mut session, 1200, 600);
+        assert!(narrow > 400.0, "the rail is still a stub: {narrow}px wide in a 900px frame");
+        assert!(wide > narrow + 100.0, "the rail does not follow the panel: {narrow}px -> {wide}px");
+    }
+
+    /// A key outside the design's range has no mark on the rail.
+    ///
+    /// §121: there is no frame to put such a key at, and a mark at the end
+    /// of the rail would say the key is there. §119's diagnostics name it
+    /// instead.
+    #[test]
+    fn a_key_outside_the_design_has_no_mark_on_the_rail() {
+        let mut outside = Session::sample();
+        let id = outside.document().nodes[0].id;
+        outside
+            .execute(
+                "key.set",
+                &serde_json::json!({ "node": id.get(), "path": "amount", "value": 0.5, "time": 30.0 }),
+            )
+            .expect("the key can be set");
+        let mut plain = Session::sample();
+
+        let state = ShellState::default();
+        let keyed = crate::raster::render(&mut outside, 900, 600, &state).expect("the frame renders");
+        let bare = crate::raster::render(&mut plain, 900, 600, &state).expect("the frame renders");
+        let rail = |frame: &crate::raster::Frame| {
+            let rect = frame
+                .automation
+                .rect(AutomationId::playhead().as_str())
+                .expect("the playhead has a rectangle");
+            crop(&frame.png, rect.left(), rect.top(), rect.width(), rect.height())
+        };
+        assert_eq!(
+            rail(&keyed),
+            rail(&bare),
+            "a key outside the design is drawn on the rail as if it were inside it"
+        );
+    }
+
+    /// The width of the timeline's rail, in a frame of the given size.
+    fn rail_width(session: &mut Session, width: usize, height: usize) -> f32 {
+        let frame =
+            crate::raster::render(session, width, height, &ShellState::default()).expect("the frame renders");
+        frame
+            .automation
+            .rect(AutomationId::playhead().as_str())
+            .expect("the playhead has a rectangle")
+            .width()
+    }
+
+    /// The column of a keyframe's mark on the rail, found in the picture.
+    ///
+    /// The mark is painted in the accent colour when its node is selected,
+    /// and the accent colour is nowhere else on the rail. Looking for it in
+    /// the pixels is the point: a test that asked the drawing code where it
+    /// drew the mark would prove only that the drawing code agrees with
+    /// itself.
+    fn mark_column(png: &[u8], rect: Rect, colour: egui::Color32) -> Option<usize> {
+        let image = image::load_from_memory(png).expect("the frame is a png").to_rgba8();
+        let [r, g, b, _] = colour.to_array();
+        let near = |got: [u8; 4]| {
+            (got[0] as i32 - r as i32).abs() < 24
+                && (got[1] as i32 - g as i32).abs() < 24
+                && (got[2] as i32 - b as i32).abs() < 24
+        };
+        for x in rect.left() as u32..=rect.right() as u32 {
+            for y in rect.top() as u32..=rect.bottom() as u32 {
+                if near(image.get_pixel(x, y).0) {
+                    return Some(x as usize);
+                }
+            }
+        }
+        None
     }
 
     /// The readout says the frame and the time.

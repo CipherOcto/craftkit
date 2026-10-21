@@ -147,6 +147,30 @@ pub fn render(
     height: usize,
     state: &crate::shell::ShellState,
 ) -> Result<Frame, String> {
+    let drawn = draw(session, width, height, state)?;
+    let png = to_png(&drawn.image)?;
+
+    Ok(Frame { png, width, height, state: drawn.state, automation: drawn.automation })
+}
+
+/// A frame, before it is encoded.
+///
+/// The pixels are kept as pixels so that two frames can be **compared**:
+/// a PNG is a picture of a picture, and its bytes say as little about what
+/// changed as its length does. §121.
+struct Drawn {
+    image: Image,
+    state: crate::shell::ShellState,
+    automation: crate::automation::Automation,
+}
+
+/// Draw the shell and keep what came out.
+fn draw(
+    session: &mut craftkit_engine::Session,
+    width: usize,
+    height: usize,
+    state: &crate::shell::ShellState,
+) -> Result<Drawn, String> {
     check_size(width, height)?;
 
     let ctx = egui::Context::default();
@@ -169,9 +193,8 @@ pub fn render(
 
     let atlas = collect_textures(&deltas);
     let image = render_pixels(width, height, &shapes, &atlas);
-    let png = to_png(&image)?;
 
-    Ok(Frame { png, width, height, state: shell.state.clone(), automation: shell.automation.clone() })
+    Ok(Drawn { image, state: shell.state.clone(), automation: shell.automation.clone() })
 }
 
 /// Draw the shell headlessly at [`DEFAULT_SIZE`].

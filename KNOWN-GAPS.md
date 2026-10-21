@@ -12684,9 +12684,10 @@ now says *"2 keyframe(s) / -5.000s, 30.000s"* — and a time reads as an instant
 of the design unless something says the design ends at 5.000 s. The listing is
 *more* informative than it was and still says nothing that could be checked.
 
-**The timeline shows the range and no keys.** The design's instants are the
-timeline, and the keyframes are on no timeline, so there was no picture in
-which the two could be seen to disagree.
+**The timeline showed the range and no keys.** The design's instants are the
+timeline, and the keyframes were on no timeline, so there was no picture in
+which the two could be seen to disagree. §121 has since put the keys on the
+rail, and this sentence is the one that went stale when it did.
 
 **A person cannot make one; a program can.** `key.set` asks a person for the
 node, the path and the value, and the **time** defaults to the playhead —
@@ -12891,6 +12892,126 @@ parameter, and a pair of parameters is not a parameter.
 **A pair needs a place of its own in the catalogue.** Otherwise each half is
 read on its own — and read on its own, both halves are optional, and the
 command is not.
+
+---
+
+---
+
+## 121. The timeline was a hundred pixels wide and showed not one keyframe
+
+### The measurement
+
+A design's keyframes are the only part of it that moves. §117 put their times
+in the properties panel — as text, for the selected node — and `key.list` put
+them in a reply. The **timeline** showed the range and the playhead.
+
+Two frames of the same design, differing in one thing only — a keyframe at
+1.0 s against the same keyframe at 3.0 s — were **pixel-identical**:
+
+| the two designs, rendered at 900 × 600 | pixels that differ (of 540 000) |
+|---|---|
+| before | **0** |
+| after | **180**, every one of them on the rail |
+
+Zero. The window could not have told a person which of the two designs it was
+showing, and the two designs differ in exactly one thing: **where the key
+is**. The value at every instant is the same in both — a single key's value
+is held before it — so the difference between the two documents is a fact
+about the *timeline*, and the timeline said nothing about it.
+
+The rail itself was a stub. `egui`'s default slider is a hundred pixels wide,
+and the timeline's rail was a hundred pixels wide: the playhead's published
+rectangle was `[[216.3 123.0] - [316.3 141.0]]`, measured in a 900-pixel
+frame. The same rail now spans the panel —
+`[[216.3 123.0] - [692.0 141.0]]`, 476 pixels of it.
+
+And the keyframes of the **other** nodes were nowhere at all: the properties
+panel speaks for the selected node, so a design whose third node carried the
+keyframes showed nothing, anywhere, about them.
+
+### Why nothing noticed
+
+**Nothing in the tree drew a keyframe.** The timeline drew the range, the
+playhead and the readout; §117's panel drew the times as text. There was no
+code path that *could* have drawn a mark — so there was no bug in one. There
+was an absence.
+
+**The engine and the panel both knew where the keys were.** `key.list`
+answered with the times (§117), the panel printed them (§117), and the
+evaluator sampled the curve through them. The *information* was in three
+places; the place a person looks to find out **when** something happens was
+not one of them.
+
+**A design with no keyframes looks exactly like a design with keyframes.**
+That is the shape of this defect: it is not wrong, it is missing — and a
+missing thing is invisible to a reader who does not know it should be there.
+§120's catalogue *said* something false; anybody who tried it was told the
+truth at once. This one said nothing at all, and the only reader who could
+have noticed was one who expected it.
+
+### The fix
+
+**The timeline is the design's, and the keyframes are on it.** Every node's
+keyframes are marked on the rail — not only the selected node's, because the
+timeline speaks for the design and the properties panel speaks for one node.
+
+**The rail spans the panel.** `egui`'s slider is a hundred pixels wide by
+default; the timeline's is the panel's width — 476 pixels in a 900-pixel
+frame and 755 in a 1180-pixel one, measured in the running window.
+
+**A mark is at the frame it names.** The marks are placed where the playhead's
+handle travels, which is not the rail's whole width: `egui` keeps the handle
+a radius inside each end. The rule is in one place (`handle_travel`), the
+handle's shape is pinned so the two cannot drift apart, and the test
+**clicks the mark** and checks that the playhead lands on that frame — so the
+alignment is measured rather than asserted.
+
+**A key outside the design's range is not drawn.** There is no frame to put it
+at, and a mark at the end of the rail would say it was inside the design.
+§119's diagnostics name such a key instead.
+
+**The selected node's marks are the accent colour** and the rest are dim, so
+the timeline and the properties panel agree about what is selected.
+
+§117's icon — *"three marks on a line: the keyframes of a property, on the
+timeline they live on"* — was a sentence about a thing that did not exist.
+It is now literal.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The timeline marks the keyframes | `the_timeline_marks_the_keyframes` in `craftkit-ui` |
+| A keyframe's mark is where the playhead goes when it is clicked | `a_keyframe_mark_is_where_the_playhead_goes_when_it_is_clicked` |
+| The rail follows the panel | `the_timeline_rail_follows_the_panel` |
+| A key outside the design has no mark on the rail | `a_key_outside_the_design_has_no_mark_on_the_rail` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the timeline marks no
+keyframes; the rail is a stub again; a keyframe's mark is not at its frame;
+and a key outside the design is drawn on the rail.
+
+The fourth mutation is the interesting one, because **the first version of it
+was missed**. It clamped the mark's place into the rail — and the gate did
+not notice, because a key outside the design's range, placed without
+clamping, lands *off* the end of the rail and is not drawn at all. The gate
+was measuring the wrong thing: it could only catch the implementation that
+clamped. The rule was moved into `mark_x` — which clamps, so it can never
+answer with a place off the rail — and the mutation was re-aimed at the guard
+that keeps such a key off the rail. **A gate that passes for the wrong reason
+is a gate that has not been tested.**
+
+### The lesson
+
+**A timeline that does not show the keyframes is a slider.** The name says the
+design's timeline; the widget was a value picker a hundred pixels wide.
+
+**The place a person looks for *when* is a place of its own.** The times were
+in the model, in a reply and in a panel — three copies of the fact, and none
+of them where the question is asked.
+
+**An absence is not a lie, and it is harder to catch.** The comparison that
+found this one was the cheapest there is: two designs that differ in one
+thing, drawn one after the other, and the pictures compared.
 
 ---
 
@@ -13187,6 +13308,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A pair prints as one line that says one of the two is required** | `craftkit-cli` test | 1 mutation — §120 |
 | **A pair prints as one line and the second spelling does not print its own** | `craftkit-cli` test | 1 mutation — §120 |
 | **The catalogue's listing names the pairs** | `craftkit-cli` test | — |
+| **The timeline marks the keyframes** | `craftkit-ui` test | 1 mutation — §121 |
+| **A keyframe's mark is where the playhead goes when it is clicked** | `craftkit-ui` test | 1 mutation — §121 |
+| **The rail follows the panel** | `craftkit-ui` test | 1 mutation — §121 |
+| **A key outside the design has no mark on the rail** | `craftkit-ui` test | 1 mutation — §121 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -13487,6 +13612,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    was describing something that had **never been built**. Thirty-nine
    instances, and the thirty-ninth is the only one where the sentence pointed
    at a *missing mechanism* rather than at a mechanism that had changed.
+   §121 is the fortieth, and it is the **first one this tree caused itself
+   in the act of fixing a gap**: §119's *"Why nothing noticed"* said *"The
+   timeline shows the range and no keys"* — and §121 put the keys on the rail,
+   which made the sentence false. The rule — *a change to a mechanism re-reads
+   the documents that describe it* — was not wrong, and the sentence was not
+   rewritten, because nothing asked. Forty instances, and the fortieth is the
+   one where the sentence described the very thing that was fixed.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
