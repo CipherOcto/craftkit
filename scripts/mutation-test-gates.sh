@@ -1051,6 +1051,17 @@ swap docs/recipes/add-an-icon.md \
 expect_catch "prose: a citation names a line and no file" \
     "cargo xtask lists"
 
+# `AGENTS.md` told every agent that any new canvas calls `navigation::handle`.
+# This tree has no canvas, no camera and no `navigation` module: the rule named
+# a module that was never built here, and nothing checked it - the symbol
+# claims gate needs a `*.rs` path beside the symbol, and the document-links
+# gate needs a `.md`.
+swap AGENTS.md \
+    '  them, with its own caps — and every canvas must go through that module' \
+    '  them, with its own caps — and every canvas calls `navigation::handle` instead'
+expect_catch "prose: a module path that names a module this tree does not have" \
+    "cargo xtask lists"
+
 # The README has a second copy of the layer table, in a different shape from
 # the one in docs/architecture.md. Only the architecture one was checked, so the
 # README's was decoration.

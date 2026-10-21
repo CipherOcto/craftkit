@@ -777,6 +777,194 @@ pub fn defines(source: &str, name: &str) -> bool {
     false
 }
 
+/// The roots of the standard library and of the tools, which prose names in
+/// the same shape as a module of this tree.
+///
+/// `std::fs` and `clippy::unwrap_used` are not claims about this tree, and a
+/// check that flagged them would be noise dressed as a gate.
+const FOREIGN_ROOTS: &[&str] = &["std", "core", "alloc", "proc_macro", "clippy", "cargo", "rustc"];
+
+/// The primitive types, which are lower case and so look like modules.
+///
+/// `i64::MIN` is a constant of a primitive, not of a module this tree owns.
+const PRIMITIVE_TYPES: &[&str] = &[
+    "bool", "char", "str", "f32", "f64", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32",
+    "u64", "u128", "usize",
+];
+
+/// A module-shaped name that one specific document may name without it existing.
+///
+/// The same shape as the command ids' exemption: a recipe may propose names
+/// that do not exist yet, and the exemption is keyed to the **file**, so an
+/// invented name anywhere else is still caught.
+const PROPOSED_MODULES: &[(&str, &str)] =
+    &[("v1", "docs/recipes/change-the-file-format.md"), ("v2", "docs/recipes/change-the-file-format.md")];
+
+/// The fields inside a dependency's braces, which are not crates.
+///
+/// `version = "1"` and `features = [ … ]` are part of a dependency's
+/// *specification*, not names of crates, and a multi-line feature list puts
+/// them on lines of their own.
+const DEPENDENCY_FIELDS: &[&str] =
+    &["version", "features", "default-features", "package", "path", "workspace", "optional"];
+
+/// A module-shaped dotted name in prose that names nothing this tree has.
+///
+/// §130: `AGENTS.md` — the file every agent reads first — told them that any
+/// new canvas calls `navigation::handle`. This tree has no canvas, no camera
+/// and no `navigation` module: the rule names a module that was never built
+/// here, and an agent that follows it looks for something that is not there.
+///
+/// The two checks that could have seen it do not. `symbol_file_claims` needs
+/// the symbol to be followed by a `*.rs` path; the document-links check needs
+/// a `.md`; this one is neither.
+///
+/// The rule: a backticked `a::b` whose first part is **module-shaped** — lower
+/// case, so a module rather than a type — must name a crate this tree uses or
+/// a module this tree declares. A type path (`Session::execute`) is not
+/// module-shaped and is not this check's business.
+pub fn unknown_module_paths(root: &Path) -> Result<Vec<String>, String> {
+    let modules = tree_modules(root);
+    let crates = known_crate_roots(root);
+    let mut problems = Vec::new();
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let relative = relative_name(root, &doc);
+        for (start, _, token) in backticked(&text) {
+            let Some(head) = module_path_head(&token) else { continue };
+            if is_known_module_root(head, &modules, &crates) {
+                continue;
+            }
+            if PROPOSED_MODULES.iter().any(|(name, file)| *name == head && *file == relative) {
+                continue;
+            }
+            let line = text[..start].matches('\n').count() + 1;
+            problems.push(format!(
+                "{relative}: line {line} says `{token}`, and `{head}` is not a module or a crate \
+                 this tree has"
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The head of a dotted name that claims to be a module of this tree.
+///
+/// `Some("navigation")` for `navigation::handle`; `None` for a type path
+/// (`Session::execute` — a type, not a module), for a primitive
+/// (`i64::MIN` — a constant of a primitive), for a file path, and for
+/// anything that is not a dotted name at all.
+pub fn module_path_head(token: &str) -> Option<&str> {
+    let (head, rest) = token.split_once("::")?;
+    if rest.is_empty() || rest.chars().any(|c| c.is_whitespace()) {
+        return None;
+    }
+    if !head.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
+        return None;
+    }
+    if !head.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+        return None;
+    }
+    Some(head)
+}
+
+/// Whether `head` names something this tree has.
+///
+/// A module of the tree, a crate the tree uses, the standard library, a tool,
+/// or a primitive type. The last two are not claims about this tree, and a
+/// check that flagged them would be noise dressed as a gate.
+fn is_known_module_root(
+    head: &str,
+    modules: &std::collections::BTreeSet<String>,
+    crates: &std::collections::BTreeSet<String>,
+) -> bool {
+    modules.contains(head)
+        || crates.contains(head)
+        || FOREIGN_ROOTS.contains(&head)
+        || PRIMITIVE_TYPES.contains(&head)
+}
+
+/// The modules this tree declares, by name.
+///
+/// Every `mod` in every Rust file, and every `pub use` of one: the tree's
+/// modules are file modules, so the name is what a reader of the prose would
+/// search for.
+fn tree_modules(root: &Path) -> std::collections::BTreeSet<String> {
+    let mut modules = std::collections::BTreeSet::new();
+    for path in rust_files(root) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        for line in text.lines() {
+            let trimmed = line.trim();
+            for keyword in ["mod ", "pub mod ", "pub(crate) mod "] {
+                let Some(rest) = trimmed.strip_prefix(keyword) else { continue };
+                let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                if !name.is_empty() {
+                    modules.insert(name);
+                }
+            }
+        }
+    }
+    modules
+}
+
+/// The crates this tree uses: its own, and the ones it depends on.
+///
+/// Read from the manifests rather than from `cargo metadata`, for the same
+/// reason `citation_drift` reads the Rust files: the build tool should not
+/// have to be the thing it builds. A crate is named the way Rust names it,
+/// with underscores.
+fn known_crate_roots(root: &Path) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    let mut manifests = Vec::new();
+    collect_manifests(root, &mut manifests);
+    for manifest in manifests {
+        let Ok(text) = std::fs::read_to_string(&manifest) else { continue };
+        let mut section = String::new();
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') {
+                section = trimmed.trim_matches(|c| c == '[' || c == ']').to_string();
+                continue;
+            }
+            let Some((key, value)) = trimmed.split_once('=') else { continue };
+            let key = key.trim();
+            if section == "package" && key == "name" {
+                names.insert(value.trim().trim_matches('"').replace('-', "_"));
+            } else if section.ends_with("dependencies") {
+                // A dependency is `name = { … }` or `name = "1"`. The fields
+                // *inside* the braces are not crates, and one of them — a
+                // `features` list — can be on a line of its own.
+                let spec = value.trim();
+                let is_a_spec = spec.starts_with('{')
+                    || spec.starts_with('"')
+                    || spec.starts_with(|c: char| c.is_ascii_digit());
+                if is_a_spec && !DEPENDENCY_FIELDS.contains(&key) {
+                    names.insert(key.split('.').next().unwrap_or(key).replace('-', "_"));
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Every `Cargo.toml` in the tree, except the ones in a build directory.
+fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if path.is_dir() {
+            if name.starts_with('.') || name == "target" || name == "node_modules" {
+                continue;
+            }
+            collect_manifests(&path, out);
+        } else if name == "Cargo.toml" {
+            out.push(path);
+        }
+    }
+}
+
 /// Citations in prose that provably no longer point at anything.
 ///
 /// The mechanically detectable half, and deliberately only that half. A
@@ -2594,6 +2782,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A list of methods with a hole in it is the wrong list.")),
     );
 
+    // A module path in prose, and the module it names. §130.
+    problems.extend(
+        unknown_module_paths(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     Name a module this tree has, or drop the name.")),
+    );
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -2605,8 +2800,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              could be sent, every limit in the model's table is enforced in code, every \
              number of commands in prose is the registry's number, every boundary that \
              catches a panic is declared in the pattern document, every field the \
-             fingerprint hashes is a field the model has, and the control channel's \
-             methods are the methods the prose lists",
+             fingerprint hashes is a field the model has, the control channel's \
+             methods are the methods the prose lists, and every module path in prose \
+             names a module this tree has",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -3763,6 +3959,44 @@ mod tests {
             "craftkit-ui"
         );
         assert_eq!(package_name("[dependencies]\nimage = \"0.25\""), "");
+    }
+
+    /// A module path in prose that names nothing this tree has.
+    ///
+    /// §130: `AGENTS.md` told every agent reading it that any new canvas calls
+    /// `navigation::handle`. This tree has no canvas, no camera and no
+    /// `navigation` module, so the rule named a module that was never built
+    /// here — and the two checks that could have seen it do not: one needs the
+    /// symbol to be followed by a `*.rs` path, the other needs a `.md`.
+    #[test]
+    fn a_module_path_in_prose_that_names_nothing_is_reported() {
+        let root = crate::root().expect("root");
+        assert!(
+            unknown_module_paths(&root).expect("runs").is_empty(),
+            "a module path in prose names nothing this tree has"
+        );
+
+        // The head of a module path.
+        assert_eq!(module_path_head("navigation::handle"), Some("navigation"));
+        assert_eq!(module_path_head("craftkit_ui::shell::Shell::start"), Some("craftkit_ui"));
+
+        // A type path is not a module path: `Session::execute` is a method of a
+        // type, and this check is about modules.
+        assert_eq!(module_path_head("Session::execute"), None);
+        // A file path is not a module path.
+        assert_eq!(module_path_head("crates/core/src/params.rs"), None);
+        // And neither is a name that is not dotted at all.
+        assert_eq!(module_path_head("catch_unwind"), None);
+
+        // What the tree knows.
+        let modules = tree_modules(&root);
+        let crates = known_crate_roots(&root);
+        assert!(is_known_module_root("shell", &modules, &crates), "the ui crate has a shell module");
+        assert!(is_known_module_root("craftkit_core", &modules, &crates), "craftkit-core is a crate");
+        assert!(is_known_module_root("serde_json", &modules, &crates), "serde_json is a dependency");
+        assert!(is_known_module_root("std", &modules, &crates), "std is the standard library");
+        assert!(is_known_module_root("i64", &modules, &crates), "i64 is a primitive type");
+        assert!(!is_known_module_root("navigation", &modules, &crates), "navigation is not a module");
     }
 
     /// A symbol that prose says is in a file, and is not.

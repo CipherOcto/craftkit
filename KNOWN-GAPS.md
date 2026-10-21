@@ -14132,6 +14132,137 @@ cache.
 
 ---
 
+## 130. The document every agent reads first named a module this tree has never had
+
+### The measurement
+
+`AGENTS.md` is the file every agent is told to read first, and it carried this
+rule:
+
+> **One set of camera controls.** Any new canvas calls
+> `navigation::handle`-style handling with its own caps; never hand-roll camera
+> input.
+
+This tree has no canvas, no camera and no `navigation` module:
+
+| | |
+|---|---|
+| `mod navigation` anywhere in the tree | none |
+| a canvas or a camera in the tree | none — the window draws a node graph, a timeline and a properties panel |
+| the modules the tree does declare | 50 |
+| the crates the tree uses | 13 of its own, 19 dependencies |
+
+So the rule pointed at a module that was never built here. The sentence had
+travelled with the scaffold: the rule is true of a 3D application and false of
+a node-graph editor, and the scaffold is the second.
+
+Sweeping every document the tree points at code from — `docs/`, `skills/`,
+`AGENTS.md`, `README.md`, `CONTRIBUTING.md` — for a backticked `a::b` whose
+first part is module-shaped:
+
+| | |
+|---|---|
+| names the sweep found | 6 |
+| of those, the toolchain's own (`clippy::unwrap_used`) | 5 |
+| **of those, a module this tree does not have** | **1** — `navigation::handle` |
+
+One, and it was in the file every agent reads first.
+
+### Why nothing noticed
+
+**The two gates that check prose do not see this shape.**
+`symbol_file_claims` needs the symbol to be followed by a `*.rs` path — "the
+`x` test in `f.rs`" — and the document-links gate needs a `.md`. A bare
+`a::b` is neither, so the one dangling module path in the tree sat in the one
+document that is read first.
+
+**The rule was about a feature the tree does not have.** Nobody looking for
+camera controls in a tree with no camera would conclude that the document was
+wrong; they would conclude that they were looking in the wrong place.
+
+**A rule about a canvas that does not exist cannot fail.** There is nothing to
+break, so there was nothing for a gate to notice.
+
+### The fix
+
+**The rule now says what is true of this tree.** `AGENTS.md` says that this
+tree has no canvas and no camera, that if a canvas is added it must have
+**one** set of camera controls — one module that owns them, with its own caps
+— and that every canvas must go through that module rather than hand-rolling
+its own input. The guidance survives; the name that was not there is gone.
+
+**And the shape is gated.** `cargo xtask lists` now checks every backticked
+module path in the prose: the first part must be a module the tree declares, a
+crate the tree uses, the standard library, a tool, or a primitive type. A
+recipe may propose a name that does not exist yet, and that exemption is keyed
+to the **file** — the same shape as the command ids' exemption — so an
+invented name anywhere else is still caught.
+
+The gate found the defect on its first run, before the rule was rewritten:
+
+```
+error: 1 shared-list problem(s):
+   • AGENTS.md: line 140 says `navigation::handle`, and `navigation` is not a module or a crate this tree has
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A module path in prose names a module this tree has | `a_module_path_in_prose_that_names_nothing_is_reported` in `xtask` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: *prose: a module path
+that names a module this tree does not have*, which puts `navigation::handle`
+back into `AGENTS.md`. Proven to fail without the fix — the gate reports the
+line, the name and the reason:
+
+```
+AGENTS.md: line 142 says `navigation::handle`, and `navigation` is not a module or a crate this tree has
+```
+
+### What is still open
+
+**The rule that the UI crate is swappable has nothing behind it.**
+`AGENTS.md` says `crates/ui` "depends on `egui` and nothing else — no
+windowing, no renderer — which is what lets the same panels run in a window,
+headlessly, and in a browser". The layer gate checks that nothing **below** L6
+names a UI toolkit, and `crates/ui` **is** L6 — so it may name `eframe`,
+`winit` or `wgpu` without a word. The wasm build would notice some of those
+and not others, and "the wasm build noticed" is not the rule. §131.
+
+**A module path is the only shape this check reads.** A sentence that names a
+*type* this tree does not have, or a *function*, is not caught: the check is
+about the module-shaped head, because a module is a name the tree either has
+or does not, and a type or a method is a claim about a shape as well as a
+name. The gap is real and it is bounded — the one dangling name the sweep
+found was a module — but it is a bound and not a proof.
+
+### The lesson
+
+**A rule carried in from another tree is a rule about another tree.** The
+sentence was true where it came from and false where it arrived, and the
+thing that carried it — a scaffold copied into an application — is a thing
+that copies the wrong sentences too.
+
+**A rule that names a module is a claim that the module exists.** The claim
+was in the file every agent reads first, and it had been false since the rule
+arrived. Nothing was going to notice: the rule was about a canvas, and there
+is no canvas to break.
+
+**The document that is read first is read by nobody.** This one was not read
+by a person but by an agent, and an agent that follows it looks for
+`navigation::handle`, does not find it, and learns nothing — which is the
+worst outcome a rule can have, because it looks like the rule simply does not
+apply.
+
+**A gate checks the shapes it knows.** Three shapes of prose claim were
+checked — a symbol beside a file, a document reference, a line number — and
+the shape in this sentence was a fourth. The sweep that found it looked for
+*any* backticked dotted name, and it found six; the gate that now holds it
+down reads the same shape, and it reads one.
+
+---
+
 ---
 
 ## What enforces what
@@ -14446,6 +14577,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The node list draws the rows the collector found** | `craftkit-ui` test | 1 mutation — §127 |
 | **The wheel scrolls the node list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §128 |
 | **A reused node still reports its problem** | `craftkit-eval` test | 1 mutation — §129 |
+| **A module path in prose names a module this tree has** | `cargo xtask lists` | 1 mutation — §130 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

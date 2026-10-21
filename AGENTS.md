@@ -136,9 +136,11 @@ needs and then runs it. §118.
   evaluator, never caches a value the evaluator computes. `crates/ui` depends
   on `egui` and nothing else — no windowing, no renderer — which is what lets
   the same panels run in a window, headlessly, and in a browser.
-- **One set of camera controls.** Any new canvas calls
-  `navigation::handle`-style handling with its own caps; never hand-roll camera
-  input.
+- **One set of camera controls.** This tree has no canvas and no camera: the
+  window draws a node graph, a timeline and a properties panel. If a canvas is
+  added, it must have **one** set of camera controls — one module that owns
+  them, with its own caps — and every canvas must go through that module
+  rather than hand-rolling its own input.
 
 ---
 
