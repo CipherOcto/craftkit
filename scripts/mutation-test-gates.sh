@@ -2180,7 +2180,7 @@ expect_catch "engine: the command does not ask the model what a name is" \
 # It used to reach the backstop -- "the command declared that it mutates the
 # document but changed nothing" -- which is an internal error. §92.
 swap crates/engine/src/commands.rs \
-    '        if p.raw("start").is_none() && p.raw("end").is_none() && p.raw("fps").is_none() {' \
+    '        if !p.has("start") && !p.has("end") && !p.has("fps") {' \
     '        if false {'
 expect_catch "engine: a command asked to change nothing is reported as a crash" \
     "cargo test -p craftkit-engine --profile ci a_range_command_with_nothing_to_change_is_a_refusal"
