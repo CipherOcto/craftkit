@@ -332,6 +332,28 @@ impl Session {
     /// Note what this does **not** do: it never opens a dialog, prompts, or
     /// touches the clipboard. Those are interactive concerns and belong to
     /// `ui.start`, which the front ends call instead.
+    ///
+    /// # What a command costs
+    ///
+    /// A command walks the whole document **four times**, and the document is
+    /// as large as the model allows. Measured on a document at the model's
+    /// limits — one node, 32 properties, 10 000 keyframes on each, 30 730 191
+    /// bytes estimated, inside `MAX_DOCUMENT_BYTES`:
+    ///
+    /// | Step | Cost | Why |
+    /// |---|---|---|
+    /// | the snapshot | 3.1 ms | the document is copied so a failed or panicking command can put it back |
+    /// | the comparison | 1.9 ms | has the command changed anything? (§93, §96) |
+    /// | the validation | 5.3 ms | is the document still one the file reader would accept? (§50) |
+    /// | the estimate | 1.2 ms | how many bytes the undo stack is holding (§52) |
+    ///
+    /// A read-only command pays the first two — **6.7 ms** — and a mutating
+    /// one pays all four and re-evaluates the plan: **23.8 ms**. That is more
+    /// than a frame at sixty frames a second, on a document the model accepts.
+    ///
+    /// The numbers were measured once and are in `KNOWN-GAPS.md` §103; the
+    /// point of writing them here is that §52's own sentence attributed the
+    /// whole of this to the snapshot, which is a seventh of it.
     pub fn execute(&mut self, id: &str, params: &Json) -> Result<Outcome, EngineError> {
         let Some(spec) = command::lookup(id) else {
             let err = EngineError::Unknown(id.to_string());

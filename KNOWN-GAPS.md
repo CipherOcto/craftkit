@@ -3431,10 +3431,21 @@ The engine still clones the whole document for **every** command, including
 the read-only ones, because the snapshot is what restores the design if a
 command fails or panics. Measured on the 19 MiB document: the clone is
 **205 µs**, and twenty cheap commands through the engine take 38 ms — so
-about 1.9 ms of engine overhead per command. That is the price of the
-restore guarantee, and it is the right price: a snapshot cannot be subtly
-wrong, which is the whole reason the design is snapshots rather than
-inverted commands.
+about 1.9 ms of engine overhead per command.
+
+> **§103 corrected the last two sentences of that paragraph.** "That is the
+> price of the restore guarantee" pointed at the clone, which is a seventh of
+> the overhead: a command walks the whole document **four** times — the
+> snapshot, the comparison, the validation and the size estimate — and the
+> other three were added after this section was written and never measured.
+> On a document at the model's limits a mutating command costs **23.8 ms**,
+> which is more than a frame at sixty frames a second. §103 has the
+> measurement and names the four.
+
+That is the price of the restore guarantee, and it is the right price: a
+snapshot cannot be subtly wrong, which is the whole reason the design is
+snapshots rather than inverted commands. It is also only a seventh of the
+overhead, and §103 has the rest.
 
 The 108 ms that first showed up in this section was **not** the clone. It was
 `plan.evaluate` doing a full, uncached evaluation of the whole document on
@@ -10544,6 +10555,122 @@ honest — but the run is gone, and it is gone after the twenty minutes it
 took to get there. It happened, in this section's own measurement. The
 header says it now.
 
+## 103. The engine walks the whole document four times a command, and the tree had measured one of them
+
+§52 measured the engine's per-command overhead once, and wrote a sentence about
+it:
+
+> Measured on the 19 MiB document: the clone is **205 µs**, and twenty cheap
+> commands through the engine take 38 ms — so about 1.9 ms of engine overhead
+> per command. **That is the price of the restore guarantee**, and it is the
+> right price.
+
+The clone is 205 µs. The overhead is 1.9 ms. The sentence calls the whole of it
+the price of the restore guarantee — and the restore guarantee is the clone,
+which is a **tenth** of it.
+
+The other three quarters were never measured, because nobody thought to ask
+what they were.
+
+### The measurement
+
+A document at the model's limits — one node, 32 properties, 10 000 keyframes on
+each, **30 730 191** bytes estimated, inside `MAX_DOCUMENT_BYTES` (32 MiB) and
+inside every count the model has. Measured on the fastest of five rounds each
+(§101's rule), on an idle machine:
+
+| Step | Cost | What it is for |
+|---|---|---|
+| the snapshot | **3.1 ms** | the document is copied, so a failed or panicking command can put it back |
+| the comparison | **1.9 ms** | has the command changed anything? (§93, §96) |
+| the validation | **5.3 ms** | is the document still one the file reader would accept? (§50) |
+| the estimate | **1.2 ms** | how many bytes the undo stack is holding (§52) |
+| **a read-only command** | **6.7 ms** | the first two, plus the command's own work |
+| **a mutating command** | **23.8 ms** | all four, and a re-evaluation of the plan |
+
+Four walks over the whole document, for every command, on a document the model
+accepts. The mutating command's 23.8 ms is **more than a frame** at sixty
+frames a second.
+
+The four are not the same kind of thing, and that matters for what could be
+done about them:
+
+- The **snapshot** is the restore guarantee. It is the price of being able to
+  put the design back, and copy-on-write would be a redesign of the model's
+  ownership rules — item 7 in the list below, and still open.
+- The **comparison** and the **validation** are *backstops*: they catch a
+  command that lies about what it did (§93, §96) and a command that leaves a
+  document the reader would refuse (§50). They are the reason the tree can
+  say "a command cannot leave a broken design".
+- The **estimate** is the undo stack's byte accounting (§52). It is only
+  expensive on a document big enough for the budget to matter, and on such a
+  document it is what keeps the budget honest.
+
+### Why nothing noticed
+
+**The one measurement that existed was about the clone.** §52 was looking at
+the undo stack, and the clone was the cost it could see from there. The
+comparison and the validation were added *after* §52 — §93, §96 and §50 — and
+nobody went back to the sentence that said what a command costs.
+
+**The number was right and the attribution was wrong.** "About 1.9 ms of engine
+overhead per command" was true. "That is the price of the restore guarantee"
+was not: the restore guarantee is 205 µs of it. A sentence can be half right
+in a way that is worse than being wrong, because the wrong half is the one
+that gets quoted.
+
+**A cost that is invisible at the sizes people use is invisible.** A document
+with ten nodes and a hundred properties validates in microseconds. The four
+walks only show up at the size the model *allows*, which is the same shape as
+§98: the numbers a small document hides are the numbers that matter.
+
+### The fix
+
+**The sentence is corrected, and the four walks are named.** §52's "what is
+still open" now says what a command costs and says which part of it is the
+restore guarantee.
+
+**The numbers are in the code**, on `Session::execute` — the place a reader
+who is about to make a command slower will actually look. §52's lesson was
+that a comment saying a thing was profiled is a promise to the next reader,
+and a promise has to be kept; this one is kept by measurement and not by
+confidence.
+
+**The open question is recorded rather than answered.** The two backstops cost
+7.2 ms of the 23.8 ms, and they are safety. Whether a document at the model's
+byte limit should be *editable* — the byte limit is a storage limit, and
+nothing in the tree says what an interaction limit would be — is a decision,
+and it is item 18 below.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| What a command costs is measured, and says which part of it is the restore | `Session::execute`'s doc comment, and §52's numbers |
+
+No new mutation: the rules this section is about — the snapshot, the
+comparison, the validation and the budget — are already mutation-tested, and
+this section measures them rather than changing them.
+
+### The lesson
+
+**A measurement of one part of a cost is not a measurement of the cost.** The
+clone was measured because it was the thing being looked at. Three other walks
+sat beside it, in the same function, and were not.
+
+**A sentence about a cost can be half right in the worst way.** "1.9 ms per
+command" was true; "that is the price of the restore guarantee" pointed
+everybody at the cheapest seventh of it, and the sentence is what a reader
+would quote.
+
+**The cost of a command is not the cost of the work it does.** The work is a
+property write. The cost is four passes over the design, and the design is as
+large as the model allows.
+
+**And a limit is a promise about more than storage.** `MAX_DOCUMENT_BYTES` says
+a design may be 32 MiB. It does not say what that design costs to edit, and at
+that size a single command costs more than a frame.
+
 ---
 
 ---
@@ -10751,6 +10878,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A mutation that does not compile is not a catch** | the mutation script | its third outcome, and the self-test's third half — §102 |
 | **A skipped phase is not counted as one that ran** | `xtask` test | 1 mutation — §102 |
 | **The phase list is the documented one** | `xtask` test | 1 mutation — §102 |
+| **What a command costs is measured, and says which part of it is the restore** | `Session::execute`'s doc comment | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -10949,6 +11077,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    depended on the machine's **load**, and failed four times in ten when the
    machine was busy. Twenty-one instances, and the twenty-first is the first
    one that was a promise about the *checking* rather than about the tree.
+   §103 is the twenty-second, and it is a sentence about a *cost*: §52 said
+   the engine's overhead per command was 1.9 ms and that "that is the price of
+   the restore guarantee", and the restore guarantee is 205 µs of it — the
+   other three quarters were three more walks over the document, added after
+   §52 was written and never measured. Twenty-two instances, and the
+   twenty-second is the only one where the number was right and the
+   attribution was not.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
@@ -11084,3 +11219,21 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     is open is whether a document may carry a rate whose frame boundaries are
     not exact. If not, the rule is already derived — `FrameRate::is_exact` —
     and the reader and the command can refuse those rates with it.
+18. **Decide what a command may cost.** §103 measured what a command costs on
+    a document at the model's limits: the engine walks the whole document four
+    times — the snapshot, the comparison, the validation and the size estimate
+    — and a mutating command costs **23.8 ms**, which is more than a frame at
+    sixty frames a second. The snapshot is item 7's question (copy-on-write).
+    The comparison and the validation are *safety*: the comparison catches a
+    command that lies about what it did (§93, §96) and the validation catches
+    one that leaves a document the file reader would refuse (§50), and between
+    them they cost 7.2 ms of the 23.8. The estimate is the undo stack's byte
+    accounting (§52), and it is what keeps that budget honest. The question is
+    not whether to keep them — they are the reason the tree can promise that a
+    command cannot leave a broken design — but **what a document may cost to
+    edit**. `MAX_DOCUMENT_BYTES` is a *storage* limit: it says a design may be
+    32 MiB, and says nothing about what that design costs to drive. A second
+    limit, on the cost rather than the size, would be a new number in a new
+    place, and the tree has no way to measure the cost of a command without
+    building a document at the limit to measure it on — which is what §103
+    did, and why the numbers are here and not in a gate.
