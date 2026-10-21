@@ -63,6 +63,11 @@ struct Application {
     session: Session,
     stash: Box<dyn Stash>,
     /// Kept between frames by the host; see [`craftkit_ui::frame`].
+    ///
+    /// §105: this field existed and was *assigned* the shell's state every
+    /// frame, which is the same as not keeping it at all: the shell's state
+    /// was replaced by a fresh one each frame, so the selection never
+    /// survived a redraw. The state must be handed **in** as well as out.
     state: craftkit_ui::ShellState,
     /// True once a stash has been written, so the panel can say "saved" rather
     /// than making the user wonder whether it has ever saved anything.
@@ -80,8 +85,10 @@ impl Application {
     /// Draw one frame: the shell, then this host's own storage panel.
     fn frame(&mut self, ctx: &eframe::egui::Context) {
         let tokens = craftkit_ui::Tokens::dark();
-        let (state, _automation) = craftkit_ui::frame(ctx, &mut self.session, &tokens);
-        self.state = state;
+        // The state goes in as well as out: the shell is built for the frame
+        // and dropped, so a host that does not hand its state back loses the
+        // selection before the next frame. §105.
+        let _automation = craftkit_ui::frame(ctx, &mut self.session, &tokens, &mut self.state);
         self.storage_panel(ctx, &tokens);
     }
 

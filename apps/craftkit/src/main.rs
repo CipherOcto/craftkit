@@ -123,7 +123,9 @@ fn main() -> std::process::ExitCode {
     let run = eframe::run_native(
         "craftkit",
         options,
-        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot }))),
+        Box::new(|_cc| {
+            Ok(Box::new(Application { session, ctx_slot, state: craftkit_ui::shell::ShellState::default() }))
+        }),
     );
     match run {
         Ok(()) => {
@@ -675,6 +677,13 @@ fn install_logger() {
 struct Application {
     session: Arc<Mutex<Session>>,
     ctx_slot: ContextSlot,
+    /// What the shell remembers between frames.
+    ///
+    /// §105: the window draws with a fresh shell every frame, and the shell
+    /// is where the selection and the status line live. Without this the
+    /// selection was gone before the next frame, and the properties panel
+    /// could never open.
+    state: craftkit_ui::shell::ShellState,
 }
 
 impl eframe::App for Application {
@@ -698,7 +707,7 @@ impl eframe::App for Application {
         // A panic in the drawing code is caught here, where the session is
         // still in hand, and the crash report is written from here. §76.
         let outcome = draw_guarded(&mut session, None, |session| {
-            let _ = craftkit_ui::frame(ctx, session, &tokens);
+            let _ = craftkit_ui::frame(ctx, session, &tokens, &mut self.state);
         });
         if let Err(message) = outcome {
             log::error!("the drawing code panicked ({message}); the crash report has been written");

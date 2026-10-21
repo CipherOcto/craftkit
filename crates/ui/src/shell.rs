@@ -26,8 +26,14 @@ use crate::theme::Tokens;
 
 /// What the shell remembers between frames.
 ///
-/// Selection and the transient status line, and nothing else. The document lives
-/// in the [`Session`]; a second copy here would be a second thing to go stale.
+/// Selection, the transient status line, and the text of the "key at the
+/// playhead" fields — the things a person typed and the app must not forget
+/// because it redrew. The document lives in the [`Session`]; a second copy
+/// here would be a second thing to go stale.
+///
+/// §105: this was "selection and the status line", and the desktop app drew
+/// every frame with a *new* shell, so the selection was gone before the next
+/// frame and the properties panel could never open.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct ShellState {
     /// The selected node, if any.
@@ -36,6 +42,13 @@ pub struct ShellState {
     pub status: String,
     /// Whether the last command failed, which is what colours the status bar.
     pub status_is_error: bool,
+    /// The path typed into the "key at the playhead" field.
+    ///
+    /// It is not in the document, because it is a path *to* something in the
+    /// document and not part of it yet. §105.
+    pub key_path: String,
+    /// The value typed into the "key at the playhead" field.
+    pub key_value: String,
 }
 
 /// The shell.
@@ -293,21 +306,26 @@ impl<'a> Shell<'a> {
 
         ui.separator();
         ui.label(RichText::new("Key at the playhead").color(tokens.text_dim));
-        let mut path_text = String::new();
-        let mut value_text = String::new();
-        let path_field = ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount"));
+        // The text lives in the shell's state, not in a local: a local is
+        // rebuilt every frame, and the person typing would watch every
+        // keystroke disappear. §105.
+        let path_field =
+            ui.add(egui::TextEdit::singleline(&mut self.state.key_path).hint_text("path, e.g. amount"));
         self.automation.publish(AutomationId::key_path(), path_field.rect, true);
-        let path_changed = path_field.changed();
-        if path_changed {
-            let value_field = ui.add(egui::TextEdit::singleline(&mut value_text).hint_text("value"));
+        // The value field is here while there is a path to put a value on.
+        // It used to appear only on the frame the path changed, which meant
+        // it was gone before anything could be typed into it. §105.
+        if !self.state.key_path.is_empty() {
+            let value_field =
+                ui.add(egui::TextEdit::singleline(&mut self.state.key_value).hint_text("value"));
             self.automation.publish(AutomationId::key_value(), value_field.rect, true);
             if value_field.changed() {
                 actions.push((
                     "key.set",
                     serde_json::json!({
                         "node": id.get(),
-                        "path": path_text,
-                        "value": value_text,
+                        "path": self.state.key_path.clone(),
+                        "value": self.state.key_value.clone(),
                         "time": self.session.at().seconds_f64(),
                     }),
                 ));
@@ -422,14 +440,27 @@ fn draw_level_bar(ui: &mut Ui, tokens: &Tokens, level: f64) -> (Rect, Rect) {
     (rect, fill)
 }
 
-/// Draw one frame and hand the finished shell back.
+/// Draw one frame, carrying the shell's state from the last one.
 ///
 /// The host keeps the [`ShellState`] and the [`Automation`] registry; it must
 /// not keep the [`Shell`], whose borrow ends here.
-pub fn frame(ctx: &Context, session: &mut Session, tokens: &Tokens) -> (ShellState, Automation) {
+///
+/// The state is the selection, the status line and the text of the "key at
+/// the playhead" fields — the things the shell remembers between frames. A
+/// host that draws with a fresh shell every frame must **keep** it and hand it
+/// back in, or the selection is gone before the next frame and the
+/// properties panel can never open. §105.
+pub fn frame(ctx: &Context, session: &mut Session, tokens: &Tokens, state: &mut ShellState) -> Automation {
     let mut shell = Shell::new(session);
+    // Copied in and copied out rather than moved, so that a panic in the
+    // drawing code leaves the host's state as it was: the desktop app catches
+    // that panic, and the person who caused it should not also lose their
+    // selection. The copy is two short strings and a flag — nothing next to
+    // the milliseconds a frame costs elsewhere (§103).
+    shell.state = state.clone();
     shell.show(ctx, tokens);
-    (shell.state, shell.automation)
+    *state = shell.state.clone();
+    shell.automation
 }
 
 /// Whether a widget is present and clickable at `name`.
@@ -842,6 +873,113 @@ mod tests {
             registry.known(&row),
             Widget::Missing,
             "`{row}` promises a keyframe row, and there is no such widget"
+        );
+    }
+
+    /// One frame through [`frame`], with the given input.
+    ///
+    /// The state is carried the way a host carries it: in and out, so that a
+    /// frame can see what the last one remembered. §105.
+    fn one_frame(
+        ctx: &Context,
+        session: &mut Session,
+        tokens: &Tokens,
+        state: &mut ShellState,
+        input: egui::RawInput,
+    ) -> Automation {
+        let mut out = None;
+        let _ = ctx.run(input, |ctx| {
+            out = Some(frame(ctx, session, tokens, state));
+        });
+        out.expect("the frame ran")
+    }
+
+    /// The state survives from one frame to the next.
+    ///
+    /// §105: the desktop app draws with `frame()`, which builds a shell for
+    /// the frame and drops it — so the shell's state (the selection, the
+    /// status line) was gone before the next frame, and the properties panel
+    /// could never open.
+    #[test]
+    fn a_selection_made_in_one_frame_is_there_in_the_next() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        // Where the first row is: draw a frame and look.
+        let mut state = ShellState::default();
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let rect = automation.rect("nodes.row.1").expect("the first row has a rectangle");
+        // Frame one: press on it.
+        let press = egui::RawInput {
+            events: vec![egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+            ..Default::default()
+        };
+        one_frame(&ctx, &mut session, &tokens, &mut state, press);
+        // And release: a click is a press and a release.
+        let release = egui::RawInput {
+            events: vec![egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+            ..Default::default()
+        };
+        one_frame(&ctx, &mut session, &tokens, &mut state, release);
+        assert!(state.selected.is_some(), "the click did not select the node");
+        // Frame three: nothing happens, and the selection must still be there.
+        one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        assert!(state.selected.is_some(), "the selection was lost between frames");
+    }
+
+    /// A path typed into the "key at the playhead" field is still there in
+    /// the next frame.
+    ///
+    /// §105: the field's text was a local, rebuilt every frame, so every
+    /// keystroke was thrown away — and the value field, which only appeared
+    /// on the frame the path changed, was gone before anything could be typed
+    /// into it.
+    #[test]
+    fn a_path_typed_into_the_key_field_is_still_there_in_the_next_frame() {
+        let mut session = Session::sample();
+        let first = session.document().nodes[0].id;
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(first), ..ShellState::default() };
+        // Where the path field is.
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let rect =
+            automation.rect(AutomationId::key_path().as_str()).expect("the path field has a rectangle");
+        // Click it, so that it has the focus a typed character goes to.
+        for pressed in [true, false] {
+            let click = egui::RawInput {
+                events: vec![egui::Event::PointerButton {
+                    pos: rect.center(),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                }],
+                ..Default::default()
+            };
+            one_frame(&ctx, &mut session, &tokens, &mut state, click);
+        }
+        // And type a path.
+        let typed = egui::RawInput { events: vec![egui::Event::Text("amount".into())], ..Default::default() };
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, typed);
+        assert!(
+            automation.rect(AutomationId::key_value().as_str()).is_some(),
+            "the value field did not appear once there was a path"
+        );
+        // The next frame: the path is still typed.
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        assert!(
+            automation.rect(AutomationId::key_value().as_str()).is_some(),
+            "the typed path was thrown away when the frame was redrawn"
         );
     }
 

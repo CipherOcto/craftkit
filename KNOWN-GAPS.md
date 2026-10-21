@@ -10771,6 +10771,132 @@ click that worked.
 
 ---
 
+## 105. The window drew a fresh shell every frame, and threw the shell's memory away with it
+
+§99, §100 and §104 were all about the **registry**: the names of the widgets and
+where they were. Every one of them was about a thing the shell *publishes*.
+
+None of them was about the thing the shell *remembers*.
+
+### The measurement
+
+The desktop app's `Application` held two things: the session, and the slot where
+the egui context is published. Its `update` called `craftkit_ui::frame`, which
+built a **new shell** for the frame, drew it, and handed back the shell's state:
+
+```rust
+let _ = craftkit_ui::frame(ctx, session, &tokens);
+```
+
+The tuple was thrown away. So the shell's state — the selection — lived for the
+length of one frame and was dropped at the end of it.
+
+The properties panel asks for the selection and, when there is none, draws
+*"Select a node."* and returns. The click on a node row set the selection
+*during* the frame; the next frame had a new shell, so the selection was gone
+and the panel said "Select a node." again. Measured:
+
+```
+selected after the click:        Some(NodeId(1))
+selected in the next frame:      None
+selected in the carried frame:   Some(NodeId(1))
+```
+
+The two pictures are the app's own rendering, before and after, at 1200×500:
+
+* **before** — `/tmp/probe105-before.png`: the right-hand panel reads
+  *"Properties / Select a node."* This is what every frame of the window said,
+  no matter what the person clicked.
+* **after** — `/tmp/probe105-after.png`: the row *Level* is highlighted in the
+  node list, and the panel shows *"Level · source"*, the *enabled* checkbox,
+  the *amount* slider, the *label* field and the "key at the playhead" field.
+
+**The browser had the same bug with a different face.** The web app *had* a
+state field, documented as *"Kept between frames by the host"*, and it
+overwrote it with the fresh shell's state every frame:
+
+```rust
+let (state, _automation) = craftkit_ui::frame(ctx, &mut self.session, &tokens);
+self.state = state;
+```
+
+The field was kept. Its contents were replaced by the same emptiness, once a
+frame, for as long as the app ran.
+
+**Two text fields had the same disease and no field at all.** The "key at the
+playhead" path and value were **locals**, rebuilt every frame, so every
+keystroke was discarded — and the value field was drawn only on the frame the
+path changed, which meant it was gone before anything could be typed into it.
+
+### Why nothing noticed
+
+**The headless path kept the shell.** `raster::render` draws both of its
+frames against one shell, so the headless picture could never show a state
+that did not survive. The bug was in the hosts, and the hosts were the two
+things the tests did not use.
+
+**Every test drew one frame.** The shell's tests draw a frame and look at the
+registry. A single frame cannot show a thing that has to survive to the next
+one — the defect is *invisible* to a one-frame observer by construction.
+
+**The state was an output, and an output may be dropped.** `frame` returned
+`(ShellState, Automation)`, so the signature *allowed* a host to throw the
+state away, and the desktop app did exactly that. `let _ = …` is the loudest
+way of saying "I do not want this", and the type system has nothing to say
+about it: dropping a return value is not a mistake that can be seen.
+
+### The fix
+
+**The frame takes the state as well as giving it back.** The signature is now
+
+```rust
+pub fn frame(ctx: &Context, session: &mut Session, tokens: &Tokens, state: &mut ShellState) -> Automation
+```
+
+The state goes in and comes back through the same reference. A host that
+forgets cannot compile, because there is no longer a return value to forget:
+the only way to draw a frame is to say where the shell's memory lives. The
+desktop app holds a `ShellState`; the web app hands its own field in.
+
+**The two text fields are in the state**, and the value field is drawn whenever
+there is a path to put a value on — not only on the frame the path changed.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A selection made in one frame is there in the next | `a_selection_made_in_one_frame_is_there_in_the_next` |
+| A path typed into the key field is still there in the next frame | `a_path_typed_into_the_key_field_is_still_there_in_the_next_frame` |
+
+and four mutations in `scripts/mutation-test-gates.sh`: the frame forgets the
+state it was given; the frame does not give the state back; the key path field
+keeps its text in a local; the key value field is only there on the frame the
+path changed.
+
+The host half needs no mutation, and that is the point of the fix: **the
+desktop app cannot drop the state, because there is nothing to drop.** The
+compiler holds that half now, which is stronger than a test would have been.
+
+### The lesson
+
+**A frame's memory has to be carried across the frame boundary by something
+that outlives it.** The shell is built for the frame and thrown away with it —
+that is what the borrow checker is for. But the shell's *state* is not the
+shell's; it is the app's, and the app has to hold it.
+
+**An output that a caller may drop is a contract nobody signed.** The old
+signature said "here is your state, keep it if you like", and the reader of
+that signature could not tell that keeping it was the whole point. Making the
+state an *input* turns the mistake from a silent omission into a compile
+error — and a compile error is the only kind of gate that cannot be forgotten.
+
+**A one-frame test cannot see a defect that is about the frame boundary.** Not
+"the test was not thorough enough": the defect is *by construction* invisible
+to it. The two tests above draw a frame, then draw another and look at what
+survived.
+
+---
+
 ---
 
 ## What enforces what
@@ -10983,6 +11109,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A click with neither a name nor a point is refused** | `craftkit` test | 1 mutation — §104 |
 | **A click with both a name and a point is refused** | `craftkit` test | 1 mutation — §104 |
 | **The widgets reply says where the widgets are** | `craftkit` test | 1 mutation — §104 |
+| **A selection made in one frame is there in the next** | `craftkit-ui` test | 2 mutations — §105 |
+| **A path typed into the key field is still there in the next frame** | `craftkit-ui` test | 2 mutations — §105 |
+| **A host cannot forget the shell's state** | the compiler — the state is an *input* to `frame` | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -11188,6 +11317,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    §52 was written and never measured. Twenty-two instances, and the
    twenty-second is the only one where the number was right and the
    attribution was not.
+   §105 is the twenty-third, and it is a sentence about a *contract*: the
+   `frame` function's doc said *"The host keeps the `ShellState`"*, and the
+   desktop host did not keep it — it dropped the state on the floor every
+   frame, and the web host's field said *"Kept between frames by the host"*
+   while it was overwritten with the same emptiness once a frame. Twenty-three
+   instances, and the twenty-third is the one where the sentence described a
+   promise the code was making *to the reader of the sentence* rather than to
+   the compiler.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

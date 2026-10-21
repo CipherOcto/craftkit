@@ -272,7 +272,7 @@ cargo run --release -p craftkit -- --sample --control 4711
 ```
 
 Flags: `--sample`, `--control PORT`, an optional `[FILE]`, `-h`, `-V`
-(`apps/craftkit/src/main.rs:129`). An unreadable file still yields a usable session
+(`parse_flags` in `apps/craftkit/src/main.rs`). An unreadable file still yields a usable session
 rather than refusing to start.
 
 ### c. The control channel

@@ -2496,5 +2496,43 @@ swap apps/craftkit/src/main.rs \
 expect_catch "ui: the published rectangles have no width" \
     "cargo test -p craftkit --profile ci the_widgets_reply_says_where_the_widgets_are"
 
+# The desktop app built a fresh shell every frame and threw the shell's state
+# away with it, so the selection was gone before the next frame and the
+# properties panel could never open. The frame now *takes* the state as well
+# as giving it back. §105.
+swap crates/ui/src/shell.rs \
+    '    shell.state = state.clone();' \
+    '    shell.state = ShellState::default();'
+expect_catch "ui: the frame forgets the state it was given" \
+    "cargo test -p craftkit-ui --profile ci a_selection_made_in_one_frame_is_there_in_the_next"
+
+# ...and the other way round: the frame draws with the host's state but never
+# gives back what the frame changed, so a selection made during the frame was
+# lost just the same. §105.
+swap crates/ui/src/shell.rs \
+    '    *state = shell.state.clone();' \
+    '    let _ = &shell.state;'
+expect_catch "ui: the frame does not give the state back" \
+    "cargo test -p craftkit-ui --profile ci a_selection_made_in_one_frame_is_there_in_the_next"
+
+# The "key at the playhead" path field kept its text in a local, which is
+# rebuilt every frame: every keystroke was thrown away. §105.
+swap crates/ui/src/shell.rs \
+    '        let path_field =
+            ui.add(egui::TextEdit::singleline(&mut self.state.key_path).hint_text("path, e.g. amount"));' \
+    '        let mut path_text = String::new();
+        let path_field =
+            ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount"));'
+expect_catch "ui: the key path field keeps its text in a local" \
+    "cargo test -p craftkit-ui --profile ci a_path_typed_into_the_key_field_is_still_there_in_the_next_frame"
+
+# The value field appeared only on the frame the path changed, so it was gone
+# before anything could be typed into it. §105.
+swap crates/ui/src/shell.rs \
+    '        if !self.state.key_path.is_empty() {' \
+    '        if path_field.changed() {'
+expect_catch "ui: the key value field is only there on the frame the path changed" \
+    "cargo test -p craftkit-ui --profile ci a_path_typed_into_the_key_field_is_still_there_in_the_next_frame"
+
 restore
 finish
