@@ -92,8 +92,12 @@ implementation panicked …"*, not *"error"*.
 
 `KernelError::Internal` is a distinct variant from `Refused` and `Failed`
 because it means "a bug, not your input", and the engine reports the two
-differently. `recovered_count()` and `guarded()` let it tell the two apart
-without parsing a log.
+differently. **The variant is what tells them apart** — the engine reads the
+error it is holding, and does not parse a log to find out what happened.
+`recovered_count()` and `guarded()` are diagnostics, not the decision: the
+first is what `session.stats` reports as `kernel_recoveries`, and the second
+answers a question about one thread's stack that **nothing outside the kernel
+asks** (§114).
 
 The two counters have different scopes on purpose, and swapping them would
 break the engine in opposite ways. `guarded()` is **per-thread**: it answers

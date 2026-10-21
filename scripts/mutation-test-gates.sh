@@ -2848,5 +2848,20 @@ swap crates/control/src/server.rs \
 expect_catch "control: the crash actions are not the engine's" \
     "cargo test -p craftkit-control --profile ci the_crash_replay_says_whether_it_reproduced_the_document"
 
+# The kernel's two counters were described as the ones the engine tells its
+# failures apart with, and the engine uses one of them for a different
+# question. The corrected prose says what `guarded()` actually answers: "is
+# this thread inside a guarded call?" -- and outside one, the answer is no.
+# §114.
+swap crates/kernel/src/lib.rs \
+    'pub fn guarded() -> bool {
+    DEPTH.with(|d| d.get() > 0)
+}' \
+    'pub fn guarded() -> bool {
+    DEPTH.with(|d| d.get() > 0) || true
+}'
+expect_catch "kernel: the guard depth never unwinds" \
+    "cargo test -p craftkit-kernel --profile ci depth_is_balanced_across_nesting_and_early_return"
+
 restore
 finish

@@ -1,8 +1,19 @@
 //! Measuring what a walk cost.
 //!
 //! The kernel is the only layer that touches implementation detail, so it is the
-//! only place that can report *how much work happened*. The engine uses that to
-//! decide whether an evaluation is worth caching.
+//! only place that can report *how much work happened*.
+//!
+//! **Nothing in the tree asks.** The engine's evaluator cache is
+//! *content-addressed* (§80): an entry is reused when the node it was computed
+//! from still hashes the same, and a cost would not change what it decides —
+//! the expensive node is the one whose content changed, whatever it cost to
+//! compute. So this is the seam where a cost-based rule would live, and there
+//! is no such rule. §114.
+//!
+//! The doc comment here used to say *"The engine uses that to decide whether
+//! an evaluation is worth caching"*, and the engine has never used it. The
+//! counter it does report — `session.stats`'s `kernel_recoveries` — comes
+//! from `recovered_count()`, and that one is about panics, not about time.
 
 use super::KernelError;
 use std::time::Instant;

@@ -11944,6 +11944,108 @@ covered what the tree can do.
 
 ---
 
+## 114. The kernel described an engine that does not call it
+
+### The measurement
+
+Three sentences, in three files, about the same thing — the kernel's API and
+the engine that was supposed to be using it:
+
+| Where | What it says |
+|---|---|
+| `crates/kernel/src/measure.rs` | *"The kernel is the only layer that touches implementation detail, so it is the only place that can report **how much work happened**. **The engine uses that to decide whether an evaluation is worth caching.**"* |
+| `crates/kernel/src/lib.rs`, on `guarded()` | *"**The engine uses this** to decide whether a recovered panic should be surfaced to the user as a warning or can be logged quietly: a kernel panic during ordinary work is a bug worth reporting, and one during a speculative background pass is noise."* |
+| `docs/patterns/one-trust-boundary.md` | *"…and the engine reports the two differently. **`recovered_count()` and `guarded()` let it tell the two apart without parsing a log.**"* |
+
+And what the tree actually does:
+
+- **The engine's cache is content-addressed, not cost-based** (§80). An entry
+  is reused when the node it was computed from still hashes the same, and the
+  walk stops at the first entry that does not. A *cost* would not change that
+  decision: the expensive node is the one whose content changed, whatever it
+  cost to compute. `measure_run` is called by its own tests and by nothing
+  else — a negative result §62 already recorded, in a different context.
+- **`guarded()` is called by nothing outside the kernel crate.** The engine's
+  rule for a recovered kernel panic is one rule: it is a bug, it is reported
+  as `EngineError::Internal`, and the application's panic hook writes a crash
+  report for it, because a panic that was recovered is still a panic. There
+  is no quiet path, and there is no speculative background pass.
+- **The engine tells "a bug" from "your input" by the variant it is holding.**
+  `KernelError::Internal` against `Refused` and `Failed` — not by a counter.
+  `recovered_count()` is what `session.stats` reports as `kernel_recoveries`:
+  a diagnostic, not a decision.
+
+### Why nothing noticed
+
+**The kernel is the crate the tree trusts most, so its doc comments are the
+ones nobody re-reads.** The kernel is the trust boundary (§78), the one place
+a foreign implementation would be plugged in, and a reader who is checking the
+*rule* does not stop to check the *caller*.
+
+**The sentences were written for a design that was better and never arrived.**
+A cost-based cache and a quiet path for speculative work are both reasonable
+things to want. The tree grew a seam for each and then grew a different rule:
+the cache became content-addressed, and the quiet path became unnecessary
+because the only guarded operation the application calls — `apply_gain` — has
+total arithmetic, so nothing is recovered to keep quiet about. The seams
+stayed, and the sentences stayed with them.
+
+**Nothing calls them, so nothing contradicts them.** A doc comment is not
+checked against its callers. The tree's own gates check prose against
+*constants*, *symbols* and *commands* (§41, §42, §77) — never against the
+callers of a function.
+
+### The fix
+
+**The three sentences now say what is true**, and say it in a way a reader can
+check:
+
+- the measurement module says that **nothing in the tree asks** for a cost,
+  and why a cost would not change the cache's decision;
+- `guarded()` says that **nothing outside the crate calls it**, that it is
+  the per-thread counterpart of `recovered_count()`, and that the tree has
+  one rule for a recovered kernel panic — reported, never quiet;
+- the pattern document says that **the variant** is what tells a bug from a
+  bad input, and that the two counters are diagnostics rather than the
+  decision.
+
+**The facts the sentences now describe are pinned by the kernel's own tests**
+— the depth balances across nesting and an early return, a guarded call on
+one thread does not guard another, and a recovery on one thread is counted on
+another — and one new mutation holds the boundary: *the guard depth never
+unwinds*.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The guard depth balances | `depth_is_balanced_across_nesting_and_early_return` |
+| A guarded call on one thread does not guard another | `being_guarded_on_one_thread_does_not_guard_another` |
+| A recovery on one thread is counted on another | `a_recovery_on_one_thread_is_counted_on_another` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: the guard depth never
+unwinds.
+
+### The lesson
+
+**A library's API outlives the caller it was written for, and its doc
+comment keeps that caller alive in the reader's mind.** Three sentences
+described an engine that does not exist, in the crate the tree trusts most,
+and every one of them was about a *caller*.
+
+**A seam is not a rule.** The kernel has a measurement and a per-thread guard,
+and the tree has neither a cost-based cache nor a quiet path. Both seams are
+still the right place for those rules to live; neither rule exists, and a
+sentence that says one does is worse than no sentence — because it is
+*checkable-looking*.
+
+**The gates check prose against constants, symbols and commands — never
+against callers.** That is the hole this section fell into, and it is a
+general one: a doc comment's most load-bearing claim is usually about
+*who uses it*, and nothing in the tree checks that.
+
+---
+
 ---
 
 ## What enforces what
@@ -12195,6 +12297,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The crash reports are a tool an agent can call** | `craftkit-mcp` test | 2 mutations — §113 |
 | **An action that does not exist is refused** | `craftkit-mcp` test | 1 mutation — §113 |
 | **The three crash actions are one rule** | `craftkit-engine` test | 1 mutation — §113 |
+| **The guard depth balances** | `craftkit-kernel` test | 1 mutation — §114 |
+| **A guarded call on one thread does not guard another** | `craftkit-kernel` test | 1 mutation — §62 |
+| **A recovery on one thread is counted on another** | `craftkit-kernel` test | 1 mutation — §62 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -12451,6 +12556,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    command, and did not appear from the registry. Thirty instances, and the
    twenty-ninth and the thirtieth are the only ones where the sentence was
    about the *shape* of a surface rather than about the surface itself.
+   §114 is the thirty-first, the thirty-second and the thirty-third, and they
+   are all about a **caller**: the kernel's measurement module said *"The
+   engine uses that to decide whether an evaluation is worth caching"*; the
+   kernel's `guarded()` said *"The engine uses this to decide whether a
+   recovered panic should be surfaced to the user as a warning or can be
+   logged quietly"*; and the trust-boundary pattern said *"`recovered_count()`
+   and `guarded()` let it tell the two apart without parsing a log"*. The
+   engine calls none of them that way, and never did. Thirty-three instances,
+   and the thirty-first to the thirty-third are the only ones whose subject is
+   a **caller** rather than the thing itself — which is the one kind of claim
+   the tree's gates do not check at all.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the

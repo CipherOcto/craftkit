@@ -115,10 +115,18 @@ impl Drop for Depth {
 
 /// True when the current thread is inside at least one guarded call.
 ///
-/// The engine uses this to decide whether a recovered panic should be surfaced
-/// to the user as a warning or can be logged quietly: a kernel panic during
-/// ordinary work is a bug worth reporting, and one during a speculative
-/// background pass is noise.
+/// **Nothing outside this crate calls it.** It is the per-thread counterpart
+/// of [`recovered_count()`] — "is *this* thread inside a guarded call?" beside
+/// "has the kernel recovered anywhere?" — and the tree has one rule for a
+/// recovered kernel panic: it is a bug, it is reported, and it is never quiet.
+/// The engine surfaces every one of them as an internal error, and the
+/// application's panic hook writes a crash report for each, because a panic
+/// that was recovered is still a panic.
+///
+/// The doc comment here used to say *"The engine uses this to decide whether a
+/// recovered panic should be surfaced to the user as a warning or can be
+/// logged quietly"*, and there is no such decision anywhere: the tree has no
+/// speculative background pass to keep quiet about. §114.
 pub fn guarded() -> bool {
     DEPTH.with(|d| d.get() > 0)
 }
