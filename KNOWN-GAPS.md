@@ -13483,6 +13483,12 @@ Fixing §123 measured two things that are **not** fixed. Each of them is in
 the code this section touched, and each is recorded here rather than left in a
 comment.
 
+§126 came out of the same work and closed a **third** thing this section did
+not mention: the panel had no scroll area at all, so the properties that did
+not fit were not on the screen and could not be reached — and the "key at the
+playhead" editor was drawn below the list, off the screen as well. What is
+written below is what §126 did **not** close.
+
 ### The properties panel drew every property of the selected node, on every frame
 
 `egui` lays out a widget per property, and the panel asks for one per property
@@ -13509,6 +13515,165 @@ The marks are drawn on a rail a few hundred pixels wide, so a million of them
 are a million of something nobody can see. The fix is to draw the marks that
 are **near the playhead** and let the rest go — but "near" is a rule nobody
 has written down yet, and it changes what the timeline means.
+
+---
+
+## 126. The properties panel had no scroll area: four thousand of five thousand properties were nowhere to be seen
+
+### The measurement
+
+A design with one node carrying five thousand properties, opened in the real
+window with the node selected, so the properties panel was open on the screen.
+The registry's own answer — the names and rectangles of the widgets the panel
+published:
+
+| what the registry said | before |
+|---|---|
+| property editors named | **5 002** |
+| the first editor's top | y = 20 |
+| the last editor's top | **y = 325 111** |
+| editors below the window's bottom edge (y > 720) | **4 991** |
+
+And the screen itself: the panel showed `p0`, `p1`, `p2` … `p8` and then ran
+off the bottom of the window. There was no scroll bar on it, because there was
+no scroll area in it. The **node list** has had a scroll area since the
+beginning; the properties panel never got one.
+
+Two things were unreachable, and the second one was not even on the screen:
+
+- the four thousand nine hundred and ninety-one properties that did not fit;
+- the **"key at the playhead" editor**, which was drawn *after* the list and
+  was therefore laid out below the panel's bottom edge — off-screen, in every
+  document with more properties than fit.
+
+The registry did not know any of this. It named all five thousand and two
+editors, every one of them with a rectangle, and an agent asking for
+`node.1.prop.p4999` was answered with a rectangle at y = 325 111 — outside the
+window, on a panel that cannot scroll.
+
+### Why nothing noticed
+
+**The panel was always given a node with a handful of properties.** The sample
+design's nodes carry one or two, so the list fitted, and the missing scroll
+area never had anything to hide.
+
+**The registry counts names, and every name was there.** §123 made the panel
+publish one editor per property, and §123's own gate checks exactly that — one
+editor for each property, and no other. A panel that publishes five thousand
+editors and shows nine of them passes that gate perfectly. The gate asked
+"does the panel name every property?", and the answer was yes; nobody asked
+"can anybody *reach* them?".
+
+**The control channel draws its own frame.** `ui {"action":"widgets"}` renders
+through `craftkit_ui::raster::render`, in a context of its own. So the
+registry's rectangles are the ones a fresh frame would lay out — with the
+scroll at the top, always — and they never showed the window's own scroll
+position. Measuring the scroll through the registry was measuring a different
+screen.
+
+**A scroll area in a panel is not the same as a scroll area in a window.**
+egui's scroll area answers the wheel only when the pointer is inside its
+rectangle, and — this is the part that cost the most time to find — a scroll
+area **shrinks to the width of its content** unless it is told not to. In a
+headless frame, a scroll area whose content was 39.3 points wide had an outer
+rectangle 39.3 points wide; a pointer at x = 150 was outside it, so the wheel
+did nothing at all. With the pointer over the content, the same frame scrolled
+(offset 15.9, then 42.7, then 76.9). Every measurement that said "the wheel
+does nothing" was measuring a pointer that was not over the thing.
+
+### The fix
+
+**The rows live in a scroll area, and the scroll area fills the panel's
+width.** `crates/ui/src/shell.rs` draws the property rows inside
+
+```rust
+ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| { … })
+```
+
+`auto_shrink([false, true])` says: do not shrink across, shrink down. The
+scroll area is then as wide as the panel, its scroll bar is at the panel's
+edge, and the wheel answers anywhere across the list — not only over the
+editor of one property.
+
+**The key editor moved above the list.** A scroll area takes the rest of the
+panel, so a control drawn after it is laid out below the panel's bottom edge.
+The "key at the playhead" editor is now drawn between the node's name and the
+list, where it stays put while the list scrolls.
+
+**The rows still borrow the tree** (§123): they are moved *into* the scroll
+area's closure, so the borrow of the session ends with the closure, and the
+commands the panel runs afterwards can still run.
+
+### In the running application
+
+The same design, the same window, the same node — with the wheel turned over
+the properties panel in between the two pictures:
+
+| the properties panel | before | after |
+|---|---|---|
+| the list shows | `p0` … `p8`, then off the bottom | `p15` … `p22` |
+| a scroll bar on the panel | **none** | **one**, at the panel's edge |
+| the "key at the playhead" editor | **not on the screen** | **at the top of the panel**, while the list scrolls |
+
+The screenshots are the evidence: `/tmp/probe126-live-after-before.png` and
+`/tmp/probe126-live-after-after.png`, cropped to the panel in
+`/tmp/probe126-panel-before.png` and `/tmp/probe126-panel-after.png`.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A property that does not fit can be brought into view | `the_properties_panel_scrolls_to_the_properties_that_do_not_fit` in `craftkit-ui` |
+| The wheel scrolls the list from anywhere across the panel | `the_wheel_scrolls_the_list_from_across_the_panel` |
+| The key editor stays on screen when the node has many properties | `the_key_editor_stays_on_screen_when_the_node_has_many_properties` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the panel's rows do
+not scroll; the panel's scroll area shrinks to its content; and the panel
+draws the key editor after the list.
+
+The first two are aimed at the two ways the wheel can fail to reach the list —
+no scroll area at all, and a scroll area that is narrower than the panel — and
+the third at the layout rule that a scroll area takes the panel.
+
+### What is still open
+
+**The list is still drawn in full, every frame.** A scroll area clips the
+*painting*, not the *layout*: five thousand rows are still laid out, and the
+panel still costs what §125 measured. This section made the properties
+reachable; it did not make them cheap. §125's first item is still open.
+
+**The registry still names the properties that are not on the screen.** An
+agent asking for `node.1.prop.p4999` is answered with a rectangle outside the
+window. The answer is not a lie — the widget is there, in the panel, and the
+window's height is in the answer too — but the agent cannot scroll the panel,
+because `ui.click` reports and does not act (§17). What an agent should be
+able to do with a list that does not fit is a decision nobody has written
+down.
+
+### The lesson
+
+**A list that does not fit is a list that is not there.** The panel published
+five thousand and two editors and showed nine of them. Nothing in the code
+was wrong except that nothing could move.
+
+**A scroll area is not a frame of its own; it takes the panel.** The rule that
+caught the key editor is not about scroll areas at all: it is that a control
+drawn after one is laid out below the bottom edge. The panel that had the
+scroll area was the panel that lost its key editor.
+
+**A gate that counts names cannot see reachability.** "One editor for each
+property, and no other" was true, and it was satisfied by a panel that showed
+nine of five thousand. The gate that would have caught this asks a different
+question: can the eleventh be *seen*.
+
+**Measure the pointer, not the wheel.** Four hours went into "the wheel does
+not scroll this" because the pointer was 100 points to the right of the thing
+it was meant to be over, and the scroll area was as narrow as its content.
+egui's own source says it in one line — `is_hovering_outer_rect` — and the
+measurement had to find it.
+
+---
+
 
 ---
 
@@ -13816,6 +13981,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A locked property may not be written** | `craftkit-engine` test | 1 mutation — §124 |
 | **A locked property's editor is published as disabled** | `craftkit-ui` test | 1 mutation — §124 |
 | **A locked property is drawn greyed** | `craftkit-ui` test | 1 mutation — §124 |
+| **A property that does not fit can be brought into view** | `craftkit-ui` test | 1 mutation — §126 |
+| **The wheel scrolls the list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §126 |
+| **The key editor stays on screen when the node has many properties** | `craftkit-ui` test | 1 mutation — §126 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -14129,6 +14297,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    reads `locked`. A comment on a field is read by the next person to change
    the field, which makes it a document; a document that is wrong is worse than
    no document, because it is believed.
+   §126 is the forty-second, and it is a sentence about **what the registry
+   says it holds**: `Automation::rects` said *"The names say what is on
+   screen"*, and the properties panel published four thousand nine hundred and
+   ninety-one editors that were not on the screen — laid out below the panel's
+   bottom edge and never painted. The sentence is now true of what the
+   registry holds, and the comment says so; the deeper question, of whether a
+   row that is scrolled out of view should be published at all, is open in
+   §126.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
@@ -14315,3 +14491,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     is what the pending-format scheme exists for (§95). The cost of leaving
     it is a person who follows the documentation setting an end one frame too
     late and never finding out.
+21. **Decide what an agent may do with a list that does not fit.** §126 made
+    the properties panel scroll, and the registry still publishes every row of
+    it — the ones scrolled out of view included, with rectangles outside the
+    window. An agent that asks for `node.1.prop.p4999` is told where it is,
+    and it cannot get there: `ui.click` reports and does not act (§17), and
+    nothing in the control channel scrolls a panel. The choices are: publish
+    only the rows on the screen, so the registry says what the screen holds
+    (§99's rule, read strictly); publish all of them and add a way to scroll
+    the panel, so an agent can walk the list; or publish the scroll offset, so
+    an agent can tell that the row is out of view and how far away it is.
+    Which one is right depends on what an agent is for, and nobody has written
+    that down.

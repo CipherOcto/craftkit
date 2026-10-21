@@ -458,6 +458,17 @@ impl<'a> Shell<'a> {
         let mut edits: Vec<(String, serde_json::Value)> = Vec::new();
         let mut actions: Vec<(&'static str, serde_json::Value)> = Vec::new();
 
+        // The key editor comes **before** the list of properties.
+        //
+        // §126: the list lives in a scroll area, and a scroll area takes the
+        // rest of the panel — so a control drawn *after* it would be laid out
+        // below the panel's bottom edge, where nobody can reach it and
+        // nobody can see it. The editor is therefore above the list, where it
+        // stays put while the list scrolls.
+        ui.separator();
+        Shell::key_editor(&mut self.state, &mut self.automation, self.session, ui, tokens, id, &mut actions);
+        ui.separator();
+
         // The model's own flatten, so the panel cannot invent a second view of
         // the property tree.
         //
@@ -467,115 +478,166 @@ impl<'a> Shell<'a> {
         // the number of keyframes and the first eight times. §123.
         let rows = node.props.flatten();
 
-        for (path, prop) in rows {
-            let path = path.to_string();
-            let widget = AutomationId::property(id, &path);
-            // A locked property is **greyed**: its editor is drawn disabled and
-            // cannot be edited, and the registry says so — §107's rule, applied
-            // to a lock. §124: the model said a locked property was greyed in
-            // the UI, and the UI had never heard of `locked`.
-            let enabled = !prop.locked;
-            match &prop.value {
-                craftkit_core::Value::Bool(b) => {
-                    let mut value = *b;
-                    let response = ui.add_enabled(enabled, egui::Checkbox::new(&mut value, path.clone()));
-                    self.automation.publish(widget, response.rect, enabled);
-                    if response.changed() {
-                        edits.push((path.clone(), serde_json::Value::Bool(value)));
+        // The rows live in a **scroll area**.
+        //
+        // §126: a node can carry more properties than the panel is tall, and
+        // the ones that did not fit were below the panel's bottom edge with
+        // no way to reach them: the panel had no scroll area at all, so the
+        // node list's scroll bar was the only one on the screen and the
+        // properties were not on it.
+        //
+        // The scroll area **fills the panel's width** (`auto_shrink` is
+        // `[false, true]`: do not shrink across, shrink down), so the scroll
+        // bar is at the panel's edge and the wheel answers anywhere across
+        // the list — and not only over the editor of one property.
+        //
+        // The rows are moved **into** the closure, so the borrow of the
+        // session ends with the closure, and the commands below can still
+        // run.
+        let mut automation = std::mem::take(&mut self.automation);
+        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
+            for (path, prop) in rows {
+                let path = path.to_string();
+                let widget = AutomationId::property(id, &path);
+                // A locked property is **greyed**: its editor is drawn disabled and
+                // cannot be edited, and the registry says so — §107's rule, applied
+                // to a lock. §124: the model said a locked property was greyed in
+                // the UI, and the UI had never heard of `locked`.
+                let enabled = !prop.locked;
+                match &prop.value {
+                    craftkit_core::Value::Bool(b) => {
+                        let mut value = *b;
+                        let response = ui.add_enabled(enabled, egui::Checkbox::new(&mut value, path.clone()));
+                        automation.publish(widget, response.rect, enabled);
+                        if response.changed() {
+                            edits.push((path.clone(), serde_json::Value::Bool(value)));
+                        }
+                    }
+                    craftkit_core::Value::Num(n) => {
+                        let mut value = *n;
+                        let response = ui.add_enabled(
+                            enabled,
+                            egui::Slider::new(&mut value, -100.0..=100.0)
+                                .text(path.clone())
+                                .clamping(egui::SliderClamping::Never),
+                        );
+                        automation.publish(widget, response.rect, enabled);
+                        if response.changed() {
+                            edits.push((path.clone(), serde_json::Value::from(value)));
+                        }
+                    }
+                    craftkit_core::Value::Color(c) => {
+                        let mut rgb = [c.r, c.g, c.b];
+                        // The colour button is a function of the `Ui`, not a
+                        // widget, so it cannot be wrapped by `add_enabled` — it is
+                        // drawn in a scope that is disabled instead.
+                        let response =
+                            ui.add_enabled_ui(enabled, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
+                        automation.publish(widget, response.rect, enabled);
+                        if response.changed() {
+                            edits.push((
+                                path.clone(),
+                                serde_json::Value::from(format!(
+                                    "#{:02x}{:02x}{:02x}",
+                                    rgb[0], rgb[1], rgb[2]
+                                )),
+                            ));
+                        }
+                    }
+                    other => {
+                        let mut text = other.display();
+                        let response = ui.add_enabled(
+                            enabled,
+                            egui::TextEdit::singleline(&mut text).hint_text(path.clone()),
+                        );
+                        automation.publish(widget, response.rect, enabled);
+                        if response.changed() {
+                            edits.push((path.clone(), serde_json::Value::from(text)));
+                        }
                     }
                 }
-                craftkit_core::Value::Num(n) => {
-                    let mut value = *n;
-                    let response = ui.add_enabled(
-                        enabled,
-                        egui::Slider::new(&mut value, -100.0..=100.0)
-                            .text(path.clone())
-                            .clamping(egui::SliderClamping::Never),
+
+                if prop.is_animated() {
+                    ui.label(
+                        RichText::new(format!("{} keyframe(s)", prop.keys.len()))
+                            .color(tokens.text_dim)
+                            .small(),
                     );
-                    self.automation.publish(widget, response.rect, enabled);
-                    if response.changed() {
-                        edits.push((path.clone(), serde_json::Value::from(value)));
-                    }
-                }
-                craftkit_core::Value::Color(c) => {
-                    let mut rgb = [c.r, c.g, c.b];
-                    // The colour button is a function of the `Ui`, not a
-                    // widget, so it cannot be wrapped by `add_enabled` — it is
-                    // drawn in a scope that is disabled instead.
-                    let response = ui.add_enabled_ui(enabled, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
-                    self.automation.publish(widget, response.rect, enabled);
-                    if response.changed() {
-                        edits.push((
-                            path.clone(),
-                            serde_json::Value::from(format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2])),
+                    // **When** the keyframes are. §117: the panel said how many
+                    // there were and not when any of them was, and the times were
+                    // in the model, in the file and in three commands' parameters
+                    // — on no screen.
+                    ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());
+                    let key = AutomationId::clear_keys(id, &path);
+                    // The button cannot work on a locked property — `prop.reset`
+                    // refuses one — so it is greyed and says so. §124.
+                    let response = ui.add_enabled(enabled, egui::Button::new("clear keys").small());
+                    automation.publish(key, response.rect, enabled);
+                    if response.clicked() {
+                        actions.push((
+                            "prop.reset",
+                            serde_json::json!({ "node": id.get(), "path": path.clone() }),
                         ));
                     }
                 }
-                other => {
-                    let mut text = other.display();
-                    let response = ui
-                        .add_enabled(enabled, egui::TextEdit::singleline(&mut text).hint_text(path.clone()));
-                    self.automation.publish(widget, response.rect, enabled);
-                    if response.changed() {
-                        edits.push((path.clone(), serde_json::Value::from(text)));
-                    }
-                }
             }
-
-            if prop.is_animated() {
-                ui.label(
-                    RichText::new(format!("{} keyframe(s)", prop.keys.len())).color(tokens.text_dim).small(),
-                );
-                // **When** the keyframes are. §117: the panel said how many
-                // there were and not when any of them was, and the times were
-                // in the model, in the file and in three commands' parameters
-                // — on no screen.
-                ui.label(RichText::new(keyframe_times(prop.keys.keys())).color(tokens.text_dim).small());
-                let key = AutomationId::clear_keys(id, &path);
-                // The button cannot work on a locked property — `prop.reset`
-                // refuses one — so it is greyed and says so. §124.
-                let response = ui.add_enabled(enabled, egui::Button::new("clear keys").small());
-                self.automation.publish(key, response.rect, enabled);
-                if response.clicked() {
-                    actions
-                        .push(("prop.reset", serde_json::json!({ "node": id.get(), "path": path.clone() })));
-                }
-            }
-        }
-
-        ui.separator();
-        ui.label(RichText::new("Key at the playhead").color(tokens.text_dim));
-        // The text lives in the shell's state, not in a local: a local is
-        // rebuilt every frame, and the person typing would watch every
-        // keystroke disappear. §105.
-        let path_field =
-            ui.add(egui::TextEdit::singleline(&mut self.state.key_path).hint_text("path, e.g. amount"));
-        self.automation.publish(AutomationId::key_path(), path_field.rect, true);
-        // The value field is here while there is a path to put a value on.
-        // It used to appear only on the frame the path changed, which meant
-        // it was gone before anything could be typed into it. §105.
-        if !self.state.key_path.is_empty() {
-            let value_field =
-                ui.add(egui::TextEdit::singleline(&mut self.state.key_value).hint_text("value"));
-            self.automation.publish(AutomationId::key_value(), value_field.rect, true);
-            if value_field.changed() {
-                actions.push((
-                    "key.set",
-                    serde_json::json!({
-                        "node": id.get(),
-                        "path": self.state.key_path.clone(),
-                        "value": self.state.key_value.clone(),
-                        "time": self.session.at().seconds_f64(),
-                    }),
-                ));
-            }
-        }
+        });
+        self.automation = automation;
 
         for (path, value) in edits {
             self.run("prop.set", serde_json::json!({ "node": id.get(), "path": path, "value": value }));
         }
         for (command, params) in actions {
             self.run(command, params);
+        }
+    }
+
+    /// The "key at the playhead" editor.
+    ///
+    /// It adds a keyframe to the property named by the path field, at the
+    /// playhead, with the value in the value field.
+    ///
+    /// §126: this is drawn **above** the list of properties, because the list
+    /// lives in a scroll area and a scroll area takes the rest of the panel.
+    /// A control drawn after it would be laid out below the panel's bottom
+    /// edge — visible to nobody, and reachable by nobody.
+    ///
+    /// It takes the pieces it needs rather than the shell: the panel holds a
+    /// borrow of the session (the node it is drawing) while it draws, so it
+    /// cannot lend out `&mut self`.
+    fn key_editor(
+        state: &mut ShellState,
+        automation: &mut Automation,
+        session: &Session,
+        ui: &mut Ui,
+        tokens: &Tokens,
+        id: NodeId,
+        actions: &mut Vec<(&'static str, serde_json::Value)>,
+    ) {
+        ui.label(RichText::new("Key at the playhead").color(tokens.text_dim));
+        // The text lives in the shell's state, not in a local: a local is
+        // rebuilt every frame, and the person typing would watch every
+        // keystroke disappear. §105.
+        let path_field =
+            ui.add(egui::TextEdit::singleline(&mut state.key_path).hint_text("path, e.g. amount"));
+        automation.publish(AutomationId::key_path(), path_field.rect, true);
+        // The value field is here while there is a path to put a value on.
+        // It used to appear only on the frame the path changed, which meant
+        // it was gone before anything could be typed into it. §105.
+        if !state.key_path.is_empty() {
+            let value_field = ui.add(egui::TextEdit::singleline(&mut state.key_value).hint_text("value"));
+            automation.publish(AutomationId::key_value(), value_field.rect, true);
+            if value_field.changed() {
+                actions.push((
+                    "key.set",
+                    serde_json::json!({
+                        "node": id.get(),
+                        "path": state.key_path.clone(),
+                        "value": state.key_value.clone(),
+                        "time": session.at().seconds_f64(),
+                    }),
+                ));
+            }
         }
     }
 
@@ -1843,6 +1905,165 @@ mod tests {
             let name = format!("{prefix}{path}");
             assert!(published.contains(&name), "the panel published no editor for `{path}`: {published:?}");
         }
+    }
+
+    /// A node with `count` plain properties, named `p0`, `p1`, …
+    ///
+    /// §126: the properties panel has to cope with a node that carries more
+    /// properties than the panel is tall.
+    fn node_with_properties(count: usize) -> (craftkit_model::Document, NodeId) {
+        let mut doc = craftkit_model::Document::empty("probe");
+        let id = doc.add_node("One", craftkit_model::NodeKind::Source).expect("the node");
+        {
+            let node = doc.get_mut(id).expect("the node");
+            for p in 0..count {
+                let value = craftkit_core::Value::num("v", 0.5).expect("a number");
+                node.props.push(craftkit_model::Property::new(p as u64 + 1, format!("p{p}"), value));
+            }
+        }
+        let id = doc.nodes[0].id;
+        (doc, id)
+    }
+
+    /// The window the panel is drawn in, for the scroll tests.
+    fn screen() -> egui::Rect {
+        egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0))
+    }
+
+    /// A wheel event over `at`, and the frame that carries it.
+    ///
+    /// The wheel is a **point** delta of seven points, which egui applies whole
+    /// in the frame it arrives: a larger delta is smoothed over several
+    /// frames, and a line delta is smoothed too, so neither says "this frame
+    /// moved seven points".
+    fn wheel_at(at: egui::Pos2) -> egui::RawInput {
+        egui::RawInput {
+            screen_rect: Some(screen()),
+            events: vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::Vec2::new(0.0, -7.0),
+                    modifiers: Default::default(),
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    /// The properties panel scrolls: a property that does not fit comes into
+    /// view.
+    ///
+    /// §126: the panel had **no scroll area at all**, so a node with more
+    /// properties than the panel is tall put the rest of them below the
+    /// panel's bottom edge — where nobody could see them and nobody could
+    /// reach them. The registry still named every one of them, so an agent
+    /// was told about five thousand editors and could get to none of them.
+    ///
+    /// The wheel only answers when the pointer is over the scroll area, and
+    /// egui's scroll area shrinks to its content unless it is told not to —
+    /// so the pointer here is over the **first editor**, which is inside the
+    /// list whatever the list's width is.
+    #[test]
+    fn the_properties_panel_scrolls_to_the_properties_that_do_not_fit() {
+        let (doc, id) = node_with_properties(40);
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(id), ..Default::default() };
+
+        let plain = egui::RawInput { screen_rect: Some(screen()), ..Default::default() };
+        let before = one_frame(&ctx, &mut session, &tokens, &mut state, plain);
+        let first =
+            before.rect(&format!("node.{}.prop.p0", id.get())).expect("the first property has an editor");
+        let last = format!("node.{}.prop.p39", id.get());
+        let start = before.rect(&last).expect("the last property has an editor");
+        assert!(
+            start.top() > screen().height(),
+            "the last property is at y={:.0}, which is on the screen: \
+             the test needs a list that does not fit",
+            start.top()
+        );
+
+        // Turn the wheel until the last property is on the screen.
+        let mut frames = 0;
+        loop {
+            frames += 1;
+            assert!(
+                frames < 400,
+                "the list did not scroll in {frames} frames: the last property is still at y={:.0}",
+                start.top()
+            );
+            let after = one_frame(&ctx, &mut session, &tokens, &mut state, wheel_at(first.center()));
+            let now = after.rect(&last).expect("the last property still has an editor");
+            if now.top() < screen().height() {
+                break;
+            }
+        }
+    }
+
+    /// The wheel scrolls the list from anywhere across the panel.
+    ///
+    /// §126: egui's scroll area shrinks to the width of its content unless it
+    /// is told not to, and a scroll area narrower than the panel answers the
+    /// wheel only over that narrower strip. The panel's own scroll bar was
+    /// the only scroll bar on the screen, and it had to be over the *content*
+    /// for the wheel to reach it.
+    #[test]
+    fn the_wheel_scrolls_the_list_from_across_the_panel() {
+        let (doc, id) = node_with_properties(40);
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(id), ..Default::default() };
+
+        let plain = egui::RawInput { screen_rect: Some(screen()), ..Default::default() };
+        let before = one_frame(&ctx, &mut session, &tokens, &mut state, plain);
+        let first_name = format!("node.{}.prop.p0", id.get());
+        let first = before.rect(&first_name).expect("the first property has an editor");
+
+        // The pointer is at the panel's right-hand edge, over the panel's
+        // scroll bar and over no editor at all.
+        let edge = egui::pos2(screen().width() - 12.0, first.center().y);
+        let mut after = before.clone();
+        for _ in 0..20 {
+            after = one_frame(&ctx, &mut session, &tokens, &mut state, wheel_at(edge));
+        }
+        let moved = after.rect(&first_name).expect("the first property still has an editor").top();
+        assert!(
+            moved < first.top() - 50.0,
+            "the list did not scroll from the panel's edge: the first property is still at y={:.0}",
+            moved
+        );
+    }
+
+    /// The key editor stays on screen when the node has many properties.
+    ///
+    /// §126: a scroll area takes the rest of the panel, so a control drawn
+    /// **after** it is laid out below the panel's bottom edge — where nobody
+    /// can see it and nobody can reach it. The key editor is therefore drawn
+    /// above the list.
+    #[test]
+    fn the_key_editor_stays_on_screen_when_the_node_has_many_properties() {
+        let (doc, id) = node_with_properties(200);
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState { selected: Some(id), ..Default::default() };
+
+        let plain = egui::RawInput { screen_rect: Some(screen()), ..Default::default() };
+        let registry = one_frame(&ctx, &mut session, &tokens, &mut state, plain);
+        let field = registry.rect("properties.key.path").expect("the key field has a rectangle");
+        assert!(
+            field.top() >= 0.0 && field.bottom() <= screen().height(),
+            "the key editor is at y={:.0}..{:.0}, outside the window: \
+             it is drawn after the list, and the list takes the panel",
+            field.top(),
+            field.bottom()
+        );
     }
 
     /// A keyframe inside a group is marked on the rail.

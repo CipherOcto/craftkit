@@ -2466,7 +2466,7 @@ expect_catch "ui: the playhead is not published" \
 # The "key at the playhead" path field was published nowhere, so a field an
 # agent could not name was a field it could not fill. §100.
 swap crates/ui/src/shell.rs \
-    '        self.automation.publish(AutomationId::key_path(), path_field.rect, true);' \
+    '        automation.publish(AutomationId::key_path(), path_field.rect, true);' \
     '        let _ = &path_field;'
 expect_catch "ui: the key path field is not published" \
     "cargo test -p craftkit-ui --profile ci the_key_fields_have_names"
@@ -2524,7 +2524,7 @@ expect_catch "ui: the frame does not give the state back" \
 # rebuilt every frame: every keystroke was thrown away. §105.
 swap crates/ui/src/shell.rs \
     '        let path_field =
-            ui.add(egui::TextEdit::singleline(&mut self.state.key_path).hint_text("path, e.g. amount"));' \
+            ui.add(egui::TextEdit::singleline(&mut state.key_path).hint_text("path, e.g. amount"));' \
     '        let mut path_text = String::new();
         let path_field =
             ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount"));'
@@ -2534,7 +2534,7 @@ expect_catch "ui: the key path field keeps its text in a local" \
 # The value field appeared only on the frame the path changed, so it was gone
 # before anything could be typed into it. §105.
 swap crates/ui/src/shell.rs \
-    '        if !self.state.key_path.is_empty() {' \
+    '        if !state.key_path.is_empty() {' \
     '        if path_field.changed() {'
 expect_catch "ui: the key value field is only there on the frame the path changed" \
     "cargo test -p craftkit-ui --profile ci a_path_typed_into_the_key_field_is_still_there_in_the_next_frame"
@@ -3230,19 +3230,56 @@ expect_catch "ui: the panel publishes a locked property's editor as enabled" \
 # The panel drew a locked property's editor in full colour, which is what the
 # model says it does not do. §124.
 swap crates/ui/src/shell.rs \
-    '                    let response = ui.add_enabled(
-                        enabled,
-                        egui::Slider::new(&mut value, -100.0..=100.0)
-                            .text(path.clone())
-                            .clamping(egui::SliderClamping::Never),
-                    );' \
-    '                    let response = ui.add(
-                        egui::Slider::new(&mut value, -100.0..=100.0)
-                            .text(path.clone())
-                            .clamping(egui::SliderClamping::Never),
-                    );'
+    '                        let response = ui.add_enabled(
+                            enabled,
+                            egui::Slider::new(&mut value, -100.0..=100.0)
+                                .text(path.clone())
+                                .clamping(egui::SliderClamping::Never),
+                        );' \
+    '                        let response = ui.add(
+                            egui::Slider::new(&mut value, -100.0..=100.0)
+                                .text(path.clone())
+                                .clamping(egui::SliderClamping::Never),
+                        );'
 expect_catch "ui: the panel draws a locked property's editor in full colour" \
     "cargo test -p craftkit-ui --profile ci a_locked_property_is_drawn_greyed"
+
+# The properties panel had no scroll area at all, so a node with more
+# properties than the panel is tall put the rest of them below the panel's
+# bottom edge, where nobody could see them and nobody could reach them. §126.
+swap crates/ui/src/shell.rs \
+    '        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
+    '        ScrollArea::neither().show(ui, |ui| {'
+expect_catch "ui: the properties panel's rows do not scroll" \
+    "cargo test -p craftkit-ui --profile ci the_properties_panel_scrolls_to_the_properties_that_do_not_fit"
+
+# egui's scroll area shrinks to the width of its content unless it is told not
+# to, and a scroll area narrower than the panel answers the wheel only over
+# that narrower strip — so the wheel did not reach the list from the panel's
+# edge. §126.
+swap crates/ui/src/shell.rs \
+    '        ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {' \
+    '        ScrollArea::vertical().show(ui, |ui| {'
+expect_catch "ui: the properties panel's scroll area shrinks to its content" \
+    "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_list_from_across_the_panel"
+
+# A scroll area takes the rest of the panel, so a control drawn after it is
+# laid out below the panel's bottom edge. The key editor was drawn after the
+# list, and a node with many properties put it out of sight. §126.
+swap crates/ui/src/shell.rs \
+    '        Shell::key_editor(&mut self.state, &mut self.automation, self.session, ui, tokens, id, &mut actions);
+        ui.separator();' \
+    '        ui.separator();'
+swap crates/ui/src/shell.rs \
+    '        self.automation = automation;
+
+        for (path, value) in edits {' \
+    '        self.automation = automation;
+        Shell::key_editor(&mut self.state, &mut self.automation, self.session, ui, tokens, id, &mut actions);
+
+        for (path, value) in edits {'
+expect_catch "ui: the properties panel draws the key editor after the list" \
+    "cargo test -p craftkit-ui --profile ci the_key_editor_stays_on_screen_when_the_node_has_many_properties"
 
 restore
 finish

@@ -343,9 +343,15 @@ impl Automation {
 
     /// The rectangle of every published widget, in publish order.
     ///
-    /// The names say what is on screen; this says **where**. An agent that
-    /// has been given a name and cannot ask for its position can only guess
-    /// pixels, and a guess is not a click. §104.
+    /// The names say what the panel published; this says **where**. An agent
+    /// that has been given a name and cannot ask for its position can only
+    /// guess pixels, and a guess is not a click. §104.
+    ///
+    /// A widget that is laid out but not painted — a row of a scroll area
+    /// that has been scrolled out of view — is published too, with a
+    /// rectangle outside the window. §126: the properties panel published
+    /// four thousand nine hundred and ninety-one such rows, and this comment
+    /// used to say that the names say what is **on screen**.
     pub fn rects(&self) -> Vec<(&str, Rect)> {
         self.entries.iter().map(|(id, rect, _)| (id.0.as_str(), *rect)).collect()
     }
