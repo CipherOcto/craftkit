@@ -12771,6 +12771,129 @@ already changing the design.
 
 ---
 
+## 120. The catalogue said a parameter was optional, and the command could not run without it
+
+### The measurement
+
+Fourteen commands take a parameter in one of two spellings: thirteen address a
+node by `node` or `node_name`, and `playback.seek` seeks by `seconds` or
+`frame`. §116 made the pair **one parameter in two spellings** and stopped
+marking the first one required — and the catalogue's own two faces still said
+only that each half was **not required**.
+
+The engine's catalogue — what `engine.describe` and `craftkit-cli commands
+--json` return — said, for `node.mute`:
+
+```json
+{ "name": "node",      "type": "number", "required": false, "help": "The node's id.", "alternative": "node_name" },
+{ "name": "node_name", "type": "string", "required": false, "help": "…or its name." }
+```
+
+Two entries, both `required: false`, and **nothing anywhere in that JSON**
+saying that the command needs one of them. A reader of it is entitled to
+believe that `node.mute` can be called with no parameters at all.
+
+The plain listing — what a person runs first — said:
+
+```text
+      ?node: node-ref — The node's id. (or give `node_name`)
+      ?node_name: text — …or its name.
+```
+
+Two `?`s. The listing's marker has exactly two states, *required* and *may be
+left out*, and a pair is a third thing that neither of them can say: **two
+lines that both say "may be left out" say that neither is needed.**
+
+And the command says the opposite:
+
+> pass `node` (an id) or `node_name` (a name)
+
+So the catalogue's own JSON and its own listing said the command could run
+with nothing, and the command said it could not. The **only** face of the
+catalogue that had it right was the MCP's JSON Schema, which §116 gave an
+`allOf` of `anyOf`s — and a JSON Schema is the one face a person reading
+`craftkit-cli commands` never sees.
+
+### Why nothing noticed
+
+**§116's fix moved the truth and left the fact behind.** The old catalogue
+marked the first spelling required, which was wrong in the other direction:
+it told a client it could not use the name. The fix made both halves
+"not required" ✓ and put *"one of the two"* into the schema ✓ — and the
+pair's requiredness was never a fact the catalogue itself carried ✗.
+
+**The commands are honest.** Every one of the fourteen refuses with a message
+that names both spellings ✓, so anybody who *tried* it was told the truth at
+once. Only somebody who *read* the catalogue was misled — and reading is
+what an agent does before it calls.
+
+**The refusal is the same shape as a typo's.** *"pass `node` (an id) or
+`node_name` (a name)"* is what a command says when a parameter is missing,
+so a reader who saw it could equally believe the catalogue's `?` and think
+the pair was a nicety.
+
+### The fix
+
+**The catalogue carries the pairs.** Every command's schema now has:
+
+```json
+"one_of": [["node", "node_name"]]
+```
+
+— the groups of which one must be given. It is derived from the same
+`ParamDoc::alternative` the MCP's schema builder reads ✓, so there is one
+declaration ✓ and two renderings ✓.
+
+**The plain listing prints a pair as one line.**
+
+```text
+      node|node_name: node-ref — The node's id, or its name. (one of the two is required)
+```
+
+Both spellings, one line, and the fact that the pair is needed. The second
+spelling does not print a line of its own, because a line of its own is a
+line that says "may be left out" ✗.
+
+**The help says what the field takes.** The parameter's help went from *"The
+node's id."* to *"The node's id, or its name."* ✓ — so the catalogue's JSON,
+the listing and **the form** (§118) all say the same thing about what may be
+typed. The form's label says *node or node_name* ✓.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The catalogue says which pairs one of must be given | `the_catalogue_says_which_pairs_one_of_must_be_given` in `craftkit-engine` |
+| A command that needs one of a pair refuses with neither | `a_command_that_needs_one_of_a_pair_refuses_with_neither` |
+| A pair prints as one line that says one of the two is required | `a_pair_prints_as_one_line_that_says_one_of_the_two_is_required` |
+| A pair prints as one line and the second spelling does not print its own | `a_pair_prints_as_one_line_and_the_second_spelling_does_not_print_its_own` |
+| A plain parameter prints as before | `a_plain_parameter_prints_as_before` |
+| An optional parameter is still marked with a `?` | `an_optional_parameter_is_marked_with_a_question_mark` |
+| The catalogue's listing names the pairs | `the_catalogue_says_which_pairs_one_of_must_be_given` in `craftkit-cli` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the catalogue no
+longer says which pairs one of must be given; the listing does not say the
+pair is required; and the listing prints the second spelling as its own line.
+
+§116's own listing mutation was re-aimed, and the suite is what said so: it
+dropped the *"(or give `node_name`)"* suffix, which this change made
+unreachable, so the gate it pointed at could no longer fail — and a gate that
+cannot fail is worse than no gate. The mutation now drops the second
+spelling from the pair's line ✓, which is the same claim in the new
+rendering ✓.
+
+### The lesson
+
+**"Not required" and "one of these is required" are different facts, and a
+boolean can only hold the first.** The catalogue had one boolean per
+parameter, and a pair of parameters is not a parameter.
+
+**A pair needs a place of its own in the catalogue.** Otherwise each half is
+read on its own — and read on its own, both halves are optional, and the
+command is not.
+
+---
+
 ---
 
 ## What enforces what
@@ -13059,6 +13182,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A keyframe outside the design is a warning** | `craftkit-eval` test | 1 mutation — §119 |
 | **A keyframe outside the design is reported at both ends** | `craftkit-eval` test | — |
 | **A keyframe inside the design is not a warning** | `craftkit-eval` test | — |
+| **The catalogue says which pairs one of must be given** | `craftkit-engine` test | 1 mutation — §120 |
+| **A command that needs one of a pair refuses with neither** | `craftkit-engine` test | — |
+| **A pair prints as one line that says one of the two is required** | `craftkit-cli` test | 1 mutation — §120 |
+| **A pair prints as one line and the second spelling does not print its own** | `craftkit-cli` test | 1 mutation — §120 |
+| **The catalogue's listing names the pairs** | `craftkit-cli` test | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -13528,3 +13656,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     and of an undo stack that records "the person looked at something else".
     Neither is obvious, and the choice should not be an accident of which
     struct the field landed in.
+20. **Decide what a design's `end` means.** The model says *"One past the last
+    instant"* (`crates/model/src/document.rs`, the `end` field) and the
+    catalogue says the same of `doc.range`'s `end` — and the code says the
+    opposite. The frame range is `start..=end`, the playhead clamps to
+    `[start, end]`, and the model's own test calls the end's frame *"the
+    design's last frame"*: so a five-second design at 24 fps has frames
+    0..=120, which is **121** of them, and the end's frame is one past the
+    last instant the code believes in. The format's own specification
+    (`docs/design/file-format.md`) reads the exclusive way — the end *"is
+    0.5 s at 24 fps — 12 frames"* — so the tree has two readings of one
+    field, and they differ by a frame. This is a **decision, not a bug**:
+    either the two doc comments and the format spec's wording move (and every
+    design that means *"my clip is five seconds long"* keeps 121 frames), or
+    the code does — and that is a change to what a saved design means, which
+    is what the pending-format scheme exists for (§95). The cost of leaving
+    it is a person who follows the documentation setting an end one frame too
+    late and never finding out.

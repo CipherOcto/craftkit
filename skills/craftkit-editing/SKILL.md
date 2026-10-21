@@ -87,6 +87,7 @@ doc.rename      node.kind                       key.list       history.undo
 | `icon` | `Icon` | `Icon(pub &'static str)` — **a name, not a drawing** (in `Icon`) |
 | `shortcut` | `Option<&'static str>` | the chord the command is advertised with; the tree binds no keys yet |
 | `params` | `&'static [ParamDoc]` | `ParamDoc { name, kind: Doc, required, help, alternative }` — `alternative` names the parameter that may be given **instead**, and then the pair is "one of the two" |
+| `asks` | `&'static [&'static str]` | the parameters a person is asked for when the command is started from the interface; a name in it must be one of `params`, and every parameter the command cannot do without must be in it (§118) |
 | `doc` | `&'static str` | one line, used by `commands --json` and the MCP description |
 | `mutates` | `bool` | does it change the document |
 | `undoable` | `bool` | does a success push an undo entry |

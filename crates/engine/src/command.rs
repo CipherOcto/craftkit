@@ -241,6 +241,18 @@ impl CommandSpec {
         self.asks.iter().filter_map(|name| self.params.iter().find(|p| p.name == *name)).collect()
     }
 
+    /// The pairs of parameters of which **one** must be given.
+    ///
+    /// A parameter with an alternative is one of a pair: neither half is
+    /// required alone, and the command refuses when it has neither. Two
+    /// entries that both say `required: false` do not say that — they say
+    /// the opposite, and a reader of the catalogue is entitled to believe
+    /// them. So the catalogue says the pairs too, and the plain listing
+    /// prints one line for the pair. §120.
+    pub fn one_of_groups(&self) -> Vec<Vec<&'static str>> {
+        self.params.iter().filter_map(|p| p.alternative.map(|other| vec![p.name, other])).collect()
+    }
+
     /// A one-line description for a listing.
     pub fn signature(&self) -> String {
         if self.params.is_empty() {
@@ -263,6 +275,10 @@ impl CommandSpec {
             "undoable": self.undoable,
             "doc": self.doc,
             "asks": self.asks,
+            // The pairs of which one must be given. Two entries that both
+            // say `required: false` do not say that the command needs one
+            // of them — they say the opposite. §120.
+            "one_of": self.one_of_groups(),
             "params": self.params.iter().map(|p| {
                 let mut param = serde_json::json!({
                     "name": p.name,
@@ -939,5 +955,56 @@ mod tests {
                 assert!(spec.ask_params().is_empty(), "`{}` asks for nothing but has parameters", spec.id);
             }
         }
+    }
+
+    /// The catalogue says which pairs one of must be given.
+    ///
+    /// §120: two entries that both say `required: false` do not say that the
+    /// command needs one of them — they say the opposite, and a reader of
+    /// the catalogue is entitled to believe them. The MCP's JSON Schema said
+    /// so; the catalogue's own JSON and the plain listing did not.
+    #[test]
+    fn the_catalogue_says_which_pairs_one_of_must_be_given() {
+        let mut pairs = 0;
+        for spec in all() {
+            for group in spec.one_of_groups() {
+                assert_eq!(group.len(), 2, "a group of one is not a pair: {group:?}");
+                for name in &group {
+                    let param = spec
+                        .params
+                        .iter()
+                        .find(|p| p.name == *name)
+                        .unwrap_or_else(|| panic!("`{name}` is not a parameter of {}", spec.id));
+                    assert!(
+                        !param.required,
+                        "`{name}` ({}) is required on its own, so it is not a pair",
+                        spec.id
+                    );
+                }
+                pairs += 1;
+            }
+            // The schema says the same thing the command does.
+            let schema = spec.schema();
+            assert_eq!(
+                schema["one_of"].as_array().map(Vec::len),
+                Some(spec.one_of_groups().len()),
+                "{}",
+                spec.id
+            );
+        }
+        assert!(pairs >= 13, "only {pairs} pair(s) in the catalogue");
+    }
+
+    /// A command that needs one of a pair refuses with neither.
+    ///
+    /// The catalogue's claim has to match what the command does: the pair is
+    /// required, so a call with neither is refused. §120.
+    #[test]
+    fn a_command_that_needs_one_of_a_pair_refuses_with_neither() {
+        let mut s = Session::sample();
+        let err = s.execute("node.mute", &serde_json::json!({})).expect_err("neither");
+        let message = err.to_string();
+        assert!(message.contains("node"), "{message}");
+        assert!(message.contains("node_name"), "{message}");
     }
 }

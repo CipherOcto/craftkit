@@ -2986,11 +2986,8 @@ expect_catch "engine: a node cannot be addressed by its name" \
 # The catalogue's plain listing dropped the alternative, so a reader of it
 # could not tell that one of the two spellings would do. §116.
 swap apps/craftkit-cli/src/cli.rs \
-    '    let alternative = match param["alternative"].as_str() {
-        Some(other) => format!(" (or give `{other}`)"),
-        None => String::new(),
-    };' \
-    '    let alternative = String::new();'
+    '        let names = group.join("|");' \
+    '        let names = group.first().cloned().unwrap_or_default();'
 expect_catch "cli: the catalogue's listing does not name the alternative" \
     "cargo test -p craftkit-cli --profile ci a_parameter_with_an_alternative_says_which_one"
 
@@ -3100,6 +3097,33 @@ swap crates/eval/src/evaluate.rs \
     '    if false {'
 expect_catch "eval: a key past the end of the design is not a warning" \
     "cargo test -p craftkit-eval --profile ci a_keyframe_outside_the_design_is_a_warning"
+
+# The catalogue said a required pair was optional: two entries that both
+# say `required: false` say that neither is needed. §120.
+swap crates/engine/src/command.rs \
+    '        self.params.iter().filter_map(|p| p.alternative.map(|other| vec![p.name, other])).collect()' \
+    '        Vec::new()'
+expect_catch "engine: the catalogue no longer says which pairs one of must be given" \
+    "cargo test -p craftkit-engine --profile ci the_catalogue_says_which_pairs_one_of_must_be_given"
+
+# The plain listing stopped saying the pair is required. §120.
+swap apps/craftkit-cli/src/cli.rs \
+    '        return format!("      {names}: {kind} — {help} (one of the two is required)");' \
+    '        return format!("      {names}: {kind} — {help}");'
+expect_catch "cli: the listing does not say the pair is required" \
+    "cargo test -p craftkit-cli --profile ci a_pair_prints_as_one_line_that_says_one_of_the_two_is_required"
+
+# The plain listing printed the second spelling as a line of its own again,
+# so the pair was two lines that both said "may be left out". §120.
+swap apps/craftkit-cli/src/cli.rs \
+    '        if group.is_some_and(|g| g.first().map(String::as_str) != Some(name)) {
+            continue;
+        }' \
+    '        if false {
+            continue;
+        }'
+expect_catch "cli: the listing prints the second spelling as its own line" \
+    "cargo test -p craftkit-cli --profile ci a_pair_prints_as_one_line_and_the_second_spelling_does_not_print_its_own"
 
 restore
 finish

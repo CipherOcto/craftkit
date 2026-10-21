@@ -258,10 +258,16 @@ impl<'a> Shell<'a> {
                 // the theme's colour and not `egui`'s dimmed one.
                 ui.label(RichText::new(label).strong().color(tokens.text));
                 for field in fields.iter_mut() {
-                    ui.label(RichText::new(field.param.name).color(tokens.text));
+                    // A parameter with an alternative is one parameter in two
+                    // spellings, and the field takes either — so the label
+                    // names both. §120.
+                    let label = match field.param.alternative {
+                        Some(other) => format!("{} or {other}", field.param.name),
+                        None => field.param.name.to_string(),
+                    };
+                    ui.label(RichText::new(&label).color(tokens.text));
                     ui.label(RichText::new(field.param.help).color(tokens.text_dim).small().weak());
-                    let response =
-                        ui.add(egui::TextEdit::singleline(&mut field.text).hint_text(field.param.name));
+                    let response = ui.add(egui::TextEdit::singleline(&mut field.text).hint_text(&label));
                     automation.publish(
                         AutomationId::prompt_field(&command, field.param.name),
                         response.rect,

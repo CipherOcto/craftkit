@@ -64,31 +64,66 @@ fn commands(as_json: bool) -> Result<(), String> {
         let label = spec["label"].as_str().unwrap_or("");
         println!("  {id:<22} {label}");
         println!("      {}", spec["doc"].as_str().unwrap_or(""));
-        if let Some(params) = spec["params"].as_array()
-            && !params.is_empty()
-        {
-            for p in params {
-                println!("{}", param_line(p));
-            }
+        for line in param_lines(spec) {
+            println!("{line}");
         }
     }
     Ok(())
 }
 
-/// The line the catalogue prints for one parameter.
+/// The lines the catalogue prints for one command's parameters.
 ///
-/// A `?` marks a parameter that may be left out, and a parameter with an
-/// alternative names the other spelling that may be given instead: the pair
-/// is "one of the two". §116.
-fn param_line(param: &Json) -> String {
+/// A **pair** of parameters of which one must be given prints as one line,
+/// and the second spelling does not print a line of its own — two lines that
+/// both say "may be left out" would say that neither is needed, and the
+/// command refuses without one. §120.
+fn param_lines(spec: &Json) -> Vec<String> {
+    let Some(params) = spec["params"].as_array() else { return Vec::new() };
+    if params.is_empty() {
+        return Vec::new();
+    }
+    let groups: Vec<Vec<String>> = spec["one_of"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|g| {
+            g.as_array().map(|names| names.iter().filter_map(|n| n.as_str().map(str::to_string)).collect())
+        })
+        .collect();
+    let mut lines = Vec::new();
+    for p in params {
+        let name = p["name"].as_str().unwrap_or("");
+        let group = groups.iter().find(|g| g.iter().any(|n| n == name));
+        // The second spelling of a pair is part of the first's line.
+        if group.is_some_and(|g| g.first().map(String::as_str) != Some(name)) {
+            continue;
+        }
+        lines.push(param_line(p, group.map(|g| g.as_slice())));
+    }
+    lines
+}
+
+/// The line the catalogue prints for one parameter, or for a pair of them.
+///
+/// A `?` marks a parameter that may be left out. A **pair** of parameters of
+/// which one must be given prints as one line with both names, because two
+/// lines that both say "may be left out" say that neither is needed — and
+/// the command refuses without one. §120.
+fn param_line(param: &Json, group: Option<&[String]>) -> String {
     let name = param["name"].as_str().unwrap_or("?");
     let kind = param["type"].as_str().unwrap_or("?");
+    let help = param["help"].as_str().unwrap_or("");
+    if let Some(group) = group {
+        let names = group.join("|");
+        return format!("      {names}: {kind} — {help} (one of the two is required)");
+    }
     let required = if param["required"].as_bool().unwrap_or(false) { "" } else { "?" };
     let alternative = match param["alternative"].as_str() {
         Some(other) => format!(" (or give `{other}`)"),
         None => String::new(),
     };
-    format!("      {required}{name}: {kind} — {}{alternative}", param["help"].as_str().unwrap_or(""))
+    format!("      {required}{name}: {kind} — {help}{alternative}")
 }
 
 // ------------------------------------------------------------------ run --
@@ -386,32 +421,142 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// A parameter with an alternative says which other spelling may be given
-    /// instead.
+    /// A pair of parameters prints as one line that says one of the two is
+    /// required.
     ///
-    /// §116: the catalogue marked the id as required, so the line said
-    /// nothing about the name — and the name is what the command accepts.
+    /// §120: the pair used to print as two lines, each marked with a `?` —
+    /// and two lines that both say "may be left out" say that neither is
+    /// needed, which is the opposite of the truth. The command refuses when
+    /// it has neither.
     #[test]
-    fn a_parameter_with_an_alternative_says_which_one() {
-        let with = json!({
+    fn a_pair_prints_as_one_line_that_says_one_of_the_two_is_required() {
+        let group = vec!["node".to_string(), "node_name".to_string()];
+        let primary = json!({
             "name": "node",
             "type": "node-ref",
             "required": false,
             "help": "The node's id.",
             "alternative": "node_name",
         });
-        let line = param_line(&with);
-        assert!(line.contains("node_name"), "the line does not name the alternative: {line}");
-        assert!(line.starts_with("      ?node:"), "the line does not mark it optional: {line}");
+        let line = param_line(&primary, Some(&group));
+        assert!(line.contains("node|node_name"), "the line does not name both spellings: {line}");
+        assert!(
+            line.contains("one of the two is required"),
+            "the line does not say the pair is needed: {line}"
+        );
+        assert!(!line.contains('?'), "the line marks the pair as optional: {line}");
+    }
 
-        let without = json!({
+    /// A plain parameter prints as it always did.
+    #[test]
+    fn a_plain_parameter_prints_as_before() {
+        let plain = json!({
             "name": "name",
             "type": "text",
             "required": true,
             "help": "The new name.",
         });
-        let line = param_line(&without);
+        let line = param_line(&plain, None);
+        assert!(line.starts_with("      name:"), "the line does not mark it required: {line}");
         assert!(!line.contains("or give"), "a plain parameter grew an alternative: {line}");
+        assert!(!line.contains("one of the two"), "a plain parameter grew a pair: {line}");
+    }
+
+    /// An optional parameter is still marked with a `?`.
+    #[test]
+    fn an_optional_parameter_is_marked_with_a_question_mark() {
+        let optional = json!({
+            "name": "muted",
+            "type": "bool",
+            "required": false,
+            "help": "True to mute.",
+        });
+        let line = param_line(&optional, None);
+        assert!(line.starts_with("      ?muted:"), "the line does not mark it optional: {line}");
+    }
+
+    /// A parameter with an alternative says which other spelling may be given
+    /// instead.
+    ///
+    /// §116: the catalogue marked the id as required, so the line said
+    /// nothing about the name — and the name is what the command accepts.
+    /// §120 prints the pair as one line, so the test drives the whole
+    /// listing rather than one parameter's line.
+    #[test]
+    fn a_parameter_with_an_alternative_says_which_one() {
+        let spec = json!({
+            "params": [
+                { "name": "node", "type": "node-ref", "required": false,
+                  "help": "The node's id, or its name.", "alternative": "node_name" },
+                { "name": "node_name", "type": "text", "required": false,
+                  "help": "…or its name." }
+            ],
+            "one_of": [["node", "node_name"]],
+        });
+        let lines = param_lines(&spec);
+        assert!(lines[0].contains("node_name"), "the line does not name the alternative: {lines:?}");
+    }
+
+    /// A pair prints as one line, and the second spelling does not print a
+    /// line of its own.
+    ///
+    /// §120: the pair used to print as two lines, each marked with a `?` —
+    /// and two lines that both say "may be left out" say that neither is
+    /// needed, which is the opposite of the truth.
+    #[test]
+    fn a_pair_prints_as_one_line_and_the_second_spelling_does_not_print_its_own() {
+        let spec = json!({
+            "id": "node.mute",
+            "params": [
+                { "name": "node", "type": "node-ref", "required": false,
+                  "help": "The node's id, or its name.", "alternative": "node_name" },
+                { "name": "node_name", "type": "text", "required": false,
+                  "help": "…or its name." }
+            ],
+            "one_of": [["node", "node_name"]],
+        });
+        let lines = param_lines(&spec);
+        assert_eq!(lines.len(), 1, "the pair printed more than one line: {lines:?}");
+        assert!(lines[0].contains("node|node_name"), "{}", lines[0]);
+        assert!(lines[0].contains("one of the two is required"), "{}", lines[0]);
+    }
+
+    /// The catalogue says, for every command, which pairs one of must be
+    /// given.
+    ///
+    /// §120: the catalogue's JSON said `required: false` for both spellings
+    /// of a pair and nothing else, so the only face of the catalogue that
+    /// said "one of the two" was the MCP's JSON Schema.
+    #[test]
+    fn the_catalogue_says_which_pairs_one_of_must_be_given() {
+        let catalogue = craftkit_engine::catalogue();
+        let list = catalogue.as_array().expect("the catalogue is a list");
+        let mut pairs = 0;
+        for spec in list {
+            let groups = spec["one_of"].as_array().expect("every command says its pairs");
+            for group in groups {
+                let names = group.as_array().expect("a group is a list of names");
+                assert!(names.len() >= 2, "a group of one is not a pair: {names:?}");
+                pairs += 1;
+                // Every name in a pair is a parameter of the command, and
+                // neither half is required on its own.
+                for name in names {
+                    let name = name.as_str().expect("a name");
+                    let param = spec["params"]
+                        .as_array()
+                        .expect("params")
+                        .iter()
+                        .find(|p| p["name"] == name)
+                        .unwrap_or_else(|| panic!("`{name}` is not a parameter of {}", spec["id"]));
+                    assert_eq!(
+                        param["required"],
+                        json!(false),
+                        "`{name}` is required on its own, so it is not a pair"
+                    );
+                }
+            }
+        }
+        assert!(pairs >= 13, "only {pairs} pair(s) in the catalogue");
     }
 
     fn temp(tag: &str) -> PathBuf {
