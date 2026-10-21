@@ -309,6 +309,13 @@ Methods, exactly (`Method::all()` in `crates/control/src/protocol.rs`):
 and `ui` (aliases `ui.click`, `ui.screenshot`, `ui.render`). There is no
 `commands.list` — the catalogue comes from `engine.describe`.
 
+**`session.state` is how you read the document's parameters.** It answers with
+the document's name, its **frame rate**, its **range** (in raw ticks — 254 016
+000 000 ticks to the second), the playhead, whether there is unsaved work, the
+nodes, the undo depth and the plan. The frame rate used to be reachable only by
+*setting* it, which rewrote the design; the window says "24 fps · 5.00s" in
+its header and nothing an agent could ask said as much. §108.
+
 **`ui.*` works in the desktop app.** `craftkit-control` is layer 5 and
 `craftkit-ui` is layer 6, so the channel does not draw: the host installs a
 handler with `ServerOptions::with_ui` (`apps/craftkit/src/main.rs`'s `ServerOptions::with_ui`) and a

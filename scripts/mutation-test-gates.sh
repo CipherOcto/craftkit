@@ -2632,5 +2632,29 @@ swap crates/ui/src/raster.rs \
 expect_catch "ui: a widget that is not there is refused as though it were disabled" \
     "cargo test -p craftkit-ui --profile ci a_click_by_a_name_that_is_not_there_is_refused"
 
+# The frame rate could only be *set*, never read: the state had the document's
+# name but not its rate, so the only way to ask for it was to set it, which
+# rewrote the design. §108.
+swap crates/engine/src/session.rs \
+    '            "fps": self.doc.meta.fps,' \
+    '            "fps": 0,'
+expect_catch "engine: the state does not carry the frame rate" \
+    "cargo test -p craftkit-engine --profile ci the_state_and_the_range_command_agree_about_the_rate"
+
+# The range is the document's own, and the state is the only place an agent
+# can read it. §108.
+swap crates/engine/src/session.rs \
+    '            "start": self.doc.meta.start.raw(),' \
+    '            "start": self.doc.meta.end.raw(),'
+expect_catch "engine: the state does not carry the document's start" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
+
+# ...and the end of it, which is the other half of the range. §108.
+swap crates/engine/src/session.rs \
+    '            "end": self.doc.meta.end.raw(),' \
+    '            "end": 0,'
+expect_catch "engine: the state does not carry the document's end" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
+
 restore
 finish

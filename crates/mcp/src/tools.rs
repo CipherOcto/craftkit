@@ -44,7 +44,8 @@ fn built_in() -> Vec<Tool> {
     vec![
         Tool {
             name: "craftkit_status".to_string(),
-            description: "The running session: node count, playhead, undo depth, and whether the \
+            description: "The running session: the document's name, its frame rate and its \
+                          range, the node count, the playhead, the undo depth, and whether the \
                           document has unsaved changes. Call this first."
                 .to_string(),
             input_schema: object_schema(&[]),

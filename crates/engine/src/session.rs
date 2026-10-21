@@ -304,9 +304,27 @@ impl Session {
     }
 
     /// The whole state, for an API surface that wants it in one object.
+    ///
+    /// "The whole state" means the session's own: the document's parameters
+    /// (its name, its frame rate, its range), the playhead, whether there is
+    /// unsaved work, the nodes, the undo depth, and the plan.
+    ///
+    /// The document's **parameters** were missing, and they were missing in a
+    /// way that hurt: the frame rate could only be *set*, never read. The
+    /// window says "24 fps · 5.00s" in its header, and nothing an agent could
+    /// ask said as much — so the only way to learn the rate was to set it,
+    /// which rewrites the design. §108.
+    ///
+    /// The instants are **raw ticks**, the same units the rest of the API
+    /// speaks; [`craftkit_core::TICKS_PER_SECOND`] is what turns them into
+    /// seconds. The document's **comment** is not here: nothing bounds its
+    /// length, and this reply is not capped.
     pub fn snapshot_json(&self) -> Json {
         serde_json::json!({
             "name": self.doc.meta.name,
+            "fps": self.doc.meta.fps,
+            "start": self.doc.meta.start.raw(),
+            "end": self.doc.meta.end.raw(),
             "at": self.at.raw(),
             "dirty": self.dirty,
             "nodes": self.doc.nodes.iter().map(|n| serde_json::json!({
@@ -702,6 +720,60 @@ mod tests {
             assert!(!s.is_dirty(), "{id} marked the document dirty");
             assert!(!s.can_undo(), "{id} pushed an undo entry");
         }
+    }
+
+    /// The state carries the document's own parameters.
+    ///
+    /// §108: the frame rate could only be *set*, never read. The window says
+    /// "24 fps · 5.00s" in its header, and nothing an agent could ask said as
+    /// much — so the only way to learn the rate was to set it, which
+    /// rewrites the design.
+    #[test]
+    fn the_state_carries_the_document_s_own_parameters() {
+        let s = sample();
+        let state = s.snapshot_json();
+        let meta = &s.document().meta;
+        assert_eq!(state.get("fps").and_then(|v| v.as_u64()), Some(u64::from(meta.fps)));
+        assert_eq!(
+            state.get("start").and_then(|v| v.as_i64()),
+            Some(meta.start.raw() as i64),
+            "the state's start is not the document's"
+        );
+        assert_eq!(
+            state.get("end").and_then(|v| v.as_i64()),
+            Some(meta.end.raw() as i64),
+            "the state's end is not the document's"
+        );
+        assert_eq!(state.get("name").and_then(|v| v.as_str()), Some(meta.name.as_str()));
+    }
+
+    /// The state and the command that sets the range agree.
+    ///
+    /// §108: the state and `doc.range` are two answers about the same
+    /// document, and they must not disagree — the state is how an agent
+    /// *reads* the rate, and `doc.range` is how it writes it.
+    #[test]
+    fn the_state_and_the_range_command_agree_about_the_rate() {
+        let mut s = sample();
+        let outcome = s.execute("doc.range", &json!({ "fps": 30 })).expect("the rate can be set");
+        let set = outcome.data.get("fps").and_then(|v| v.as_u64());
+        let read = s.snapshot_json().get("fps").and_then(|v| v.as_u64());
+        assert_eq!(set, Some(30));
+        assert_eq!(read, set, "the state and the command disagree about the rate");
+    }
+
+    /// Reading the rate does not change it.
+    ///
+    /// §108: the rate was reachable only by setting it, and setting it
+    /// rewrote the design. Reading it must cost nothing.
+    #[test]
+    fn reading_the_rate_does_not_change_the_document() {
+        let s = sample();
+        let before = s.document().clone();
+        let _ = s.snapshot_json();
+        assert_eq!(s.document(), &before, "reading the state changed the document");
+        assert!(!s.is_dirty(), "reading the state marked the document dirty");
+        assert!(!s.can_undo(), "reading the state pushed an undo entry");
     }
 
     /// A command that says it does not change the document and changes it is

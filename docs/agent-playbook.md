@@ -295,6 +295,13 @@ widget and clicks the middle of it; with `{"x": …, "y": …}` it clicks that
 point. Giving both is refused rather than resolved — one of the two things you
 said would have to be ignored, and which one is a guess. §104.
 
+**`session.state` is how you read the document's parameters.** It answers with
+the document's name, its **frame rate**, its **range** (in raw ticks — 254 016
+000 000 ticks to the second), the playhead, whether there is unsaved work, the
+nodes, the undo depth and the plan. The frame rate used to be reachable only by
+*setting* it, which rewrote the design; the window says "24 fps · 5.00s" in
+its header and nothing an agent could ask said as much. §108.
+
 **The action is in the method name, not in `params`.** `ui.render`,
 `ui.screenshot` and `ui.click` each ask for exactly that; the bare `ui` takes
 an `action` of `widgets`, `render`, `screenshot` or `click`. Naming both at

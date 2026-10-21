@@ -11161,6 +11161,125 @@ by hand is a measurement of the wrong tree unless the timestamps say so too.
 
 ---
 
+## 108. The frame rate was on the screen and nowhere in the API — and the only way to ask was to change it
+
+### The measurement
+
+On the running app, over the control channel:
+
+```
+session.state -> {"at": 0, "can_redo": false, "can_undo": false, "dirty": false,
+                  "name": "Sample plan", "nodes": [...], "plan": {...}}
+```
+
+**No frame rate. No range. No comment.** The state has the document's *name*
+and not its other parameters.
+
+Nor is there any other read:
+
+```
+plan.evaluate   -> {"at": 0, "diagnostics": {...}, "evaluated": 3, "reused": 0, "nodes": [...]}
+session.stats    -> {"commands": 0, "failures": 0, "kernel_recoveries": 0, "nodes": 3, "undo_depth": 0}
+diagnostics.list -> {"dropped": 0, "items": []}
+doc.range {}     -> refused: give at least one of `start`, `end` or `fps`
+```
+
+And the window says, in its own header, *"Sample plan 24 fps · 5.00s"*.
+
+So the rate was on the screen, in the model, and in the file — and in **no**
+place an agent could ask. The only command that mentions it at all is
+`doc.range`, which **sets** it. And setting it is not free:
+
+```
+doc.range {"fps": 30}   -> ok | range 0.000s..5.000s at 30 fps
+session.state           -> dirty: true, can_undo: true
+```
+
+The agent asked for the rate and **rewrote the design**. The rate was not a
+thing that could be read; it was a thing that could be *guessed*, and a wrong
+guess cost the user their design's settings.
+
+### Why nothing noticed
+
+**Nothing in the tree reads it either.** The shell reads `meta.fps` for the
+header and the timeline's scale; the CLI reads it for its own summary. Both
+read the **model** directly. The API surfaces are the ones that answer
+questions, and none of them was asked.
+
+**`session.state` said "the whole state".** It was a summary, and the doc
+sentence was the promise that made it look like one. This is the twenty-fifth
+instance of the same shape, and the first one where the sentence was about the
+*object* rather than about the code.
+
+**Every parameter was write-only.** `doc.rename` sets the name and the state
+carries it; `doc.range` sets the rate and the range and nothing carries them.
+The pattern held for the one field that had been added to the state and not
+for the three that had not.
+
+### The fix
+
+**The state carries the document's own parameters**: `fps`, `start` and `end`,
+alongside the `name` it already had. The instants are raw ticks, the same
+units the rest of the API speaks; `TICKS_PER_SECOND` is what turns them into
+seconds, and it is documented in the README, the format document and the
+time pattern.
+
+**The state and the command agree.** `doc.range`'s reply carries `fps`,
+`start` and `end`; the state carries the same three, from the same place, and
+a test says they may not disagree.
+
+**Reading costs nothing.** `session.state` is a read: it does not mark the
+document dirty, it does not push an undo entry, and a test says so.
+
+The document's **comment** is still not carried: nothing bounds its length,
+and this reply is not capped, so a document with a very long comment would
+make a very long reply. That is a limit, not an oversight, and it is the
+comment's own gap to have.
+
+Measured on the running app, after the fix:
+
+```
+session.state -> {"at": 0, "can_redo": false, "can_undo": false, "dirty": false,
+                  "end": 1270080000000, "fps": 24, "name": "Sample plan",
+                  "nodes": [...], "plan": {...}, "start": 0}
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The state carries the document's own parameters | `the_state_carries_the_document_s_own_parameters` |
+| The state and the range command agree about the rate | `the_state_and_the_range_command_agree_about_the_rate` |
+| Reading the rate does not change the document | `reading_the_rate_does_not_change_the_document` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the state does not
+carry the frame rate; the state does not carry the document's start; the state
+does not carry the document's end.
+
+The first of those three is the one that matters, and it is caught by the
+*agreement* test rather than by the *contents* test: the contents test would
+also be satisfied by a state that carried a constant, while the agreement test
+compares the state against the command that writes the same fact.
+
+### The lesson
+
+**A parameter that can only be set cannot be read, and that is not the same as
+a parameter nobody looks at.** The rate was not missing from the API; it was
+present in the API *as a verb*, and an agent looking for a noun had to turn it
+into one by writing to the design. The cost of the missing noun was paid in
+the user's settings.
+
+**The window is not a source of truth about the API.** The header said "24 fps"
+and the API could not, and the header was right. Nothing about a screen
+proves that the question behind it is answerable.
+
+**"The whole state" is a promise, and it is the sort that is made by reading
+the code rather than by counting the fields.** The state had nine fields and
+the document had five parameters; four of them were in the file, in the model
+and on the screen, and none of them in the state.
+
+---
+
 ---
 
 ## What enforces what
@@ -11389,6 +11508,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The answer at a point says whether it can be clicked** | `craftkit-ui` test | 1 mutation — §107 |
 | **Only the widgets that cannot be clicked are in the dead list** | `craftkit-ui` test | — |
 | **A widget that is not there is refused differently from one that is dead** | `craftkit-ui` test | 1 mutation — §107 |
+| **The state carries the document's own parameters** | `craftkit-engine` test | 2 mutations — §108 |
+| **The state and the range command agree about the rate** | `craftkit-engine` test | 1 mutation — §108 |
+| **Reading the rate does not change the document** | `craftkit-engine` test | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -11608,6 +11730,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    "key at the playhead" row. Twenty-four instances, and the twenty-fourth is
    the one where the sentence was half right, which is harder to notice than
    being half wrong.
+   §108 is the twenty-fifth, and it is a sentence about a *whole*: the engine's
+   `snapshot_json` said *"The whole state, for an API surface that wants it in
+   one object"*, and the object had the document's name and not its frame rate,
+   its range or its comment. Twenty-five instances, and the twenty-fifth is
+   the one where the word "whole" was the whole problem: the sentence was
+   true of every field it had and false of the object it described.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
