@@ -93,7 +93,13 @@ pub struct Frame {
     pub png: Vec<u8>,
     pub width: usize,
     pub height: usize,
-    /// The shell's state after the frame: selection and the status line.
+    /// The shell's state after the frame.
+    ///
+    /// It is the whole of [`crate::shell::ShellState`]: the selection, the
+    /// status line and the text of the "key at the playhead" fields. §105
+    /// added the last two, and this sentence still said "selection and the
+    /// status line" — the twenty-fourth instance of a description that was
+    /// written by reading the code rather than by measuring it.
     pub state: crate::shell::ShellState,
     /// Every widget that was present, for "what is at this point?" and for an
     /// agent to check that a control it expects is actually on screen.
@@ -124,11 +130,23 @@ pub fn check_size(width: usize, height: usize) -> Result<(), String> {
 /// frames are drawn against one shell, so a panel that caches state sees the
 /// same shell both times, exactly as it would in a window.
 ///
+/// `state` is the shell's memory: the selection, the status line and the text
+/// of the "key at the playhead" fields. It is a **parameter** rather than an
+/// internal default because the state decides what is on the screen — with
+/// nothing selected the properties panel draws *"Select a node."* and
+/// publishes no editor at all, so a render that did not say what it was
+/// rendering was silently rendering the empty half of the window. §106.
+///
 /// # Errors
 ///
 /// The requested size is out of bounds, or PNG encoding failed. Both name what
 /// was asked for.
-pub fn render(session: &mut craftkit_engine::Session, width: usize, height: usize) -> Result<Frame, String> {
+pub fn render(
+    session: &mut craftkit_engine::Session,
+    width: usize,
+    height: usize,
+    state: &crate::shell::ShellState,
+) -> Result<Frame, String> {
     check_size(width, height)?;
 
     let ctx = egui::Context::default();
@@ -137,7 +155,7 @@ pub fn render(session: &mut craftkit_engine::Session, width: usize, height: usiz
         egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(width as f32, height as f32));
     let raw = egui::RawInput { screen_rect: Some(screen_rect), ..Default::default() };
 
-    let mut shell = crate::shell::Shell::new(session);
+    let mut shell = crate::shell::Shell::with_state(session, state.clone());
     let mut deltas: Vec<egui::TexturesDelta> = Vec::new();
     let mut shapes: Vec<egui::ClippedPrimitive> = Vec::new();
     for _ in 0..FRAMES {
@@ -157,8 +175,11 @@ pub fn render(session: &mut craftkit_engine::Session, width: usize, height: usiz
 }
 
 /// Draw the shell headlessly at [`DEFAULT_SIZE`].
-pub fn render_default(session: &mut craftkit_engine::Session) -> Result<Frame, String> {
-    render(session, DEFAULT_SIZE[0], DEFAULT_SIZE[1])
+pub fn render_default(
+    session: &mut craftkit_engine::Session,
+    state: &crate::shell::ShellState,
+) -> Result<Frame, String> {
+    render(session, DEFAULT_SIZE[0], DEFAULT_SIZE[1], state)
 }
 
 /// Render with whatever pointer input the caller supplies, and report what came
@@ -169,12 +190,17 @@ pub fn render_default(session: &mut craftkit_engine::Session) -> Result<Frame, S
 /// *replayed* into a fresh context and the automation registry says which
 /// widget the click landed on. The answer is the layout's answer, which is the
 /// honest one — it is the widget that was at that point, not a guess.
+///
+/// `state` is the shell's memory, and it decides the layout the click lands
+/// in: with nothing selected the properties panel is empty, and a property
+/// editor is not on the screen to be clicked. §106.
 pub fn click(
     session: &mut craftkit_engine::Session,
     x: f32,
     y: f32,
     width: usize,
     height: usize,
+    state: &crate::shell::ShellState,
 ) -> Result<Click, String> {
     check_size(width, height)?;
     if !x.is_finite() || !y.is_finite() {
@@ -189,7 +215,7 @@ pub fn click(
 
     // Settle the layout first, with no pointer at all. A click into a layout
     // that has not settled answers about where things *will* be.
-    let mut shell = crate::shell::Shell::new(session);
+    let mut shell = crate::shell::Shell::with_state(session, state.clone());
     for _ in 0..FRAMES {
         let _ = ctx.run(raw.clone(), |ctx| shell.show(ctx, &tokens));
     }
@@ -224,11 +250,16 @@ pub fn click(
 ///
 /// The click lands in the middle of the widget's rectangle, and the answer
 /// is the same answer [`click`] gives: which widget was at that point.
+///
+/// `state` is the shell's memory, and it decides what is on the screen to be
+/// clicked: the properties panel is empty without a selection, so a property
+/// editor has no name to be found under. §106.
 pub fn click_name(
     session: &mut craftkit_engine::Session,
     name: &str,
     width: usize,
     height: usize,
+    state: &crate::shell::ShellState,
 ) -> Result<Click, String> {
     check_size(width, height)?;
 
@@ -239,14 +270,14 @@ pub fn click_name(
     let screen_rect =
         egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(width as f32, height as f32));
     let raw = egui::RawInput { screen_rect: Some(screen_rect), ..Default::default() };
-    let mut shell = crate::shell::Shell::new(session);
+    let mut shell = crate::shell::Shell::with_state(session, state.clone());
     for _ in 0..FRAMES {
         let _ = ctx.run(raw.clone(), |ctx| shell.show(ctx, &tokens));
     }
 
     let rect = widget_rect(&shell.automation, name)?;
     let centre = rect.center();
-    click(session, centre.x, centre.y, width, height)
+    click(session, centre.x, centre.y, width, height, state)
 }
 
 /// The rectangle of the widget with this name, or say why there is not one.
@@ -747,10 +778,19 @@ mod tests {
 
     // ---- the session-level API ------------------------------------------------
 
+    /// The state a render is drawn with: nothing selected.
+    ///
+    /// §106: the state decides what is on the screen, so a test that does not
+    /// say which state it means is choosing the empty one — and the empty one
+    /// has no property editor on it.
+    fn empty() -> crate::shell::ShellState {
+        crate::shell::ShellState::default()
+    }
+
     #[test]
     fn a_session_renders_to_a_real_png() {
         let mut session = craftkit_engine::Session::sample();
-        let frame = render(&mut session, 400, 300).expect("renders");
+        let frame = render(&mut session, 400, 300, &empty()).expect("renders");
         assert_eq!((frame.width, frame.height), (400, 300));
         assert_eq!(&frame.png[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a], "not a PNG");
         assert!(frame.png.len() > 1000, "a blank frame would be tiny: {}", frame.png.len());
@@ -759,7 +799,7 @@ mod tests {
     #[test]
     fn a_rendered_frame_is_not_blank() {
         let mut session = craftkit_engine::Session::sample();
-        let frame = render(&mut session, 320, 240).expect("renders");
+        let frame = render(&mut session, 320, 240, &empty()).expect("renders");
         // Decoded with a real decoder rather than by reading our own bytes
         // back: "the encoder wrote something" and "it is a viewable image" are
         // different claims.
@@ -773,10 +813,37 @@ mod tests {
     #[test]
     fn a_rendered_frame_reports_the_widgets_on_screen() {
         let mut session = craftkit_engine::Session::sample();
-        let frame = render(&mut session, 600, 400).expect("renders");
+        let frame = render(&mut session, 600, 400, &empty()).expect("renders");
         let names = frame.automation.names();
         assert!(!names.is_empty(), "the shell published no widgets at all");
         assert!(names.iter().any(|n| n.contains("node")), "the node list should be on screen: {names:?}");
+    }
+
+    /// The state decides what is on the screen.
+    ///
+    /// §106: a render that does not say which state it is drawing silently
+    /// draws the empty one — and the empty one has no properties panel on it,
+    /// so every property editor had no name to be found under.
+    #[test]
+    fn the_state_decides_what_is_on_the_screen() {
+        let mut session = craftkit_engine::Session::sample();
+        let empty_frame = render(&mut session, 600, 400, &empty()).expect("renders");
+        let empty_names = empty_frame.automation.names();
+        assert!(
+            !empty_names.iter().any(|n| n.starts_with("node.1.prop.")),
+            "the empty screen has a property editor on it: {empty_names:?}"
+        );
+
+        let selected = crate::shell::ShellState {
+            selected: Some(craftkit_core::NodeId(1)),
+            ..crate::shell::ShellState::default()
+        };
+        let frame = render(&mut session, 600, 400, &selected).expect("renders");
+        let names = frame.automation.names();
+        assert!(
+            names.iter().any(|n| n.starts_with("node.1.prop.")),
+            "the selected node's editors are not on the screen: {names:?}"
+        );
     }
 
     #[test]
@@ -786,7 +853,7 @@ mod tests {
         // as unexplained history.
         let mut session = craftkit_engine::Session::sample();
         let before = session.snapshot_json();
-        let _ = render(&mut session, 320, 240).expect("renders");
+        let _ = render(&mut session, 320, 240, &empty()).expect("renders");
         assert_eq!(session.snapshot_json(), before);
         assert!(!session.is_dirty(), "a render must not make the session dirty");
         assert_eq!(session.undo_depth(), 0, "a render must not push an undo entry");
@@ -795,11 +862,11 @@ mod tests {
     #[test]
     fn an_absurd_size_is_refused_by_name() {
         let mut session = craftkit_engine::Session::sample();
-        let err = render(&mut session, 0, 100).expect_err("refused");
+        let err = render(&mut session, 0, 100, &empty()).expect_err("refused");
         assert!(err.contains("at least"), "{err}");
         assert!(err.contains("0x100"), "the report should say what was asked for: {err}");
 
-        let err = render(&mut session, 100, usize::MAX).expect_err("refused");
+        let err = render(&mut session, 100, usize::MAX, &empty()).expect_err("refused");
         assert!(err.contains("at most"), "{err}");
     }
 
@@ -814,7 +881,7 @@ mod tests {
 
         // Each side is inside the per-side limit, and the area is not: the
         // refusal has to be about the pixels, not about the sides.
-        let err = render(&mut session, MAX_SIZE, MAX_SIZE).expect_err("refused");
+        let err = render(&mut session, MAX_SIZE, MAX_SIZE, &empty()).expect_err("refused");
         assert!(err.contains("pixels"), "the refusal should name the limit it broke: {err}");
         assert!(err.contains(&format!("{MAX_SIZE}x{MAX_SIZE}")), "and what was asked for: {err}");
 
@@ -836,10 +903,11 @@ mod tests {
     fn a_click_on_a_widget_names_that_widget() {
         let mut session = craftkit_engine::Session::sample();
         // Settle once to learn where things are, then click exactly there.
-        let frame = render(&mut session, 600, 400).expect("renders");
+        let frame = render(&mut session, 600, 400, &empty()).expect("renders");
         let name = frame.automation.names().into_iter().find(|n| n.contains("node")).expect("a node row");
         let rect = frame.automation.rect(name).expect("the row has a rectangle");
-        let click = click(&mut session, rect.center().x, rect.center().y, 600, 400).expect("clicks");
+        let click =
+            click(&mut session, rect.center().x, rect.center().y, 600, 400, &empty()).expect("clicks");
         assert_eq!(click.hit.as_deref(), Some(name), "clicked the centre of {name}");
     }
 
@@ -852,10 +920,10 @@ mod tests {
     fn a_click_by_name_lands_on_that_widget() {
         let mut session = craftkit_engine::Session::sample();
         let name = "nodes.row.1";
-        let click = click_name(&mut session, name, 600, 400).expect("clicks");
+        let click = click_name(&mut session, name, 600, 400, &empty()).expect("clicks");
         assert_eq!(click.hit.as_deref(), Some(name), "the click did not land on {name}");
         // And the point it reported is inside the widget's own rectangle.
-        let frame = render(&mut session, 600, 400).expect("renders");
+        let frame = render(&mut session, 600, 400, &empty()).expect("renders");
         let rect = frame.automation.rect(name).expect("the row has a rectangle");
         assert!(
             rect.contains(egui::pos2(click.point[0], click.point[1])),
@@ -868,8 +936,30 @@ mod tests {
     #[test]
     fn a_click_by_a_name_that_is_not_there_is_refused() {
         let mut session = craftkit_engine::Session::sample();
-        let err = click_name(&mut session, "nodes.row.9999", 600, 400).expect_err("refused");
+        let err = click_name(&mut session, "nodes.row.9999", 600, 400, &empty()).expect_err("refused");
         assert!(err.contains("no widget named"), "{err}");
+    }
+
+    /// A property editor can be clicked by name, when a node is selected.
+    ///
+    /// §106: the channel drew the shell with nothing selected, so the
+    /// properties panel was empty — and the editor's name, which §99 gave it,
+    /// was a name that could never be found. The name existed; the widget it
+    /// promised was not on the screen.
+    #[test]
+    fn a_property_editor_can_be_clicked_by_name_when_a_node_is_selected() {
+        let mut session = craftkit_engine::Session::sample();
+        let editor = "node.1.prop.amount";
+        // Without a selection it is not on the screen, and the refusal says so.
+        let err = click_name(&mut session, editor, 600, 400, &empty()).expect_err("refused");
+        assert!(err.contains("no widget named"), "{err}");
+
+        let selected = crate::shell::ShellState {
+            selected: Some(craftkit_core::NodeId(1)),
+            ..crate::shell::ShellState::default()
+        };
+        let click = click_name(&mut session, editor, 600, 400, &selected).expect("clicks");
+        assert_eq!(click.hit.as_deref(), Some(editor), "the click did not land on {editor}");
     }
 
     /// A widget that is on screen but disabled is a different thing.
@@ -892,33 +982,33 @@ mod tests {
     fn a_click_on_empty_space_says_so_rather_than_guessing() {
         let mut session = craftkit_engine::Session::sample();
         // The bottom-right corner of the frame is background in this layout.
-        let hit = click(&mut session, 597.0, 397.0, 600, 400).expect("clicks");
+        let hit = click(&mut session, 597.0, 397.0, 600, 400, &empty()).expect("clicks");
         assert_eq!(hit.hit, None, "something was found at the corner: {:?}", hit.hit);
     }
 
     #[test]
     fn a_click_outside_the_frame_is_not_a_click() {
         let mut session = craftkit_engine::Session::sample();
-        assert_eq!(click(&mut session, 5000.0, 10.0, 600, 400).expect("clicks").hit, None);
-        assert_eq!(click(&mut session, -40.0, -40.0, 600, 400).expect("clicks").hit, None);
+        assert_eq!(click(&mut session, 5000.0, 10.0, 600, 400, &empty()).expect("clicks").hit, None);
+        assert_eq!(click(&mut session, -40.0, -40.0, 600, 400, &empty()).expect("clicks").hit, None);
     }
 
     #[test]
     fn a_non_finite_click_is_refused() {
         let mut session = craftkit_engine::Session::sample();
-        let err = click(&mut session, f32::NAN, 0.0, 600, 400).expect_err("refused");
+        let err = click(&mut session, f32::NAN, 0.0, 600, 400, &empty()).expect_err("refused");
         assert!(err.contains("not a point"), "{err}");
-        assert!(click(&mut session, f32::INFINITY, 0.0, 600, 400).is_err());
+        assert!(click(&mut session, f32::INFINITY, 0.0, 600, 400, &empty()).is_err());
     }
 
     #[test]
     fn a_click_does_not_change_the_document_either() {
         let mut session = craftkit_engine::Session::sample();
         let before = session.snapshot_json();
-        let frame = render(&mut session, 600, 400).expect("renders");
+        let frame = render(&mut session, 600, 400, &empty()).expect("renders");
         let name = frame.automation.names().first().copied().expect("a widget");
         let rect = frame.automation.rect(name).expect("a rectangle");
-        let _ = click(&mut session, rect.center().x, rect.center().y, 600, 400).expect("clicks");
+        let _ = click(&mut session, rect.center().x, rect.center().y, 600, 400, &empty()).expect("clicks");
         // A click reports where it landed; it does not activate. Acting is
         // `engine.execute`, which is undoable and auditable. A click that
         // changed the document would be a second way to do everything.

@@ -10897,6 +10897,140 @@ survived.
 
 ---
 
+## 106. The control channel drew the shell with nothing selected, so half the window was invisible
+
+§99, §100 and §104 were about the **registry** — the names of the widgets and
+where they were. §105 was about the shell's **memory**: the selection the
+window threw away with the frame.
+
+This is the other half of §105: the memory the window now keeps, the channel
+could not see.
+
+### The measurement
+
+On the running app, over the control channel:
+
+```
+ui.widgets                 -> 34 names
+  property editors: []
+ui.click {"name": "node.1.prop.amount"}
+  -> there is no widget named `node.1.prop.amount` on screen
+ui.click {"name": "properties.key.path"}
+  -> there is no widget named `properties.key.path` on screen
+```
+
+Thirty-four names: the toolbar's twenty-four buttons, three node rows, three
+level bars, three mute buttons, three delete buttons and the playhead. **Not
+one property editor** — and not the key fields either, which are the names
+§100 invented, with a test of their own.
+
+The reason is one line. `raster::render` built its shell with
+`ShellState::default()`, and the default has no selection. With no selection
+the properties panel draws *"Select a node."* and returns — so it publishes
+nothing at all. The panel was not on the screen the channel described.
+
+And that screen was not the window's screen either. Since §105 the window
+keeps its selection, so the window can be showing four editors while the
+channel says there are none.
+
+### Why nothing noticed
+
+**The names existed, and the names were the point.** §99 and §100 spent two
+sections making sure every widget had a name that promised a widget that was
+really there. That rule was checked in the shell's own frame — where the
+properties panel is empty unless something is selected. The check passed, and
+the channel never saw a frame with a selection in it.
+
+**A render is a picture, and a picture of nothing looks right.** Thirty-four
+names is a plausible list of widgets. Nothing said "this is the screen of an
+application nobody has touched".
+
+**§105 made the window right and the channel wrong.** Before §105 the window's
+state was always the default, so the channel's empty screen and the window's
+empty screen were the *same* screen and nobody could tell them apart. After
+§105 the window keeps a selection and the two screens came apart. The
+divergence was *caused* by the fix that came before it — which is why it
+needed a measurement rather than a reading.
+
+### The fix
+
+**A render of the shell is a render of a shell *in a state*.** `raster::render`,
+`click` and `click_name` take the shell's state, and it is not an internal
+default any more: a caller that does not say which state it means is choosing
+the empty one, and now has to say so. `Shell::with_state` is the way to say it.
+
+**The channel and the window share one state.** The app holds it in an
+`Arc<Mutex<ShellState>>`; the frame loop writes it back and the channel's
+handler reads it. So the screen the channel describes is the screen the window
+is showing. Both sides take the **session** before the **state**, so neither
+can be waiting for the other.
+
+**An agent can ask about a screen with a node selected.** The `ui` actions take
+a `selected` node id; the reply says which node it drew, and a node that is
+not in the document is refused rather than answered with an empty panel.
+
+**Selecting a node is not a command.** It changes nothing in the document, so
+there is nothing to undo and nothing to log — which is why it is a parameter of
+a read rather than a new method. Whether it *should* be a command is the open
+question in "Suggested order", item 19.
+
+Measured on the running app, after the fix:
+
+```
+ui.widgets                                 -> 34 names, no property editor
+ui.widgets {"selected": 1}                 -> 39 names
+  property editors: node.1.prop.amount, node.1.prop.enabled,
+                    node.1.prop.label, node.1.prop.tint
+  key fields: properties.key.path
+ui.click {"name": "node.1.prop.amount", "selected": 1}
+  -> `node.1.prop.amount` is at that point
+ui.widgets {"selected": 9999}               -> refused: there is no node with id 9999
+```
+
+The pictures are the channel's own render, before and after:
+`/tmp/probe106-before.png` (the panel says *"Select a node."*) and
+`/tmp/probe106-after.png` (the panel shows *"Level · source"*, the *enabled*
+checkbox, the *amount* slider, the *label* field and the "key at the playhead"
+field).
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The state decides what is on the screen | `the_state_decides_what_is_on_the_screen` |
+| A property editor can be clicked by name when a node is selected | `a_property_editor_can_be_clicked_by_name_when_a_node_is_selected` |
+| The property editors are on the screen when a node is selected | `the_property_editors_are_on_the_screen_when_a_node_is_selected` |
+| The widgets reply is the screen the window is showing | `the_widgets_reply_is_the_screen_the_window_is_showing` |
+| The channel reports the window's screen over the socket | `the_channel_reports_the_windows_screen_over_the_socket` |
+| A selected node that is not there is refused | `a_selected_node_that_is_not_there_is_refused` |
+| A `selected` that is not a node id is refused | `a_selected_that_is_not_a_node_id_is_refused` |
+
+and five mutations in `scripts/mutation-test-gates.sh`: the render draws the
+shell with nothing selected; a click by name looks for the widget on the empty
+screen; the channel reports a screen of its own; the selected node is ignored;
+a selected node that is not there is accepted.
+
+The socket test is the one that covers the **wiring**: the others call the
+handler directly, and the thing that can go wrong is a handler that is handed
+a state of its own instead of the shared one.
+
+### The lesson
+
+**A tool that shows a screen must show the screen, not a screen it made up.**
+The channel's answer to "what is on screen?" was a picture of an application
+nobody had touched, and it was indistinguishable from a picture of the real
+one — because the real one *was* that, until §105 made it something else.
+
+**The state is the difference between a picture and a lie.** Thirty-four names
+is not a wrong answer; it is the right answer to a question nobody asked.
+
+**A fix can create the next gap.** §105 made the window right. The channel's
+answer was wrong in a *new* way afterwards, and nothing in the tree would have
+said so: both sides still agreed with themselves, and they had stopped
+agreeing with each other.
+
+---
+
 ---
 
 ## What enforces what
@@ -11112,6 +11246,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A selection made in one frame is there in the next** | `craftkit-ui` test | 2 mutations — §105 |
 | **A path typed into the key field is still there in the next frame** | `craftkit-ui` test | 2 mutations — §105 |
 | **A host cannot forget the shell's state** | the compiler — the state is an *input* to `frame` | — |
+| **The state decides what is on the screen** | `craftkit-ui` test | 1 mutation — §106 |
+| **A property editor can be clicked by name when a node is selected** | `craftkit-ui` test | 1 mutation — §106 |
+| **The property editors are on the screen when a node is selected** | `craftkit` test | 1 mutation — §106 |
+| **The widgets reply is the screen the window is showing** | `craftkit` test | 1 mutation — §106 |
+| **The channel reports the window's screen over the socket** | `craftkit` test | 1 mutation — §106 |
+| **A selected node that is not there is refused** | `craftkit` test | 1 mutation — §106 |
+| **A `selected` that is not a node id is refused** | `craftkit` test | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -11325,6 +11466,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    instances, and the twenty-third is the one where the sentence described a
    promise the code was making *to the reader of the sentence* rather than to
    the compiler.
+   §106 is the twenty-fourth, and it is a sentence about a *struct*: the
+   raster's `Frame` said its state was *"selection and the status line"*, and
+   §105 had already added two fields to it — the path and the value of the
+   "key at the playhead" row. Twenty-four instances, and the twenty-fourth is
+   the one where the sentence was half right, which is harder to notice than
+   being half wrong.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
@@ -11478,3 +11625,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     place, and the tree has no way to measure the cost of a command without
     building a document at the limit to measure it on — which is what §103
     did, and why the numbers are here and not in a gate.
+19. **Decide whether selecting a node belongs in the document.** §105 put the
+    selection where the shell could keep it, and §106 shared it between the
+    window and the control channel. It is the one piece of the interface that
+    is **not** a command and not in the document: it changes nothing that can
+    be undone, and nothing that is saved with the design. That is a defensible
+    choice — a selection is a *view*, and undoing a selection would be
+    strange — but it has a cost: a design reopened tomorrow opens with nothing
+    selected, an agent and a person at the same desk can disagree about what
+    is selected without either of them being wrong, and the CLI's `snapshot`
+    can only ever draw the empty panel (§106's parameter is the control
+    channel's way around it). The other choice is to put the selection in the
+    document: it would then be saved, undoable, and shared by every surface —
+    at the price of the file format, of the model's idea of what a design is,
+    and of an undo stack that records "the person looked at something else".
+    Neither is obvious, and the choice should not be an accident of which
+    struct the field landed in.

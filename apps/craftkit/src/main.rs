@@ -41,7 +41,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use craftkit_control::ServerOptions;
@@ -99,18 +99,32 @@ fn main() -> std::process::ExitCode {
     // sides meet here rather than in either one's lifetime.
     let ctx_slot: ContextSlot = Arc::new(Mutex::new(None));
 
+    // The shell's memory is shared by the window and the control channel, so
+    // that the screen the channel describes is the screen the window is
+    // showing. §106.
+    let state: SharedState = Arc::new(Mutex::new(craftkit_ui::shell::ShellState::default()));
+
     // Started *before* the window, so a port clash is reported before anything
     // is drawn, and held in a local so it lives exactly as long as the window
     // and not a moment longer.
     let control = match flags.control {
         None => None,
-        Some(port) => match start_control(port, &session, &ctx_slot) {
-            Ok(server) => Some(server),
-            Err(e) => {
-                eprintln!("control channel: {e}");
-                return std::process::ExitCode::FAILURE;
+        Some(port) => {
+            let token = match craftkit_control::Token::resolve() {
+                Ok(token) => token,
+                Err(e) => {
+                    eprintln!("control channel: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            match start_control(port, &session, &ctx_slot, &state, token, None) {
+                Ok((server, _path)) => Some(server),
+                Err(e) => {
+                    eprintln!("control channel: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
             }
-        },
+        }
     };
 
     let options = eframe::NativeOptions {
@@ -123,9 +137,7 @@ fn main() -> std::process::ExitCode {
     let run = eframe::run_native(
         "craftkit",
         options,
-        Box::new(|_cc| {
-            Ok(Box::new(Application { session, ctx_slot, state: craftkit_ui::shell::ShellState::default() }))
-        }),
+        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot, state }))),
     );
     match run {
         Ok(()) => {
@@ -266,17 +278,32 @@ fn request_repaint(slot: &ContextSlot) {
 }
 
 /// Open the loopback control channel.
+///
+/// `token_dir` is where the token file goes; `None` is the usual place. It is a
+/// parameter so that a test can keep the file inside a directory it owns.
 fn start_control(
     port: u16,
     session: &Arc<Mutex<Session>>,
     ctx_slot: &ContextSlot,
-) -> Result<craftkit_control::Server, String> {
-    let token = craftkit_control::Token::resolve()?;
+    state: &SharedState,
+    token: craftkit_control::Token,
+    token_dir: Option<&Path>,
+) -> Result<(craftkit_control::Server, PathBuf), String> {
     // Cloned rather than borrowed: the handler outlives this function, and the
     // slot outlives it in turn because `main` holds it for the window's life.
     let slot = Arc::clone(ctx_slot);
-    let options =
-        ServerOptions::new(port, token).with_ui(ui_request).with_after(move || request_repaint(&slot));
+    // The shell's memory, shared with the window: the channel reports the
+    // screen the window is showing, not a screen of its own. §106.
+    let ui_state = Arc::clone(state);
+    let mut options = ServerOptions::new(port, token)
+        .with_ui(move |session, request| {
+            let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            ui_request(session, request, &guard)
+        })
+        .with_after(move || request_repaint(&slot));
+    if let Some(dir) = token_dir {
+        options = options.with_token_dir(dir);
+    }
     // The channel is bound **before** the token is published. The token file
     // is the promise that this port answers to this token, and a second
     // instance — which cannot bind — used to take that promise away from the
@@ -286,7 +313,7 @@ fn start_control(
     println!("control channel listening on 127.0.0.1:{}", server.port());
     println!("token in {}", path.display());
     println!("try: {{\"id\":1,\"token\":\"…\",\"method\":\"engine.describe\"}}");
-    Ok(server)
+    Ok((server, path))
 }
 
 /// Answer a `ui.*` request.
@@ -303,7 +330,21 @@ fn start_control(
 /// what makes this binary usable on a build machine. The consequence of *that*
 /// is that `ui.screenshot` must not pretend to be the window's pixels, so it
 /// says so in its own reply.
-fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> craftkit_control::Response {
+///
+/// # The state it draws with
+///
+/// `state` is the shell's memory, and it is the **window's** memory: the
+/// window's frame loop and this handler share one value, so the screen the
+/// channel describes is the screen the window is showing. It used to draw a
+/// shell with nothing selected — which is a screen the window cannot be in,
+/// because with nothing selected the properties panel is empty and publishes
+/// no editor, so half the window's widgets had no name to be found under.
+/// §106.
+fn ui_request(
+    session: &mut Session,
+    request: &craftkit_control::Request,
+    state: &craftkit_ui::shell::ShellState,
+) -> craftkit_control::Response {
     use craftkit_control::Response;
     use serde_json::Value as Json;
 
@@ -319,6 +360,14 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
     let width = size(request.params.get("width")).unwrap_or(default_width);
     let height = size(request.params.get("height")).unwrap_or(default_height);
 
+    // The state to draw with: the window's, unless the caller named a node to
+    // select. §106.
+    let state = match selected_state(session, state, request.params.get("selected")) {
+        Ok(state) => state,
+        Err(message) => return Response::error(&request.id, "bad-parameter", message),
+    };
+    let selected = state.selected.map(|id| id.get());
+
     match action {
         craftkit_control::UiAction::Render | craftkit_control::UiAction::Screenshot => {
             let message = if action == craftkit_control::UiAction::Screenshot {
@@ -329,7 +378,7 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
             } else {
                 format!("rendered {width}x{height}")
             };
-            match craftkit_ui::raster::render(session, width, height) {
+            match craftkit_ui::raster::render(session, width, height, &state) {
                 Ok(frame) => Response::ok(
                     &request.id,
                     message,
@@ -340,6 +389,7 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
                             ("height".to_string(), Json::from(frame.height)),
                             ("widgets".to_string(), Json::from(frame.automation.names())),
                             ("rects".to_string(), rects(&frame.automation)),
+                            ("selected".to_string(), selected.map(Json::from).unwrap_or(Json::Null)),
                         ]
                         .into_iter()
                         .collect(),
@@ -362,8 +412,10 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
                 );
             }
             let clicked = match (by_name, by_point) {
-                (Some(name), _) => craftkit_ui::raster::click_name(session, name, width, height),
-                (None, (Some(x), Some(y))) => craftkit_ui::raster::click(session, x, y, width, height),
+                (Some(name), _) => craftkit_ui::raster::click_name(session, name, width, height, &state),
+                (None, (Some(x), Some(y))) => {
+                    craftkit_ui::raster::click(session, x, y, width, height, &state)
+                }
                 (None, _) => {
                     return Response::error(
                         &request.id,
@@ -384,6 +436,7 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
                                 ("x".to_string(), Json::from(click.point[0])),
                                 ("y".to_string(), Json::from(click.point[1])),
                                 ("status".to_string(), Json::from(click.state.status)),
+                                ("selected".to_string(), selected.map(Json::from).unwrap_or(Json::Null)),
                             ]
                             .into_iter()
                             .collect(),
@@ -393,24 +446,57 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
                 Err(e) => Response::error(&request.id, "bad-parameter", e),
             }
         }
-        craftkit_control::UiAction::Widgets => match craftkit_ui::raster::render(session, width, height) {
-            Ok(frame) => Response::ok(
-                &request.id,
-                "the widgets on screen, and where they are",
-                Json::Object(
-                    [
-                        ("widgets".to_string(), Json::from(frame.automation.names())),
-                        ("rects".to_string(), rects(&frame.automation)),
-                        ("width".to_string(), Json::from(frame.width)),
-                        ("height".to_string(), Json::from(frame.height)),
-                    ]
-                    .into_iter()
-                    .collect(),
+        craftkit_control::UiAction::Widgets => {
+            match craftkit_ui::raster::render(session, width, height, &state) {
+                Ok(frame) => Response::ok(
+                    &request.id,
+                    "the widgets on screen, and where they are",
+                    Json::Object(
+                        [
+                            ("widgets".to_string(), Json::from(frame.automation.names())),
+                            ("rects".to_string(), rects(&frame.automation)),
+                            ("width".to_string(), Json::from(frame.width)),
+                            ("height".to_string(), Json::from(frame.height)),
+                            ("selected".to_string(), selected.map(Json::from).unwrap_or(Json::Null)),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
                 ),
-            ),
-            Err(e) => Response::error(&request.id, "bad-parameter", e),
-        },
+                Err(e) => Response::error(&request.id, "bad-parameter", e),
+            }
+        }
     }
+}
+
+/// The shell's state to draw with.
+///
+/// The window's own state, unless the caller named a node to select: an agent
+/// that wants to see the properties panel has to be able to put the screen
+/// into the state it wants to look at, and without a selection the panel is
+/// empty. The named node must exist — a request that names a node that is not
+/// there is refused rather than answered with a screen of nothing.
+///
+/// # Errors
+///
+/// The `selected` is not a node id, or it is a node id that is not in the
+/// document. Both name what was asked for.
+fn selected_state(
+    session: &Session,
+    live: &craftkit_ui::shell::ShellState,
+    selected: Option<&serde_json::Value>,
+) -> Result<craftkit_ui::shell::ShellState, String> {
+    let Some(value) = selected else {
+        return Ok(live.clone());
+    };
+    let id = value.as_u64().ok_or_else(|| format!("`selected` must be a node id; got {value}"))?;
+    let node = craftkit_core::NodeId(id);
+    if session.node(node).is_none() {
+        return Err(format!("there is no node with id {id}"));
+    }
+    let mut state = live.clone();
+    state.selected = Some(node);
+    Ok(state)
 }
 
 /// Every published widget's rectangle, as a map from its name.
@@ -683,8 +769,19 @@ struct Application {
     /// is where the selection and the status line live. Without this the
     /// selection was gone before the next frame, and the properties panel
     /// could never open.
-    state: craftkit_ui::shell::ShellState,
+    ///
+    /// §106: it is shared with the control channel, so the screen the channel
+    /// reports is the screen the window is showing.
+    state: SharedState,
 }
+
+/// The shell's memory, shared by the window and the control channel.
+///
+/// A mutex because the two live on different threads, and the *same* mutex
+/// because the window takes the session before the state and the channel's
+/// handler is called with the session already held — so the two always take
+/// them in the same order, and neither can be waiting for the other.
+type SharedState = Arc<Mutex<craftkit_ui::shell::ShellState>>;
 
 impl eframe::App for Application {
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
@@ -707,7 +804,14 @@ impl eframe::App for Application {
         // A panic in the drawing code is caught here, where the session is
         // still in hand, and the crash report is written from here. §76.
         let outcome = draw_guarded(&mut session, None, |session| {
-            let _ = craftkit_ui::frame(ctx, session, &tokens, &mut self.state);
+            // The shell's memory, shared with the control channel: the screen
+            // the channel reports is the screen the window is showing. §106.
+            //
+            // A poisoned lock means a frame panicked while holding it; the
+            // state is still there, and losing it would lose the person's
+            // selection for no gain.
+            let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let _ = craftkit_ui::frame(ctx, session, &tokens, &mut state);
         });
         if let Err(message) = outcome {
             log::error!("the drawing code panicked ({message}); the crash report has been written");
@@ -765,7 +869,7 @@ mod tests {
     fn a_click_by_name_reaches_the_widget_it_names() {
         let mut session = craftkit_engine::Session::sample();
         let request = ui_request_params("ui.click", serde_json::json!({ "name": "nodes.row.1.del" }));
-        let response = ui_request(&mut session, &request);
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(response.ok, "the click by name was refused: {:?}", response.message);
         let hit = response.data.as_ref().and_then(|d| d.get("hit")).and_then(|v| v.as_str());
         assert_eq!(hit, Some("nodes.row.1.del"), "the click did not land on the widget");
@@ -776,7 +880,7 @@ mod tests {
     fn a_click_with_neither_a_name_nor_a_point_is_refused() {
         let mut session = craftkit_engine::Session::sample();
         let request = ui_request_params("ui.click", serde_json::json!({}));
-        let response = ui_request(&mut session, &request);
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(!response.ok, "a click with no target was accepted");
         assert!(response.message.as_deref().unwrap_or("").contains("name"), "{:?}", response.message);
     }
@@ -787,7 +891,7 @@ mod tests {
         let mut session = craftkit_engine::Session::sample();
         let request =
             ui_request_params("ui.click", serde_json::json!({ "name": "nodes.row.1.del", "x": 10, "y": 10 }));
-        let response = ui_request(&mut session, &request);
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(!response.ok, "a click with two targets was accepted");
         assert!(response.message.as_deref().unwrap_or("").contains("not both"), "{:?}", response.message);
     }
@@ -799,7 +903,7 @@ mod tests {
     fn the_widgets_reply_says_where_the_widgets_are() {
         let mut session = craftkit_engine::Session::sample();
         let request = ui_request_params("ui", serde_json::json!({ "action": "widgets" }));
-        let response = ui_request(&mut session, &request);
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(response.ok, "the widgets reply was refused: {:?}", response.message);
         let data = response.data.as_ref().expect("the reply carries data");
         let rects = data.get("rects").and_then(|v| v.as_object()).expect("the rectangles");
@@ -807,6 +911,148 @@ mod tests {
         assert_eq!(row.len(), 4, "a rectangle is x, y, width, height: {row:?}");
         assert!(row[2].as_f64().expect("a width") > 0.0, "the row has no width");
         assert!(data.get("width").is_some(), "the reply does not say what size it is");
+    }
+
+    /// The widget names in a reply.
+    fn widget_names(response: &craftkit_control::Response) -> Vec<String> {
+        response
+            .data
+            .as_ref()
+            .and_then(|d| d.get("widgets"))
+            .and_then(|v| v.as_array())
+            .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+            .unwrap_or_default()
+    }
+
+    /// The properties panel is on the screen when a node is selected.
+    ///
+    /// §106: the channel drew the shell with nothing selected, so the
+    /// properties panel was empty and published no editor — and the names §100
+    /// gave that panel (`properties.key.path`, `properties.key.value`) and
+    /// every property editor's name could never be looked up through the
+    /// channel at all.
+    #[test]
+    fn the_property_editors_are_on_the_screen_when_a_node_is_selected() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui", serde_json::json!({ "action": "widgets", "selected": 1 }));
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
+        assert!(response.ok, "the widgets reply was refused: {:?}", response.message);
+        let names = widget_names(&response);
+        assert!(
+            names.iter().any(|n| n.starts_with("node.1.prop.")),
+            "the selected node's property editors are not on the screen: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n == "properties.key.path"),
+            "the key field is not on the screen: {names:?}"
+        );
+    }
+
+    /// The channel reports the screen the **window** is showing.
+    ///
+    /// §106: the channel and the window share one shell state, so what the
+    /// channel says is on screen is what the person is looking at. Before
+    /// this, the channel drew a shell of its own — always the empty one.
+    #[test]
+    fn the_widgets_reply_is_the_screen_the_window_is_showing() {
+        let mut session = craftkit_engine::Session::sample();
+        let live = craftkit_ui::shell::ShellState {
+            selected: Some(craftkit_core::NodeId(1)),
+            ..craftkit_ui::shell::ShellState::default()
+        };
+        let request = ui_request_params("ui", serde_json::json!({ "action": "widgets" }));
+        let response = ui_request(&mut session, &request, &live);
+        assert!(response.ok, "the widgets reply was refused: {:?}", response.message);
+        let names = widget_names(&response);
+        assert!(
+            names.iter().any(|n| n.starts_with("node.1.prop.")),
+            "the window's selection is not in the channel's screen: {names:?}"
+        );
+        let selected = response.data.as_ref().and_then(|d| d.get("selected")).and_then(|v| v.as_u64());
+        assert_eq!(selected, Some(1), "the reply does not say which node is selected");
+    }
+
+    /// A node that is not there is refused, not answered with an empty panel.
+    #[test]
+    fn a_selected_node_that_is_not_there_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui", serde_json::json!({ "action": "widgets", "selected": 9999 }));
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
+        assert!(!response.ok, "a selection of a node that is not there was accepted");
+        assert!(
+            response.message.as_deref().unwrap_or("").contains("no node with id"),
+            "{:?}",
+            response.message
+        );
+    }
+
+    /// A `selected` that is not a node id is refused, not ignored.
+    #[test]
+    fn a_selected_that_is_not_a_node_id_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        let request =
+            ui_request_params("ui", serde_json::json!({ "action": "widgets", "selected": "the first one" }));
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
+        assert!(!response.ok, "a selection that is not a node id was accepted");
+        assert!(response.message.as_deref().unwrap_or("").contains("node id"), "{:?}", response.message);
+    }
+
+    /// The channel, over a socket, reports the screen the window is showing.
+    ///
+    /// §106: the channel and the window share one shell state, so what the
+    /// channel says is on screen is what the person is looking at. Before this,
+    /// the channel drew a shell of its own — always the empty one, so the
+    /// properties panel was never in the answer.
+    ///
+    /// This goes through the socket rather than calling the handler directly,
+    /// because the thing that can go wrong is the *wiring*: a handler that is
+    /// handed a state of its own instead of the shared one.
+    #[test]
+    fn the_channel_reports_the_windows_screen_over_the_socket() {
+        use std::io::{BufRead, BufReader, Write};
+
+        let session = Arc::new(Mutex::new(craftkit_engine::Session::sample()));
+        let state: SharedState = Arc::new(Mutex::new(craftkit_ui::shell::ShellState {
+            selected: Some(craftkit_core::NodeId(1)),
+            ..craftkit_ui::shell::ShellState::default()
+        }));
+        let ctx_slot: ContextSlot = Arc::new(Mutex::new(None));
+
+        // A directory of its own, so the test does not write into the
+        // user's own control folder.
+        let dir = std::env::temp_dir().join(format!("craftkit-control-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a directory for the token");
+
+        let token = craftkit_control::Token::from_text("0123456789abcdef0123").expect("a valid token");
+        let (server, _path) =
+            start_control(0, &session, &ctx_slot, &state, token.clone(), Some(&dir)).expect("binds");
+
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", server.port())).expect("connects");
+        let request = serde_json::json!({
+            "id": 1,
+            "token": "0123456789abcdef0123",
+            "method": "ui",
+            "params": { "action": "widgets" },
+        });
+        writeln!(stream, "{request}").expect("sends");
+        stream.flush().ok();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("a reply");
+        let reply: serde_json::Value = serde_json::from_str(&line).expect("a JSON reply");
+        assert_eq!(reply.get("ok"), Some(&serde_json::json!(true)), "{reply}");
+        let names: Vec<String> = reply
+            .get("data")
+            .and_then(|d| d.get("widgets"))
+            .and_then(|v| v.as_array())
+            .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+            .unwrap_or_default();
+        assert!(
+            names.iter().any(|n| n.starts_with("node.1.prop.")),
+            "the channel did not report the window's screen: {names:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1047,7 +1293,7 @@ mod tests {
         request.method = "ui.click".to_string();
         request.params = serde_json::json!({ "x": 400.0, "y": 12.0 });
 
-        let response = ui_request(&mut session, &request);
+        let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(response.ok, "{:?}", response.message);
         let message = response.message.clone().unwrap_or_default();
         assert!(!message.starts_with("rendered"), "ui.click was rendered instead of clicked: {message}");
@@ -1061,7 +1307,7 @@ mod tests {
         let mut render = craftkit_control::Request::new(2, craftkit_control::Method::Ui);
         render.method = "ui.render".to_string();
         render.params = serde_json::json!({ "width": 320, "height": 240 });
-        let response = ui_request(&mut session, &render);
+        let response = ui_request(&mut session, &render, &craftkit_ui::shell::ShellState::default());
         let render_message = response.message.unwrap_or_default();
         assert!(render_message.starts_with("rendered"), "{render_message}");
         assert!(response.data.and_then(|d| d.get("png_base64").cloned()).is_some(), "no frame");

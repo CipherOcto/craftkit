@@ -2534,5 +2534,59 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the key value field is only there on the frame the path changed" \
     "cargo test -p craftkit-ui --profile ci a_path_typed_into_the_key_field_is_still_there_in_the_next_frame"
 
+# The render drew the shell with nothing selected, so the properties panel was
+# empty -- and every property editor had no name to be found under. §106.
+swap crates/ui/src/raster.rs \
+    '    let mut shell = crate::shell::Shell::with_state(session, state.clone());
+    let mut deltas: Vec<egui::TexturesDelta> = Vec::new();' \
+    '    let mut shell = crate::shell::Shell::new(session);
+    let mut deltas: Vec<egui::TexturesDelta> = Vec::new();'
+expect_catch "ui: the render draws the shell with nothing selected" \
+    "cargo test -p craftkit-ui --profile ci the_state_decides_what_is_on_the_screen"
+
+# The click by name settled the layout with nothing selected, so a property
+# editor was not on the screen to be found. §106.
+swap crates/ui/src/raster.rs \
+    '    let mut shell = crate::shell::Shell::with_state(session, state.clone());
+    for _ in 0..FRAMES {
+        let _ = ctx.run(raw.clone(), |ctx| shell.show(ctx, &tokens));
+    }
+
+    let rect = widget_rect(&shell.automation, name)?;' \
+    '    let mut shell = crate::shell::Shell::new(session);
+    for _ in 0..FRAMES {
+        let _ = ctx.run(raw.clone(), |ctx| shell.show(ctx, &tokens));
+    }
+
+    let rect = widget_rect(&shell.automation, name)?;'
+expect_catch "ui: a click by name looks for the widget on the empty screen" \
+    "cargo test -p craftkit-ui --profile ci a_property_editor_can_be_clicked_by_name_when_a_node_is_selected"
+
+# The channel was handed a state of its own instead of the window's, so the
+# screen it described was not the screen the window was showing. §106.
+swap apps/craftkit/src/main.rs \
+    '            let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            ui_request(session, request, &guard)' \
+    '            let _guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            ui_request(session, request, &craftkit_ui::shell::ShellState::default())'
+expect_catch "ui: the channel reports a screen of its own" \
+    "cargo test -p craftkit --profile ci the_channel_reports_the_windows_screen_over_the_socket"
+
+# The `selected` parameter was ignored, so an agent could not ask about a
+# screen with a node selected -- and the properties panel stayed invisible. §106.
+swap apps/craftkit/src/main.rs \
+    '    state.selected = Some(node);' \
+    '    state.selected = None;'
+expect_catch "ui: the selected node is ignored" \
+    "cargo test -p craftkit --profile ci the_property_editors_are_on_the_screen_when_a_node_is_selected"
+
+# A node that is not in the document was accepted, and answered with an empty
+# panel instead of a refusal. §106.
+swap apps/craftkit/src/main.rs \
+    '    if session.node(node).is_none() {' \
+    '    if session.node(node).is_some() {'
+expect_catch "ui: a selected node that is not there is accepted" \
+    "cargo test -p craftkit --profile ci a_selected_node_that_is_not_there_is_refused"
+
 restore
 finish

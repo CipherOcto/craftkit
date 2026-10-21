@@ -341,6 +341,16 @@ Giving both is refused. §104.
 frame its `width` and `height` describe, and the size itself. Before §104 it
 carried the names only, so a name could be found but not aimed at.
 
+**The screen has a state, and the channel shares the window's.** The shell
+remembers which node is selected, and the properties panel draws that node's
+editors; with nothing selected it draws "Select a node." and there is no
+editor on the screen to name. Before §106 the channel drew a shell of its own,
+always the empty one, so `ui.widgets` never listed a property editor and
+`ui.click {"name": "node.1.prop.amount"}` was refused with "there is no widget
+named … on screen". To ask about a screen with a node selected, send
+`"selected": <node id>`; the reply says which node it drew, and a node that is
+not in the document is refused. §106.
+
 **The method name is the action.** `ui.render`/`ui.screenshot`/`ui.click` each
 mean themselves; only the bare `ui` reads `params.action`, and giving both a
 method and a disagreeing `action` is refused. This is the shape that matters:

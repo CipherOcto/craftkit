@@ -329,6 +329,26 @@ cheapest way to find out whether the control you expect is on screen at all —
 and, before §104, it was the only way to learn a name without also learning
 where it was, which left a click with nothing to click.
 
+**The screen has a state, and the state is the window's.** The shell remembers
+which node is selected, and the properties panel draws that node's editors —
+with nothing selected it draws *"Select a node."* and there is no editor on
+the screen to name. The window and the control channel share that memory, so
+the channel reports the screen the window is showing. Before §106 the channel
+drew a shell of its own, always the empty one, so the properties panel was
+never in the answer and no property editor could be looked up by name.
+
+To ask about a screen with a node selected — without changing what the window
+shows — send **`selected`**, the node's id:
+
+```json
+{"id":4,"method":"ui","params":{"action":"widgets","selected":1}}
+```
+
+The reply says which node it drew (`selected`), and a node that is not in the
+document is refused rather than answered with an empty panel. Selecting a node
+is a *screen*, not a command: it changes nothing in the document, so it is
+not in the undo stack and there is no command for it. §106.
+
 Headless, through the CLI:
 
 ```bash

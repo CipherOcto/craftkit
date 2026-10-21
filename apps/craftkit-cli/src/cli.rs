@@ -234,10 +234,15 @@ const SNAPSHOT_SIZE: (usize, usize) =
     (craftkit_ui::raster::DEFAULT_SIZE[0], craftkit_ui::raster::DEFAULT_SIZE[1]);
 
 /// Draw one frame of the real shell and write it as a PNG.
+///
+/// The shell is drawn with nothing selected: a snapshot is a picture of a
+/// design, not of a person looking at one, so there is no selection to carry.
+/// The properties panel is therefore empty in the picture, and it says so. §106.
 #[cfg(not(target_arch = "wasm32"))]
 fn render(session: &mut Session, out: &Path) -> Result<(), String> {
     let (width, height) = SNAPSHOT_SIZE;
-    let frame = craftkit_ui::raster::render(session, width, height)?;
+    let state = craftkit_ui::shell::ShellState::default();
+    let frame = craftkit_ui::raster::render(session, width, height, &state)?;
     let png = frame.png;
 
     if let Some(parent) = out.parent()

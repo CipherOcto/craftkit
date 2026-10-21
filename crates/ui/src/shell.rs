@@ -64,7 +64,18 @@ pub struct Shell<'a> {
 
 impl<'a> Shell<'a> {
     pub fn new(session: &'a mut Session) -> Self {
-        Self { session, state: ShellState::default(), automation: Automation::new() }
+        Self::with_state(session, ShellState::default())
+    }
+
+    /// A shell that starts from a known state.
+    ///
+    /// A shell draws *a* screen, and which screen depends on its state: the
+    /// properties panel draws the selected node's editors, and draws
+    /// *"Select a node."* when there is none. A caller that renders the shell
+    /// without saying what it is rendering has silently chosen the empty one.
+    /// §106.
+    pub fn with_state(session: &'a mut Session, state: ShellState) -> Self {
+        Self { session, state, automation: Automation::new() }
     }
 
     /// The session, for a host that needs to look at it after the frame.
