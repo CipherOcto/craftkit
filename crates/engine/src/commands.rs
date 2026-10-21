@@ -6,7 +6,11 @@
 //!
 //! # House rules for anything in this file
 //!
-//! - **Read parameters through [`craftkit_core::Params`].** Never index.
+//! - **Read parameters through [`craftkit_core::Params`].** Never index. This
+//!   file does not even *see* the raw JSON: the readers that have to know a
+//!   parameter's shape live in [`crate::params`], and the gate in
+//!   `cargo xtask lists` refuses the tree when a third file reaches for it.
+//!   §136.
 //! - **Return an error, do not clamp silently.** A refused command is a message
 //!   a person can act on; a clamped one is a surprise ten minutes later.
 //! - **Mutate through `Session`.** Never cache a document reference across a
@@ -14,7 +18,7 @@
 
 use crate::command::{Area, CommandSpec, Icon, ParamDoc};
 use crate::error::EngineError;
-use crate::params::{self, Doc, node_by_id_or_name, value_for};
+use crate::params::{Doc, node_by_id_or_name, opt_easing, opt_kind, opt_time, value_for};
 use crate::session::{Outcome, Session};
 use craftkit_core::{FrameRate, Params, Tick};
 use craftkit_model::{Easing, Key, Node, NodeKind, PropGroup, PropNode, PropPath, Property, limits};
@@ -105,7 +109,7 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
         // `null` counts as absent: a script that sends `{"fps": null}` means
         // "leave the rate alone", which is a thing to say — and it is a
         // *refusal*, not a failure.
-        if p.raw("start").is_none() && p.raw("end").is_none() && p.raw("fps").is_none() {
+        if !p.has("start") && !p.has("end") && !p.has("fps") {
             return Err(EngineError::Param {
                 id: DOC_RANGE.id.to_string(),
                 source: craftkit_core::ParamError::new(
@@ -1065,78 +1069,6 @@ fn check_name(name: &str) -> Result<(), EngineError> {
         });
     }
     Ok(())
-}
-
-/// Read an optional instant. Accepts a number of seconds, or a string like
-/// `"12f"` for frames and `"120t"` for raw ticks.
-///
-/// `rate` is the document's own frame rate, so `"24f"` means the same frame in
-/// a 24 fps plan and in a 30 fps one. Hard-coding 24 here would silently give a
-/// 30 fps plan the wrong instant, which is the sort of bug that only shows up
-/// in someone else's project.
-fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Option<Tick>, EngineError> {
-    let bad = |detail: String| EngineError::Param {
-        id: String::new(),
-        source: craftkit_core::ParamError::new(key, detail),
-    };
-    match p.raw(key) {
-        None => Ok(None),
-        Some(serde_json::Value::Number(n)) => {
-            let secs = n.as_f64().ok_or_else(|| bad(format!("{n} is not a number of seconds")))?;
-            Ok(Some(Tick::try_from_seconds_f64("time", secs).map_err(|e| bad(e.to_string()))?))
-        }
-        Some(serde_json::Value::String(s)) => parse_time_text(s, rate).map(Some).ok_or_else(|| {
-            bad(format!("`{s}` is not a time; use seconds (1.5), frames (12f) or ticks (120t)"))
-        }),
-        Some(other) => Err(bad(format!("a {} is not a time", params::kind_of(other)))),
-    }
-}
-
-fn parse_time_text(s: &str, rate: FrameRate) -> Option<Tick> {
-    let t = s.trim();
-    let (body, factor) = match t.chars().last() {
-        Some('f') | Some('F') => (&t[..t.len() - 1], 'f'),
-        Some('t') | Some('T') => (&t[..t.len() - 1], 't'),
-        _ => (t, 's'),
-    };
-    let n: f64 = body.trim().parse().ok()?;
-    match factor {
-        's' => Tick::try_from_seconds_f64("time", n).ok(),
-        'f' => Some(Tick::from_frames_i64(n as i64, rate)),
-        _ => Some(Tick::from_raw(n as i128)),
-    }
-}
-
-fn opt_kind(p: &Params<'_>, key: &str) -> Result<Option<NodeKind>, EngineError> {
-    let bad = |detail: String| EngineError::Param {
-        id: String::new(),
-        source: craftkit_core::ParamError::new(key, detail),
-    };
-    let Some(raw) = p.raw(key) else { return Ok(None) };
-    let text = match raw {
-        serde_json::Value::String(s) => s.clone(),
-        other => return Err(bad(format!("a {} is not a node kind; expected text", params::kind_of(other)))),
-    };
-    NodeKind::all().iter().find(|k| k.label() == text).copied().map(Some).ok_or_else(|| {
-        bad(format!("`{text}` is not a kind; expected one of source, filter, sink, cue, comment"))
-    })
-}
-
-fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, EngineError> {
-    let Some(raw) = p.raw(key) else { return Ok(None) };
-    let serde_json::Value::String(s) = raw else {
-        return Err(EngineError::Param {
-            id: String::new(),
-            source: craftkit_core::ParamError::new(key, "expected an easing name as text"),
-        });
-    };
-    Easing::preset(s).map(Some).ok_or_else(|| EngineError::Param {
-        id: String::new(),
-        source: craftkit_core::ParamError::new(
-            key,
-            format!("`{s}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut"),
-        ),
-    })
 }
 
 fn node_mut<'a>(

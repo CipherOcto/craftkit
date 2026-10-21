@@ -63,6 +63,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly FILES=(
     Cargo.toml
     ATTRIBUTION.md
+    clippy.toml
     docs/architecture.md
     crates/core/Cargo.toml
     crates/core/src/lib.rs
@@ -3430,6 +3431,25 @@ swap crates/ui/src/shell.rs \
     '        let rows = node_rows(self.session.document(), self.session.plan());
         self.session.load_document(self.session.document().clone());'
 expect_catch "ui: the shell puts a document into the session" \
+    "cargo xtask lists"
+
+# A parameter is never indexed, and the one door out - the raw JSON - has two
+# homes. A third file that opens it decides the shape of a parameter by
+# indexing it, which is either a panic or a silent wrong answer. §136.
+swap crates/engine/src/commands.rs \
+    '        if !p.has("start") && !p.has("end") && !p.has("fps") {' \
+    '        if p.raw_json("start").is_none() && !p.has("end") && !p.has("fps") {'
+expect_catch "core: a third file reads the raw parameter JSON" \
+    "cargo xtask lists"
+
+# And the setting in clippy.toml that re-enabled a lint nobody denies: it
+# enforced nothing, and it made the file look as though it held down the rule
+# above. §136.
+swap clippy.toml \
+    'allow-panic-in-tests = true' \
+    'allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true'
+expect_catch "clippy: a setting re-enables a lint nobody denies" \
     "cargo xtask lists"
 
 restore

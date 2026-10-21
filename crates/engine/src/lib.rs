@@ -22,7 +22,9 @@
 //! 3. **Clone before edit.** A mutating command runs against a snapshot, and the
 //!    snapshot is restored on both an error and a panic.
 //! 4. **Read parameters through [`craftkit_core::Params`].** Never index a
-//!    parameter object, anywhere, ever.
+//!    parameter object, anywhere, ever. The one door out — the raw JSON — has
+//!    two homes, and `cargo xtask lists` refuses the tree when a third file
+//!    opens it. §136.
 
 #![deny(
     clippy::unwrap_used,

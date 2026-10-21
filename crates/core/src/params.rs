@@ -11,6 +11,11 @@
 //! `hostile_params_never_panic` — a test that fires every registered command at
 //! every documented parameter name with every hostile value — can pass.
 //!
+//! There is one door out of that: [`Params::raw_json`], which hands back the
+//! JSON itself. A `&Json` can be indexed, and indexing it is either a panic
+//! or a **silent wrong answer** — so the door has two homes, this module and
+//! `crates/engine/src/params.rs`, and `cargo xtask lists` refuses the tree when
+//! a third file opens it. §136.
 //! The test derives its values from the registry, so "every documented
 //! parameter name" stays true as commands are added: the test used to fire
 //! five fixed parameter objects, and 27 of the commands' documented parameters
@@ -191,9 +196,32 @@ impl<'a> Params<'a> {
     }
 
     /// The raw JSON for a key, for the cases where a caller genuinely needs it.
+    ///
+    /// **This is the escape hatch**, and it is named after what it is. Every
+    /// other method here is typed and cannot be indexed; this one hands back a
+    /// `&Json`, and a `&Json` *can* be indexed: `json["key"]` panics on
+    /// anything that is not an object, and answers `null` for a key that is
+    /// not there. So a caller that indexes a raw value gets either a panic or
+    /// a **silent wrong answer**, and the second is the one the tree cannot
+    /// catch.
+    ///
+    /// Two modules in the tree call this, and both are *readers*: this one,
+    /// and `crates/engine/src/params.rs`, which is where a command's parameter
+    /// becomes a typed value. `cargo xtask lists` refuses the tree when
+    /// anything else calls it. §136.
+    ///
     /// Still bounded by the line-length limit upstream.
-    pub fn raw(&self, key: &str) -> Option<&'a Json> {
+    pub fn raw_json(&self, key: &str) -> Option<&'a Json> {
         self.get(key).filter(|v| !v.is_null())
+    }
+
+    /// Whether the caller gave the parameter.
+    ///
+    /// `null` counts as absent — that is the tree's convention everywhere —
+    /// and no shape is read: this asks whether there is a value, not what it
+    /// is. A command that has to know the *shape* wants a typed reader.
+    pub fn has(&self, key: &str) -> bool {
+        self.raw_json(key).is_some()
     }
 
     /// Reject any key not in `allowed`. Commands call this so a typo is an
@@ -260,7 +288,7 @@ pub fn value_of(p: &Params<'_>, key: &str, depth: u8) -> Result<Option<Value>, P
     if depth > MAX_DEPTH {
         return Err(ParamError::new(key, "nested too deeply"));
     }
-    let raw = match p.raw(key) {
+    let raw = match p.raw_json(key) {
         None => return Ok(None),
         Some(r) => r,
     };
@@ -328,6 +356,34 @@ mod tests {
         // The classic coercion bug: "20" is not 20.
         let pp = p(json!({ "d": "20" }));
         assert!(pp.num("d").is_err());
+    }
+
+    /// Whether the caller gave the parameter.
+    ///
+    /// `null` counts as absent — that is the tree's convention everywhere, and
+    /// it is what the command that asks "was anything given at all?" needs. §136.
+    #[test]
+    fn a_parameter_that_is_null_is_absent() {
+        let pp = p(json!({ "a": null, "b": 0, "c": false, "d": "" }));
+        assert!(!pp.has("a"), "null is absent");
+        assert!(pp.has("b"), "zero is a value");
+        assert!(pp.has("c"), "false is a value");
+        assert!(pp.has("d"), "an empty string is a value");
+        assert!(!pp.has("missing"), "a key that was never there is absent");
+    }
+
+    /// The escape hatch is the escape hatch: it hands back the JSON.
+    ///
+    /// The point of the test is that it *can* be indexed — that is why the
+    /// gate keeps it to two homes. §136.
+    #[test]
+    fn the_raw_reader_hands_back_the_json_itself() {
+        let pp = p(json!({ "a": [1, 2, 3] }));
+        let raw = pp.raw_json("a").expect("there is a value");
+        assert_eq!(raw, &json!([1, 2, 3]));
+        // And it is indexable, which is the whole reason it has two homes.
+        assert_eq!(raw[0], json!(1));
+        assert!(pp.raw_json("missing").is_none());
     }
 
     #[test]

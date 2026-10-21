@@ -1,9 +1,20 @@
-# The one place that decides whether the "never crash" rule is enforced.
-# Each is re-enabled for test code, because tests are allowed to panic.
+# What the crate roots deny, re-enabled for test code.
+#
+# The deny lists are in the crate roots — one set of lints in every crate —
+# and this file does not decide them. It decides where they do not apply: a
+# test may panic, so the lints that forbid panicking are allowed in test code.
+#
+# Every key here must name a lint a crate root actually denies. A key that
+# names one that is denied nowhere **enforces nothing**: it re-enables a lint
+# that was never switched on. `allow-indexing-slicing-in-tests` was such a
+# key — `clippy::indexing_slicing` is denied in no crate — and it made this
+# file look as though it held down the rule that a parameter is never
+# indexed. That rule is about *parameters*, and it is held down by the gate in
+# `xtask/src/lists.rs`. `cargo xtask lists` checks that every key here names a
+# denied lint. §136.
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
-allow-indexing-slicing-in-tests = true
 
 # Useful at every level, from clippy::correctness up.
 msrv = "1.93"

@@ -965,6 +965,105 @@ fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// The two files that may read a parameter's raw JSON.
+///
+/// `AGENTS.md`: "Read them through `craftkit_core::Params`' typed helpers;
+/// never index." The typed helpers are typed, and a typed value cannot be
+/// indexed — but `Params::raw_json` hands back a `&Json`, and a `&Json` can:
+/// `json["key"]` panics on anything that is not an object, and answers `null`
+/// for a key that is not there. So the rule is true of the readers and a
+/// convention for everybody else. §136.
+///
+/// Two homes, and both are readers: the module that owns the parameters, and
+/// the engine's module where a parameter becomes a typed value. A third file
+/// that calls it is a third place where the shape of a parameter is decided,
+/// and the shape is decided by matching, never by indexing.
+const RAW_PARAMETER_HOMES: &[&str] = &["crates/core/src/params.rs", "crates/engine/src/params.rs"];
+
+/// The raw parameter reader has two homes, and no more.
+///
+/// §136: the tree had a rule — *a parameter is never indexed* — in four
+/// places, and nothing held it down. `Params::raw` was public and returned a
+/// `&Json`, which is indexable; six call sites used it, all of them safely,
+/// and a seventh would not have had to be careful.
+pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>, String> {
+    let mut sources = Vec::new();
+    collect_rust(root, &mut sources)?;
+    let mut problems = Vec::new();
+    for path in sources {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        // Strings and comments do not count: this file names the reader, and
+        // a doc comment that says `raw_json` is saying the opposite.
+        let code = code_lines_kept(&text);
+        if !code.contains("raw_json(") {
+            continue;
+        }
+        let relative = relative_name(root, &path);
+        if RAW_PARAMETER_HOMES.contains(&relative.as_str()) {
+            continue;
+        }
+        let line = code.lines().position(|l| l.contains("raw_json(")).map_or(1, |n| n + 1);
+        problems.push(format!(
+            "{relative}: line {line} reads a parameter's raw JSON: the two readers are \
+             `crates/core/src/params.rs` and `crates/engine/src/params.rs`, and a parameter is \
+             never indexed"
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The clippy settings that re-enable a lint in test code, and the lint each
+/// one re-enables.
+///
+/// A setting that names a lint no crate denies **enforces nothing**: it
+/// re-enables a lint that was never switched on. `clippy.toml` carried such
+/// a setting — `allow-indexing-slicing-in-tests`, for a lint that is denied
+/// in no crate — and it made the file look as though it held down the rule
+/// that a parameter is never indexed. §136.
+const TEST_ONLY_LINTS: &[(&str, &str)] = &[
+    ("allow-unwrap-in-tests", "clippy::unwrap_used"),
+    ("allow-expect-in-tests", "clippy::expect_used"),
+    ("allow-panic-in-tests", "clippy::panic"),
+];
+
+/// Every setting in `clippy.toml` re-enables a lint the tree denies.
+///
+/// The file's own header used to claim it was "the one place that decides
+/// whether the 'never crash' rule is enforced", and one of its four keys
+/// enforced nothing at all: `clippy::indexing_slicing` is denied in no crate,
+/// so allowing it in tests allowed something that was allowed everywhere.
+/// §136.
+pub fn every_test_only_setting_names_a_denied_lint(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("clippy.toml");
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let mut problems = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("allow-") || !trimmed.ends_with("= true") {
+            continue;
+        }
+        let setting = trimmed.trim_end_matches("= true").trim();
+        let Some((_, lint)) = TEST_ONLY_LINTS.iter().find(|(s, _)| *s == setting) else {
+            problems.push(format!(
+                "clippy.toml: line {} sets `{setting}`, and it names no lint this tree knows: a \
+                 setting that re-enables nothing enforces nothing",
+                number + 1
+            ));
+            continue;
+        };
+        if !LINTS.contains(lint) {
+            problems.push(format!(
+                "clippy.toml: line {} sets `{setting}`, which re-enables `{lint}` — and no crate \
+                 root denies it",
+                number + 1
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The names that evaluate a document from outside `craftkit-eval`.
 ///
 /// `evaluate_once` is the function; `Evaluator` is the struct whose `evaluate`
@@ -3107,6 +3206,20 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A panel reads the design; the host opens it.")),
     );
 
+    // The raw parameter reader, and the two homes it has. §136.
+    problems.extend(
+        the_raw_parameter_reader_has_two_homes(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A parameter is read by a reader, and never indexed.")),
+    );
+
+    // The clippy settings, and the lints they re-enable. §136.
+    problems.extend(
+        every_test_only_setting_names_a_denied_lint(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A setting that re-enables nothing enforces nothing.")),
+    );
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -3121,8 +3234,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              fingerprint hashes is a field the model has, the control channel's \
              methods are the methods the prose lists, every module path in prose \
              names a module this tree has, the shell never evaluates the \
-             document, the shell never writes the document, and the session \
-             offers no way into the design but the registry",
+             document, the shell never writes the document, the raw parameter \
+             reader has two homes, every clippy setting names a denied lint, \
+             and the session offers no way into the design but the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -4388,6 +4502,61 @@ mod tests {
         // And a comment is not a call: the doc comment may say the opposite.
         let commented = "/// The shell never calls load_document.\nfn panel() {}\n";
         assert!(!has_word(&code_lines_kept(commented), "load_document"));
+    }
+
+    /// Every clippy setting names a lint the tree denies.
+    ///
+    /// §136: `clippy.toml` carried `allow-indexing-slicing-in-tests`, and
+    /// `clippy::indexing_slicing` is denied in no crate — so the setting
+    /// enforced nothing and made the file look as though it held down the rule
+    /// that a parameter is never indexed.
+    #[test]
+    fn every_clippy_setting_names_a_denied_lint() {
+        let root = crate::root().expect("root");
+        assert!(
+            every_test_only_setting_names_a_denied_lint(&root).expect("runs").is_empty(),
+            "a clippy setting re-enables a lint nobody denies"
+        );
+
+        // The three settings are the three panicking lints the crate roots
+        // deny, and the fourth — the one that was there — is not.
+        assert_eq!(TEST_ONLY_LINTS.len(), 3, "the mapping is the list of settings");
+        for (setting, lint) in TEST_ONLY_LINTS {
+            assert!(LINTS.contains(lint), "{setting} re-enables {lint}, which no crate denies");
+        }
+        assert!(
+            !TEST_ONLY_LINTS.iter().any(|(s, _)| *s == "allow-indexing-slicing-in-tests"),
+            "the setting that enforced nothing is gone"
+        );
+    }
+
+    /// The raw parameter reader has two homes.
+    ///
+    /// §136: "a parameter is never index" was a rule in four places and a
+    /// convention in the code: `Params::raw` was public and returned a
+    /// `&Json`, and a `&Json` can be indexed.
+    #[test]
+    fn the_raw_parameter_reader_has_no_third_home() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_raw_parameter_reader_has_two_homes(&root).expect("runs").is_empty(),
+            "a third file reads a parameter's raw JSON"
+        );
+
+        // The two homes are the two readers.
+        assert!(RAW_PARAMETER_HOMES.contains(&"crates/core/src/params.rs"));
+        assert!(RAW_PARAMETER_HOMES.contains(&"crates/engine/src/params.rs"));
+        assert_eq!(RAW_PARAMETER_HOMES.len(), 2, "a third home is a third reader");
+
+        // A string is not a call, and a comment is not a call: the gate names
+        // the reader, and this file is not a home.
+        let named = "fn f() { let _ = \"raw_json(\"; }\n";
+        assert!(!code_lines_kept(named).contains("raw_json("), "a string is not a call");
+        let commented = "/// It calls raw_json(key).\nfn f() {}\n";
+        assert!(!code_lines_kept(commented).contains("raw_json("), "a comment is not a call");
+        // But a call is a call.
+        let called = "fn f(p: &Params<'_>) { let _ = p.raw_json(\"x\"); }\n";
+        assert!(code_lines_kept(called).contains("raw_json("), "a call is a call");
     }
 
     /// A module path in prose that names nothing this tree has.

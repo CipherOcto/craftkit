@@ -14975,6 +14975,202 @@ was the only road that had it.
 
 ---
 
+## 136. The rule that a parameter is never indexed was a convention
+
+### The measurement
+
+The tree says the same thing in four places:
+
+- `AGENTS.md`: *"Read them through `craftkit_core::Params`' typed helpers;
+  never index."*
+- `crates/core/src/lib.rs`: *"[`Params`] — the only way to read a command
+  parameter. Never index."*
+- `crates/engine/src/lib.rs`: *"Never index a parameter object, anywhere,
+  ever."*
+- `crates/core/src/params.rs`: *"**Never index a parameter object.**
+  `params["distance"]` is a panic waiting for an agent, a script, or a file
+  from a future version."*
+
+None of it was enforced. The typed helpers are typed, and a typed value cannot
+be indexed — that half is structural. But there was a door out of it:
+
+```rust
+/// The raw JSON for a key, for the cases where a caller genuinely needs it.
+pub fn raw(&self, key: &str) -> Option<&'a Json> {
+    self.get(key).filter(|v| !v.is_null())
+}
+```
+
+A `&Json` **is** indexable, and indexing it is either a panic or a silent
+wrong answer: `json["key"]` panics on anything that is not an object, and
+answers `null` for a key that is not there. A silent wrong answer is the one
+thing the tree cannot catch.
+
+There were **seven** call sites, and every one of them was careful — each
+matched the JSON's shape with a `match` and never indexed:
+
+| File | Call sites | What it read |
+|---|---|---|
+| `crates/core/src/params.rs` | 1 | `value_of` — the generic value path |
+| `crates/engine/src/params.rs` | 2 | `node_ref`, `value_for` |
+| `crates/engine/src/commands.rs` | 4 | presence, `opt_time`, `opt_kind`, `opt_easing` |
+
+Seven careful call sites are not a rule. They are seven decisions to be
+careful, made by whoever wrote them, and the eighth one would not have had to
+be.
+
+### The file that looked like it held the rule down
+
+`clippy.toml` began:
+
+```toml
+# The one place that decides whether the "never crash" rule is enforced.
+# Each is re-enabled for test code, because tests are allowed to panic.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+```
+
+Three of those four settings re-enable a lint the crate roots deny. The
+fourth re-enables **`clippy::indexing_slicing`**, which is denied in **no
+crate** — the house deny list has six lints and it is not one of them. So the
+setting allowed, in test code, something that was allowed everywhere: it
+enforced nothing at all.
+
+Measured, with the lint switched on by hand:
+
+```text
+ 72 warning: indexing may panic
+ 16 warning: slicing may panic
+```
+
+**88 sites** in production code — 39 in `xtask`, 16 in `crates/model`, 11 in
+`crates/ui`, 9 in `craftkit-cli`, 6 in the desktop app, 3 in `crates/core`,
+2 in `crates/engine`, 2 in `crates/mcp`. All of them safe: `windows(2)`
+yields slices of length two, `binary_search` returns an index that is in
+range, and the reader's own slice ranges are bounded by construction. **The
+tree indexes on purpose, and it is right to.** Forbidding *all* indexing would
+be a style rule, and it would make twenty of those eighty-eight sites worse
+rather than safer — `Ok(i) => { self.0[i].ease = ease; }` cannot become a
+`get_mut` with an error branch, because the error branch cannot happen and
+`unreachable!` is denied.
+
+So the lint was the wrong tool, and the setting was not evidence of a rule
+that existed. It was evidence of a rule that was *wanted*.
+
+One measurement made the file's claim checkable: clippy **errors** on a
+configuration key it does not know.
+
+```text
+error: error reading Clippy's configuration file: unknown field
+`allow-definitely-not-a-real-key`, expected one of ...
+```
+
+So `allow-indexing-slicing-in-tests` was a key clippy accepts. It was
+accepted, and it enforced nothing.
+
+### Why nothing noticed
+
+**The rule was true of every call site.** Seven of them, all careful, and the
+carefulness looks exactly like the rule being enforced. Nothing distinguishes
+"this code follows the rule" from "this code happens to be safe", and the
+tests cannot: `hostile_params_never_panic` fires every command at every
+documented parameter name with every hostile value, and it passed — because
+the seven call sites were safe.
+
+**The escape hatch had a plausible name.** `raw` reads as *"the raw value"*,
+not as *"the door out of the typed readers"*. A reader of the code had no way
+to know it was the one thing the rule was about.
+
+**The lint was the wrong shape, so the lint could not be the answer.** The
+rule is about *parameters*. `clippy::indexing_slicing` is about indexing. The
+rule has no lint, and the lint has no rule, and the file that connected them
+was a configuration key.
+
+### The fix
+
+**The escape hatch is named after what it is, and it has two homes.**
+`Params::raw` is `Params::raw_json` now, and its doc says what it is:
+
+> **This is the escape hatch** … a `&Json` *can* be indexed: `json["key"]`
+> panics on anything that is not an object, and answers `null` for a key that
+> is not there.
+
+Two modules may call it, and both are *readers*:
+`crates/core/src/params.rs`, which owns the parameters, and
+`crates/engine/src/params.rs`, which is where a parameter becomes a typed
+value. `cargo xtask lists` refuses the tree when a third file calls it.
+
+**The commands no longer see the raw JSON at all.** The three readers that
+have to know a parameter's shape — `opt_time`, `opt_kind`, `opt_easing` —
+moved out of `crates/engine/src/commands.rs` and into
+`crates/engine/src/params.rs`, which is the module whose own header says it
+exists to be "the answer to that temptation". The one command that only had
+to know whether a parameter was *given* now asks `Params::has`, which reads
+no shape at all.
+
+**The dead setting is gone, and the file says what it does.** `clippy.toml`
+now says that the deny lists are in the crate roots and that it decides
+where they do not apply, and it carries three settings instead of four. A
+new gate checks that every setting in it names a lint the tree denies, so
+the next dead key cannot be added quietly.
+
+### What now holds it
+
+Two mutations:
+
+| Mutation | Gate | Caught by |
+|---|---|---|
+| core: a third file reads the raw parameter JSON | `cargo xtask lists` | the two-homes rule |
+| clippy: a setting re-enables a lint nobody denies | `cargo xtask lists` | the settings rule |
+
+And two tests: `the_raw_parameter_reader_has_no_third_home` and
+`every_clippy_setting_names_a_denied_lint` in `xtask`, plus
+`a_parameter_that_is_null_is_absent` and
+`the_raw_reader_hands_back_the_json_itself` in `crates/core`.
+
+### What is still open
+
+**The rule is still a rule about *parameters*, not about indexing.** The tree
+indexes eighty-eight times on purpose, and that is right. A second rule —
+*never index a value that came from outside* — would be about the readers of
+`.craftkit` files and of the control channel, and it is not written down
+anywhere. The gate cannot express it: `indexing_slicing` is all-or-nothing,
+and the tree's own indexing is safe.
+
+**The escape hatch is still public.** `Params::raw_json` is on the public API
+of `craftkit-core`, because the engine's reader needs it and the engine is
+another crate. The gate holds it to two files; a *type* would hold it to two
+files by construction, at the price of a newtype that every reader has to
+unwrap. That trade is open.
+
+**One skill cited the reader's lines.** `skills/craftkit-editing/SKILL.md`
+had a table of readers cited by line number — `params.rs:108`, `params.rs:117`
+— and the first edit to the file moved them. The four line citations are now
+file paths, which is what the house style wants anyway: *"Prefer a symbol
+over a line number when you write one."*
+
+### The lesson
+
+**A convention with seven careful examples is not a rule.** It is seven
+decisions, and the eighth is not covered. The rule needed a shape that made
+breaking it hard to write, not a paragraph that asked nicely.
+
+**A configuration key is not evidence.** The file said it was "the one place
+that decides whether the 'never crash' rule is enforced", and one of its four
+keys enforced nothing — it re-enabled a lint that was denied nowhere. The
+setting was not a rule; it was a wish written in TOML, and it looked exactly
+like the opposite of one.
+
+**The right tool for a narrow rule is a narrow tool.** `clippy::indexing_slicing`
+would have forbidden eighty-eight safe indexings and made twenty of them
+worse. The rule was about *parameters*, and the gate is about parameters.
+
+---
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -15295,6 +15491,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **There is no second path into the design** | `cargo xtask lists` | 3 mutations — §135 |
 | **A panel never puts a document into the session** | `cargo xtask lists` | 1 mutation — §135 |
 | **The playhead is a place in the design** | `craftkit-engine` test | 2 mutations — §135 |
+| **A parameter is never indexed** | `cargo xtask lists` | 1 mutation — §136 |
+| **Every clippy setting names a denied lint** | `cargo xtask lists` | 1 mutation — §136 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

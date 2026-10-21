@@ -63,8 +63,12 @@ loses it, and the user's trust in everything else.
 
 - **Input-derived numbers are hostile.** Command parameters, `.craftkit` files
   and control-channel input all arrive from outside. Read them through
-  `craftkit_core::Params`' typed helpers; never index. Check finiteness, bound
-  sizes, and cap loop counts. `crates/core/src/params.rs` is the list.
+  `craftkit_core::Params`' typed helpers; never index. The helpers are typed
+  and a typed value cannot be indexed; the one door out is
+  `Params::raw_json`, and it has two homes — `crates/core/src/params.rs` and
+  `crates/engine/src/params.rs` — and `cargo xtask lists` refuses the tree
+  when a third file opens it. Check finiteness, bound sizes, and cap loop
+  counts. `crates/core/src/params.rs` is the list.
 
 - **Two trust boundaries, in order:**
   1. `craftkit_kernel::guard` — turns a panic inside code craftkit does not own

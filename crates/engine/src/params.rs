@@ -8,11 +8,21 @@
 //! temptation is to reach for a JSON value directly. This module is the answer
 //! to that temptation: every reader here goes through
 //! [`craftkit_core::Params`], which never indexes and always validates.
+//!
+//! **This module is one of the two homes of the raw reader.**
+//! [`craftkit_core::Params::raw_json`] hands back a `&Json`, and a `&Json` can
+//! be indexed — `json["key"]` panics on anything that is not an object and
+//! answers `null` for a key that is not there. So a command's parameter is
+//! read **here**, where the shape is matched with a `match` and never indexed,
+//! and the other home is `crates/core/src/params.rs`. `cargo xtask lists`
+//! refuses the tree when a third file calls it. §136.
 
-use craftkit_core::{Color, NodeId, ParamError, Params, Value};
+use craftkit_core::{Color, FrameRate, NodeId, ParamError, Params, Tick, Value};
+use craftkit_model::{Easing, NodeKind};
 use serde_json::Value as Json;
 
 use crate::command::ParamDoc;
+use crate::error::EngineError;
 
 /// The documented type of one parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,7 +154,7 @@ pub fn text_to_param(param: &ParamDoc, text: &str) -> Result<Typed, String> {
 
 /// The required subject of almost every command: which node.
 pub fn node_ref(p: &Params<'_>, key: &str) -> Result<NodeId, ParamError> {
-    match p.raw(key) {
+    match p.raw_json(key) {
         Some(Json::Number(n)) => {
             let raw = n.as_u64().ok_or_else(|| {
                 ParamError::new(key, format!("{n} is not a node id; ids are whole numbers"))
@@ -190,9 +200,89 @@ pub fn node_by_id_or_name(doc: &craftkit_model::Document, p: &Params<'_>) -> Res
     }
 }
 
+/// An instant, in the three spellings a time has.
+///
+/// Seconds, a frame (`12f`) and raw ticks (`120t`). The frame spelling needs
+/// the document's own rate, which is why the rate is a parameter and not
+/// something this module knows.
+///
+/// The shape is matched, never indexed: a number is a number of seconds, a
+/// string is a spelling, and anything else is refused by name.
+pub(crate) fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Option<Tick>, EngineError> {
+    let bad = |detail: String| EngineError::Param { id: String::new(), source: ParamError::new(key, detail) };
+    match p.raw_json(key) {
+        None => Ok(None),
+        Some(Json::Number(n)) => {
+            let secs = n.as_f64().ok_or_else(|| bad(format!("{n} is not a number of seconds")))?;
+            Ok(Some(Tick::try_from_seconds_f64("time", secs).map_err(|e| bad(e.to_string()))?))
+        }
+        Some(Json::String(s)) => parse_time_text(s, rate).map(Some).ok_or_else(|| {
+            bad(format!("`{s}` is not a time; use seconds (1.5), frames (12f) or ticks (120t)"))
+        }),
+        Some(other) => Err(bad(format!("a {} is not a time", kind_of(other)))),
+    }
+}
+
+/// The three spellings of a time, in text.
+///
+/// A trailing `f` is a frame and a trailing `t` is a tick; anything else is a
+/// number of seconds. The frame is a frame **of this document**: the rate
+/// belongs to the document, so hard-coding 24 here would silently give a 30
+/// fps plan the wrong instant, which is the sort of bug that only shows up in
+/// someone else's project.
+fn parse_time_text(s: &str, rate: FrameRate) -> Option<Tick> {
+    let t = s.trim();
+    let (body, factor) = match t.chars().last() {
+        Some('f') | Some('F') => (&t[..t.len() - 1], 'f'),
+        Some('t') | Some('T') => (&t[..t.len() - 1], 't'),
+        _ => (t, 's'),
+    };
+    let n: f64 = body.trim().parse().ok()?;
+    match factor {
+        's' => Tick::try_from_seconds_f64("time", n).ok(),
+        'f' => Some(Tick::from_frames_i64(n as i64, rate)),
+        _ => Some(Tick::from_raw(n as i128)),
+    }
+}
+
+/// A node kind, by its label.
+///
+/// The shape is matched, never indexed.
+pub(crate) fn opt_kind(p: &Params<'_>, key: &str) -> Result<Option<NodeKind>, EngineError> {
+    let bad = |detail: String| EngineError::Param { id: String::new(), source: ParamError::new(key, detail) };
+    let Some(raw) = p.raw_json(key) else { return Ok(None) };
+    let text = match raw {
+        Json::String(s) => s.clone(),
+        other => return Err(bad(format!("a {} is not a node kind; expected text", kind_of(other)))),
+    };
+    NodeKind::all().iter().find(|k| k.label() == text).copied().map(Some).ok_or_else(|| {
+        bad(format!("`{text}` is not a kind; expected one of source, filter, sink, cue, comment"))
+    })
+}
+
+/// An easing preset, by its name.
+///
+/// The shape is matched, never indexed.
+pub(crate) fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, EngineError> {
+    let Some(raw) = p.raw_json(key) else { return Ok(None) };
+    let Json::String(s) = raw else {
+        return Err(EngineError::Param {
+            id: String::new(),
+            source: ParamError::new(key, "expected an easing name as text"),
+        });
+    };
+    Easing::preset(s).map(Some).ok_or_else(|| EngineError::Param {
+        id: String::new(),
+        source: ParamError::new(
+            key,
+            format!("`{s}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut"),
+        ),
+    })
+}
+
 /// A value for a property, read as whatever the document will store.
 pub fn value_for(p: &Params<'_>, key: &str) -> Result<Option<Value>, ParamError> {
-    match p.raw(key) {
+    match p.raw_json(key) {
         None => Ok(None),
         Some(Json::Bool(b)) => Ok(Some(Value::Bool(*b))),
         Some(Json::String(s)) => {
