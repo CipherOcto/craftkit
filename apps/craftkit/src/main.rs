@@ -337,6 +337,7 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
                             ("width".to_string(), Json::from(frame.width)),
                             ("height".to_string(), Json::from(frame.height)),
                             ("widgets".to_string(), Json::from(frame.automation.names())),
+                            ("rects".to_string(), rects(&frame.automation)),
                         ]
                         .into_iter()
                         .collect(),
@@ -346,15 +347,30 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
             }
         }
         craftkit_control::UiAction::Click => {
-            let (Some(x), Some(y)) = (number(request.params.get("x")), number(request.params.get("y")))
-            else {
+            // By name, or by point — but not both. The names say what is on
+            // screen; a name with no position behind it is a name an agent
+            // cannot act on, so the name is enough. §104.
+            let by_name = request.params.get("name").and_then(|v| v.as_str());
+            let by_point = (number(request.params.get("x")), number(request.params.get("y")));
+            if by_name.is_some() && by_point.0.is_some() {
                 return Response::error(
                     &request.id,
                     "bad-parameter",
-                    "`x` and `y` are required, and must be finite numbers",
+                    "send a `name` or an `x` and `y`, not both",
                 );
+            }
+            let clicked = match (by_name, by_point) {
+                (Some(name), _) => craftkit_ui::raster::click_name(session, name, width, height),
+                (None, (Some(x), Some(y))) => craftkit_ui::raster::click(session, x, y, width, height),
+                (None, _) => {
+                    return Response::error(
+                        &request.id,
+                        "bad-parameter",
+                        "`x` and `y` are required, and must be finite numbers; or give the `name` of a widget",
+                    );
+                }
             };
-            match craftkit_ui::raster::click(session, x, y, width, height) {
+            match clicked {
                 Ok(click) => {
                     let hit = click.hit.clone();
                     Response::ok(
@@ -378,14 +394,47 @@ fn ui_request(session: &mut Session, request: &craftkit_control::Request) -> cra
         craftkit_control::UiAction::Widgets => match craftkit_ui::raster::render(session, width, height) {
             Ok(frame) => Response::ok(
                 &request.id,
-                "the widgets on screen",
+                "the widgets on screen, and where they are",
                 Json::Object(
-                    [("widgets".to_string(), Json::from(frame.automation.names()))].into_iter().collect(),
+                    [
+                        ("widgets".to_string(), Json::from(frame.automation.names())),
+                        ("rects".to_string(), rects(&frame.automation)),
+                        ("width".to_string(), Json::from(frame.width)),
+                        ("height".to_string(), Json::from(frame.height)),
+                    ]
+                    .into_iter()
+                    .collect(),
                 ),
             ),
             Err(e) => Response::error(&request.id, "bad-parameter", e),
         },
     }
+}
+
+/// Every published widget's rectangle, as a map from its name.
+///
+/// The names say *what* is on screen; this says *where*. An agent that has
+/// been given a name and cannot ask for its position can only guess pixels,
+/// and a guess is not a click. §104.
+fn rects(automation: &craftkit_ui::automation::Automation) -> serde_json::Value {
+    use serde_json::Value as Json;
+    Json::Object(
+        automation
+            .rects()
+            .into_iter()
+            .map(|(name, rect)| {
+                (
+                    name.to_string(),
+                    Json::Array(vec![
+                        Json::from(rect.min.x),
+                        Json::from(rect.min.y),
+                        Json::from(rect.width()),
+                        Json::from(rect.height()),
+                    ]),
+                )
+            })
+            .collect(),
+    )
 }
 
 /// What a click says.
@@ -684,8 +733,71 @@ mod tests {
         HOOK_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// A request with a method and some parameters.
+    fn ui_request_params(method: &str, params: serde_json::Value) -> craftkit_control::Request {
+        craftkit_control::Request {
+            id: serde_json::json!(1),
+            token: None,
+            method: method.to_string(),
+            params,
+        }
+    }
+
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// A click by name reaches the widget it names.
+    ///
+    /// §104: the registry publishes the names of the widgets and the click
+    /// took pixels, so an agent that knew a name could not act on it — it
+    /// had to guess where the name was.
+    #[test]
+    fn a_click_by_name_reaches_the_widget_it_names() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui.click", serde_json::json!({ "name": "nodes.row.1.del" }));
+        let response = ui_request(&mut session, &request);
+        assert!(response.ok, "the click by name was refused: {:?}", response.message);
+        let hit = response.data.as_ref().and_then(|d| d.get("hit")).and_then(|v| v.as_str());
+        assert_eq!(hit, Some("nodes.row.1.del"), "the click did not land on the widget");
+    }
+
+    /// A click with neither a name nor a point says what it wants.
+    #[test]
+    fn a_click_with_neither_a_name_nor_a_point_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui.click", serde_json::json!({}));
+        let response = ui_request(&mut session, &request);
+        assert!(!response.ok, "a click with no target was accepted");
+        assert!(response.message.as_deref().unwrap_or("").contains("name"), "{:?}", response.message);
+    }
+
+    /// A click with both a name and a point is refused, not guessed at.
+    #[test]
+    fn a_click_with_both_a_name_and_a_point_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        let request =
+            ui_request_params("ui.click", serde_json::json!({ "name": "nodes.row.1.del", "x": 10, "y": 10 }));
+        let response = ui_request(&mut session, &request);
+        assert!(!response.ok, "a click with two targets was accepted");
+        assert!(response.message.as_deref().unwrap_or("").contains("not both"), "{:?}", response.message);
+    }
+
+    /// The widgets reply says where the widgets are.
+    ///
+    /// §104: the names alone left an agent with nothing to click.
+    #[test]
+    fn the_widgets_reply_says_where_the_widgets_are() {
+        let mut session = craftkit_engine::Session::sample();
+        let request = ui_request_params("ui", serde_json::json!({ "action": "widgets" }));
+        let response = ui_request(&mut session, &request);
+        assert!(response.ok, "the widgets reply was refused: {:?}", response.message);
+        let data = response.data.as_ref().expect("the reply carries data");
+        let rects = data.get("rects").and_then(|v| v.as_object()).expect("the rectangles");
+        let row = rects.get("nodes.row.1").and_then(|v| v.as_array()).expect("the row's rectangle");
+        assert_eq!(row.len(), 4, "a rectangle is x, y, width, height: {row:?}");
+        assert!(row[2].as_f64().expect("a width") > 0.0, "the row has no width");
+        assert!(data.get("width").is_some(), "the reply does not say what size it is");
     }
 
     #[test]

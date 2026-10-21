@@ -1026,8 +1026,8 @@ expect_catch "desktop: the click reply claims to have clicked" \
 # The playbook's click example was `{"method":"ui.render","params":{"action":
 # "click"}}` for months. It worked by accident, and the docs taught it twice.
 swap docs/agent-playbook.md \
-    '{"id":3,"method":"ui.click","params":{"x":120,"y":240}}' \
-    '{"id":3,"method":"ui.render","params":{"action":"click","x":120,"y":240}}'
+    '{"id":3,"method":"ui.click","params":{"name":"nodes.row.1.del"}}' \
+    '{"id":3,"method":"ui.render","params":{"action":"click","name":"nodes.row.1.del"}}'
 expect_catch "prose: a control-channel example that could not be sent" \
     "cargo xtask lists"
 
@@ -2478,6 +2478,23 @@ swap crates/ui/src/shell.rs \
                     automation.publish(AutomationId::level_bar(id), row, true);'
 expect_catch "ui: a widget is published with another widget's rectangle" \
     "cargo test -p craftkit-ui --profile ci every_published_name_answers_at_its_own_centre"
+
+# The control channel published the *names* of the widgets and not their
+# positions, and the click took pixels -- so an agent that knew a widget's
+# name could not act on it and had to guess where the name was. §104.
+swap crates/ui/src/raster.rs \
+    '    let centre = rect.center();' \
+    '    let centre = egui::pos2(width as f32 / 2.0, height as f32 / 2.0);'
+expect_catch "ui: a click by name lands somewhere else" \
+    "cargo test -p craftkit-ui --profile ci a_click_by_name_lands_on_that_widget"
+
+# The widgets reply carries the rectangles, so an agent can say where a
+# widget is without guessing. §104.
+swap apps/craftkit/src/main.rs \
+    '                        Json::from(rect.width()),' \
+    '                        Json::from(0.0),'
+expect_catch "ui: the published rectangles have no width" \
+    "cargo test -p craftkit --profile ci the_widgets_reply_says_where_the_widgets_are"
 
 restore
 finish

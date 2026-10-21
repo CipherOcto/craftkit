@@ -215,6 +215,55 @@ pub fn click(
     })
 }
 
+/// Click the widget with this name.
+///
+/// The names say what is on screen; this says **where** it is, and clicks
+/// it. An agent that has been given a name could not ask for its position
+/// before, and a click takes pixels — so the only way to act on a name was
+/// to guess. §104.
+///
+/// The click lands in the middle of the widget's rectangle, and the answer
+/// is the same answer [`click`] gives: which widget was at that point.
+pub fn click_name(
+    session: &mut craftkit_engine::Session,
+    name: &str,
+    width: usize,
+    height: usize,
+) -> Result<Click, String> {
+    check_size(width, height)?;
+
+    // Settle the layout first, the same way `click` does: a layout that has
+    // not settled answers about where things *will* be.
+    let ctx = egui::Context::default();
+    let tokens = crate::theme::Tokens::dark();
+    let screen_rect =
+        egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(width as f32, height as f32));
+    let raw = egui::RawInput { screen_rect: Some(screen_rect), ..Default::default() };
+    let mut shell = crate::shell::Shell::new(session);
+    for _ in 0..FRAMES {
+        let _ = ctx.run(raw.clone(), |ctx| shell.show(ctx, &tokens));
+    }
+
+    let rect = widget_rect(&shell.automation, name)?;
+    let centre = rect.center();
+    click(session, centre.x, centre.y, width, height)
+}
+
+/// The rectangle of the widget with this name, or say why there is not one.
+///
+/// A widget that is on screen but **disabled** is a different thing from a
+/// widget that is not there: the first is on the screen and cannot be
+/// clicked, and the second is not on the screen at all. §104.
+fn widget_rect(automation: &crate::automation::Automation, name: &str) -> Result<egui::Rect, String> {
+    match automation.known(name) {
+        crate::automation::Widget::Found { rect, enabled: true } => Ok(rect),
+        crate::automation::Widget::Found { rect: _, enabled: false } => {
+            Err(format!("`{name}` is on screen but disabled, so there is nothing to click"))
+        }
+        crate::automation::Widget::Missing => Err(format!("there is no widget named `{name}` on screen")),
+    }
+}
+
 /// What [`click`] found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Click {
@@ -792,6 +841,51 @@ mod tests {
         let rect = frame.automation.rect(name).expect("the row has a rectangle");
         let click = click(&mut session, rect.center().x, rect.center().y, 600, 400).expect("clicks");
         assert_eq!(click.hit.as_deref(), Some(name), "clicked the centre of {name}");
+    }
+
+    /// A click by name lands on that widget.
+    ///
+    /// §104: the names say what is on screen and the click took pixels, so an
+    /// agent that knew a widget's name could not act on it — it had to guess
+    /// where the name was.
+    #[test]
+    fn a_click_by_name_lands_on_that_widget() {
+        let mut session = craftkit_engine::Session::sample();
+        let name = "nodes.row.1";
+        let click = click_name(&mut session, name, 600, 400).expect("clicks");
+        assert_eq!(click.hit.as_deref(), Some(name), "the click did not land on {name}");
+        // And the point it reported is inside the widget's own rectangle.
+        let frame = render(&mut session, 600, 400).expect("renders");
+        let rect = frame.automation.rect(name).expect("the row has a rectangle");
+        assert!(
+            rect.contains(egui::pos2(click.point[0], click.point[1])),
+            "{:?} is not in {rect:?}",
+            click.point
+        );
+    }
+
+    /// A name that is not on screen is refused, and says so.
+    #[test]
+    fn a_click_by_a_name_that_is_not_there_is_refused() {
+        let mut session = craftkit_engine::Session::sample();
+        let err = click_name(&mut session, "nodes.row.9999", 600, 400).expect_err("refused");
+        assert!(err.contains("no widget named"), "{err}");
+    }
+
+    /// A widget that is on screen but disabled is a different thing.
+    ///
+    /// §104: the registry carries whether a widget can be clicked, and a
+    /// disabled widget that answers "there is no such widget" would send an
+    /// agent looking for something that is right there.
+    #[test]
+    fn a_disabled_widget_is_not_the_same_as_one_that_is_not_there() {
+        let mut automation = crate::automation::Automation::new();
+        let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
+        automation.publish(crate::automation::AutomationId("off".to_string()), rect, false);
+        let err = widget_rect(&automation, "off").expect_err("refused");
+        assert!(err.contains("disabled"), "{err}");
+        let missing = widget_rect(&automation, "nope").expect_err("refused");
+        assert!(missing.contains("no widget named"), "{missing}");
     }
 
     #[test]

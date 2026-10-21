@@ -319,15 +319,27 @@ handler draws a **fresh** frame into a new egui context via
 ```json
 {"id":6,"token":"…","method":"ui.render","params":{"width":1180,"height":720}}
 {"id":7,"token":"…","method":"ui","params":{"action":"widgets"}}
-{"id":8,"token":"…","method":"ui.click","params":{"x":412,"y":288}}
+{"id":8,"token":"…","method":"ui.click","params":{"name":"nodes.row.1.del"}}
 ```
 
-`ui.render` answers with `png_base64`, `width`, `height` and the list of widget
-names. `ui.screenshot` is the same picture and says in its own `message` that it
+`ui.render` answers with `png_base64`, `width`, `height`, the list of widget
+names and a `rects` map from each name to `[x, y, width, height]` in the pixels
+of that picture. `ui.screenshot` is the same picture and says in its own
+`message` that it
 is a fresh render rather than the window's framebuffer — a socket thread cannot
 read that. `ui.click` replays a pointer event into a fresh context and reports
 which widget was at the point; it does **not** activate anything, because acting
 is `engine.execute`.
+
+**A click takes a name or a point.** `{"name": "nodes.row.1.del"}` finds that
+widget and clicks the middle of it — which is how you find out *where* a widget
+is, since the reply carries the point. `{"x": …, "y": …}` clicks that point.
+Giving both is refused. §104.
+
+**`ui.widgets` says where the widgets are.** The reply carries the names, a
+`rects` map from each name to `[x, y, width, height]` in the pixels of the
+frame its `width` and `height` describe, and the size itself. Before §104 it
+carried the names only, so a name could be found but not aimed at.
 
 **The method name is the action.** `ui.render`/`ui.screenshot`/`ui.click` each
 mean themselves; only the bare `ui` reads `params.action`, and giving both a

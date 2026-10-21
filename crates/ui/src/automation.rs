@@ -295,6 +295,15 @@ impl Automation {
         }
     }
 
+    /// The rectangle of every published widget, in publish order.
+    ///
+    /// The names say what is on screen; this says **where**. An agent that
+    /// has been given a name and cannot ask for its position can only guess
+    /// pixels, and a guess is not a click. §104.
+    pub fn rects(&self) -> Vec<(&str, Rect)> {
+        self.entries.iter().map(|(id, rect, _)| (id.0.as_str(), *rect)).collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

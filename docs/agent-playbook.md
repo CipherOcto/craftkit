@@ -282,11 +282,18 @@ cargo run --release -p craftkit -- --sample --control PORT
 # drive it with JSON lines on 127.0.0.1:PORT
 {"id":1,"token":"…","method":"engine.execute","params":{"command":"node.add","params":{"name":"Gate","kind":"filter"}}}
 {"id":2,"method":"ui.render","params":{"width":1180,"height":720}}
-{"id":3,"method":"ui.click","params":{"x":120,"y":240}}
+{"id":3,"method":"ui.click","params":{"name":"nodes.row.1.del"}}
 ```
 
-`ui.render` answers with `png_base64`, `width`, `height` and the list of widget
-names. Decode the base64 and look at the PNG.
+`ui.render` answers with `png_base64`, `width`, `height`, the list of widget
+names and a `rects` map from each name to `[x, y, width, height]` in the pixels
+of that picture. Decode the base64 and look at the PNG; the rectangles say
+where in it each widget is. §104.
+
+**A click takes a name or a point.** `ui.click` with `{"name": "…"}` finds that
+widget and clicks the middle of it; with `{"x": …, "y": …}` it clicks that
+point. Giving both is refused rather than resolved — one of the two things you
+said would have to be ignored, and which one is a guess. §104.
 
 **The action is in the method name, not in `params`.** `ui.render`,
 `ui.screenshot` and `ui.click` each ask for exactly that; the bare `ui` takes
@@ -315,8 +322,12 @@ knowing before you rely on it:
   Activating something is `engine.execute`, which is undoable and shows up in
   the log. Two ways to do everything is two ways to get it wrong.
 
-`{"action":"widgets"}` returns just the names, which is usually the cheapest way
-to find out whether the control you expect is on screen at all.
+`{"action":"widgets"}` returns the names **and where they are**: the names, a
+`rects` map from each name to `[x, y, width, height]` in the pixels of the frame
+the reply's `width` and `height` describe, and the size itself. That is the
+cheapest way to find out whether the control you expect is on screen at all —
+and, before §104, it was the only way to learn a name without also learning
+where it was, which left a click with nothing to click.
 
 Headless, through the CLI:
 

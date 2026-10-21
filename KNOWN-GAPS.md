@@ -10671,6 +10671,104 @@ large as the model allows.
 a design may be 32 MiB. It does not say what that design costs to edit, and at
 that size a single command costs more than a frame.
 
+## 104. The control channel published the names of the widgets and not where they were
+
+The registry exists so that an agent can find a widget. §99 gave the level bar
+a name of its own; §100 named the buttons the shell drew and had never
+published. Both of those were about **names**.
+
+None of them was about **positions** — and a name with no position behind it is
+a name an agent cannot act on.
+
+### The measurement
+
+The running app, over the control channel:
+
+```
+ui.widgets keys: ['widgets']
+ui.widgets widgets[:6]: ['node.1.level', 'node.2.level', 'node.3.level',
+                         'nodes.row.1', 'nodes.row.2', 'nodes.row.3']
+ui.widgets has rectangles? False
+ui.click by name -> False | `x` and `y` are required, and must be finite numbers
+ui.click by point -> True  | nothing is at that point
+```
+
+So the channel answered "these thirty-four widgets are on screen" and nothing
+else. `ui.click` wanted pixels, and the pixels were the one thing the channel
+would not say. An agent that had been told "the delete button of row 3 is
+`nodes.row.3.del`" — which is exactly what §100 made true — had no way to find
+out where that button was, and so no way to click it.
+
+The registry knew: `Automation::rect(name)` has answered with a widget's
+rectangle since the registry was written. Nothing published it.
+
+### Why nothing noticed
+
+**The names were the interesting half, and they were published.** §99 and §100
+were both about the *set* of names — a name that collides, a name that is
+missing. The position of a name was nobody's question.
+
+**A click by coordinates looks like it works.** `ui.click {"x": 120, "y": 240}`
+answers "nothing is at that point" or "…is at that point", and a caller who
+guessed well is satisfied. The caller who guessed *badly* gets an answer that
+reads like a fact about the screen.
+
+**The PNG was the fallback, and it is not a coordinate system.** An agent can
+look at the rendered picture and see the buttons, but the picture is pixels, and
+the agent has to guess where in it a button is, and the click's coordinates are
+in the frame's pixels — the same pixels, but only if the agent happened to
+render at the size the click assumes.
+
+### The fix
+
+**A click takes a name.** `ui.click {"name": "nodes.row.1.del"}` finds the
+widget and clicks the middle of it. The reply carries the point it landed on,
+so the same call answers "where is this widget?" as well as "what is at this
+point?" — the click was always a report (§17), and now the report can be asked
+for by name.
+
+**`ui.widgets` says where the widgets are.** The reply carries the names, a
+`rects` map from each name to `[x, y, width, height]`, and the `width` and
+`height` those pixels are in — so an agent can build its own map of the screen
+and aim at anything on it.
+
+**Giving both is refused**, like a method and an action that disagree: one of
+the two things the caller said would have to be ignored, and which one is a
+guess.
+
+**A widget that is on screen but disabled is not one that is not there.** The
+refusal says so, rather than "there is no widget named X" for a button that is
+right there.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A click by name lands on that widget | `a_click_by_name_lands_on_that_widget` |
+| A name that is not on screen is refused | `a_click_by_a_name_that_is_not_there_is_refused` |
+| A disabled widget is not the same as one that is not there | `a_disabled_widget_is_not_the_same_as_one_that_is_not_there` |
+| A click with neither a name nor a point is refused | `a_click_with_neither_a_name_nor_a_point_is_refused` |
+| A click with both a name and a point is refused | `a_click_with_both_a_name_and_a_point_is_refused` |
+| The widgets reply says where the widgets are | `the_widgets_reply_says_where_the_widgets_are` |
+
+and two mutations in `scripts/mutation-test-gates.sh`: a click by name lands
+somewhere else, and the published rectangles have no width.
+
+### The lesson
+
+**A name is not an address.** The registry answers "what is called X?" and the
+channel published exactly that — and a caller holding a name still could not
+point at it. §99 and §100 fixed names; this fixes the other half.
+
+**"Where is it?" and "what is it?" are different questions, and a registry
+that only answers the second is half a registry.** The rectangle was there the
+whole time, in the same struct, one method away.
+
+**A capability that needs a guess is not a capability.** `ui.click` took
+pixels, and the pixels were not published, so the only way to use it was to
+guess — and a guess that happens to be right is indistinguishable from a
+click that worked.
+
 ---
 
 ---
@@ -10879,6 +10977,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A skipped phase is not counted as one that ran** | `xtask` test | 1 mutation — §102 |
 | **The phase list is the documented one** | `xtask` test | 1 mutation — §102 |
 | **What a command costs is measured, and says which part of it is the restore** | `Session::execute`'s doc comment | — |
+| **A click by name lands on that widget** | `craftkit-ui` test | 1 mutation — §104 |
+| **A name that is not on screen is refused** | `craftkit-ui` test | 1 mutation — §104 |
+| **A disabled widget is not the same as one that is not there** | `craftkit-ui` test | 1 mutation — §104 |
+| **A click with neither a name nor a point is refused** | `craftkit` test | 1 mutation — §104 |
+| **A click with both a name and a point is refused** | `craftkit` test | 1 mutation — §104 |
+| **The widgets reply says where the widgets are** | `craftkit` test | 1 mutation — §104 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
