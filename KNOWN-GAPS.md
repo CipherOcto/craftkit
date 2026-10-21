@@ -12631,6 +12631,146 @@ than a sentence about one.
 
 ---
 
+## 119. A keyframe outside the design's range changed the design, and nothing said so
+
+### The measurement
+
+A design whose range is 0.000 s .. 5.000 s at 24 fps, and a property called
+`amount`:
+
+| What was done | What the design said |
+|---|---|
+| `key.set` at 30.000 s | *"keyed `amount` at 30.000s"* — accepted |
+| `key.set` at -5.000 s | *"keyed `amount` at -5.000s"* — accepted |
+| `diagnostics.list` | *"0 problem(s)"* |
+| `key.list` | *"2 keyframe(s) on `amount`: -5.000s, 30.000s"* |
+| 200 seeks from 0.0 s to 199.9 s | the playhead never left 0.000 s .. 5.000 s, and never reached either key |
+
+So the two keys are **unreachable**: the playhead is clamped to the design's
+range, and no instant of the design is either of them.
+
+And then the measurement that matters. With **no** keys, `amount` at 0.000 s
+is **1.0** — the property's own value. With a key at -5.000 s holding 0.25 and
+a key at 30.000 s holding 0.75, `amount` at 0.000 s is:
+
+```
+0.25 + (0.75 - 0.25) x (0 - (-5)) / (30 - (-5))  =  0.3214285714285714
+```
+
+**A key past the end of the design changed every instant of the design.** The
+value between two keys is interpolated, and the interpolation ran *across* a
+key the playhead can never reach. At 4.999 s the value was 0.39284285714285716
+— the same interpolation, a little further along, towards a value the design
+never contains. Nothing anywhere said so: the command said only the time, the
+diagnostics said there was nothing wrong, and the panel (§117) said the times
+next to no range to compare them with.
+
+### Why nothing noticed
+
+**The model is right, and that is the point.** `Keyframes::sample` holds the
+value before the first key and after the last — a rule that only matters for
+keys the design does not contain. The model's own comment says the clamping
+is what stops a caller having to *"special-case 'before the animation
+starts'"*. So a key outside the range is **legal**, and refusing it would
+throw away a rule the model deliberately has.
+
+**Nothing compared the two ranges.** `Document::validate` checks the design's
+range and the keyframes, and never checks one against the other. Two facts
+about instants, each checked on its own, and the place where they meet was
+nobody's job.
+
+**§117 made the times visible, which made the gap harder to see.** The panel
+now says *"2 keyframe(s) / -5.000s, 30.000s"* — and a time reads as an instant
+of the design unless something says the design ends at 5.000 s. The listing is
+*more* informative than it was and still says nothing that could be checked.
+
+**The timeline shows the range and no keys.** The design's instants are the
+timeline, and the keyframes are on no timeline, so there was no picture in
+which the two could be seen to disagree.
+
+**A person cannot make one; a program can.** `key.set` asks a person for the
+node, the path and the value, and the **time** defaults to the playhead —
+which is inside the range by construction. So the form cannot key outside the
+design, the properties panel's "key at the playhead" cannot either, and the
+gap was one a **script, an agent or the CLI** could walk into. Which is why
+the reporting had to be for everyone else and not only for the person who
+pressed the key.
+
+### The fix
+
+**The command says it, at the moment it happens.** `key.set` at 30.000 s now
+says:
+
+> keyed `amount` at 30.000s — past the end of the design (5.000s), so the
+> playhead can never reach it
+
+and a key before the start says *"before the design starts at 0.000s"*. The
+reply carries `"outside_range": true`, so an agent does not have to parse the
+sentence.
+
+**The diagnostics report it, for everyone else.** The evaluator knows the
+document's range and every node's keyframes, so the plan's diagnostics now
+carry:
+
+> the keyframes of `amount` reach 30.000s, past the end of the design
+> (5.000s)
+
+and, at the other end, *"reach back to -5.000s, before the design starts at
+0.000s"*. Both ends, not one: a property with a key at each end is outside
+the range at both ends, and reporting only the first would hide the one that
+changes every instant of the design.
+
+The warning is a **warning**, not an error. The design is legal, and the
+person who made the key may have meant it.
+
+### The evidence, in the real window
+
+A design keyed past its end (by the control channel, since the form cannot
+key outside the range) and then the **Problems** button pressed in the real
+window:
+
+- the status bar says **1 problem(s)**;
+- the plan panel says **Problems** and, under it, the warning the evaluator
+  produced: *"warning: Level \"1\": the keyframes of `amount` reach 30.000s,
+  past the end of the design (5.000s)"*;
+- the plan's own footer says *"0t at 0.000s — 0 reused, 3 evaluated, 1
+  problem(s)"*.
+
+Before the change the same design said **0 problem(s)** and the panel said
+nothing at all.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A key outside the design says so | `a_key_outside_the_design_says_so` |
+| A key before the design says so | `a_key_before_the_design_says_so` |
+| A key inside the design does not say it is outside | `a_key_inside_the_design_does_not_say_it_is_outside` |
+| The diagnostics report a key the playhead cannot reach | `the_diagnostics_report_a_key_the_playhead_cannot_reach` |
+| A keyframe outside the design is a warning | `a_keyframe_outside_the_design_is_a_warning` |
+| A keyframe outside the design is reported at both ends | `a_keyframe_outside_the_design_is_reported_at_both_ends` |
+| A keyframe inside the design is not a warning | `a_keyframe_inside_the_design_is_not_a_warning` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the command does not
+say the key is outside the design; a key before the design is not noticed; and
+a key past the end of the design is not a warning.
+
+### The lesson
+
+**A keyframe is not an instant of the design until the design contains it.**
+Everything about a key assumes it is somewhere the playhead can be, and
+nothing checked.
+
+**"The value holds outside the keys" and "the design is a range" are two
+rules, and the place where they meet was nobody's job.** The model was right
+about each of them; the gap was the comparison between them.
+
+**A value that is interpolated towards an instant nobody can reach is not
+inert.** The key at 30 s did not wait, quietly, for a longer design. It was
+already changing the design.
+
+---
+
 ---
 
 ## What enforces what
@@ -12912,6 +13052,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every name a command asks for is one of its parameters** | `craftkit-engine` test | — |
 | **A command never asks for the same parameter twice** | `craftkit-engine` test | — |
 | **Every parameter a command needs is one it asks for** | `craftkit-engine` test | 1 mutation — §118 |
+| **A key outside the design says so** | `craftkit-engine` test | 1 mutation — §119 |
+| **A key before the design says so** | `craftkit-engine` test | 1 mutation — §119 |
+| **A key inside the design does not say it is outside** | `craftkit-engine` test | — |
+| **The diagnostics report a key the playhead cannot reach** | `craftkit-engine` test | — |
+| **A keyframe outside the design is a warning** | `craftkit-eval` test | 1 mutation — §119 |
+| **A keyframe outside the design is reported at both ends** | `craftkit-eval` test | — |
+| **A keyframe inside the design is not a warning** | `craftkit-eval` test | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

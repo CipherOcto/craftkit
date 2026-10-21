@@ -562,6 +562,25 @@ pub static KEY_SET: CommandSpec = CommandSpec {
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
         let easing = opt_easing(p, "easing")?.unwrap_or(Easing::Linear);
+        // Whether the instant is one the design has. A key outside the range
+        // can never be reached by the playhead, and the value between two
+        // keys is interpolated across it — so the key changes the design
+        // without ever being seen. §119.
+        let range = s.document().meta.clone();
+        let outside = if time < range.start {
+            Some(format!(
+                " — before the design starts at {:.3}s, so the playhead can never reach it",
+                range.start.seconds_f64()
+            ))
+        } else if time > range.end {
+            Some(format!(
+                " — past the end of the design ({:.3}s), so the playhead can never reach it",
+                range.end.seconds_f64()
+            ))
+        } else {
+            None
+        };
+        let is_outside = outside.is_some();
 
         let node = node_mut(s, id, KEY_SET.id)?;
         let parsed = parse_path(&path, KEY_SET.id)?;
@@ -591,12 +610,14 @@ pub static KEY_SET: CommandSpec = CommandSpec {
         let after = prop.keys.keys().iter().find(|k| k.time == time).map(|k| k.value.clone());
         let changed = value_changed || before != after;
         Ok(Outcome::with(
-            format!("keyed `{path}` at {:.3}s", time.seconds_f64()),
+            format!("keyed `{path}` at {:.3}s{}", time.seconds_f64(), outside.unwrap_or_default()),
             serde_json::json!({
                 "id": id.get(),
                 "path": path,
                 "time": time.raw(),
                 "value": value,
+                // Whether the instant is one the design has. §119.
+                "outside_range": is_outside,
                 "keys": prop.keys.len(),
             }),
         )
@@ -2052,6 +2073,76 @@ mod tests {
         let items = out.data["items"].as_array().expect("items");
         assert_eq!(items.len(), 1, "{items:?}");
         assert_eq!(items[0]["severity"], json!("error"));
+    }
+
+    /// A key outside the design's range says so.
+    ///
+    /// §119: the command keyed 30 seconds into a design that ends at 5
+    /// seconds and said only *"keyed `amount` at 30.000s"*. The playhead can
+    /// never reach that instant, and the value between two keys is
+    /// interpolated across it — so the key changed the design without anyone
+    /// being told.
+    #[test]
+    fn a_key_outside_the_design_says_so() {
+        let mut s = session();
+        let end = s.document().meta.end.seconds_f64();
+        let out = s
+            .execute("key.set", &json!({ "node": 1, "path": "amount", "value": "0.25", "time": end + 25.0 }))
+            .expect("the key is set");
+        assert!(
+            out.message.contains("past the end of the design"),
+            "the message does not say the key is outside: {}",
+            out.message
+        );
+        assert!(out.message.contains(&format!("{end:.3}")), "{}", out.message);
+        assert_eq!(out.data["outside_range"], json!(true));
+    }
+
+    /// A key before the design's range says so too.
+    #[test]
+    fn a_key_before_the_design_says_so() {
+        let mut s = session();
+        let start = s.document().meta.start.seconds_f64();
+        let out = s
+            .execute("key.set", &json!({ "node": 1, "path": "amount", "value": "0.25", "time": start - 5.0 }))
+            .expect("the key is set");
+        assert!(
+            out.message.contains("before the design starts"),
+            "the message does not say the key is outside: {}",
+            out.message
+        );
+        assert_eq!(out.data["outside_range"], json!(true));
+    }
+
+    /// A key inside the design does not say it is outside.
+    #[test]
+    fn a_key_inside_the_design_does_not_say_it_is_outside() {
+        let mut s = session();
+        let out = s
+            .execute("key.set", &json!({ "node": 1, "path": "amount", "value": "0.25", "time": 1.0 }))
+            .expect("the key is set");
+        assert_eq!(out.message, "keyed `amount` at 1.000s");
+        assert_eq!(out.data["outside_range"], json!(false));
+    }
+
+    /// The diagnostics report a key the playhead cannot reach.
+    ///
+    /// The command's message tells the person who made the key. The
+    /// diagnostics tell everyone else — including whoever opens the design
+    /// tomorrow. §119.
+    #[test]
+    fn the_diagnostics_report_a_key_the_playhead_cannot_reach() {
+        let mut s = session();
+        let end = s.document().meta.end.seconds_f64();
+        s.execute("key.set", &json!({ "node": 1, "path": "amount", "value": "0.25", "time": end + 25.0 }))
+            .expect("the key is set");
+
+        let out = s.execute("diagnostics.list", &json!({})).expect("diagnostics");
+        let items = out.data["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1, "{items:?}");
+        let message = items[0]["message"].as_str().expect("a message");
+        assert!(message.contains("past the end of the design"), "{message}");
+        assert_eq!(items[0]["severity"], json!("warning"));
     }
 
     #[test]

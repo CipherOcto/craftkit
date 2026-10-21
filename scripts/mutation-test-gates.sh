@@ -3079,5 +3079,27 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the form is not on the screen" \
     "cargo test -p craftkit-ui --profile ci a_frame_with_a_form_is_not_the_frame_without_one"
 
+# A key outside the design's range changed the design and nothing said so.
+# §119.
+swap crates/engine/src/commands.rs \
+    '            format!("keyed `{path}` at {:.3}s{}", time.seconds_f64(), outside.unwrap_or_default()),' \
+    '            format!("keyed `{path}` at {:.3}s", time.seconds_f64()),'
+expect_catch "engine: the command does not say the key is outside the design" \
+    "cargo test -p craftkit-engine --profile ci a_key_outside_the_design_says_so"
+
+# The check for a key before the design stopped firing. §119.
+swap crates/engine/src/commands.rs \
+    '        let outside = if time < range.start {' \
+    '        let outside = if false {'
+expect_catch "engine: a key before the design is not noticed" \
+    "cargo test -p craftkit-engine --profile ci a_key_before_the_design_says_so"
+
+# The check for a key past the end of the design stopped firing. §119.
+swap crates/eval/src/evaluate.rs \
+    '    if last.time > end {' \
+    '    if false {'
+expect_catch "eval: a key past the end of the design is not a warning" \
+    "cargo test -p craftkit-eval --profile ci a_keyframe_outside_the_design_is_a_warning"
+
 restore
 finish

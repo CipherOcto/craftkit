@@ -179,8 +179,63 @@ impl Evaluator {
         self.cached_at = Some(at);
         self.last_reused = reused;
 
+        // A keyframe outside the design's range can never be reached, and the
+        // value between two keys is interpolated **across** it — so a key
+        // past the end of the design changes every instant of the design,
+        // and a key before its start is interpolated towards from the first
+        // frame. Nothing else says so. §119.
+        //
+        // This is outside the reuse branch on purpose: the range belongs to
+        // the document, not to a node, so a node whose fingerprint has not
+        // changed can still be outside the range the document now has.
+        for node in &doc.nodes {
+            for (path, prop) in node.props.flatten() {
+                for message in keyframes_outside_the_range(&path, prop, doc.meta.start, doc.meta.end) {
+                    diagnostics.push(Diagnostic::warn(Some(node.id), &node.name, message));
+                }
+            }
+        }
+
         Ok(Plan { at, nodes, diagnostics, reused, evaluated: doc.nodes.len() - reused })
     }
+}
+
+/// The warning a keyframe outside the design's range earns, if there is one.
+///
+/// The model's own rule is that the value **holds** before the first key and
+/// after the last, and that the value between two keys is interpolated — and
+/// both of those rules are about instants the design may not contain. A
+/// keyframe outside the range is therefore legal, and it is not a mistake the
+/// model should refuse: it is a fact about the design that the person who
+/// made it may not know. §119.
+fn keyframes_outside_the_range(
+    path: &craftkit_model::path::PropPath,
+    prop: &craftkit_model::Property,
+    start: Tick,
+    end: Tick,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let keys = prop.keys.keys();
+    let (Some(first), Some(last)) = (keys.first(), keys.last()) else { return out };
+    // **Both** ends, not one: a property with a key before the start and a
+    // key after the end is outside the range at both ends, and reporting only
+    // the first would hide the second — which is the one that changes every
+    // instant of the design.
+    if first.time < start {
+        out.push(format!(
+            "the keyframes of `{path}` reach back to {:.3}s, before the design starts at {:.3}s",
+            first.time.seconds_f64(),
+            start.seconds_f64()
+        ));
+    }
+    if last.time > end {
+        out.push(format!(
+            "the keyframes of `{path}` reach {:.3}s, past the end of the design ({:.3}s)",
+            last.time.seconds_f64(),
+            end.seconds_f64()
+        ));
+    }
+    out
 }
 
 /// Evaluate one node, given the level entering it.
@@ -348,6 +403,77 @@ mod tests {
             Some(PropNode::Prop(p)) => p,
             other => panic!("expected a property, found {other:?}"),
         }
+    }
+
+    /// A keyframe outside the design's range is a warning, not a silence.
+    ///
+    /// §119: a key past the end of the design changes **every instant** of
+    /// the design — the value between two keys is interpolated across it —
+    /// and the playhead can never reach the key itself. Nothing said so.
+    #[test]
+    fn a_keyframe_outside_the_design_is_a_warning() {
+        let mut d = doc_with(&[(NodeKind::Source, "src", 1.0)]);
+        let end = d.meta.end;
+        let past_the_end = Tick::from_raw(end.raw() + 1_000_000_000);
+        let prop = first_prop(&mut d, NodeId(1));
+        let mut keys = Keyframes::new();
+        let one = Value::num("amount", 1.0).expect("value");
+        let two = Value::num("amount", 2.0).expect("value");
+        keys.set(Key::new(end, one, Easing::Linear).expect("key")).expect("set");
+        keys.set(Key::new(past_the_end, two, Easing::Linear).expect("key")).expect("set");
+        prop.keys = keys;
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert_eq!(plan.diagnostics.items.len(), 1, "{:?}", plan.diagnostics);
+        let message = &plan.diagnostics.items[0].message;
+        assert!(message.contains("past the end of the design"), "{message}");
+        assert!(message.contains("amount"), "{message}");
+    }
+
+    /// A keyframe at both ends outside the range is reported at both ends.
+    ///
+    /// The one that matters is the end *after* the design: it changes every
+    /// instant of the design. Reporting only the first would hide it. §119.
+    #[test]
+    fn a_keyframe_outside_the_design_is_reported_at_both_ends() {
+        let mut d = doc_with(&[(NodeKind::Source, "src", 1.0)]);
+        let start = d.meta.start;
+        let end = d.meta.end;
+        let before = Tick::from_raw(start.raw() - 1_000_000_000);
+        let after = Tick::from_raw(end.raw() + 1_000_000_000);
+        let prop = first_prop(&mut d, NodeId(1));
+        let mut keys = Keyframes::new();
+        let one = Value::num("amount", 1.0).expect("value");
+        let two = Value::num("amount", 2.0).expect("value");
+        keys.set(Key::new(before, one, Easing::Linear).expect("key")).expect("set");
+        keys.set(Key::new(after, two, Easing::Linear).expect("key")).expect("set");
+        prop.keys = keys;
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert_eq!(plan.diagnostics.items.len(), 2, "{:?}", plan.diagnostics);
+        let messages: Vec<&str> = plan.diagnostics.items.iter().map(|d| d.message.as_str()).collect();
+        assert!(messages.iter().any(|m| m.contains("before the design starts")), "{messages:?}");
+        assert!(messages.iter().any(|m| m.contains("past the end of the design")), "{messages:?}");
+    }
+
+    /// A keyframe inside the design is not a warning.
+    ///
+    /// The warning is worth nothing if it fires on every design. §119.
+    #[test]
+    fn a_keyframe_inside_the_design_is_not_a_warning() {
+        let mut d = doc_with(&[(NodeKind::Source, "src", 1.0)]);
+        let start = d.meta.start;
+        let end = d.meta.end;
+        let prop = first_prop(&mut d, NodeId(1));
+        let mut keys = Keyframes::new();
+        let one = Value::num("amount", 1.0).expect("value");
+        let two = Value::num("amount", 2.0).expect("value");
+        keys.set(Key::new(start, one, Easing::Linear).expect("key")).expect("set");
+        keys.set(Key::new(end, two, Easing::Linear).expect("key")).expect("set");
+        prop.keys = keys;
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert!(plan.diagnostics.is_empty(), "{:?}", plan.diagnostics);
     }
 
     #[test]
