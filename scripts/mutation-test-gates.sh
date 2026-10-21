@@ -3373,5 +3373,64 @@ swap crates/eval/src/evaluate.rs \
 expect_catch "eval: a reused node repeats its problems" \
     "cargo test -p craftkit-eval --profile ci a_reused_node_still_reports_its_problem"
 
+# The rule that there is no second path, and the engine's own public API.
+# `Session::recompute` re-evaluates the document with no command, no trace
+# step and no log entry - it had no caller at all, and it was public. §135.
+swap crates/engine/src/session.rs \
+    '    pub(crate) fn recompute(&mut self) {' \
+    '    pub fn recompute(&mut self) {'
+expect_catch "engine: the session offers a second path to the plan" \
+    "cargo xtask lists"
+
+# The other road: `Session::seek_to` moves the playhead without the clamp
+# the registry applies, and the crash replay is what calls it. §135.
+swap crates/engine/src/session.rs \
+    '    pub(crate) fn seek_to(&mut self, at: i64) {' \
+    '    pub fn seek_to(&mut self, at: i64) {'
+expect_catch "engine: the session offers a second path to the playhead" \
+    "cargo xtask lists"
+
+# And the clamp itself: the playhead is a place **in** the design (§115),
+# and the roads that do not go through the registry have to keep it there.
+swap crates/engine/src/session.rs \
+    '        self.clamp_playhead_into_range();
+        self.recompute();
+    }
+
+    /// Move the playhead to a tick.' \
+    '        self.recompute();
+    }
+
+    /// Move the playhead to a tick.'
+expect_catch "engine: the playhead can leave the design" \
+    "cargo test -p craftkit-engine --profile ci the_playhead_cannot_leave_the_design"
+
+# The same clamp, on the road a user walks: a crash replay. The report
+# records the playhead at crash time and the design at the start of the
+# trace, and the two disagree whenever the range changed during the trace.
+swap crates/engine/src/session.rs \
+    '        self.clamp_playhead_into_range();
+        self.recompute();
+    }
+
+    /// Move the playhead to a tick.' \
+    '        self.recompute();
+    }
+
+    /// Move the playhead to a tick.'
+expect_catch "engine: a crash replay puts the playhead outside the design" \
+    "cargo test -p craftkit-engine --profile ci a_crash_replay_does_not_put_the_playhead_outside_the_design"
+
+# The other half of "a panel never writes to the document": the writers are
+# public, because the host opens designs with them (§18), so the shell could
+# have replaced the design under the user's hands. It never did - and the
+# gate is what makes that a fact rather than a habit. §135.
+swap crates/ui/src/shell.rs \
+    '        let rows = node_rows(self.session.document(), self.session.plan());' \
+    '        let rows = node_rows(self.session.document(), self.session.plan());
+        self.session.load_document(self.session.document().clone());'
+expect_catch "ui: the shell puts a document into the session" \
+    "cargo xtask lists"
+
 restore
 finish

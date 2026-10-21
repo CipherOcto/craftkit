@@ -98,6 +98,14 @@ cannot be bypassed by picking a different front end. A keyboard shortcut would
 land there too — the registry advertises chords — but the tree binds none yet,
 so a chord is a specification and not a binding (§83).
 
+**The engine's own API is part of that promise.** `Session`'s public methods
+are the registry, the things that read a design, and the two that let the host
+open a file (`load_document`, `replace_document` — file I/O is the host's
+business, §18). There is no public way to re-evaluate the document or to move
+the playhead around the registry, and `cargo xtask lists` refuses the tree
+when one appears: a public method that changed a design would be a second
+path, and the whole point of step 3 is that there is only one. §135.
+
 ## The panic boundary: three, with different jobs
 
 craftkit has exactly three `catch_unwind` sites, and they are not interchangeable.

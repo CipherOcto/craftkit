@@ -14750,6 +14750,206 @@ reasons, and neither of them had anything to do with the code it watches.
 
 ---
 
+## 135. The rule that there is no second path had nothing behind it
+
+### The measurement
+
+`AGENTS.md`, under **Everything is a command**:
+
+> User-visible behaviour = a `CommandSpec` in `crates/engine/src/commands.rs`.
+> That one registry is what the toolbar, the dialogs, scripts, the CLI, the
+> control channel and the MCP server all reach. There is no second path.
+
+And `Session::execute`'s own doc comment:
+
+> This is the only way anything changes.
+
+Both claims are about the **front ends**, and the front ends were measured —
+one by one, in production code only, with the test modules cut:
+
+| Front end | reaches the registry | anything else that changes a design |
+|---|---|---|
+| `crates/ui/src/shell.rs` | `session.execute` — one call site | none |
+| `apps/craftkit/src/main.rs` | through the shell | `load_document` — opening a file (§18) |
+| `apps/craftkit-web/src/main.rs` | through the shell | `load_document` — the stash (§18) |
+| `apps/craftkit-cli/src/cli.rs` | 5 × `session.execute` | `load_document` — opening a file (§18) |
+| `crates/control/src/server.rs` | 2 × `session.execute` | none |
+| `crates/mcp/src/server.rs` | `guard.execute(command, arguments)` | none |
+
+The front ends honoured the rule. The **engine's own public API** did not.
+
+`Session` had twenty-two public methods. Two are constructors, fifteen read,
+one is the registry, two open a file (§18). The other two were roads around
+the registry:
+
+- **`pub fn recompute(&mut self)`** — re-evaluates the document at the
+  playhead. No command, no trace step, no log entry, no undo. **It had no
+  caller anywhere in the tree.** It was public by accident, and the doc
+  comment above it said nothing about who was allowed to call it.
+- **`pub fn seek_to(&mut self, at: i64)`** — moves the playhead. The registry
+  has a command for exactly this, `playback.seek`, which validates its
+  argument and **clamps it to the design's range**. `seek_to` did neither. It
+  had one caller: the crash replay.
+
+A front end was free to take either road. *"There is no second path"* was a
+sentence about a door that was standing open.
+
+### The difference, measured
+
+A design whose range is one second to two, and a playhead asked to go to 999
+seconds:
+
+```
+playback.seek 999s -> 2.000s data={"from":254016000000,"seconds":2.0,"to":508032000000}
+seek_to(999s) -> at=999 (raw 253761984000000)
+  inside the range? false
+```
+
+The registry clamps to the design's end. `seek_to` puts the playhead **999
+seconds into a design that is one second long** — and the plan is evaluated
+there, and the timeline draws a handle at a place the design does not reach.
+
+§115 is the section that made the playhead a place **in** the design. It
+clamped `playback.seek`, it took the playhead with a range that moved under
+it, and it took the playhead with a document that arrived with its own range.
+It did not touch the two roads that do not go through the registry.
+
+### The consequence, on a road a user walks
+
+The crash replay is not a hypothetical: `craftkit-cli crashes replay <id>`
+and the control channel's `diagnostics.crash_reports` with `action: "replay"`
+both run it.
+
+A crash report carries **three** things (§47): the design as it was when the
+crash happened, the design the trace started from, and the commands in
+between. The playhead in the report is the one the session was standing at
+**when it crashed**; the design in the report is the one the trace **started
+from**. Those two are the same document only until a command changes the
+range — and `doc.range` is a command.
+
+So a report written across a `doc.range` command holds a playhead outside the
+range of the design it is replayed onto. The replay loaded the base — which
+clamped the playhead into the base's range — and then sought to the report's
+tick, which put it straight back out:
+
+```
+the replay put the playhead at 1270080000000, outside the design's range 0..254016000000
+```
+
+Five seconds into a one-second design.
+
+### Why nothing noticed
+
+**The rule was written about the front ends and was checked about the front
+ends.** Every front end was inspected, at the start, and found clean. The
+thing the rule was *about* — the engine's API — was never looked at, because
+the rule did not say it was about the engine's API.
+
+**`recompute` had no caller, and a public method with no caller is
+invisible.** A dead private function is noise. A dead *public* function is an
+API promise, and nobody reads an API promise that nothing calls.
+
+**`seek_to`'s only caller was inside the crate.** `crates/engine/src/crash.rs`
+called it, so a search for callers outside the crate found none — and the
+caller was the crash reporter, a piece of the tree that reads like
+infrastructure and is rarely looked at closely.
+
+**The clamp was in the command, not in the session.** `playback.seek` clamped
+its own argument. The invariant *"the playhead is a place in the design"* was
+therefore a property of one command — and a command is the one place in this
+tree where a property like that does not belong.
+
+### The fix
+
+**The invariant moved into the session**, where every road into the playhead
+passes:
+
+```rust
+pub(crate) fn set_at(&mut self, at: Tick) {
+    self.at = at;
+    // The playhead is a place **in** the design (§115). …
+    self.clamp_playhead_into_range();
+    self.recompute();
+}
+```
+
+**The two roads are gone from the public API.** `recompute` and `seek_to` are
+`pub(crate)` now: `recompute` had no caller, and `seek_to` had one, inside the
+crate.
+
+**And the rule is enforced.** `cargo xtask lists` carries two new gates:
+
+- `the_session_offers_no_second_path` — the public methods of `Session` are
+  an **allow list**: the registry, the readers, and the two that let the host
+  open a file. A new public method is refused until somebody says what it is
+  and why it is not a second path. That is the only direction that fails
+  safe.
+- `the_shell_does_not_write_the_document` — the other half of *"a panel never
+  writes to the document"*, which §132 called enforced by the engine's API. It
+  was enforced for the **mutator** (`doc_mut` is `pub(crate)`) and not for
+  the **writers** (`load_document` and `replace_document` are public, because
+  the host opens designs with them). The shell never called either; now it
+  may not.
+
+The engine-side gate covers every front end at once, including the ones that
+do not exist yet: a new front end cannot change a design without a command,
+because the engine does not offer it a way to.
+
+### What now holds it
+
+Five mutations, in `scripts/mutation-test-gates.sh`:
+
+| Mutation | Gate | Caught by |
+|---|---|---|
+| engine: the session offers a second path to the plan | `cargo xtask lists` | the allow list |
+| engine: the session offers a second path to the playhead | `cargo xtask lists` | the allow list |
+| engine: the playhead can leave the design | `craftkit-engine` test | `the_playhead_cannot_leave_the_design` |
+| engine: a crash replay puts the playhead outside the design | `craftkit-engine` test | `a_crash_replay_does_not_put_the_playhead_outside_the_design` |
+| ui: the shell puts a document into the session | `cargo xtask lists` | the shell gate |
+
+### What is still open
+
+**The allow list is a list of names.** It says which public methods exist, not
+what they do. A public method that *reads* is on the list because it is on
+the list; if one of them started writing, the gate would not notice. The
+readers are safe today because `Session` has no interior mutability they
+could reach — `history_mut` and `doc_mut` are `pub(crate)` — and that is an
+argument, not a check.
+
+**The front ends are not gated.** The engine's API is, so a front end cannot
+change a design without a command; but nothing checks that a front end does
+not *reimplement* a command's behaviour — a shell that drew a rectangle
+itself rather than running `sketch.rectangle` would pass every gate in the
+tree. §132's gate has the same shape and the same hole: it checks what the
+shell *names*, not what the shell *does*.
+
+**File I/O is still outside the registry**, by design (§18):
+`load_document` and `replace_document` are public, and the CLI's `open` is a
+subcommand. The owner question — *should `save`/`open` be commands?* — is
+still open, and it is in the suggested order.
+
+### The lesson
+
+**A rule written about the callers is not a rule about the callee.** *"The
+front ends reach the registry"* was true, and the thing it was supposed to
+guarantee — that there is no other way in — was false, because the guarantee
+lived in a type's visibility and the rule lived in a paragraph about front
+ends.
+
+**An API is a promise, and a promise nothing calls is invisible.** The dead
+public `recompute` was the clearest thing in the tree and nobody saw it,
+because *"does anything call this?"* is not a question anybody asks about a
+function that is already public.
+
+**The invariant belongs where every road passes.** The playhead is a place in
+the design; that is a property of the *session*, not of the one command that
+happened to implement it. §115 put the clamp in the command, and the command
+was the only road that had it.
+
+---
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -15067,6 +15267,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The shell may read the plan and may not evaluate the document** | `cargo xtask lists` | 1 mutation — §132 |
 | **A server that has exited is not a fault** | `craftkit-cli` test | 1 mutation — §133 |
 | **The rows are not collected a scan at a time, on a busy machine either** | `craftkit-ui` test | 1 mutation — §134 |
+| **There is no second path into the design** | `cargo xtask lists` | 3 mutations — §135 |
+| **A panel never puts a document into the session** | `cargo xtask lists` | 1 mutation — §135 |
+| **The playhead is a place in the design** | `craftkit-engine` test | 2 mutations — §135 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -15633,3 +15836,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     next to the fingerprint and gate it, widen the fingerprint to cover what a
     diagnostic may read, or make a diagnostic that depends on more than its own
     node a separate kind of thing that is never cached.
+25. **Decide what a front end may do that is not a command.** §135 closed the
+    second path *through the engine*: the session's public methods are an
+    allow list, and a panel may not put a document into the session. What is
+    still open is the other direction — a front end that *reimplements* a
+    command's behaviour instead of running it. A shell that drew a rectangle
+    itself rather than running `sketch.rectangle` would pass every gate in
+    the tree, and §132's gate has the same hole: it checks what the shell
+    *names*, not what the shell *does*. The choices are: compare the shell's
+    effects against the registry's (hard, because the shell draws and the
+    engine does not), name the commands a front end is allowed to reimplement
+    (a list that has to be kept true), or accept that a front end's behaviour
+    is checked by its own tests and that the gates police only the *names*.

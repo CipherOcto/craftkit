@@ -1066,6 +1066,40 @@ mod tests {
         assert!(err.contains("at most"), "{err}");
     }
 
+    /// A crash replay does not put the playhead outside the design.
+    ///
+    /// §135: the replay seeks with `Session::seek_to` — a road to the playhead
+    /// that does not go through the registry, and the registry clamps. A
+    /// report records the playhead **at crash time** and the design **at the
+    /// start of the trace**, and the two disagree whenever the range changed
+    /// during the trace: which is what a report written across a `doc.range`
+    /// command holds. The replay then started outside the design it was
+    /// replaying, and the plan was evaluated there.
+    #[test]
+    fn a_crash_replay_does_not_put_the_playhead_outside_the_design() {
+        let dir = temp_dir("replay-range");
+        let mut s = Session::sample();
+        // The design the trace starts from: one second long.
+        let mut doc = s.document().clone();
+        doc.meta.start = craftkit_core::Tick::from_seconds_f64(0.0);
+        doc.meta.end = craftkit_core::Tick::from_seconds_f64(1.0);
+        s.load_document(doc);
+        let mut report = build(&s, "prop.set", "boom");
+        // The playhead where the session was standing when it crashed: five
+        // seconds in, outside the design the trace started from.
+        report.at = i64::try_from(craftkit_core::Tick::from_seconds_f64(5.0).raw()).expect("the tick fits");
+        write_to(&dir, &report).expect("written");
+
+        let outcome = reproduce_in(&dir, &report.id).expect("the replay runs");
+        let at = outcome.session["at"].as_i64().expect("the playhead is a number");
+        let start = outcome.session["start"].as_i64().expect("the start is a number");
+        let end = outcome.session["end"].as_i64().expect("the end is a number");
+        assert!(
+            at >= start && at <= end,
+            "the replay put the playhead at {at}, outside the design's range {start}..{end}"
+        );
+    }
+
     /// A report whose base is a corrupt document is refused.
     ///
     /// The design reader refuses a document with two nodes sharing an id —

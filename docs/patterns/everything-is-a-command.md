@@ -146,6 +146,17 @@ pub fn execute(&mut self, id: &str, params: &Json) -> Result<Outcome, EngineErro
 Everything the front ends share is above that line; everything they cannot skip
 is below it.
 
+**And the engine's own API is narrow enough to say so.** `Session`'s public
+methods are the registry, the readers, and the two that let the host open a
+file. Two others used to be public: `recompute`, which re-evaluated the
+document with no command, no trace step and no log entry and had no caller at
+all, and `seek_to`, a second road to the playhead that skipped the clamp the
+registry applies. The crash replay was calling the second one, and it put the
+playhead outside the design whenever a report's range and its playhead
+disagreed — which is what a report written across a `doc.range` command
+holds. `cargo xtask lists` refuses the tree when a public method appears that
+is not on the list. §135.
+
 ## When NOT to use it
 
 - **A pure read that computes rather than inspects** — a preview that measures

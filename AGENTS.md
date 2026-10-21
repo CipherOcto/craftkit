@@ -100,6 +100,14 @@ run      the JSON form: (session, params) -> Result<Outcome, EngineError>
 Adding behaviour anywhere else — a special case in the UI, a bespoke MCP tool, a
 flag on the CLI — is the mistake this rule exists to prevent. Add a command.
 
+The rule is structural, not a promise. `Session`'s public methods are the
+registry (`execute`), the things that read a design, and the two that let the
+host open a file; a public method that changed a design would be a second
+path, and `cargo xtask lists` refuses the tree when one appears. The front
+ends are measured, and they honour it: the desktop app, the web app, the CLI,
+the control channel and the MCP server all reach the registry and nothing else
+that changes a design. §135.
+
 **Programmatic calls never open dialogs.** `engine.execute` runs the JSON form.
 Only a front end's own entry point may ask a question — in this tree that is
 `craftkit_ui::shell::Shell::start`, which collects the parameters a command
@@ -133,9 +141,11 @@ needs and then runs it. §118.
   toolkit. `cargo xtask layers` checks it against every `Cargo.toml`.
 - **The UI is thin.** Panels read engine state and act through
   `session.execute`. A panel never writes to the document, never calls the
-  evaluator, never caches a value the evaluator computes. `crates/ui` depends
-  on `egui` and on no other UI toolkit — no windowing, no renderer — which is
-  what lets the same panels run in a window, headlessly, and in a browser.
+  evaluator, never caches a value the evaluator computes. All three are
+  checked: `cargo xtask lists` refuses a shell that names the evaluator, and
+  one that puts a document into the session. `crates/ui` depends on `egui` and
+  on no other UI toolkit — no windowing, no renderer — which is what lets the
+  same panels run in a window, headlessly, and in a browser.
 - **One set of camera controls.** This tree has no canvas and no camera: the
   window draws a node graph, a timeline and a properties panel. If a canvas is
   added, it must have **one** set of camera controls — one module that owns

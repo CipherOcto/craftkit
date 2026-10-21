@@ -587,7 +587,14 @@ impl Session {
     }
 
     /// Re-evaluate at the current playhead.
-    pub fn recompute(&mut self) {
+    ///
+    /// Not public, and that is the point of it. The road into the design is
+    /// [`Session::execute`] and the road into the playhead is `playback.seek`.
+    /// A public way to re-evaluate would be a **second path** around the
+    /// registry: it would change what the screen shows without a command, a
+    /// trace step or a log entry — and nothing in the tree would know. It had
+    /// no caller at all; it was public by accident. §135.
+    pub(crate) fn recompute(&mut self) {
         match self.evaluator.evaluate(&self.doc, self.at) {
             Ok(plan) => self.plan = Some(plan),
             Err(e) => {
@@ -721,6 +728,13 @@ impl Session {
 
     pub(crate) fn set_at(&mut self, at: Tick) {
         self.at = at;
+        // The playhead is a place **in** the design (§115). The registry's
+        // `playback.seek` clamps before it gets here; this clamp is what makes
+        // the same true of the roads that do not go through the registry.
+        // Before it, a road that skipped the clamp could put the playhead
+        // outside the design, where there is nothing to see and where the
+        // timeline draws a handle at a place the playhead is not. §135.
+        self.clamp_playhead_into_range();
         self.recompute();
     }
 
@@ -729,7 +743,14 @@ impl Session {
     /// The command `playback.seek` takes seconds or a frame; this takes the
     /// raw tick a crash report recorded, so a replay starts where the crashed
     /// session was standing. §47.
-    pub fn seek_to(&mut self, at: i64) {
+    ///
+    /// Not public, and that is the point of it. This is the same behaviour as
+    /// `playback.seek` without the registry: no validation, no trace step, no
+    /// log entry. A second road to the playhead is exactly what "there is no
+    /// second path" forbids — and this one had a caller, in the crash replay,
+    /// which put the playhead outside the design whenever the report's range
+    /// and the report's playhead disagreed. §135.
+    pub(crate) fn seek_to(&mut self, at: i64) {
         self.set_at(Tick::from_raw(i128::from(at)));
     }
 
@@ -871,6 +892,34 @@ mod tests {
             meta.start.raw(),
             meta.end.raw()
         );
+    }
+
+    /// The playhead cannot leave the design.
+    ///
+    /// §115 made the playhead a place **in** the design: `playback.seek`
+    /// clamped to the design's range, a range that moved took the playhead
+    /// with it, and a document that arrived with its own range took the
+    /// playhead with it. Two roads into the playhead did not clamp, and one
+    /// of them had a caller: `seek_to`, which the crash replay uses. A report
+    /// whose playhead sat outside the range it was recorded against — which
+    /// is what a report written across a `doc.range` command holds — put the
+    /// replayed session outside the design. §135.
+    #[test]
+    fn the_playhead_cannot_leave_the_design() {
+        let mut s = sample();
+        s.execute("doc.range", &json!({ "start": 1.0, "end": 2.0 })).expect("the range can be set");
+        let (start, end) = (s.document().meta.start, s.document().meta.end);
+        let inside = |at: Tick| at >= start && at <= end;
+
+        // The registry's road.
+        s.execute("playback.seek", &json!({ "seconds": 999.0 })).expect("the seek runs");
+        assert_eq!(s.at(), end, "the registry's seek lands on the design's end");
+
+        // The roads that are not the registry's.
+        s.set_at(Tick::from_seconds_f64(999.0));
+        assert!(inside(s.at()), "set_at left the playhead at {} ticks", s.at().raw());
+        s.seek_to(0);
+        assert!(inside(s.at()), "seek_to left the playhead at {} ticks", s.at().raw());
     }
 
     /// Reading the rate does not change it.

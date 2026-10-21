@@ -1119,6 +1119,149 @@ fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
+/// The public methods a session may have.
+///
+/// `AGENTS.md`: "User-visible behaviour = a `CommandSpec` in
+/// `crates/engine/src/commands.rs`. That one registry is what the toolbar, the
+/// dialogs, scripts, the CLI, the control channel and the MCP server all
+/// reach. **There is no second path.**"
+///
+/// The front ends honoured that — measured, every one of them reaches the
+/// registry and nothing else that changes a design — but the **engine's own
+/// public API** was a second path, and a front end was free to take it.
+/// `Session::recompute` re-evaluated the document with no command, no trace
+/// step and no log entry, and it had **no caller at all**: it was public by
+/// accident. `Session::seek_to` moved the playhead without the clamp the
+/// registry applies, and it had a caller — the crash replay. §135.
+///
+/// So the rule is put where it can be enforced. The list is short on purpose:
+///
+/// - `new` and `sample` — the constructors.
+/// - the readers — nothing here changes anything;
+/// - `execute` — the registry, the one road into the design;
+/// - `replace_document` and `load_document` — the host's business. File I/O
+///   is not behaviour (§18), and the desktop app, the web app and the CLI
+///   all open designs this way.
+///
+/// Anything else that is `pub` on `Session` is a second path, and the gate
+/// says so.
+const SESSION_PUBLIC_METHODS: &[&str] = &[
+    "new",
+    "sample",
+    "document",
+    "node",
+    "at",
+    "plan",
+    "is_dirty",
+    "can_undo",
+    "can_redo",
+    "undo_depth",
+    "history_bytes",
+    "log",
+    "trace",
+    "trace_base",
+    "trace_total",
+    "trace_dropped",
+    "snapshot_json",
+    "execute",
+    "replace_document",
+    "load_document",
+];
+
+/// The session's public methods, and what they are allowed to be.
+///
+/// §135: "There is no second path" had nothing behind it. The check is on the
+/// **names of the public methods**, and the list is an allow list: a new
+/// public method on `Session` is refused until somebody says what it is and
+/// why it is not a second path. That is the only direction that fails safe.
+pub fn the_session_offers_no_second_path(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates/engine/src/session.rs");
+    let source =
+        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let Some((block, first_line)) = impl_block(&source, "impl Session {") else {
+        return Err(format!("{} has no `impl Session` block to read", path.display()));
+    };
+    // Comments and strings do not count: a doc comment that says `pub fn` is
+    // saying the opposite.
+    let code = code_lines_kept(block);
+    let relative = relative_name(root, &path);
+    let mut problems = Vec::new();
+    for (offset, line) in code.lines().enumerate() {
+        let Some(rest) = line.trim().strip_prefix("pub fn ") else { continue };
+        let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+        if name.is_empty() || SESSION_PUBLIC_METHODS.contains(&name.as_str()) {
+            continue;
+        }
+        problems.push(format!(
+            "{relative}: line {} makes `Session::{name}` public: the session's public methods are the \
+             registry and the things that read it — a public way to change the design is a second path",
+            first_line + offset
+        ));
+    }
+    Ok(problems)
+}
+
+/// An `impl` block, and the file line its first line is on.
+///
+/// The block ends at the first `}` in the first column: everything inside an
+/// `impl` is indented, so a closing brace in the first column is the block's
+/// own. The line number is carried because a check that names a line has to
+/// name the **file's** line.
+fn impl_block<'a>(source: &'a str, header: &str) -> Option<(&'a str, usize)> {
+    let start = source.find(header)?;
+    let body = &source[start + header.len()..];
+    let end = body.find("\n}\n")?;
+    let block = &body[..end];
+    // The header's own line, plus the lines before it in the file.
+    let first_line = source[..start].lines().count() + 1;
+    Some((block, first_line))
+}
+
+/// The names that put a document into a session.
+const DOCUMENT_WRITERS: &[&str] = &["load_document", "replace_document"];
+
+/// The shell may not write the document.
+///
+/// `AGENTS.md`: "A panel never writes to the document, never calls the
+/// evaluator, never caches a value the evaluator computes."
+///
+/// §132 said the first half of that sentence was enforced by the engine's
+/// API, because `Session::doc_mut` is `pub(crate)` to the engine. It was
+/// enforced for the **mutator** and not for the **writers**:
+/// `Session::load_document` and `Session::replace_document` are public — they
+/// have to be, because the desktop app, the web app and the CLI open designs
+/// with them (§18) — so a panel could have put a document into the session
+/// and replaced the whole design under the user's hands. It never did; the
+/// shell's production code calls neither. But "did not" is not "may not", and
+/// the difference is exactly what a gate is for. §135.
+pub fn the_shell_does_not_write_the_document(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for path in rust_files(&root.join("crates/ui/src")) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        // The tests are not the panels: a test may open a design to have
+        // something to draw.
+        let production = match text.find("\nmod tests {") {
+            Some(at) => &text[..at],
+            None => &text[..],
+        };
+        // Only the tail is cut, so the line numbers are the file's.
+        let code = code_lines_kept(production);
+        let relative = relative_name(root, &path);
+        for name in DOCUMENT_WRITERS {
+            if !has_word(&code, name) {
+                continue;
+            }
+            let line = code.lines().position(|l| has_word(l, name)).map_or(1, |n| n + 1);
+            problems.push(format!(
+                "{relative}: line {line} names `{name}`: the shell may read the design, but it may \
+                 not put a document into the session"
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
 /// Citations in prose that provably no longer point at anything.
 ///
 /// The mechanically detectable half, and deliberately only that half. A
@@ -2950,6 +3093,20 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     The engine owns the evaluation; the shell reads the plan.")),
     );
 
+    // The session, and the roads into the design it does not have. §135.
+    problems.extend(
+        the_session_offers_no_second_path(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     There is no second path: the registry is the way in.")),
+    );
+
+    // The shell, and the documents it may not put into the session. §135.
+    problems.extend(
+        the_shell_does_not_write_the_document(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A panel reads the design; the host opens it.")),
+    );
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -2963,8 +3120,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              catches a panic is declared in the pattern document, every field the \
              fingerprint hashes is a field the model has, the control channel's \
              methods are the methods the prose lists, every module path in prose \
-             names a module this tree has, and the shell never evaluates the \
-             document",
+             names a module this tree has, the shell never evaluates the \
+             document, the shell never writes the document, and the session \
+             offers no way into the design but the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -4155,6 +4313,81 @@ mod tests {
         let code = code_lines_kept("fn one() {}\n/* two\n   three */\nfn four() {}\n");
         assert_eq!(code.lines().count(), 4, "the line count changed");
         assert!(code.lines().nth(3).is_some_and(|l| l.contains("four")));
+    }
+
+    /// The session offers no second path into the design.
+    ///
+    /// §135: `AGENTS.md` says "There is no second path", and the front ends
+    /// honoured it — but `Session::recompute` (no caller at all) and
+    /// `Session::seek_to` (the crash replay's road to the playhead, with no
+    /// clamp) were public, so the engine's own API was a second path.
+    #[test]
+    fn the_session_has_no_road_into_the_design_but_the_registry() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_session_offers_no_second_path(&root).expect("runs").is_empty(),
+            "the session offers a second path into the design"
+        );
+
+        // The list is an allow list, and it is checked against the code.
+        assert!(SESSION_PUBLIC_METHODS.contains(&"execute"), "the registry is on the list");
+        assert!(SESSION_PUBLIC_METHODS.contains(&"document"), "the readers are on the list");
+        assert!(
+            !SESSION_PUBLIC_METHODS.contains(&"recompute"),
+            "a way to re-evaluate without a command is a second path"
+        );
+        assert!(
+            !SESSION_PUBLIC_METHODS.contains(&"seek_to"),
+            "a second road to the playhead is a second path"
+        );
+
+        // The block is found, and the line it names is the file's line.
+        let source =
+            "impl Session {\n    pub fn document(&self) {}\n\n    pub fn recompute(&mut self) {}\n}\n";
+        let (block, first_line) = impl_block(source, "impl Session {").expect("the block is there");
+        assert_eq!(first_line, 1, "the block's first line is the file's first line");
+        assert!(block.contains("recompute"), "the block holds the methods");
+
+        // And a method that is not on the list is reported.
+        let mut problems = Vec::new();
+        for (offset, line) in code_lines_kept(block).lines().enumerate() {
+            let Some(rest) = line.trim().strip_prefix("pub fn ") else { continue };
+            let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+            if name.is_empty() || SESSION_PUBLIC_METHODS.contains(&name.as_str()) {
+                continue;
+            }
+            problems.push(format!("{}:{name}", first_line + offset));
+        }
+        assert_eq!(problems, vec!["4:recompute".to_string()], "the second path is reported");
+    }
+
+    /// The shell may not put a document into the session.
+    ///
+    /// §135: `AGENTS.md` says "A panel never writes to the document", and
+    /// §132 called that half enforced by the engine's API. It was enforced
+    /// for the mutator and not for the writers: `load_document` and
+    /// `replace_document` are public, and a panel could have replaced the
+    /// whole design.
+    #[test]
+    fn the_shell_may_not_write_the_document() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_shell_does_not_write_the_document(&root).expect("runs").is_empty(),
+            "the shell puts a document into the session"
+        );
+
+        // The names are the writers and nothing else.
+        assert!(DOCUMENT_WRITERS.contains(&"load_document"));
+        assert!(DOCUMENT_WRITERS.contains(&"replace_document"));
+        assert!(!DOCUMENT_WRITERS.contains(&"execute"), "the registry is not a writer");
+
+        // A word: `load_document` is not `load_documents`.
+        assert!(has_word("session.load_document(doc);", "load_document"));
+        assert!(!has_word("session.load_documents(doc);", "load_document"));
+
+        // And a comment is not a call: the doc comment may say the opposite.
+        let commented = "/// The shell never calls load_document.\nfn panel() {}\n";
+        assert!(!has_word(&code_lines_kept(commented), "load_document"));
     }
 
     /// A module path in prose that names nothing this tree has.
