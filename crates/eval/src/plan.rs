@@ -168,6 +168,18 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// The state of one node, by id.
+    ///
+    /// **This is a scan, not a lookup.** It walks the plan's nodes until it
+    /// finds the one asked for, so a caller that asks about *every* node pays
+    /// a scan per node — quadratic.
+    ///
+    /// The node list did exactly that, and paid 43.7 ms a frame on a document
+    /// at the model's own limit of ten thousand nodes; it now collects the
+    /// levels once instead. §127.
+    ///
+    /// So: ask about the node you need, or collect what you need in one walk
+    /// and look it up in what you collected.
     pub fn state(&self, id: NodeId) -> Option<&NodeState> {
         self.nodes.iter().find(|s| s.id == id)
     }

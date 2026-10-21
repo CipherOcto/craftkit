@@ -15,6 +15,8 @@
 //! answer to a question the evaluator also answers, that question belongs in the
 //! evaluator and the panel should show its answer.
 
+use std::collections::HashMap;
+
 use egui::{Context, Layout, Rect, RichText, ScrollArea, Ui, Vec2};
 
 use craftkit_core::NodeId;
@@ -357,24 +359,26 @@ impl<'a> Shell<'a> {
     }
 
     fn node_list(&mut self, ui: &mut Ui, tokens: &Tokens) {
-        ui.heading("Nodes");
-        ui.separator();
-
         // Everything the rows need is read out **before** any of them is drawn.
         // Drawing needs `&mut` to the automation registry and the selection,
         // and iterating the document needs `&` to the document; collecting first
         // is what lets both borrows exist.
-        let plan = self.session.plan();
-        let rows: Vec<(NodeId, String, String, bool, f64)> = self
-            .session
-            .document()
-            .nodes
-            .iter()
-            .map(|n| {
-                let level = plan.and_then(|p| p.state(n.id)).map(|s| s.level_out).unwrap_or(0.0);
-                (n.id, n.name.clone(), n.kind.label().to_string(), n.muted, level)
-            })
-            .collect();
+        //
+        // §127: the collection is a pure function of the document and the
+        // plan, so it can be measured **on its own** — which is how the cost
+        // of asking the plan for every node's level was found.
+        let rows = node_rows(self.session.document(), self.session.plan());
+        self.node_rows_panel(ui, tokens, &rows);
+    }
+
+    /// Draw the node list's rows.
+    ///
+    /// Split from the collection so that a gate can time the two apart: the
+    /// panel's cost is the rows' **drawing** plus the rows' **collecting**,
+    /// and only the second was quadratic. §127.
+    fn node_rows_panel(&mut self, ui: &mut Ui, tokens: &Tokens, rows: &[NodeRow]) {
+        ui.heading("Nodes");
+        ui.separator();
 
         let mut selected = self.state.selected;
         let mut automation = std::mem::take(&mut self.automation);
@@ -384,19 +388,19 @@ impl<'a> Shell<'a> {
         let to_remove = std::cell::Cell::new(None);
 
         ScrollArea::vertical().show(ui, |ui| {
-            for (id, name, kind, muted, level) in &rows {
-                let id = *id;
+            for row in rows {
+                let id = row.id;
                 let is_selected = selected == Some(id);
                 ui.horizontal(|ui| {
                     let colour = if is_selected { tokens.accent } else { tokens.text };
-                    let response = ui.selectable_label(is_selected, RichText::new(name).color(colour));
-                    let row = response.rect;
+                    let response = ui.selectable_label(is_selected, RichText::new(&row.name).color(colour));
+                    let row_rect = response.rect;
                     let clicked = response.clicked();
                     // The **track**, not the fill: the fill is as wide as the
                     // level, so at level zero it is a rectangle with no area at
                     // all — a name an agent can look up and never click. §99.
-                    let (level_track, _) = draw_level_bar(ui, tokens, *level);
-                    automation.publish(AutomationId::node_row(id), row, true);
+                    let (level_track, _) = draw_level_bar(ui, tokens, row.level);
+                    automation.publish(AutomationId::node_row(id), row_rect, true);
                     automation.publish(AutomationId::level_bar(id), level_track, true);
                     if clicked {
                         selected = Some(id);
@@ -417,8 +421,8 @@ impl<'a> Shell<'a> {
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(kind).color(tokens.text_dim).small());
-                    if *muted {
+                    ui.label(RichText::new(&row.kind).color(tokens.text_dim).small());
+                    if row.muted {
                         ui.label(RichText::new("muted").color(tokens.warning).small());
                     }
                 });
@@ -794,6 +798,55 @@ impl<'a> Shell<'a> {
             });
         });
     }
+}
+
+/// One row of the node list.
+///
+/// The rows are collected **before** any of them is drawn — a panel reads the
+/// document and the plan, and never holds a borrow of either while it draws
+/// (§123's rule) — so what a row needs has to be owned.
+pub struct NodeRow {
+    pub id: NodeId,
+    pub name: String,
+    pub kind: String,
+    pub muted: bool,
+    /// The level leaving this node, as the plan resolved it.
+    pub level: f64,
+}
+
+/// Collect the node list's rows.
+///
+/// The plan answers *"what is this node's level?"* by **scanning** its own
+/// nodes: [`craftkit_eval::Plan::state`] is a `find`. Asking it about every
+/// node in turn is therefore a scan per node — quadratic in the number of
+/// nodes, for a list that draws a few dozen rows on the screen.
+///
+/// Measured, §127: at the model's own limit of ten thousand nodes the
+/// collection took **43.7 ms**, and with the levels found once it takes
+/// **1.2 ms**.
+///
+/// The levels are therefore found **once**, into a map, and every row then
+/// costs one lookup. The rows still come from the **document**, not from the
+/// plan: the list shows the document's nodes, and a plan that has fallen
+/// behind the document must not hide a node or invent one.
+pub fn node_rows(document: &craftkit_model::Document, plan: Option<&craftkit_eval::Plan>) -> Vec<NodeRow> {
+    // The plan holds one state per node, in the document's order, with the
+    // ids unique — so the map has exactly one entry per node.
+    let levels: HashMap<NodeId, f64> = match plan {
+        Some(p) => p.nodes.iter().map(|s| (s.id, s.level_out)).collect(),
+        None => HashMap::new(),
+    };
+    document
+        .nodes
+        .iter()
+        .map(|n| NodeRow {
+            id: n.id,
+            name: n.name.clone(),
+            kind: n.kind.label().to_string(),
+            muted: n.muted,
+            level: levels.get(&n.id).copied().unwrap_or(0.0),
+        })
+        .collect()
 }
 
 /// A small bar showing a level, coloured by magnitude.
@@ -2541,5 +2594,149 @@ mod tests {
                 state.status
             );
         }
+    }
+
+    // --- §127: the node list's rows ---------------------------------------
+
+    /// A document of `count` nodes, all of them sources.
+    fn many_nodes(count: usize) -> craftkit_model::Document {
+        let mut doc = craftkit_model::Document::empty("probe");
+        for n in 0..count {
+            doc.add_node(format!("node {n}"), craftkit_model::NodeKind::Source).expect("the node");
+        }
+        doc
+    }
+
+    /// The rows collected the **slow** way: the plan is asked about every node.
+    ///
+    /// This is the reference the gate measures the real collection against. It
+    /// is deliberately the way the panel used to do it — one scan of the plan
+    /// per node — so the gate compares the production code against the thing
+    /// it replaced, on the same machine, in the same run.
+    fn rows_by_scanning(
+        document: &craftkit_model::Document,
+        plan: Option<&craftkit_eval::Plan>,
+    ) -> Vec<NodeRow> {
+        document
+            .nodes
+            .iter()
+            .map(|n| {
+                let level = plan.and_then(|p| p.state(n.id)).map(|s| s.level_out).unwrap_or(0.0);
+                NodeRow {
+                    id: n.id,
+                    name: n.name.clone(),
+                    kind: n.kind.label().to_string(),
+                    muted: n.muted,
+                    level,
+                }
+            })
+            .collect()
+    }
+
+    /// The cheapest of `rounds` runs of `work`, in seconds.
+    ///
+    /// The **minimum**, not the mean: the question is how fast the code *can*
+    /// go, and a round that was interrupted by the machine is a round that
+    /// says nothing about the code.
+    fn fastest(rounds: usize, mut work: impl FnMut()) -> f64 {
+        let mut best = f64::MAX;
+        for _ in 0..rounds {
+            let start = std::time::Instant::now();
+            work();
+            let each = start.elapsed().as_secs_f64();
+            if each < best {
+                best = each;
+            }
+        }
+        best
+    }
+
+    /// The node list carries the level the plan resolved.
+    ///
+    /// §127: the rows used to ask the plan for each node's level, and the
+    /// plan finds a node by scanning. The fix asks **once**. Either way the
+    /// answer has to be the plan's answer: a row that said level zero for
+    /// every node would look right on screen — a bar with nothing in it — and
+    /// would be wrong.
+    #[test]
+    fn the_node_list_carries_the_level_the_plan_resolved() {
+        let mut session = Session::new("probe");
+        session.load_document(many_nodes(64));
+        let plan = session.plan().expect("the plan has been computed");
+
+        let rows = node_rows(session.document(), Some(plan));
+        assert_eq!(rows.len(), session.document().nodes.len());
+        for (row, state) in rows.iter().zip(plan.nodes.iter()) {
+            assert_eq!(row.id, state.id);
+            assert_eq!(row.level, state.level_out, "node {} has the wrong level", row.id.get());
+        }
+        // A level is not zero by accident: the sources start at one.
+        assert!(rows.iter().all(|r| r.level > 0.0), "every source should carry a level");
+
+        // With no plan at all there is nothing to resolve, and a row says so
+        // with a level of zero rather than inventing one.
+        let without = node_rows(session.document(), None);
+        assert!(without.iter().all(|r| r.level == 0.0));
+    }
+
+    /// The node list does not scan the plan once per node.
+    ///
+    /// §127: the plan answers *"what is this node's level?"* by scanning its
+    /// own nodes, so asking it about every node was a scan per node —
+    /// quadratic. At the model's own limit of ten thousand nodes that was
+    /// **43.7 ms** of collecting, and the panel paid it every frame.
+    ///
+    /// The gate measures the production collection against the way it was
+    /// done before, **in the same run, on the same machine**: the fast way
+    /// has to be at least eight times cheaper than the scan. Measured: 1.2 ms
+    /// against 43.7 ms — thirty-six times.
+    #[test]
+    fn the_node_list_does_not_scan_the_plan_once_per_node() {
+        let mut session = Session::new("probe");
+        session.load_document(many_nodes(10_000));
+        assert_eq!(session.document().nodes.len(), 10_000, "the model's own limit");
+
+        let collected = fastest(9, || {
+            std::hint::black_box(node_rows(session.document(), session.plan()));
+        });
+        let scanned = fastest(9, || {
+            std::hint::black_box(rows_by_scanning(session.document(), session.plan()));
+        });
+
+        assert!(
+            collected * 8.0 < scanned,
+            "collecting the rows of ten thousand nodes took {collected:.6}s, and asking the plan \
+             about every node took {scanned:.6}s: the rows are still collected a scan at a time"
+        );
+    }
+
+    /// The node list draws the rows the collector found.
+    ///
+    /// §127: the panel's rows are collected by [`node_rows`], and this is the
+    /// gate that ties the two together — the panel draws exactly the rows
+    /// that were collected, and no others. Without it the collector could be
+    /// correct and fast while the panel drew rows of its own, and nothing
+    /// would say so.
+    #[test]
+    fn the_node_list_draws_the_rows_the_collector_found() {
+        let mut session = Session::new("probe");
+        session.load_document(many_nodes(12));
+        let rows = node_rows(session.document(), session.plan());
+
+        let (_state, registry) = draw(&mut session);
+        for row in &rows {
+            let name = AutomationId::node_row(row.id);
+            assert!(
+                registry.known(name.as_str()) != Widget::Missing,
+                "node {} was collected but has no row on the screen",
+                row.id.get()
+            );
+        }
+        let published = registry
+            .names()
+            .into_iter()
+            .filter(|n| n.starts_with("nodes.row.") && !n.ends_with(".mute") && !n.ends_with(".del"))
+            .count();
+        assert_eq!(published, rows.len(), "the panel drew {published} rows for {} nodes", rows.len());
     }
 }

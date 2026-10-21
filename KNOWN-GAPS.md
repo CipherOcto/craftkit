@@ -13489,6 +13489,13 @@ not fit were not on the screen and could not be reached — and the "key at the
 playhead" editor was drawn below the list, off the screen as well. What is
 written below is what §126 did **not** close.
 
+§127 came out of the same work too, and it is the **other panel**: the node
+list asked the evaluator about every node, one node at a time, and the plan
+answers by scanning — so the list's rows were collected quadratically, 43.7 ms
+of every frame at the model's own limit of ten thousand nodes. The properties
+panel and the node list are two halves of the same question — *what does this
+panel cost as the document grows* — and only one of them was being measured.
+
 ### The properties panel drew every property of the selected node, on every frame
 
 `egui` lays out a widget per property, and the panel asks for one per property
@@ -13671,6 +13678,183 @@ not scroll this" because the pointer was 100 points to the right of the thing
 it was meant to be over, and the scroll area was as narrow as its content.
 egui's own source says it in one line — `is_hovering_outer_rect` — and the
 measurement had to find it.
+
+---
+
+## 127. The node list asked the plan about every node, one node at a time
+
+### The measurement
+
+The node list draws one row per node in the document. Each row shows the
+node's **level** — the signal level leaving it — and that level is the
+**evaluator's** answer: `Plan::state(id)` is where the plan holds it.
+
+`Plan::state` is a `find`:
+
+```rust
+pub fn state(&self, id: NodeId) -> Option<&NodeState> {
+    self.nodes.iter().find(|s| s.id == id)
+}
+```
+
+So the list asked the plan about **every node in the document**, one at a
+time, and each answer was a scan of the plan's own nodes. Collecting the
+list's rows was therefore **quadratic in the number of nodes** — and the
+model's own limit is ten thousand nodes.
+
+Measured in the running process, the cheapest of nine rounds, at the sizes the
+model allows:
+
+| nodes | rows collected, the old way | rows collected, the new way |
+|---|---|---|
+| 100 | 14 µs | 11 µs |
+| 1 000 | 304 µs | 112 µs |
+| 5 000 | **9.19 ms** | 589 µs |
+| 10 000 | **43.7 ms** | **1.21 ms** |
+
+The old column multiplies by a hundred when the nodes multiply by ten; the
+new one multiplies by ten. At the model's own limit the old way cost
+**thirty-six times** what the new one costs.
+
+The panel draws all of them, so the whole node list cost **95.1 ms** a frame
+at ten thousand nodes, of which 43.7 ms was this and the rest was egui laying
+out ten thousand rows (§125's first item, for the *other* panel).
+
+### Why nothing noticed
+
+**The sample document has three nodes.** Three nodes is a scan of three
+entries, thirteen times over, and the difference between 14 µs and 11 µs is
+not something a person can see.
+
+**Nothing was wrong with the answer.** The level each row carried was always
+the plan's level. The code was not slow because it was wrong; it was slow
+because it was right in a way that cost a scan per row.
+
+**The panel was measured, but the panel is not where the cost was.** The
+node list's *drawing* — egui's layout of ten thousand rows — is the bigger
+number, and it is linear. Measuring the panel and seeing "95 ms" says
+nothing about which part of the panel that was; the finding only came from
+splitting the panel's cost into **collecting** and **drawing** and timing
+them apart.
+
+**The plan's own API does not say what it costs.** `Plan::state` reads like a
+lookup and is a scan. A caller that uses it in a loop — which is the obvious
+way to use it — pays a scan per iteration, and the type says nothing about
+that.
+
+### The fix
+
+**The levels are found once.** `crates/ui/src/shell.rs` now collects the
+list's rows with a free function:
+
+```rust
+pub fn node_rows(
+    document: &craftkit_model::Document,
+    plan: Option<&craftkit_eval::Plan>,
+) -> Vec<NodeRow>
+```
+
+The plan is walked **once**, into a map from node id to level, and every row
+then costs one lookup. The rows still come from the **document**, not from the
+plan: the list shows the document's nodes, and a plan that has fallen behind
+the document must not hide a node or invent one.
+
+The function is free rather than a method for the same reason `draw_level_bar`
+is: it is a pure function of the document and the plan, and a pure function
+can be **measured on its own**. That is how the cost was found — and it is
+how the gate now holds it down.
+
+### In the running application
+
+The same design — ten thousand nodes — open in the real application, and the
+application's own render measured over the control channel (`ui.render`, which
+runs the same `craftkit_ui::frame` the window's own frame runs):
+
+| the running application | before | after |
+|---|---|---|
+| `ui.render` with the **sample** document (3 nodes) | 11.9 ms | 12.5 ms |
+| `ui.render` with **ten thousand** nodes | **341.7 ms** | **209.0 ms** |
+| what the node list costs, the difference | **≈ 330 ms** | **≈ 197 ms** |
+
+The small document is the control: it says the socket, the picture and the
+rest of the shell cost about twelve milliseconds either way, so the whole
+difference is the node list. Two runs of the "after" build gave 212.3 ms and
+209.0 ms.
+
+The difference is larger in the application than in the probe (130 ms against
+43.7 ms), and the reason is the cache: in the old code the scan of the plan
+was interleaved with cloning ten thousand names, so the plan was evicted
+between scans and every scan went to memory. The probe collected the rows in
+a tight loop, where the plan stayed in cache.
+
+The screenshots are the evidence: `/tmp/probe127-live-big-before.png` and
+`/tmp/probe127-live-big-after.png`. **They are the same picture** — and that
+is the point. Nothing about the screen changed; what changed is how long it
+takes to get there. A performance fix has no other visible sign.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The node list carries the level the plan resolved | `the_node_list_carries_the_level_the_plan_resolved` in `craftkit-ui` |
+| The node list does not scan the plan once per node | `the_node_list_does_not_scan_the_plan_once_per_node` |
+| The node list draws the rows the collector found | `the_node_list_draws_the_rows_the_collector_found` |
+
+and two mutations in `scripts/mutation-test-gates.sh`: the node list asks the
+plan once per node again, and the node list shows every level as zero.
+
+The first mutation is aimed at the cost gate and the second at the
+correctness gate, and they are aimed apart on purpose: the scan-per-node
+mutation still returns **the right levels**, so a gate that only checked the
+levels would not notice it. The gate that notices it measures the
+collection against the way it was done before, **in the same run, on the same
+machine**: the fast way has to be at least eight times cheaper than the scan,
+and it is thirty-six times.
+
+### What is still open
+
+**The list is still drawn in full, every frame.** The fix made the
+collection cheap; the drawing is unchanged, and it is the larger half: at
+ten thousand nodes the panel still lays out ten thousand rows. The fix took
+the node list from 95 ms to 52 ms in the probe; the rest is egui's layout,
+and only a virtualised list will remove it. §125's first item is the same
+problem in the other panel.
+
+**The plan's own API still costs a scan per question.** `Plan::state` is
+still a `find`. This section fixed the one caller that asked it about every
+node; the next caller will not know. The honest fix is a `HashMap` inside
+the plan — but the plan is a **derived value** that is thrown away and built
+again on every evaluation, and a map of ten thousand entries on that path is
+a cost paid on every command to save one on every frame. That trade is a
+decision nobody has written down.
+
+**The level is not observable to an agent.** The level bar's **track** is
+published (§99) and the track is always sixty-four points wide whatever the
+level is, so the registry cannot say what level a node is at. An agent can
+get it from `plan.evaluate`, which returns the whole plan — so nothing is
+lost — but the screen and the registry disagree about how much is on the
+screen.
+
+### The lesson
+
+**A lookup that reads like a lookup is not a lookup.** `Plan::state(id)` has
+the shape of an indexed read and the cost of a scan. Nothing in the signature
+says so, and the type that returns it cannot say so either.
+
+**Quadratic costs hide behind linear ones.** The node list's cost was
+dominated by egui's layout, which is linear and which everybody assumed was
+"the cost of the list". The quadratic part was 46% of the total — enough to
+matter, small enough to be lost in the noise of the bigger number. Splitting
+a cost into its parts and timing them apart is what found it.
+
+**Measure the whole of the thing, not the thing you can see.** The obvious
+measurement — "how long does the panel take" — pointed at egui and found
+nothing. The measurement that found it was of the panel's *input*, not its
+output.
+
+**A pure function is a gift to the next person.** Splitting the collection
+out of the panel was not tidiness: it is what made the cost measurable, and
+therefore what made it fixable, and therefore what made it holdable.
 
 ---
 
@@ -13984,6 +14168,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A property that does not fit can be brought into view** | `craftkit-ui` test | 1 mutation — §126 |
 | **The wheel scrolls the list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §126 |
 | **The key editor stays on screen when the node has many properties** | `craftkit-ui` test | 1 mutation — §126 |
+| **The node list carries the level the plan resolved** | `craftkit-ui` test | 1 mutation — §127 |
+| **The node list does not scan the plan once per node** | `craftkit-ui` test | 1 mutation — §127 |
+| **The node list draws the rows the collector found** | `craftkit-ui` test | 1 mutation — §127 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -14305,6 +14492,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    registry holds, and the comment says so; the deeper question, of whether a
    row that is scrolled out of view should be published at all, is open in
    §126.
+   §127 is the forty-third, and it is the first one whose subject is a
+   **number**: the doc comment on `node_rows` said the collection took
+   *"49.8 ms"* at ten thousand nodes and *"0.9 ms"* once the levels were found
+   once — the numbers from the first probe. The final measurement, with the
+   code as it was committed, said **43.7 ms** and **1.2 ms**. The two probes
+   differed only in the shape of the fix, and the comment was written from the
+   earlier one and never re-read. A sentence about behaviour is checked by
+   reading the behaviour; a **number** has to be checked by repeating the
+   measurement, and nothing in a build repeats it. Forty-three instances, and
+   the forty-third is the only one where the fix was measured **twice** and
+   only the first measurement was written down.
 9. **Decide how long a crash report lives.** §58 left one thing open, and it
    is the only unbounded writer left in the tree: the undo stack has a byte
    budget (§52), the trace has one, the command log has a count, and the
@@ -14503,3 +14701,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     an agent can tell that the row is out of view and how far away it is.
     Which one is right depends on what an agent is for, and nobody has written
     that down.
+22. **Decide what the plan should cost to ask it a question.** `Plan::state(id)`
+    is a scan, and §127 fixed the one caller that asked it about every node in
+    the document. The next caller will not know, because the signature reads
+    like an indexed read. The obvious fix is a map inside the plan — but the
+    plan is a **derived** value, rebuilt on every evaluation, so a map of ten
+    thousand entries is paid on every *command* to save a scan on every
+    *frame*. The alternatives are a map that is built lazily, a plan that
+    keeps its nodes sorted so a binary search answers, or a rule that says a
+    plan is only ever asked about a few nodes and every caller must collect
+    first. Which one is right depends on how often the plan is rebuilt and
+    how often it is asked, and nobody has measured the second against the
+    first.

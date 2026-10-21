@@ -2407,8 +2407,8 @@ expect_catch "ui: the level bar wears a property's name" \
 # level -- so at level zero the name resolved to a rectangle with no width at
 # all: a widget an agent could look up and never click. §99.
 swap crates/ui/src/shell.rs \
-    '                    let (level_track, _) = draw_level_bar(ui, tokens, *level);' \
-    '                    let (_, level_track) = draw_level_bar(ui, tokens, *level);'
+    '                    let (level_track, _) = draw_level_bar(ui, tokens, row.level);' \
+    '                    let (_, level_track) = draw_level_bar(ui, tokens, row.level);'
 expect_catch "ui: the level bar publishes the fill" \
     "cargo test -p craftkit-ui --profile ci a_level_bar_publishes_a_rectangle_with_an_area"
 
@@ -2475,12 +2475,12 @@ expect_catch "ui: the key path field is not published" \
 # the wrong thing at that point, and the name it publishes is a name that does
 # not lead to it. §100.
 swap crates/ui/src/shell.rs \
-    '                    let (level_track, _) = draw_level_bar(ui, tokens, *level);
-                    automation.publish(AutomationId::node_row(id), row, true);
+    '                    let (level_track, _) = draw_level_bar(ui, tokens, row.level);
+                    automation.publish(AutomationId::node_row(id), row_rect, true);
                     automation.publish(AutomationId::level_bar(id), level_track, true);' \
-    '                    let (_level_track, _) = draw_level_bar(ui, tokens, *level);
-                    automation.publish(AutomationId::node_row(id), row, true);
-                    automation.publish(AutomationId::level_bar(id), row, true);'
+    '                    let (_level_track, _) = draw_level_bar(ui, tokens, row.level);
+                    automation.publish(AutomationId::node_row(id), row_rect, true);
+                    automation.publish(AutomationId::level_bar(id), row_rect, true);'
 expect_catch "ui: a widget is published with another widget's rectangle" \
     "cargo test -p craftkit-ui --profile ci every_published_name_answers_at_its_own_centre"
 
@@ -3280,6 +3280,30 @@ swap crates/ui/src/shell.rs \
         for (path, value) in edits {'
 expect_catch "ui: the properties panel draws the key editor after the list" \
     "cargo test -p craftkit-ui --profile ci the_key_editor_stays_on_screen_when_the_node_has_many_properties"
+
+# The plan answers "what is this node's level?" by **scanning** its own
+# nodes, so asking it about every node in the list was a scan per node —
+# quadratic. At the model's own limit of ten thousand nodes that was 43.7 ms
+# of collecting, every frame. The levels are found **once** now. §127.
+swap crates/ui/src/shell.rs \
+    '            level: levels.get(&n.id).copied().unwrap_or(0.0),' \
+    '            level: match plan {
+                Some(p) => p.state(n.id).map(|s| s.level_out).unwrap_or(0.0),
+                None => levels.get(&n.id).copied().unwrap_or(0.0),
+            },'
+expect_catch "ui: the node list asks the plan once per node again" \
+    "cargo test -p craftkit-ui --profile ci the_node_list_does_not_scan_the_plan_once_per_node"
+
+# The rows carry the level the plan resolved. A row that said zero for every
+# node would draw a bar with nothing in it and look perfectly right. §127.
+swap crates/ui/src/shell.rs \
+    '    let levels: HashMap<NodeId, f64> = match plan {
+        Some(p) => p.nodes.iter().map(|s| (s.id, s.level_out)).collect(),
+        None => HashMap::new(),
+    };' \
+    '    let levels: HashMap<NodeId, f64> = HashMap::new();'
+expect_catch "ui: the node list shows every level as zero" \
+    "cargo test -p craftkit-ui --profile ci the_node_list_carries_the_level_the_plan_resolved"
 
 restore
 finish
