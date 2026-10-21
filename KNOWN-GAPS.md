@@ -11852,10 +11852,10 @@ speaking JSON-RPC, for an agent that has a tool-calling loop"* — the reader
 most likely to be holding the tool *because* something crashed, and the one
 surface that could not say what happened.
 
-The two JSON front ends had also drifted into two copies of the same three
-branches. The control channel's `crashes` had its own wording for a missing
-id, its own wording for an unknown action, and its own idea of what a replay
-answer looked like — and the MCP server had none of it.
+The control channel's `crashes` was also its own copy of the three branches: its
+own wording for a missing id, its own wording for an unknown action, and its
+own idea of what a replay answer looked like — and the MCP server had none of
+it.
 
 And the MCP crate's own module doc said:
 

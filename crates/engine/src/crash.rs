@@ -601,10 +601,11 @@ impl ActionError {
 ///
 /// **One dispatcher for every front end.** The CLI prints the crash reports
 /// for a person, the control channel answers with JSON over a socket, and the
-/// MCP server answers with JSON to a tool-calling agent — and the last two
-/// were two copies of the same three branches, each with its own wording and
-/// its own idea of what a missing id means. The rules about *what* an action
-/// does live here, so the three front ends cannot drift apart. §113.
+/// MCP server answers with JSON to a tool-calling agent — and the control
+/// channel had its own copy of the three branches, with its own wording for a
+/// missing id and its own idea of what a replay answer looked like, while the
+/// MCP server had no way to ask at all. The rules about *what* an action does
+/// live here, so the front ends cannot drift apart. §113.
 ///
 /// `from` is the name of the design the caller is looking at, and the replay's
 /// answer says which one — a replay runs against the report's own base, and
