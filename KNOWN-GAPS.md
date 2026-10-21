@@ -2041,6 +2041,29 @@ statements are not in conflict: a *claim with a file* is a fact about this
 tree; a *bare name* is a name from somewhere, and the tree cannot tell where
 from.
 
+**The general rule was counted, and every false positive is a quote.** In the
+hunt that followed §113, the rule was measured against the tree: every
+test-shaped name — `the_`, `a_`, `an_`, `every_`, `each_`, lower case, no
+digits — in this file, in `docs/`, in `skills/`, in `AGENTS.md` and in
+`README.md` that is **not** a `fn` in the tree. There are six:
+
+| Name | Where | What it is |
+|---|---|---|
+| `a_change_this_build_has_never_heard_of` | this file, in a quoted error | a message, not a test |
+| `a_trace_line_that_is_not_json_still_replays_as_a_step` | this file | the **old** name of a test this file is talking about |
+| `an_older_file_is_read` | this file | the old name, quoted next to the new one |
+| `every_command_has_an_icon_it_can_draw` | this file | the false claim §29 found, quoted as the example |
+| `the_method_name_decides_what_a_ui_request_does` | this file | another old name, in a lesson about a filter that matched the wrong test |
+| `a_test` | `docs/recipes/add-an-icon.md` | a placeholder: "a test *of that name* enforces it" |
+
+**Six out of six are the prose doing its job.** Five are quotes of names the
+file is *talking about* — a renamed test, a message in a quoted block — and
+one is a placeholder. A gate on the general rule would have to flag all six,
+and five of the six would be the gate crying wolf at prose that is correct.
+§29's verdict, confirmed by a second count: **a bare name is a name from
+somewhere**, and the ones that are not in the tree are the ones the tree is
+quoting.
+
 ---
 
 ## 40. A pattern document promised a safety property the code did not have
