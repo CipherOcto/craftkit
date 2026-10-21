@@ -307,6 +307,13 @@ id, whether it worked and what it said. "What has this session done?" used to
 be answerable only as a *count* — `session.stats` said "3 commands, 1
 failure" — and the commands themselves were in the tree the whole time. §109.
 
+**`session.state` also carries the design's note** — the paragraph in the
+file's `meta.comment`, whole. It used to be in the file and in the model and
+nowhere else, so the only way to read a design's note was to open the file.
+`doc.note` is how you write one (`{"text": "…"}`), an empty text clears it,
+and a note with no `text` at all is refused rather than silently emptying the
+note. The note is bounded at 4 096 bytes. §110.
+
 **The action is in the method name, not in `params`.** `ui.render`,
 `ui.screenshot` and `ui.click` each ask for exactly that; the bare `ui` takes
 an `action` of `widgets`, `render`, `screenshot` or `click`. Naming both at

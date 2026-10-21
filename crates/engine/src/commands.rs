@@ -41,6 +41,41 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
     },
 };
 
+pub static DOC_NOTE: CommandSpec = CommandSpec {
+    id: "doc.note",
+    label: "Set note",
+    area: Area::Document,
+    icon: Icon("info"),
+    shortcut: None,
+    doc: "Set the plan's note: the paragraph that says why the plan is the way it is.",
+    params: &[ParamDoc::req("text", Doc::Text, "The note. An empty text clears the note.")],
+    mutates: true,
+    undoable: true,
+    enabled: always,
+    run: |s, p| {
+        // The note may be **empty** — that is how a note is cleared — but it
+        // must be *there*. A command with no `text` says nothing about what
+        // to write, and "write nothing" is not the same thing as "write an
+        // empty note". §110.
+        let text = p
+            .text("text", limits::MAX_COMMENT_BYTES)
+            .map_err(|e| EngineError::Param { id: DOC_NOTE.id.to_string(), source: e })?;
+        let Some(text) = text else {
+            return Err(EngineError::Param {
+                id: DOC_NOTE.id.to_string(),
+                source: craftkit_core::ParamError::new(
+                    "text",
+                    "give the note's text; an empty text clears the note",
+                ),
+            });
+        };
+        let bytes = text.len();
+        let changed = s.doc_mut().set_comment(text.clone());
+        Ok(Outcome::with(format!("note set ({bytes} bytes)"), serde_json::json!({ "comment": text }))
+            .unchanged_if(!changed))
+    },
+};
+
 pub static DOC_RANGE: CommandSpec = CommandSpec {
     id: "doc.range",
     label: "Set range",
@@ -1551,6 +1586,68 @@ mod tests {
         let mut s = session();
         let err = s.execute("node.rename", &json!({ "node": 1 })).expect_err("refused");
         assert!(err.to_string().contains("required"), "{err}");
+    }
+
+    /// The note can be set, read back and cleared.
+    ///
+    /// §110: the note was in the model and in the file and there was **no
+    /// way to write it** — so a note could only be made by editing the file
+    /// by hand, and the window could not show what it said.
+    #[test]
+    fn the_note_can_be_set_read_and_cleared() {
+        let mut s = session();
+        ok(&mut s, "doc.note", json!({ "text": "the level bar needs a taper" }));
+        assert_eq!(s.document().meta.comment, "the level bar needs a taper");
+
+        // An empty note clears it.
+        ok(&mut s, "doc.note", json!({ "text": "" }));
+        assert!(s.document().meta.comment.is_empty(), "the note was not cleared");
+    }
+
+    /// A note command with no text says what it wanted.
+    ///
+    /// "Write nothing" and "write an empty note" are different things, and
+    /// the command that cannot tell them apart is the one that writes an
+    /// empty note when the user meant nothing at all. §110.
+    #[test]
+    fn a_note_command_with_no_text_is_a_refusal() {
+        let mut s = session();
+        let err = s.execute("doc.note", &json!({})).expect_err("refused");
+        assert!(!err.is_internal(), "a missing note must not be reported as a crash: {err}");
+        assert_eq!(err.kind(), "bad-parameter", "{err}");
+        assert!(err.to_string().contains("text"), "{err}");
+    }
+
+    /// A note over the limit is refused, and the note that is there survives.
+    ///
+    /// §110: the note had no bound, so it could be any size at all — and the
+    /// state now carries it whole, so an unbounded note would be an unbounded
+    /// reply.
+    #[test]
+    fn a_note_over_the_limit_is_refused() {
+        let mut s = session();
+        ok(&mut s, "doc.note", json!({ "text": "short" }));
+        let long = "n".repeat(limits::MAX_COMMENT_BYTES + 1);
+        let err = s.execute("doc.note", &json!({ "text": long })).expect_err("refused");
+        assert_eq!(err.kind(), "bad-parameter", "{err}");
+        assert!(err.to_string().contains("text"), "{err}");
+        assert_eq!(s.document().meta.comment, "short", "the refused note replaced the old one");
+    }
+
+    /// Writing the note the document already has changes nothing.
+    ///
+    /// §93's rule, applied to the note: the command says it changed nothing,
+    /// and the engine agrees — a success that is not an edit, with no step on
+    /// the undo stack and no dirty flag. §110.
+    #[test]
+    fn writing_the_same_note_changes_nothing() {
+        let mut s = session();
+        ok(&mut s, "doc.note", json!({ "text": "the same note" }));
+        let depth = s.undo_depth();
+        let outcome = s.execute("doc.note", &json!({ "text": "the same note" })).expect("ok");
+        assert!(!outcome.changed, "the note was the same, and the command says so");
+        assert_eq!(s.undo_depth(), depth, "an unchanged note pushed a step onto the undo stack");
+        assert_eq!(s.document().meta.comment, "the same note");
     }
 
     // ------------------------------------------------------------------ §93 --

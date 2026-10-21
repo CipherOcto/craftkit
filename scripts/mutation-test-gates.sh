@@ -914,12 +914,12 @@ expect_catch "docs: a boundary that catches a panic is not declared" \
 
 # A number of commands in prose, that is not the registry's number. §71's
 # lesson: a number written by hand about a thing that grows is stale by
-# construction. The registry grows — every command added makes "21 commands"
+# construction. The registry grows — every command added makes "22 commands"
 # wrong — and the two documents that said it were both written by hand, with
 # nothing to notice when the count changed.
 swap docs/patterns/everything-is-a-command.md \
-    'The registry currently holds 21 commands across 7 areas' \
-    'The registry currently holds 22 commands across 7 areas'
+    'The registry currently holds 22 commands across 7 areas' \
+    'The registry currently holds 23 commands across 7 areas'
 expect_catch "prose: the number of commands is not the registry's number" \
     "cargo xtask lists"
 
@@ -2680,6 +2680,76 @@ swap crates/engine/src/log.rs \
     pub ok: bool,'
 expect_catch "engine: the log does not say whether the command worked" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_commands_that_ran"
+
+# The note had no bound at all, so it could be any size -- and the state
+# carries it whole, so an unbounded note is an unbounded reply. §110.
+swap crates/model/src/document.rs \
+    '        if self.meta.comment.len() > limits::MAX_COMMENT_BYTES {' \
+    '        if self.meta.comment.len() > limits::MAX_COMMENT_BYTES + 1 {'
+expect_catch "model: a note one byte over the limit is accepted" \
+    "cargo test -p craftkit-model --profile ci a_note_over_the_byte_limit_is_refused"
+
+# The setter said it changed the note even when the note was the note that was
+# already there, so the engine's "you changed nothing" backstop fired on an
+# ordinary command. §110.
+swap crates/model/src/document.rs \
+    '        if self.meta.comment == comment {
+            return false;
+        }' \
+    '        if self.meta.comment == comment {
+            return true;
+        }'
+expect_catch "model: the note setter always says it changed something" \
+    "cargo test -p craftkit-engine --profile ci writing_the_same_note_changes_nothing"
+
+# The state is the only place an agent can read the design's note, and it did
+# not carry it. §110.
+swap crates/engine/src/session.rs \
+    '            "comment": self.doc.meta.comment,' \
+    '            "comment": "",'
+expect_catch "engine: the state does not carry the note" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_note"
+
+# The command wrote the note without a bound, so the note the file refuses was
+# a note the command wrote. §110.
+swap crates/engine/src/commands.rs \
+    '            .text("text", limits::MAX_COMMENT_BYTES)' \
+    '            .text("text", limits::MAX_COMMENT_BYTES + 1)'
+expect_catch "engine: the note command accepts a note over the limit" \
+    "cargo test -p craftkit-engine --profile ci a_note_over_the_limit_is_refused"
+
+# The command claimed it had changed the note when it had not, so the engine
+# refused an ordinary command as though it had forgotten to write. §110.
+swap crates/engine/src/commands.rs \
+    '        let changed = s.doc_mut().set_comment(text.clone());' \
+    '        s.doc_mut().set_comment(text.clone());
+        let changed = true;'
+expect_catch "engine: the note command always claims it changed something" \
+    "cargo test -p craftkit-engine --profile ci writing_the_same_note_changes_nothing"
+
+# The note was computed and never drawn, so the window showed a design without
+# its note. §110.
+swap crates/ui/src/shell.rs \
+    '        if !meta.comment.is_empty() {' \
+    '        if !meta.comment.is_empty() && false {'
+expect_catch "ui: the note is not drawn" \
+    "cargo test -p craftkit-ui --profile ci a_frame_with_a_note_is_not_the_frame_without_one"
+
+# The preview did not cut, so a long note was drawn in full over the panel --
+# and a short one was marked as cut when it was not. §110.
+swap crates/ui/src/shell.rs \
+    '    if note.chars().count() <= NOTE_PREVIEW_CHARS {' \
+    '    if note.chars().count() <= NOTE_PREVIEW_CHARS && false {'
+expect_catch "ui: the note preview does not say that it was cut" \
+    "cargo test -p craftkit-ui --profile ci the_note_preview_is_a_glimpse_of_the_note"
+
+# `eval` printed the node count and the frame rate and never the note, so the
+# only way to read a design's note was to open the file. §110.
+swap apps/craftkit-cli/src/cli.rs \
+    '    if note.is_empty() { None } else { Some(format!("note: {note}")) }' \
+    '    if note.is_empty() || true { None } else { Some(format!("note: {note}")) }'
+expect_catch "cli: eval does not say what the design's note is" \
+    "cargo test -p craftkit-cli --profile ci eval_says_what_the_design_s_note_is"
 
 restore
 finish

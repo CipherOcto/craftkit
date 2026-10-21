@@ -11397,6 +11397,163 @@ answer to an ordinary question.
 
 ---
 
+## 110. The design's note was in the file and in the model and nowhere else — and there was no way to write it
+
+### The measurement
+
+A design with a note in it — written by hand, with a `comment` in its meta:
+
+```
+$ craftkit-cli eval /tmp/commented.craftkit
+left where it was
+1 node(s), 12 frame(s) at 24 fps
+{ "plan": {...}, "diagnostics": {...} }
+```
+
+The note is *in that file*. The file says:
+
+> "This design came from a sketch: the taper is meant to be gentle."
+
+and the evaluation of that file does not mention it. Nor did anything else:
+
+| Where an agent or a person would look | What it said |
+|---|---|
+| `session.state` | `{at, can_redo, can_undo, dirty, end, fps, log, name, nodes, plan, start}` — no note |
+| the window's header | `Commented  24 fps · 0.50s` — and nothing under it |
+| `craftkit-cli eval` | the node count, the frame count and the frame rate — and nothing else |
+| the command registry | 21 commands, none of which wrote a note |
+
+`meta.comment` was in the model and in the file format, and the **only** place
+in the whole tree that read it was `Document::estimated_bytes`, which counts
+bytes. It was a field with a writer (the file reader) and no reader.
+
+There was no way to *set* it either. `Document` had no setter for the note, no
+command wrote one, and `Session` has no constructor that takes a document —
+the app loads one with `Session::new` plus `load_document`, so a test could
+only reach a document with a note by building one and loading it.
+
+And the note had **no bound at all**. The model bounded the nodes, the
+properties, the keys, the names, the paths and the whole document's bytes —
+and the one field a person writes *prose* into was the one field with no limit
+on it.
+
+### Why nothing noticed
+
+**A field nobody reads looks exactly like a field nobody needs.** `comment`
+was in the file, and the file's schema is a list of fields the format has to
+carry. Nothing in that list says the field is *used*.
+
+**The name promised a comment node, not a comment.** `NodeKind::Comment`
+exists — a node that says something in the timeline. So "comment" in this
+project meant a *node*, and `meta.comment` was something else entirely: a
+paragraph about the whole design, with no name of its own that anybody used.
+The two things shared a word and nothing else, which is exactly the kind of
+collision that makes a field look covered.
+
+**Nothing in the window ever asked for it.** The window draws the design's
+name, its frame rate and its range, because those are the three things a
+person looks at when they open a design. The note is the fourth thing, and
+nobody had ever opened a design *with* a note — because there was no way to
+make one without editing the file by hand, and nobody edits a file by hand to
+write a note they cannot read back.
+
+**The bounds are written down, and the bounds are a list of counts.** Every
+other limit is a *count* of things: nodes, properties, keys, names, path
+segments. The note is not a count; it is a **size**, and the size was the one
+thing the list of limits did not have.
+
+### The fix
+
+**The note has a bound: `MAX_COMMENT_BYTES` (4 096).** A bound is what makes
+a note carryable — the state can hand it over whole, and a file with a longer
+one is refused rather than half-kept. It is the model's bound, and the
+validator enforces it, so a document that cannot be carried cannot be saved.
+
+**The state carries the note**, whole:
+
+```
+session.state -> {..., "comment": "This design came from a sketch: the taper is
+                            meant to be gentle.", ...}
+```
+
+**There is a command that writes it.** `doc.note` — the twenty-second
+command — sets the note, and an empty text clears it:
+
+```
+engine.execute {"command": "doc.note", "params": {"text": "why the design is the way it is"}}
+-> {"ok": true, "message": "note set (29 bytes)", "data": {"comment": "why the design is the way it is"}}
+```
+
+A command with **no** `text` is refused, because "write nothing" and "write
+an empty note" are different things. A note that is already the note the
+document has changes nothing, and says so (§93's rule), instead of tripping
+§44's backstop.
+
+**The window shows a glimpse of it.** The note is a paragraph and the panel
+is not a page: the header shows the first 200 characters and marks the cut
+with "…". The whole note is in the state.
+
+**The CLI says it.** `craftkit-cli eval` prints the note, if the design has
+one.
+
+Measured on the running app, over the control channel, with the file above:
+
+```
+session.state -> {"comment": "This design came from a sketch: the taper is meant to be gentle.", ...}
+engine.execute -> {"ok": true, "message": "note set (29 bytes)", "data": {"comment": "Set from the control channel."}}
+session.state -> {"comment": "Set from the control channel.", "dirty": true, "can_undo": true, ...}
+```
+
+and in the window, under the design's name:
+
+> **Commented**  24 fps · 0.50s
+> This design came from a sketch: the taper is meant to be gentle.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A note over the bound is refused | `a_note_over_the_byte_limit_is_refused` |
+| A note command with no text is refused | `a_note_command_with_no_text_is_a_refusal` |
+| A note command over the bound is refused | `a_note_over_the_limit_is_refused` |
+| Writing the note the document already has changes nothing | `writing_the_same_note_changes_nothing` |
+| The state carries the note | `the_state_carries_the_note` |
+| The state and the document agree about the note | `the_state_and_the_document_agree_about_the_note` |
+| The note is on the screen | `a_frame_with_a_note_is_not_the_frame_without_one` |
+| The window's note is a glimpse, and says so | `the_note_preview_is_a_glimpse_of_the_note` |
+| The CLI says what the design's note is | `eval_says_what_the_design_s_note_is` |
+
+and eight mutations in `scripts/mutation-test-gates.sh`: the bound is one byte
+too loose; the setter always claims it changed something; the state does not
+carry the note; the command accepts a note over the limit; the command always
+claims it changed something; the note is not drawn; the preview does not say
+that it was cut; `eval` does not say what the design's note is.
+
+### The lesson
+
+**A field with a writer and no reader is a field nobody notices.** The file
+format carried the note for as long as the format existed. Carrying it is
+cheap and invisible; *reading* it is what nobody had to do.
+
+**A bound is what makes a thing carryable.** The note could not be put in the
+state until it had a size, because "whole" is not a thing you can promise
+about an unbounded field. The bound came first, and the state followed.
+
+**A comparison that differs for another reason proves nothing.** The first
+version of the window's test compared a frame *with* a note against a frame
+*without* one — and the mutation that stops the note being drawn was
+**MISSED**: the two frames differed anyway, because the second was "unsaved"
+in the status bar and the first was "saved". The test now compares two
+frames whose notes have *different text* and nothing else, so the only thing
+that can make them differ is the note. A comparison has to have exactly one
+possible difference, or it is not a comparison.
+
+**"Comment" was two things.** A node kind and a paragraph about the design,
+sharing a word and nothing else. The node kind was the visible one, so the
+paragraph looked covered.
+
+---
+
 ---
 
 ## What enforces what
@@ -11630,6 +11787,15 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Reading the rate does not change the document** | `craftkit-engine` test | — |
 | **The state carries the commands that ran** | `craftkit-engine` test | 2 mutations — §109 |
 | **The log and the command count agree** | `craftkit-engine` test | 1 mutation — §109 |
+| **A note over the bound is refused** | `craftkit-model` test | 1 mutation — §110 |
+| **A note command with no text is refused** | `craftkit-engine` test | — |
+| **A note command over the bound is refused** | `craftkit-engine` test | 1 mutation — §110 |
+| **Writing the note the document already has changes nothing** | `craftkit-engine` test | 2 mutations — §110 |
+| **The state carries the note** | `craftkit-engine` test | 1 mutation — §110 |
+| **The state and the document agree about the note** | `craftkit-engine` test | — |
+| **The note is on the screen** | `craftkit-ui` test | 1 mutation — §110 |
+| **The window's note is a glimpse, and says so** | `craftkit-ui` test | 1 mutation — §110 |
+| **The CLI says what the design's note is** | `craftkit-cli` test | 1 mutation — §110 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

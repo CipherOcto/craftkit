@@ -52,6 +52,7 @@ fn after_key(command: &'static str, params: Json) -> Case {
 /// is what keeps it complete.
 fn cases() -> Vec<Case> {
     vec![
+        case("doc.note", json!({ "text": "A note about the design." })),
         case("doc.rename", json!({ "name": "Renamed plan" })),
         case("doc.range", json!({ "start": 48, "end": 96 })),
         case("node.add", json!({ "name": "Extra", "kind": "filter" })),

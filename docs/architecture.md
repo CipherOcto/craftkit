@@ -266,7 +266,7 @@ Nothing in a production path panics. This is enforced, not requested:
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
 | Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0 and > 1000 |
-| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
+| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
 | Bounded file reads | `craftkit_io::format::File::from_text` refuses input over 64 MiB before parsing, then `Document::validate`, then `reseat_id_counter` |
 | Bounded kernel walks | `craftkit_kernel::MAX_STEPS` (64), refused up front rather than detected by a counter deep in a loop |
 | The last resort | `Session::execute`'s `catch_unwind`, described above |

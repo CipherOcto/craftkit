@@ -62,16 +62,17 @@ uppercase, no abbreviations borrowed from another product. Area prefixes come fr
 `session.stats` are cross-cutting, and a shared prefix would name them after the
 panel instead of after what they do.
 
-The 21 ids today, sorted (`crates/engine/src/commands.rs`):
+The 22 ids today, sorted by (area, id) — the registry's own order
+(`crates/engine/src/command.rs`):
 
 ```text
-doc.rename      node.add        prop.set        key.set        playback.seek
-doc.range       node.remove     prop.reset      key.remove     history.undo
-                node.rename                      key.clear     history.redo
-                node.mute                        key.ease      plan.evaluate
-                node.kind                                      diagnostics.list
-                node.move                                      session.stats
-                node.duplicate
+doc.note        node.add        prop.reset      key.clear      playback.seek
+doc.range       node.duplicate  prop.set        key.ease       history.redo
+doc.rename      node.kind                       key.remove     history.undo
+                node.move                       key.set       diagnostics.list
+                node.mute                                      plan.evaluate
+                node.remove                                    session.stats
+                node.rename
 ```
 
 ### The shape of a `CommandSpec`

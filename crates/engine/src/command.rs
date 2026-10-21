@@ -244,7 +244,8 @@ pub fn all() -> &'static [&'static CommandSpec] {
 /// length: adding a command without adding it to the count is a compile error,
 /// not a silently truncated list. The order is checked by
 /// `the_catalogue_is_sorted_and_free_of_duplicates`.
-static ALL: [&CommandSpec; 21] = [
+static ALL: [&CommandSpec; 22] = [
+    &DOC_NOTE,
     &DOC_RANGE,
     &DOC_RENAME,
     &NODE_ADD,

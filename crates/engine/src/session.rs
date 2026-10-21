@@ -317,17 +317,22 @@ impl Session {
     ///
     /// The instants are **raw ticks**, the same units the rest of the API
     /// speaks; [`craftkit_core::TICKS_PER_SECOND`] is what turns them into
-    /// seconds. The document's **comment** is not here: nothing bounds its
-    /// length, and this reply is not capped.
+    /// seconds.
     ///
     /// The **log** is here: the last [`crate::log::MAX_ENTRIES`] commands
     /// with their outcome, so that "what has this session done?" is a
     /// question the session can answer. It used to be answerable only as a
     /// *count* — `session.stats` said "3 commands, 1 failure" — and the
     /// commands themselves were in the tree the whole time. §109.
+    ///
+    /// The **note** is here: the document's own comment, whole. It had no
+    /// bound and no way out — it was in the file and in the model and in
+    /// nothing else, so the only way to read a design's note was to open the
+    /// file. §110.
     pub fn snapshot_json(&self) -> Json {
         serde_json::json!({
             "name": self.doc.meta.name,
+            "comment": self.doc.meta.comment,
             "fps": self.doc.meta.fps,
             "start": self.doc.meta.start.raw(),
             "end": self.doc.meta.end.raw(),
@@ -824,6 +829,48 @@ mod tests {
         let total = s.log.total();
         assert_eq!(log.len() as u64, total, "the log and the counter disagree");
         assert_eq!(log.len(), 3, "three commands ran and the log does not say so");
+    }
+
+    /// The state carries the document's note.
+    ///
+    /// §110: the note was in the file and in the model and **nowhere else** —
+    /// not in the window, not in the CLI, not in the state. The only way to
+    /// read a design's note was to open the file that held it. The note is
+    /// carried **whole**, and it is bounded, so the reply is bounded too.
+    #[test]
+    fn the_state_carries_the_note() {
+        let mut s = sample();
+        // Reading the state is not an edit.
+        let before = s.document().clone();
+        let _ = s.snapshot_json();
+        assert!(!s.is_dirty(), "reading the state marked the document dirty");
+        assert_eq!(s.document(), &before, "reading the state changed the document");
+
+        let note = "The taper is here so the level bar has something to taper.";
+        s.execute("doc.note", &json!({ "text": note })).expect("the note can be set");
+
+        let state = s.snapshot_json();
+        assert_eq!(
+            state.get("comment").and_then(|v| v.as_str()),
+            Some(note),
+            "the state does not carry the note"
+        );
+    }
+
+    /// The note in the state and the note in the document agree.
+    ///
+    /// §110: the state is how an agent *reads* the note, and `doc.note` is
+    /// how it writes it. Two answers about the same thing must not disagree.
+    #[test]
+    fn the_state_and_the_document_agree_about_the_note() {
+        let mut s = sample();
+        s.execute("doc.note", &json!({ "text": "one" })).expect("ok");
+        let read = s.snapshot_json().get("comment").and_then(|v| v.as_str()).map(str::to_string);
+        assert_eq!(read.as_deref(), Some("one"));
+        s.execute("doc.note", &json!({ "text": "two" })).expect("ok");
+        let read = s.snapshot_json().get("comment").and_then(|v| v.as_str()).map(str::to_string);
+        assert_eq!(read.as_deref(), Some("two"), "the state kept the old note");
+        assert_eq!(s.document().meta.comment, "two");
     }
 
     /// A command that says it does not change the document and changes it is

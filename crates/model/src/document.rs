@@ -252,6 +252,24 @@ impl Document {
         true
     }
 
+    /// Set the document's note. Returns whether it changed.
+    ///
+    /// The note is the paragraph that says why the design is the way it is.
+    /// It used to have no setter at all: the field was in the model and in
+    /// the file and there was no way to write it, so a note could only be
+    /// made by editing the file by hand. §110.
+    ///
+    /// An empty note is a note that says nothing, and it is legal: it is how
+    /// a note is cleared.
+    pub fn set_comment(&mut self, comment: impl Into<String>) -> bool {
+        let comment = comment.into();
+        if self.meta.comment == comment {
+            return false;
+        }
+        self.meta.comment = comment;
+        true
+    }
+
     /// Set the document's range and rate. Returns whether it changed.
     pub fn set_range(&mut self, start: Tick, end: Tick, fps: u32) -> bool {
         if self.meta.start == start && self.meta.end == end && self.meta.fps == fps {
@@ -387,6 +405,16 @@ impl Document {
                 self.meta.start, self.meta.end
             )));
         }
+        // The note has a bound, so that it can be carried whole. A note with
+        // no bound is a note nobody can read: it was in the file and in the
+        // model and in nothing else. §110.
+        if self.meta.comment.len() > limits::MAX_COMMENT_BYTES {
+            return Err(DocError::BadMeta(format!(
+                "the note is {} bytes long: it must be at most {}",
+                self.meta.comment.len(),
+                limits::MAX_COMMENT_BYTES
+            )));
+        }
         // The range has to be one a reply can carry.
         //
         // The file format is wider than the model: a bare integer in a file is
@@ -505,6 +533,33 @@ mod tests {
         ok.meta.start = craftkit_core::Tick::ZERO;
         ok.meta.end = craftkit_core::Tick::from_raw(u64::MAX as i128);
         ok.validate().expect("a range inside the bounds is fine");
+    }
+
+    /// A note over the byte limit is refused, and one at the limit is not.
+    ///
+    /// §110: the note had **no** bound at all, and no way out either — it
+    /// was in the file and in the model and in nothing else, so the only way
+    /// to read a design's note was to open the file that held it. A bound is
+    /// what makes the note carryable: the state can hand it over whole, and a
+    /// file with a longer one is refused rather than half-kept.
+    #[test]
+    fn a_note_over_the_byte_limit_is_refused() {
+        let mut doc = Document::new("With a note");
+        doc.meta.comment = "n".repeat(limits::MAX_COMMENT_BYTES);
+        doc.validate().expect("a note at the limit is a note");
+
+        doc.meta.comment = "n".repeat(limits::MAX_COMMENT_BYTES + 1);
+        let err = doc.validate().expect_err("refused");
+        assert!(err.to_string().contains("the note is"), "{err}");
+        assert!(err.to_string().contains(&limits::MAX_COMMENT_BYTES.to_string()), "{err}");
+
+        // And the setter writes it, and says whether it changed anything.
+        let mut doc = Document::new("With a note");
+        assert!(doc.set_comment("why the design is the way it is"), "the note was written");
+        assert_eq!(doc.meta.comment, "why the design is the way it is");
+        assert!(!doc.set_comment("why the design is the way it is"), "the same note is not a change");
+        assert!(doc.set_comment(""), "an empty note clears the note");
+        assert!(doc.meta.comment.is_empty());
     }
 
     /// The estimate grows with the content, and a small document is nowhere

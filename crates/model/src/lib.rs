@@ -71,6 +71,15 @@ pub mod limits {
     pub const MAX_PATH_SEGMENTS: usize = 16;
     /// The longest node name, in bytes.
     pub const MAX_NAME: usize = 255;
+    /// The longest document note, in bytes.
+    ///
+    /// A note is a paragraph: it is what a person writes next to a design to
+    /// say why the design is the way it is. It used to have **no** bound at
+    /// all, and no way out either — the note was in the file and in the model
+    /// and in nothing else, so it could not be read by anything that was not
+    /// the file. A bound makes it readable: the note can be carried whole,
+    /// and a file with a longer one is refused rather than half-kept. §110.
+    pub const MAX_COMMENT_BYTES: usize = 4_096;
     /// The longest property path, in bytes.
     ///
     /// A path is made of names, and a name is at most [`MAX_NAME`] bytes, so a

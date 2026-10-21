@@ -196,6 +196,12 @@ fn eval(file: &Path, at: Option<&str>) -> Result<(), String> {
         session.document().meta.duration().frames_i64(session.document().meta.frame_rate()),
         session.document().meta.fps
     );
+    // The design's note, if it has one. §110: it was in the file and in the
+    // model and in nothing else, so `eval` on a design with a note never
+    // mentioned the note.
+    if let Some(line) = note_line(&session.document().meta.comment) {
+        println!("{line}");
+    }
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
@@ -205,6 +211,16 @@ fn eval(file: &Path, at: Option<&str>) -> Result<(), String> {
         .map_err(|e| e.to_string())?
     );
     Ok(())
+}
+
+/// The line `eval` prints about a design's note, if the design has one.
+///
+/// A note is a paragraph, so it is printed whole: the note is bounded (the
+/// model's `MAX_COMMENT_BYTES`), so the line is bounded too. A note that is
+/// only whitespace is no note at all. §110.
+fn note_line(note: &str) -> Option<String> {
+    let note = note.trim();
+    if note.is_empty() { None } else { Some(format!("note: {note}")) }
 }
 
 // ------------------------------------------------------------- snapshot --
@@ -494,6 +510,26 @@ mod tests {
         let list = craftkit_engine::catalogue();
         let arr = list.as_array().expect("an array");
         assert_eq!(arr.len(), craftkit_engine::all().len());
+    }
+
+    /// `eval` says what the design's note is.
+    ///
+    /// §110: the note was in the file and in the model and in nothing else,
+    /// so `eval` on a design with a note printed the node count and the frame
+    /// rate and never the note. A note that only the file can show is a note
+    /// nobody reads.
+    #[test]
+    fn eval_says_what_the_design_s_note_is() {
+        assert_eq!(note_line(""), None, "a design with no note has no note line");
+        assert_eq!(note_line("   \n  "), None, "whitespace is not a note");
+        assert_eq!(
+            note_line("why the design is the way it is"),
+            Some("note: why the design is the way it is".to_string())
+        );
+        assert_eq!(
+            note_line("  a note with its edges trimmed  "),
+            Some("note: a note with its edges trimmed".to_string())
+        );
     }
 
     // ------------------------------------------------------- the dispatcher --

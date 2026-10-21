@@ -88,7 +88,7 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
 };
 ```
 
-The registry currently holds 21 commands across 7 areas — `document`,
+The registry currently holds 22 commands across 7 areas — `document`,
 `node`, `property`, `keyframes`, `playback`, `history`, `debug` — from
 `doc.rename` to `session.stats`. Both numbers are checked: `cargo xtask lists`
 fails if either of them stops matching the registry, because a number written

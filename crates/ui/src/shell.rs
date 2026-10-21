@@ -367,6 +367,15 @@ impl<'a> Shell<'a> {
                     .color(tokens.text_dim),
             );
         });
+        // The design's own note, if it has one. §110: it was in the file and
+        // in the model and in nothing else, so a note could only be read by
+        // opening the file that held it.
+        //
+        // The window shows a glimpse — a note is a paragraph and the panel is
+        // not a page — and the state carries the whole of it.
+        if !meta.comment.is_empty() {
+            ui.label(RichText::new(note_preview(&meta.comment)).color(tokens.text_dim).small().weak());
+        }
         ui.separator();
 
         let mut frame = self.session.at().frames_i64(rate);
@@ -472,6 +481,21 @@ pub fn frame(ctx: &Context, session: &mut Session, tokens: &Tokens, state: &mut 
     shell.show(ctx, tokens);
     *state = shell.state.clone();
     shell.automation
+}
+
+/// A glimpse of the design's note, for the window.
+///
+/// The note is a paragraph and the panel is not a page, so the window shows
+/// the first 200 characters and says that it is cut. The whole note is in the
+/// state. §110.
+pub fn note_preview(note: &str) -> String {
+    const NOTE_PREVIEW_CHARS: usize = 200;
+    if note.chars().count() <= NOTE_PREVIEW_CHARS {
+        return note.to_string();
+    }
+    let mut out: String = note.chars().take(NOTE_PREVIEW_CHARS).collect();
+    out.push('…');
+    out
 }
 
 /// Whether a widget is present and clickable at `name`.
@@ -1008,5 +1032,56 @@ mod tests {
         let before = session.document().clone();
         let _ = draw(&mut session);
         assert_eq!(session.document(), &before, "a frame must be side-effect free");
+    }
+
+    /// The note is a glimpse, and it says that it is a glimpse.
+    ///
+    /// §110: a note is a paragraph and the panel is not a page. The window
+    /// shows the first 200 characters and marks the cut; the whole note is in
+    /// the state.
+    #[test]
+    fn the_note_preview_is_a_glimpse_of_the_note() {
+        assert_eq!(note_preview(""), "");
+        assert_eq!(note_preview("short"), "short");
+
+        let long = "n".repeat(500);
+        let preview = note_preview(&long);
+        assert!(preview.ends_with('…'), "a cut note says that it was cut: {preview}");
+        assert_eq!(preview.chars().count(), 201, "the preview is 200 characters and the mark");
+        assert!(long.starts_with(preview.trim_end_matches('…')), "the preview is not the note's head");
+    }
+
+    /// A frame with a note is not the frame without one.
+    ///
+    /// §110: the note was in the model and in the file and **nowhere else** —
+    /// not in the window. The check is on the pixels, because a note that is
+    /// computed and never drawn would pass every test that looked at the
+    /// model.
+    ///
+    /// The two frames differ in **one** thing: the text of the note. That is
+    /// on purpose. A frame with a note and a frame without one also differ in
+    /// the status bar — the second is "unsaved" and the first is "saved" —
+    /// so that comparison would pass even if the note were never drawn, and
+    /// the mutation that stops the note being drawn was **missed** until this
+    /// test was written the other way round.
+    #[test]
+    fn a_frame_with_a_note_is_not_the_frame_without_one() {
+        let mut session = Session::sample();
+        let state = ShellState::default();
+
+        session
+            .execute("doc.note", &serde_json::json!({ "text": "why the design is the way it is" }))
+            .expect("the note can be set");
+        let with = crate::raster::render(&mut session, 600, 400, &state).expect("the frame renders");
+
+        session
+            .execute("doc.note", &serde_json::json!({ "text": "a different note" }))
+            .expect("the note can be set");
+        let other = crate::raster::render(&mut session, 600, 400, &state).expect("the frame renders");
+
+        assert_ne!(
+            with.png, other.png,
+            "two designs whose notes differ have the same frame: the note is not on the screen"
+        );
     }
 }

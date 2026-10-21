@@ -321,6 +321,11 @@ id, whether it worked and what it said. "What has this session done?" used to
 be answerable only as a *count* (`session.stats` said "3 commands, 1
 failure"); the commands themselves were in the tree the whole time. §109.
 
+**`session.state` also carries the design's note** — the paragraph in the
+file's `meta.comment`, whole. It used to be in the file and in the model and
+nowhere else, so the only way to read it was to open the file; `doc.note` is
+how you write one, and an empty text clears it. §110.
+
 **`ui.*` works in the desktop app.** `craftkit-control` is layer 5 and
 `craftkit-ui` is layer 6, so the channel does not draw: the host installs a
 handler with `ServerOptions::with_ui` (`apps/craftkit/src/main.rs`'s `ServerOptions::with_ui`) and a
