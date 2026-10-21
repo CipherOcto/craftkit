@@ -218,7 +218,11 @@ inverting commands by hand.
 ## Incremental evaluation
 
 `craftkit_eval::Evaluator` holds the previous evaluation as a `Vec<CacheEntry>`
-— one per node, each with the node's fingerprint and whether it is animated.
+— one per node, each with the node's fingerprint, whether it is animated, and
+the problems that node reported. The problems travel with the state because
+they are part of the node's answer: a reused entry that brought back its state
+but not its problems would make the plan report fewer problems than the
+document has (§129).
 
 The reuse rule, from `Evaluator::evaluate`'s doc comment: walk the node list
 from the front; entry `i` is reused when **both** (1) the fingerprint of

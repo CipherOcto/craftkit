@@ -13991,6 +13991,147 @@ between two consecutive frames cannot tell a settling layout from a scroll.
 ---
 
 
+## 129. The evaluator's cache kept the nodes' states and dropped their problems, so the problems panel emptied itself the moment the playhead moved
+
+### The measurement
+
+The evaluator keeps the last evaluation and reuses the states of nodes that
+have not changed (§53, §80). The **problems** a node reports were not part of
+that cache: they were produced as a side effect of evaluating the node, and a
+node that was reused was not evaluated, so it reported nothing.
+
+In the evaluator itself, with five nodes that carry no `amount` property — a
+warning each — the same document evaluated twice:
+
+| | reused | evaluated | problems |
+|---|---|---|---|
+| the first evaluation | 0 | 5 | **5** |
+| the second, at another instant | 5 | 0 | **0** |
+| the third, at another instant | 5 | 0 | **0** |
+
+And in the running application, with a design of ten thousand nodes, none of
+which carries an `amount` property:
+
+| | when the file opens | after `playback.seek` to 1.000 s |
+|---|---|---|
+| the status line | `0t at 0.000s — 0 reused, 10000 evaluated, 10000 problem(s)` | `254016000000t at 1.000s — 10000 reused, 0 evaluated, 0 problem(s)` |
+| `diagnostics.list` over the control channel | 10 000 problems (256 listed, 9 744 dropped) | **0 problems** (0 listed, 0 dropped) |
+| the problems area of the screen | 6 911 lit pixels | **0 lit pixels** |
+
+The last row is the whole defect in one number: the panel does not empty, it
+**disappears**. The Problems header and the list are drawn only when the plan
+has diagnostics, and the plan had none.
+
+With the fix in place, the same three runs give 10 000 → 10 000 problems and
+6 911 → 6 911 lit pixels.
+
+### Why nothing noticed
+
+**The first evaluation always reports.** The cache is empty when a file opens,
+so the problems are on the screen exactly when somebody opens the design and
+looks at it.
+
+**A document edit hides the defect, because the reuse is a prefix reuse.**
+Muting the first node of the ten-thousand-node design re-evaluates everything
+after it — the level entering a node comes from the node before it, so a change
+anywhere in the prefix invalidates the rest. Measured: the problems area kept
+**11 276 → 11 281** lit pixels. The obvious test — change the design, look at
+the problems — finds nothing at all. The thing that has to happen is a change
+that does **not** touch the document: the playhead moving.
+
+**The playhead is what a person moves.** Scrubbing is the most ordinary thing
+in the editor, and it is the one thing that produces a reuse.
+
+**The status line reads like good news.** `10000 reused, 0 evaluated` is the
+cache working; the `, 0 problem(s)` at the end of the line is the lie, and it
+is at the end of a line nobody reads twice.
+
+**The count on the screen does not change.** The plan keeps at most
+`MAX_DIAGNOSTICS` = 256 diagnostics and counts the rest as dropped, so a
+design with ten thousand problems and a design with two hundred and fifty-six
+show the same eleven lines. Only the summary line carries the real number, and
+§129's defect is in the number.
+
+### The fix
+
+**`crates/eval/src/evaluate.rs` — the cache keeps the problems with the
+state.**
+
+- `CacheEntry` carries a `diagnostics: Vec<Diagnostic>` beside its state.
+- `eval_node` returns `(NodeState, Vec<Diagnostic>)` instead of pushing into a
+  shared list, so a node's problems travel with its state.
+- A reused node puts its cached problems back into the plan.
+- The cache is rebuilt from the per-node lists, so a node that was evaluated
+  keeps its problems for the next reuse.
+
+The two documents that described the cache were rewritten with it, because the
+rule in item 6 of "Suggested order" is *a change to a mechanism re-reads the
+documents that describe it*: `CacheEntry`'s own doc comment said it was *"one
+cached node state"*, and `docs/architecture.md` said an entry held *"the node's
+fingerprint and whether it is animated"*. Both were true when they were written
+and false the moment the entry gained a third field.
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| A reused node still reports its problem | `a_reused_node_still_reports_its_problem` in `craftkit-eval` |
+
+and one mutation in `scripts/mutation-test-gates.sh`: *eval: a reused node
+repeats its problems*, which deletes the loop that puts the cached problems
+back. It compiles, and the gate fails with *"the reused node did not report its
+problem again, so the plan says the design is fine: []"*.
+
+**What the fix costs.** The plan has to put ten thousand problems back
+together on every warm evaluation. Measured on the ten-thousand-node design,
+the best of thirty warm evaluations was **5.42 ms and 5.17 ms** with the fix
+and **6.01 ms and 5.15 ms** without it — the difference is inside the
+run-to-run spread, so the cost is not measurable against a warm evaluation that
+already costs five milliseconds.
+
+### What is still open
+
+**The problems panel publishes nothing** (item 23): an agent cannot see the
+problems on the screen, and `diagnostics.list` gives it at most 256 of them
+and a count of the rest. An agent that asks "what is wrong with this design?"
+is told the first 256 problems and that there are 9 744 more it cannot see.
+Whether it should be able to page through them is not decided.
+
+**The cache's key is the node's own content, so the problems have to fit
+inside it.** A node's problems must depend on the node alone, because the
+fingerprint covers the node alone. It is true today: `amount_of` reads the
+node's own properties. It is not written down anywhere and nothing checks it,
+and a diagnostic that depended on the level coming in, or on another node,
+would be reported once and then reused — the same defect, one layer down.
+
+**The prefix rule decides which defects a person ever sees.** The reuse stops
+at the first node that changed, so a problem in a document that is edited near
+its front is re-reported on every command, while a problem in a document that
+is only scrubbed is reported once. That is a consequence of the rule in §53 and
+is not wrong, but it means the *frequency* of a wrong answer depends on where
+in the document the edit lands.
+
+### The lesson
+
+**A side effect is part of the answer.** The cache kept what the evaluation
+*computed* and dropped what it *said*. The state of a node is a number; the
+problems of a node are what the design is telling the person about itself, and
+a design whose ten thousand warnings vanish the moment the playhead moves is
+not a design with no warnings — it is a design the editor has stopped reading.
+
+**The obvious test found nothing, and the obvious test was the wrong one.**
+"Change the document and look at the problems" is what a person reaches for,
+and the prefix reuse makes it useless. The defect needed an operation that
+changes *nothing* — moving the playhead — and the operation that reveals
+problems is not the one anybody would think to try.
+
+**The number on the screen is not the number in the design.** The panel draws
+at most 256 rows, so "10 000 problems" and "256 problems" look the same; only
+the summary line carried the truth, and it was at the end of a line about the
+cache.
+
+---
+
 ---
 
 ## What enforces what
@@ -14304,6 +14445,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The node list does not scan the plan once per node** | `craftkit-ui` test | 1 mutation — §127 |
 | **The node list draws the rows the collector found** | `craftkit-ui` test | 1 mutation — §127 |
 | **The wheel scrolls the node list from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §128 |
+| **A reused node still reports its problem** | `craftkit-eval` test | 1 mutation — §129 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -14859,3 +15001,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     while a list of ten thousand problems sits there, and there is no gate
     for that today. The choice is: publish the rows as a name per diagnostic,
     or leave the panel as the one part of the screen an agent cannot see.
+24. **Decide what a node's problems may depend on.** §129 made the cache keep
+    the problems of the nodes it reuses. That is only sound while a node's
+    problems depend on the node alone, because the fingerprint covers the node
+    alone — and today that is true only because `amount_of` happens to read the
+    node's own properties. It is written down nowhere and nothing checks it. A
+    diagnostic that read the level coming in, or another node's state, would be
+    reported once and then reused for every later evaluation, which is §129's
+    defect with the fingerprint as the reason. The choices are: put the rule
+    next to the fingerprint and gate it, widen the fingerprint to cover what a
+    diagnostic may read, or make a diagnostic that depends on more than its own
+    node a separate kind of thing that is never cached.

@@ -27,7 +27,8 @@ pub const START_LEVEL: f64 = 1.0;
 /// [`craftkit_kernel::apply_gain`], so there is exactly one copy of the rule.
 pub const MAX_LEVEL: f64 = craftkit_core::MAX_MAGNITUDE;
 
-/// One cached node state with the fingerprint that justifies keeping it.
+/// One cached node answer — its state and its problems — with the
+/// fingerprint that justifies keeping it.
 #[derive(Debug, Clone)]
 struct CacheEntry {
     /// Hash of the node as it was when this state was computed.
@@ -36,6 +37,12 @@ struct CacheEntry {
     /// produces the same state at every instant, so it survives a time change.
     animated: bool,
     state: NodeState,
+    /// The problems this node reported.
+    ///
+    /// They are part of the node's answer, so the cache has to keep them
+    /// with the state: a reused node that did not repeat its problems would
+    /// make the plan say a document has fewer problems than it has. §129.
+    diagnostics: Vec<Diagnostic>,
 }
 
 /// Holds the previous evaluation so the next one can do less work.
@@ -132,6 +139,8 @@ impl Evaluator {
         // document with 200 000 keyframes that was 52 ms each, where the
         // evaluation the cache was meant to save cost 7 µs. §53.
         let mut fingerprints: Vec<u64> = Vec::with_capacity(doc.nodes.len());
+        // What each node reported, in the order the nodes are in. §129.
+        let mut node_problems: Vec<Vec<Diagnostic>> = Vec::with_capacity(doc.nodes.len());
         let mut level = START_LEVEL;
         let mut reused = 0usize;
         // Until something fails to match, we are still inside the reusable prefix.
@@ -150,6 +159,12 @@ impl Evaluator {
                 match entry {
                     Some(e) => {
                         level = e.state.level_out;
+                        // The node's problems are part of its answer, and the
+                        // answer is what the cache keeps. §129.
+                        for problem in &e.diagnostics {
+                            diagnostics.push(problem.clone());
+                        }
+                        node_problems.push(e.diagnostics.clone());
                         nodes.push(e.state);
                         reused += 1;
                     }
@@ -161,7 +176,11 @@ impl Evaluator {
             }
             at_start_of_prefix = false;
 
-            let state = eval_node(node, level, at, &mut diagnostics);
+            let (state, own) = eval_node(node, level, at);
+            for problem in &own {
+                diagnostics.push(problem.clone());
+            }
+            node_problems.push(own);
             level = state.level_out;
             nodes.push(state);
         }
@@ -170,10 +189,12 @@ impl Evaluator {
             .iter()
             .zip(doc.nodes.iter())
             .zip(fingerprints.iter())
-            .map(|((state, node), fp)| CacheEntry {
+            .zip(node_problems.iter())
+            .map(|(((state, node), fp), problems)| CacheEntry {
                 node_fp: *fp,
                 animated: is_animated(&node.props),
                 state: state.clone(),
+                diagnostics: problems.clone(),
             })
             .collect();
         self.cached_at = Some(at);
@@ -245,9 +266,12 @@ fn keyframes_outside_the_range(
 /// the cost of catching a panic is paid once per node rather than once per frame
 /// — and so the seam stays visible when an untrusted node implementation is
 /// added later.
-fn eval_node(node: &Node, level_in: f64, at: Tick, diag: &mut Diagnostics) -> NodeState {
+fn eval_node(node: &Node, level_in: f64, at: Tick) -> (NodeState, Vec<Diagnostic>) {
     let props = resolve_props(&node.props, at);
     let mut level_out = level_in;
+    // The node's own problems, kept beside its state so that a reused node
+    // can repeat them. §129.
+    let mut own: Vec<Diagnostic> = Vec::new();
 
     if !node.muted && !node.kind.is_passive() {
         match node.kind {
@@ -260,12 +284,12 @@ fn eval_node(node: &Node, level_in: f64, at: Tick, diag: &mut Diagnostics) -> No
                 // because the number *between* two keys is clamped to the
                 // same range: the interpolator is a second door into the
                 // value, and it was the one that was not checked. §65.
-                if let Ok(amount) = amount_of(&props, diag, node) {
+                if let Ok(amount) = amount_of(&props, &mut own, node) {
                     level_out = amount;
                 }
             }
             NodeKind::Filter => {
-                if let Ok(amount) = amount_of(&props, diag, node) {
+                if let Ok(amount) = amount_of(&props, &mut own, node) {
                     match apply_gain(level_in, amount) {
                         Ok(v) => level_out = v,
                         Err(e) => {
@@ -277,7 +301,7 @@ fn eval_node(node: &Node, level_in: f64, at: Tick, diag: &mut Diagnostics) -> No
                             // and pass the level through rather than inventing
                             // a number, so a future bug is visible and not
                             // silent.
-                            diag.push(Diagnostic::error(
+                            own.push(Diagnostic::error(
                                 Some(node.id),
                                 &node.name,
                                 format!("the level could not be scaled: {e}"),
@@ -290,15 +314,18 @@ fn eval_node(node: &Node, level_in: f64, at: Tick, diag: &mut Diagnostics) -> No
         }
     }
 
-    NodeState {
-        id: node.id,
-        name: node.name.clone(),
-        kind: node.kind,
-        muted: node.muted,
-        level_in,
-        level_out,
-        props,
-    }
+    (
+        NodeState {
+            id: node.id,
+            name: node.name.clone(),
+            kind: node.kind,
+            muted: node.muted,
+            level_in,
+            level_out,
+            props,
+        },
+        own,
+    )
 }
 
 /// The `amount` property, with the rules for what a missing or wrong one means.
@@ -306,7 +333,7 @@ fn eval_node(node: &Node, level_in: f64, at: Tick, diag: &mut Diagnostics) -> No
 /// `Ok(())`-free on purpose: the `Err` case has already pushed its diagnostic,
 /// so the caller only has to decide what value to carry instead of formatting
 /// the same message twice.
-fn amount_of(props: &[Resolved], diag: &mut Diagnostics, node: &Node) -> Result<f64, ()> {
+fn amount_of(props: &[Resolved], diag: &mut Vec<Diagnostic>, node: &Node) -> Result<f64, ()> {
     let Some(r) = props.iter().find(|p| p.path == "amount") else {
         diag.push(Diagnostic::warn(Some(node.id), &node.name, "has no `amount` property; using 1.0"));
         return Ok(1.0);
@@ -410,6 +437,56 @@ mod tests {
     /// §119: a key past the end of the design changes **every instant** of
     /// the design — the value between two keys is interpolated across it —
     /// and the playhead can never reach the key itself. Nothing said so.
+    /// A reused node still reports its problem.
+    ///
+    /// §129: the cache kept a node's **state**, and the problems a node
+    /// reports were produced as a side effect of evaluating it. A reused
+    /// node therefore reported nothing, and the plan came back with fewer
+    /// problems than the document has — so the editor's problems panel
+    /// emptied itself the moment anything was recomputed, and a design with
+    /// ten thousand broken nodes looked clean after the first command.
+    ///
+    /// The node here has no `amount` property, which is a warning about that
+    /// node and nothing else.
+    #[test]
+    fn a_reused_node_still_reports_its_problem() {
+        let mut doc = Document::empty("probe");
+        let id = doc.add_node("no amount", NodeKind::Source).expect("the node");
+        doc.get_mut(id).expect("the node").props = PropGroup::new("id", "label");
+
+        let mut evaluator = Evaluator::new();
+        let first = evaluator.evaluate(&doc, Tick::ZERO).expect("the plan");
+        assert_eq!(first.reused, 0, "the first evaluation evaluates everything");
+        assert_eq!(
+            first.diagnostics.items.len(),
+            1,
+            "the first evaluation should report the node's problem: {:?}",
+            first.diagnostics.items
+        );
+
+        // The same document, the same instant: the node is reused.
+        let second = evaluator.evaluate(&doc, Tick::ZERO).expect("the plan");
+        assert_eq!(second.reused, 1, "the node was reused");
+        assert_eq!(
+            second.diagnostics.items.len(),
+            1,
+            "the reused node did not report its problem again, so the plan says the design is fine: {:?}",
+            second.diagnostics.items
+        );
+        assert_eq!(second.diagnostics.items, first.diagnostics.items);
+
+        // Another instant: the node has no keyframes, so it is reused there
+        // too, and the plan must still say the same thing.
+        let third = evaluator.evaluate(&doc, Tick::from_seconds_f64(1.0)).expect("the plan");
+        assert_eq!(third.reused, 1, "the node was reused at another instant");
+        assert_eq!(
+            third.diagnostics.items.len(),
+            1,
+            "the reused node did not report its problem at another instant: {:?}",
+            third.diagnostics.items
+        );
+    }
+
     #[test]
     fn a_keyframe_outside_the_design_is_a_warning() {
         let mut d = doc_with(&[(NodeKind::Source, "src", 1.0)]);

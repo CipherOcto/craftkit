@@ -3328,5 +3328,18 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the node list's scroll area shrinks to its content" \
     "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_node_list_from_across_the_panel"
 
+# The evaluator's cache kept a node's state and dropped the problems that
+# node reported, so a reused node reported nothing and the plan said the
+# design was fine - the editor's problems panel emptied itself the moment
+# anything was recomputed. §129.
+swap crates/eval/src/evaluate.rs \
+    '                        for problem in &e.diagnostics {
+                            diagnostics.push(problem.clone());
+                        }
+' \
+    ''
+expect_catch "eval: a reused node repeats its problems" \
+    "cargo test -p craftkit-eval --profile ci a_reused_node_still_reports_its_problem"
+
 restore
 finish
