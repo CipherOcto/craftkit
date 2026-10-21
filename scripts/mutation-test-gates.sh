@@ -67,6 +67,7 @@ readonly FILES=(
     docs/architecture.md
     crates/core/Cargo.toml
     crates/core/src/lib.rs
+    crates/core/src/ids.rs
     crates/core/src/readers.rs
     crates/core/src/value.rs
     crates/core/src/tick.rs
@@ -3451,6 +3452,33 @@ swap clippy.toml \
 allow-indexing-slicing-in-tests = true'
 expect_catch "clippy: a setting re-enables a lint nobody denies" \
     "cargo xtask lists"
+
+# The id counter, which used to be saturating - and a saturating counter
+# hands out its last id for ever. A file carrying that id made every later
+# "node.add" mint a node that shared an id with one already there, and a
+# document with two nodes that share an id is one the file format refuses.
+# §137.
+swap crates/core/src/ids.rs \
+    '        if self.0 >= Self::MAX {
+            return None;
+        }' \
+    '        if false {
+            return None;
+        }'
+expect_catch "model: the id counter hands out the same id twice" \
+    "cargo test -p craftkit-core --profile ci the_counter_never_hands_out_the_same_id_twice"
+
+# And the same rule from the other side: a ceiling that is off by one hands
+# out the last id once, and the file that carries it gets a duplicate.
+swap crates/core/src/ids.rs \
+    '        if self.0 >= Self::MAX {
+            return None;
+        }' \
+    '        if self.0 > Self::MAX {
+            return None;
+        }'
+expect_catch "model: the id counter ceiling is off by one" \
+    "cargo test -p craftkit-model --profile ci a_document_whose_ids_reached_the_ceiling_refuses_a_new_node"
 
 restore
 finish

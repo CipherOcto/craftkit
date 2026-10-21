@@ -316,7 +316,19 @@ impl Document {
         if let Some(why) = Node::why_not_a_name(&name) {
             return Err(CoreError::BadData(format!("the node name `{name}` cannot be used: {why}")));
         }
-        let id = NodeId(self.next_id.next());
+        // The id comes from the counter, and the counter refuses when it can no
+        // longer promise an id that is not already in use. Two nodes that
+        // share an id are a document the file format refuses, so a duplicate
+        // here would not be a small wrong answer: the command would be
+        // refused for a reason nobody could act on. §137.
+        let Some(raw) = self.next_id.next() else {
+            return Err(CoreError::BadData(format!(
+                "this document's node ids have reached the ceiling of {}, so a new node cannot \
+                 be given an id of its own",
+                craftkit_core::IdCounter::MAX
+            )));
+        };
+        let id = NodeId(raw);
         self.nodes.push(Node::new(id, name, kind));
         Ok(id)
     }
@@ -695,6 +707,28 @@ mod tests {
         }
         assert_eq!(d.nodes.len(), limits::MAX_NODES);
         assert!(d.add_node("one too many", NodeKind::Source).is_err());
+    }
+
+    /// A document whose ids have reached the ceiling refuses a new node.
+    ///
+    /// §137: the id counter used to *saturate*, which meant it handed out its
+    /// last id for ever. A file carrying that id therefore made every later
+    /// `node.add` mint a node that shared an id with one already there — and
+    /// two nodes that share an id are a document the file format refuses, so
+    /// the command failed with the tree's own unexpected error, for ever.
+    #[test]
+    fn a_document_whose_ids_reached_the_ceiling_refuses_a_new_node() {
+        let mut d = Document::empty("t");
+        // What a file from another machine can carry: one node, with the
+        // last id the counter can reach.
+        d.nodes.push(Node::new(NodeId(craftkit_core::IdCounter::MAX), "Only", NodeKind::Source));
+        d.reseat_id_counter();
+
+        let err = d.add_node("Second", NodeKind::Filter).expect_err("the ids are exhausted");
+        assert!(err.to_string().contains("ceiling"), "{err}");
+        assert_eq!(d.nodes.len(), 1, "no node was added");
+        // And the document is still one the file format would accept.
+        assert!(d.validate().is_ok(), "the document is still valid");
     }
 
     #[test]

@@ -15171,6 +15171,192 @@ worse. The rule was about *parameters*, and the gate is about parameters.
 
 ---
 
+## 137. A hostile file could make a design uneditable
+
+### The measurement
+
+`craftkit_core::IdCounter` hands out the ids a document's nodes get. It was
+**saturating**:
+
+```rust
+pub fn next(&mut self) -> u64 {
+    let cur = self.0;
+    if self.0 < Self::MAX {
+        self.0 += 1;
+    }
+    cur
+}
+```
+
+At the ceiling it stops advancing, and so it hands out its last value **for
+ever**. The comment above it said what that was for:
+
+> Saturating stops the document changing at all, which is a far smaller lie.
+
+It did not stop the document changing. It made the document **unbuildable**:
+the second node it minted shared an id with the first, and two nodes that
+share an id are a document the file format refuses (§92's "two objects share
+an id").
+
+And the test said so too, and said it was correct:
+
+```rust
+c.observe(IdCounter::MAX);
+assert_eq!(c.next(), IdCounter::MAX);
+assert_eq!(c.next(), IdCounter::MAX, "must saturate, never wrap");
+```
+
+The name was `ids_are_sequential_and_saturate` and the assertion was that the
+same id comes out twice. **The defect was pinned by a test.** The intent
+behind it — *never wrap* — was right; the implementation repeated instead of
+stopping, and the test recorded the repeat as the promise.
+
+### How a file reaches the ceiling
+
+`IdCounter::MAX` is 2^52 − 1 = 4 503 599 627 370 495. That is inside the
+range a JSON number carries exactly, so a file from another machine can hold
+it.
+
+`Document::reseat_id_counter` raises the counter above every id in a loaded
+document, and the file reader calls it — that is the "single most important
+line of defence against a corrupt or hostile file", its own comment says. It
+is also what carried the ceiling into the document.
+
+So a file with **one** node, whose id is the ceiling, leaves the counter
+saturated — and `Document::add_node` then mints that same id again. The
+document has two nodes with the same id, `Document::validate` refuses it, and
+the engine's own check (§50 — *no command leaves a document the file would
+refuse*) turns that into a refusal of the command.
+
+### The live evidence
+
+A script whose base is such a file, and one command:
+
+```json
+{ "name": "hostile ids",
+  "base": { "meta": { "name": "Hostile", "fps": 24, "start": 0, "end": 127008000000 },
+            "nodes": [ { "id": 4503599627370495, "name": "Only", "kind": "source",
+                         "props": { "id": "props", "label": "Properties", "nodes": [] },
+                         "muted": false } ] },
+  "commands": [ { "command": "node.add", "params": { "name": "Second", "kind": "filter" } } ] }
+```
+
+```text
+craftkit-cli: step 1/1: `node.add` failed unexpectedly (the command left the document in a
+state the file format refuses: two objects share an id: two nodes share an id); your
+document is unchanged
+```
+
+That is the tree's own vocabulary for *"worth a crash report and a bug"* — and
+it is what a file from another machine produces. And it is not one failure:
+the counter stays saturated, so **every** later `node.add` and every
+`node.duplicate` fails the same way, for ever. The design is open, visible,
+and uneditable.
+
+### Why nothing noticed
+
+**The ids are absurd.** Four and a half quadrillion, against a model that
+allows ten thousand nodes. No honest document gets near the ceiling, so the
+only way there is a file — and a file is *input*, the thing the tree's rules
+are mostly about.
+
+**The comment said the right thing.** "Saturating stops the document changing
+at all" is the intention; the code did something else. A comment that is
+right about the intent and wrong about the code is worse than no comment,
+because it stops the reader from looking.
+
+**The test asserted the defect.** `must saturate, never wrap` reads like a
+rule. It was a test that the same id comes out twice, described as the
+property the tree wanted. A test that pins a defect is not a missing test; it
+is a test that says the defect is intended.
+
+### The fix
+
+**The counter stops one id short of its ceiling, and says so when it cannot
+go on.** `next()` returns `Option<u64>` now, and `None` when it can no longer
+promise an id that is not already in use:
+
+```rust
+pub fn next(&mut self) -> Option<u64> {
+    if self.0 >= Self::MAX {
+        return None;
+    }
+    let cur = self.0;
+    self.0 += 1;
+    Some(cur)
+}
+```
+
+The refusal is the point: a counter that hands out its last id twice breaks
+the one promise the type makes — *an id is unique across the whole document* —
+and the document it breaks is the one the file format refuses, so the failure
+lands on a command the user cannot fix.
+
+**The document says why.** `Document::add_node` refuses with the reason
+rather than minting a duplicate:
+
+```text
+craftkit-cli: step 1/1: this document's node ids have reached the ceiling of 4503599627370495,
+so a new node cannot be given an id of its own
+```
+
+The document stays **valid** — the ids it has are unique — so it can still
+be looked at, saved and replayed. Only the edit is refused, and the refusal
+says what would have to change.
+
+### What now holds it
+
+Two mutations:
+
+| Mutation | Gate | Caught by |
+|---|---|---|
+| model: the id counter hands out the same id twice | `craftkit-core` test | `the_counter_never_hands_out_the_same_id_twice` |
+| model: the id counter ceiling is off by one | `craftkit-model` test | `a_document_whose_ids_reached_the_ceiling_refuses_a_new_node` |
+
+And two tests: `ids_are_sequential_and_stop_at_the_ceiling` in
+`craftkit-core`, and `a_document_whose_ids_reached_the_ceiling_refuses_a_new_node`
+in `craftkit-model`.
+
+### What is still open
+
+**The reader accepts such a file, and that is a decision the tree made.** The
+document is valid — its ids are unique — so refusing the file would lose a
+design the user can still look at. The tree degrades gracefully: the design
+opens, and the edit is refused with a reason that says what would have to
+change. The other answer — refuse the file with *"its node ids are beyond
+what this format can carry"* — is defensible, and a tree that valued a file
+it cannot edit over a file it can would choose it.
+
+**The ceiling is not in the model's limits table.** `IdCounter::MAX` lives in
+`craftkit-core`, and the table in `crates/model/src/lib.rs` is the tree's
+list of safety limits (§74). An id ceiling is a safety limit, and it is not
+in the table — so nothing checks that the table and the code agree about it.
+
+**A counter that stops is a counter that can be wrong.** If a document ever
+needed more ids than the ceiling allows, the answer would be "no", and
+nobody would be able to edit it. 2^52 is far beyond the model's ten thousand
+nodes, so this is theoretical — and it is exactly the kind of theoretical
+that the ceiling was chosen to make impossible.
+
+### The lesson
+
+**A test that pins a defect is worse than a missing test.** The test said
+`must saturate, never wrap` and asserted the repeat. It read like a rule, so
+everybody after it read the code as if the rule were being kept.
+
+**"Saturating" is not "stopping".** The comment said saturating stops the
+document changing; saturating makes the document *unbuildable*. The two
+words are close enough that the code looked right.
+
+**A hostile file is a file, and the model's limits are the honest place to
+look for it.** Ten thousand nodes, fifty thousand properties, ten thousand
+keyframes — every one of those is checked when a file is read. The one limit
+that was not checked was the one a file could reach.
+
+---
+
+---
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -15493,6 +15679,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The playhead is a place in the design** | `craftkit-engine` test | 2 mutations — §135 |
 | **A parameter is never indexed** | `cargo xtask lists` | 1 mutation — §136 |
 | **Every clippy setting names a denied lint** | `cargo xtask lists` | 1 mutation — §136 |
+| **An id is unique across the whole document, even at the ceiling** | `craftkit-core` + `craftkit-model` tests | 2 mutations — §137 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

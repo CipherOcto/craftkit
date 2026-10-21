@@ -12,10 +12,18 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A monotonic counter, saturating rather than wrapping.
+/// A monotonic counter that stops rather than repeats.
 ///
-/// Wrapping would let a document with 2^64 nodes mint an id that already exists.
-/// Saturating stops the document changing at all, which is a far smaller lie.
+/// Wrapping would let a document with 2^64 nodes mint an id that already
+/// exists. So does repeating — and repeating is what a **saturating** counter
+/// does: it hands out its last value for ever. The comment here used to say
+/// that saturating "stops the document changing at all", and it did not: a
+/// counter that repeats does not stop the document changing, it makes the
+/// document **unbuildable**, because two nodes that share an id are a document
+/// the file format refuses.
+///
+/// So the counter stops one id short of its ceiling: the last id it hands out
+/// is `MAX - 1`, and after that it hands out nothing at all. §137.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct IdCounter(u64);
@@ -27,15 +35,23 @@ impl IdCounter {
         Self(start.min(Self::MAX))
     }
 
-    // Named `next` because that is what an id allocator does; the lint is
-    // silenced because the type is not an iterator and cannot be used as one.
+    /// The next id, or `None` when the counter cannot promise a fresh one.
+    ///
+    /// Named `next` because that is what an id allocator does; the lint is
+    /// silenced because the type is not an iterator and cannot be used as one.
+    ///
+    /// The refusal is the point. A counter that hands out its last id twice
+    /// breaks the one promise this type makes — *an id is unique across the
+    /// whole document* — and the document it breaks is the one the file format
+    /// refuses, so the failure lands on a command the user cannot fix. §137.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> u64 {
-        let cur = self.0;
-        if self.0 < Self::MAX {
-            self.0 += 1;
+    pub fn next(&mut self) -> Option<u64> {
+        if self.0 >= Self::MAX {
+            return None;
         }
-        cur
+        let cur = self.0;
+        self.0 += 1;
+        Some(cur)
     }
 
     pub fn peek(&self) -> u64 {
@@ -88,13 +104,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_sequential_and_saturate() {
+    fn ids_are_sequential_and_stop_at_the_ceiling() {
         let mut c = IdCounter::new(1);
-        assert_eq!(c.next(), 1);
-        assert_eq!(c.next(), 2);
+        assert_eq!(c.next(), Some(1));
+        assert_eq!(c.next(), Some(2));
         c.observe(IdCounter::MAX);
-        assert_eq!(c.next(), IdCounter::MAX);
-        assert_eq!(c.next(), IdCounter::MAX, "must saturate, never wrap");
+        assert_eq!(c.next(), None, "the counter must stop, not repeat");
+        assert_eq!(c.next(), None, "and it must keep stopping");
+    }
+
+    /// The counter never hands out the same id twice.
+    ///
+    /// §137: it used to be *saturating*, which meant it handed out its last
+    /// value for ever — and a document with two nodes that share an id is a
+    /// document the file format refuses.
+    #[test]
+    fn the_counter_never_hands_out_the_same_id_twice() {
+        let mut c = IdCounter::new(IdCounter::MAX - 1);
+        assert_eq!(c.next(), Some(IdCounter::MAX - 1), "the last id it may hand out");
+        assert_eq!(c.next(), None, "the counter must stop, not repeat");
+        assert_eq!(c.next(), None, "and it must keep stopping");
+        // And the same id cannot come back through `observe` either.
+        c.observe(IdCounter::MAX - 1);
+        assert_eq!(c.next(), None, "an observed id must not make the counter repeat");
     }
 
     #[test]
