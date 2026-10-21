@@ -7,7 +7,7 @@
 pub const MAX_ENTRIES: usize = 256;
 
 /// One line of the log.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LogEntry {
     pub seq: u64,
     pub command: String,

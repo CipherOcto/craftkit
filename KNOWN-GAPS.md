@@ -11296,6 +11296,107 @@ and on the screen, and none of them in the state.
 
 ---
 
+## 109. The session kept the last 256 runs and could only be asked how many had run
+
+### The measurement
+
+On the running app, over the control channel, after three commands — one that
+added a node, one that renamed it, and one that was refused:
+
+```
+session.stats -> {"commands": 3, "failures": 1, "kernel_recoveries": 0,
+                  "nodes": 4, "undo_depth": 2}
+session.state -> {"at": 0, "can_redo": false, "can_undo": true, "dirty": true,
+                  "end": ..., "fps": 24, "name": ..., "nodes": [...],
+                  "plan": {...}, "start": 0}
+```
+
+**Three commands ran. One of them failed.** The session could tell an agent
+that much — and not one of them:
+
+- which commands ran,
+- what they were called,
+- what they said,
+- and which of them had **failed**.
+
+The `LogBook` was there the whole time: a bounded ring of 256 entries, each
+with a sequence number, the command's id, whether it worked, and the message
+the command produced. It is public (`Session::log`), it is what the crash
+reporter replays, and it was not in the state, in `session.stats`, in the CLI,
+or anywhere else an agent could ask.
+
+### Why nothing noticed
+
+**The count was there, and a count looks like an answer.** `session.stats`
+reports "3 commands, 1 failure", and that is a *number about* the commands.
+Nothing said "and here they are".
+
+**The log's job had been decided for it.** §69 gave the book a bound and a
+failure counter, and §47 gave the crash report a replay. Those are the two
+things it was built for, and both of them are *exceptional* moments: a crash,
+or a question asked afterwards. The ordinary case — an agent that has just run
+four commands and wants to know what they were — was never a use case, so the
+book was never asked.
+
+**The shell shows the last message and the last message is not the log.** The
+window's status line says what the last command said. That is one line, and
+after the third command it says the third command's message. It is not a
+history, and it was never mistaken for one.
+
+### The fix
+
+**The state carries the log**: the last 256 entries, each with its sequence
+number, its command, whether it worked and its message. A refusal is in there
+with `ok: false` and the reason it was refused — which is the entry an agent
+most wants and could not have.
+
+**The log and the counter agree.** A test says the state's log and
+`session.stats`'s count may not disagree, because they are two answers about
+one thing.
+
+**Reading the log costs nothing.** It is a read: no dirty flag, no undo entry.
+
+Measured on the running app, after the fix:
+
+```
+session.state -> {..., "log": [
+  {"seq": 1, "command": "node.add",    "ok": true,  "message": "added source `In`"},
+  {"seq": 2, "command": "node.rename", "ok": true,  "message": "renamed to `Renamed`"},
+  {"seq": 3, "command": "node.add",    "ok": false, "message": "`node.add` rejected its
+      parameters: `kind` `nonsense` is not a kind; expected one of source, filter,
+      sink, cue, comment"}
+]}
+```
+
+### What now holds it
+
+| Property | Held by |
+|---|---|
+| The state carries the commands that ran | `the_state_carries_the_commands_that_ran` |
+| The log and the command count agree | `the_log_and_the_command_count_agree` |
+
+and three mutations in `scripts/mutation-test-gates.sh`: the state does not
+carry the commands that ran; the log carries only the last command; the log
+does not say whether the command worked.
+
+### The lesson
+
+**A count is not the thing it counts.** "3 commands, 1 failure" is a true
+answer to a question nobody asked. The question was "what did this session
+do?", and the answer was a number about it.
+
+**The bound and the counter were the wrong two features.** §69 gave the book
+its size and a count of the failures — the two things a *monitor* needs. The
+book itself — the entries — were there and were never asked for, because
+nothing asked for them.
+
+**A record kept for the exceptional case is still a record.** The log was
+built for the crash report, and it did that job well. The mistake was not
+keeping it; it was not noticing that a thing kept for the crash is also the
+answer to an ordinary question.
+
+---
+
 ---
 
 ## What enforces what
@@ -11527,6 +11628,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The state carries the document's own parameters** | `craftkit-engine` test | 2 mutations — §108 |
 | **The state and the range command agree about the rate** | `craftkit-engine` test | 1 mutation — §108 |
 | **Reading the rate does not change the document** | `craftkit-engine` test | — |
+| **The state carries the commands that ran** | `craftkit-engine` test | 2 mutations — §109 |
+| **The log and the command count agree** | `craftkit-engine` test | 1 mutation — §109 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

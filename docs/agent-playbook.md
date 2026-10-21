@@ -302,6 +302,11 @@ nodes, the undo depth and the plan. The frame rate used to be reachable only by
 *setting* it, which rewrote the design; the window says "24 fps · 5.00s" in
 its header and nothing an agent could ask said as much. §108.
 
+**`session.state` also carries the log**: the last 256 runs, each with its
+id, whether it worked and what it said. "What has this session done?" used to
+be answerable only as a *count* — `session.stats` said "3 commands, 1
+failure" — and the commands themselves were in the tree the whole time. §109.
+
 **The action is in the method name, not in `params`.** `ui.render`,
 `ui.screenshot` and `ui.click` each ask for exactly that; the bare `ui` takes
 an `action` of `widgets`, `render`, `screenshot` or `click`. Naming both at

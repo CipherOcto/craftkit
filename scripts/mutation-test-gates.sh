@@ -2656,5 +2656,30 @@ swap crates/engine/src/session.rs \
 expect_catch "engine: the state does not carry the document's end" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
 
+# The session kept the last 256 commands and could only be asked how many had
+# run. The commands were in the tree the whole time. §109.
+swap crates/engine/src/session.rs \
+    '            "log": self.log.entries(),' \
+    '            "log": [],'
+expect_catch "engine: the state does not carry the commands that ran" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_commands_that_ran"
+
+# ...and the log carried the last command only, so "what has this session
+# done?" had one answer. §109.
+swap crates/engine/src/session.rs \
+    '            "log": self.log.entries(),' \
+    '            "log": self.log.tail(1),'
+expect_catch "engine: the log carries only the last command" \
+    "cargo test -p craftkit-engine --profile ci the_log_and_the_command_count_agree"
+
+# The log said which commands ran but not whether they worked, and a refusal
+# is the one an agent most wants to see. §109.
+swap crates/engine/src/log.rs \
+    '    pub ok: bool,' \
+    '    #[serde(skip)]
+    pub ok: bool,'
+expect_catch "engine: the log does not say whether the command worked" \
+    "cargo test -p craftkit-engine --profile ci the_state_carries_the_commands_that_ran"
+
 restore
 finish

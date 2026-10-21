@@ -316,6 +316,11 @@ nodes, the undo depth and the plan. The frame rate used to be reachable only by
 *setting* it, which rewrote the design; the window says "24 fps · 5.00s" in
 its header and nothing an agent could ask said as much. §108.
 
+**`session.state` also carries the log** — the last 256 runs, each with its
+id, whether it worked and what it said. "What has this session done?" used to
+be answerable only as a *count* (`session.stats` said "3 commands, 1
+failure"); the commands themselves were in the tree the whole time. §109.
+
 **`ui.*` works in the desktop app.** `craftkit-control` is layer 5 and
 `craftkit-ui` is layer 6, so the channel does not draw: the host installs a
 handler with `ServerOptions::with_ui` (`apps/craftkit/src/main.rs`'s `ServerOptions::with_ui`) and a

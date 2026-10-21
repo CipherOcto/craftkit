@@ -319,6 +319,12 @@ impl Session {
     /// speaks; [`craftkit_core::TICKS_PER_SECOND`] is what turns them into
     /// seconds. The document's **comment** is not here: nothing bounds its
     /// length, and this reply is not capped.
+    ///
+    /// The **log** is here: the last [`crate::log::MAX_ENTRIES`] commands
+    /// with their outcome, so that "what has this session done?" is a
+    /// question the session can answer. It used to be answerable only as a
+    /// *count* — `session.stats` said "3 commands, 1 failure" — and the
+    /// commands themselves were in the tree the whole time. §109.
     pub fn snapshot_json(&self) -> Json {
         serde_json::json!({
             "name": self.doc.meta.name,
@@ -336,6 +342,7 @@ impl Session {
             "can_undo": self.can_undo(),
             "can_redo": self.can_redo(),
             "plan": self.plan.as_ref().map(|p| serde_json::to_value(p).unwrap_or(Json::Null)),
+            "log": self.log.entries(),
         })
     }
 
@@ -774,6 +781,49 @@ mod tests {
         assert_eq!(s.document(), &before, "reading the state changed the document");
         assert!(!s.is_dirty(), "reading the state marked the document dirty");
         assert!(!s.can_undo(), "reading the state pushed an undo entry");
+    }
+
+    /// The state carries the commands that ran.
+    ///
+    /// §109: the session kept the last 256 commands — what they were, whether
+    /// they worked, and what they said — and could only be asked *how many*
+    /// had run. The commands were in the tree the whole time.
+    #[test]
+    fn the_state_carries_the_commands_that_ran() {
+        let mut s = sample();
+        let added = s.execute("node.add", &json!({ "name": "In", "kind": "source" }));
+        assert!(added.is_ok(), "{added:?}");
+        let refused = s.execute("node.add", &json!({ "name": "Bad", "kind": "nonsense" }));
+        assert!(refused.is_err(), "a bad kind should have been refused");
+
+        let state = s.snapshot_json();
+        let log = state.get("log").and_then(|v| v.as_array()).expect("the log");
+        let last = log.last().expect("at least one entry").clone();
+        assert_eq!(last.get("ok").and_then(|v| v.as_bool()), Some(false), "the refusal is not in the log");
+        assert!(
+            last.get("message").and_then(|v| v.as_str()).unwrap_or("").contains("kind"),
+            "the refusal does not say what was wrong: {last}"
+        );
+        let first = log.first().expect("at least one entry").clone();
+        assert_eq!(first.get("command").and_then(|v| v.as_str()), Some("node.add"));
+        assert_eq!(first.get("ok").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    /// The log says how many commands have run, and the log agrees.
+    ///
+    /// §109: `session.stats` reported the count, and the log was the rest of
+    /// the story. The two must not disagree.
+    #[test]
+    fn the_log_and_the_command_count_agree() {
+        let mut s = sample();
+        for _ in 0..3 {
+            let _ = s.execute("node.add", &json!({ "name": "In", "kind": "source" }));
+        }
+        let state = s.snapshot_json();
+        let log = state.get("log").and_then(|v| v.as_array()).expect("the log");
+        let total = s.log.total();
+        assert_eq!(log.len() as u64, total, "the log and the counter disagree");
+        assert_eq!(log.len(), 3, "three commands ran and the log does not say so");
     }
 
     /// A command that says it does not change the document and changes it is
