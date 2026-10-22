@@ -233,7 +233,18 @@ pub fn registry_command_ids(root: &Path) -> Result<std::collections::BTreeSet<St
         let path = root.join(rel);
         let text =
             std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
-        for line in text.lines() {
+        // The **shape** of the registry is read from the code: an `id:` in a
+        // comment or in a string is not a field. The id itself is read from
+        // the text, because there a string *is* the subject. The two views
+        // are the same length, so a position in one is a position in the
+        // other. §158.
+        let code = code_lines_kept(&text);
+        let lines: Vec<&str> = text.lines().collect();
+        for (number, code_line) in code.lines().enumerate() {
+            if !code_line.trim_start().starts_with("id:") {
+                continue;
+            }
+            let Some(line) = lines.get(number) else { continue };
             let Some(rest) = line.trim().strip_prefix("id: \"") else { continue };
             let Some(id) = rest.split('"').next() else { continue };
             if id.starts_with("test.") {
@@ -444,16 +455,25 @@ pub fn wire_names(root: &Path) -> Result<(Vec<String>, Vec<String>), String> {
 /// the names are defined.
 fn arms_named(text: &str, marker: &str) -> Vec<String> {
     let mut names = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
+    // The **shape** of an arm is read from the code: the pattern of a match
+    // arm is a string literal, and in the code view a literal is blanked, so
+    // the part of the line before the arrow is empty. The names are read
+    // from the text, because there the strings *are* the subject. §158.
+    let code = code_lines_kept(text);
+    let lines: Vec<&str> = text.lines().collect();
+    for (number, code_line) in code.lines().enumerate() {
+        let Some(arrow) = code_line.find("=>") else { continue };
         // Only arms, not the function signature or a `=> return None` arm.
-        if !trimmed.starts_with('"') {
+        // The pattern of an arm is a string literal, and in the code view a
+        // literal is blanked, so what is left of the pattern is the `|`s
+        // between the literals and nothing else.
+        if !code_line[..arrow].replace('|', "").trim().is_empty() {
             continue;
         }
-        let Some(arrow) = line.find("=>") else { continue };
-        if !line[arrow..].contains(marker) {
+        if !code_line[arrow..].contains(marker) {
             continue;
         }
+        let Some(line) = lines.get(number) else { continue };
         // `ui" | "ui.click" | "ui.render" => Method::Ui` — one line, several names.
         for part in line.split("=>").next().unwrap_or_default().split('|') {
             let name = part.trim().trim_matches('"').trim();
@@ -4122,19 +4142,33 @@ fn after_visibility(line: &str) -> Option<&str> {
 
 /// The lines of a function, from its `fn` line to the `}` that closes it.
 fn function_lines(lines: &[String], start: usize) -> Vec<String> {
+    function_line_indices(lines, start)
+        .into_iter()
+        .filter_map(|index| lines.get(index).map(|line| line.trim().to_string()))
+        .collect()
+}
+
+/// The line numbers of a function's body.
+///
+/// The **numbers**, not the lines, because a gate that reads a shape from the
+/// code and a name from the text has to pair the two by position — and a
+/// comment-only line is blank in the code view and not in the text, so the
+/// two lists of *lines* are not the same length. The two views are the same
+/// length in lines, so a line number is a position in both. §159.
+fn function_line_indices(lines: &[String], start: usize) -> Vec<usize> {
     let indent = lines[start].len() - lines[start].trim_start().len();
-    let mut out = vec![lines[start].trim().to_string()];
-    for line in &lines[start + 1..] {
+    let mut out = vec![start];
+    for (offset, line) in lines[start + 1..].iter().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
         let own = line.len() - line.trim_start().len();
+        let index = start + 1 + offset;
+        out.push(index);
         if trimmed == "}" && own == indent {
-            out.push(trimmed.to_string());
             break;
         }
-        out.push(trimmed.to_string());
     }
     out
 }
@@ -5338,14 +5372,31 @@ fn control_methods(root: &Path) -> Result<Vec<String>, String> {
     let source =
         std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let lines: Vec<String> = source.lines().map(|l| l.to_string()).collect();
-    let Some(start) = lines.iter().position(|l| l.trim().starts_with("pub fn as_str")) else {
+    // The **shape** of the arms is read from the code: the value of an arm is
+    // a string literal, and in the code view a literal is blanked, so what
+    // is left of it is nothing. The name itself is read from the text,
+    // because there a string *is* the subject. The two views are the same
+    // length, so a line number is a position in both. §158.
+    let code = code_lines_kept(&source);
+    let code_lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+    let Some(start) = code_lines.iter().position(|l| l.trim().starts_with("pub fn as_str")) else {
         return Err(format!("{} has no `Method::as_str` to read the methods from", path.display()));
     };
-    let body = function_lines(&lines, start);
+    // The function's **line numbers**, not its lines: a comment-only line is
+    // blank in the code view and not in the text, so the two lists of lines
+    // are not the same length and a position in one is not a position in the
+    // other. A line number is. §159.
+    let indices = function_line_indices(&code_lines, start);
     let mut names = Vec::new();
-    for line in &body {
-        let trimmed = line.trim();
-        let Some((_, literal)) = trimmed.split_once("=>") else { continue };
+    for index in indices {
+        let Some(shape) = code_lines.get(index) else { continue };
+        let Some(line) = lines.get(index) else { continue };
+        let Some((_, literal)) = shape.trim().split_once("=>") else { continue };
+        // What is left of the value is nothing: it was a string.
+        if !literal.trim().trim_end_matches(',').trim().is_empty() {
+            continue;
+        }
+        let Some((_, literal)) = line.trim().split_once("=>") else { continue };
         let literal = literal.trim().trim_end_matches(',').trim();
         let Some(name) = literal.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
             continue;
@@ -6459,19 +6510,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The code view is the same length as the file.
-    ///
-    /// The gate reads the *shape* of a thing from the code and its
-    /// *contents* from the text, and it takes one from the other by
-    /// position. That only works if the two views are the same length, byte
-    /// for byte: a block comment's end, a string's contents and a character
-    /// that is more than one byte all have to keep their place. §155.
     /// A raw string is a string, and its contents are not code.
     ///
     /// The scanner that blanks an ordinary string's contents ends it at the
     /// first quote inside it — and a raw string has quotes inside it. The
     /// rest of the file was read as code, so a name inside a raw string was
-    /// a definition, and a limit nobody enforced looked enforced. §158.
+    /// a definition, and a limit nobody enforces looked enforced. §158.
     #[test]
     fn a_raw_string_is_a_string() {
         let source = "let raw = r#\"{\"time\": 1}\"#;\nfn f() {}\n";
@@ -6531,6 +6575,103 @@ mod tests {
         assert_eq!(code.len(), source.len(), "{code}");
     }
 
+    /// A command id that stands only in a comment is not a command id.
+    ///
+    /// The gate that says how many commands the tree has reads the registry
+    /// out of the source, and an `id:` in a block comment is a sentence about
+    /// a command, not a command. The comment's command made the registry one
+    /// longer, and the two documents that say how many commands there are
+    /// were reported as wrong. §159.
+    #[test]
+    fn a_command_id_in_a_comment_is_not_a_command_id() {
+        let dir = std::env::temp_dir().join(format!("craftkit-ids-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("commands.rs"),
+            r#"/*
+pub static GHOST: CommandSpec = CommandSpec {
+    id: "ghost.cmd",
+};
+*/
+
+pub static REAL: CommandSpec = CommandSpec {
+    id: "real.cmd",
+};
+"#,
+        )
+        .expect("the fabricated code");
+        std::fs::write(engine.join("command.rs"), "").expect("the fabricated code");
+
+        let ids = registry_command_ids(&dir).expect("the ids");
+        assert_eq!(ids.len(), 1, "{ids:?}");
+        assert!(ids.contains("real.cmd"), "{ids:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A wire name that stands only in a comment is not a wire name.
+    ///
+    /// The control channel's method names are read out of the match arms in
+    /// `crates/control/src/protocol.rs`, and an arm in a block comment is a
+    /// sentence about an arm. The comment's arm made a document's example
+    /// resolve to a method that the channel does not have. §159.
+    #[test]
+    fn a_wire_name_in_a_comment_is_not_a_wire_name() {
+        let source = r#"
+fn parse(s: &str) -> Option<Self> {
+    /*
+    "doc.ghost" => Method::Ghost,
+    */
+    match s {
+        "engine.execute" => Method::Execute,
+        _ => return None,
+    }
+}
+"#;
+        let names = arms_named(source, "Method::");
+        assert_eq!(names, vec!["engine.execute".to_string()], "{names:?}");
+    }
+
+    /// A method that stands only in a comment is not a method.
+    ///
+    /// The methods the control channel accepts are read out of
+    /// `Method::as_str`, and an arm in a line comment is a sentence about an
+    /// arm. The comment's arm made the gate believe the channel had a method
+    /// it does not have, and the documents that list the methods were
+    /// reported as wrong. §159.
+    #[test]
+    fn a_method_in_a_comment_is_not_a_control_method() {
+        // A directory of its own: two tests that share one write over each
+        // other, and the tests run in parallel.
+        let dir = std::env::temp_dir().join(format!("craftkit-comment-methods-{}", std::process::id()));
+        let control = dir.join("crates/control/src");
+        std::fs::create_dir_all(&control).expect("the fabricated tree");
+        std::fs::write(
+            control.join("protocol.rs"),
+            r#"impl Method {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            // Method::Ghost => "doc.ghost",
+            Method::Execute => "engine.execute",
+        }
+    }
+}
+"#,
+        )
+        .expect("the fabricated code");
+
+        let names = control_methods(&dir).expect("the methods");
+        assert_eq!(names, vec!["engine.execute".to_string()], "{names:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The code view is the same length as the file.
+    ///
+    /// The gate reads the *shape* of a thing from the code and its
+    /// *contents* from the text, and it takes one from the other by
+    /// position. That only works if the two views are the same length, byte
+    /// for byte: a block comment's end, a string's contents and a character
+    /// that is more than one byte all have to keep their place. §155.
     #[test]
     fn the_code_view_is_the_same_length_as_the_file() {
         let source = "/* a comment */\n\

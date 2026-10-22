@@ -18224,6 +18224,142 @@ string is not the end of the item. `xtask/src/web.rs` has a `}` at the start
 of a line inside a raw string, and the cut ends there — so **eighteen test
 functions** in that file are read as production code. §160.
 
+## 159. Three gates that read names read their shape from the text, and a comment that shows a command is a command
+
+### The measurement
+
+Three gates read the tree's source for **names**: the registry's command ids
+(`registry_command_ids`), the control channel's wire names (`wire_names`, via
+`arms_named`) and the control channel's methods (`control_methods`). A name is
+a **string**, and there a string *is* the subject — §149's rule is about a
+mention *of* a name, not about the name itself.
+
+What the three gates had in common was that they read the **shape** from the
+text as well. A command id is an `id:` field, a wire name is a match arm, and
+a method is a match arm with a string for a value — and in the *text*, a
+comment shows all three exactly as well as code does.
+
+Measured, against the real gates on a copy of the tree, with the tree as it
+stands after §158 and with §159's fix in it:
+
+| Case | What was done | Before | After |
+|---|---|---|---|
+| control | the tree as it stands | **green** | **green** |
+| A | a command that stands only inside a block comment | **RED** — 2 false positives: *"AGENTS.md: line 205 says there are 23 commands, and there are 24"* | **green** |
+| B | a wire name that stands only inside a block comment, and a document's example that uses it | **green** — the example resolves to a method the channel does not have | **RED** — *"`doc.ghost` is not a control-channel method"* |
+| C | a method that stands only inside a line comment | **RED** — 4 false positives: the method is not in the table, and three documents are reported as naming the methods wrongly | **green** |
+| D-control | the recipe's table names a method the code does not have | **RED** — correct | **RED** — correct |
+| D | the same table, and the code has a **comment** that shows that method | **RED** — but the *wrong* complaint: two documents are reported for not naming a method that does not exist, and the table's false method is not reported at all | **RED** — *"the table lists `doc.ghost`, which is not a method the code has"* |
+
+Case A is the false positive: the registry was one command longer than it is,
+and two documents that say how many commands there are were told they were
+wrong.
+
+Case B is the false negative, and the sharpest one. The gate that says a
+document's example must resolve to a real method was satisfied by a
+**comment**: the example named `doc.ghost`, the code has no such method, and
+the gate said the example was fine.
+
+Case C is the false positive again, on the third of the three gates.
+
+Case D is the false negative on the third gate. The gate's verdict on the
+truth was wrong in both directions: it complained about two documents for not
+naming a method that does not exist, and it did not report that the table
+lists a method the code does not have.
+
+### The fix
+
+**The shape comes from the code and the contents from the text.** §155's
+rule, applied to three more gates:
+
+- `registry_command_ids` asks the **code view** whether a line is an `id:`
+  field, and the **text** what the id is.
+- `arms_named` asks the **code view** whether a line is a match arm — the
+  pattern of an arm is a string literal, and in the code view a literal is
+  blanked, so what is left of the pattern is the `|`s between the literals and
+  nothing else — and the **text** what the names are.
+- `control_methods` asks the **code view** whether a line of `Method::as_str`
+  has a string for a value — in the code view a literal is blanked, so what
+  is left of it is nothing — and the **text** what the name is.
+
+**The two views are paired by line number, not by position in a list.** A
+comment-only line is blank in the code view and not in the text, so the two
+lists of *lines* are not the same length; the two views are the same length
+in *lines*, so a line number is a position in both. `function_line_indices`
+returns the numbers, and `function_lines` is built on it.
+
+**Three unit tests**, each checked to fail when the rule it protects is taken
+out:
+
+| Test | What it holds |
+|---|---|
+| `a_command_id_in_a_comment_is_not_a_command_id` | an `id:` in a comment is not a command |
+| `a_wire_name_in_a_comment_is_not_a_wire_name` | an arm in a comment is not a wire name |
+| `a_method_in_a_comment_is_not_a_control_method` | an arm in a comment is not a method |
+
+**Three mutations**, each putting the old text-reading loop back.
+
+### The audit items 31 and 32 asked for
+
+Item 31 asked for the list of every gate that opens a Rust file, and a
+decision for each: is its subject production code, and does it say so? Item
+32 asked for the same list again, and for each gate which half of it is about
+the *shape* and which half is about what the code *says*. Here is the list,
+derived by walking the tree's own build tool rather than by memory:
+
+| Gate | How it reads the file | What it is about |
+|---|---|---|
+| `panic_boundaries_are_declared` | code view, production only | the shape |
+| `limits_are_enforced` | code view, production only | the shape |
+| `parameter_readers` | code view, production only | the shape |
+| `registry_commands` | code view | the shape |
+| `registry_command_ids` | code view for the shape, text for the id | a string that is the subject |
+| `wire_names` | code view for the shape, text for the names | strings that are the subject |
+| `control_methods` | code view for the shape, text for the names | strings that are the subject |
+| `the_tree_writes_its_json_with_one_writer` | code view, production only | the shape |
+| `the_shell_does_not_evaluate` | code view, production only | the shape |
+| `the_shell_does_not_write_the_document` | code view, production only | the shape |
+| `the_session_offers_no_second_path` | code view | the shape |
+| `the_file_cap_is_derived_from_the_designs_budget` | code view | the shape and the contents |
+| `the_memory_budgets_are_derived_from_the_models` | code view | the shape and the contents |
+| `the_byte_bounds_are_named_in_the_prose` | code view | the contents |
+| `prose_constants_match_the_code` | code view | the contents |
+| `fingerprint_sees_every_field` | code view | the shape and the contents |
+| `area_variants` | **the text** | the shape — still open |
+| `attributed_code_is_in_the_file` | **the text** | the contents — still open |
+| `check_roots` (the crate roots) | **the text** | the contents — still open |
+| `mod_groups` (the sorted `mod` lines) | **the text** | the shape — still open |
+
+Sixteen of the twenty read the code view; three of the three §159 found read
+the text; **four still read the text** and are item 35.
+
+### The lesson
+
+**A name is a string, and a string is the subject — but the *shape* around
+it is not.** "A mention in a string is not code" (§149) and "the string is
+the subject" (§155) are the same rule seen from two sides. A gate that reads
+a name has to say which side of the line each half of its reading is on,
+and three gates had not said it.
+
+**The shape of a thing can be read from a comment, and that is what a comment
+is for.** A block comment that shows a whole command is the clearest example
+of the shape of the thing in the tree — and it is a sentence, not a command.
+The gates that were wrong were not careless: they were reading a shape
+without asking whether they were looking at code.
+
+**Pair two views by position in the file, not by position in a list.** The
+code view and the text view have the same number of lines and not the same
+number of *non-empty* lines, because a comment-only line is blank in one and
+not in the other. A gate that pairs them by index has to pair them by line
+number.
+
+**A test's fixture directory has to be its own.** The new test for the third
+gate was written with the same temporary directory name as the test that was
+already there — `craftkit-methods-<pid>` — and the two tests write over each
+other, because the tests run in parallel and the pid is the same for both.
+The gate under test was reading the *other* test's fixture and reported a
+method that is in neither. The name is part of the test.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -18294,6 +18430,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A raw string's contents are not code** | `code_lines_kept` | 1 mutation — §158 |
 | **A raw string ends at its own delimiter** | `code_lines_kept` | 1 mutation — §158 |
 | **A byte string is a string** | `code_lines_kept` | 1 mutation — §158 |
+| **A command id in a comment is not a command** | the code view in `registry_command_ids` | 1 mutation — §159 |
+| **A wire name in a comment is not a wire name** | the code view in `arms_named` | 1 mutation — §159 |
+| **A method in a comment is not a control method** | the code view in `control_methods` | 1 mutation — §159 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -19293,3 +19432,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     brace matching in the **code view**, where a `}` inside a string is
     blanked and is not a brace — the way §157 found the end of a test-only
     method. §160.
+35. **Give the four gates that still read the tree's source as text the same
+    two-view treatment.** §159 took the shape of a thing from the code and
+    its contents from the text in three gates, and the audit that §159
+    recorded — the list items 31 and 32 asked for — found **four** gates
+    that still read the tree's source as text:
+    `area_variants` (the `Area` enum's variants, counted out of the text),
+    `attributed_code_is_in_the_file` (a document's claim that a piece of
+    code is in a file, checked against the file's text),
+    `check_roots` (the deny attribute every crate root must carry, read out
+    of the text) and `mod_groups` (the sorted `mod` lines). Each of them is
+    the same question in a different place: *is this line code, or is it a
+    sentence about code?* None of them has been measured yet — a claim in a
+    string satisfies `attributed_code_is_in_the_file`, and a `pub mod` inside
+    a string would be counted by `mod_groups`.

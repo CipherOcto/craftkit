@@ -4163,5 +4163,92 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the reader does not recognise a byte string" \
     "cargo test -p xtask --profile ci a_byte_string_is_a_string"
 
+# Three gates that read names read their shape from the text, and a comment
+# is a shape. Measured, against the real gates on a copy of the tree, with the
+# tree as it stands after section 158 and with section 159's fix in it:
+#
+#   * a command that stands only inside a block comment made the registry one
+#     command longer, and the two documents that say how many commands there
+#     are were reported as wrong -- two false positives.
+#   * a wire name that stands only inside a block comment made a document's
+#     example resolve to a method the control channel does not have: the gate
+#     that says a document's example must resolve was satisfied by a comment.
+#   * a method that stands only inside a line comment made the gate believe
+#     the channel had a method it does not have, and the three documents that
+#     list the methods were reported as wrong -- four false positives.
+#
+# The shape comes from the code and the contents from the text: a command id,
+# a wire name and a method name are strings, and there a string *is* the
+# subject. Section 159.
+
+swap xtask/src/lists.rs \
+    $'        let code = code_lines_kept(&text);
+        let lines: Vec<&str> = text.lines().collect();
+        for (number, code_line) in code.lines().enumerate() {
+            if !code_line.trim_start().starts_with("id:") {
+                continue;
+            }
+            let Some(line) = lines.get(number) else { continue };
+' \
+    $'        for line in text.lines() {
+            let Some(rest) = line.trim().strip_prefix("id: \\"") else { continue };
+'
+expect_catch "gate: the registry reads a command id out of a comment" \
+    "cargo test -p xtask --profile ci a_command_id_in_a_comment_is_not_a_command_id"
+
+swap xtask/src/lists.rs \
+    $'    let code = code_lines_kept(text);
+    let lines: Vec<&str> = text.lines().collect();
+    for (number, code_line) in code.lines().enumerate() {
+        let Some(arrow) = code_line.find("=>") else { continue };
+        // Only arms, not the function signature or a `=> return None` arm.
+        // The pattern of an arm is a string literal, and in the code view a
+        // literal is blanked, so what is left of the pattern is the `|`s
+        // between the literals and nothing else.
+        if !code_line[..arrow].replace(\'|\', "").trim().is_empty() {
+            continue;
+        }
+        if !code_line[arrow..].contains(marker) {
+            continue;
+        }
+        let Some(line) = lines.get(number) else { continue };
+' \
+    $'    for line in text.lines() {
+        let trimmed = line.trim_start();
+        // Only arms, not the function signature or a `=> return None` arm.
+        if !trimmed.starts_with(\'"\') {
+            continue;
+        }
+        let Some(arrow) = line.find("=>") else { continue };
+        if !line[arrow..].contains(marker) {
+            continue;
+        }
+'
+expect_catch "gate: the wire names read an arm out of a comment" \
+    "cargo test -p xtask --profile ci a_wire_name_in_a_comment_is_not_a_wire_name"
+
+swap xtask/src/lists.rs \
+    $'    let indices = function_line_indices(&code_lines, start);
+    let mut names = Vec::new();
+    for index in indices {
+        let Some(shape) = code_lines.get(index) else { continue };
+        let Some(line) = lines.get(index) else { continue };
+        let Some((_, literal)) = shape.trim().split_once("=>") else { continue };
+        // What is left of the value is nothing: it was a string.
+        if !literal.trim().trim_end_matches(\',\').trim().is_empty() {
+            continue;
+        }
+        let Some((_, literal)) = line.trim().split_once("=>") else { continue };
+' \
+    $'    let body = function_lines(&lines, start);
+    let mut names = Vec::new();
+    for line in &body {
+        let trimmed = line.trim();
+        let Some((_, literal)) = trimmed.split_once("=>") else { continue };
+        let literal = literal.trim().trim_end_matches(\',\').trim();
+'
+expect_catch "gate: the control methods read an arm out of a comment" \
+    "cargo test -p xtask --profile ci a_method_in_a_comment_is_not_a_control_method"
+
 restore
 finish

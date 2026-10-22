@@ -170,6 +170,24 @@ a reader made the gate report two commands reading a parameter called
 showed a whole command made it report a command that does not exist. The
 controls, with the same prose and no signature, were green.
 
+Three more gates are both, and had the shape half wrong: the registry's
+command ids, the control channel's wire names and the control channel's
+methods. A **name** is a string and there a string *is* the subject — but the
+*shape* around the name is code, and a comment shows that shape perfectly.
+A command that stands only inside a block comment made the registry one
+command longer and told two documents that they were wrong about how many
+commands there are; a method that stands only inside a line comment made
+the gate believe the channel had a method it does not have; and a wire name
+that stands only inside a block comment made a document's example resolve to
+a method that does not exist, so the gate that says an example must resolve
+was satisfied by a comment. §159.
+
+**Pair the two views by line number, not by position in a list.** A
+comment-only line is blank in the code view and not in the text, so the two
+lists of *lines* are not the same length — and a gate that zips them by
+index pairs the wrong lines. The two views have the same number of lines, so
+a line number is a position in both.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -265,6 +283,12 @@ let code = code_lines_kept(&text);
 - `a_raw_string_without_hashes_is_a_raw_string` — `r"…"` is a raw string
   too, and the view keeps the file's length.
 - `a_byte_string_is_a_string` — `b"…"` and `br"…"` are strings.
+- `a_command_id_in_a_comment_is_not_a_command_id` — an `id:` in a comment is
+  not a command.
+- `a_wire_name_in_a_comment_is_not_a_wire_name` — an arm in a comment is not
+  a wire name.
+- `a_method_in_a_comment_is_not_a_control_method` — an arm in a comment is
+  not a method.
 
 ## See also
 
