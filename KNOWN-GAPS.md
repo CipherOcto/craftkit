@@ -16161,6 +16161,229 @@ anyway.
 source, and it is the only thing that can tell a bounded writer of the
 tree's own from a bounded writer of its own.
 
+## 143. The recipe for adding a control-channel method taught the rule the tree had already reversed
+
+### The measurement
+
+`docs/recipes/add-a-control-channel-method.md` is the document an agent
+follows to add a method to the control channel. Its step 1 said:
+
+> The worked example here is real work this tree needs: all three `ui.*` names
+> parse to one variant, `Method::Ui`, and the action inside `params` is what
+> distinguishes them — `"render"`, `"screenshot"`, `"click"` and `"widgets"`.
+
+**That is the rule the tree had already reversed.** `Request::ui_action` says
+the opposite: *"The **method name decides**, and `params.action` is only
+consulted for the bare `ui`, which has no spelling of its own."* The reverse
+order is what §32 replaced, because the host used to read the action out of
+`params.action` and ignore the method the caller had typed — so
+`{"method":"ui.click","params":{"x":400,"y":12}}` rendered a 1180×720 PNG and
+answered `rendered 1180x720`, `ok: true`, and no click.
+
+The recipe then taught the implementation that would bring it back. It told the
+reader to add a variant:
+
+```rust
+pub enum Method {
+    // …
+    /// Render the current state off-screen, with no window.
+    Render,
+}
+```
+
+`Method` has **eight** variants and none of them is `Render`. The tree's
+`Method` is `Execute`, `Describe`, `State`, `Diagnostics`, `Crashes`, `Ui`,
+`Ping` and `Shutdown`, and `ui.render` is a **spelling of `Method::Ui`** —
+deliberately, and by a test: `the_ui_aliases_all_reach_one_method` names all
+four spellings and asserts they reach one method.
+
+And the recipe told the reader to change that test:
+
+> Removing `"ui.render"` from the alias group is the delicate part:
+> `the_ui_aliases_all_reach_one_method` names all four strings, so that
+> test has to be updated to the new truth in the same change.
+
+### What the instruction does to the tree
+
+So the recipe's six edits were applied to the tree, exactly as written: the
+variant, the `as_str` arm, the `parse` arm moved out of the alias group, the
+entry in `all()`, a dispatch arm, and the guard test edited to the "new
+truth".
+
+```text
+test result: FAILED. 58 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out
+failures:
+    server::tests::a_host_handler_answers_ui_instead_of_the_refusal
+    server::tests::the_change_hook_fires_for_ui_requests
+```
+
+**The two failures are not the test the recipe names.** The recipe says the
+delicate part is the alias group and the guard test; the recipe tells you to
+edit the guard test, and when you do, the tree is still broken — somewhere the
+recipe never mentions. `ui.render` stops reaching `Method::Ui`, so it stops
+reaching the **host**, and the host is the only thing that draws the frame.
+The reply becomes *"this build has no off-screen renderer"*, in an application
+that has one.
+
+And the application does not notice: `cargo test -p craftkit` is green,
+**27 passed, 0 failed**, because nothing in the app sends a `ui.render` over
+the control channel. Only two of the control crate's own tests send one, and
+they are the two that fail.
+
+The tree's own gate noticed something, and it was not the defect:
+
+```text
+error: 2 shared-list problem(s):
+   • docs/recipes/add-a-control-channel-method.md: cites `crates/control/src/protocol.rs:103`, …
+   • the control method `ui.render` is not in the table in docs/recipes/add-a-control-channel-method.md
+```
+
+The first of those is an artefact of the mutation shifting the file's lines. The
+second is real: `control_methods_are_listed` compares the recipe's **table**
+with the code's methods, so it noticed that `ui.render` had become a method of
+its own. It said nothing about the variant the recipe invented, and nothing
+about the sentence it taught.
+
+### Why nothing noticed
+
+**A symbol named in prose is not checked.** §130's gate checks `a::b` where
+the head is a **module**, and says in so many words that a *type* path
+(`Session::execute`) is *"not this check's business"*. §140's open item said
+the same thing from the other end: *"A method named in prose is still not
+checked."*
+
+**The recipe contradicted itself, forty lines apart.** The note above the
+worked example says *"A new spelling belongs in `UiAction::method` as well, or
+the name is decoration — which is how `ui.click` came to render instead of
+click"*, and *"Do not invent a ninth name where one of these fits"* — and then
+invents a ninth. The tree's `Method::all` has eight entries, and the note
+says so.
+
+**The citations were wrong in the way citations rot.** `crates/control/src/protocol.rs:57`
+was cited for `Method::parse`; line 57 is inside `as_str`, and `parse` is at
+line 64. `crates/control/src/protocol.rs:103` was cited for `Request::token`;
+line 103 is inside `UiAction`'s doc comment, and the field is at line 171.
+Neither was caught, because `citation_drift` only reports a citation that
+lands on **nothing** — a blank line or a lone brace — and both of these land
+on real lines that say something else. That is the gate's stated limit: *"A
+citation that lands on real code which says something else is not detectable
+by any tool."*
+
+**A limit named by a path is not a limit the limit-gate can see.** The gate
+that checks *"a limit in prose is the constant's value"* reads a backticked
+name that is **all capitals** — `MAX_ENTRIES` — and follows it with a number.
+In a sentence the whole span is the name, and `History::MAX_ENTRIES` is not
+all capitals: it is a *path*, so the gate skipped it and the value it claimed
+was never compared with anything. The tree has two constants of that name,
+128 in the engine's history and 256 in the engine's log, so the path was the
+only thing that could have told them apart.
+
+**A rule about a shape is not a rule about a symbol.** "The action inside
+`params` is what distinguishes them" is a sentence, and no gate can judge a
+sentence. The variant the sentence carried — `Method::Render` — was a symbol,
+and that could have been checked.
+
+### The fix
+
+**The recipe teaches the tree's control channel.** Its step 1 is now "Which
+shape is this?", and it says the two shapes out loud: a new **method** is a
+new variant of `Method`, in three places (`as_str`, `parse`, `all()`); a new
+**`ui.*` spelling** is *not* a new variant — it is an `UiAction`, in four
+places (`UiAction::parse`, `UiAction::as_str`, `UiAction::method`, and
+`Request::ui_action`). The rule is stated as the tree states it — the method
+name decides — with §32's reason attached. The guard is stated as a guard:
+**it grows, and it is never edited to let a spelling out.**
+
+Its step 2 no longer invents a dispatch arm. The `ui.*` family is not
+dispatched in the control crate at all; it is answered by the host, and the
+recipe says so and shows the shape. The size of a frame is the host's bound —
+`craftkit_ui::raster::MAX_SIZE` and `craftkit_ui::raster::MAX_PIXELS` — not a
+range check invented in the wrong crate, and the recipe says *that* too.
+
+**The citations are symbols now.** Three line numbers went; `Method::parse`,
+`Request::token` and `MAX_LINE` are named, with the file beside them. That is
+the tree's own convention: *"Prefer a symbol over a line number when you write
+one. `wasm::run` still means something next year; `wasm.rs:41` does not."*
+
+**And the other document that had the same defect.** `docs/architecture.md`
+said *"`History::MAX_ENTRIES` is 128 entries"*. There is no `History::MAX_ENTRIES`:
+the constant is module-level, `craftkit_engine::history::MAX_ENTRIES`, and the
+engine's **log** has a `MAX_ENTRIES` of its own — 256, not 128. The number
+was right and the name was not, and a reader who went looking for
+`History::MAX_ENTRIES` would find nothing.
+
+### What now holds it
+
+A gate — `unknown_type_paths` — and two mutations.
+
+The gate is the **twin of §130's `unknown_module_paths`**, and it is the thing
+§130's own comment left undone. The rule: a `Type::member` in prose, where
+`Type` is a type **this tree defines**, must name a member that type has — a
+variant, a field, an item of an `impl` block, or a method a derived trait
+provides.
+
+```text
+error: 5 shared-list problem(s):
+   • docs/architecture.md: line 220 names `History::MAX_ENTRIES`, and History has no member of that name
+   • docs/recipes/add-a-control-channel-method.md: line 124 names `Method::Render`, and Method has no member of that name
+   • docs/recipes/add-a-control-channel-method.md: line 126 names `Method::Render`, and Method has no member of that name
+   • docs/recipes/add-a-control-channel-method.md: line 143 names `Method::Render`, and Method has no member of that name
+   • docs/recipes/add-a-control-channel-method.md: line 205 names `Method::Render`, and Method has no member of that name
+```
+
+| Mutation | Caught by |
+|---|---|
+| prose: the recipe names a method the tree does not have | `cargo xtask lists` |
+| prose: a limit is named by a path the type does not have | `cargo xtask lists` |
+
+The second one is the one that matters more, because it proves the check is
+about the **tree's prose** and not about one document: it is the
+`docs/architecture.md` defect, put back.
+
+### What is still open
+
+**The gate checks that a member exists, not that a reader can reach it.**
+`docs/design/file-format.md` says *"`Document::next_id` is `#[serde(skip)]`"*.
+The field is **private**, so no reader can write that path; the public names
+are `Document::peek_next_id` and `Document::reseat_id_counter`. The gate
+accepts it, on purpose: a document about the tree's own internals may name a
+private field, and `Session::doc_mut` — which is `pub(crate)` — is named
+correctly in two other documents. Reachability is a judgement, and this gate
+does not make it.
+
+**A rule about a shape is still not checked.** The recipe's sentence about
+`params.action` was fixed by hand, because a sentence cannot be gated. What
+*could* be gated is the symbol the sentence carried, and that is now.
+
+**The exact-block gate still does not compare enums.** §140 left this open:
+*"The gate that compares code has to know every shape of code."* It compares
+functions, structs and statics; `Method` is an enum. The recipe no longer
+quotes one, so nothing depends on it today.
+
+### The lesson
+
+**A recipe that teaches a rule the tree has already reversed is worse than no
+recipe**, because it is read at the moment somebody is about to make the
+change. The tree had the fixed rule in `Request::ui_action`, in `UiAction`'s
+doc comment, and in a test named `the_ui_aliases_all_reach_one_method` — and
+the recipe said the opposite, in the imperative mood.
+
+**A gate that covers half of a path shape is a gate that looks complete.**
+§130's gate checks `a::b` and says, in its own comment, that a type path is
+"not this check's business". The type path was the business. The two halves
+were written by two people and the second one was left out.
+
+**A symbol in prose is checkable; a sentence is not.** The gate finds
+`Method::Render` and cannot find *"the action inside `params` is what
+distinguishes them"*. That is the right order to fix a document in — the
+symbol first, because it is the part a machine can hold, and the sentence
+second, because it is the part only a reader can judge.
+
+**The two halves of the `ui.*` family are held by different things.** The
+guard test holds the spellings together and the recipe held them apart, and
+the recipe was the one that was wrong. A guard test nobody has to change is
+worth more than a paragraph nobody has to read.
+
 ---
 
 ---
@@ -16499,6 +16722,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The design file's cap is the design's budget, not a number of its own** | `cargo xtask lists` | 1 mutation — §141 |
 | **A crash report of a design the model accepts can be read back** | `craftkit-engine` test | 1 mutation — §142 |
 | **The tree's JSON has one writer, and the places that write a design use it** | `cargo xtask lists` | 1 mutation — §142 |
+| **A type path in prose names a member the type has** | `cargo xtask lists` | 2 mutations — §143 |
+| **A `ui.*` spelling reaches `Method::Ui`, and the guard grows** | `the_ui_aliases_all_reach_one_method` | — |
+| **The recipe teaches the method name deciding, not `params.action`** | *nothing* | a sentence cannot be gated — §143 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -17105,3 +17331,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     about a big design; page the reply, which changes the protocol; or accept
     the size and say what it costs, which is item 21's question about a list
     that does not fit, asked of the whole reply rather than of one list.
+28. **Teach the exact-block gate about enums.** The gate that compares a
+    quoted block with the code it names reads **functions**, **structs** and
+    **statics** — §140 added the last — and nothing else. An enum is a fourth
+    shape, and the control channel's whole vocabulary is one: `Method` is an
+    enum, and §143's defect was a variant of it. A block marked `exact` that
+    quotes an enum is reported as *"quotes no code"*, so nothing may quote
+    one. The work is small — the variant names, in order, the way a struct's
+    fields are compared — and §140's lesson applies directly: *"The gate that
+    compares code has to know every shape of code."*

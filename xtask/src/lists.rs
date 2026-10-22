@@ -948,6 +948,497 @@ fn known_crate_roots(root: &Path) -> std::collections::BTreeSet<String> {
     names
 }
 
+/// The methods a derived trait puts on a type.
+///
+/// `#[derive(Clone)]` gives a type a `clone`, and prose that says
+/// `Document::clone` names something that exists. Without this table every
+/// mention of a derived method would be a false positive, and a gate that
+/// cries wolf is a gate nobody runs.
+const DERIVED_MEMBERS: &[(&str, &[&str])] = &[
+    ("Clone", &["clone"]),
+    ("Default", &["default"]),
+    ("Debug", &["debug"]),
+    ("PartialEq", &["eq", "ne"]),
+    ("PartialOrd", &["partial_eq", "partial_cmp"]),
+    ("Ord", &["cmp", "partial_eq", "partial_cmp"]),
+    ("Hash", &["hash"]),
+    ("From", &["from"]),
+    ("Into", &["into"]),
+    ("AsRef", &["as_ref"]),
+    ("Borrow", &["borrow"]),
+    ("Serialize", &["serialize"]),
+    ("Deserialize", &["deserialize"]),
+    ("Display", &["fmt", "to_string"]),
+    ("ToString", &["to_string"]),
+];
+
+/// A type path in prose that names a member the type does not have.
+///
+/// The twin of [`unknown_module_paths`]. §130 checked `a::b` — a path whose
+/// head is a **module** — and said, in so many words, that a *type* path
+/// (`Session::execute`) was "not this check's business". §143 is that
+/// business.
+///
+/// The defect it finds: `docs/recipes/add-a-control-channel-method.md` told an
+/// agent to add a `Method::Render` variant to the control channel. The tree
+/// has no such variant, and `ui.render` — the spelling the recipe was adding
+/// — already exists and deliberately reaches `Method::Ui`. An agent that
+/// follows the recipe splits the `ui.*` family, and `ui.render` stops
+/// reaching the host that draws the frame.
+///
+/// The rule: a `Type::member` in prose, where `Type` is a type **this tree
+/// defines**, must name a member that type has — a variant, a field, an item
+/// of an `impl` block, or a method a derived trait provides. A path whose
+/// head is another crate's type (`serde_json::Value`) is not this check's
+/// business, and neither is a module's path: that is §130's.
+pub fn unknown_type_paths(root: &Path) -> Result<Vec<String>, String> {
+    let types = tree_types(root);
+    let used = type_paths_in_code(root);
+    let own: BTreeSet<String> = TABLE.iter().map(|(name, _)| (*name).to_string()).collect();
+    let mut problems = Vec::new();
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let relative = relative_name(root, &doc);
+        for (line, ty, member, qualifier) in type_paths(&text) {
+            // A path into somebody else's crate is not this tree's business:
+            // `serde_json::Value::Number` names a variant of *serde's* value,
+            // and the tree's own `Value` has nothing to do with it.
+            if let Some(qualifier) = qualifier
+                && !own.contains(&path_root(&qualifier))
+            {
+                continue;
+            }
+            let Some(members) = types.get(&ty) else { continue };
+            if members.contains(&member) || used.contains(&format!("{ty}::{member}")) {
+                continue;
+            }
+            problems.push(format!(
+                "{relative}: line {line} names `{ty}::{member}`, and {ty} has no member of that name"
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The first segment of a dotted path: the crate it starts in.
+fn path_root(path: &str) -> String {
+    path.split("::").next().unwrap_or(path).to_string()
+}
+
+/// The types this tree defines, and the members each one has.
+///
+/// A member is an enum variant, a struct field, an item of an `impl` block, or
+/// a method a derived trait provides. Visibility is **not** part of it: a
+/// document about the tree's own internals may name a `pub(crate)` field, and
+/// a gate that flagged those would be flagging the documents that are most
+/// precise about how the tree works.
+fn tree_types(root: &Path) -> std::collections::BTreeMap<String, BTreeSet<String>> {
+    let mut types: std::collections::BTreeMap<String, BTreeSet<String>> = std::collections::BTreeMap::new();
+    for path in rust_files(root) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        collect_types_in(&strip_code(&text), &mut types);
+    }
+    types
+}
+
+/// Every `Type::member` the tree's own code writes, as `Type::member`.
+///
+/// A path the code writes is a path that exists — including the ones a
+/// derived trait provides and the ones a trait implementation supplies.
+fn type_paths_in_code(root: &Path) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    for path in rust_files(root) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        // The strings and the comments do not count: a doc comment that says
+        // `Method::Render` is describing something that is not there.
+        let code = code_lines_kept(&text);
+        for (_, ty, member, _) in type_paths(&code) {
+            found.insert(format!("{ty}::{member}"));
+        }
+    }
+    found
+}
+
+/// Every `Type::member` in `text`, as (line, type, member, qualifier).
+///
+/// The head must be an upper-case identifier — a tree type — and the member is
+/// the identifier after the `::`. A path whose head is lower case is a
+/// module's, and [`unknown_module_paths`] has it.
+///
+/// The **qualifier** is whatever came before the type: `Some("serde_json")`
+/// for `serde_json::Value::Number`, and `None` for a bare `Document::new`.
+/// It is what tells the tree's `Value` from serde's.
+fn type_paths(text: &str) -> Vec<(usize, String, String, Option<String>)> {
+    let bytes = text.as_bytes();
+    let mut found = Vec::new();
+    let mut at = 0usize;
+    while let Some(rel) = text[at..].find("::") {
+        let separator = at + rel;
+        let mut head = separator;
+        while head > 0 && is_word_byte(bytes[head - 1]) {
+            head -= 1;
+        }
+        let mut tail = separator + 2;
+        while tail < bytes.len() && is_word_byte(bytes[tail]) {
+            tail += 1;
+        }
+        let ty = &text[head..separator];
+        let member = &text[separator + 2..tail];
+        let head_is_a_type = ty.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+        let member_is_a_name = member.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if head_is_a_type && member_is_a_name {
+            let line = text[..head].matches('\n').count() + 1;
+            let qualifier = qualifier_before(text, head);
+            found.push((line, ty.to_string(), member.to_string(), qualifier));
+        }
+        at = separator + 2;
+    }
+    found
+}
+
+/// The path in front of a type, when there is one.
+///
+/// `serde_json::Value` is qualified by `serde_json`; a bare `Document` is not
+/// qualified at all.
+fn qualifier_before(text: &str, head: usize) -> Option<String> {
+    let before = text[..head].trim_end();
+    let before = before.strip_suffix("::")?;
+    let bytes = before.as_bytes();
+    let mut start = before.len();
+    while start > 0 && is_word_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start == before.len() {
+        return None;
+    }
+    Some(before[start..].to_string())
+}
+
+/// The types and members in one file of code.
+///
+/// The code has been stripped of its strings and comments already, so the
+/// braces in it are the braces that structure it.
+fn collect_types_in(code: &str, types: &mut std::collections::BTreeMap<String, BTreeSet<String>>) {
+    let bytes = code.as_bytes();
+    let mut at = 0usize;
+    let mut derives: Vec<String> = Vec::new();
+    while at < bytes.len() {
+        if !is_word_byte(bytes[at]) || bytes[at].is_ascii_digit() {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        while at < bytes.len() && is_word_byte(bytes[at]) {
+            at += 1;
+        }
+        let word = &code[start..at];
+        match word {
+            "derive" => derives = derive_traits(code, at),
+            "struct" | "enum" | "trait" => {
+                let Some(name) = next_identifier(code, at) else { continue };
+                let members = types.entry(name.to_string()).or_default();
+                for (trait_name, methods) in DERIVED_MEMBERS {
+                    if derives.iter().any(|d| d == trait_name) {
+                        for method in *methods {
+                            members.insert((*method).to_string());
+                        }
+                    }
+                }
+                derives.clear();
+                if let Some(body) = braced_body(code, at) {
+                    collect_members(&body, word, members);
+                }
+            }
+            "impl" => {
+                let Some((name, body_at)) = impl_self_type(code, at) else { continue };
+                let members = types.entry(name).or_default();
+                if let Some(body) = braced_body(code, body_at) {
+                    collect_items(&body, members);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The traits in a `#[derive(…)]`, as names.
+fn derive_traits(code: &str, at: usize) -> Vec<String> {
+    let bytes = code.as_bytes();
+    let mut i = at;
+    while i < bytes.len() && bytes[i] != b'(' {
+        if bytes[i] == b']' {
+            return Vec::new();
+        }
+        i += 1;
+    }
+    if i >= bytes.len() {
+        return Vec::new();
+    }
+    let end = code[i..].find(')').map(|n| i + n).unwrap_or(code.len());
+    code[i + 1..end].split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+}
+
+/// The identifier that starts at or after `at`.
+fn next_identifier(code: &str, at: usize) -> Option<&str> {
+    let bytes = code.as_bytes();
+    let mut i = at;
+    while i < bytes.len() && !is_word_byte(bytes[i]) {
+        i += 1;
+    }
+    let start = i;
+    while i < bytes.len() && is_word_byte(bytes[i]) {
+        i += 1;
+    }
+    if start == i {
+        return None;
+    }
+    Some(&code[start..i])
+}
+
+/// The body of the first braced block that starts at or after `at`.
+///
+/// A tuple struct has no braces of its own, and the block after it belongs to
+/// something else — so a `(` or a `;` first means there is no body.
+fn braced_body(code: &str, at: usize) -> Option<String> {
+    let bytes = code.as_bytes();
+    let mut i = at;
+    while i < bytes.len() && bytes[i] != b'{' {
+        if bytes[i] == b'(' || bytes[i] == b';' || bytes[i] == b',' {
+            return None;
+        }
+        i += 1;
+    }
+    if i >= bytes.len() {
+        return None;
+    }
+    let mut depth = 0i32;
+    let mut j = i;
+    while j < bytes.len() {
+        match bytes[j] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(code[i + 1..j].to_string());
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// The type an `impl` block is about, and where its body starts.
+///
+/// `impl Foo` is about `Foo`; `impl Trait for Foo` is about `Foo` as well —
+/// the trait is what the block implements, not what it is on.
+fn impl_self_type(code: &str, at: usize) -> Option<(String, usize)> {
+    let bytes = code.as_bytes();
+    let mut end = at;
+    while end < bytes.len() && bytes[end] != b'{' {
+        end += 1;
+    }
+    if end >= bytes.len() {
+        return None;
+    }
+    let header = &code[at..end];
+    let header = match header.split(" for ").nth(1) {
+        Some(after) => after,
+        None => header,
+    };
+    let mut i = 0usize;
+    let hb = header.as_bytes();
+    // A generic parameter list is not the type.
+    if i < hb.len() && hb[i] == b'<' {
+        let mut depth = 0i32;
+        while i < hb.len() {
+            match hb[i] {
+                b'<' => depth += 1,
+                b'>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        i += 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    while i < hb.len() && !is_word_byte(hb[i]) {
+        i += 1;
+    }
+    let start = i;
+    while i < hb.len() && is_word_byte(hb[i]) {
+        i += 1;
+    }
+    if start == i {
+        return None;
+    }
+    Some((header[start..i].to_string(), end))
+}
+
+/// The variants of an enum, or the fields of a struct.
+fn collect_members(body: &str, kind: &str, members: &mut BTreeSet<String>) {
+    for line in body.lines() {
+        let mut trimmed = line.trim();
+        for prefix in ["pub ", "pub(crate) "] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                trimmed = rest.trim_start();
+            }
+        }
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if kind == "enum" {
+            let name: String = trimmed.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                members.insert(name);
+            }
+        } else if let Some((name, _)) = trimmed.split_once(':') {
+            let name = name.trim();
+            if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                members.insert(name.to_string());
+            }
+        }
+    }
+}
+
+/// The items of an `impl` block: its functions, its constants, its types.
+fn collect_items(body: &str, members: &mut BTreeSet<String>) {
+    for line in body.lines() {
+        let mut trimmed = line.trim();
+        loop {
+            let mut stripped = false;
+            for prefix in ["pub ", "pub(crate) ", "async ", "unsafe ", "default ", "const "] {
+                if let Some(rest) = trimmed.strip_prefix(prefix) {
+                    trimmed = rest.trim_start();
+                    stripped = true;
+                }
+            }
+            if !stripped {
+                break;
+            }
+        }
+        for prefix in ["fn ", "const ", "type "] {
+            let Some(rest) = trimmed.strip_prefix(prefix) else { continue };
+            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if !name.is_empty() {
+                members.insert(name);
+            }
+        }
+    }
+}
+
+/// The source with its strings, char literals and comments blanked out.
+///
+/// The same length as the input, so every offset still points at the same
+/// thing — which is what makes it usable for counting braces. A **lifetime**
+/// is not a char literal: `fn f<'a>(x: &'a str)` has one, and treating it as
+/// a literal would swallow the rest of the file.
+fn strip_code(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(text.len());
+    let mut at = 0usize;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'/' if bytes.get(at + 1) == Some(&b'/') => {
+                while at < bytes.len() && bytes[at] != b'\n' {
+                    out.push(b' ');
+                    at += 1;
+                }
+            }
+            b'/' if bytes.get(at + 1) == Some(&b'*') => {
+                let mut depth = 0usize;
+                while at < bytes.len() {
+                    if bytes[at] == b'/' && bytes.get(at + 1) == Some(&b'*') {
+                        depth += 1;
+                        out.push(b' ');
+                        out.push(b' ');
+                        at += 2;
+                        continue;
+                    }
+                    if bytes[at] == b'*' && bytes.get(at + 1) == Some(&b'/') {
+                        depth -= 1;
+                        out.push(b' ');
+                        out.push(b' ');
+                        at += 2;
+                        if depth == 0 {
+                            break;
+                        }
+                        continue;
+                    }
+                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                    at += 1;
+                }
+            }
+            b'"' => {
+                out.push(b' ');
+                at += 1;
+                while at < bytes.len() {
+                    if bytes[at] == b'\\' {
+                        out.push(b' ');
+                        at += 1;
+                        if at < bytes.len() {
+                            out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                            at += 1;
+                        }
+                        continue;
+                    }
+                    if bytes[at] == b'"' {
+                        out.push(b' ');
+                        at += 1;
+                        break;
+                    }
+                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                    at += 1;
+                }
+            }
+            b'\'' => {
+                // A char literal, or a lifetime.
+                let literal = match bytes.get(at + 1) {
+                    Some(b'\\') => true,
+                    Some(_) => bytes.get(at + 2) == Some(&b'\''),
+                    None => false,
+                };
+                if !literal {
+                    out.push(b'\'');
+                    at += 1;
+                    continue;
+                }
+                out.push(b' ');
+                at += 1;
+                while at < bytes.len() {
+                    if bytes[at] == b'\\' {
+                        out.push(b' ');
+                        at += 1;
+                        if at < bytes.len() {
+                            out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                            at += 1;
+                        }
+                        continue;
+                    }
+                    if bytes[at] == b'\'' {
+                        out.push(b' ');
+                        at += 1;
+                        break;
+                    }
+                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                    at += 1;
+                }
+            }
+            byte => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Every `Cargo.toml` in the tree, except the ones in a build directory.
 fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -4060,6 +4551,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     Name a module this tree has, or drop the name.")),
     );
 
+    // A type path in prose, and the member it names. §143.
+    problems.extend(
+        unknown_type_paths(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     Name a member this type has, or drop the name.")),
+    );
+
     // The shell, and the evaluator it may read but not call. §132.
     problems.extend(
         the_shell_does_not_evaluate(root)?
@@ -4138,7 +4636,8 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              catches a panic is declared in the pattern document, every field the \
              fingerprint hashes is a field the model has, the control channel's \
              methods are the methods the prose lists, every module path in prose \
-             names a module this tree has, the shell never evaluates the \
+             names a module this tree has, every type path in prose names a \
+             member the type has, the shell never evaluates the \
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
@@ -5807,5 +6306,85 @@ printf '%s%d/%d caught.%s\\n' \\
         assert!(problems.is_empty(), "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A type path in prose must name a member the type has. §143.
+    ///
+    /// The recipe for adding a control-channel method told an agent to add a
+    /// `Method::Render` variant to a tree that has never had one, and to move
+    /// `ui.render` out of the group of spellings that reach `Method::Ui`. §143
+    /// is the twin of §130's module-path gate: §130 checked `a::b` and said in
+    /// so many words that a *type* path was "not this check's business".
+    #[test]
+    fn a_type_path_that_names_a_member_the_type_does_not_have_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            unknown_type_paths(&root).expect("runs").is_empty(),
+            "the tree's prose names a member a type does not have"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-type-paths-{}", std::process::id()));
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            dir.join("protocol.rs"),
+            "pub enum Method {\n    Ui,\n    Ping,\n}\n\
+             impl Method {\n    pub fn parse(s: &str) -> Option<Self> { None }\n}\n",
+        )
+        .expect("the fabricated source");
+
+        // The defect: a variant the tree has never had.
+        std::fs::write(docs.join("recipe.md"), "Add a `Method::Render` variant.\n")
+            .expect("the fabricated prose");
+        let problems = unknown_type_paths(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("Method::Render"), "{problems:#?}");
+
+        // A path into somebody else's crate is not this tree's business:
+        // `serde_json::Value::Number` names a variant of *serde's* value, and
+        // the tree has a `Value` of its own that has nothing to do with it.
+        std::fs::write(docs.join("recipe.md"), "Match `serde_json::Value::Number(n)`.\n")
+            .expect("the fabricated prose");
+        let problems = unknown_type_paths(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a member the type does have is not a problem.
+        std::fs::write(docs.join("recipe.md"), "Call `Method::parse`.\n").expect("the fabricated prose");
+        let problems = unknown_type_paths(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The scanner that reads the tree's types has to survive the things Rust
+    /// source is full of.
+    ///
+    /// A **lifetime** is not a char literal, and a brace inside a string is
+    /// not a brace. Both mistakes eat the rest of the file, and the gate then
+    /// believes a type has members it does not have.
+    #[test]
+    fn the_type_scanner_survives_lifetimes_strings_and_char_literals() {
+        let source = "pub struct Holder<'a> {\n    name: &'a str,\n}\n\
+                      impl<'a> Holder<'a> {\n    pub fn get(&self) -> &str { self.name }\n}\n\
+                      const OPEN: char = '{';\n\
+                      const CLOSE: char = '}';\n\
+                      // a comment with a } in it\n\
+                      pub fn quoted() -> &'static str { \"a } brace\" }\n";
+        let stripped = strip_code(source);
+        // The braces inside the string and the char literals are gone, and the
+        // lifetime is still a lifetime.
+        assert!(!stripped.contains("'{'"), "{stripped}");
+        assert!(!stripped.contains("'}'"), "{stripped}");
+        assert!(stripped.contains("'a"), "{stripped}");
+        assert!(!stripped.contains("a } brace"), "{stripped}");
+
+        let mut types: std::collections::BTreeMap<String, BTreeSet<String>> =
+            std::collections::BTreeMap::new();
+        collect_types_in(&stripped, &mut types);
+        let members = types.get("Holder").expect("the type");
+        assert!(members.contains("name"), "{members:?}");
+        assert!(members.contains("get"), "{members:?}");
+        // The functions after the string are still in the same file.
+        assert!(types.contains_key("Holder"), "{types:?}");
     }
 }

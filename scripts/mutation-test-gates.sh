@@ -113,6 +113,7 @@ readonly FILES=(
     xtask/src/doctor.rs
     xtask/src/lists.rs
     docs/recipes/add-a-command.md
+    docs/recipes/add-a-control-channel-method.md
     docs/recipes/add-an-icon.md
     docs/recipes/change-the-file-format.md
     docs/recipes/fix-a-crash.md
@@ -3601,6 +3602,30 @@ swap crates/engine/src/crash.rs \
     '    let text = serde_json::to_string(value).map_err(|e| format!("could not serialize: {e}"))?;
     out.extend_from_slice(text.as_bytes());'
 expect_catch "engine: the crash report is written with a writer of its own" \
+    "cargo xtask lists"
+
+# The recipe for adding a control-channel method told an agent to add a
+# `Method::Render` variant -- a variant the tree has never had -- and to move
+# `ui.render` out of the group of spellings that reach `Method::Ui`. Applied to
+# the tree, that splits the `ui.*` family and `ui.render` stops reaching the
+# host that draws the frame. The prose named a member the type does not have,
+# and nothing checked that. §143.
+swap docs/recipes/add-a-control-channel-method.md \
+    'Method::Ui => match ui {' \
+    'Method::Render => "ui.render",
+Method::Ui => match ui {'
+expect_catch "prose: the recipe names a method the tree does not have" \
+    "cargo xtask lists"
+
+# And the same defect somewhere else, so the check is about the tree's prose
+# and not about one document: a limit named by a path the type does not have.
+# `craftkit_engine::history::MAX_ENTRIES` is a module-level constant; there is
+# no `History::MAX_ENTRIES`, and the engine's log has a `MAX_ENTRIES` of its
+# own with a different value. §143.
+swap docs/architecture.md \
+    '`craftkit_engine::history::MAX_ENTRIES` is 128 entries' \
+    '`History::MAX_ENTRIES` is 128 entries'
+expect_catch "prose: a limit is named by a path the type does not have" \
     "cargo xtask lists"
 
 restore

@@ -217,11 +217,11 @@ had, and closing the file would lose the change without anything having said
 the file was unsaved. The flag is published to agents as *"safe to use as a
 probe"*, so it has to mean it. §96.
 
-The cost is bounded and measured rather than guessed: `History::MAX_ENTRIES` is
-128 entries, and each entry is a document of at most
-`craftkit_model::limits::MAX_NODES` (10 000) nodes. If that ever shows up in a
-profile, the fix is to raise the entry count and add a size cap — not to start
-inverting commands by hand.
+The cost is bounded and measured rather than guessed:
+`craftkit_engine::history::MAX_ENTRIES` is 128 entries, and each entry is a
+document of at most `craftkit_model::limits::MAX_NODES` (10 000) nodes. If that
+ever shows up in a profile, the fix is to raise the entry count and add a size
+cap — not to start inverting commands by hand.
 
 ## Incremental evaluation
 

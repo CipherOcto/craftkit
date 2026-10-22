@@ -24,8 +24,8 @@ and read
 control channel is a trust boundary, and every decision below follows from
 where that line is drawn.
 
-is green, and you have checked `Method::parse`
-(`crates/control/src/protocol.rs:57`) to confirm the name is genuinely unused.
+is green, and you have checked `Method::parse` in
+`crates/control/src/protocol.rs` to confirm the name is genuinely unused.
 
 ---
 
@@ -36,7 +36,7 @@ is green, and you have checked `Method::parse`
 1. **One JSON object per line, in and out.** The line is the frame. No length
    prefix, no header, so `nc 127.0.0.1 PORT` is a usable debugger and a
    transcript is readable. `MAX_LINE` is `craftkit_core::MAX_JSON_TEXT_BYTES`
-   (`crates/control/src/protocol.rs:21`); over that the connection is closed
+   (in `crates/control/src/protocol.rs`); over that the connection is closed
    (`ProtocolError::is_fatal`). That limit is on the **request** line: a
    reply is not capped, because a reply may be a picture — `ui.render` answers
    with a base64 PNG of the frame, measured at 4 008 255 bytes for a
@@ -55,7 +55,7 @@ is green, and you have checked `Method::parse`
 3. **A token per launch.** Written `0600` to
    `~/.local/share/craftkit/control/PORT.token`, or supplied in
    `CRAFTKIT_CONTROL_TOKEN`. Only the *first* request on a connection carries
-   it (`Request::token`, `crates/control/src/protocol.rs:103`); a connection
+   it (`Request::token`, in `crates/control/src/protocol.rs`); a connection
    that does not present it is closed without a reply, so a port scanner learns
    nothing. `CRAFTKIT_CONTROL_DIR` relocates the token file — and only the
    token *file*: a directory that was already there keeps the permissions its
@@ -96,39 +96,75 @@ is green, and you have checked `Method::parse`
 
 ## Steps
 
-### 1. Add the variant to `Method`
+### 1. Which shape is this?
 
-`Method` is a closed enum on purpose: a typo becomes an error naming the methods
-that do exist, instead of a dispatch that silently does nothing.
+There are **two** shapes, and they are not the same work.
 
-The worked example here is real work this tree needs: all three `ui.*` names
-parse to one variant, `Method::Ui`, and the action inside `params` is what
-distinguishes them — `"render"`, `"screenshot"`, `"click"` and `"widgets"`. That
-means an unknown action has to be reported by *name*, and the error has to say
-which actions exist, or an agent has nothing to correct.
+**A new method** — a new variant of `Method`. `Method` is a closed enum on
+purpose: a typo becomes an error naming the methods that do exist, instead of
+a dispatch that silently does nothing. Three places, and all three of them:
+
+- `Method::as_str` — the name on the wire,
+- `Method::parse` — the name coming back,
+- `Method::all` — the list an unknown method's error message offers.
+
+`every_method_round_trips_through_its_own_name` checks the first two. The
+third is what a typo is told to try, and a method that is not in `all()` is a
+method nobody is offered.
+
+**A new `ui.*` spelling** — **not** a new variant. `ui`, `ui.render`,
+`ui.screenshot` and `ui.click` all reach `Method::Ui`: one method, four
+spellings, and the spelling is what says which action is wanted.
+
+> **The method name decides.** `params.action` is consulted only for the bare
+> `ui`, which has no spelling of its own. The reverse order is what this
+> replaced, and the reason is worth reading: the host used to read the action
+> out of `params.action` and ignore the method the caller had typed, so
+> `{"method":"ui.click","params":{"x":400,"y":12}}` rendered a 1180×720 PNG and
+> answered `rendered 1180x720` — `ok: true`, no error, and no click. §32.
+
+Splitting the spellings into variants of their own brings that back.
+`ui.render` stops reaching the host that draws the frame, and answers a
+refusal instead — and only two of this crate's tests send a `ui.render`, so
+nothing else in the tree notices.
+
+> **The guard grows; it is never edited to let a spelling out.**
+> `the_ui_aliases_all_reach_one_method` names all four spellings and asserts
+> that they reach one method. A new spelling is **added** to it. Changing it
+> to let one out is how the family gets split.
+
+So a new spelling is an `UiAction`'s business, and there are four places:
+
+- `UiAction::parse` — the action's own name, `click` and the rest,
+- `UiAction::as_str` — the same name, the other way,
+- `UiAction::method` — the method spelling that asks for it on its own, or
+  `None` for an action that has no spelling of its own,
+- `Request::ui_action` — what the typed method means.
+
+`UiAction::method` returning `None` is not a gap waiting to be filled.
+`widgets` is the honest exception: it has always been spelled
+`{"method":"ui","params":{"action":"widgets"}}`, and a `ui.widgets` that
+`Method::parse` does not accept would be a name that resolves to nothing.
+
+The third of those four, as the tree has it:
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Method {
-    // …
-    /// Render the current state off-screen, with no window.
-    Render,
-}
+    /// The spelling of the method that asks for this action on its own, or `None`
+    /// for [`UiAction::Widgets`], which has always been spelled
+    /// `{"method":"ui","params":{"action":"widgets"}}`.
+    pub fn method(self) -> Option<&'static str> {
+        Some(match self {
+            UiAction::Render => "ui.render",
+            UiAction::Screenshot => "ui.screenshot",
+            UiAction::Click => "ui.click",
+            UiAction::Widgets => return None,
+        })
+    }
 ```
 
-Add the `as_str` arm, the `parse` arm, and the entry in `all()`. All three,
-or `every_method_round_trips_through_its_own_name` fails.
-
-```rust
-Method::Render => "ui.render",
-// …
-"ui.render" => Method::Render,   // moved out of the `"ui" | "ui.click" | …` arm
-```
-
-Removing `"ui.render"` from the alias group is the delicate part:
-`the_ui_aliases_all_reach_one_method` names all four strings, so that
-test has to be updated to the new truth in the same change.
+An unknown action is refused **by name**, and the refusal says which actions
+exist — otherwise an agent has nothing to correct. `hostile_ui_actions_are_refused_by_name`
+is the test that says so.
 
 To add an *alias* of an existing method instead, touch `parse` only — that is
 what the `ui.*` aliases do, and no other file changes.
@@ -140,27 +176,29 @@ what the `ui.*` aliases do, and no other file changes.
 the whole method layer testable without a socket.
 
 ```rust
-Method::Render => {
-    let width  = request.params.get("width").and_then(Json::as_u64).unwrap_or(1024);
-    let height = request.params.get("height").and_then(Json::as_u64).unwrap_or(768);
-    if !(16..=4096).contains(&width) || !(16..=4096).contains(&height) {
-        return Response::error(&request.id, "bad-parameter", "width and height must be 16..=4096");
-    }
-    // The off-screen renderer lives in the app, not in the engine. Until an app
-    // supplies one, say so — never return an empty success.
-    Response::error(
-        &request.id,
-        "no-renderer",
-        "this build has no off-screen renderer; run an app, or use `engine.execute`",
-    )
-}
-
-Method::Ui => Response::error(
-    &request.id,
-    "no-window",
-    "this process has no window, so `ui.click` cannot run; use `engine.execute`",
-),
+Method::Ping => Response::ok(&request.id, "pong", json!({ "at": session.at().raw() })),
 ```
+
+**The `ui.*` family is not dispatched here.** It is answered by the host,
+because only the host knows whether there is a window. The shape of that arm:
+
+```rust
+Method::Ui => match ui {
+    Some(handler) => handler(session, request),
+    None => Response::error(&request.id, "no-window", "this process has no window, so `ui.*` cannot run"),
+},
+```
+
+The tree's arm wraps the handler in a `catch_unwind` as well, because a panic
+in host code would otherwise drop the connection with no reply at all.
+
+**The size of a frame is the host's bound, not this crate's.** `ui.render` and
+`ui.screenshot` take a `width` and a `height`, and the limits are
+`craftkit_ui::raster::MAX_SIZE` (a side) and `craftkit_ui::raster::MAX_PIXELS`
+(the area). A method that turns a client-supplied number straight into an
+allocation is a denial of service on the process that holds the user's
+document — so the bound belongs to whoever draws, and it is a bound, not a
+range check invented here.
 
 Rules the surrounding code already follows:
 
@@ -168,11 +206,10 @@ Rules the surrounding code already follows:
   build a `Response` — `message`, `data` and `kind` are skipped when `None`, and
   clients depend on that shape.
 - **Errors carry a `kind`.** The kinds the engine produces come from
-  `EngineError::kind` (`crates/engine/src/error.rs:59`): `unknown-command`,
-  `disabled`, `bad-parameter`, `invalid-value`, `invalid-document`,
-  `cannot-evaluate`, `kernel`, `internal`. A method adds its own only when none
-  of those fit (`no-window`, `no-renderer`, `poisoned`, `not-found`,
-  `unknown-method`).
+  `EngineError::kind`: `unknown-command`, `disabled`, `bad-parameter`,
+  `invalid-value`, `invalid-document`, `cannot-evaluate`, `kernel`, `internal`.
+  A method adds its own only when none of those fit (`no-window`, `poisoned`,
+  `not-found`, `unknown-method`).
 - **Read params defensively, with a default and a range check.** Never
   `request.params["width"].as_u64().unwrap()` — the JSON is hostile input, and
   it reached you from a socket a port scanner found.
@@ -195,14 +232,15 @@ without a token.
 Two, and the second is the one that matters.
 
 **A. Protocol-level.** In `crates/control/src/protocol.rs`'s test module,
-beside `a_request_round_trips` (in `crates/mcp/src/rpc.rs`):
+beside `a_request_round_trips`:
 
 ```rust
 #[test]
 fn a_render_request_round_trips() {
     let line = r#"{"id":3,"method":"ui.render","params":{"width":640,"height":480}}"#;
     let req = parse_request(line).expect("parses");
-    assert_eq!(req.method(), Ok(Method::Render));
+    // `ui.render` is a spelling of `Method::Ui`, not a method of its own.
+    assert_eq!(req.method(), Ok(Method::Ui));
     assert_eq!(req.params["width"], json!(640));
 }
 ```
@@ -212,7 +250,7 @@ needs no socket, so this is a unit test:
 
 ```rust
 #[test]
-fn a_render_without_a_renderer_says_so_rather_than_returning_nothing() {
+fn a_ui_request_without_a_window_says_so_rather_than_returning_nothing() {
     let mut s = Session::sample();
     let req = Request { id: json!(3), token: None, method: "ui.render".into(), params: json!({}) };
     let r = dispatch(&mut s, &req);
@@ -220,29 +258,33 @@ fn a_render_without_a_renderer_says_so_rather_than_returning_nothing() {
     // names why. It is never an empty success.
     if !r.ok {
         let kind = r.kind.expect("a failure always names its kind");
-        assert!(matches!(kind, "no-renderer" | "bad-parameter" | "internal"), "{kind}");
+        assert!(matches!(kind, "no-window" | "bad-parameter" | "internal"), "{kind}");
         assert!(!r.message.expect("a message").is_empty());
     }
 }
+```
 
+**C. The spelling, refused by name.** In `crates/control/src/protocol.rs`'s test
+module, beside `hostile_ui_actions_are_refused_by_name`:
+
+```rust
 #[test]
-fn a_render_with_an_absurd_size_is_refused_rather_than_allocating_it() {
-    let mut s = Session::sample();
+fn a_ui_action_that_is_not_an_action_is_refused_by_name() {
     let req = Request {
-        id: json!(4), token: None, method: "ui.render".into(),
-        params: json!({ "width": 4_000_000, "height": 4_000_000 }),
+        id: json!(4), token: None, method: "ui".into(),
+        params: json!({ "action": "explode" }),
     };
-    let r = dispatch(&mut s, &req);
-    assert!(!r.ok);
+    let r = req.ui_action().expect_err("refused");
     assert_eq!(r.kind, Some("bad-parameter"));
+    assert!(r.message.expect("a message").contains("explode"));
 }
 ```
 
-The second of those two is the one that earns its place: a control channel is
-reachable by anything that finds the port, and a method that turns a
-client-supplied number straight into an allocation is a denial-of-service on the
-process that holds the user's document. `MAX_LINE` bounds the *line*; nothing
-bounds the *width* unless your code does.
+The second of those three is the one that earns its place: a control channel is
+reachable by anything that finds the port, and a method that answers
+`ok: true` without having done anything is how an agent comes to believe it
+clicked something. `MAX_LINE` bounds the *line*; nothing bounds the *answer*
+unless your code does.
 
 ### Why dispatch-level is the one that matters
 
@@ -256,7 +298,7 @@ transport.
 The assertion to copy is the *shape* of the failure: **a method must always
 answer, and an inability must always be named.** Compare
 `a_ui_method_without_a_window_says_so_rather_than_pretending`
-(`a_server_binds_a_free_port_when_asked_for_zero` in `crates/control/src/server.rs`), which exists for exactly this reason.
+(in `crates/control/src/server.rs`), which exists for exactly this reason.
 
 ---
 
