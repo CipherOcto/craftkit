@@ -16915,6 +16915,163 @@ was tested against structs because structs were what the first recipe quoted.
 
 ---
 
+## 147. The gate that read a limit in prose could only follow an expression it recognised
+
+### The measurement
+
+`xtask/src/lists.rs` holds the gate that keeps the tree's prose honest about
+its own limits: `prose_constants_match_the_code`. For each backticked span
+whose name is a constant, it looks for the **claimed value** in two places —
+the text right after the name (*"`MAX_NODES` 10 000"*) and the **next
+backticked span** (*"`MAX_LINE` is `1 << 20` bytes"*).
+
+The second place had a condition on it:
+
+```rust
+Some(next) if next.1.contains("<<") || next.1.contains('*') => next.1.trim(),
+_ => continue,
+```
+
+Two operators. Everything else — a division, an addition, a subtraction, a
+modulus — was a span the gate stepped over without reading it.
+
+**The tree makes such a claim today.** `docs/recipes/add-a-control-channel-method.md`
+says:
+
+> … the number is derived from a memory budget rather than chosen on its own:
+> `MAX_JSON_TEXT_BYTES` is `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION`.
+
+and the code says:
+
+```rust
+pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;
+```
+
+The claim is true, and nothing was holding it there. Measured, against the
+gate itself on the tree:
+
+| Mutation | What changed | The gate said |
+|---|---|---|
+| M1 | the code's divisor became `/ 16` | **green** — 0 problems |
+| M2 | the document's claim became `/ 16` | **green** — 0 problems |
+
+Both directions were unchecked: the document could have kept claiming a
+divisor the code no longer used, and the code could have changed the divisor
+while the document went on quoting the old one.
+
+**Three constants in the tree hold a value the gate cannot reach**, and one of
+them is quoted:
+
+| Constant | Value | File |
+|---|---|---|
+| `MAX_JSON_TEXT_BYTES` | `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` | `crates/core/src/lib.rs` |
+| `MAX_TRACE_BYTES` | `MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION` | `crates/engine/src/lib.rs` |
+| `TICKS_PER_FRAME_24` | `TICKS_PER_SECOND / 24` | `crates/core/src/tick.rs` |
+
+### Why nothing noticed
+
+**The condition was a guess about what an expression looks like.** `<<` and `*`
+were picked because they are the operators the tree's prose happened to use.
+`/` was left out — and `/` is also the separator in every file path in the
+tree, so widening the list to "any operator" would have been worse than the
+hole it closed.
+
+**A path is not an expression, and the tree's prose is full of paths.** Beside
+a constant's name the tree writes `crates/engine/src/commands.rs`,
+`xtask/src/layers.rs`, `crates/io/src/format/pending/`, `docs/architecture.md`,
+`KNOWN-GAPS.md` and `$XDG_DATA_HOME/craftkit/crashes`. Read as values, every
+one of them is a claim the tree does not make, and every one of them follows
+a name that **is** a constant:
+
+| Prose | The name | The span after it |
+|---|---|---|
+| `docs/agent-playbook.md:20` | `MAX_JSON_TEXT_BYTES` | `crates/model/src/document.rs` |
+| `docs/architecture.md:293` | `MAX_PATH_SEGMENTS` | `KNOWN-GAPS.md` |
+| `docs/recipes/add-an-icon.md:14` | `ALL` | `crates/ui/src/icons.rs` |
+| `docs/design/file-format.md:213` | `CURRENT` | `crates/io/src/format/pending/` |
+
+**And the sharpest one is an expression.** `docs/patterns/exact-time-not-float-seconds.md`
+says the range used to be `i128::MIN / 4` to `i128::MAX / 4`. The gate takes
+the last `::` segment of a span, so `u64::MAX` is the name **MAX** — and
+`craftkit_core::ids::MAX` is a real constant whose value is `(1 << 52) - 1`. A
+gate that learned to read any expression would have reported that sentence
+against the wrong constant, and the tree's own pattern document would have
+been the thing that broke.
+
+### The fix
+
+**A value is an expression whose operands are identifiers or numbers.** The
+new `expression_parts` splits a span into its operators and its operands and
+answers `None` when a token is neither — so `crates/core/src/lib.rs` is not an
+expression (its last segment is not an identifier), and `KNOWN-GAPS.md` is not
+one either.
+
+**A claim is a value that belongs to that constant.** `is_a_value_claim` asks
+two things: the candidate is an expression, and it either has **the same
+operators** as the code's value or **an operand in common** with it. The
+second test is what keeps the `u64::MAX` sentence out: `MAX`'s value is
+`(1 << 52) - 1` and the sentence's expression is `i128::MIN / 4` — different
+operators, and no operand in common.
+
+| Case | The code's value | The span | A claim? |
+|---|---|---|---|
+| `MAX_JSON_TEXT_BYTES` | `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` | the same | **yes** |
+| `MAX_JSON_TEXT_BYTES` | the same | `crates/model/src/document.rs` | no — not an expression |
+| `MAX` | `(1 << 52) - 1` | `i128::MIN / 4` | no — different operators, no shared operand |
+| `MAX` | `(1 << 52) - 1` | `crates/ui/src/icons.rs` | no — not an expression |
+
+The old `<<`/`*` acceptance stays, so the gate reaches no less than it did.
+
+**One more thing the gate got wrong while it was there.** When the code's
+value has no digit in it, `say_the_values` called it *"a re-export"* — so a
+report about `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` said the code says
+"a re-export". An expression with no digit in it is not a re-export.
+
+**Three unit tests**, each of which was checked to fail when the rule is
+broken, because a test that passes for the wrong reason is a test that has
+not been tested:
+
+| Test | What it holds | It fails when |
+|---|---|---|
+| `a_claimed_expression_the_gate_does_not_know_is_caught` | a `/` claim is held to the code | the rule is switched off |
+| `a_path_beside_a_constant_is_not_a_claim` | a path is a mention | the rule is applied blindly |
+| `an_expression_with_no_operand_in_common_is_not_a_claim` | `i128::MIN / 4` is not about `MAX` | the rule is applied blindly |
+
+**Two mutations**, in `scripts/mutation-test-gates.sh`: the code's divisor
+changes, and the document's claim changes. Both have to turn the gate red.
+
+**And a small hole the arc found in itself.** The gate reads the tree's
+constants out of the source *text*, so a test that fabricates a constant in a
+string literal fabricates one for the tree — and a fabricated constant can
+**mask** a real drift, because the gate accepts a claim that matches *any*
+value of that name. The test that fabricates `MAX_JSON_TEXT_BYTES` was written
+with a two-line string, which put a `pub const` at the left margin of the
+second line, and the gate duly reported the fabricated value beside the real
+one. It is one line now, with the newline as an escape.
+
+### The lesson
+
+**A gate that recognises a shape by a whitelist of operators knows the
+whitelist, not the shape.** The condition read `<<` or `*` and the tree's
+prose happened to use those; the day the tree derived a limit by division,
+the gate stopped reading. The shape was *"an expression"*, and the whitelist
+was an accident of what the tree had said so far.
+
+**A path and an expression are the same characters with different meanings.**
+`crates/core/src/lib.rs` and `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` differ
+by what the operands are, not by the operators between them — so the test has
+to look at the operands, and the operand test has to be the one that decides.
+
+**The sentence that looked like a defect was the sentence that saved the
+gate.** `docs/patterns/exact-time-not-float-seconds.md` says `i128::MIN / 4`
+beside a name the tree also uses. Without it, the obvious fix would have
+looked right and broken a document that was correct.
+
+**A fabricated constant in a test is a constant of the tree**, because the gate
+reads the source as text. That one was found by the message it produced —
+*"`MAX_JSON_MEMORY_BYTES / {divisor}` in xtask/src/lists.rs"* — which named a
+value no file in the tree has.
+
 ---
 
 ---
@@ -16965,6 +17122,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An exact block that quotes something the gate cannot compare is named** | `quoted_code_matches_the_source` | 1 mutation — §146 |
 | **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
+| **A limit in prose is the constant's value, whatever expression it is written as** | `prose_constants_match_the_code` | 2 mutations — §147 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -17902,3 +18060,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     The trace's own cap is not the whole story: §64 recorded that the crash
     replay's cost is quadratic in the number of steps, so a bigger trace buys
     a slower replay.
+30. **Decide how a limit that is a re-export is held to the prose.** §147
+    taught the limit-in-prose gate to follow an expression it did not
+    recognise, and closed the division it could not read. One shape is still
+    open: a limit whose value is a **qualified path**. The control channel's
+    `MAX_LINE` is `craftkit_core::MAX_JSON_TEXT_BYTES`, and
+    `docs/recipes/add-a-control-channel-method.md` says so — and the gate
+    cannot check it, because a path is written like the paths the tree's
+    prose puts beside a constant's name. Measured: twenty-two such mentions
+    follow a constant in the tree's documents, and **one** of them is a
+    claim; the rest are mentions ("derived from", "and the other two
+    readers"). Telling them apart needs to know what the sentence *says*,
+    and the tree's rule is that a sentence is not checkable. The choices are:
+    compare a path claim by its last segment (which catches a changed
+    qualifier but not a changed constant), write the claim in a form the gate
+    can read — the value in parentheses, as the limit-in-prose gate already
+    reads a number — or accept that a re-export is stated and not checked.

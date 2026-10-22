@@ -3727,5 +3727,27 @@ pub enum Area {
 expect_catch "prose: an exact block quotes something the gate cannot compare" \
     "cargo xtask lists"
 
+# And the limit the recipe derives by division. The gate that reads a limit in
+# prose followed only an expression holding "<<" or "*", so the recipe's claim
+# that MAX_JSON_TEXT_BYTES is MAX_JSON_MEMORY_BYTES / JSON_EXPANSION was never
+# compared with the code: measured, the divisor could change and the prose
+# would keep claiming the old one, and the gate said nothing. Section 147.
+#
+# The first mutation changes the divisor in the code. The prose still claims
+# the old expression, and the gate has to say so.
+swap crates/core/src/lib.rs \
+    'pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;' \
+    'pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / 16;'
+expect_catch "prose: a limit derived by division is not the constant's value" \
+    "cargo xtask lists"
+
+# The second changes the claim in the prose. The code says what it says, and
+# the document has to be held to it.
+swap docs/recipes/add-a-control-channel-method.md \
+    '`MAX_JSON_MEMORY_BYTES / JSON_EXPANSION`' \
+    '`MAX_JSON_MEMORY_BYTES / 16`'
+expect_catch "prose: a claim of division is not the constant's value" \
+    "cargo xtask lists"
+
 restore
 finish

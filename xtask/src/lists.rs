@@ -4278,8 +4278,21 @@ pub fn prose_constants_match_the_code(root: &Path) -> Result<Vec<String>, String
                 } else {
                     let next = spans.iter().find(|other| other.0 >= span.2);
                     match next {
-                        Some(next) if next.1.contains("<<") || next.1.contains('*') => next.1.trim(),
-                        _ => continue,
+                        Some(next) => {
+                            let candidate = next.1.trim();
+                            // The span is the constant's value only if it is
+                            // an expression the code could have written.
+                            // A path is not: `crates/core/src/lib.rs` sits
+                            // beside constant names all over the tree's
+                            // prose, and reading it as a value would turn a
+                            // mention into a claim. §147.
+                            let recognised = candidate.contains("<<") || candidate.contains('*');
+                            if !recognised && !is_a_value_claim(candidate, &values) {
+                                continue;
+                            }
+                            candidate
+                        }
+                        None => continue,
                     }
                 };
                 if claimed.is_empty() {
@@ -4329,7 +4342,15 @@ fn constants_in(source: &str) -> Vec<(String, String)> {
 fn say_the_values(values: &[(String, String)]) -> String {
     let mut parts = Vec::new();
     for (value, file) in values {
-        let shown = if value.chars().any(|c| c.is_ascii_digit()) { value.as_str() } else { "a re-export" };
+        // A value with an operator is an expression, and it is shown even when
+        // it has no digit in it: `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` is
+        // not a re-export. §147.
+        let expression = value.split_whitespace().any(is_an_operator);
+        let shown = if expression || value.chars().any(|c| c.is_ascii_digit()) {
+            value.as_str()
+        } else {
+            "a re-export"
+        };
         parts.push(format!("`{shown}` in {file}"));
     }
     parts.join(" or ")
@@ -4355,6 +4376,92 @@ fn numbers_agree(claimed: &str, value: &str) -> bool {
 fn expressions_agree(claimed: &str, value: &str) -> bool {
     let squeeze = |text: &str| text.chars().filter(|c| !c.is_whitespace()).collect::<String>();
     squeeze(claimed) == squeeze(value)
+}
+
+/// Whether the span is the constant's value, and not a mention beside it.
+///
+/// A span that follows a constant's name is a **claim** about that constant
+/// only if it could be the code's value for it. Two things decide that, and
+/// both are needed:
+///
+/// - the span has to be an expression at all — every operand an identifier
+///   or a number, so a path is not one;
+/// - and it has to be *this* constant's expression — the same operators, or
+///   an operand in common with it.
+///
+/// The second test is what keeps a path out. `docs/patterns/exact-time-not-
+/// float-seconds.md` says the range used to be `i128::MIN / 4` to
+/// `i128::MAX / 4`, and `craftkit_core::ids::MAX` is a real constant whose
+/// value is `(1 << 52) - 1`: the same shape would not save it, but no operand
+/// is in common, so the sentence is a mention and not a claim. §147.
+fn is_a_value_claim(claimed: &str, values: &[(String, String)]) -> bool {
+    let Some((claimed_operators, claimed_operands)) = expression_parts(claimed) else { return false };
+    for (value, _) in values {
+        let Some((value_operators, value_operands)) = expression_parts(value) else { continue };
+        let same_shape = value_operators == claimed_operators;
+        let shares = value_operands.iter().any(|operand| claimed_operands.contains(operand));
+        if same_shape || shares {
+            return true;
+        }
+    }
+    false
+}
+
+/// The operators and the operands of an expression.
+///
+/// `None` when the text is not an expression: every operand has to be an
+/// identifier or a number, so `crates/core/src/lib.rs` — whose last segment
+/// is not an identifier — is not one. The operands are keyed by their last
+/// `::` segment, so `craftkit_core::JSON_EXPANSION` and `JSON_EXPANSION` are
+/// the same operand.
+fn expression_parts(text: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let mut operators = Vec::new();
+    let mut operands = Vec::new();
+    for token in text.split_whitespace() {
+        if is_an_operator(token) {
+            operators.push(token.to_string());
+            continue;
+        }
+        let trimmed = token.trim_matches(|c| c == '(' || c == ')');
+        let key = operand_key(trimmed)?;
+        operands.push(key);
+    }
+    if operators.is_empty() {
+        return None;
+    }
+    Some((operators, operands))
+}
+
+/// Whether a token is an arithmetic operator.
+fn is_an_operator(token: &str) -> bool {
+    matches!(token, "*" | "/" | "+" | "-" | "%" | "<<" | ">>" | "&" | "|" | "^")
+}
+
+/// The key of an operand: its last `::` segment.
+///
+/// `None` when the token is not an identifier or a number.
+fn operand_key(token: &str) -> Option<String> {
+    if token.is_empty() {
+        return None;
+    }
+    let last = token.rsplit("::").next().unwrap_or(token);
+    if last.is_empty() {
+        return None;
+    }
+    if last.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '.')
+        && last.chars().any(|c| c.is_ascii_digit())
+    {
+        return Some(last.to_string());
+    }
+    let mut chars = last.chars();
+    let first = chars.next()?;
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return None;
+    }
+    if !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    Some(last.to_string())
 }
 
 /// Every Rust file in the tree.
@@ -5363,6 +5470,104 @@ mod tests {
         let problems = limits_are_enforced(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("MAX_UNUSED"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A claimed expression the gate does not recognise is still checked.
+    ///
+    /// The gate used to follow only an expression holding `<<` or `*`, so the
+    /// tree's own claim that `MAX_JSON_TEXT_BYTES` is
+    /// `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION` was never compared with the
+    /// code: the divisor could change and the prose would keep claiming the
+    /// old one. §147.
+    #[test]
+    fn a_claimed_expression_the_gate_does_not_know_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-claim-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/recipes");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        let source = |divisor: &str| {
+            // One physical line, with the newline as an escape: a string
+            // broken across two lines puts a "pub const" at the left margin
+            // of the second one, and the gate reads the tree's constants out
+            // of the source text — so a test that fabricates a constant
+            // would fabricate one for the tree. §147.
+            format!(
+                "pub const MAX_JSON_MEMORY_BYTES: usize = 32 * 1024 * 1024;\npub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / {divisor};"
+            )
+        };
+        std::fs::write(core.join("lib.rs"), source("JSON_EXPANSION")).expect("the fabricated source");
+        std::fs::write(
+            docs.join("claim.md"),
+            "The number is derived from a memory budget rather than chosen on its own: \
+             `MAX_JSON_TEXT_BYTES` is `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION`.\n",
+        )
+        .expect("the fabricated claim");
+
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        std::fs::write(core.join("lib.rs"), source("16")).expect("the fabricated source");
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_JSON_TEXT_BYTES"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A path beside a constant's name is a mention, not a claim.
+    ///
+    /// The tree's prose names a file beside a constant in dozens of places,
+    /// and a file path is not an expression: `crates/core/src/lib.rs` has no
+    /// operand in it that a constant could have written.
+    #[test]
+    fn a_path_beside_a_constant_is_not_a_claim() {
+        let dir = std::env::temp_dir().join(format!("craftkit-claim-path-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/recipes");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            core.join("lib.rs"),
+            "pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;\n",
+        )
+        .expect("the fabricated source");
+        std::fs::write(
+            docs.join("claim.md"),
+            "`MAX_JSON_TEXT_BYTES` is set in `crates/core/src/lib.rs`, and it is the limit.\n",
+        )
+        .expect("the fabricated mention");
+
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An expression with no operand in common is not a claim either.
+    ///
+    /// `docs/patterns/exact-time-not-float-seconds.md` says the range used to
+    /// be `i128::MIN / 4` to `i128::MAX / 4`, and `craftkit_core::ids::MAX` is
+    /// a real constant whose value is `(1 << 52) - 1`. The sentence is about
+    /// `i128::MAX`, not about the tree's constant, and the gate has to be
+    /// able to tell the two apart.
+    #[test]
+    fn an_expression_with_no_operand_in_common_is_not_a_claim() {
+        let dir = std::env::temp_dir().join(format!("craftkit-claim-mention-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(core.join("ids.rs"), "pub const MAX: u64 = (1 << 52) - 1;\n")
+            .expect("the fabricated source");
+        std::fs::write(
+            docs.join("mention.md"),
+            "The range is the one a reply can hold: `i64::MIN` to `u64::MAX`, the integers a JSON \
+             number holds. It was wider - `i128::MIN / 4` to `i128::MAX / 4` - and that broke it.\n",
+        )
+        .expect("the fabricated mention");
+
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
