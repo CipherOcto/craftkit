@@ -18450,6 +18450,177 @@ line. Counting the tree's raw strings for §158 found it in one line of
 output, and the defect it uncovered was already costing the tree eighteen
 test functions.
 
+## 161. Four gates still read the tree's source as text, and one of them paired a claim with a file it was never about
+
+§159 audited the gates that open a Rust file and found twenty of them.
+Sixteen read the code view; **four still read the text**: `area_variants`,
+`attributed_code_is_in_the_file`, `check_roots` and `mod_groups`. That was
+item 35, and item 35 asked the question §159 had already asked of three more
+gates: *is this line code, or is it a sentence about code?*
+
+The four are the same question in four places, and none of them had been
+measured — item 35 said so outright. Measuring them turned up **five**
+defects rather than four, because the fourth gate had a second one inside
+it, and the second one was in the tree's own prose.
+
+### What was measured
+
+Against the real gates, on a copy of the tree, with the gates as they were
+before this section and with the fix in them. Every case has a control: the
+same tree with the thing *really* wrong, so a gate that said no to everything
+would pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | a crate root's deny attribute moved inside a string | **green** — accepted | **red** — "no deny attribute" | red, both |
+| B | a `pub mod` line moved inside a raw string | **red** — "these `mod` lines are not sorted" | **green** | red, both |
+| C | a document's claim satisfied by a mention inside a string | **green** — accepted | **red** — names the claim | red, both |
+| D | an `Area` variant moved inside a block comment | **red** — "there are 7 areas, and there are 8" | **green** | red, both |
+| E | a claim on the far side of a clause boundary | **red** — two problems, one naming the wrong file | **red** — one problem, naming the right file | one problem, both |
+
+Two of the five were **false negatives** — the gate accepted something it
+should have rejected — and two were **false positives**, and both of those
+were false positives *in the tree*, on the tree's own files, over nothing but
+a string and a comment:
+
+- case B: the tree's own `xtask/src/lib.rs` was reported as unsorted,
+  because a `pub mod aardvark;` line inside a raw string counted as a
+  module. The gate named the tree's own file and told it to sort a line
+  that is not one.
+- case D: the tree's own `docs/patterns/everything-is-a-command.md` was
+  reported as saying the wrong number of areas, because a variant inside a
+  block comment counted as a variant.
+
+Case E is the odd one, and it is the reason this section has five defects in
+it and not four.
+
+### The first four: a mention in a string is a sentence about the code
+
+The four fixes are the same fix, in four places: **the gate asks the code
+view whether a line is code, and the text what the line says.**
+
+- `check_roots` looks for the tree's deny attribute, and it looked for the
+  attribute's **text**. A crate root whose attribute exists only inside a
+  string was accepted: the tree's rule is that every crate root carries the
+  attribute, and the gate could not tell an attribute from a sentence about
+  one. The same went for the `#![forbid(unsafe_code)]` beside it.
+- `mod_groups` reads the `mod` lines of a file to say whether they are
+  sorted, and it read them as text. A `pub mod` line inside a raw string is
+  a module in the gate's eyes — and the tree's own crate root has none, so
+  this was latent until it was measured.
+- `attributed_code_is_in_the_file` checks that the code a document claims is
+  in a file really is in that file, and it looked for the name in the file's
+  **text**. A mention inside a string satisfied the claim.
+- `area_variants` counts the `Area` enum's variants, and it counted them out
+  of the text. A line inside a block comment that looks like a variant name
+  counted as one, and the gate that says how many areas there are then said
+  the tree's own prose was wrong.
+
+### The fifth: a claim is about the file that *follows* it
+
+With the four fixed, the tree's lists gate went **red** — and the problem it
+reported was in the tree's own sentence in `skills/craftkit-editing/SKILL.md`:
+
+> the grammar is in the module doc of `crates/model/src/path.rs`; the listing
+> is `PropGroup::flatten` in `crates/model/src/property.rs`
+
+That is **one** claim, in two clauses. The gate made it **two**: it paired
+`PropGroup::flatten` with `crates/model/src/path.rs` as well as with
+`crates/model/src/property.rs`, and reported that `path.rs` does not have a
+`flatten` in it. It never claimed to.
+
+The gate paired a claim with the file on **either** side of it. Before this
+section the claim was checked against the file's *text*, and `path.rs` has a
+doc comment that says *"Used by `flatten`"* — so the wrong pair was satisfied
+by a comment, and the tree was green. Fixing the reader removed the luck and
+left the pairing standing there in the open.
+
+The fix is the direction §39's rule already uses for test names: **the claim
+comes first and the file follows it**, the way "the `X` in `f.rs`" reads.
+One rule for the tree, and a claim and a file on the far side of a clause
+boundary are no longer paired as if the document had said they belonged
+together.
+
+Measured on the tree's own documents, the gate made **twenty** claim pairs
+before this section and makes **sixteen** after. The four that went are the
+file-first pairs: two of them were pairs whose claim the gate still checks
+in the other direction (`ServerOptions::with_ui` and `Session::execute` are
+both claimed with their file twice), one was a claim whose file the
+document inherited from the previous clause and never named (`PropGroup::id`),
+and one was the false positive above. Nothing that the tree's documents
+actually claim about a file stopped being checked.
+
+### And the message named the wrong thing
+
+The report itself was wrong, and it was wrong in a way that made the defect
+harder to see. The gate built the file's code view into a variable called
+`code`, which **shadowed** the claim it was reporting about, and the message
+printed the shadowed one:
+
+> `skills/craftkit-editing/SKILL.md: line 291 says `<19 257 characters>` is
+> in `crates/model/src/path.rs`, and it is not`
+
+The 19 257 characters are the **whole of `path.rs`**, not the claim. A reader
+looking at that message has no way to tell which claim was wrong, because
+the message does not say. The view is called `view` now, and the message
+names the claim.
+
+### The unit tests
+
+Five, one for each defect, each checked to fail when the rule it protects is
+taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_deny_attribute_in_a_string_is_not_a_deny_attribute` | a deny attribute inside a string is not a deny attribute |
+| `a_mod_line_in_a_string_is_not_a_module` | a `pub mod` line inside a raw string is not a module |
+| `a_claim_satisfied_by_a_string_is_not_satisfied` | a mention inside a string does not satisfy a claim |
+| `a_variant_in_a_comment_is_not_a_variant` | a variant inside a block comment is not a variant |
+| `a_claim_after_a_clause_boundary_is_not_about_the_file_before_it` | a claim is not about the file on the other side of a clause boundary |
+
+**One of them passed for the wrong reason, and the mutation suite is what
+said so.** The first fixture was a crate root with the deny attribute inside
+a string and **no `forbid` attribute**, so the gate complained about the
+missing `forbid` whether the deny attribute was there or not — and the test
+could not tell the two apart. The mutation that puts the text-reading back
+was **missed**: the test still passed, for the wrong reason. The fixture now
+carries the `forbid` attribute, and the test asserts that the *only* thing
+wrong with the crate root is the deny attribute. A test that passes for the
+wrong reason is a gate that has not been tested.
+
+### The mutations
+
+Five, each putting the old rule back.
+
+### The lesson
+
+**A gate that reads a file has to say which half of its reading is about the
+shape and which is about what the file says.** §159 found three gates that
+did not; §161 found four more, and the four are the four that the audit had
+already named. The audit was worth writing down: §159's list of twenty is
+what made it possible to ask the question of the four, and §161's list of
+five cases is what made it possible to *answer* it.
+
+**Fixing a reader can expose the defect it was hiding.** The pairing rule
+was wrong before this section and wrong after it; the difference is that the
+text-reading had been covering for it, with a doc comment in `path.rs` that
+mentioned `flatten` in passing. A gate can be wrong in two ways at once and
+only one of them shows. The rule that caught it was §149's: *a mention in a
+string is not code* — applied to the reader, it made the gate's other
+mistake visible.
+
+**A claim and a file are in the same clause or they are not in each other.**
+Prose attributes code to a file the way a sentence does: "`X` in `f.rs`".
+Two backticked spans forty characters apart are not a claim, and a claim on
+the far side of a semicolon is about the file that follows it. The gate had
+been pairing on proximity alone, and proximity is not attribution.
+
+**A message that names the wrong thing is a gate nobody can act on.** The
+shadowed variable was not a wrong answer — the answer was right — but it
+named 19 257 characters of the file instead of the eighteen characters of
+the claim, and a report nobody can read is a report nobody reads.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -18826,6 +18997,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | `ui.click` reports, it does not act | `click_message` | 1 mutation — §17, §32 |
 | No commercial product's data, code or artwork | *nothing* | a gate cannot read provenance |
 | Independent of any other project's source | *nothing* | a process, not a check |
+| **A deny attribute inside a string is not a deny attribute** | the code view in `check_roots` | 1 mutation — §161 |
+| **A `mod` line inside a string is not a module** | the code view in `mod_groups` | 1 mutation — §161 |
+| **A mention inside a string does not satisfy a claim** | the code view in `attributed_code_is_in_the_file` | 1 mutation — §161 |
+| **A variant inside a comment is not a variant** | the code view in `area_variants` | 1 mutation — §161 |
+| **A claim is about the file that follows it** | the direction in `attributed_code_is_in_the_file` | 1 mutation — §161 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -19523,20 +19699,27 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     brace matching in the **code view**, where a `}` inside a string is
     blanked and is not a brace — the way §157 found the end of a test-only
     method. §160.
-35. **Give the four gates that still read the tree's source as text the same
-    two-view treatment.** §159 took the shape of a thing from the code and
-    its contents from the text in three gates, and the audit that §159
-    recorded — the list items 31 and 32 asked for — found **four** gates
-    that still read the tree's source as text:
-    `area_variants` (the `Area` enum's variants, counted out of the text),
-    `attributed_code_is_in_the_file` (a document's claim that a piece of
-    code is in a file, checked against the file's text),
-    `check_roots` (the deny attribute every crate root must carry, read out
-    of the text) and `mod_groups` (the sorted `mod` lines). Each of them is
-    the same question in a different place: *is this line code, or is it a
-    sentence about code?* None of them has been measured yet — a claim in a
-    string satisfies `attributed_code_is_in_the_file`, and a `pub mod` inside
-    a string would be counted by `mod_groups`.
+35. ~~**Give the four gates that still read the tree's source as text the
+    same two-view treatment.**~~ **Done, and it found five defects rather
+    than four.** §159 took the shape of a thing from the code and its
+    contents from the text in three gates, and the audit that §159 recorded
+    — the list items 31 and 32 asked for — found **four** gates that still
+    read the tree's source as text: `area_variants` (the `Area` enum's
+    variants, counted out of the text), `attributed_code_is_in_the_file` (a
+    document's claim that a piece of code is in a file, checked against the
+    file's text), `check_roots` (the deny attribute every crate root must
+    carry, read out of the text) and `mod_groups` (the sorted `mod` lines).
+    **§161** measured all four and found two false negatives and two false
+    positives — the tree's own `xtask/src/lib.rs` reported as unsorted and
+    the tree's own `docs/patterns/everything-is-a-command.md` reported as
+    saying the wrong number of areas, both over a string and a comment. The
+    fifth defect came out of the fix: the gate paired a claim with the file
+    on *either* side of it, and the tree's own sentence in
+    `skills/craftkit-editing/SKILL.md` — "the grammar is in `path.rs`; the
+    listing is `PropGroup::flatten` in `property.rs`" — is one claim that the
+    gate read as two. The claim is now paired with the file that *follows*
+    it, the way §39's rule pairs a test with its file. Five unit tests, five
+    mutations.
 36. **Decide what a file under a `tests/` directory is.** The tree's cut
     removes a file's *test items* — a `mod tests { … }` block, a top-level
     `#[cfg(test)]` item, a test-only method — and a file under a `tests/`
@@ -19552,3 +19735,30 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     treats a file under a `tests/` directory as a test file, the gates that
     walk the tree skip those directories, or the tree says a `tests/` file is
     production code and means it.
+37. **Match a claim's name as a name, not as a piece of a longer word.** The
+    gate that says the code a document claims is in a file asks whether the
+    method is in that file, and it answers with a **substring** test:
+    `code.contains(name)`. A name that appears only inside a longer
+    identifier satisfies the claim. Measured after §161: a document claiming
+    that `Ghost::serve` is in `crates/core/src/ids.rs` was **accepted** —
+    `ids.rs` has `pub fn observe(...)` and no `serve` — while the control,
+    with a name that is nowhere at all, was reported by both. The name has
+    to be matched as an identifier: preceded, and followed, by something that
+    is not part of one. (The tree already asks the question twice in two
+    places with two different rules: `defines` looks for `fn <name>`, which
+    matches `fn servex`, and this gate looks for `<name>`, which matches
+    `observe`. Neither asks whether the name is a name.)
+38. **Put `Cargo.lock` in the mutation script's snapshot.** The script's
+    `FILES` list is a contract — a mutation outside it is refused, because
+    the script could not put it back — and `Cargo.lock` is not on it. One of
+    the cases adds `egui` to `crates/model/Cargo.toml`, and cargo then
+    rewrites the lock file; the restore puts the manifest back and leaves
+    the lock file alone. Measured: with `egui` in that manifest, cargo
+    rewrites `Cargo.lock` to list `egui` as a dependency of `craftkit-model`
+    — a claim that is false — and the restore does not touch it. The
+    fingerprint never looks at it either, so the script's **"Tree
+    unchanged"** line is not a claim about it. The drift is corrected by the
+    next cargo run, so a full suite ends with the lock file right; what is
+    open is that the tree is not what the script says it is *between* cases,
+    and the script cannot see it. The fix is one line — `Cargo.lock` in
+    `FILES` — and the fingerprint then covers it as well.

@@ -197,6 +197,67 @@ lists of *lines* are not the same length — and a gate that zips them by
 index pairs the wrong lines. The two views have the same number of lines, so
 a line number is a position in both.
 
+## And the audit finds the gates that forgot
+
+The rule above is easy to state and easy to forget, so it has to be checked
+rather than remembered. §159 listed **every** gate that opens a Rust file —
+twenty of them — and said for each whether it reads the code view or the
+text. Sixteen did; **four still read the text**:
+
+| Gate | What it was reading the text for |
+|---|---|
+| `area_variants` | the `Area` enum's variants, counted out of the text |
+| `attributed_code_is_in_the_file` | a document's claim, checked against the file's text |
+| `check_roots` | the deny attribute every crate root must carry |
+| `mod_groups` | the sorted `mod` lines |
+
+They are the same question in four places — *is this line code, or is it a
+sentence about code?* — and §161 measured all four. Two were **false
+negatives** (a crate root whose deny attribute stood only in a string was
+accepted; a document's claim satisfied by a mention inside a string was
+accepted) and two were **false positives** on the tree's own files: the
+tree's `xtask/src/lib.rs` was reported as unsorted because a `pub mod` line
+inside a raw string counted as a module, and the tree's
+`docs/patterns/everything-is-a-command.md` was reported as saying the wrong
+number of areas because a variant inside a block comment counted as one.
+
+The list is the point. §159's audit is what made it possible to ask the
+question of the four, and the four are the four the audit had already named.
+
+## And a claim and a file are in the same clause
+
+A gate that reads **prose** has the same problem in a different place: prose
+is made of sentences, and a sentence can hold more than one claim.
+
+The gate that says the code a document claims is in a file reads two
+backticked spans out of a paragraph — the claim, and the `*.rs` path — and
+pairs them. The first version paired them in **either** direction, on
+proximity alone: two spans forty characters apart were a claim and a file,
+whether the document had said so or not.
+
+The tree's own sentence in `skills/craftkit-editing/SKILL.md` is the
+counter-example:
+
+> the grammar is in the module doc of `crates/model/src/path.rs`; the listing
+> is `PropGroup::flatten` in `crates/model/src/property.rs`
+
+One claim, in two clauses. The gate made it **two**, and reported that
+`path.rs` does not have a `flatten` in it — a file that never claimed to.
+It was green before, because the claim was checked against the file's
+*text* and `path.rs` has a doc comment that mentions `flatten` in passing:
+fixing the reader removed the luck and left the pairing standing there in
+the open.
+
+The rule is the one §39's rule already uses for test names: **the claim comes
+first and the file follows it**, the way "the `X` in `f.rs`" reads. One rule
+for the tree.
+
+And the report has to name the **claim**. The gate built the file's code
+view into a variable called `code`, which shadowed the claim it was
+reporting about, and the message printed nineteen thousand characters of the
+file instead of the eighteen characters of the claim. A report nobody can
+read is a report nobody reads.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -300,6 +361,16 @@ let code = code_lines_kept(&text);
   not a method.
 - `a_brace_in_a_string_does_not_end_a_test_module` — a `}` inside a string
   does not end a test item.
+- `a_deny_attribute_in_a_string_is_not_a_deny_attribute` — a deny attribute
+  inside a string is not a deny attribute.
+- `a_mod_line_in_a_string_is_not_a_module` — a `pub mod` line inside a raw
+  string is not a module.
+- `a_claim_satisfied_by_a_string_is_not_satisfied` — a mention inside a
+  string does not satisfy a claim.
+- `a_variant_in_a_comment_is_not_a_variant` — a variant inside a block
+  comment is not a variant.
+- `a_claim_after_a_clause_boundary_is_not_about_the_file_before_it` — a
+  claim is about the file that follows it, not the one before it.
 
 ## See also
 

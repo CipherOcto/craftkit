@@ -302,10 +302,13 @@ fn area_variants(root: &Path) -> Result<usize, String> {
     let path = root.join("crates/engine/src/command.rs");
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let Some(start) = text.find("pub enum Area {") else {
+    // The variants are **code**: a variant name inside a string is not a
+    // variant, and a `}` inside a string does not end the enum. §161.
+    let code = code_lines_kept(&text);
+    let Some(start) = code.find("pub enum Area {") else {
         return Err("the engine has no `Area` enum".to_string());
     };
-    let body = &text[start..];
+    let body = &code[start..];
     let end = body.find("\n}").unwrap_or(body.len());
     let variants = body[..end]
         .lines()
@@ -3389,7 +3392,10 @@ pub fn check_roots(roots: &[std::path::PathBuf]) -> Vec<String> {
                 continue;
             }
         };
-        match normalise(&body) {
+        // The attribute is **code**: a crate root that has the deny
+        // attribute's text inside a string has not got the attribute. §161.
+        let code = code_lines_kept(&body);
+        match normalise(&code) {
             None => problems.push(format!(
                 "{}: no deny attribute.\n     Add this at the top of the file:\n{}\n     It must deny exactly these lints: {}",
                 path.display(),
@@ -3404,7 +3410,7 @@ pub fn check_roots(roots: &[std::path::PathBuf]) -> Vec<String> {
                 DENY.lines().map(|l| format!("     {l}")).collect::<Vec<_>>().join("\n"),
             )),
         }
-        if !body.contains(FORBID) {
+        if !code.contains(FORBID) {
             problems.push(format!("{}: no `#![forbid(unsafe_code)]`.\n     Add: {FORBID}", path.display()));
         }
     }
@@ -3671,9 +3677,14 @@ pub fn package_name(manifest: &str) -> String {
 
 /// The `mod x;` lines of one file, split into groups by blank lines or comments.
 pub fn mod_groups(source: &str) -> Vec<Vec<String>> {
+    // The **names** come from the code: a `pub mod` inside a string is not a
+    // module. The groups are still the text's blank lines, because a
+    // comment ends a group in both views. §161.
+    let view = code_lines_kept(source);
+    let code: Vec<&str> = view.lines().collect();
     let mut groups: Vec<Vec<String>> = Vec::new();
     let mut current: Vec<String> = Vec::new();
-    for line in source.lines() {
+    for (number, line) in source.lines().enumerate() {
         let line = line.trim();
         if line.is_empty() || line.starts_with("//") {
             if !current.is_empty() {
@@ -3681,12 +3692,13 @@ pub fn mod_groups(source: &str) -> Vec<Vec<String>> {
             }
             continue;
         }
-        let rest = line.strip_prefix("pub mod ").or_else(|| line.strip_prefix("mod ")).unwrap_or("");
-        {
-            let name = rest.split(';').next().unwrap_or("").trim().to_string();
-            if !name.is_empty() {
-                current.push(name);
-            }
+        let Some(code_line) = code.get(number) else { continue };
+        let code_line = code_line.trim();
+        let rest =
+            code_line.strip_prefix("pub mod ").or_else(|| code_line.strip_prefix("mod ")).unwrap_or("");
+        let name = rest.split(';').next().unwrap_or("").trim().to_string();
+        if !name.is_empty() {
+            current.push(name);
         }
     }
     if !current.is_empty() {
@@ -4357,6 +4369,15 @@ fn nearest_rust_path_before(paragraph: &str, at: usize) -> Option<String> {
 /// - `Type::method` — the method must be in that file.
 /// - a statement, ending in `;` — the statement must be a line of that file.
 ///
+/// The claim comes **first** and the file follows it, the way "the `X` in
+/// `f.rs`" reads — the same direction §39's rule uses for test names. The
+/// first version of this rule also paired the other way round, and a claim
+/// and a file on the far side of a clause boundary were paired as if the
+/// document had said they belonged together. §161.
+///
+/// The claim is checked against the file's **code**: a mention inside a
+/// string or a comment is a sentence about the code, not the code. §161.
+///
 /// §39's rule is the same shape for test names, and deliberately narrower: a
 /// test name is a *name*, a `Type::method` is a *place*.
 pub fn attributed_code_is_in_the_file(root: &Path) -> Result<Vec<String>, String> {
@@ -4372,24 +4393,43 @@ pub fn attributed_code_is_in_the_file(root: &Path) -> Result<Vec<String>, String
                 if gap > 40 {
                     continue;
                 }
-                for (code, file) in [(left.1, right.1), (right.1, left.1)] {
-                    if !file.ends_with(".rs") || !file.contains('/') {
-                        continue;
-                    }
-                    let Some(claim) = code_claim(code) else { continue };
-                    let path = root.join(file);
-                    let Ok(body) = std::fs::read_to_string(&path) else { continue };
-                    let present = match &claim {
-                        Claim::Method(name) => body.contains(name.as_str()),
-                        Claim::Statement(line) => body.lines().any(|l| l.trim() == line),
-                    };
-                    if present {
-                        continue;
-                    }
-                    let at = number + paragraph[..left.0].bytes().filter(|b| *b == b'\n').count();
-                    problems
-                        .push(format!("{relative}: line {at} says `{code}` is in `{file}`, and it is not"));
+                // The claim comes **first** and the file follows it, the way
+                // "the `X` in `f.rs`" reads. The first version also paired the
+                // other way round, and a claim on the far side of a clause
+                // boundary was paired with a file it was never about: the
+                // tree's own "the grammar is in `path.rs`; the listing is
+                // `PropGroup::flatten` in `property.rs`" is one claim, and
+                // the gate read it as two. §161.
+                let (code, file) = (left.1, right.1);
+                if !file.ends_with(".rs") || !file.contains('/') {
+                    continue;
                 }
+                let Some(claim) = code_claim(code) else { continue };
+                let path = root.join(file);
+                let Ok(body) = std::fs::read_to_string(&path) else { continue };
+                // The claim is about **code**: a mention inside a string or a
+                // comment is a sentence about the code, not the code. §161.
+                //
+                // The view is called `view` and not `code`: the first version
+                // shadowed the claim with it, so the message said the file
+                // "says `<the whole file>` is in `<the file>`" and named
+                // 19 000 characters of the wrong thing. §161.
+                let view = code_lines_kept(&body);
+                let present = match &claim {
+                    Claim::Method(name) => view.contains(name.as_str()),
+                    Claim::Statement(line) => {
+                        // The claim is blanked the same way the file is, so a
+                        // statement with a string in it still matches the line
+                        // it quotes.
+                        let wanted = code_lines_kept(line);
+                        view.lines().any(|l| l.trim() == wanted.trim())
+                    }
+                };
+                if present {
+                    continue;
+                }
+                let at = number + paragraph[..left.0].bytes().filter(|b| *b == b'\n').count();
+                problems.push(format!("{relative}: line {at} says `{code}` is in `{file}`, and it is not"));
             }
         }
     }
@@ -6574,6 +6614,133 @@ fn also_production() {}
         assert!(!production.contains("PAGE"), "{production}");
         assert!(production.contains("fn production"), "{production}");
         assert!(production.contains("fn also_production"), "{production}");
+    }
+
+    /// A deny attribute that stands only in a string is not a deny attribute.
+    ///
+    /// Every crate root has to carry the tree's deny attribute, and the gate
+    /// that says so looked for the attribute's **text**: a crate root whose
+    /// attribute exists only inside a string was accepted. §161.
+    ///
+    /// The fixture carries the `forbid` attribute the gate also wants, so the
+    /// only thing wrong with it is the deny attribute. A fixture without it
+    /// passes for the wrong reason: the gate complains about the missing
+    /// `forbid` whether the deny attribute is there or not, and the test
+    /// cannot tell the two apart. §161.
+    #[test]
+    fn a_deny_attribute_in_a_string_is_not_a_deny_attribute() {
+        let dir = std::env::temp_dir().join(format!("craftkit-deny-string-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::write(
+            crate_dir.join("lib.rs"),
+            r##"#![forbid(unsafe_code)]
+
+const NOTE: &str = r#"#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]"#;
+
+pub fn f() {}
+"##,
+        )
+        .expect("the fabricated root");
+
+        let problems = check_roots(&[crate_dir.join("lib.rs")]);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("no deny attribute"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A `mod` line that stands only in a string is not a module.
+    ///
+    /// The gate that says the `mod` lines are sorted counted the modules out
+    /// of the text, and a line inside a raw string that begins with `pub mod`
+    /// is a sentence about a module, not a module. §161.
+    #[test]
+    fn a_mod_line_in_a_string_is_not_a_module() {
+        let source = "pub mod b;\n\nconst NOTE: &str = r#\"\npub mod a;\n\"#;\n";
+        let groups = mod_groups(source);
+        // One group, one module: the one that is code.
+        assert_eq!(groups.len(), 1, "{groups:?}");
+        assert_eq!(groups[0], vec!["b".to_string()], "{groups:?}");
+    }
+
+    /// A claim satisfied by a mention inside a string is not satisfied.
+    ///
+    /// The gate that says every symbol a document claims is in a file looked
+    /// for the name in the file's **text**, so a mention inside a string
+    /// satisfied the claim. §161.
+    #[test]
+    fn a_claim_satisfied_by_a_string_is_not_satisfied() {
+        let dir = std::env::temp_dir().join(format!("craftkit-claim-string-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(core.join("lib.rs"), "pub fn real() {}\n\nconst NOTE: &str = \"Ghost::call\";\n")
+            .expect("the fabricated code");
+        std::fs::write(docs.join("thing.md"), "The `Ghost::call` lives in `crates/core/src/lib.rs`.\n")
+            .expect("the fabricated prose");
+
+        let problems = attributed_code_is_in_the_file(&dir).expect("the check runs");
+        assert!(!problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A claim on the far side of a clause boundary is not about that file.
+    ///
+    /// The gate that says every symbol a document claims is in a file paired a
+    /// claim with the file that came **before** it as well as the one that
+    /// came after, so "the grammar is in `path.rs`; the listing is
+    /// `Ghost::call` in `lib.rs`" was read as a claim about `path.rs` too —
+    /// and the tree's own sentence in `skills/craftkit-editing/SKILL.md` was
+    /// one claim read as two. §161.
+    #[test]
+    fn a_claim_after_a_clause_boundary_is_not_about_the_file_before_it() {
+        let dir = std::env::temp_dir().join(format!("craftkit-clause-boundary-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(core.join("lib.rs"), "pub fn real() {}\n").expect("the fabricated code");
+        std::fs::write(core.join("path.rs"), "pub fn other() {}\n").expect("the fabricated code");
+        std::fs::write(
+            docs.join("thing.md"),
+            "The grammar is in `crates/core/src/path.rs`; the listing is `Ghost::call` in `crates/core/src/lib.rs`.\n",
+        )
+        .expect("the fabricated prose");
+
+        let problems = attributed_code_is_in_the_file(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("crates/core/src/lib.rs"), "{problems:#?}");
+        assert!(!problems[0].contains("path.rs"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A variant that stands only in a comment is not a variant.
+    ///
+    /// The gate that says how many areas the registry has counted the
+    /// variants of `Area` out of the text, and a line inside a block comment
+    /// that looks like a variant name was counted. §161.
+    #[test]
+    fn a_variant_in_a_comment_is_not_a_variant() {
+        let dir = std::env::temp_dir().join(format!("craftkit-area-string-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("command.rs"),
+            "pub enum Area {\n    Document,\n    /*\n    Ghost,\n    */\n}\n",
+        )
+        .expect("the fabricated code");
+
+        let count = area_variants(&dir).expect("the variants");
+        assert_eq!(count, 1, "{count}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A raw string is a string, and its contents are not code.

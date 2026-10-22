@@ -4295,5 +4295,72 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the cut ends a test item at a brace inside a string" \
     "cargo test -p xtask --profile ci a_brace_in_a_string_does_not_end_a_test_module"
 
+# Four gates still read the tree's source as text. A gate that reads a file
+# as text reads its comments and its strings as if they were code, and a
+# mention in a string is then a sentence about the code rather than the code
+# itself. Measured, against the real gates on a copy of the tree, with the
+# gates as they were before section 161 and with the fix in them:
+#
+#   * a crate root whose deny attribute stood only inside a string was
+#     **accepted** -- a false negative. The control, with the attribute gone
+#     altogether, was reported by both.
+#   * a `mod` line that stood only inside a string was counted as a module,
+#     and the gate that says the `mod` lines are sorted reported the tree's
+#     own `xtask/src/lib.rs` as unsorted -- a false positive. The control,
+#     with a real `mod` line out of order, was reported by both.
+#   * a document's claim, satisfied by a mention inside a string, was
+#     **accepted** -- a false negative. The control, with the claim false and
+#     the name nowhere, was reported by both.
+#   * a variant that stood only inside a block comment was counted as a
+#     variant, so the gate that says how many areas there are reported the
+#     tree's own "7 areas" as wrong -- a false positive. The control, with a
+#     real variant added, was reported by both.
+#
+# Section 161.
+swap xtask/src/lists.rs \
+    '        let code = code_lines_kept(&body);' \
+    '        let code = body.clone();'
+expect_catch "gate: the crate root's deny attribute is read out of a string" \
+    "cargo test -p xtask --profile ci a_deny_attribute_in_a_string_is_not_a_deny_attribute"
+
+swap xtask/src/lists.rs \
+    '        let Some(code_line) = code.get(number) else { continue };
+        let code_line = code_line.trim();' \
+    '        let code_line = source.lines().nth(number).unwrap_or_default().trim();'
+expect_catch "gate: the module list reads a mod line out of a string" \
+    "cargo test -p xtask --profile ci a_mod_line_in_a_string_is_not_a_module"
+
+swap xtask/src/lists.rs \
+    '                let view = code_lines_kept(&body);' \
+    '                let view = body.clone();'
+expect_catch "gate: a claim is satisfied by a mention inside a string" \
+    "cargo test -p xtask --profile ci a_claim_satisfied_by_a_string_is_not_satisfied"
+
+swap xtask/src/lists.rs \
+    '    // The variants are **code**: a variant name inside a string is not a
+    // variant, and a `}` inside a string does not end the enum. §161.
+    let code = code_lines_kept(&text);' \
+    '    // The variants are **code**: a variant name inside a string is not a
+    // variant, and a `}` inside a string does not end the enum. §161.
+    let code = text.clone();'
+expect_catch "gate: the area count reads a variant out of a comment" \
+    "cargo test -p xtask --profile ci a_variant_in_a_comment_is_not_a_variant"
+
+# And a claim is about the file that follows it, not the file that came
+# before. The gate that says every symbol a document claims is in a file
+# paired a claim with the file on either side of it, so a claim and a file
+# on the far side of a clause boundary were paired as if the document had
+# said they belonged together. Measured: the tree's own sentence in
+# `skills/craftkit-editing/SKILL.md` -- "the grammar is in `path.rs`; the
+# listing is `PropGroup::flatten` in `property.rs`" -- is one claim, and the
+# gate read it as two: it reported that `path.rs` does not have `flatten`
+# when `path.rs` never claimed to. The control, with the claim naming one
+# file, was reported once by both. Section 161.
+swap xtask/src/lists.rs \
+    '                let (code, file) = (left.1, right.1);' \
+    '                let (code, file) = (right.1, left.1);'
+expect_catch "gate: a claim is paired with the file before it" \
+    "cargo test -p xtask --profile ci a_claim_after_a_clause_boundary_is_not_about_the_file_before_it"
+
 restore
 finish
