@@ -17421,6 +17421,74 @@ script has the right shape: it prints MISSED in red and fails the run, and it
 is what caught the anchor that §150 moved.
 
 
+## 151. The gate that said the raw parameter reader has two homes counted a test's call as a home
+
+### The measurement
+
+§136's gate holds the tree's raw parameter reader to two files: the module
+that owns the parameters, and the engine's module where a parameter becomes a
+typed value. A third file that calls it is a third place where the shape of a
+parameter is decided — and the shape is decided by matching, never by indexing.
+
+The gate read the tree's files **whole**, tests included. Measured: a third
+file whose **test** called the reader to prove the reader works was reported
+as a third home; so was the same call in production code. The gate could not
+tell them apart.
+
+The control: with no third file calling the reader at all, the gate was
+green.
+
+And the tree's own position on this: `crates/core/src/params.rs` — one of the
+two homes — has a test that calls the reader *and indexes it*, on purpose:
+
+> The point of the test is that it **can** be indexed — that is why the gate
+> keeps it to two homes. §136.
+
+The tree tolerates the reader being used to prove what it is. It tolerates it
+in one of the two homes, and only because that file is exempt wholesale.
+
+### Why nothing noticed
+
+**The tree's own test use is hidden by an exemption.** `RAW_PARAMETER_HOMES`
+exempts two *files*, so the tree's own test use of the reader never reached
+the gate. The gate would have cried wolf at the tree's own test if the test
+had lived in a third file.
+
+**It was the only gate that had learned one half of the rule.** §149 taught
+the gates that read the tree's source to ignore strings and comments, and the
+raw-reader gate learned it. It had not learned the other half — that a test
+is not the production code — and it was the only gate whose subject is a
+*production* property and that did not.
+
+### The fix
+
+**The gate cuts the file at its test module**, with the same `production_of`
+helper §150 introduced.
+
+**One unit test**, `a_test_that_calls_the_raw_reader_is_not_a_third_home`,
+which was checked to fail when the cut is taken out — and which also checks
+that the same call in production code is still reported, so the fix cannot
+turn the gate off.
+
+**One mutation**.
+
+### The lesson
+
+**The rule about production code is the rule about strings, one level up.**
+§148 closed the string hole. §150 closed the test hole in the limits gate.
+§151 is the same hole in the next gate along. A rule applied to one gate is
+not a rule of the tree — and once the rule is written down and put in a
+helper, the next gate to need it is a matter of time, not of chance.
+
+**A gate that cries wolf at a test is a gate nobody runs.** The tree's own
+test proves the reader can be indexed. If that test had lived in a third
+file, the gate would have said the tree broke its own rule.
+
+**An exemption can hide the evidence.** The tree's own test use of the reader
+was invisible to the gate not because the gate understood it but because the
+file it lives in is exempt. The gate had no opinion about tests at all.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17476,6 +17544,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A gate that names a line names the file's line** | `code_lines_kept` | 2 mutations — §149 |
 | **The tree reads its code one way** | `the_tree_has_one_code_reader` | 1 mutation — §149 |
 | **A limit only a test mentions is not enforcement** | `production_of` in `limits_are_enforced` | 2 mutations — §150 |
+| **A test that calls the raw reader is not a third home** | `production_of` in `the_raw_parameter_reader_has_two_homes` | 1 mutation — §151 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |

@@ -3928,5 +3928,18 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the limits gate reads the table file's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
+# A test is not a third home of the raw parameter reader. The gate that holds
+# the reader to two files read the tree's files whole, so a test in a third
+# file that called the reader to prove the reader works was reported as a
+# third place where the shape of a parameter is decided. Measured: a third
+# file whose *test* called the reader was reported, and the same call in
+# production code was reported too -- the gate could not tell them apart.
+# Section 151.
+swap xtask/src/lists.rs \
+    '        let code = code_lines_kept(production_of(&text));' \
+    '        let code = code_lines_kept(&text);'
+expect_catch "gate: the raw reader gate counts a test's call as a third home" \
+    "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
+
 restore
 finish

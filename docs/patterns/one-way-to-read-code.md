@@ -80,12 +80,15 @@ So a gate whose subject is a *production* property cuts the file at its test
 module first. The tree's `production_of` helper does it, and four of the
 tree's gates already had a cut of their own before it: the panic-boundary
 check, the JSON writer's check, and the two that say the shell does not
-evaluate the document and does not write it.
+evaluate the document and does not write it. The limits gate and the raw
+reader's gate use the helper now.
 
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
 test that compares the limits with each other. The gate that says every limit
-is enforced said **green**.
+is enforced said **green**. And a third file whose *test* called the raw
+parameter reader — to prove the reader works — was reported as a third home
+of a reader that is allowed two.
 
 ## In the code
 
@@ -136,6 +139,8 @@ let code = code_lines_kept(production_of(&text));
   reports is the line in the file.
 - `a_limit_only_a_test_mentions_is_still_caught` — a limit that only a test
   mentions is not enforced.
+- `a_test_that_calls_the_raw_reader_is_not_a_third_home` — a test is not a
+  third home of the raw reader.
 
 ## See also
 

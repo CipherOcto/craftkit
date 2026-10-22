@@ -1389,7 +1389,12 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         // Strings and comments do not count: this file names the reader, and
         // a doc comment that says `raw_json` is saying the opposite.
-        let code = code_lines_kept(&text);
+        //
+        // And neither do the **tests**: the rule is about how the product
+        // reads a parameter, and a test that calls the reader to prove the
+        // reader works is not a third place where the shape of a parameter is
+        // decided. §151.
+        let code = code_lines_kept(production_of(&text));
         if !code.contains("raw_json(") {
             continue;
         }
@@ -5824,6 +5829,52 @@ mod tests {
     /// a function that pads a sentence with spaces has the second.
     fn is_a_code_reader(body: &str) -> bool {
         body.contains("in_string") && (body.contains("push(' ')") || body.contains("push(b' ')"))
+    }
+
+    /// A test that calls the raw reader is not a third home.
+    ///
+    /// The rule the gate holds is about how the **product** reads a parameter:
+    /// the shape of a parameter is decided by matching, never by indexing. A
+    /// test that calls the reader to prove the reader works is not a third
+    /// place where that shape is decided — and the tree's own test does
+    /// exactly that, inside one of the two homes. §151.
+    #[test]
+    fn a_test_that_calls_the_raw_reader_is_not_a_third_home() {
+        let dir = std::env::temp_dir().join(format!("craftkit-raw-home-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        // A third file whose *test* calls the reader.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn f() -> usize { 1 }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             #[test]\n\
+             fn the_reader_works() {\n\
+             let p = craftkit_core::Params::new(&craftkit_core::Value::Null);\n\
+             let _ = p.raw_json(\"x\");\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let problems = the_raw_parameter_reader_has_two_homes(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And the same call in production code is a third home.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn f(p: &craftkit_core::Params<'_>) -> usize {\n\
+             let _ = p.raw_json(\"x\");\n\
+             1\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+        let problems = the_raw_parameter_reader_has_two_homes(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("raw JSON"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A limit that only a test mentions is not enforced.
