@@ -16568,6 +16568,201 @@ the bytes and kept the measurement to itself. The same question about the
 whole session — `document_bytes()` — was one method away, and the answer is
 the number four documents of memory that no sentence in the tree mentioned.
 
+## 145. The tree's tables of limits left out the bounds that bind, and told a reader to add one that exists
+
+### The measurement
+
+`docs/patterns/clone-before-edit.md` is one of the tree's pattern documents:
+*clone before you edit*. It has a section called **The cost bound**, and it
+begins by saying that a snapshot *"is bounded rather than reasoned about"*:
+
+| Bound | Value | Where |
+|---|---|---|
+| Undo entries kept | 128 | `craftkit_engine::history::MAX_ENTRIES` |
+| Nodes per document | 10 000 | `craftkit_model::limits::MAX_NODES` |
+| Clones per command | 1 | unconditional, above |
+
+and then it says:
+
+> A session can run for days, so the history is capped; a document is capped, so
+> each entry is bounded; **the product is the memory bound**. If it ever appears
+> in a profile, the fix is to raise `MAX_ENTRIES` and add a size cap — not to
+> start inverting commands by hand. That sentence is the point of the pattern:
+> it names the *next* thing a maintainer will be tempted to do, and says it is
+> the wrong one.
+
+**The size cap has existed since §52.** The history's budget is
+`craftkit_engine::history::MAX_HISTORY_BYTES` — 64 MiB — and §52 put it there,
+replacing the count of entries as the bound on memory. The module document of
+`crates/engine/src/history.rs` keeps the paragraph that §52 replaced, and
+corrects it in the next breath:
+
+> **That last paragraph was wrong, and §52 is why.** A count of entries is
+> not a bound on memory: the document's own size was never bounded in bytes,
+> so 128 snapshots of a 12 MiB document cost 1.5 GiB — and undoing them did
+> not give the memory back, because the snapshots moved to the redo stack.
+> The count is still here (a session can run for days), but the *budget* is
+> what bounds the memory now.
+
+**The pattern document quoted the same paragraph without the correction.** It
+says *"the fix is to raise `MAX_ENTRIES` and add a size cap"* — the sentence
+the code names as wrong — and it says it in the present tense, as advice. And
+`docs/architecture.md` says the same thing: *"the fix is to raise the entry
+count and add a size cap"*.
+
+And the advice does not work. Measured, with a session holding a design at the
+model's limit:
+
+```text
+rss after ten edits:         101.01 MiB
+   the session's undo depth:   2
+rss after two hundred edits:  102.06 MiB
+   the session's undo depth:   2
+   the undo and redo stacks:   59.20 MiB  (2.00 documents)
+```
+
+**Two snapshots, not a hundred and twenty-eight.** The count binds only for a
+document of half a megabyte or less; above that the *bytes* bind, and the
+entry count is a number that never says anything. A maintainer who followed
+the pattern — raise `MAX_ENTRIES`, add a size cap — would have raised a
+constant that does nothing and added a bound the tree has had for thirteen
+sections.
+
+**The table did not have the bound in it either.** The tree's two documents
+that keep a table of what undoing costs listed a *count* and a *node number*.
+The bound that binds was in neither.
+
+### Why nothing noticed
+
+**The table's own reasoning was arithmetic, not a bound.** *"The product is
+the memory bound"* — 128 entries × 10 000 nodes is a number, and no number
+that is a product of two limits is a limit.
+
+**The gate that checks limits in prose could not see it.** The tree's gate
+reads a backticked name and the number next to it, and compares the number
+with the code's value. `MAX_ENTRIES` is 128 in the code and 128 in the table,
+so the gate was satisfied. What was missing was a bound, and a gate that
+compares what is there cannot see what is not.
+
+**Five bounds the tree has were named in no document at all** — and they are
+exactly the ones whose names say what they are:
+
+```text
+MAX_HISTORY_BYTES            crates/engine/src/history.rs
+MAX_TRACE_MEMORY_BYTES       crates/engine/src/lib.rs
+MAX_TRACE_BYTES              crates/engine/src/lib.rs
+MAX_SESSION_BYTES            crates/engine/src/session.rs
+MAX_PATH_BYTES               crates/model/src/lib.rs
+```
+
+`MAX_PATH_BYTES` is the one §97 added — the longest property path — and the
+architecture document's own list of the model's hard limits has been missing
+it since.
+
+### The fix
+
+**The table has the bound that binds**, and the paragraph says which one it is:
+
+| Bound | Value | Where |
+|---|---|---|
+| Undo entries kept | 128 | `craftkit_engine::history::MAX_ENTRIES` |
+| Undo and redo memory | two documents' worth | `craftkit_engine::history::MAX_HISTORY_BYTES` |
+| Nodes per document | 10 000 | `craftkit_model::limits::MAX_NODES` |
+| Clones per command | 1 | unconditional, above |
+
+**The advice is now the advice that works**, and the pattern's own
+meta-sentence became true:
+
+> **The budget binds before the count does**, for anything but a small
+> document: half a megabyte of design fills 64 MiB with a hundred and
+> twenty-eight snapshots, and a design at the model's limit keeps **two** of
+> them. If it ever appears in a profile, the fix is to raise
+> `craftkit_engine::history::HISTORY_EXPANSION` — not to raise `MAX_ENTRIES`,
+> which is not what binds, and not to start inverting commands by hand. That
+> sentence is the point of the pattern: it names the *next* thing a maintainer
+> will be tempted to do, and says it is the wrong one.
+
+It names the right temptation now — raising the count — and says it is the
+wrong one, because it is.
+
+**`docs/architecture.md` says the same thing**, in the same words, and its
+list of the model's hard limits has `MAX_PATH_BYTES` in it again.
+
+**And the tree's list of the engine's memory budgets is a list.** The
+architecture document's never-crash table has a row for them now, and the
+number that says what the process uses is in it.
+
+### What now holds it
+
+A gate — `the_byte_bounds_are_named_in_the_prose` — and two mutations, and a
+unit test.
+
+The rule, in two halves: a bound whose name says **bytes** or **memory** is
+named in the tree's prose, so a reader can look it up; and the prose does not
+tell a reader to **add a size cap** the tree has.
+
+| Mutation | Caught by |
+|---|---|
+| prose: a bound the tree has is not named | `cargo xtask lists` |
+| prose: the pattern tells a reader to add a size cap | `cargo xtask lists` |
+
+The first mutation takes a bound out of the tree's documents. `MAX_PATH_BYTES`
+was named in **exactly one place**, and a bound named in exactly one place is
+one edit away from being named in none.
+
+The second is the sentence the pattern had before. The phrase is searched for
+with the whitespace collapsed, because a document that wraps it across two
+lines is the same sentence — and the one before the fix wrapped it across
+three.
+
+### What is still open
+
+**The gate checks that a bound is named, not that it is named *where it
+matters*.** `MAX_HISTORY_BYTES` is named in two documents, and the gate
+cannot tell that one of them is the pattern about undoing and the other is
+the architecture — it only knows the name is in the tree's prose. A bound
+named in the wrong document satisfies it.
+
+**The prose's own arithmetic is not checked.** "The product is the memory
+bound" was wrong, and the fix was to write a better sentence; nothing can
+tell a better sentence from the one it replaced. What the gate *can* see is
+the advice that names a bound the tree already has.
+
+**Two of the five bounds the gate found are still the wrong shape.**
+`MAX_TRACE_BYTES` is derived from `MAX_TRACE_MEMORY_BYTES`, which is a
+literal (§144's open item), and `MAX_SESSION_BYTES` is derived from the
+model's budget but its *value* — five documents — is a number somebody chose.
+Both are named in the prose now; neither is derived all the way down.
+
+### The lesson
+
+**A document that outlives the fix that made it wrong is worse than one that
+was never written.** §52 did the right thing in the file the history lives in
+and said so at length. The pattern document quoted the old paragraph, and the
+old paragraph told a reader to do a thing the tree had already done.
+
+**A table of limits is a claim about which limit binds.** A table with a
+count in it and a byte budget missing from it answers the question "what
+stops this?" with the wrong number — and the number it answers with is the
+one a reader will go and change.
+
+**"Add a size cap" is advice that outlives the cap.** Once the cap exists,
+the sentence is worse than useless: it is a maintainer adding a second bound
+to a tree that already has one, and neither of them is the one that binds.
+
+**A gate that compares what is there cannot see what is not.** The limit gate
+checked `MAX_ENTRIES` against the code and was satisfied. The missing row was
+not a wrong value; it was an absent one, and only a gate that asks *which*
+limits the tree has — and not *what value* this one has — can find it.
+
+**A run that stops is a void run, and the script says so.** §145's own prose
+edit moved an anchor §143 had written — the sentence about the entry count
+changed shape — and the suite stopped at it with *"THE MUTATION DID NOT
+APPLY, SO THE RUN IS VOID"*, rather than carrying on and reporting the cases
+after it as if they meant something. That guard is why a stale anchor is a
+void run and not a false green, and it is the reason the suite is trusted to
+answer "does anything notice".
+
 ---
 
 ---
@@ -16912,6 +17107,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The history's budget is the model's budget times two** | `cargo xtask lists` | 1 mutation — §144 |
 | **The session's budget covers the stacks and the three documents beside them** | `craftkit-engine` test | 1 mutation — §144 |
 | **A session says what its documents cost** | `craftkit-engine` test | — |
+| **Every bound whose name says bytes is named in the tree's prose** | `cargo xtask lists` | 1 mutation — §145 |
+| **The prose does not tell a reader to add a size cap the tree has** | `cargo xtask lists` | 1 mutation — §145 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |

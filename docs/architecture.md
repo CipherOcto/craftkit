@@ -217,11 +217,15 @@ had, and closing the file would lose the change without anything having said
 the file was unsaved. The flag is published to agents as *"safe to use as a
 probe"*, so it has to mean it. §96.
 
-The cost is bounded and measured rather than guessed:
-`craftkit_engine::history::MAX_ENTRIES` is 128 entries, and each entry is a
-document of at most `craftkit_model::limits::MAX_NODES` (10 000) nodes. If that
-ever shows up in a profile, the fix is to raise the entry count and add a size
-cap — not to start inverting commands by hand.
+The cost is bounded and measured rather than guessed, and it is bounded in
+**bytes**: `craftkit_engine::history::MAX_HISTORY_BYTES` is
+`craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION` — 64 MiB,
+two documents' worth of memory — and `craftkit_engine::history::MAX_ENTRIES`
+(128) is a ceiling on *steps* that only binds for a small document. A design
+at the model's limit keeps two snapshots, not a hundred and twenty-eight. If
+that ever shows up in a profile, the fix is to raise
+`craftkit_engine::history::HISTORY_EXPANSION` — not to raise the entry count,
+which is not what binds, and not to start inverting commands by hand.
 
 ## Incremental evaluation
 
@@ -278,7 +282,8 @@ Nothing in a production path panics. This is enforced, not requested:
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
 | Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0 and > 1000 |
-| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
+| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
+| Memory budgets | `craftkit_engine::MAX_SESSION_BYTES` (the documents a session holds) and `craftkit_engine::history::MAX_HISTORY_BYTES` (the undo and redo stacks) are derived from `craftkit_model::limits::MAX_DOCUMENT_BYTES` (§144); `craftkit_engine::MAX_TRACE_BYTES` is the command trace's budget in text, derived from `craftkit_engine::MAX_TRACE_MEMORY_BYTES` (§70) |
 | Bounded file reads | `craftkit_io::format::File::from_text` refuses input over 64 MiB before parsing, then `Document::validate`, then `reseat_id_counter` |
 | Bounded kernel walks | `craftkit_kernel::MAX_STEPS` (64), refused up front rather than detected by a counter deep in a loop |
 | The last resort | `Session::execute`'s `catch_unwind`, described above |

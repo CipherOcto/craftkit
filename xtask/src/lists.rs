@@ -1690,6 +1690,76 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
     Ok(problems)
 }
 
+/// Every bound the tree has, and the ones its prose names.
+///
+/// §145. `docs/patterns/clone-before-edit.md` keeps a table of what undoing
+/// costs, and it listed the *count* of undo entries (128) and the number of
+/// nodes in a document (10 000) — and not the bound that actually binds, the
+/// undo and redo stacks' 64 MiB. The paragraph under the table said the
+/// product was the memory bound and that *"the fix is to raise `MAX_ENTRIES`
+/// and add a size cap"*. §52 had already added the size cap, thirteen
+/// sections earlier, and raising the count changes nothing for a document
+/// over 512 KiB: measured, a design at the model's limit keeps **two**
+/// snapshots, not a hundred and twenty-eight.
+///
+/// The rule, in two halves:
+///
+/// - a bound whose name says **bytes** or **memory** is named in the tree's
+///   prose, so a reader can look it up;
+/// - the prose does not tell a reader to **add a size cap** the tree has.
+pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, String> {
+    let mut prose = String::new();
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        prose.push_str(&text);
+        prose.push('\n');
+    }
+    let mut problems = Vec::new();
+    for path in rust_files(root) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        for name in byte_bounds(&text) {
+            if prose.contains(&name) {
+                continue;
+            }
+            problems.push(format!(
+                "{}: the tree has `{name}` and no document in the tree names it; a bound a \
+                 reader cannot look up is a bound a reader cannot check.",
+                relative_name(root, &path)
+            ));
+        }
+    }
+    // The phrase is searched for with the whitespace collapsed, because a
+    // document that wraps it across two lines is the same sentence.
+    let flat: String = prose.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.contains("add a size cap") {
+        problems.push(
+            "a document tells a reader to add a size cap, and the tree has one: \
+             `craftkit_engine::history::MAX_HISTORY_BYTES`. §145."
+                .to_string(),
+        );
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The bounds in a file of Rust whose names say bytes or memory.
+fn byte_bounds(source: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
+        let Some((name, _)) = rest.split_once(':') else { continue };
+        let name = name.trim();
+        if !name.starts_with("MAX_") {
+            continue;
+        }
+        if name.contains("BYTES") || name.contains("MEMORY") {
+            found.push(name.to_string());
+        }
+    }
+    found
+}
+
 /// The tree's JSON has one writer, and the places that write a design use it.
 ///
 /// §142. The crash report's three files were written with
@@ -4699,6 +4769,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
     );
 
+    // The bounds the tree has, and the ones its prose names. §145.
+    problems.extend(
+        the_byte_bounds_are_named_in_the_prose(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     Name the bound, so a reader can look it up.")),
+    );
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -4730,7 +4807,8 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              methods are the methods the prose lists, every module path in prose \
              names a module this tree has, every type path in prose names a \
              member the type has, every memory budget is derived from the \
-             model's, the shell never evaluates the \
+             model's, every byte bound is named in the prose, the shell never \
+             evaluates the \
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
@@ -6535,6 +6613,44 @@ printf '%s%d/%d caught.%s\\n' \\
         .expect("the fabricated source");
         let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
         assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A bound the tree has is named in the prose, and the prose does not
+    /// tell a reader to add a size cap the tree has. §145.
+    #[test]
+    fn a_byte_bound_the_prose_does_not_name_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_byte_bounds_are_named_in_the_prose(&root).expect("runs").is_empty(),
+            "a byte bound the tree has is not named in the prose"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-byte-bounds-{}", std::process::id()));
+        let docs = dir.join("docs");
+        let src = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::create_dir_all(&src).expect("the fabricated tree");
+        std::fs::write(src.join("history.rs"), "pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;\n")
+            .expect("the fabricated source");
+        std::fs::write(docs.join("notes.md"), "Nothing here names a bound.\n").expect("the fabricated prose");
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        // And a document that tells a reader to add a size cap the tree has.
+        // The phrase is wrapped across two lines, because a document that
+        // wraps it is the same sentence.
+        std::fs::write(docs.join("notes.md"), "The fix is to add a size\ncap.\n")
+            .expect("the fabricated prose");
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        // And once the prose names the bound, there is nothing to report.
+        std::fs::write(docs.join("notes.md"), "`MAX_HISTORY_BYTES` is the budget.\n")
+            .expect("the fabricated prose");
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

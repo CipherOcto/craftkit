@@ -131,15 +131,24 @@ than reasoned about:
 | Bound | Value | Where |
 |---|---|---|
 | Undo entries kept | 128 | `craftkit_engine::history::MAX_ENTRIES` |
+| Undo and redo memory | two documents' worth | `craftkit_engine::history::MAX_HISTORY_BYTES` |
 | Nodes per document | 10 000 | `craftkit_model::limits::MAX_NODES` |
 | Clones per command | 1 | unconditional, above |
 
-A session can run for days, so the history is capped; a document is capped, so
-each entry is bounded; the product is the memory bound. If it ever appears in a
-profile, the fix is to raise `MAX_ENTRIES` and add a size cap — not to start
-inverting commands by hand. That sentence is the point of the pattern: it names
-the *next* thing a maintainer will be tempted to do, and says it is the wrong
-one.
+A session can run for days, so the history is capped in **steps**; a document
+is capped in **bytes**, so each entry is bounded; and the stacks have a budget
+of their own — `craftkit_engine::history::MAX_HISTORY_BYTES` is
+`craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION`, which is
+64 MiB, two documents' worth of memory.
+
+**The budget binds before the count does**, for anything but a small document:
+half a megabyte of design fills 64 MiB with a hundred and twenty-eight
+snapshots, and a design at the model's limit keeps **two** of them. If it ever
+appears in a profile, the fix is to raise
+`craftkit_engine::history::HISTORY_EXPANSION` — not to raise `MAX_ENTRIES`,
+which is not what binds, and not to start inverting commands by hand. That
+sentence is the point of the pattern: it names the *next* thing a maintainer
+will be tempted to do, and says it is the wrong one.
 
 ## When NOT to use it
 

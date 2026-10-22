@@ -3623,8 +3623,8 @@ expect_catch "prose: the recipe names a method the tree does not have" \
 # no `History::MAX_ENTRIES`, and the engine's log has a `MAX_ENTRIES` of its
 # own with a different value. §143.
 swap docs/architecture.md \
-    '`craftkit_engine::history::MAX_ENTRIES` is 128 entries' \
-    '`History::MAX_ENTRIES` is 128 entries'
+    '`craftkit_engine::history::MAX_ENTRIES`' \
+    '`History::MAX_ENTRIES`'
 expect_catch "prose: a limit is named by a path the type does not have" \
     "cargo xtask lists"
 
@@ -3649,6 +3649,33 @@ swap crates/engine/src/session.rs \
     'pub const SESSION_OWN_DOCUMENTS: usize = 1;'
 expect_catch "engine: the session's budget forgot the trace's base" \
     "cargo test -p craftkit-engine --profile ci the_session_budget_covers_the_stacks_and_the_documents_it_owns"
+
+# The pattern document for cloning before editing keeps a table of what undoing
+# costs. It listed the count of undo entries and the number of nodes in a
+# document, and not the bound that actually binds -- the undo and redo stacks'
+# 64 MiB -- and the paragraph under it told a reader that "the fix is to raise
+# MAX_ENTRIES and add a size cap". Section 52 had already added the size cap,
+# thirteen sections earlier, and raising the count changes nothing for a
+# document over half a megabyte: measured, a design at the model's limit keeps
+# two snapshots, not a hundred and twenty-eight. Section 145.
+#
+# The first mutation takes a bound out of the tree's documents. It is named in
+# exactly one place, and a bound named in exactly one place is one edit away
+# from being named in none.
+swap docs/architecture.md \
+    ', `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1`' \
+    ','
+expect_catch "prose: a bound the tree has is not named" \
+    "cargo xtask lists"
+
+# And the advice itself: a document must not tell a reader to add a bound the
+# tree already has. The phrase is searched for with the whitespace collapsed,
+# because a document that wraps it across two lines is the same sentence.
+swap docs/patterns/clone-before-edit.md \
+    '`craftkit_engine::history::HISTORY_EXPANSION` — not to raise `MAX_ENTRIES`,' \
+    '`craftkit_engine::history::HISTORY_EXPANSION` and add a size cap — not to raise `MAX_ENTRIES`,'
+expect_catch "prose: the pattern tells a reader to add a size cap" \
+    "cargo xtask lists"
 
 restore
 finish
