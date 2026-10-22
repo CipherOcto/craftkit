@@ -18111,6 +18111,119 @@ not on the shape of the thing it found first.
 for it.** The reader list, the limits gate and the shell gates read
 different things and all three counted a test's name. One cut, one rule, and
 three gates that were wrong in the same way.
+## 158. The tree's one code reader did not know what a raw string is, and a limit nobody enforces looked enforced
+
+### The measurement
+
+The tree has one code reader: `code_lines_kept`, in `xtask/src/lists.rs`. It
+turns a Rust file into a view of the same length in which every string's
+contents, every comment and every character literal is blanked. Every gate
+that reads the tree's source asks that view what the code *is*.
+
+The reader knew one kind of string. A **raw string** — `r"…"`, `r#"…"#` — is
+a string with a different ending, and the reader ended it at the first quote
+inside it. Two things followed. The text between that quote and the raw
+string's own delimiter was read as **code**, and the rest of the file was
+read as **string contents** and disappeared.
+
+Measured, against the real gates on a copy of the tree, with the reader as it
+was before the fix and as it is after it:
+
+| Case | What was done | Before | After |
+|---|---|---|---|
+| control | the tree as it stands | **green** | **green** |
+| A | the limit's every production use replaced by a literal, and a raw string mentioning the limit | **green** — the limit is enforced | **RED** — the limit is not enforced |
+| A-control | the same, with the mention in an ordinary string | **RED** | **RED** |
+| A-control-2 | the limit's every production use replaced by a literal, and nothing mentioning it | **RED** | **RED** |
+| B | a raw string with one quote in it, four lines before the writer | **RED** — the design file is not written with the tree's writer | **green** |
+| B-control | the same text in an ordinary string | **green** | **green** |
+
+Case A is a **false negative**. The limit `MAX_PROPERTIES` was enforced by
+nothing — its only production use had been replaced by a literal — and the
+gate said it was enforced. "A limit nobody enforces is a wish" is the gate's
+own sentence; the reader turned the wish into a fact.
+
+Case B is a **false positive**. The tree writes its design file with
+`craftkit_core::writer::write_json`, four lines below the raw string, and
+the gate said it did not: *"the design file is not written with the tree's
+writer"*. The reader had ended its ordinary string in the wrong place and
+read the writer call as string contents.
+
+The controls are what make the two cases mean something. The same mention in
+an ordinary string is reported correctly by both readers, and the tree with no
+string at all is reported correctly by both. The difference is the raw string
+and nothing else.
+
+### Why nothing noticed
+
+**Every raw string in the tree is in code the gates do not read as
+production.** The tree has 118 raw strings. 108 of them are inside a
+`mod tests { … }` block or an `#[cfg(test)]` item, which §150 through §157
+taught the gates to cut; nine are in `apps/craftkit-cli/tests/mcp_stdio.rs`,
+a file that is entirely a test; and the last one is in `xtask/src/web.rs`,
+in a test too.
+
+**The defect was latent, not absent.** A gate that has never been wrong
+because the shape it would have been wrong about is not in the tree is a gate
+that has not been asked. The measurement above is what put the shape there on
+purpose, and the reader's own verdict on the tree as it stands is unchanged
+by the fix: every gate says what it said before.
+
+**The reader had one kind of string in mind.** §149 made the rule that a
+mention in a string is not code, and the rule was right. The rule did not get
+narrower; the reader that carries it did.
+
+### The fix
+
+**The reader knows a raw string.** `r"…"`, `r#"…"#` and `br#"…"#` are strings:
+their contents are blanked, they end at their own delimiter, and a backslash
+inside one is a backslash and not an escape.
+
+**The opening delimiter is consumed as well as written.** The view has to be
+the same length as the file — §155 — and a delimiter that is written into the
+view but not taken off the source shifts every position after it by a byte.
+
+**Five unit tests**, each checked to fail when the rule it protects is taken
+out:
+
+| Test | What it holds |
+|---|---|
+| `a_raw_string_is_a_string` | the contents of a raw string are not code |
+| `a_raw_string_ends_at_its_own_delimiter` | a raw string ends at its own delimiter, not at the first quote in it |
+| `a_backslash_in_a_raw_string_is_not_an_escape` | a backslash in a raw string is a backslash |
+| `a_raw_string_without_hashes_is_a_raw_string` | `r"…"` is a raw string too, and the view keeps its length |
+| `a_byte_string_is_a_string` | `b"…"` and `br"…"` are strings |
+
+**Four mutations**: the reader does not recognise a raw string; the reader
+ends a raw string at the first quote in it; the reader does not consume the
+raw string's own delimiter; the reader does not recognise a byte string.
+
+### The lesson
+
+**One reader means one place for the language to be wrong.** Every gate that
+reads the tree's source asks the same function what the code is. A reader
+that is wrong about a shape of Rust is not one gate that is wrong; it is
+every gate that reads code, wrong in the same way — and none of them can
+catch it, because they all read the same wrong view. That is why the reader
+has its own unit tests, and why §154 through §158 have all been about it.
+
+**A rule is only as wide as the reader that carries it.** §149's rule — a
+mention in a string is not code — was right, and it was carried by a reader
+that knew what a string was. The rule did not get narrower; the reader did.
+
+**"No gate has ever complained" is not evidence that the code is right.** The
+tree's raw strings are all in tests, so every gate was green. A green gate on
+a shape the tree does not have is a gate that has never been asked.
+
+### What the measurement turned up on the way
+
+Counting the tree's raw strings to write this section turned up a second
+defect, in the **cut** rather than in the reader: `production_of` ends a
+top-level test item at the first `}` in the first column, and a `}` inside a
+string is not the end of the item. `xtask/src/web.rs` has a `}` at the start
+of a line inside a raw string, and the cut ends there — so **eighteen test
+functions** in that file are read as production code. §160.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -18178,6 +18291,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test-only method inside an impl block is not the shell** | `production_of` removes the method | 1 mutation — §157 |
 | **A test-only method that takes a `&Params` is not a reader** | `production_of` removes the method | 1 mutation — §157 |
 | **A test-only method does not enforce a limit** | `production_of` removes the method | 1 mutation — §157 |
+| **A raw string's contents are not code** | `code_lines_kept` | 1 mutation — §158 |
+| **A raw string ends at its own delimiter** | `code_lines_kept` | 1 mutation — §158 |
+| **A byte string is a string** | `code_lines_kept` | 1 mutation — §158 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -19166,3 +19282,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     reader list, which was counting a test-only method as a reader, and
     the limits gate, which was counting a test-only method as the
     enforcement of a limit.
+34. **Teach the test cut to find the end of a top-level item that a string
+    can end early.** `production_of` removes a test item by skipping lines
+    until it reaches a `}` in the first column — the rule that a top-level
+    item's body is indented, so the first `}` in the first column ends it.
+    A `}` inside a **string** is not the end of the item, and the tree has
+    one: `xtask/src/web.rs` has a `}` at the start of a line inside a raw
+    string, so the cut ends there and **eighteen test functions** in that
+    file are read as production code. The end of the item has to be found by
+    brace matching in the **code view**, where a `}` inside a string is
+    blanked and is not a brace — the way §157 found the end of a test-only
+    method. §160.

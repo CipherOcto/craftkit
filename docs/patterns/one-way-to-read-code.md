@@ -47,7 +47,7 @@ do it.** The one way is `code_lines_kept`, in `xtask/src/lists.rs`. It takes a
 file's source and gives back the same source with the comments, the string
 contents and the char literals blanked out — and with **every line kept**.
 
-Four properties, each of which was a defect first:
+Five properties, each of which was a defect first:
 
 - **The comments go.** A comment is a sentence about the code, and a sentence
   is not a definition.
@@ -62,6 +62,13 @@ Four properties, each of which was a defect first:
   not a brace, and the scanner that reads a type's members counts braces. `'a`
   is a lifetime, and treating it as a literal would swallow the rest of the
   file.
+- **A raw string is a string.** `r"…"`, `r#"…"#` and `br#"…"#` end at their
+  own delimiter, not at the first quote inside them, and a backslash inside
+  one is a backslash and not an escape. A reader that ends a raw string at
+  the first quote inside it reads the text after that quote as code and the
+  rest of the file as string contents — and then a limit nobody enforces
+  looks enforced, and a writer four lines below the raw string is not there
+  any more. §158.
 
 There is one reader, and that is the point. The rule was written three times
 before — as three different helpers — and the gates that read a *symbol* or a
@@ -250,6 +257,14 @@ let code = code_lines_kept(&text);
   `&Params` is a function, and it is not a reader the commands use.
 - `a_test_only_method_does_not_enforce_a_limit` — a test-only method that
   uses a limit does not enforce it.
+- `a_raw_string_is_a_string` — the contents of a raw string are not code.
+- `a_raw_string_ends_at_its_own_delimiter` — a raw string ends at its own
+  delimiter, not at the first quote inside it.
+- `a_backslash_in_a_raw_string_is_not_an_escape` — a backslash in a raw
+  string is a backslash.
+- `a_raw_string_without_hashes_is_a_raw_string` — `r"…"` is a raw string
+  too, and the view keeps the file's length.
+- `a_byte_string_is_a_string` — `b"…"` and `br"…"` are strings.
 
 ## See also
 

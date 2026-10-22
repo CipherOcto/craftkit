@@ -2679,6 +2679,48 @@ fn code_lines_kept(source: &str) -> String {
             continue;
         }
         match c {
+            'r' if !ends_with_word_byte(&out) => {
+                // A raw string: `r"…"`, `r#"…"#`. The scanner that blanks the
+                // contents of an ordinary string would end a raw one at the
+                // first quote inside it and read the rest of the file as
+                // code. §158.
+                let mut ahead = chars.clone();
+                let mut hashes = 0usize;
+                while ahead.peek() == Some(&'#') {
+                    ahead.next();
+                    hashes += 1;
+                }
+                if ahead.peek() != Some(&'"') {
+                    // Not a raw string: an identifier that starts with `r`.
+                    out.push(c);
+                    continue;
+                }
+                out.push(c);
+                blank_a_raw_string(&mut out, &mut chars, hashes);
+            }
+            'b' if !ends_with_word_byte(&out) => {
+                // A byte string. `b"…"` is an ordinary string to the
+                // scanner; `br"…"` is a raw one.
+                let mut ahead = chars.clone();
+                let mut hashes = 0usize;
+                let raw = ahead.peek() == Some(&'r');
+                if raw {
+                    ahead.next();
+                    while ahead.peek() == Some(&'#') {
+                        ahead.next();
+                        hashes += 1;
+                    }
+                }
+                if raw && ahead.peek() == Some(&'"') {
+                    out.push(c);
+                    // The `r` of `br` is code, and it keeps its place.
+                    chars.next();
+                    out.push('r');
+                    blank_a_raw_string(&mut out, &mut chars, hashes);
+                    continue;
+                }
+                out.push(c);
+            }
             '"' => {
                 in_string = true;
                 out.push(' ');
@@ -2721,6 +2763,53 @@ fn code_lines_kept(source: &str) -> String {
         }
     }
     out
+}
+
+/// Whether the output so far ends with a word byte.
+///
+/// A raw string starts with an `r` that is not part of an identifier:
+/// `r#"…"#` is a raw string and `result` is not.
+fn ends_with_word_byte(out: &str) -> bool {
+    out.as_bytes().last().is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+}
+
+/// Blank the contents of a raw string.
+///
+/// A raw string — `r"…"`, `r#"…"#` — has a quote in it, and the scanner that
+/// blanks an ordinary string's contents would end it at the first quote
+/// inside and read the rest of the file as code. The hashes and the quotes
+/// are code; the contents are not. The closing delimiter is a quote followed
+/// by as many hashes as the opening one had. §158.
+fn blank_a_raw_string(out: &mut String, chars: &mut std::iter::Peekable<std::str::Chars<'_>>, hashes: usize) {
+    // The **opening** delimiter: as many hashes as the closing one has, and a
+    // quote. They are code, and they are *consumed* here — the loop below must
+    // see the contents and not the delimiter again, or every position after it
+    // is off by one byte.
+    for _ in 0..hashes {
+        chars.next();
+        out.push('#');
+    }
+    chars.next();
+    out.push('"');
+    while let Some(next) = chars.next() {
+        if next == '"' {
+            let mut probe = chars.clone();
+            let mut seen = 0usize;
+            while seen < hashes && probe.peek() == Some(&'#') {
+                probe.next();
+                seen += 1;
+            }
+            if seen == hashes {
+                out.push('"');
+                for _ in 0..hashes {
+                    out.push('#');
+                    chars.next();
+                }
+                break;
+            }
+        }
+        blank(out, next);
+    }
 }
 
 /// Blank a character, keeping the file's byte count.
@@ -6377,6 +6466,71 @@ mod tests {
     /// position. That only works if the two views are the same length, byte
     /// for byte: a block comment's end, a string's contents and a character
     /// that is more than one byte all have to keep their place. §155.
+    /// A raw string is a string, and its contents are not code.
+    ///
+    /// The scanner that blanks an ordinary string's contents ends it at the
+    /// first quote inside it — and a raw string has quotes inside it. The
+    /// rest of the file was read as code, so a name inside a raw string was
+    /// a definition, and a limit nobody enforced looked enforced. §158.
+    #[test]
+    fn a_raw_string_is_a_string() {
+        let source = "let raw = r#\"{\"time\": 1}\"#;\nfn f() {}\n";
+        let code = code_lines_kept(source);
+        assert!(!code.contains("time"), "{code}");
+        assert!(code.contains("fn f()"), "{code}");
+        assert_eq!(code.len(), source.len(), "{code}");
+    }
+
+    /// A raw string ends at its own delimiter, not at the first quote in it.
+    #[test]
+    fn a_raw_string_ends_at_its_own_delimiter() {
+        let source = "let a = r#\"one \"two\" three\"#;\nfn f() {}\n";
+        let code = code_lines_kept(source);
+        assert!(!code.contains("one"), "{code}");
+        assert!(!code.contains("two"), "{code}");
+        assert!(!code.contains("three"), "{code}");
+        assert!(code.contains("fn f()"), "{code}");
+        assert_eq!(code.len(), source.len(), "{code}");
+    }
+
+    /// A backslash in a raw string is a backslash, not an escape.
+    ///
+    /// The scanner that blanks an ordinary string's contents takes a
+    /// backslash for an escape, and a raw string has none: `r#"a\"#` ends at
+    /// its own delimiter, and the quote before the hash closes it.
+    #[test]
+    fn a_backslash_in_a_raw_string_is_not_an_escape() {
+        let source = "let a = r#\"ends with a backslash\\\"#;\nfn f() {}\n";
+        let code = code_lines_kept(source);
+        assert!(code.contains("fn f()"), "{code}");
+        assert_eq!(code.len(), source.len(), "{code}");
+    }
+
+    /// A raw string with no hashes is a raw string too.
+    #[test]
+    fn a_raw_string_without_hashes_is_a_raw_string() {
+        let source = "let a = r\"plain\";\nfn f() {}\n";
+        let code = code_lines_kept(source);
+        assert!(!code.contains("plain"), "{code}");
+        assert!(code.contains("fn f()"), "{code}");
+        assert_eq!(code.len(), source.len(), "{code}");
+    }
+
+    /// A byte string is a string too.
+    ///
+    /// `b"…"` is an ordinary string to the reader, and `br"…"` is a raw one:
+    /// the `b` in front of the `r` does not make the string an ordinary one.
+    #[test]
+    fn a_byte_string_is_a_string() {
+        let source = "let a = br#\"bytes \"here\"\"#;\nlet b = b\"more\";\nfn f() {}\n";
+        let code = code_lines_kept(source);
+        assert!(!code.contains("bytes"), "{code}");
+        assert!(!code.contains("here"), "{code}");
+        assert!(!code.contains("more"), "{code}");
+        assert!(code.contains("fn f()"), "{code}");
+        assert_eq!(code.len(), source.len(), "{code}");
+    }
+
     #[test]
     fn the_code_view_is_the_same_length_as_the_file() {
         let source = "/* a comment */\n\

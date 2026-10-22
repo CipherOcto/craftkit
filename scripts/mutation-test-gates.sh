@@ -4110,5 +4110,58 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the cut keeps a test-only method" \
     "cargo test -p xtask --profile ci a_test_only_method_is_not_a_reader"
 
+# A raw string is a string, and the tree's one code reader did not know it.
+# The reader that blanks an ordinary string's contents ends it at the first
+# quote inside -- and a raw string has quotes inside it. Measured, against the
+# gates on a copy of the tree, with the reader as it was before the fix and
+# with the reader as it is after it:
+#
+#   * a limit whose every production use had been replaced by a literal, and
+#     which a raw string merely mentioned, was reported as **enforced** --
+#     a limit nobody enforces is a wish, and the gate said it was not. The
+#     control, with the same mention in an ordinary string, was reported
+#     correctly, before and after.
+#   * a raw string with one quote in it, four lines before the writer, was
+#     reported by the gate that says the tree writes its JSON with one
+#     writer: the design file "is not written with the tree's writer", which
+#     is untrue. The reader had ended its ordinary string in the wrong place
+#     and read the rest of the file as string contents. The control, with the
+#     same text in an ordinary string, was green before and after.
+#
+# The tree's own raw strings are all in test code, which is why no gate had
+# noticed: the defect was latent, and it is measured here rather than
+# asserted. Section 158.
+swap xtask/src/lists.rs \
+    "            'r' if !ends_with_word_byte(&out) => {" \
+    "            'r' if ends_with_word_byte(&out) => {"
+expect_catch "gate: the reader does not recognise a raw string" \
+    "cargo test -p xtask --profile ci a_raw_string_is_a_string"
+
+swap xtask/src/lists.rs \
+    "            if seen == hashes {" \
+    "            if seen == hashes && hashes == 0 {"
+expect_catch "gate: the reader ends a raw string at the first quote in it" \
+    "cargo test -p xtask --profile ci a_raw_string_ends_at_its_own_delimiter"
+
+swap xtask/src/lists.rs \
+    "    for _ in 0..hashes {
+        chars.next();
+        out.push('#');
+    }
+    chars.next();
+    out.push('\"');" \
+    "    for _ in 0..hashes {
+        out.push('#');
+    }
+    out.push('\"');"
+expect_catch "gate: the reader does not consume the raw string's own delimiter" \
+    "cargo test -p xtask --profile ci a_raw_string_without_hashes_is_a_raw_string"
+
+swap xtask/src/lists.rs \
+    "                let raw = ahead.peek() == Some(&'r');" \
+    "                let raw = ahead.peek() == Some(&'R');"
+expect_catch "gate: the reader does not recognise a byte string" \
+    "cargo test -p xtask --profile ci a_byte_string_is_a_string"
+
 restore
 finish
