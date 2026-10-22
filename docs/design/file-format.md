@@ -47,6 +47,19 @@ is out of date.
 That is a complete, loadable file. `craftkit-cli eval` on it reports one node,
 12 frames at 24 fps, and no diagnostics.
 
+### The whitespace is not part of the format
+
+The file above is hand-written and indented; the files this build writes are
+one item per line, and the **indentation stops growing past four levels** — so
+a design with a deep property tree has a flat file below that depth. The
+indentation used to grow with the design, which made a file up to ten times the
+design it held, and a design the model accepted could then be too big to save
+(§141).
+
+None of that is part of the format: the reader takes any JSON of this shape,
+and the writer's layout is a property of the writer. The shape is what the rest
+of this document describes.
+
 ### The four shapes that surprise people
 
 **`format` is a string, not a number.** `"craftkit/1"` — a tag plus a version.

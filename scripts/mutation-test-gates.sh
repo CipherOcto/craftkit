@@ -77,6 +77,7 @@ readonly FILES=(
     crates/io/src/lib.rs
     crates/io/src/format.rs
     crates/io/src/store.rs
+    crates/io/src/writer.rs
     crates/io/src/format/pending.rs
     crates/kernel/src/lib.rs
     crates/ui/Cargo.toml
@@ -838,7 +839,7 @@ swap crates/io/src/format.rs \
     '        self.to_text_bounded(MAX_FILE_BYTES)' \
     '        self.to_text_bounded(usize::MAX)'
 expect_catch "io: the writer writes a file too large to read back" \
-    "cargo test -p craftkit-io --profile ci a_document_too_large_to_read_back_is_not_written"
+    "cargo test -p craftkit-io --profile ci a_design_whose_file_would_be_too_big_is_not_written"
 
 # The limit has to stop the text *while* it is written, not after: §49's
 # lesson, in the writer. A writer that keeps the chunk it refused has spent
@@ -3544,6 +3545,40 @@ swap docs/recipes/add-a-command.md \
     '        ParamDoc::either("node", Doc::NodeRef, "The node'"'"'s id, or its name.", "node_name"),' \
     '        ParamDoc::req("node", Doc::NodeRef, "The node'"'"'s id."),'
 expect_catch "prose: a quoted command spec is not the one in the code" \
+    "cargo xtask lists"
+
+# The design file's indentation grew with the depth of the design, so a file
+# was up to 9.9 times the design it held -- and the tree's file cap was
+# smaller than the file some designs inside the model's own budget needed.
+# The tree could hold designs it could not save. §141.
+#
+# The bound on the indentation is the whole of the fix: take it away and the
+# file is ten times the design again, and a design the model accepts no
+# longer fits in a file.
+swap crates/io/src/writer.rs \
+    'pub const MAX_INDENT_DEPTH: usize = 4;' \
+    'pub const MAX_INDENT_DEPTH: usize = 64;'
+expect_catch "io: the writer indents as deep as the design goes" \
+    "cargo test -p craftkit-io --profile ci a_designs_file_is_bounded_by_the_design_it_holds"
+
+# The format's expansion is the number that says how many bytes of text one
+# byte of design takes, and the file's cap is the design's budget times it.
+# Understate the expansion and the cap is too small for a design the model
+# accepts: the tree holds a design it cannot save.
+swap crates/io/src/format.rs \
+    'pub const FILE_EXPANSION: usize = 2;' \
+    'pub const FILE_EXPANSION: usize = 1;'
+expect_catch "io: the format's expansion is understated" \
+    "cargo test -p craftkit-io --profile ci a_document_the_model_accepts_can_be_written_and_read_back"
+
+# And the cap itself has to be *derived*. A literal that happens to be the
+# right number today is a number that can be wrong tomorrow, and the test in
+# the io crate cannot see it: the literal and the derivation have the same
+# value. That is what the gate is for.
+swap crates/io/src/format.rs \
+    'pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * FILE_EXPANSION;' \
+    'pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;'
+expect_catch "io: the file's cap is a number somebody chose" \
     "cargo xtask lists"
 
 restore

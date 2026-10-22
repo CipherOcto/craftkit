@@ -111,11 +111,15 @@ pub const MAX_JSON_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 
 /// The largest JSON text whose parse fits in [`MAX_JSON_MEMORY_BYTES`].
 ///
-/// This is the number every reader of untrusted JSON in the tree uses: the
-/// control channel's line limit, the MCP server's message limit, and the
-/// CLI's script limit. They used to be three unrelated numbers — 1 MiB,
-/// 4 MiB and 32 MiB — and the largest of them bought a gigabyte of memory.
-/// §64.
+/// This is the number every reader of **raw** untrusted JSON in the tree
+/// uses: the control channel's line limit, the MCP server's message limit,
+/// and the CLI's script limit. They used to be three unrelated numbers — 1
+/// MiB, 4 MiB and 32 MiB — and the largest of them bought a gigabyte of
+/// memory. §64.
+///
+/// The design file is the fourth reader of untrusted JSON, and it is the
+/// exception: its text is not a raw JSON tree but a document, so its limit is
+/// the model's own budget for one rather than this number. §64, §141.
 pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;
 
 /// Check a number that is about to be stored.

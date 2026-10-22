@@ -245,20 +245,41 @@ impl Default for Format {
     }
 }
 
+/// How many bytes of file text one byte of document memory costs, measured.
+///
+/// A design file and the design it holds are the same thing in two
+/// currencies: the file's **text** and the document's **memory**. The number
+/// that converts one into the other is not a constant of the language but a
+/// property of this format — and it used to be a property of the *design*,
+/// because the file was indented by the design's depth. Measured over the
+/// shapes a document can take, the text was 2.5 times the memory for a flat
+/// design and 9.9 times it for a deep one, and the tree's file cap was
+/// smaller than the file some designs inside the model's own budget needed:
+/// 311 MiB of file for a 31 MiB design. §141.
+///
+/// The writer's indentation now stops growing
+/// ([`crate::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
+/// format rather than a function of the design. Measured over the same
+/// shapes, the worst case is **1.51** bytes of text per byte of memory.
+pub const FILE_EXPANSION: usize = 2;
+
 /// How many bytes a design file may be.
 ///
-/// The cap is generous for a document and small enough to bound the parse.
+/// Derived from the model's own budget, the way every other limit in the tree
+/// is derived: a design may hold
+/// [`craftkit_model::limits::MAX_DOCUMENT_BYTES`] of memory, and its file may
+/// be at most [`FILE_EXPANSION`] times that.
+///
+/// 64 MiB — the number this cap has always been — but now it is a
+/// consequence rather than a choice, and it cannot drift away from the budget
+/// it protects. The other half of the derivation is what makes the two agree:
+/// every document the model accepts has a file inside this cap, so the tree
+/// can hold a design and save it. §141.
+///
 /// It is applied **while reading**, in [`crate::store::load`], so that a file
 /// of any size costs at most this much memory — a cap checked after the read
 /// has already paid for what it was meant to prevent. §49.
-///
-/// That bounds the **text**. The parse then turns the text into a document,
-/// and a document is measured against its own budget
-/// ([`craftkit_model::limits::MAX_DOCUMENT_BYTES`]), so the file's bytes and
-/// the document's bytes are two different numbers and the reader's cap is the
-/// looser one. A raw JSON input has no such second measurement, which is why
-/// its limits are derived from a memory budget instead — §64.
-pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * FILE_EXPANSION;
 
 /// The shape of a whole file on disk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,7 +349,8 @@ impl File {
         }
     }
 
-    /// The JSON this build writes, pretty-printed with a trailing newline.
+    /// The JSON this build writes: one item per line, with the indentation
+    /// bounded, and a trailing newline.
     ///
     /// The trailing newline is not cosmetic: it makes every saved file end in
     /// one, so a diff of two saves shows only what changed.
@@ -350,7 +372,7 @@ impl File {
     /// agree about what a file is.
     pub fn to_text_bounded(&self, max: usize) -> Result<String, FormatError> {
         let mut out = LimitedWriter::new(max);
-        match serde_json::to_writer_pretty(&mut out, self) {
+        match crate::writer::write_json(&mut out, self) {
             Ok(()) => {}
             Err(e) if e.is_io() => {
                 return Err(FormatError::TooLargeToWrite { bytes: out.seen, limit: max });
@@ -443,12 +465,162 @@ impl std::io::Write for LimitedWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craftkit_model::Document;
+    use craftkit_model::{Document, NodeKind, PropGroup, Property};
 
     #[test]
     fn the_tag_names_this_build() {
         assert_eq!(tag(1), "craftkit/1");
         assert_eq!(Format::new().version().expect("valid"), CURRENT);
+    }
+
+    /// The file's cap is the design's own budget, not a number somebody chose.
+    ///
+    /// §141. The cap used to be 64 MiB written out as a literal, and the two
+    /// numbers it has to agree with — the model's budget for a document, and
+    /// the format's expansion from a document to its text — were nowhere in
+    /// the same place. A literal that happens to be the right number today is
+    /// a number that can be wrong tomorrow.
+    #[test]
+    fn the_file_cap_is_the_model_budget_times_the_formats_expansion() {
+        assert_eq!(
+            MAX_FILE_BYTES,
+            craftkit_model::limits::MAX_DOCUMENT_BYTES * FILE_EXPANSION,
+            "the file's cap is not the design's own budget times the format's expansion"
+        );
+    }
+
+    /// A design's file is at most [`FILE_EXPANSION`] times the design's memory.
+    ///
+    /// This is the property that makes the file's cap and the model's budget
+    /// agree: if a design's file could be bigger than the cap, the tree would
+    /// hold designs it could not save. §141.
+    ///
+    /// The shapes are the ones a design can take — many small nodes, long text
+    /// values, keyframes, and keyframes inside the deepest property tree the
+    /// model allows — and the worst of them measured 1.51 before the writer's
+    /// indentation was bounded. It was 9.9.
+    #[test]
+    fn a_designs_file_is_bounded_by_the_design_it_holds() {
+        for (name, doc) in shapes() {
+            let text = File::new(doc.clone()).to_text().expect("the design is written");
+            let memory = doc.estimated_bytes();
+            assert!(
+                text.len() <= FILE_EXPANSION * memory,
+                "{name}: the file is {} bytes and the design holds {memory} bytes",
+                text.len()
+            );
+        }
+    }
+
+    /// The shapes a design can take, each big enough that the file's own head
+    /// does not decide the ratio.
+    fn shapes() -> Vec<(&'static str, Document)> {
+        let mut out: Vec<(&'static str, Document)> = Vec::new();
+
+        // Many small nodes: the file is verbose per node.
+        {
+            let mut doc = Document::empty("Nodes");
+            for n in 0..2_000u64 {
+                let id = doc.add_node(format!("node{n}"), NodeKind::Filter).expect("node");
+                let mut g = PropGroup::new("props", "Properties");
+                for p in 0..3u64 {
+                    g.push(Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0)));
+                }
+                doc.get_mut(id).expect("just added").props = g;
+            }
+            out.push(("many small nodes", doc));
+        }
+
+        // Long text values: the file is the same size as the design.
+        {
+            let text = "x".repeat(65_000);
+            let mut doc = Document::empty("Text");
+            let id = doc.add_node("wide", NodeKind::Source).expect("node");
+            let mut g = PropGroup::new("props", "Properties");
+            for p in 0..64u64 {
+                g.push(Property::new(p + 1, format!("t{p}"), craftkit_core::Value::Text(text.clone())));
+            }
+            doc.get_mut(id).expect("just added").props = g;
+            out.push(("text values", doc));
+        }
+
+        // Keyframes, and the same keyframes inside the deepest property tree
+        // the model allows: the shape the unbounded indentation hurt most.
+        for (name, depth) in [("keyframes", 0usize), ("keyframes in the deepest tree", 15)] {
+            let mut doc = Document::empty("Keys");
+            let id = doc.add_node("animated", NodeKind::Cue).expect("node");
+            let mut g = PropGroup::new("props", "Properties");
+            for p in 0..8u64 {
+                let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                for t in 0..2_000i128 {
+                    let Ok(key) = craftkit_model::Key::new(
+                        craftkit_core::Tick::from_raw(t * 10_584_000),
+                        craftkit_core::Value::Num(t as f64),
+                        craftkit_model::Easing::Linear,
+                    ) else {
+                        break;
+                    };
+                    if prop.keys.set(key).is_err() {
+                        break;
+                    }
+                }
+                g.push(prop);
+            }
+            let mut inner = g;
+            for d in 0..depth {
+                let mut group = PropGroup::new(format!("g{d}"), format!("Group {d}"));
+                group.push_group(inner);
+                inner = group;
+            }
+            doc.get_mut(id).expect("just added").props = inner;
+            out.push((name, doc));
+        }
+
+        out
+    }
+
+    /// The writer's own limit still stops a design whose file would be too big.
+    ///
+    /// §51. The writer and the reader share the cap, so a file the writer
+    /// writes is a file the reader can read back. §141 bounded the
+    /// indentation, so a design *the model accepts* now always fits — but the
+    /// writer does not know what the model accepts, and the cap is what it
+    /// has.
+    #[test]
+    fn a_design_whose_file_would_be_too_big_is_not_written() {
+        let doc = a_design_bigger_than_a_file();
+        let err = File::new(doc).to_text().expect_err("the writer refuses it");
+        assert!(matches!(err, FormatError::TooLargeToWrite { limit: MAX_FILE_BYTES, .. }), "{err}");
+    }
+
+    /// A design whose file is bigger than the cap.
+    ///
+    /// Fifty-six properties with 10 000 keyframes on each: 53.6 MiB of memory
+    /// and 74 MiB of text, past the cap. The model's own budget would refuse
+    /// it too, but the writer is asked on its own here — `File::to_text` does
+    /// not validate the design, and the cap is what the writer has.
+    fn a_design_bigger_than_a_file() -> Document {
+        let mut doc = Document::empty("Big");
+        let id = doc.add_node("n", NodeKind::Source).expect("node");
+        let mut group = PropGroup::new("props", "Properties");
+        for p in 0..56u64 {
+            let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+            for t in 0..10_000i128 {
+                let Ok(key) = craftkit_model::Key::new(
+                    craftkit_core::Tick::from_raw(t),
+                    craftkit_core::Value::Num(t as f64),
+                    craftkit_model::Easing::Linear,
+                ) else {
+                    break;
+                };
+                if prop.keys.set(key).is_err() {
+                    break;
+                }
+            }
+            group.push(prop);
+        }
+        doc.get_mut(id).expect("just added").props = group;
+        doc
     }
 
     /// The writer refuses a text that is over the limit, and says which limit.

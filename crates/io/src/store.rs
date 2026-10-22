@@ -338,27 +338,36 @@ mod tests {
         assert!(message.contains("amount"), "{message}");
     }
 
-    /// A document the reader would refuse must not be written.
+    /// A document the model accepts can be written, and read back.
     ///
-    /// §49 gave the reader a limit of 64 MiB. The writer had none, so a
-    /// document big enough to serialise past it was written to disk as a file
-    /// that could not be opened again. Measured: a document of 32 properties
-    /// with 10 000 keyframes on each — well inside the model's own limits —
-    /// serialised to 74 820 332 bytes, was written, and was then refused by
-    /// the reader with *"the file is 74820332 bytes, and the limit is
-    /// 67108864"*. §51.
+    /// §141. §51 made the writer refuse a document whose file would be too big
+    /// to read back, and §52 gave the document a budget of its own — but the
+    /// budget counts **memory** and the refusal counts **text**, and the two
+    /// are not the same thing. The file's indentation grew with the depth of
+    /// the design, so a design's file was up to 9.9 times the design's
+    /// memory, and the document §51 used — 32 properties with 10 000
+    /// keyframes on each — is inside the model's budget (29.3 MiB of memory)
+    /// and was 71.4 MiB of text, past the reader's 64 MiB. So the tree could
+    /// hold a design it could not save, and the test below asserted exactly
+    /// that.
+    ///
+    /// The two agree now: the same document is written, and read back.
     #[test]
-    fn a_document_too_large_to_read_back_is_not_written() {
-        let doc = too_large_to_read();
+    fn a_document_the_model_accepts_can_be_written_and_read_back() {
+        let doc = a_big_document_the_model_accepts();
+        assert!(doc.validate().is_ok(), "the document is one the model accepts");
 
-        let err = save_text(&doc).expect_err("the writer refuses it too");
-        let message = err.to_string();
-        assert!(message.contains("the limit is"), "{message}");
+        let text = save_text(&doc).expect("the writer writes it");
+        assert!(
+            text.len() <= crate::format::MAX_FILE_BYTES,
+            "the file is {} bytes, and the cap is {}",
+            text.len(),
+            crate::format::MAX_FILE_BYTES
+        );
 
-        let path = scratch("too-large").join("plan.craftkit");
-        let err = save(&path, &doc).expect_err("the writer refuses it too");
-        assert!(err.to_string().contains("the limit is"), "{err}");
-        assert!(!path.exists(), "a refused document left a file behind");
+        let path = scratch("savable").join("plan.craftkit");
+        save(&path, &doc).expect("save");
+        assert_eq!(load(&path).expect("load"), doc, "the file reads back as the design");
     }
 
     /// A document the reader *can* read back is written, and reads back.
@@ -373,11 +382,11 @@ mod tests {
         assert_eq!(load(&path).expect("load"), doc);
     }
 
-    /// A document the model's own limits allow, and the reader's do not.
+    /// A document the model's own limits allow, and that is big.
     ///
     /// One node, 32 properties, 10 000 keyframes on each: inside
-    /// `MAX_PROPERTIES` and `MAX_KEYS`, and 74 MiB of text.
-    fn too_large_to_read() -> Document {
+    /// `MAX_PROPERTIES` and `MAX_KEYS`, and 29.3 MiB of memory. §141.
+    fn a_big_document_the_model_accepts() -> Document {
         let mut doc = Document::empty("Big");
         let id = doc.add_node("n", NodeKind::Source).expect("node");
         let mut group = craftkit_model::PropGroup::new("props", "Properties");

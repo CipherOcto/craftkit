@@ -15843,6 +15843,196 @@ and is not.
 that named it. The two it missed were the two a person reads *before* writing
 code.
 
+## 141. The tree could hold a design it could not save
+
+Two budgets, two currencies, and no stated conversion between them.
+
+### The measurements
+
+A design and the file that holds it are the same thing in two currencies: the
+design's **memory** and the file's **text**. The model budgets the first
+(`MAX_DOCUMENT_BYTES`, 32 MiB, §52) and the format budgets the second
+(`MAX_FILE_BYTES`, 64 MiB, §49). The number that converts one into the other
+was nowhere in the tree — and it was not a constant either.
+
+The file was written pretty: one item per line, **indented by its depth**. The
+depth is the design's own — a property tree may nest sixteen deep
+(`MAX_PATH_SEGMENTS`), and a keyframe inside it is written nine levels down —
+so the indentation grew with the design, and the file grew faster than the
+design did.
+
+Measured, over the shapes a design can take:
+
+| the design | its memory | its file | the factor |
+|---|---|---|---|
+| 9 990 small nodes | 13.23 MiB | 11.43 MiB | **0.86** |
+| 512 text values of 65 000 bytes | 31.88 MiB | 31.90 MiB | **1.00** |
+| 32 properties × 1 000 keyframes | 2.94 MiB | 7.08 MiB | **2.48** |
+| the same, in the deepest property tree | 2.95 MiB | 29.32 MiB | **9.95** |
+
+The factor is a function of the *design*, and it ranges over a factor of
+eleven. So the two budgets were not comparable numbers at all. §64's
+reasoning — *"the document path is the one place in the tree where the bytes
+of a file and the bytes of what it holds are two different numbers with the
+tighter one on the memory"* — was true about memory and wrong about
+everything else: the looser number was not loose enough.
+
+**The tree could hold a design it could not save.** The largest design the
+model accepts — 34 properties × 10 000 keyframes, in the deepest property tree
+— is 31.15 MiB of memory, inside the model's 32 MiB budget, and **311.61 MiB**
+of text, past the format's 64 MiB cap.
+
+And the shape §51 measured, the one that section wrote down:
+
+| | memory | text |
+|---|---|---|
+| 32 properties × 10 000 keyframes | **29.31 MiB** — inside the model's budget | **71.35 MiB** — past the format's cap |
+
+The writer refused it:
+
+```text
+save_text -> the file would be more than 67108865 bytes, and the limit is 67108864
+```
+
+§52's budget was supposed to close §51's open item — *"the engine can still
+hold such a document: nothing stops a command from growing the plan past what
+can be written"* — and it did not, because the budget counts **memory** and
+the refusal counts **text**, and the two are not the same thing.
+
+**A test asserted the defect.** `a_document_too_large_to_read_back_is_not_written`
+built that document and checked that the writer refused it. The rule it
+enforced was *"a design the model accepts cannot be saved"*.
+
+### Why nothing noticed
+
+**The file's cap was a number somebody chose.** Its own doc comment said so:
+*"The cap is generous for a document and small enough to bound the parse."*
+That is a judgement, not a derivation, and §64's rule is that the limits are
+*"derived from a memory budget rather than chosen on their own"*. The three raw
+JSON readers had been re-derived; the design file had been left alone, and
+§64's own body called it *"the exception"* without saying what the exception
+was for.
+
+**The tree's own documentation claimed the opposite.** `crates/core/src/lib.rs`
+said of `MAX_JSON_TEXT_BYTES`:
+
+> This is the number every reader of untrusted JSON in the tree uses: the
+> control channel's line limit, the MCP server's message limit, and the CLI's
+> script limit.
+
+The design file is the fourth reader of untrusted JSON. It did not use that
+number, and it could not: the number is a bound on a raw JSON tree, and a
+design file is not one.
+
+**Nothing compared the two currencies.** There was no number in the tree for
+"how many bytes of text one byte of design takes", so the model's budget and
+the format's cap could not be compared — and two limits that cannot be
+compared are two limits that can drift apart silently.
+
+### The fix
+
+**The writer's indentation stops growing.** `crates/io/src/writer.rs` is a
+formatter of the tree's own: serde_json's pretty formatter with one change,
+that the indentation does not grow past [`MAX_INDENT_DEPTH`] (four levels).
+Everything else — where the newlines go, how a string is escaped, how a
+number is written — is serde_json's, so the file is the same JSON it always
+was, and only the spaces at the start of a line differ.
+
+The factor is now a constant of the format rather than a function of the
+design:
+
+| the design | before | after |
+|---|---|---|
+| 9 990 small nodes | 0.86 | **0.65** |
+| 512 text values | 1.00 | **1.00** |
+| keyframes, flat | 2.48 | **1.49** |
+| keyframes, in the deepest tree | 9.95 | **1.48** |
+
+**The file's cap is derived.** `MAX_FILE_BYTES` is now
+`MAX_DOCUMENT_BYTES * FILE_EXPANSION` — the design's own budget times the
+format's measured expansion. It is **64 MiB**, the number it has always been,
+but it is a consequence rather than a choice, and it cannot drift away from
+the budget it protects.
+
+**The invariant is a test.** The document §51 measured is now written and read
+back:
+
+```text
+32 properties x 10 000 keyframes: memory 29.31 MiB, text 42.05 MiB
+save_text -> Ok, 44097000 bytes
+```
+
+and the largest design the model accepts is 46.97 MiB of text, inside the
+64 MiB cap. The same design's file was 311.61 MiB before, and the reader
+refused it.
+
+**The core's claim is true now.** The comment says *raw* untrusted JSON, and
+names the design file as the exception, with the reason.
+
+### What now holds it
+
+Three mutations, and three tests:
+
+| Mutation | Caught by |
+|---|---|
+| the writer indents as deep as the design goes | `a_designs_file_is_bounded_by_the_design_it_holds` |
+| the format's expansion is understated | `a_document_the_model_accepts_can_be_written_and_read_back` |
+| the file's cap is a number somebody chose | `the_file_cap_is_derived_from_the_designs_budget` |
+
+The third one is the interesting one: the mutation writes the cap as the
+literal `64 * 1024 * 1024`, which is the *same number* the derivation gives.
+The test in the io crate cannot see it — the two have the same value today —
+and the gate can, because the gate reads the source. That is what a gate is
+for, and it is the first time in this tree that a unit test and a gate cover
+the same rule from two sides.
+
+### What is still open
+
+**The reader still pays for the text it refuses.** A 61 MiB file is refused
+correctly and costs **119 MiB** of resident memory, because the reader holds
+the text and then builds a document from it — and the document's budget is
+checked *after* the parse, not during it. The cap is the same 64 MiB it has
+always been, so nothing regressed, but the tree's promise for a hostile file
+is still "the text plus the document", and the second half of that promise is
+not bounded while the parse runs. Streaming the parse would fix it, and it is
+a change to the reader's shape rather than to a number.
+
+**The bound of four levels is a choice.** Below it the file looks as it always
+has; below *that* the lines are flat. A design file that does not nest at all
+— a property tree stored by path — would make the factor a property of the
+data rather than of the depth, and the tree has machinery for a change of
+shape (`format/pending`). It is a change of the file format, and the file
+format is not changed for a number.
+
+**The file's cap is still twice the design's budget.** That is the format's
+expansion (1.51 measured, 2 allowed), and it is what it is: the file is
+pretty, and a pretty file is bigger than the design it holds. The bound on
+the reader's memory follows from it.
+
+### The lesson
+
+**Two budgets for one thing need a stated conversion, and the conversion has
+to be measured.** The model and the format each had a number, the numbers
+looked like they were about the same thing, and nothing in the tree said what
+one was in units of the other. The conversion was a property of the *design* —
+0.86 for one shape and 9.95 for another — and a property of the design is not
+a number a limit can be written in.
+
+**A limit checked in one currency cannot bound a limit in another.** The
+model's budget was about memory and the format's cap was about text, and §52
+believed the first closed the second. It did not, and the way to see that it
+did not is to ask what the two numbers mean side by side: 29.31 MiB and
+71.35 MiB, of the same design.
+
+**A test that asserts a defect is a test that keeps the defect.** The test
+that caught the writer refusing a design the model accepts was written to
+prove §51's fix worked, and it did — §51's fix was *"refuse to write what the
+reader would refuse"*, and the test enforced exactly that. What it could not
+see was that the rule it enforced was the wrong rule: a design the model
+accepts should be savable, and the writer should never have been asked.
+
+---
+
 ---
 
 ---
@@ -16174,6 +16364,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A panel never keeps a copy of the plan** | `cargo xtask lists` | 1 mutation — §138 |
 | **Every parameter a command reads is declared** | `cargo xtask lists` | 1 mutation — §139 |
 | **Every parameter a command declares is read** | `cargo xtask lists` | 1 mutation — §139 |
+| **A design the model accepts can always be saved** | `craftkit-io` test | 1 mutation — §141 |
+| **A design's file is bounded by the design it holds** | `craftkit-io` test | 1 mutation — §141 |
+| **The design file's cap is the design's budget, not a number of its own** | `cargo xtask lists` | 1 mutation — §141 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -16752,3 +16945,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     engine does not), name the commands a front end is allowed to reimplement
     (a list that has to be kept true), or accept that a front end's behaviour
     is checked by its own tests and that the gates police only the *names*.
+26. **Decide what a design file may cost, and what the reader may spend on one.**
+    §141 bound the writer's indentation, so that a file is at most twice the
+    design it holds, and derived the file's cap from the model's budget. The
+    two numbers are still the tree's own choices: the expansion is the
+    format's (1.51 measured, 2 allowed) and the bound on the indentation
+    (four levels) is a taste. And the reader still pays for the text it
+    refuses — a 61 MiB file costs 119 MiB of resident memory, because the
+    document's budget is checked after the parse rather than during it. The
+    choices are: flatten the property tree in the file, so that a file's size
+    is a property of the data and not of how deep the design nests (a change
+    of the file format, with the `format/pending` machinery and the
+    compatibility work that goes with it); or keep the nesting and stream the
+    reader's parse, so that a hostile file costs a document and not a document
+    plus its text; or accept both numbers as they are and write them down as
+    the promise they are.

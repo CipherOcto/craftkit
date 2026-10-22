@@ -1064,6 +1064,60 @@ pub fn every_test_only_setting_names_a_denied_lint(root: &Path) -> Result<Vec<St
     Ok(problems)
 }
 
+/// The design file's byte cap, and the budget it has to come from.
+///
+/// §141. The cap used to be `64 * 1024 * 1024`, written out as a literal, and
+/// the two numbers it has to agree with — the model's budget for a document,
+/// and the format's expansion from a document to its text — were nowhere in
+/// the same place. A literal that happens to be the right number today is a
+/// number that can be wrong tomorrow: raise the model's budget and the
+/// reader's cap stays where it was.
+///
+/// The runtime test in the io crate cannot see this, because the literal and
+/// the derivation have the same value today. That is what a gate is for.
+pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates/io/src/format.rs");
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let mut problems = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))
+    else {
+        problems.push(
+            "crates/io/src/format.rs: there is no `MAX_FILE_BYTES`: the design file's cap is the \
+             number the reader and the writer share"
+                .to_string(),
+        );
+        return Ok(problems);
+    };
+    // The statement may be wrapped over several lines, and the names it has to
+    // name are on one of them.
+    let mut statement = lines[index].to_string();
+    let mut last = index;
+    while !statement.contains(';') && last + 1 < lines.len() {
+        last += 1;
+        statement.push(' ');
+        statement.push_str(lines[last].trim());
+    }
+    if !statement.contains("MAX_DOCUMENT_BYTES") {
+        problems.push(format!(
+            "crates/io/src/format.rs: line {} writes the design file's cap without the model's \
+             budget for a design in it; the cap has to be that budget times the format's \
+             expansion, so that a design the model accepts can always be saved. §141.",
+            index + 1
+        ));
+    }
+    if !statement.contains("FILE_EXPANSION") {
+        problems.push(format!(
+            "crates/io/src/format.rs: line {} writes the design file's cap without the format's \
+             expansion in it; the cap has to be the model's budget times the number of bytes of \
+             text one byte of design takes. §141.",
+            index + 1
+        ));
+    }
+    Ok(problems)
+}
+
 /// The types the evaluator's answers arrive in.
 ///
 /// `Plan` is the whole answer, `NodeState` one node's, `Resolved` one
@@ -3981,6 +4035,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A setting that re-enables nothing enforces nothing.")),
     );
 
+    // The design file's cap, and the budget it has to come from. §141.
+    problems.extend(
+        the_file_cap_is_derived_from_the_designs_budget(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A cap that is a number of its own drifts from the budget.")),
+    );
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -5575,5 +5636,54 @@ printf '%s%d/%d caught.%s\\n' \\
         let read = names_read(&rename.body, rename.body_line, &readers, 0);
         assert_eq!(read.len(), 1, "it reads one parameter: {read:?}");
         assert_eq!(read[0].0, "name", "and it is the one it declares");
+    }
+
+    /// The design file's cap is the design's own budget, times the format's
+    /// expansion. §141.
+    ///
+    /// The runtime test in the io crate cannot see this one: the literal and
+    /// the derivation have the same value today, so only the source can tell
+    /// them apart. That is what a gate is for.
+    #[test]
+    fn a_file_cap_that_is_a_number_of_its_own_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_file_cap_is_derived_from_the_designs_budget(&root).expect("runs").is_empty(),
+            "the design file's cap is not the design's own budget times the format's expansion"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-file-cap-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+
+        // A cap somebody chose: the same number, and no way to see it.
+        std::fs::write(io.join("format.rs"), "pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;\n")
+            .expect("the fabricated source");
+        let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        // The cap the tree has, written over two lines: the gate reads the
+        // statement, not the line.
+        std::fs::write(
+            io.join("format.rs"),
+            "pub const MAX_FILE_BYTES: usize =\n    craftkit_model::limits::MAX_DOCUMENT_BYTES * \
+             FILE_EXPANSION;\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a cap that names the budget but not the expansion is caught too:
+        // the expansion is the number that says how many bytes of text one
+        // byte of design takes.
+        std::fs::write(
+            io.join("format.rs"),
+            "pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES;\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
