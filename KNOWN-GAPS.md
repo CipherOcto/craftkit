@@ -19045,6 +19045,156 @@ the other fifteen. A table that says what each gate reads is a table that has
 to be held to the same standard as the gates it describes — which is what
 item 40 asks for.
 
+## 166. The audit asked the question again, and two more gates read a shape out of the text
+
+Item 40 asked for §159's audit to be checked rather than believed. The audit
+listed twenty gates and said, for each, which view it reads. §165 found one
+of those rows **wrong**. This section asks the audit's question of every gate
+in it — and asks it of the **reads**, not of the gates: a gate that reads a
+file twice reads it twice, and each read has to be on the right side of the
+line.
+
+The answer is two more gates, and a third finding: the audit was also
+**incomplete**.
+
+| Gate | The read that was still text | What it cost |
+|---|---|---|
+| `the_session_offers_no_second_path` | the `impl Session` block's **header** and its **end** | a public method after a `}` in a string went unchecked |
+| `find_embedded` (the assets gate) | the **embed call** itself | a comment or a string that showed a call was reported as an embed |
+
+The assets gate is **not in §159's list at all**. §159's audit was of "every
+gate that opens a Rust file", and the assets gate opens one — it reads every
+`.rs` file in the tree to look for `include_bytes!`. So the list was wrong
+about one row *and* was missing a gate, which is the second half of item 40's
+complaint: the list was a claim, and a claim that nobody checked is a
+sentence.
+
+### What was measured
+
+Against the real gates, on a copy of the tree, with the gates as they were
+before this section and with the fix in them. Every case has a control: the
+same tree with the thing *really* wrong, so a gate that said no to everything
+would pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | a `}` inside a raw string in `crates/engine/src/session.rs`, and a public method after it | **green** — the gate said nothing | **RED** — *"line 221 makes `Session::the_ghost_path` public"* | red, both — the block intact |
+| B | an `impl Session {` inside a raw string | **green** — the gate read the string's block, which ended before the real one | **RED** — the same complaint | red, both — the same method, with no string in the way |
+| C | an `include_str!` inside a **block comment** | **RED** — *"include_str! pulls in “logo.png”"*: a file the tree does not have | **green** | red, both — the call really in the code |
+| D | an `include_str!` inside a **raw string** | **RED** — the same false positive | **green** | red, both |
+
+Case A is a false negative in the gate §135 built. "There is no second path
+into the design" is a rule about the engine's **API**: a `pub fn` on
+`Session` that is not on the allow list is a public way to change the design,
+and a `}` inside a raw string hid it. The gate's own words for this are "a
+public way to change the design is a second path", and the method it missed
+was exactly that.
+
+Case C and Case D are false positives in the assets gate. The tree was
+reported as embedding `logo.png` — a file it does not have and never did. The
+gate that says *"no embedded image; every asset attributed"* was reporting an
+asset that does not exist, and the assets gate is the one that says every
+file in the tree is accounted for.
+
+### The case that changed nothing, and why it is worth writing down
+
+An `include_str!` inside an **ordinary** string was reported by neither the
+old gate nor the new one. Not because the gate had decided the call was not
+an embed: because the escaped quotes left it with an argument it could not
+resolve, and the rule it follows when it cannot resolve an argument is to say
+nothing. A **raw** string has no escapes, and the same gate reported it —
+the same sentence, the same file, the same call, the opposite answer.
+
+**Silence from a gate is not the same as a gate that knows.** It is measured
+here because the tree's own §17 keeps finding it: a check that cannot act is
+not a check, and a check that cannot say is not a check either.
+
+### The fix
+
+Two reads, both of them the tree's one reader.
+
+The session gate's block is found in the **code** and ends where its
+**braces** say:
+
+```rust
+let code = code_lines_kept(source);
+let start = code.find(header)?;
+let Some(brace) = header.rfind('{') else { return None };
+let close = matching(&code, start + brace, b'{', b'}')?;
+let block = &source[start + header.len()..close];
+```
+
+The old rule was "everything inside an `impl` is indented, so a `}` in the
+first column is the block's own" — a rule about **layout** used to answer a
+question about **structure**. The braces answer the structure question. The
+code view is the text, byte for byte, so the offsets are the same offsets and
+the block is the same block in both.
+
+The assets gate's **shape** comes from the code and its **contents** from the
+text:
+
+```rust
+let code = crate::lists::code_lines_kept(&text);
+for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
+    for call in EMBED_CALLS {
+        let Some(at) = code_line.find(call) else { continue };
+        let rest = &text_line[at + call.len()..];
+```
+
+"There is a call here" is code. "The path it names" is a string, and a
+string is the subject there.
+
+And the reader had to be **public** to be used from the assets module: it was
+a private `fn` in `lists.rs`, and the alternative was a second copy of the
+rule in `assets.rs` — the very thing the tree's one-reader test exists to
+stop. §166 made it `pub fn`, and the one-reader mutation's anchor with it.
+
+### The unit tests
+
+Four, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_brace_inside_a_string_does_not_end_the_session_block` | a `}` inside a string does not end the session's impl block |
+| `an_impl_inside_a_string_is_not_the_session_block` | an `impl Session {` inside a string is not the session's block |
+| `an_embed_call_in_a_block_comment_is_not_an_embed` | an embed call inside a block comment is not an embed |
+| `an_embed_call_in_a_string_is_not_an_embed` | an embed call inside a string is not an embed |
+
+### The mutations
+
+Four, each putting the old text-reading back. Each mutation is caught by
+**two** of the tests, so each swap is written **twice**: one swap serves one
+gate, and a second `expect_catch` after the same swap would run against a
+restored tree and report a **miss** that is not one.
+
+The first run of these four cases was **void**, and the reason is worth
+writing down. The anchors carry Rust's `'{` and `'}'`, and the script's
+anchors are shell-quoted, so the shell ate the quotes and the anchor never
+matched. The script's own guard caught it — it printed *"THE MUTATION DID
+NOT APPLY, SO THE RUN IS VOID"* and stopped the run rather than handing an
+unmutated tree to a gate — which is the guard doing exactly the thing it
+exists for. The quotes are escaped the way the script escapes them
+elsewhere, and the second run was whole.
+
+### The lesson
+
+**The audit's question is per *read*, not per gate.** §165's gate called the
+reader — for one of its two reads — and §159's table said "code view". A
+gate that reads a file twice reads it twice, and each read has to be on the
+right side of the line.
+
+**A gate that reads a shape has to say where the shape ends.** "A `}` in the
+first column is the block's own" is a fact about how people write Rust, and
+it was answering a question about what the code *is*. The braces answer that
+question, and they answer it in the code, where a `}` inside a string is not
+a brace.
+
+**A list of gates is a list of claims, and the list was wrong twice.** §161
+fixed the four the list named as broken, §165 fixed the fifth the list had
+wrong, and here the list was missing a gate as well. The list is still worth
+more than nothing — every gate this section found was found *by asking its
+question* — but it cannot be trusted row by row, and item 40 stays open.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19437,6 +19587,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An impl block inside a string is not an impl block** | the code view in `fingerprint_sees_every_field` | 1 mutation — §165 |
 | **A `}` inside a string does not end an impl block** | the code view in `fingerprint_sees_every_field` | 1 mutation — §165 |
 | **A struct inside a string is not the type the tree has** | the code view in `shape_of` | 1 mutation — §165 |
+| **A `}` inside a string does not end the session's impl block** | the code view in `impl_block` | 1 mutation — §166 |
+| **An `impl` inside a string is not the session's impl block** | the code view in `impl_block` | 1 mutation — §166 |
+| **An embed call inside a block comment is not an embed** | the code view in `find_embedded` | 1 mutation — §166 |
+| **An embed call inside a string is not an embed** | the code view in `find_embedded` | 1 mutation — §166 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -20234,3 +20388,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     a static check that reports every place a Rust file is opened without
     the tree's one reader, or a line above the table saying that it is a
     claim rather than a fact.
+    **Partly done.** §165 and **§166** asked the audit's question of every
+    gate it lists, read by read, and found **three** more gates that read a
+    shape out of the text: the fingerprint gate (§165), the session gate and
+    the assets gate (§166). The assets gate was not in the list at all — it
+    opens every `.rs` file in the tree — so the list was wrong about one row
+    *and* missing a gate. Every row is now held by a test that fabricates a
+    file with a string in it, so the choice left is between a **static**
+    check — every place a Rust file is opened without the tree's one reader,
+    which would catch the next one without a human asking — and a line above
+    the table saying that it is a claim rather than a fact.

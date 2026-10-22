@@ -2649,7 +2649,12 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
 /// *shape* of a thing from the code and its *contents* from the text: a
 /// command's id is a string, and a string is the subject there, but a `pub
 /// static` in a comment is not a command. §155.
-fn code_lines_kept(source: &str) -> String {
+///
+/// It is **public** because it is the tree's one reader and another gate
+/// needs it: a rule written twice is two chances to forget it, and the
+/// assets gate had a copy of the idea in it — a shape read out of the text.
+/// §166.
+pub fn code_lines_kept(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut chars = source.chars().peekable();
     let mut in_string = false;
@@ -3015,15 +3020,23 @@ pub fn the_session_offers_no_second_path(root: &Path) -> Result<Vec<String>, Str
 
 /// An `impl` block, and the file line its first line is on.
 ///
-/// The block ends at the first `}` in the first column: everything inside an
-/// `impl` is indented, so a closing brace in the first column is the block's
-/// own. The line number is carried because a check that names a line has to
-/// name the **file's** line.
+/// The block is found in the **code**, and it ends where its **braces** say.
+/// An `impl Session {` inside a string is a sentence about one, and a `}`
+/// inside a string is not the end of anything — the old rule read the text
+/// and took the first `}` in the first column for the block's own, so a
+/// string with a `}` in it cut the block short and every method after it
+/// went unchecked. §166.
+///
+/// The line number is carried because a check that names a line has to name
+/// the **file's** line.
 fn impl_block<'a>(source: &'a str, header: &str) -> Option<(&'a str, usize)> {
-    let start = source.find(header)?;
-    let body = &source[start + header.len()..];
-    let end = body.find("\n}\n")?;
-    let block = &body[..end];
+    // The code view is the text, byte for byte, so an offset in one is an
+    // offset in the other and the block is the same block in both.
+    let code = code_lines_kept(source);
+    let start = code.find(header)?;
+    let brace = header.rfind('{')?;
+    let close = matching(&code, start + brace, b'{', b'}')?;
+    let block = &source[start + header.len()..close];
     // The header's own line, plus the lines before it in the file.
     let first_line = source[..start].lines().count() + 1;
     Some((block, first_line))
@@ -8237,6 +8250,61 @@ fn parse(s: &str) -> Option<Self> {
             problems.push(format!("{}:{name}", first_line + offset));
         }
         assert_eq!(problems, vec!["4:recompute".to_string()], "the second path is reported");
+    }
+
+    /// A `}` inside a string does not end the session's impl block.
+    ///
+    /// The gate that says the session offers no second path into the design
+    /// found the block in the **text**: the header was looked for in the
+    /// text, and the block ended at the first `}` in the first column. A
+    /// `}` inside a string is not a brace — and the block ended there, so
+    /// every method after it went unchecked. §166.
+    #[test]
+    fn a_brace_inside_a_string_does_not_end_the_session_block() {
+        let dir = std::env::temp_dir().join(format!("craftkit-session-brace-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("session.rs"),
+            "impl Session {\n    const NOTE: &str = r#\"\n}\n\"#;\n    pub fn recompute(&mut self) {}\n}\n",
+        )
+        .expect("the fabricated session");
+
+        let problems = the_session_offers_no_second_path(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("recompute")), "{problems:#?}");
+
+        // And the same session, with the `}` out of the string, is still
+        // reported: the method really is a second path.
+        std::fs::write(
+            engine.join("session.rs"),
+            "impl Session {\n    const NOTE: &str = \"a note\";\n    pub fn recompute(&mut self) {}\n}\n",
+        )
+        .expect("the fabricated session");
+        let problems = the_session_offers_no_second_path(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("recompute")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An `impl Session {` inside a string is not the session's impl block.
+    ///
+    /// The same gate looked for the header in the text, so a string that
+    /// mentions the header was the block it read — and the block it read
+    /// ended at the string's own `}`, which is before the real block, so
+    /// the real methods went unchecked. §166.
+    #[test]
+    fn an_impl_inside_a_string_is_not_the_session_block() {
+        let dir = std::env::temp_dir().join(format!("craftkit-session-impl-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("session.rs"),
+            "const NOTE: &str = r#\"\nimpl Session {\n}\n\"#;\nimpl Session {\n    pub fn recompute(&mut self) {}\n}\n",
+        )
+        .expect("the fabricated session");
+
+        let problems = the_session_offers_no_second_path(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("recompute")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The shell may not put a document into the session.

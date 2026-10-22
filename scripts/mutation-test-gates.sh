@@ -110,6 +110,7 @@ readonly FILES=(
     apps/craftkit-cli/src/args.rs
     apps/craftkit-cli/src/cli.rs
     apps/craftkit-web/src/main.rs
+    xtask/src/assets.rs
     xtask/src/ci.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
@@ -3905,8 +3906,8 @@ expect_catch "gate: a block comment loses the lines it covers" \
 # And the seventh grows the tree a second reader, which is the thing the
 # one-reader check exists to stop.
 swap xtask/src/lists.rs \
-    'fn code_lines_kept(source: &str) -> String {' \
-    'fn a_second_code_reader(source: &str) -> String {
+    'pub fn code_lines_kept(source: &str) -> String {' \
+    'pub fn a_second_code_reader(source: &str) -> String {
     let mut in_string = false;
     let mut out = String::new();
     for c in source.chars() {
@@ -3918,7 +3919,7 @@ swap xtask/src/lists.rs \
     out
 }
 
-fn code_lines_kept(source: &str) -> String {'
+pub fn code_lines_kept(source: &str) -> String {'
 expect_catch "gate: the tree grows a second code reader" \
     "cargo test -p xtask --profile ci the_tree_has_one_code_reader"
 
@@ -4527,6 +4528,88 @@ swap xtask/src/lists.rs \
         let code = text.clone();'
 expect_catch "gate: a struct inside a string is not the struct" \
     "cargo test -p xtask --profile ci a_struct_inside_a_string_is_not_the_struct"
+
+# Two more gates read a **shape** out of the tree's source as text, and
+# section 165's audit asked for exactly this: not "is the subject code?" but
+# "is the shape read as code?". Measured, against the real gates on a copy of
+# the tree, with the gates as they were before section 166 and with the fix
+# in them. Each case has a control: the same tree with the thing really
+# wrong, so a gate that said no to everything would pass the control too.
+#
+#   * the session gate found its `impl Session` block in the **text** and
+#     ended it at the first `}` in the first column. A `}` inside a raw
+#     string ended the block early, so a public method after it -- a public
+#     way into the design, which is the thing the gate exists to stop -- was
+#     not reported: a false negative. The control, with the block intact, was
+#     reported by both.
+#   * the same gate looked for the header in the text too, so an
+#     `impl Session {` inside a raw string was the block it read, and that
+#     block ended at the string's own `}` -- before the real one, so the real
+#     methods went unchecked: a false negative. The control, with the string
+#     out of the way, was reported by both.
+#   * the assets gate found the embed calls in the **text** and cut each line
+#     at the first `//`, so a **block** comment that showed a call was
+#     reported as an embed of a file the tree does not have: a false
+#     positive. The control, with the call really in the code, was reported
+#     by both.
+#   * the same gate, and a **raw string**: a raw string holds a call as
+#     plainly as a comment does, and it was reported as an embed too: a
+#     false positive. The control was reported by both.
+#
+# Section 166.
+swap xtask/src/lists.rs \
+    '    let code = code_lines_kept(source);
+    let start = code.find(header)?;
+    let brace = header.rfind('"'"'{'"'"')?;
+    let close = matching(&code, start + brace, b'"'"'{'"'"', b'"'"'}'"'"')?;
+    let block = &source[start + header.len()..close];' \
+    '    let start = source.find(header)?;
+    let body = &source[start + header.len()..];
+    let end = body.find("\n}\n")?;
+    let block = &body[..end];'
+expect_catch "gate: a brace inside a string ends the session's block" \
+    "cargo test -p xtask --profile ci a_brace_inside_a_string_does_not_end_the_session_block"
+
+swap xtask/src/lists.rs \
+    '    let code = code_lines_kept(source);
+    let start = code.find(header)?;
+    let brace = header.rfind('"'"'{'"'"')?;
+    let close = matching(&code, start + brace, b'"'"'{'"'"', b'"'"'}'"'"')?;
+    let block = &source[start + header.len()..close];' \
+    '    let start = source.find(header)?;
+    let body = &source[start + header.len()..];
+    let end = body.find("\n}\n")?;
+    let block = &body[..end];'
+expect_catch "gate: an impl inside a string is not the session's block" \
+    "cargo test -p xtask --profile ci an_impl_inside_a_string_is_not_the_session_block"
+
+swap xtask/src/assets.rs \
+    '        let code = crate::lists::code_lines_kept(&text);
+        for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
+            for call in EMBED_CALLS {
+                let Some(at) = code_line.find(call) else { continue };
+                let rest = &text_line[at + call.len()..];' \
+    '        for (number, line) in text.lines().enumerate() {
+            let code_line = line.split("//").next().unwrap_or(line);
+            for call in EMBED_CALLS {
+                let Some(at) = code_line.find(call) else { continue };
+                let rest = &code_line[at + call.len()..];'
+expect_catch "gate: an embed call in a block comment is not an embed" \
+    "cargo test -p xtask --profile ci an_embed_call_in_a_block_comment_is_not_an_embed"
+
+swap xtask/src/assets.rs \
+    '        let code = crate::lists::code_lines_kept(&text);
+        for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
+            for call in EMBED_CALLS {
+                let Some(at) = code_line.find(call) else { continue };
+                let rest = &text_line[at + call.len()..];' \
+    '        for (number, line) in text.lines().enumerate() {
+            let code_line = line.split("//").next().unwrap_or(line);
+            for call in EMBED_CALLS {
+                let Some(at) = code_line.find(call) else { continue };
+                let rest = &code_line[at + call.len()..];'
+expect_catch "gate: an embed call in a string is not an embed" \
+    "cargo test -p xtask --profile ci an_embed_call_in_a_string_is_not_an_embed"
 
 restore
 finish

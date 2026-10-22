@@ -348,12 +348,66 @@ twenty gates is twenty claims, and nothing checked them.** The list found
 four gates in §161 and a fifth here, and it was wrong about one of the other
 fifteen.
 
+## And the audit's question is per read
+
+§165 found one gate that read the tree's source as text. The audit's
+question — *is this line code, or is it a sentence about code?* — was then
+asked of every gate in the list, and it found two more, plus a gate the list
+had left out.
+
+| Gate | The read that was still text | What it cost |
+|---|---|---|
+| `the_session_offers_no_second_path` | the `impl Session` block's **header** and its **end** | a public method after a `}` in a string went unchecked |
+| `find_embedded` (the assets gate) | the **embed call** itself | a comment or a string that showed a call was reported as an embed |
+
+The assets gate was **not in the list at all** — it opens every `.rs` file in
+the tree — so the list was wrong about one row *and* missing a gate.
+
+Two things came out of it.
+
+**The question is per *read*, not per gate.** A gate that reads a file twice
+reads it twice, and each read has to be on the right side of the line. The
+fingerprint gate called the reader for one of its two reads, and the table
+said "code view".
+
+**A gate that reads a shape has to say where the shape ends.** The session
+gate ended its block at the first `}` in the first column, on the reasoning
+that "everything inside an `impl` is indented". That is a fact about how
+people write Rust, used to answer a question about what the code *is*. The
+braces answer the structure question, and they answer it in the code, where a
+`}` inside a string is not a brace:
+
+```rust
+let code = code_lines_kept(source);
+let start = code.find(header)?;
+let Some(brace) = header.rfind('{') else { return None };
+let close = matching(&code, start + brace, b'{', b'}')?;
+let block = &source[start + header.len()..close];
+```
+
+The code view is the text, byte for byte, so the offsets are the same offsets
+and the block is the same block in both.
+
+And the assets gate reads both halves, because a **path** is a string and a
+string is the subject there:
+
+```rust
+let code = crate::lists::code_lines_kept(&text);
+for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
+    // "there is a call here" is code; "the path it names" is the text
+}
+```
+
+That is why the reader had to become **public**: it was a private `fn` in
+`lists.rs`, and the alternative was a second copy of the rule in
+`assets.rs` — the thing the tree's one-reader test exists to stop.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
 
 ```rust
-fn code_lines_kept(source: &str) -> String {
+pub fn code_lines_kept(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut chars = source.chars().peekable();
     let mut in_string = false;
@@ -481,6 +535,14 @@ let code = code_lines_kept(&text);
   string does not end an impl block.
 - `a_struct_inside_a_string_is_not_the_struct` — a `struct` inside a string
   is not the type the tree has.
+- `a_brace_inside_a_string_does_not_end_the_session_block` — a `}` inside a
+  string does not end the session's impl block.
+- `an_impl_inside_a_string_is_not_the_session_block` — an `impl Session {`
+  inside a string is not the session's block.
+- `an_embed_call_in_a_block_comment_is_not_an_embed` — an embed call inside
+  a block comment is not an embed.
+- `an_embed_call_in_a_string_is_not_an_embed` — an embed call inside a
+  string is not an embed.
 
 ## See also
 

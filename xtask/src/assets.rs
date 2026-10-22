@@ -250,11 +250,20 @@ pub fn find_embedded(root: &Path, sources: &[PathBuf]) -> Result<Vec<String>, St
             Ok(text) => text,
             Err(e) => return Err(format!("could not read {}: {e}", path.display())),
         };
-        for (number, line) in text.lines().enumerate() {
-            let code = line.split("//").next().unwrap_or(line);
+        // The **shape** comes from the code and the **contents** from the
+        // text: an `include_str!` inside a comment or inside a string is a
+        // sentence about an embed, not an embed. The old rule read the text
+        // and cut the line at the first `//`, so a block comment that showed
+        // a call was reported as an embed of a file the tree does not have.
+        // §166.
+        //
+        // The two views are the same length, byte for byte, so the offset of
+        // the call in one is the offset of the call in the other.
+        let code = crate::lists::code_lines_kept(&text);
+        for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
             for call in EMBED_CALLS {
-                let Some(at) = code.find(call) else { continue };
-                let rest = &code[at + call.len()..];
+                let Some(at) = code_line.find(call) else { continue };
+                let rest = &text_line[at + call.len()..];
                 let argument = rest.trim_start().trim_start_matches('(');
                 let Some(start) = argument.find('"') else { continue };
                 let after = &argument[start + 1..];
@@ -535,6 +544,40 @@ mod tests {
         // and the gate is decoration.
         let temp = Temp::new("commented");
         temp.write("src/lib.rs", "// const X: &[u8] = include_bytes!(\"old.png\");\n");
+
+        let sources = find_sources(temp.path()).expect("sources");
+        assert!(find_embedded(temp.path(), &sources).expect("scans").is_empty());
+    }
+
+    /// An embed call inside a **block** comment is not an embed.
+    ///
+    /// The old rule read the tree's source as text and cut each line at the
+    /// first `//`, so a line comment was handled and a block comment was not:
+    /// a block comment that showed a call was reported as an embed of a
+    /// file the tree does not have. §166.
+    #[test]
+    fn an_embed_call_in_a_block_comment_is_not_an_embed() {
+        let temp = Temp::new("block-comment");
+        temp.write("src/lib.rs", "/* include_bytes!(\"icons.png\") */\npub fn f() {}\n");
+
+        let sources = find_sources(temp.path()).expect("sources");
+        assert!(find_embedded(temp.path(), &sources).expect("scans").is_empty());
+
+        // And a call that is really in the code is found.
+        temp.write("src/lib.rs", "const ICONS: &[u8] = include_bytes!(\"icons.png\");\n");
+        let sources = find_sources(temp.path()).expect("sources");
+        let hits = find_embedded(temp.path(), &sources).expect("scans");
+        assert_eq!(hits.len(), 1, "{hits:?}");
+    }
+
+    /// An embed call inside a **string** is not an embed.
+    ///
+    /// The same rule read the text, and a raw string holds a call as
+    /// plainly as a comment does. §166.
+    #[test]
+    fn an_embed_call_in_a_string_is_not_an_embed() {
+        let temp = Temp::new("in-a-string");
+        temp.write("src/lib.rs", "const NOTE: &str = r#\"include_bytes!(\"icons.png\")\"#;\n");
 
         let sources = find_sources(temp.path()).expect("sources");
         assert!(find_embedded(temp.path(), &sources).expect("scans").is_empty());
