@@ -18734,6 +18734,72 @@ noticed is that the tree's own pattern document had already said what a
 second copy costs.
 
 
+## 163. The mutation script said the tree was unchanged, and the tree was not
+
+The mutation script's `FILES` list is a contract, and the script keeps it
+like one: a mutation outside it is refused (`guarded`), the files on it are
+copied before the run (`snapshot`), put back after every case (`restore`),
+and checksummed at the end (`fingerprint`). The line that says **"Tree
+unchanged"** is the fingerprint's verdict.
+
+`Cargo.lock` was not on the list. Cargo rewrites it whenever a manifest
+changes, and one of the cases changes a manifest: the *"layers: L1 model
+names egui"* case appends `egui` to `crates/model/Cargo.toml`. So the file
+the script promises to put back is a file cargo writes underneath it.
+
+### What was measured
+
+Against the script's own steps — its `FILES` list read out of the script
+itself, its snapshot, its restore and its fingerprint — with a manifest
+mutation and a cargo run:
+
+| | before | after |
+|---|---|---|
+| `Cargo.lock` in the snapshot | **no** | yes |
+| the files the fingerprint saw change | the manifest only | the manifest **and** the lock |
+| `Cargo.lock` after the restore | **not** what it was | what it was |
+
+The middle row is the one that matters: the fingerprint is what prints
+"Tree unchanged", and before the fix it never looked at the file that had
+changed. The last row is what a reviewer would see — `git status` after a
+mutation run, with a `Cargo.lock` that lists `egui` as a dependency of
+`craftkit-model`, which is false.
+
+**How far the drift goes is worth saying.** The next cargo run rewrites
+the lock file back, because the manifest is back by then, so a full suite
+usually ends with the lock file right. What was open is narrower and
+truer: *between* cases the tree is not what the script says it is, and the
+script cannot see it, because the one thing it checks cannot change.
+
+### The fix
+
+One line: `Cargo.lock` in `FILES`. The snapshot copies it, the restore puts
+it back, and the fingerprint checksums it.
+
+### The self-test
+
+The script's self-test is the negative of the whole exercise — it proves
+the script *fails* when a gate stops catching — and it now has a fourth
+half, which is the one positive assertion in it: **the snapshot must cover
+the files a build writes**. With `Cargo.lock` off the list the self-test
+exits **2** and says which file is missing; with it on, the self-test exits
+**1**, as it must.
+
+### The lesson
+
+**A snapshot is a promise about every file the tool touches, and a build
+touches files a mutation does not.** The script's guard is strict — a
+mutation outside `FILES` is refused, because the script could not put it
+back — and the strictness was about *mutations*. Cargo's own writes were
+not mutations, so they were not covered, and the one claim the script makes
+about the tree was not true of the tree.
+
+**A claim the tool cannot check is not a claim.** The fingerprint is the
+script's proof that it left nothing behind, and it was checksummed over a
+list that could not change — so it was proof of nothing. The fix is not a
+better fingerprint; it is a list that covers what the tool does.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19118,6 +19184,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A name inside a longer name does not satisfy a claim** | `has_word` in `attributed_code_is_in_the_file` | 1 mutation — §162 |
 | **A test that is only the prefix of another test's name is not it** | `has_word` in `defines` | 1 mutation — §162 |
 | **An empty name is not a word** | the guard in `has_word` | 1 mutation — §162 |
+| **The mutation script's snapshot covers what a build writes** | `Cargo.lock` in `FILES` | 1 self-test — §163 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -19871,17 +19938,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     that is not part of one. Nothing the
     tree's documents claim stopped being checked: its sixteen claims about
     a file's code and its eleven about a file's test all still hold.
-38. **Put `Cargo.lock` in the mutation script's snapshot.** The script's
-    `FILES` list is a contract — a mutation outside it is refused, because
-    the script could not put it back — and `Cargo.lock` is not on it. One of
+38. ~~**Put `Cargo.lock` in the mutation script's snapshot.**~~ **Done, and
+    the measurement was worse than the item said.** The script's `FILES`
+    list is a contract — a mutation outside it is refused, because the
+    script could not put it back — and `Cargo.lock` was not on it. One of
     the cases adds `egui` to `crates/model/Cargo.toml`, and cargo then
     rewrites the lock file; the restore puts the manifest back and leaves
-    the lock file alone. Measured: with `egui` in that manifest, cargo
-    rewrites `Cargo.lock` to list `egui` as a dependency of `craftkit-model`
-    — a claim that is false — and the restore does not touch it. The
-    fingerprint never looks at it either, so the script's **"Tree
-    unchanged"** line is not a claim about it. The drift is corrected by the
-    next cargo run, so a full suite ends with the lock file right; what is
-    open is that the tree is not what the script says it is *between* cases,
-    and the script cannot see it. The fix is one line — `Cargo.lock` in
-    `FILES` — and the fingerprint then covers it as well.
+    the lock file alone. Measured, against the script's own snapshot,
+    restore and fingerprint: the fingerprint — the thing that prints **"Tree
+    unchanged"** — saw the manifest change and **never looked at the lock
+    file**, and after the restore the lock file was **not** what it was,
+    listing `egui` as a dependency of `craftkit-model`, which is false.
+    **§163** added `Cargo.lock` to `FILES`: the snapshot copies it, the
+    restore puts it back, the fingerprint checksums it, and the script's
+    self-test now has a fourth half that fails when a file a build writes
+    is not in the snapshot.

@@ -61,6 +61,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Every file a mutation may write to.
 readonly FILES=(
+    Cargo.lock
     Cargo.toml
     ATTRIBUTION.md
     clippy.toml
@@ -383,6 +384,21 @@ if [[ "${1:-}" == "--self-test" ]]; then
         printf '%sself-test FAILED: a broken build was counted as a caught mutation%s\n' "$RED" "$RESET"
         exit 2
     fi
+    # The fourth half: the snapshot has to cover the files a **build**
+    # writes, not only the files a mutation writes. Cargo rewrites
+    # `Cargo.lock` when a manifest changes, and a file the snapshot does not
+    # hold is a file the restore cannot put back and the fingerprint never
+    # looks at -- so the tree is not what the script says it is, while the
+    # script says it is. §163.
+    echo
+    echo "-- self-test: the snapshot must cover the files a build writes"
+    for written in Cargo.lock; do
+        if [[ ! " ${FILES[*]} " == *" ${written} "* ]]; then
+            printf '%sself-test FAILED: %s is not in the snapshot%s\n' "$RED" "$written" "$RESET"
+            printf '  A file a build writes is a file the restore has to put back.\n' >&2
+            exit 2
+        fi
+    done
     finish
 fi
 
