@@ -81,14 +81,17 @@ module first. The tree's `production_of` helper does it, and four of the
 tree's gates already had a cut of their own before it: the panic-boundary
 check, the JSON writer's check, and the two that say the shell does not
 evaluate the document and does not write it. The limits gate and the raw
-reader's gate use the helper now.
+reader's gate use the helper now. The session's gate — which counts the
+session's public methods — skips a method marked `#[cfg(test)]` instead,
+because a helper inside an impl block is marked rather than put in a module.
 
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
 test that compares the limits with each other. The gate that says every limit
 is enforced said **green**. And a third file whose *test* called the raw
 parameter reader — to prove the reader works — was reported as a third home
-of a reader that is allowed two.
+of a reader that is allowed two. And a test-only method in the session's impl
+block was reported as "a public way to change the design is a second path".
 
 ## In the code
 
@@ -141,6 +144,8 @@ let code = code_lines_kept(production_of(&text));
   mentions is not enforced.
 - `a_test_that_calls_the_raw_reader_is_not_a_third_home` — a test is not a
   third home of the raw reader.
+- `a_test_only_method_is_not_a_second_path_into_the_design` — a test's method
+  is not a public path into the design.
 
 ## See also
 

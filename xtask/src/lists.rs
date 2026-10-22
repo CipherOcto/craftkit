@@ -2713,10 +2713,37 @@ pub fn the_session_offers_no_second_path(root: &Path) -> Result<Vec<String>, Str
     let code = code_lines_kept(block);
     let relative = relative_name(root, &path);
     let mut problems = Vec::new();
+    // A method marked `#[cfg(test)]` is not in the shipped build, so it is not
+    // a public way into the design: the gate's subject is the **public** API,
+    // and a test's method is not part of it. §152.
+    let mut test_only = false;
     for (offset, line) in code.lines().enumerate() {
-        let Some(rest) = line.trim().strip_prefix("pub fn ") else { continue };
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+        if trimmed.starts_with("#[cfg(test)]") {
+            test_only = true;
+            continue;
+        }
+        if trimmed.starts_with("#[") {
+            // Another attribute: the test-only mark is spent unless it says
+            // `cfg(test)` itself.
+            test_only = false;
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("pub fn ") else {
+            // Any other item ends the mark's reach.
+            test_only = false;
+            continue;
+        };
         let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
         if name.is_empty() || SESSION_PUBLIC_METHODS.contains(&name.as_str()) {
+            test_only = false;
+            continue;
+        }
+        if test_only {
+            test_only = false;
             continue;
         }
         problems.push(format!(
@@ -5874,6 +5901,53 @@ mod tests {
         let problems = the_raw_parameter_reader_has_two_homes(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("raw JSON"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test's method is not a public path into the design.
+    ///
+    /// The gate that says the session offers no second path counts every
+    /// `pub fn` in the session's impl block. A method marked `#[cfg(test)]` is
+    /// not in the shipped build, so it is not a public way to change the
+    /// design — and a gate that says it is would cry wolf at the first test
+    /// that adds a helper to the session. §152.
+    #[test]
+    fn a_test_only_method_is_not_a_second_path_into_the_design() {
+        let dir = std::env::temp_dir().join(format!("craftkit-session-path-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub struct Session;\n\
+             \n\
+             impl Session {\n\
+             /// A test's helper.\n\
+             #[cfg(test)]\n\
+             pub fn a_test_helper(&self) -> usize {\n\
+             0\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated session");
+
+        let problems = the_session_offers_no_second_path(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a public method that is not test-only is still a second path.
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub struct Session;\n\
+             \n\
+             impl Session {\n\
+             pub fn a_public_way_in(&self) -> usize {\n\
+             0\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated session");
+        let problems = the_session_offers_no_second_path(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("a_public_way_in"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

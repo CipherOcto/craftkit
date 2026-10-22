@@ -17489,6 +17489,78 @@ was invisible to the gate not because the gate understood it but because the
 file it lives in is exempt. The gate had no opinion about tests at all.
 
 
+## 152. The gate that said the session offers no second path counted a test's method as a public path
+
+### The measurement
+
+§135's gate holds the session's public methods to an allow list: a new public
+method on `Session` is refused until somebody says what it is and why it is not
+a second path into the design. The gate counts every `pub fn` in the session's
+`impl` block.
+
+A method marked `#[cfg(test)]` is not in the shipped build. It is not a public
+way to change the design; it is a test's helper.
+
+Measured, against the gate on a copy of the tree: a `#[cfg(test)] pub fn` put
+in the session's `impl` block was reported —
+
+> makes `Session::a_test_helper` public: the session's public methods are the
+> registry and the things that read it — a public way to change the design is a
+> second path
+
+The control, with no such method, was green.
+
+### Why nothing noticed
+
+**The tree's own tests live in a module, not in the impl block.**
+`crates/engine/src/session.rs` has its `#[cfg(test)] mod tests { … }` *after*
+the `impl Session { … }` block, so the gate has never met a test-only method.
+But the shape that would trip it is the shape a test helper takes when a
+developer writes one **inside** the impl — which is where a helper for a
+private method belongs, and where the tree's other gates' test modules sit one
+level up.
+
+**This is the third gate in a row, and the second half of one rule.**
+§148 taught the gates that read the tree's source to ignore strings and
+comments. §150 taught the limits gate to ignore the tests as well. §151
+taught the raw-reader gate the same. This gate had learned the first half and
+not the second — and it was the only gate left whose subject is a *production*
+property and that did not.
+
+### The fix
+
+**The gate recognises a `#[cfg(test)]` attribute and skips the method it
+marks.** The mark's reach ends at the next item or at another attribute, so a
+method that is not marked is still counted.
+
+**One unit test**, `a_test_only_method_is_not_a_second_path_into_the_design`,
+which was checked to fail when the rule is taken out — and which also checks
+that a public method that is *not* test-only is still reported, so the fix
+cannot turn the gate off.
+
+**One mutation**.
+
+### The lesson
+
+**The subject of a gate decides what it has to ignore.** "The session offers
+no second path" is about the **public API** — the paths into the design that a
+shipped binary has. A test's method is not one, so a gate about the public
+API has to say so. A gate about the *tree* (does this symbol exist, is this
+module there) is the opposite: a test's symbol and a test's module are real
+things in the tree, and §149's gates rightly counted them.
+
+**Layout hides shape.** The tree's session puts its tests in a module after
+the impl block, so the shape that would trip the gate does not exist — and a
+gate that has never met the shape cannot be tested against it. The tree's own
+tests for the gates that read the tree's source fabricate the shape, and this
+one had no fabricated tree at all.
+
+**The gates that read the tree's source are the tree's most fragile code.**
+Three arcs in a row have found one, and the reason is the same every time: a
+gate's subject is a *production* property, and a reader that does not know
+what production code is will believe whatever it finds.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17545,6 +17617,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree reads its code one way** | `the_tree_has_one_code_reader` | 1 mutation — §149 |
 | **A limit only a test mentions is not enforcement** | `production_of` in `limits_are_enforced` | 2 mutations — §150 |
 | **A test that calls the raw reader is not a third home** | `production_of` in `the_raw_parameter_reader_has_two_homes` | 1 mutation — §151 |
+| **A test's method is not a public path into the design** | the `#[cfg(test)]` mark in `the_session_offers_no_second_path` | 1 mutation — §152 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |

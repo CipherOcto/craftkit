@@ -3941,5 +3941,23 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the raw reader gate counts a test's call as a third home" \
     "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
 
+# A test's method is not a public path into the design. The gate that says
+# the session offers no second path counts every "pub fn" in the session's
+# impl block, and a method marked #[cfg(test)] is not in the shipped build.
+# Measured: a test-only method in the impl block was reported as "a public
+# way to change the design is a second path", while the control, with no such
+# method, was green. Section 152.
+swap xtask/src/lists.rs \
+    '        if trimmed.starts_with("#[cfg(test)]") {
+            test_only = true;
+            continue;
+        }' \
+    '        if trimmed.starts_with("#[cfg(test)]") {
+            test_only = false;
+            continue;
+        }'
+expect_catch "gate: the session gate counts a test's method as a second path" \
+    "cargo test -p xtask --profile ci a_test_only_method_is_not_a_second_path_into_the_design"
+
 restore
 finish
