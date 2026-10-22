@@ -4666,7 +4666,8 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
-/// The production code of a file: everything except its test items.
+/// The production code of a file: everything except its test items and its
+/// test-only methods.
 ///
 /// The tests are not the production code, and a gate whose subject is a
 /// *production* property has to say so: a test may name the thing to prove
@@ -4678,12 +4679,29 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
 /// truncated the file at the first test item would hide a limit used further
 /// down, and would hide a panic boundary caught further down. §153.
 ///
-/// An **indented** `#[cfg(test)]` is not a test item: it marks a method
-/// inside an impl block, and the methods around it are production code.
+/// An **indented** `#[cfg(test)]` marks a **method** inside an impl block,
+/// and the method is removed whole as well — the methods around it are
+/// production code, and they stay visible, because the method is removed
+/// line by line and not by truncating the file at it. §157.
+///
+/// The line count is the file's, whatever is removed: a gate that names a
+/// line has to name the file's line.
 fn production_of(text: &str) -> String {
+    let code = code_lines_kept(text);
+    let lines: Vec<&str> = text.lines().collect();
+    // The byte offset of each line's first byte.
+    let mut starts = Vec::with_capacity(lines.len());
+    let mut at = 0usize;
+    for line in &lines {
+        starts.push(at);
+        at += line.len() + 1;
+    }
+
     let mut out = String::with_capacity(text.len());
     let mut skipping = false;
-    for line in text.lines() {
+    let mut index = 0usize;
+    while index < lines.len() {
+        let line = lines[index];
         if skipping {
             // A top-level item ends at the first `}` in the first column:
             // everything inside it is indented.
@@ -4691,17 +4709,73 @@ fn production_of(text: &str) -> String {
                 skipping = false;
             }
             out.push('\n');
+            index += 1;
             continue;
         }
         if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
             skipping = true;
             out.push('\n');
+            index += 1;
+            continue;
+        }
+        if is_indented_test_attribute(line)
+            && let Some(last) = test_method_last_line(&code, &starts, &lines, index)
+        {
+            for _ in index..=last {
+                out.push('\n');
+            }
+            index = last + 1;
             continue;
         }
         out.push_str(line);
         out.push('\n');
+        index += 1;
     }
     out
+}
+
+/// Whether a line is an **indented** `#[cfg(test)]` attribute.
+///
+/// An indented attribute marks a method inside an impl block; an unindented
+/// one marks a test item, and the cut already has those.
+fn is_indented_test_attribute(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed == "#[cfg(test)]" && trimmed.len() != line.len()
+}
+
+/// The last line of the method an indented test attribute marks.
+///
+/// The method ends at the brace that closes it. The **code view** is used to
+/// find that brace, because it has no strings in it: a brace inside a string
+/// is not a brace, and the text's own strings would have to be stepped over
+/// to find it. The two views are the same length, so a position in one is a
+/// position in the other. §155.
+///
+/// The search stops at the end of the block the attribute is in, so a
+/// malformed file cannot make the cut swallow the rest of the file.
+fn test_method_last_line(code: &str, starts: &[usize], lines: &[&str], index: usize) -> Option<usize> {
+    let indent = lines[index].len() - lines[index].trim_start().len();
+    // The end of the enclosing block: the first following line that is not
+    // blank and is indented **less** than the attribute. The method's own
+    // signature and its closing brace are indented like the attribute, so
+    // they are part of it.
+    let mut end = lines.len();
+    for (at, line) in lines.iter().enumerate().skip(index + 1) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let here = line.len() - line.trim_start().len();
+        if here < indent {
+            end = at;
+            break;
+        }
+    }
+    let from = starts[index] + lines[index].len();
+    let to = if end < lines.len() { starts[end] } else { code.len() };
+    let open = code.get(from..to)?.find('{')? + from;
+    let close = matching(code, open, b'{', b'}')?;
+    // The line the closing brace is on.
+    Some(code[..close].matches('\n').count())
 }
 
 /// The limits the model's table declares, and the rest of the file.
@@ -7880,6 +7954,90 @@ printf '%s%d/%d caught.%s\\n' \\
         .expect("the fabricated source");
         let problems = the_shell_does_not_evaluate(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        // And a **test-only method** inside an impl block: it is marked
+        // rather than put in a module, and it is a test all the same. The
+        // fixture has nothing else in it, so the gate must say nothing.
+        std::fs::write(
+            ui.join("shell.rs"),
+            "impl Shell<'_> {\n    #[cfg(test)]\n    fn a_test_only_helper() {\n    let _ = craftkit_eval::evaluate_once;\n    }\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_shell_does_not_evaluate(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test-only method that takes a `Params` is not a reader.
+    ///
+    /// The tree derives its parameter readers from its source, and a
+    /// test-only method inside an impl block is a function. A test-only
+    /// method that shares a name with a production reader is worse than
+    /// useless: the gate believes the reader has no name argument of its
+    /// own, reads the *method's* body, and tells the commands that they
+    /// read a parameter the test invented. §154 found this shape in a
+    /// test's own module; §158 found it in a test-only method. §157.
+    #[test]
+    fn a_test_only_method_is_not_a_reader() {
+        let dir = std::env::temp_dir().join(format!("craftkit-method-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "use craftkit_core::Params;\n\n\
+             impl Helpers {\n    pub fn value_for(p: &Params<'_>, key: &str) -> Option<f64> {\n    p.num(key).ok().flatten()\n    }\n    #[cfg(test)]\n    fn value_for(p: &Params<'_>) -> Option<f64> {\n    p.num(\"ghost\").ok().flatten()\n    }\n}\n",
+        )
+        .expect("the fabricated code");
+
+        let readers = parameter_readers(&dir);
+        // One reader: the one that is production.
+        assert_eq!(readers.len(), 1, "{readers:?}");
+        assert_eq!(readers[0].name, "value_for", "{readers:?}");
+        assert!(readers[0].key.is_some(), "{readers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test-only method does not enforce a limit.
+    ///
+    /// The gate that says every limit in the model's table is enforced
+    /// somewhere reads the tree's production code, and a test-only method
+    /// inside an impl block was in it: the limit's one production use was
+    /// replaced by a literal, a test-only method used the limit instead,
+    /// and the gate said **green**. The limit nobody enforces is a wish.
+    /// §157.
+    #[test]
+    fn a_test_only_method_does_not_enforce_a_limit() {
+        let dir = std::env::temp_dir().join(format!("craftkit-method-limit-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(model.join("lib.rs"), "pub mod limits {\n    pub const MAX_THINGS: usize = 10;\n}\n")
+            .expect("the fabricated source");
+
+        // Nothing uses the limit: the gate must say so.
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        // A test-only method uses it: that is still nothing.
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n    pub const MAX_THINGS: usize = 10;\n}\n\
+             impl Helpers {\n    #[cfg(test)]\n    fn a_test_only_check() -> bool {\n\
+             limits::MAX_THINGS > 0\n    }\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        // And the production code uses it: then it is enforced.
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n    pub const MAX_THINGS: usize = 10;\n}\n\
+             fn a_production_check() -> bool {\n    limits::MAX_THINGS > 0\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

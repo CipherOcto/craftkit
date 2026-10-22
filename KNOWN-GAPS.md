@@ -17611,6 +17611,12 @@ An **indented** `#[cfg(test)]` is not a test item: it marks a method inside an
 impl block, and the methods around it are production code. The tree's
 `crates/engine/src/session.rs` has two such methods inside `impl Session`.
 
+§157 changed the second half of that: the method is removed as well, **whole**
+and line by line, so the methods around it stay visible. The reason §153 gave
+for keeping it — *removing it by truncating the file would hide the
+production methods around it* — was about the way to remove it, not about
+whether to remove it.
+
 **The boundary gate uses the helper**, so a test written outside a module is
 no longer a boundary.
 
@@ -18004,68 +18010,107 @@ the same files, and the sentence did not reach them.
 **A test-only method inside an impl block is still counted as the shell.**
 That is §157, and it was measured in the same run.
 
-## 157. A test-only method inside an impl block is still counted as the shell
+## 157. A test-only method inside an impl block was counted as the shell, as a reader, and as the enforcement of a limit
 
 ### The measurement
 
-§156 fixed the three gates that cut the tree's source at a test item, and in
-the same run it left one shape standing.
+The tree's cut removes the test **items**: a `mod tests { … }` block, or a
+top-level item marked `#[cfg(test)]`. A test-only **method** inside an impl
+block is marked rather than put in a module, and the cut kept it — §153's
+reasoning was that removing it by truncating the file would hide the
+production methods around it.
 
-The shared cut, `production_of`, **removes test items** — a `mod tests { … }`
-block, or a top-level item marked `#[cfg(test)]`. It deliberately does not
-touch an **indented** `#[cfg(test)]`: that marks a method inside an impl
-block, and removing it would hide the production methods around it. §153
-said so, and §156 kept it.
+Three gates read **names**, and a name in a test-only method is a name in
+the file.
 
-So a test-only *method* inside an impl block stays in the production code,
-and the two gates that say the shell never evaluates the document and never
-writes it read the file for **names**. A name in a test-only method is a
-name in the file.
+Measured, against the real gates on a copy of the tree:
 
-Measured, against the real gate on a copy of the tree: a test-only method
-inside an impl block in `crates/ui/src/shell.rs`, naming the evaluator, was
-reported —
+| Case | What was done | What the gate said |
+|---|---|---|
+| control | the tree as it stands | **green** |
+| A | a test-only method in `crates/ui/src/shell.rs` that names the evaluator | **RED** — the shell may not evaluate the document |
+| B | a test-only method named `value_for`, after a production reader of that name | **RED** — 2 false positives: the commands read a parameter called `ghost` |
+| C | the limit's one production use replaced by a literal, and a test-only method using the limit | **green** — the limit is enforced |
+| C-control | the limit's one production use replaced by a literal, and nothing else using it | **RED** — the limit is not enforced |
+| P1 | the shell's **production** code names the evaluator | **RED** — the gate works |
+| P2 | the shell's **production** code names a document writer | **RED** — the gate works |
 
-> crates/ui/src/shell.rs: line 843 names `evaluate_once`: the shell may read
-> the plan, but it may not evaluate the document
+Case A is the false positive §157 was opened for. Case B is §154's shape
+again, one level down: §154 found it in a test's own **module**, and this is
+the same thing in a test-only **method** — the gate believed the reader had
+no name argument of its own, read the method's body, and told the commands
+that they read a parameter the test invented.
 
-The shell's production code does not evaluate the document. A **test** does,
-to prove that it does not, and the tree's rule says a test may name the
-thing to prove that the production code does not do it.
-
-This is not a regression: the cut the two shell gates used before §156 kept
-the method as well. §156 made the two gates right about a test written
-outside a module and left them wrong about a test-only method.
+Case C is the quiet one, and it is the opposite of a false positive: the
+limit's only production use was replaced by a literal, so the limit is
+enforced by nothing, and a test-only method that uses it made the gate say
+**green**. The control is the same tree without the test-only method, and
+the gate says **red**. A limit nobody enforces is a wish, and a test that
+mentions a limit is a sentence about a limit.
 
 ### Why nothing noticed
 
 **The shell has no impl blocks.** `crates/ui/src/shell.rs` is free functions
 and structs; there is no `impl` in it at all, so the shape is not in the
-tree. A method inside an impl block is the shape the tree uses *elsewhere* —
-`crates/engine/src/session.rs` has three `#[cfg(test)]` methods — so the
-shape is not unusual, only absent from this file.
+tree. The shape *is* in the tree elsewhere — `crates/engine/src/session.rs`
+has three `#[cfg(test)]` methods — so it is not unusual, only absent from
+the file the gate reads.
 
 **§152 solved it for another gate.** The gate that says the session offers
 no second path counts the session's **public methods**, and a method marked
 `#[cfg(test)]` is not in the shipped build and so is not a public way into
 the design. §152 taught that gate to skip the method the attribute marks.
-The two shell gates work on **names**, not on methods, and they have no
-such rule — the fix §152 found is not a helper they can call.
+The three gates here work on **names**, not on methods, and they have no
+such rule.
 
-### What is still open
+**§153's rule was about a cut that truncates.** §153 kept the indented
+attribute because removing it by truncating the file would hide the
+production methods around it. That was the right reason and the wrong
+conclusion: the method can be removed **whole**, line by line, and the
+methods around it stay visible.
 
-**Nothing holds the two shell gates against a test-only method.** The fix
-has to remove the *method* an indented `#[cfg(test)]` marks, and to leave
-the production methods around it alone — which is exactly what
-`production_of` declines to do, and for a good reason. It is the same
-tension §152 settled for the session's methods, and it has to be settled
-again for two gates that read names rather than methods.
+### The fix
 
-The shape is narrow — the shell has no impl blocks — and the rule it breaks
-is one of the tree's loudest ("a panel never writes to the document, never
-calls the evaluator"). It is recorded here so that it is not lost: the
-audit found it, measured it, and did not fix it.
+**The cut removes the method an indented `#[cfg(test)]` marks**, whole, line
+by line, so the production methods around it stay visible and the line
+count is the file's. The method's extent is found by brace matching in the
+**code view**, because the code view has no strings in it and a brace inside
+a string is not a brace; the two views are the same length, so a position in
+one is a position in the other. §155.
 
+**The search is bounded**: it stops at the end of the block the attribute is
+in, so a malformed file cannot make the cut swallow the rest of the file.
+
+**Three unit tests**, each checked to fail when the rule it protects is
+taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_test_only_method_is_not_a_reader` | a test-only method that takes a `&Params` is not a reader |
+| `a_test_only_method_does_not_enforce_a_limit` | a test-only method does not enforce a limit |
+| `a_test_outside_a_module_is_not_the_shell` | a test-only method is not the shell, and the shell's production code still is |
+
+**One mutation**, and the §153 case re-anchored on the rewritten cut.
+
+### The lesson
+
+**"The tests are not the production code" is one rule, and it has three
+shapes.** A test module, a top-level test item, and a test-only method.
+§150 found the first, §153 the second, §157 the third — and each was found
+by a gate that read *names*, because a name in a test is a sentence about
+the thing the test is about. The rule was one rule the whole time; the cut
+that carries it knew about two of its three shapes.
+
+**A reason for a cut is not a decision about a cut.** §153's reason —
+*removing the method by truncating would hide the production methods around
+it* — was sound, and it was about the **way** to remove, not about whether
+to remove. A cut has to be judged on what it removes and what it leaves,
+not on the shape of the thing it found first.
+
+**The same fix can close three gates at once, and that is a reason to look
+for it.** The reader list, the limits gate and the shell gates read
+different things and all three counted a test's name. One cut, one rule, and
+three gates that were wrong in the same way.
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -18130,7 +18175,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A `pub static` in a comment is not a command** | the code view in `registry_commands` | 1 mutation — §155 |
 | **The code view is the same length as the file** | `code_lines_kept` | 1 mutation — §155 |
 | **Production code after a test item is still production code, for every gate that reads the source** | `production_of` in the three gates that had a cut of their own | 3 mutations — §156 |
-| **A test-only method inside an impl block is not the shell** | *nothing* | a test-only method names what the shell may not name — §157 |
+| **A test-only method inside an impl block is not the shell** | `production_of` removes the method | 1 mutation — §157 |
+| **A test-only method that takes a `&Params` is not a reader** | `production_of` removes the method | 1 mutation — §157 |
+| **A test-only method does not enforce a limit** | `production_of` removes the method | 1 mutation — §157 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -19109,12 +19156,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     that opens a Rust file, and for each, which half of it is about the
     *shape* and which half is about what the code *says*. A gate can be
     both at once, and then it reads the file twice.
-33. **Give the two shell gates a way to cut a test-only method.** §156
-    fixed the three gates that cut the tree's source at a test item, and
-    left one shape standing: a test-only *method* inside an impl block is
-    still counted as the shell, because the shared cut deliberately keeps
-    an indented test attribute — removing it would hide the production
-    methods around it. The two shell gates read *names* rather than
-    methods, so §152's fix for the session's public methods does not
-    reach them. §157 is the measurement; the fix is to remove the method
-    the attribute marks, and to leave the rest of the impl block alone.
+33. ~~**Give the two shell gates a way to cut a test-only method.**~~
+    **Done, and it paid more than the two gates.** §156 fixed the three
+    gates that cut the tree's source at a test item and left one shape
+    standing: a test-only *method* inside an impl block is still counted
+    as the shell. §157 removed the method the attribute marks — whole, and
+    line by line, so the production methods around it stay visible — and
+    the same cut closed two more gates that were wrong in the same way: the
+    reader list, which was counting a test-only method as a reader, and
+    the limits gate, which was counting a test-only method as the
+    enforcement of a limit.

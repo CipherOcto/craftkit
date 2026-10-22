@@ -3984,6 +3984,7 @@ swap xtask/src/lists.rs \
     '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
             skipping = true;
             out.push('"'"'\n'"'"');
+            index += 1;
             continue;
         }' \
     '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
@@ -4090,6 +4091,24 @@ swap xtask/src/lists.rs \
         for name in EVALUATOR_NAMES {'
 expect_catch "gate: the shell's cut truncates the file" \
     "cargo test -p xtask --profile ci a_test_outside_a_module_is_not_the_shell"
+
+# A test-only method inside an impl block is a test all the same. The cut
+# removes the test *items* -- a mod tests block, or a top-level item marked
+# cfg(test) -- and it kept the methods, because a method is marked rather
+# than put in a module. Measured, against the gates on a copy of the tree: a
+# test-only method that names the evaluator was reported by the gate that
+# says the shell never evaluates the document; a test-only method named
+# after a production reader was read as a reader, and the gate told the
+# commands that they read a parameter the test invented; and the limit's one
+# production use replaced by a literal, with a test-only method using the
+# limit instead, was reported as enforced. Section 157.
+swap xtask/src/lists.rs \
+    '    let trimmed = line.trim_start();
+    trimmed == "#[cfg(test)]" && trimmed.len() != line.len()' \
+    '    let _trimmed = line.trim_start();
+    false'
+expect_catch "gate: the cut keeps a test-only method" \
+    "cargo test -p xtask --profile ci a_test_only_method_is_not_a_reader"
 
 restore
 finish

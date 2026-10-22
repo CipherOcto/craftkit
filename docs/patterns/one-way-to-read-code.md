@@ -97,6 +97,11 @@ further down. §153 found the truncating cut and fixed the helper; §156
 found three gates that still had a cut of their own, and they were all
 truncating.
 
+It removes the test-only **method** too — the method an *indented*
+`#[cfg(test)]` marks, whole and line by line, so the production methods
+around it stay visible. §157: a name in a test-only method is a name in a
+test, and three gates that read names were counting it.
+
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
 test that compares the limits with each other. The gate that says every limit
@@ -241,6 +246,10 @@ let code = code_lines_kept(&text);
   file.
 - `a_test_outside_a_module_is_not_the_shell` — a test written outside a
   module is a test too.
+- `a_test_only_method_is_not_a_reader` — a test-only method that takes a
+  `&Params` is a function, and it is not a reader the commands use.
+- `a_test_only_method_does_not_enforce_a_limit` — a test-only method that
+  uses a limit does not enforce it.
 
 ## See also
 
