@@ -1571,7 +1571,10 @@ pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Ve
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let mut problems = Vec::new();
-    let lines: Vec<&str> = text.lines().collect();
+    // The code, not the text: a cap that stands only inside a string literal
+    // is not a cap. §148.
+    let code = code_only(&text);
+    let lines: Vec<&str> = code.lines().collect();
     let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))
     else {
         problems.push(
@@ -1655,7 +1658,10 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
             Ok(t) => t,
             Err(e) => return Err(format!("could not read {}: {e}", path.display())),
         };
-        let lines: Vec<&str> = text.lines().collect();
+        // The code, not the text: a budget that stands only inside a string
+        // literal is not a budget. §148.
+        let code = code_only(&text);
+        let lines: Vec<&str> = code.lines().collect();
         let Some(index) =
             lines.iter().position(|l| l.trim_start().starts_with(&format!("pub const {constant}")))
         else {
@@ -1717,7 +1723,7 @@ pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>
     let mut problems = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        for name in byte_bounds(&text) {
+        for name in byte_bounds(&code_only(&text)) {
             if prose.contains(&name) {
                 continue;
             }
@@ -4317,7 +4323,12 @@ pub fn prose_constants_match_the_code(root: &Path) -> Result<Vec<String>, String
 /// Every `pub const NAME: … = VALUE;` in a source file.
 fn constants_in(source: &str) -> Vec<(String, String)> {
     let mut found = Vec::new();
-    for line in source.lines() {
+    // The code, not the text: a constant that stands only inside a string
+    // literal is not a constant of the tree, and a fabricated one can mask a
+    // real drift. The tree has the rule already — §78's `code_only` — and it
+    // is applied here. §148.
+    let code = code_only(source);
+    for line in code.lines() {
         let trimmed = line.trim();
         let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
         let Some((name, value)) = rest.split_once('=') else { continue };
@@ -4623,7 +4634,10 @@ fn code_only(source: &str) -> String {
             } else if c == '"' {
                 in_string = false;
             }
-            out.push(' ');
+            // A newline inside a string stays a newline: the gates that read
+            // a file's code report the line a thing is on, and a line number
+            // that moved is a line number that is wrong. §148.
+            out.push(if c == '\n' { '\n' } else { ' ' });
             continue;
         }
         if c == '"' {
@@ -5567,6 +5581,133 @@ mod tests {
         .expect("the fabricated mention");
 
         let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A constant that stands only inside a string is not a constant of the tree.
+    ///
+    /// The gates read the tree's limits out of its source, and the tree's
+    /// tests fabricate source files — in strings. A string written across two
+    /// lines puts a `pub const` at the left margin of the second one, and a
+    /// gate that reads the *text* cannot tell that from code. Measured: a
+    /// design file's cap that stood only inside a string satisfied the gate
+    /// that exists to check that cap; so did the undo stacks' budget; and a
+    /// fabricated constant **masked** a real drift in the prose, because the
+    /// gate accepts a claim that matches *any* value of that name. §148.
+    #[test]
+    fn a_constant_that_stands_only_in_a_string_is_not_a_constant_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-string-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let io = dir.join("crates/io/src");
+        let docs = dir.join("docs/recipes");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // The code says one thing...
+        std::fs::write(
+            core.join("lib.rs"),
+            "pub const MAX_JSON_MEMORY_BYTES: usize = 32 * 1024 * 1024;\n\
+             pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / 16;\n",
+        )
+        .expect("the fabricated source");
+        // ...and the tree's prose claims another.
+        std::fs::write(
+            docs.join("claim.md"),
+            "`MAX_JSON_TEXT_BYTES` is `MAX_JSON_MEMORY_BYTES / JSON_EXPANSION`.\n",
+        )
+        .expect("the fabricated claim");
+        // A test that fabricates a source file holds a constant in a string,
+        // and that constant is not the tree's.
+        std::fs::write(
+            io.join("format.rs"),
+            "const FABRICATED: &str = \"\\\n\
+             pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;\n\
+             \";\n",
+        )
+        .expect("the fabricated source");
+
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_JSON_TEXT_BYTES"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A limit that stands only inside a string is not a limit.
+    ///
+    /// Two gates read a limit out of the tree's source and check what its
+    /// statement says: the design file's cap and the undo stacks' budget.
+    /// Both read the *text*, so a cap that had left the code and stood in a
+    /// string satisfied them. §148.
+    #[test]
+    fn a_limit_that_stands_only_in_a_string_is_not_a_limit() {
+        let dir = std::env::temp_dir().join(format!("craftkit-string-cap-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            io.join("format.rs"),
+            "pub const FILE_EXPANSION: usize = 2;\n\
+             const FABRICATED: &str = \"\\\n\
+             pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * FILE_EXPANSION;\n\
+             \";\n",
+        )
+        .expect("the fabricated source");
+        std::fs::write(
+            engine.join("history.rs"),
+            "pub const HISTORY_EXPANSION: usize = 2;\n\
+             const FABRICATED: &str = \"\\\n\
+             pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;\n\
+             \";\n",
+        )
+        .expect("the fabricated source");
+        // The session's own budget is in code, and is right: the gate has to
+        // report the history's and nothing else.
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub const SESSION_OWN_DOCUMENTS: usize = 2;\n\
+             pub const SESSION_SNAPSHOT_DOCUMENTS: usize = 1;\n\
+             pub const HISTORY_EXPANSION: usize = 2;\n\
+             pub const SESSION_DOCUMENTS: usize = 4;\n\
+             pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;\n",
+        )
+        .expect("the fabricated source");
+
+        let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_FILE_BYTES"), "{problems:#?}");
+
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        // The gate looks for three budgets; this tree has none of them in
+        // code, so what matters is that the fabricated one is among them.
+        assert!(problems.iter().any(|p| p.contains("MAX_HISTORY_BYTES")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A bound that stands only inside a string is not a bound of the tree.
+    ///
+    /// The gate that says every bound the tree has is named in the tree's
+    /// prose read the tree's source as text, so a bound that stood only in a
+    /// string was a bound it then said no document named. §148.
+    #[test]
+    fn a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-string-bound-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        let docs = dir.join("docs/architecture.md");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub const MAX_DOCUMENT_BYTES: usize = 32 * 1024 * 1024;\n\
+             const FABRICATED: &str = \"\\\n\
+             pub const MAX_FABRICATED_BYTES: usize = 1;\n\
+             \";\n",
+        )
+        .expect("the fabricated source");
+        std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES`.\n").expect("the prose");
+
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }

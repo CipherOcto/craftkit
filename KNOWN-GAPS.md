@@ -17074,6 +17074,119 @@ value no file in the tree has.
 
 ---
 
+## 148. The tree's limits were read out of its text, and a limit that stood in a string was still a limit
+
+### The measurement
+
+The tree has the rule that **a mention in a string is not code**. §78 wrote it
+down for one gate — *"a mention in a string is not a call: this file's own
+needle is one, and a check that flagged itself would be a check nobody
+trusts"* — and the tree has a function for it, `code_only`, which takes a
+file's source and gives back the code with the comments **and the string
+literals** removed.
+
+**Four gates read the tree's limits without it.** They read the *text*:
+
+| Gate | What it reads the text for |
+|---|---|
+| `prose_constants_match_the_code` | every constant the tree has, to compare the prose with the code |
+| `the_file_cap_is_derived_from_the_designs_budget` | the design file's cap, to hold it to the model's budget |
+| `the_memory_budgets_are_derived_from_the_models` | the undo stacks' and the session's budgets |
+| `the_byte_bounds_are_named_in_the_prose` | every bound whose name says bytes or memory |
+
+The difference matters because the tree's tests fabricate source files, **in
+strings**. A string written across two lines — the way `rustfmt` leaves one —
+puts a `pub const` at the left margin of its second line, and a gate reading
+the text cannot tell that from code.
+
+Measured, against the gates themselves on a copy of the tree:
+
+| Case | What was done | What the gate said |
+|---|---|---|
+| A | the design file's cap left the code and stood only inside a string | **green** |
+| B | the undo stacks' budget, the same way | **green** |
+| C | the code's divisor drifted and a fabricated constant held the old value | **green** |
+
+All three are **false greens**. In A the design file's cap — the bound that
+says a design the model accepts can always be saved — was not in the code at
+all, and the gate that exists to hold that cap was satisfied by a string. In
+B the undo stacks' budget was gone and the gate that holds it to the model's
+budget was satisfied by a string. In C a real drift was **masked**: the
+prose still claimed the old divisor, the code had changed, and a fabricated
+constant stood in for the old value — and the gate accepts a claim that
+matches *any* value of that name.
+
+### Why nothing noticed
+
+**The rule was written down for a gate, not for the tree.** `code_only` is a
+helper, and the helper has callers; a gate that reads the same file another
+way does not get the rule for free. Nothing said *the tree's limits are read
+from code* — the rule said *a mention in a string is not a call*, and a
+mention in a string is not a constant either, but nobody had said that.
+
+**The tree's own tests are the hazard, and they are everywhere.** Six of the
+gates' own unit tests fabricate a source file in a string, and one of those
+strings has a constant in it. It was harmless by luck — the fabricated
+constant was on one physical line, where the gate's `pub const` prefix does
+not match — and the next test written the other way would have planted a
+constant in the tree.
+
+**And §147's own arc found it.** The test that fabricates a source file for
+the limit-in-prose gate was written with a two-line string, and the gate's
+own message said so:
+
+> … the code says `MAX_JSON_MEMORY_BYTES / 16` in crates/core/src/lib.rs **or
+> `MAX_JSON_MEMORY_BYTES / {divisor};`** in xtask/src/lists.rs
+
+A value no file in the tree has, named as one of the tree's values. The test
+was written to *check* the gate, and it was changing what the gate saw.
+
+### The fix
+
+**`code_only` is applied where the tree's limits are read.** `constants_in`
+runs on the code and not on the text; the file-cap gate, the memory-budgets
+gate and the byte-bounds gate read `code_only(&text)`.
+
+**And `code_only` keeps the newlines inside a string.** It used to replace
+every character of a string with a space — including the newline — so a
+string written across two lines moved every line after it. The gates that
+report a line number would have reported the wrong one. A newline inside a
+string is a newline now.
+
+**Three unit tests**, each of which was checked to fail when the rule is
+taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_constant_that_stands_only_in_a_string_is_not_a_constant_of_the_tree` | the prose gate sees the drift, not the fabricated constant |
+| `a_limit_that_stands_only_in_a_string_is_not_a_limit` | the file-cap gate and the memory-budgets gate both say the limit is not there |
+| `a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree` | a bound in a string is not a bound the prose has to name |
+
+**Four mutations**, one for each of the four call sites, each of which turns
+one test red.
+
+### The lesson
+
+**A rule written for one gate is not a rule of the tree.** §78's rule was
+true — a mention in a string is not a call — and it was implemented once, in
+a helper, and then applied once. The other four gates read the same files
+and did not get it.
+
+**A gate that reads a file as text will read a string as a file.** The tree's
+tests fabricate source files; that is what tests for source-reading gates
+have to do, and it means the fabricated text is *indistinguishable* from the
+real thing unless the reader knows what a string is.
+
+**A message that names a value the tree does not have is a defect report.**
+§147's gate said `MAX_JSON_MEMORY_BYTES / {divisor}` was one of the tree's
+values, and it was — a value invented by a test's string, read as code. The
+message is how it was found: a value with a `{` in it is not a value
+anybody wrote.
+
+---
+
+---
+
 ---
 
 ## What enforces what
@@ -17123,6 +17236,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
 | **A limit in prose is the constant's value, whatever expression it is written as** | `prose_constants_match_the_code` | 2 mutations — §147 |
+| **The tree's limits are read from its code, not from its text** | `code_only` in the four gates that read them | 4 mutations — §148 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |

@@ -3749,5 +3749,55 @@ swap docs/recipes/add-a-control-channel-method.md \
 expect_catch "prose: a claim of division is not the constant's value" \
     "cargo xtask lists"
 
+# The tree's limits, read out of its source. The tree has the rule that a
+# mention in a string is not code -- section 78 wrote code_only for it -- and
+# four gates that read the tree's limits did not apply it: they read the
+# text. Measured: a design file's cap that stood only inside a string
+# satisfied the gate that exists to check that cap; so did the undo stacks'
+# budget; and a fabricated constant masked a real drift in the prose, because
+# the gate accepts a claim that matches *any* value of that name. Section 148.
+#
+# The first mutation takes the rule out of the gate that reads the tree's
+# constants for the prose.
+swap xtask/src/lists.rs \
+    '    let code = code_only(source);
+    for line in code.lines() {' \
+    '    let code = source.to_string();
+    for line in code.lines() {'
+expect_catch "gate: the prose reads the tree's limits out of text" \
+    "cargo test -p xtask --profile ci a_constant_that_stands_only_in_a_string_is_not_a_constant_of_the_tree"
+
+# The second takes it out of the gate that holds the design file's cap to the
+# model's budget.
+swap xtask/src/lists.rs \
+    '    let code = code_only(&text);
+    let lines: Vec<&str> = code.lines().collect();
+    let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))' \
+    '    let code = text.clone();
+    let lines: Vec<&str> = code.lines().collect();
+    let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))'
+expect_catch "gate: the file cap reads the tree's limits out of text" \
+    "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_a_limit"
+
+# The third takes it out of the gate that holds the memory budgets to the
+# model's budget.
+swap xtask/src/lists.rs \
+    '        let code = code_only(&text);
+        let lines: Vec<&str> = code.lines().collect();
+        let Some(index) =' \
+    '        let code = text.clone();
+        let lines: Vec<&str> = code.lines().collect();
+        let Some(index) ='
+expect_catch "gate: the memory budgets read the tree's limits out of text" \
+    "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_a_limit"
+
+# And the fourth out of the gate that says every bound the tree has is named
+# in the tree's prose.
+swap xtask/src/lists.rs \
+    'for name in byte_bounds(&code_only(&text)) {' \
+    'for name in byte_bounds(&text) {'
+expect_catch "gate: the byte bounds read the tree's limits out of text" \
+    "cargo test -p xtask --profile ci a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree"
+
 restore
 finish
