@@ -1609,6 +1609,87 @@ pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Ve
     Ok(problems)
 }
 
+/// The memory budgets, and the budget they have to come from.
+///
+/// §144. The model's limit table said a document's budget was *"the number
+/// that says what the process actually uses"*, and the process holds **four**
+/// documents: the one being edited, the base the command trace starts from,
+/// and the undo and redo stacks. Measured, with a design at the model's
+/// limit: 118.12 MiB of documents, 102.67 MiB of resident memory — **3.18
+/// times** the number the table named.
+///
+/// Two caps had to come from the model's budget and neither said so. The
+/// history's was `64 * 1024 * 1024` and the session's would have been the
+/// same — which is also the design file's cap, a cap §141 had already
+/// derived. Three caps with the same value and no relation between them are
+/// three caps that drift apart the moment one of them is changed.
+///
+/// The runtime test in the engine cannot see this, because the literal and
+/// the derivation have the same value today. That is what a gate is for.
+pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec<String>, String> {
+    // (file, constant, the names its statement has to name, what it bounds)
+    let wanted = [
+        (
+            "crates/engine/src/history.rs",
+            "MAX_HISTORY_BYTES",
+            &["MAX_DOCUMENT_BYTES", "HISTORY_EXPANSION"][..],
+            "the undo and redo stacks",
+        ),
+        (
+            "crates/engine/src/session.rs",
+            "MAX_SESSION_BYTES",
+            &["MAX_DOCUMENT_BYTES", "SESSION_DOCUMENTS"][..],
+            "the documents a session holds",
+        ),
+        (
+            "crates/engine/src/session.rs",
+            "SESSION_DOCUMENTS",
+            &["SESSION_OWN_DOCUMENTS", "SESSION_SNAPSHOT_DOCUMENTS", "HISTORY_EXPANSION"][..],
+            "the documents a session holds",
+        ),
+    ];
+    let mut problems = Vec::new();
+    for (relative, constant, names, what) in wanted {
+        let path = root.join(relative);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => return Err(format!("could not read {}: {e}", path.display())),
+        };
+        let lines: Vec<&str> = text.lines().collect();
+        let Some(index) =
+            lines.iter().position(|l| l.trim_start().starts_with(&format!("pub const {constant}")))
+        else {
+            problems.push(format!(
+                "{relative}: there is no `{constant}`: {what} have a budget, and it has to be \
+                 the model's"
+            ));
+            continue;
+        };
+        // The statement may be wrapped over several lines, and the names it
+        // has to name are on one of them.
+        let mut statement = lines[index].to_string();
+        let mut last = index;
+        while !statement.contains(';') && last + 1 < lines.len() {
+            last += 1;
+            statement.push(' ');
+            statement.push_str(lines[last].trim());
+        }
+        for name in names {
+            if statement.contains(name) {
+                continue;
+            }
+            problems.push(format!(
+                "{relative}: line {} writes `{constant}` without `{name}` in it; {what} are \
+                 measured in the model's own currency, so the cap has to be that budget times a \
+                 number of documents. §144.",
+                index + 1
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
 /// The tree's JSON has one writer, and the places that write a design use it.
 ///
 /// §142. The crash report's three files were written with
@@ -2557,6 +2638,10 @@ const SESSION_PUBLIC_METHODS: &[&str] = &[
     "can_redo",
     "undo_depth",
     "history_bytes",
+    // A reader, and the other half of `history_bytes`: the document being
+    // edited and the base the trace starts from are the rest of what a
+    // session holds, and §144 is the section that says so.
+    "document_bytes",
     "log",
     "trace",
     "trace_base",
@@ -4607,6 +4692,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     One design, one writer.")),
     );
 
+    // The memory budgets, and the budget they have to come from. §144.
+    problems.extend(
+        the_memory_budgets_are_derived_from_the_models(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
+    );
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -4637,7 +4729,8 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              fingerprint hashes is a field the model has, the control channel's \
              methods are the methods the prose lists, every module path in prose \
              names a module this tree has, every type path in prose names a \
-             member the type has, the shell never evaluates the \
+             member the type has, every memory budget is derived from the \
+             model's, the shell never evaluates the \
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
@@ -6386,5 +6479,63 @@ printf '%s%d/%d caught.%s\\n' \\
         assert!(members.contains("get"), "{members:?}");
         // The functions after the string are still in the same file.
         assert!(types.contains_key("Holder"), "{types:?}");
+    }
+
+    /// The memory budgets are the model's budget times a number of documents.
+    /// §144.
+    ///
+    /// The model's limit table said a document's budget was *"the number that
+    /// says what the process actually uses"*, and the process holds four
+    /// documents. The caps that decide how many were literals that happened
+    /// to be the design file's cap.
+    #[test]
+    fn a_memory_budget_that_is_a_number_of_its_own_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_memory_budgets_are_derived_from_the_models(&root).expect("runs").is_empty(),
+            "a memory budget is not derived from the model's budget"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-memory-budgets-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        let good_history = "pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;\n";
+        let good_session = "pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;\n\
+                            pub const SESSION_DOCUMENTS: usize = SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION;\n";
+        std::fs::write(engine.join("history.rs"), good_history).expect("the fabricated source");
+        std::fs::write(engine.join("session.rs"), good_session).expect("the fabricated source");
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // A cap somebody chose: the same number, and no way to see it.
+        std::fs::write(engine.join("history.rs"), "pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;\n")
+            .expect("the fabricated source");
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        // And a session's budget that forgot the stacks it holds: the
+        // statement names none of the three parts, and each is reported.
+        std::fs::write(engine.join("history.rs"), good_history).expect("the fabricated source");
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;\n\
+             pub const SESSION_DOCUMENTS: usize = 2;\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 3, "{problems:#?}");
+
+        // And a session's budget that forgot the model's own: the statement
+        // names neither half of the derivation, and each half is reported.
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub const MAX_SESSION_BYTES: usize = 128 * 1024 * 1024;\n\
+             pub const SESSION_DOCUMENTS: usize = SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION;\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

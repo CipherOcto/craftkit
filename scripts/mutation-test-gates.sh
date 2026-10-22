@@ -3628,5 +3628,27 @@ swap docs/architecture.md \
 expect_catch "prose: a limit is named by a path the type does not have" \
     "cargo xtask lists"
 
+# The model's limit table said a document's budget was "the number that says
+# what the process actually uses", and the process holds four documents: the
+# one being edited, the base the command trace starts from, and the undo and
+# redo stacks. Measured: 118.12 MiB of documents and 102.67 MiB of resident
+# memory, 3.18 times the number the table named. The history's own budget was
+# a literal that happened to be the design file's cap -- a cap section 141 had
+# already derived. Section 144.
+swap crates/engine/src/history.rs \
+    'pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;' \
+    'pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;'
+expect_catch "engine: the history's budget is a number somebody chose" \
+    "cargo xtask lists"
+
+# And the session's budget has to cover the base the trace starts from, not
+# only the document being edited. A budget that forgot it would be a fifth
+# short -- and this one the runtime test can see, because the numbers move.
+swap crates/engine/src/session.rs \
+    'pub const SESSION_OWN_DOCUMENTS: usize = 2;' \
+    'pub const SESSION_OWN_DOCUMENTS: usize = 1;'
+expect_catch "engine: the session's budget forgot the trace's base" \
+    "cargo test -p craftkit-engine --profile ci the_session_budget_covers_the_stacks_and_the_documents_it_owns"
+
 restore
 finish

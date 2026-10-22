@@ -92,13 +92,27 @@ pub mod limits {
     /// limit a group's id at all — so a file could hold a property that the
     /// tree published a path to and no command would accept. §97.
     pub const MAX_PATH_BYTES: usize = MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1;
-    /// How much memory one document may hold.
+    /// How much memory **one document** may hold.
     ///
     /// Every other limit here is a **count**, and a count does not say how
     /// much memory the thing counted holds: 10 000 nodes × 50 000 properties
-    /// × 10 000 keyframes is a number no machine has. The engine clones the
-    /// whole document for every command and keeps 128 of them for undo, so
-    /// this is the number that says what the process actually uses. §52.
+    /// × 10 000 keyframes is a number no machine has. This is the number that
+    /// says how much memory a design takes. §52.
+    ///
+    /// **It is one document, not the process.** This sentence used to say
+    /// *"this is the number that says what the process actually uses"*, and it
+    /// was wrong: §52 replaced the history's count of steps with a byte
+    /// budget, and the sentence was never revisited. Measured, with a session
+    /// holding a design at this limit: the document being edited, the base the
+    /// command trace starts from, and the undo and redo stacks — **four
+    /// documents** between commands and **five** while one runs, because the
+    /// snapshot is taken before the history is trimmed. That is 118.12 MiB of
+    /// documents and 102.69 MiB of resident memory, which is **3.19 times**
+    /// this number. §144.
+    ///
+    /// The number that says what the process uses is
+    /// `craftkit_engine::MAX_SESSION_BYTES`, and it is this number times the
+    /// number of documents a session holds. §144.
     ///
     /// 32 MiB is far more than any hand-made plan needs and is small enough
     /// that a clone of it is quick.

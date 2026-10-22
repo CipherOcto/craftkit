@@ -34,6 +34,41 @@ use crate::error::EngineError;
 use crate::history::History;
 use crate::log::LogBook;
 
+/// How many documents a session holds besides the undo and redo stacks.
+///
+/// Two: the one being edited, and the one the command trace starts from — a
+/// crash report replays the trace **onto** that base rather than onto an
+/// empty session, so it has to exist (§47).
+pub const SESSION_OWN_DOCUMENTS: usize = 2;
+
+/// The snapshot a command takes before it edits anything.
+///
+/// Taken for **every** command, mutating or not, and it exists *alongside*
+/// the document it was taken from: the history is trimmed when the snapshot
+/// is pushed, which is after the command has run. So a session holds one more
+/// document while a command runs than it does between them, and a budget
+/// that counts only the resting state is a budget that every command
+/// exceeds. §144.
+pub const SESSION_SNAPSHOT_DOCUMENTS: usize = 1;
+
+/// How many documents a session holds at once.
+///
+/// The document being edited, the base the trace starts from, the snapshot a
+/// command takes, and the undo and redo stacks. §144.
+pub const SESSION_DOCUMENTS: usize =
+    SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION;
+
+/// How much memory the documents a session holds may take.
+///
+/// **This is the number that says what the process actually uses** — which is
+/// what [`craftkit_model::limits::MAX_DOCUMENT_BYTES`] used to claim for
+/// itself, and was wrong by a factor of four. §144.
+///
+/// It is the model's own budget times the number of documents a session holds,
+/// because every document it holds is bounded by the model's budget and the
+/// stacks are bounded by their own.
+pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;
+
 /// What a command did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
@@ -268,6 +303,19 @@ impl Session {
     /// push and kept the measurement to itself.
     pub fn history_bytes(&self) -> usize {
         self.history.bytes()
+    }
+
+    /// How much memory the documents this session holds take, in bytes.
+    ///
+    /// The document being edited, the base the command trace starts from, and
+    /// the undo and redo stacks — the three things that together are what the
+    /// process spends its memory on. §144.
+    ///
+    /// The number is what [`MAX_SESSION_BYTES`] bounds, and asking was the
+    /// point: nothing could ask before §144, so the budget was a number in a
+    /// file rather than a thing anybody could check.
+    pub fn document_bytes(&self) -> usize {
+        self.doc.estimated_bytes() + self.trace_base.estimated_bytes() + self.history.bytes()
     }
 
     pub fn log(&self) -> &LogBook {
@@ -1822,6 +1870,106 @@ mod tests {
         assert!(
             line.contains("MAX_TRACE_MEMORY_BYTES") && line.contains("JSON_EXPANSION"),
             "the trace budget is not derived from the memory budget: {line}"
+        );
+    }
+
+    /// A document of a given size, for the tests that need a big one.
+    ///
+    /// The same arithmetic `crates/engine/src/history.rs` uses: the model
+    /// measures a keyframe at about 88 bytes.
+    fn doc_of_megabytes(mebibytes: usize) -> craftkit_model::Document {
+        let mut doc = craftkit_model::Document::empty("t");
+        let id = doc.add_node("n", craftkit_model::NodeKind::Source).expect("node");
+        let mut group = craftkit_model::PropGroup::new("props", "Properties");
+        let keys = (mebibytes * 1024 * 1024) / 88 / 4;
+        for p in 0..4u64 {
+            let mut prop =
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+            for t in 0..keys {
+                let _ = prop.keys.set(
+                    craftkit_model::Key::new(
+                        craftkit_core::Tick::from_raw(t as i128),
+                        craftkit_core::Value::Num(t as f64),
+                        craftkit_model::Easing::Linear,
+                    )
+                    .expect("key"),
+                );
+            }
+            group.push(prop);
+        }
+        doc.get_mut(id).expect("just added").props = group;
+        doc
+    }
+
+    /// A session says what its documents cost, and it holds more than one.
+    ///
+    /// The model's limit table said a document's budget was *"the number that
+    /// says what the process actually uses"*, and the process holds **four**
+    /// documents: this one, the base the command trace starts from, and the
+    /// undo and redo stacks. Nothing could ask before §144.
+    #[test]
+    fn a_session_says_what_its_documents_cost() {
+        let mut s = sample();
+        s.load_document(doc_of_megabytes(2));
+        for i in 0..4 {
+            let _ = s.execute("node.add", &json!({ "name": format!("n{i}"), "kind": "source" }));
+        }
+        let current = s.document().estimated_bytes();
+        let held = s.document_bytes();
+        assert_eq!(
+            held,
+            current + s.trace_base().estimated_bytes() + s.history_bytes(),
+            "the three parts do not add up"
+        );
+        // The base is a real copy: a crash report replays the trace *onto* it.
+        assert!(
+            held > current,
+            "the session says it holds {held} bytes, and the document alone is {current}"
+        );
+    }
+
+    /// The session's budget covers the stacks **and** the three documents it
+    /// holds beside them. §144.
+    ///
+    /// The number that says what the process uses has to be the history's
+    /// budget plus the document being edited, plus the base the trace starts
+    /// from, plus the snapshot a command takes. A budget that forgot the base
+    /// would be a fifth short; one that forgot the snapshot would be
+    /// exceeded by every command.
+    #[test]
+    fn the_session_budget_covers_the_stacks_and_the_documents_it_owns() {
+        let model = craftkit_model::limits::MAX_DOCUMENT_BYTES;
+        let needed = crate::history::MAX_HISTORY_BYTES + 3 * model;
+        assert!(
+            MAX_SESSION_BYTES >= needed,
+            "the session's budget is {MAX_SESSION_BYTES}, and the stacks and the three \
+             documents need {needed}"
+        );
+        assert_eq!(
+            SESSION_DOCUMENTS,
+            SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION,
+            "the session holds the document, the base, the snapshot and the stacks"
+        );
+    }
+
+    /// A session holding a big design stays inside the budget it names. §144.
+    #[test]
+    fn a_session_holding_a_big_design_stays_inside_its_budget() {
+        let mut s = sample();
+        s.load_document(doc_of_megabytes(2));
+        for i in 0..40 {
+            let _ = s.execute("node.add", &json!({ "name": format!("n{i}"), "kind": "source" }));
+        }
+        let held = s.document_bytes();
+        assert!(
+            held <= MAX_SESSION_BYTES,
+            "the session held {held} bytes, and the budget is {MAX_SESSION_BYTES}"
+        );
+        assert!(
+            s.history_bytes() <= crate::history::MAX_HISTORY_BYTES,
+            "the stacks held {} bytes, and their budget is {}",
+            s.history_bytes(),
+            crate::history::MAX_HISTORY_BYTES
         );
     }
 }

@@ -16384,6 +16384,190 @@ guard test holds the spellings together and the recipe held them apart, and
 the recipe was the one that was wrong. A guard test nobody has to change is
 worth more than a paragraph nobody has to read.
 
+## 144. The limits table said a design was what the process uses, and the process holds five designs
+
+### The measurement
+
+`crates/model/src/lib.rs` is the tree's table of safety limits, and §74's gate
+checks every constant in it is enforced somewhere in the code. Its entry for
+`MAX_DOCUMENT_BYTES` said:
+
+> The engine clones the whole document for every command and keeps 128 of them
+> for undo, so this is the number that says what the process actually uses.
+> §52.
+
+Measured, with a session holding a design at the model's limit — 32
+properties with 10 000 keyframes on each, 29.31 MiB estimated:
+
+```text
+the design's estimated bytes: 29.31 MiB   (the model's budget is 32.00 MiB)
+rss after load_document:      41.74 MiB
+   the session's undo depth:   0
+rss after ten edits:         101.01 MiB
+   the session's undo depth:   2
+rss after two hundred edits:  102.06 MiB
+   the session's undo depth:   2
+peak rss / the model's budget:  3.19x
+```
+
+**The undo depth is 2, not 128.** And the documents the session holds, counted
+exactly:
+
+```text
+   the document being edited:  29.61 MiB
+   the trace's base:           29.31 MiB
+   the undo and redo stacks:   59.20 MiB  (2.00 documents)
+   together:                   118.12 MiB  (3.99 documents)
+   the model's budget:         32.00 MiB
+   the history's budget:       64.00 MiB  (2.16 documents)
+```
+
+Four documents between commands, and **five** while a command runs: the engine
+takes its snapshot *before* the command edits anything, and the history is
+trimmed when that snapshot is pushed — which is after the command has run. The
+peak resident set was **102.69 MiB** (105 160 KiB), which is **3.19 times**
+the number the table called "what the process actually uses".
+
+So the sentence was wrong in three ways: the history keeps two snapshots and
+not 128, the process holds four or five designs and not one, and the number
+it names is a quarter of what the process spends.
+
+### Why nothing noticed
+
+**§52 fixed the file it was in and not the file that quoted it.** §52
+replaced the history's *count* of steps with a byte budget — and the comment
+in `crates/engine/src/history.rs` says so, at length, in the place where the
+history lives:
+
+> **That last paragraph was wrong, and §52 is why.** A count of entries is
+> not a bound on memory […] The count is still here (a session can run for
+> days), but the *budget* is what bounds the memory now.
+
+The model's table quoted the old paragraph, and §52 did not come back for it.
+A gate cannot see this: §74's gate checks that every constant in the table is
+**enforced**, and `MAX_DOCUMENT_BYTES` was — perfectly enforced, 32 MiB, all
+day. What was false was the sentence around it.
+
+**The cap that decided it was a number somebody chose.** The history's budget
+was `64 * 1024 * 1024`, written out as a literal — and §141 had just derived
+the design file's cap from the model's budget, with the *same value*, because
+the file's expansion is 2. Two caps, the same number, no relation between
+them: raise the model's budget and the history's stays where it was.
+
+**Nothing could ask.** §111 added `Session::history_bytes()`, because the
+tree measured the bytes on every push and kept the measurement to itself. But
+the measurement covered the **stacks** only. The document being edited and the
+base the trace starts from were in memory, every second of every session, and
+no number anywhere said so.
+
+### The fix
+
+**The table says what it bounds.** `MAX_DOCUMENT_BYTES` bounds *one
+document*, and says so, and points at the number that says what the process
+uses.
+
+**The history's budget is derived.** `MAX_HISTORY_BYTES` is now
+`craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION` — the same
+64 MiB, and now it *means* something: two documents. The number did not
+change; what it says did.
+
+**The session has a budget of its own**, and it is the number that says what
+the process uses:
+
+```rust
+pub const SESSION_DOCUMENTS: usize = SESSION_OWN_DOCUMENTS
+    + SESSION_SNAPSHOT_DOCUMENTS
+    + crate::history::HISTORY_EXPANSION;
+pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;
+```
+
+Five documents: the one being edited, the base the trace starts from, the
+snapshot a command takes, and the two the stacks hold. **160 MiB** — and the
+measured 102.67 MiB is inside it, because the estimate counts the model's
+representation and the allocator reuses what the trim frees.
+
+**And a session can be asked.** `Session::document_bytes()` is the number the
+table could not give, next to `history_bytes()`:
+
+```rust
+pub fn document_bytes(&self) -> usize {
+    self.doc.estimated_bytes()
+        + self.trace_base.estimated_bytes()
+        + self.history.bytes()
+}
+```
+
+§135's gate stopped it the moment it was added, because it is a new public
+method on `Session` and that list is an allow list — a second path is refused
+until somebody says what it is. It is a reader, and it is now on the list.
+
+### What now holds it
+
+A gate — `the_memory_budgets_are_derived_from_the_models` — and two mutations,
+and three runtime tests.
+
+The gate is the same shape as §141's: the runtime test cannot see a literal
+that happens to have the right value today, so the **source** is checked.
+
+| Mutation | Caught by |
+|---|---|
+| engine: the history's budget is a number somebody chose | `cargo xtask lists` |
+| engine: the session's budget forgot the trace's base | `craftkit-engine` test |
+
+The second one is caught by the **test** and not by the gate, and that is the
+point of having both: the gate reads the source and sees that the name is
+there; the test reads the numbers and sees that the base is not. A budget
+that forgot a document has the right *names* in it and the wrong *value*.
+
+```text
+the session's budget is 100663296, and the stacks and the three documents need 134217728
+```
+
+### What is still open
+
+**The crash report's cap is still a literal.** `MAX_REPORT_BYTES` is
+`64 * 1024 * 1024`, and the reader's own budget is `report_memory_budget` —
+the text plus twice a document — so reading a 64 MiB report costs 128 MiB of
+memory, where every other reader of untrusted JSON in the tree allows itself
+32 MiB. Item 13 says the *derivation* is not the owner's decision and the
+*value* is; §144 did not take it, because the value depends on the **shape**
+of the report — whether the base travels inside it — and that is item 13's
+question, not this section's.
+
+**The trace's 8 MiB is still a number somebody chose.** §70 derived
+`MAX_TRACE_BYTES` from it — 8 MiB of memory divided by the JSON expansion —
+but the 8 MiB itself is a literal, and nothing says what it should be
+relative to.
+
+**Nothing measures the peak.** `MAX_SESSION_BYTES` covers the snapshot a
+command takes, and the measured 102.67 MiB is below it — but the number that
+would *exceed* it was never reached, because the budget is a bound on what
+the tree asks for and not on what the allocator does with it. The peak is an
+argument, not a measurement.
+
+### The lesson
+
+**A table of limits has sentences in it, and the sentences rot faster than
+the constants.** §74's gate checks that every constant in the model's table is
+enforced. It cannot check that the *sentence* next to the constant is true,
+and §52 made one of them false without noticing, because the file it was in
+was not the file it was in.
+
+**A budget that is a literal drifts from the budget it is about.** §141
+derived the design file's cap from the model's budget and left the history's
+alone — and the two happened to be the same number, so nothing looked wrong
+and nothing would have until one of them moved.
+
+**The number that says what the process uses has to exist.** Everything else
+follows from it: the table's sentence, the history's expansion, the stacks'
+share, and the peak. It did not exist, so four separate facts about memory
+were each written down somewhere else, or nowhere.
+
+**Ask the thing.** §111 added `history_bytes()` because the tree measured
+the bytes and kept the measurement to itself. The same question about the
+whole session — `document_bytes()` — was one method away, and the answer is
+the number four documents of memory that no sentence in the tree mentioned.
+
 ---
 
 ---
@@ -16725,6 +16909,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A type path in prose names a member the type has** | `cargo xtask lists` | 2 mutations — §143 |
 | **A `ui.*` spelling reaches `Method::Ui`, and the guard grows** | `the_ui_aliases_all_reach_one_method` | — |
 | **The recipe teaches the method name deciding, not `params.action`** | *nothing* | a sentence cannot be gated — §143 |
+| **The history's budget is the model's budget times two** | `cargo xtask lists` | 1 mutation — §144 |
+| **The session's budget covers the stacks and the three documents beside them** | `craftkit-engine` test | 1 mutation — §144 |
+| **A session says what its documents cost** | `craftkit-engine` test | — |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -17132,7 +17319,9 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     document may hold, and above the 32 MiB every other reader of untrusted
     JSON in the tree allows itself. Whether a crash report deserves its own,
     larger budget is a decision; that the cap should be *derived* from a
-    memory budget rather than written by hand is not.
+    memory budget rather than written by hand is not. §144 left it alone,
+    because the value depends on the **shape** of the report — whether the
+    base travels inside it — and the shape is the question above.
 14. **Decide whether the running app should report its own memory.** §66 found
     a leak that cost 221 MB an hour, and nobody could see it, because egui
     only redraws on demand: a leak in the drawing path is *invisible* in a
@@ -17148,7 +17337,11 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     rather than merely stated. The bigger question is whether the app should
     *say* how big it has got: a status line with the process's resident size,
     or a warning once it passes a threshold, would turn "invisible" into
-    "visible" for every future leak and not just this one.
+    "visible" for every future leak and not just this one. §144 made half of
+    it askable — `Session::document_bytes()` is what the *documents* a session
+    holds take, and `MAX_SESSION_BYTES` is what they are allowed to take — so
+    the remaining half is the process's resident size, which is a fact about
+    the operating system rather than about the design.
 15. **Decide what a folded format change is.** §81 fixed the half that could
     be fixed — the naming, the guards, the reader — and left the release
     half open, because it is a decision about the release and the release is
