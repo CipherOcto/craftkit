@@ -68,6 +68,11 @@ before — as three different helpers — and the gates that read a *symbol* or 
 *module* used none of them. A rule written three times is three chances to
 forget it, and the tree forgot it in three places at once.
 
+The view is also the **same length** as the file, byte for byte: a block
+comment's end, a string's contents and a character that is more than one byte
+all keep their place. That is what lets a gate read the *shape* of a thing
+from the code and its *contents* from the text — see the next section.
+
 ## And the tests are not the production code
 
 A gate that reads the tree's source has to know **what part of it is
@@ -108,6 +113,44 @@ is the worst shape: the gate believes the reader has no name argument of its
 own, reads the *test's* body, and tells the commands that they read a
 parameter the test invented.
 
+## And a string is sometimes the subject
+
+A gate that reads the tree's source can be **two gates at once**: one that
+asks *what shape is this?* and one that asks *what does it say?*. The first
+is about code and the second can be about a string.
+
+The gate that says every parameter a command reads is declared is both. It
+derives two lists out of the tree's source — the **readers** (the functions
+that take a `&Params`) and the **commands** (the `pub static` specs) — and
+then it compares what each command *declares* with what it *reads*. The
+names on both sides are strings: a command's id, a parameter's name. There
+the string **is** the subject, and a reader that blanks it has nothing left
+to compare.
+
+So the gate reads each file twice:
+
+```rust
+let text = std::fs::read_to_string(&path)?;
+let code = code_lines_kept(&text);
+```
+
+- The **shape** comes from `code`: which `fn` is a function, which `pub
+  static` is a command, which `ParamDoc::` is a declaration, which call is a
+  call. A `fn` in a doc comment is not a function, and a `pub static` in a
+  doc comment is not a command.
+- The **contents** come from `text`: the command's id, the parameter's
+  name.
+
+The two views are the same length, so a position in one is a position in the
+other: the gate finds *where* a thing is in the code and reads *what* it
+says in the text.
+
+Measured, against the gate on a copy of the tree: a doc comment that showed
+a reader made the gate report two commands reading a parameter called
+`ghost` — a parameter that exists only in the comment. A doc comment that
+showed a whole command made it report a command that does not exist. The
+controls, with the same prose and no signature, were green.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -132,6 +175,14 @@ let Ok(text) = std::fs::read_to_string(&path) else { continue };
 let code = code_lines_kept(production_of(&text));
 ```
 
+And a gate that needs both the shape and the contents reads both views:
+
+```rust
+let Ok(text) = std::fs::read_to_string(&path) else { continue };
+let code = code_lines_kept(&text);
+// the shape from `code`, the contents from `text`, one position in both
+```
+
 ## When NOT to use it
 
 - **For prose.** A document is prose. Its backticks are text, and a gate that
@@ -139,7 +190,9 @@ let code = code_lines_kept(production_of(&text));
   source, not about Markdown.
 - **For the contents of a string.** Sometimes the string *is* the subject: a
   command id, a file name, a JSON payload. Read those with the file's own
-  reader, not with this one.
+  reader, not with this one. When a gate needs both — the shape from the code
+  and the contents from the text — read the file twice and take one from each,
+  by position.
 - **To find where a string ends.** Two other scanners in the tree skip strings
   rather than blanking them — one finds the bracket that matches another, one
   reads a call's arguments. They want to know *where the string is*, not what
@@ -167,6 +220,13 @@ let code = code_lines_kept(production_of(&text));
   removes the test items and keeps the rest.
 - `a_test_helper_is_not_a_reader` — a test helper that takes a `&Params` is a
   function, and it is not a reader the commands use.
+- `a_reader_that_stands_only_in_a_comment_is_not_a_reader` — a `fn` in a
+  comment is not a function.
+- `a_command_that_stands_only_in_a_comment_is_not_a_command` — a `pub static`
+  in a comment is not a command.
+- `the_code_view_is_the_same_length_as_the_file` — the two views are the
+  same length, byte for byte, so a position in one is a position in the
+  other.
 
 ## See also
 

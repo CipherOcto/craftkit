@@ -17715,6 +17715,168 @@ comment said *"the tests are not the production code"* — which was §78's
 sentence, sitting in a comment for seventy-two sections before §150 read it
 as a rule about the tree.
 
+## 155. The gate that says every parameter a command reads is declared read its two lists as text
+
+### The measurement
+
+The gate that says *every parameter a command reads is declared, and every
+parameter it declares is read* derives **two lists** out of the tree's
+source:
+
+- the **readers** — the functions that take a `&Params`, or the methods of
+  `Params` itself, and
+- the **commands** — the `pub static` specs in
+  `crates/engine/src/commands.rs`.
+
+Both lists were read as **text**. A `fn` in a doc comment was a reader. A
+`pub static` in a doc comment was a command.
+
+Measured, against the gate on a copy of the tree:
+
+| Case | What was done | What the gate said |
+|---|---|---|
+| control | the tree as it stands | **green** |
+| control A | a doc comment that mentions a reader, with no signature | **green** |
+| control D | a raw string that mentions a reader, with no signature | **green** |
+| A | a doc comment that shows a reader | **RED** — 2 false positives |
+| B | a doc comment that shows a command | **RED** — 1 false positive |
+| C | an escaped string that shows a reader | **green** |
+| D | a raw string that shows a reader | **RED** — 2 false positives |
+| E | a raw string that shows a command | **RED** — 1 false positive |
+
+Case A is the worst shape, and it is the shape a person actually writes. A
+doc comment in `crates/engine/src/params.rs` that shows what a reader looks
+like —
+
+```rust
+/// It looks like `fn value_for(p: &Params<'_>) { p.num("ghost") }`.
+```
+
+— made the gate believe that the reader had **no name argument of its own**,
+so it read the *comment's* body instead of the reader's, and it told the
+commands that they read a parameter called `ghost`:
+
+> crates/engine/src/commands.rs: line 449 reads the parameter `ghost`, which
+> `prop.set` does not declare: the engine refuses an undeclared parameter, so
+> the command cannot be given the value it needs
+
+and the same for `key.set`. Neither command reads `ghost`. The parameter
+exists only in a comment.
+
+Case B is the same defect in the other list. A doc comment that shows a whole
+command made the gate report a command that does not exist:
+
+> crates/engine/src/commands.rs: line 32 declares the parameter `ghost`,
+> which `ghost.cmd` never reads: a caller that passes it is ignored
+
+**The controls are the important half.** The same prose with no signature —
+a comment that *mentions* a reader, or a string that mentions one — is
+green. So it is not the comment's presence that fools the gate; it is the
+comment's **shape**.
+
+**Case C stayed green by luck.** A reader shown in an *escaped* string does
+not bite, because the parameter's name would have to be an escaped string
+literal, and `as_string_literal` refuses one. That is an accident of the
+reader, not a defence: case D shows the same reader in a **raw** string, and
+it bites.
+
+**And the gate still catches the real thing.** A gate that stopped reporting
+the false positives might have stopped reporting altogether, so:
+
+| Case | What was done | What the gate said |
+|---|---|---|
+| P1 | a command reads a parameter it does not declare | **RED** — and the matching "declares one it never reads" |
+| P2 | a command declares a parameter it never reads | **RED** |
+| P3 | a reader added in production, used by no command | **green** — correct |
+
+### Why nothing noticed
+
+**The tree has no comment that shows a reader or a command.** A person
+writing down what a reader looks like is a perfectly normal thing to do, and
+the tree's readers live in `crates/engine/src/params.rs`, where a doc
+comment about them would be natural. It is a shape the tree happens not to
+have.
+
+**§149 made the rule and then listed the gates.** §149 gave the tree one
+way to read code and said that a mention in a string is not code. It listed
+three gates that read the tree's source as text: the one that checks a
+document's claim about a test, the one that checks a document's claim about
+a module, and the one that checks the limits. It did **not** list this
+gate — and the reason is a question about the list, not about the rule. §149
+asked *which gates read a symbol or a module?* This gate reads neither. It
+reads a **function** and a **spec**. The rule covered it; the list of gates
+did not.
+
+**§154 fixed the other half of the same gate.** §154 was about the
+production/test distinction, and this gate was the last one the audit had
+reached. Its prose says the gate "reads the tree's source the same way" —
+and it did, and it was wrong in a **second** way. A gate can have more than
+one defect and they need not be in the same place: one arc cut the tests out
+of the file, the next arc cut the comments and the strings out of it.
+
+**The tree's own rule said the opposite of what the gate did.** The pattern
+document says, under *For the contents of a string*:
+
+> Sometimes the string *is* the subject: a command id, a file name, a JSON
+> payload.
+
+This gate is one of those cases. A command's id and a parameter's name are
+strings, and there the string *is* the subject — reading it from the code
+view would blank it. So the rule could not be applied by blanking the
+strings; it had to be applied by deciding **which half of the gate is
+about shape and which half is about contents**. Nobody had made that
+decision, so the gate read everything as text.
+
+### The fix
+
+**The shape comes from the code; the contents come from the text.**
+
+The gate now reads each file twice: once as the file is written, and once
+as the file is **code** — the same bytes with the comments, the string
+contents and the char literals blanked out. The shape is read from the code
+view: which `fn` is a function, which `pub static` is a command, which
+`ParamDoc::` is a declaration, which call is a call. The contents are read
+from the text: the command's id, the parameter's name. A string is the
+subject there, and the code view has blanked it.
+
+**For that to work, the two views have to be the same length.** The code
+view used to lose a byte at the end of a block comment, and a character that
+is more than one byte lost its extra bytes. Both are fixed, and a unit test
+holds the property: *the code view is the same length as the file*.
+
+**Three unit tests**, each checked to fail when the rule it protects is
+taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_reader_that_stands_only_in_a_comment_is_not_a_reader` | a `fn` in a comment is not a reader |
+| `a_command_that_stands_only_in_a_comment_is_not_a_command` | a `pub static` in a comment is not a command |
+| `the_code_view_is_the_same_length_as_the_file` | the two views are the same length, byte for byte |
+
+**Three mutations**, one for each.
+
+### The lesson
+
+**A gate that needs a string's contents and a gate that must not read a
+string as code are two different jobs, and one gate can be both.** The
+pattern document said "sometimes the string is the subject" and stopped
+there. It did not say that a gate which is both has to decide, *per
+question*, which half it is asking — and that the two halves want different
+views of the same file. The tree had the rule twice and neither copy said
+which half of a gate it applied to.
+
+**A list of gates is only as good as the question that produced it.** §149's
+list came from the question *which gates read a symbol or a module?*, and
+this gate reads a function and a spec. A list built from a question is
+right about the gates that answer that question and silent about the rest.
+The question has to be *which gates read the tree's source?* — and every one
+of them has to say what part of it it is about.
+
+**Two arcs, one gate, two halves.** §154 cut the tests out of the file this
+gate reads. §155 cut the comments and the strings out of it. Neither arc
+could have found the other's defect, because each was looking for one kind
+of mistake and the gate had two.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17775,6 +17937,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test that catches a panic is not a boundary** | `production_of` in `panic_boundaries_are_declared` | 1 mutation — §153 |
 | **Production code after a test item is still production code** | `production_of` removes the test items | 1 mutation — §153 |
 | **A test helper that takes a `&Params` is not a reader** | `production_of` in `parameter_readers` | 1 mutation — §154 |
+| **A `fn` in a comment is not a reader** | the code view in `parameter_readers` | 1 mutation — §155 |
+| **A `pub static` in a comment is not a command** | the code view in `registry_commands` | 1 mutation — §155 |
+| **The code view is the same length as the file** | `code_lines_kept` | 1 mutation — §155 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -18739,3 +18904,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     opens a Rust file, and a decision for each: is its subject production
     code, and does it say so? §154 closed the last gate the audit had
     *reached*; it did not enumerate the rest.
+32. **Audit the gates that read the tree's source for the code/text
+    distinction.** §149 made the rule that a mention in a string is not
+    code, and listed the three gates that read the tree's source as text.
+    That list came from the question *which gates read a symbol or a
+    module?*, and the gate that says every parameter a command reads is
+    declared reads neither: it derives two lists — the readers and the
+    commands — and it read them as text. A doc comment that shows a reader
+    made the gate report two commands reading a parameter that exists only
+    in the comment; a doc comment that shows a whole command made it
+    report a command that does not exist. §155 closed that one. The same
+    way of asking the question will find the rest: a list of every gate
+    that opens a Rust file, and for each, which half of it is about the
+    *shape* and which half is about what the code *says*. A gate can be
+    both at once, and then it reads the file twice.

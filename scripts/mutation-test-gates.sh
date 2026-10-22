@@ -3859,7 +3859,7 @@ expect_catch "gate: the limits gate reads the tree's strings as code" \
 # across two lines is two lines of the file, and the tree's own
 # crates/io/src/format.rs has three of them.
 swap xtask/src/lists.rs \
-    "                out.push(if c == '\n' { '\n' } else { ' ' });
+    "                blank(&mut out, c);
                 escaped = false;" \
     "                out.push(' ');
                 escaped = false;"
@@ -3872,7 +3872,7 @@ swap xtask/src/lists.rs \
     "            } else if c == '\n' {
                 out.push('\n');
             } else {
-                out.push(' ');
+                blank(&mut out, c);
             }
             continue;
         }
@@ -4002,10 +4002,50 @@ expect_catch "gate: the production cut hides the code after a test item" \
 # made the gate report two commands reading a parameter called "ghost" --
 # while the control, with no such helper, was green. Section 154.
 swap xtask/src/lists.rs \
-    '        for (name, line, signature, body, block) in rust_functions(&relative, &production) {' \
-    '        for (name, line, signature, body, block) in rust_functions(&relative, &text) {'
+    '        let production = production_of(&text);
+        let code = code_lines_kept(&production);' \
+    '        let production = text.clone();
+        let code = code_lines_kept(&production);'
 expect_catch "gate: the reader list counts a test's helper as a reader" \
     "cargo test -p xtask --profile ci a_test_helper_is_not_a_reader"
+
+# A comment is not code. The gate that says every parameter a command reads
+# is declared derives its two lists -- the readers and the commands -- out of
+# the tree's source, and it read them as text. A doc comment that shows a
+# reader is the worst shape: the gate believed the reader had no name
+# argument of its own, read the comment's body, and told the commands that
+# they read a parameter the comment invented. Measured: a doc comment that
+# showed a reader made the gate report two commands reading a parameter
+# called "ghost" -- and a doc comment that showed a whole command made it
+# report a command that does not exist. The controls, with the same prose
+# and no signature, were green. Section 155.
+swap xtask/src/lists.rs \
+    '        for function in rust_functions(&relative, &production, &code) {' \
+    '        for function in rust_functions(&relative, &production, &production) {'
+expect_catch "gate: the reader list reads a comment as a reader" \
+    "cargo test -p xtask --profile ci a_reader_that_stands_only_in_a_comment_is_not_a_reader"
+
+swap xtask/src/lists.rs \
+    '    let code = code_lines_kept(&text);
+    let mut out = Vec::new();
+    let bytes = code.as_bytes();' \
+    '    let code = text.clone();
+    let mut out = Vec::new();
+    let bytes = code.as_bytes();'
+expect_catch "gate: the command list reads a comment as a command" \
+    "cargo test -p xtask --profile ci a_command_that_stands_only_in_a_comment_is_not_a_command"
+
+# And the code view has to be the same length as the file: the gate reads
+# the shape of a thing from the code and its contents from the text, and it
+# takes one from the other by position. A block comment's end used to lose a
+# byte, and every position after it was off by one.
+swap xtask/src/lists.rs \
+    "                // Two bytes for two bytes: the view keeps the file's length.
+                out.push(' ');
+                out.push(' ');" \
+    "                out.push(' ');"
+expect_catch "gate: the code view loses a byte" \
+    "cargo test -p xtask --profile ci the_code_view_is_the_same_length_as_the_file"
 
 restore
 finish

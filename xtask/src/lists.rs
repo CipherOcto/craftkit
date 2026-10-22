@@ -2049,9 +2049,14 @@ struct Reader {
     /// Its body, used to work out the names a reader without a name argument
     /// of its own reads.
     body: String,
+    /// Its body as it is **code**, beside the body as it is written: a
+    /// reader call inside a string is a sentence about a call, not a call.
+    /// §155.
+    code_body: String,
 }
 
 /// A command in the registry, read from the source.
+#[derive(Debug)]
 struct CommandSource {
     /// The command's id.
     id: String,
@@ -2062,6 +2067,9 @@ struct CommandSource {
     /// The body of its `run`, and the file line that body starts on.
     body: String,
     body_line: usize,
+    /// The body of its `run`, read as code: the strings are blanked, so a
+    /// reader call inside a string is not a call. §155.
+    code_body: String,
 }
 
 /// The offset of the delimiter that closes the one at `open`.
@@ -2122,39 +2130,66 @@ fn impl_blocks(source: &str) -> Vec<(String, usize, usize)> {
     out
 }
 
+/// A function in a Rust file, read from the code and from the text.
+///
+/// The **shape** comes from the code: a `fn` in a comment or in a string is
+/// not a function. The **body** comes from the text, because a body reads
+/// its parameters by name and a name is a string — and the code view has
+/// blanked it. The code body is carried beside it, so that a reader call in
+/// a string is not mistaken for a call. §155.
+struct Function {
+    /// Its name.
+    name: String,
+    /// The file line its `fn` is on.
+    line: usize,
+    /// Its signature, as it is written.
+    signature: String,
+    /// Its body, as it is written.
+    body: String,
+    /// Its body, as it is code.
+    code_body: String,
+    /// The `impl` block it is written in, if any.
+    block: String,
+}
+
 /// Every function in a Rust file, with its signature, its body and the block
 /// it is written in.
-fn rust_functions(file: &str, source: &str) -> Vec<(String, usize, String, String, String)> {
-    let bytes = source.as_bytes();
-    let blocks = impl_blocks(source);
+///
+/// `source` is the file's text and `code` is the same file read as code: the
+/// same bytes, with the comments, the string contents and the char literals
+/// blanked out. The two are the same length, so a position in one is a
+/// position in the other. §155.
+fn rust_functions(file: &str, source: &str, code: &str) -> Vec<Function> {
+    let bytes = code.as_bytes();
+    let blocks = impl_blocks(code);
     let mut out = Vec::new();
     let mut at = 0usize;
-    while let Some(found) = source[at..].find("fn ") {
+    while let Some(found) = code[at..].find("fn ") {
         let start = at + found;
         at = start + 3;
         if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
             continue;
         }
-        let name: String = source[at..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        let name: String = code[at..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
         if name.is_empty() {
             continue;
         }
         at += name.len();
-        let Some(open) = source[at..].find('(') else { continue };
+        let Some(open) = code[at..].find('(') else { continue };
         let open = at + open;
-        let Some(close) = matching(source, open, b'(', b')') else { continue };
-        let signature = source[open + 1..close].to_string();
+        let Some(close) = matching(code, open, b'(', b')') else { continue };
+        let signature = code[open + 1..close].to_string();
         let after = close + 1;
-        let brace = source[after..].find('{').map(|i| after + i);
-        let (body, line) = match brace {
+        let brace = code[after..].find('{').map(|i| after + i);
+        let (body, code_body, line) = match brace {
             Some(bs) => {
-                let line = source[..bs].lines().count() + 1;
-                match matching(source, bs, b'{', b'}') {
-                    Some(be) => (source[bs..=be].to_string(), line),
-                    None => (String::new(), line),
+                let line = code[..bs].lines().count() + 1;
+                match matching(code, bs, b'{', b'}') {
+                    Some(be) => (source[bs..=be].to_string(), code[bs..=be].to_string(), line),
+                    None => (String::new(), String::new(), line),
                 }
             }
-            None => (String::new(), source[..open].lines().count() + 1),
+            None => (String::new(), String::new(), code[..open].lines().count() + 1),
         };
         // The block the function is written in: the innermost `impl` that
         // holds it.
@@ -2164,7 +2199,7 @@ fn rust_functions(file: &str, source: &str) -> Vec<(String, usize, String, Strin
             .max_by_key(|(_, first, _)| *first)
             .map(|(header, _, _)| header.clone())
             .unwrap_or_default();
-        out.push((name, line, signature, body, block));
+        out.push(Function { name, line, signature, body, code_body, block });
     }
     let _ = file;
     out
@@ -2257,19 +2292,32 @@ fn key_index(signature: &str) -> Option<usize> {
 /// useless — the gate believes the reader has no name argument of its own,
 /// reads the *test's* body, and tells the commands that they read a
 /// parameter the test invented. §154.
+///
+/// And the list is derived from the **code**: a `fn` in a comment or in a
+/// string is not a function. A doc comment that shows a reader — the way a
+/// person writes down what a reader looks like — made the gate believe the
+/// reader had no name argument of its own, read the comment's body, and
+/// tell the commands that they read a parameter the comment invented. §155.
 fn parameter_readers(root: &Path) -> Vec<Reader> {
     let mut out = Vec::new();
     for path in rust_files(&root.join("crates")) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         let relative = relative_name(root, &path);
         let production = production_of(&text);
-        for (name, line, signature, body, block) in rust_functions(&relative, &production) {
-            let is_method = has_word(&block, PARAMS_TYPE);
-            let takes_params = signature.contains(&format!("&{PARAMS_TYPE}"));
+        let code = code_lines_kept(&production);
+        for function in rust_functions(&relative, &production, &code) {
+            let is_method = has_word(&function.block, PARAMS_TYPE);
+            let takes_params = function.signature.contains(&format!("&{PARAMS_TYPE}"));
             if !is_method && !takes_params {
                 continue;
             }
-            out.push(Reader { line, name, key: key_index(&signature), body });
+            out.push(Reader {
+                line: function.line,
+                name: function.name,
+                key: key_index(&function.signature),
+                body: function.body,
+                code_body: function.code_body,
+            });
         }
     }
     out
@@ -2279,7 +2327,18 @@ fn parameter_readers(root: &Path) -> Vec<Reader> {
 ///
 /// A reader with a name argument contributes the string at that argument. A
 /// reader without one contributes the names its own body reads.
-fn names_read(body: &str, body_line: usize, readers: &[Reader], depth: usize) -> Vec<(String, usize)> {
+///
+/// `code_body` is the same body read as code: the strings are blanked, so a
+/// reader call inside a string is a sentence about a call and not a call.
+/// The two are the same length, so a position in one is a position in the
+/// other. §155.
+fn names_read(
+    body: &str,
+    code_body: &str,
+    body_line: usize,
+    readers: &[Reader],
+    depth: usize,
+) -> Vec<(String, usize)> {
     let mut out = Vec::new();
     if depth > 3 {
         return out;
@@ -2294,10 +2353,14 @@ fn names_read(body: &str, body_line: usize, readers: &[Reader], depth: usize) ->
             if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
                 continue;
             }
-            // And it must be a call.
+            // And it must be a call — and the call must be **code**. A name in
+            // a string is a sentence about a call.
             let Some(open) = body[at..].find('(') else { continue };
             let open = at + open;
             if !body[at..open].trim().is_empty() {
+                continue;
+            }
+            if !code_body[start..].starts_with(&reader.name) {
                 continue;
             }
             let Some(close) = matching(body, open, b'(', b')') else { continue };
@@ -2314,7 +2377,9 @@ fn names_read(body: &str, body_line: usize, readers: &[Reader], depth: usize) ->
                     // A reader with no name argument of its own reads what its
                     // own body reads — but the read happens **here**, at the
                     // call site, so that is the line the report names.
-                    for (name, _) in names_read(&reader.body, reader.line, readers, depth + 1) {
+                    for (name, _) in
+                        names_read(&reader.body, &reader.code_body, reader.line, readers, depth + 1)
+                    {
                         out.push((name, call_line));
                     }
                 }
@@ -2328,29 +2393,35 @@ fn names_read(body: &str, body_line: usize, readers: &[Reader], depth: usize) ->
 fn registry_commands(root: &Path) -> Vec<CommandSource> {
     let path = root.join("crates/engine/src/commands.rs");
     let Ok(text) = std::fs::read_to_string(&path) else { return Vec::new() };
+    // The **shape** of the registry is read from the code: a `pub static` in a
+    // comment or in a string is not a command. The **contents** — the id, the
+    // parameter names — are read from the text, because there a string *is*
+    // the subject. The two views are the same length, so a position in one is
+    // a position in the other. §155.
+    let code = code_lines_kept(&text);
     let mut out = Vec::new();
-    let bytes = text.as_bytes();
+    let bytes = code.as_bytes();
     let mut at = 0usize;
-    while let Some(found) = text[at..].find("pub static ") {
+    while let Some(found) = code[at..].find("pub static ") {
         let start = at + found;
         at = start + 10;
         if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
             continue;
         }
-        let Some(brace) = text[at..].find('{') else { break };
+        let Some(brace) = code[at..].find('{') else { break };
         let brace = at + brace;
-        let Some(end) = matching(&text, brace, b'{', b'}') else { continue };
+        let Some(end) = matching(&code, brace, b'{', b'}') else { continue };
+        // The shape says where the command is; the text says what it says.
+        let shape = &code[brace..=end];
         let block = &text[brace..=end];
-        let line = text[..brace].lines().count() + 1;
-        let Some(id) = block.find("id: \"") else { continue };
-        let id_start = id + 5;
-        let Some(id_end) = block[id_start..].find('"') else { continue };
-        let id = block[id_start..id_start + id_end].to_string();
+        let line = code[..brace].lines().count() + 1;
+        let Some(id_at) = field_at(shape, "id") else { continue };
+        let Some(id) = quoted_after(&block[id_at..]) else { continue };
 
         // The names the command declares.
         let mut declared = Vec::new();
         let mut scan = 0usize;
-        while let Some(found) = block[scan..].find("ParamDoc::") {
+        while let Some(found) = shape[scan..].find("ParamDoc::") {
             let mark = scan + found;
             scan = mark + 10;
             let Some(open) = block[scan..].find('(') else { break };
@@ -2364,20 +2435,55 @@ fn registry_commands(root: &Path) -> Vec<CommandSource> {
 
         // The body of its `run`.
         let mut body = String::new();
+        let mut code_body = String::new();
         let mut body_line = line;
-        if let Some(run) = block.find("run:") {
+        if let Some(run) = shape.find("run:") {
             let after = run + 4;
-            if let Some(brace) = block[after..].find('{') {
+            if let Some(brace) = shape[after..].find('{') {
                 let open = after + brace;
-                if let Some(close) = matching(block, open, b'{', b'}') {
+                if let Some(close) = matching(shape, open, b'{', b'}') {
                     body = block[open..=close].to_string();
-                    body_line = line + block[..open].lines().count();
+                    code_body = shape[open..=close].to_string();
+                    body_line = line + shape[..open].lines().count();
                 }
             }
         }
-        out.push(CommandSource { id, line, declared, body, body_line });
+        out.push(CommandSource { id, line, declared, body, body_line, code_body });
     }
     out
+}
+
+/// The offset just after a field's colon, if the code has that field.
+///
+/// The name has to stand alone — `valid` is not `id` — and it has to be
+/// followed by a colon, because that is what makes it a field and not a
+/// word.
+fn field_at(code: &str, name: &str) -> Option<usize> {
+    let bytes = code.as_bytes();
+    let mut at = 0usize;
+    while let Some(found) = code[at..].find(name) {
+        let start = at + found;
+        at = start + name.len();
+        if start > 0 && is_word_byte(bytes[start - 1]) {
+            continue;
+        }
+        if !code[at..].starts_with(':') {
+            continue;
+        }
+        return Some(at + 1);
+    }
+    None
+}
+
+/// The string that follows a field, if the field is followed by one.
+///
+/// The text is the file's **text**: a command's id is a string, and a string
+/// is the subject there. §155.
+fn quoted_after(text: &str) -> Option<String> {
+    let rest = text.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
 }
 
 /// Every parameter a command reads is declared, and every parameter it
@@ -2409,7 +2515,7 @@ pub fn every_parameter_a_command_reads_is_declared(root: &Path) -> Result<Vec<St
     }
 
     for command in &commands {
-        let read = names_read(&command.body, command.body_line, &readers, 0);
+        let read = names_read(&command.body, &command.code_body, command.body_line, &readers, 0);
         let declared: Vec<&str> = command.declared.iter().map(|s| s.as_str()).collect();
 
         for (name, line) in &read {
@@ -2510,6 +2616,12 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
 /// `'{'` in the source would open a body that is not there. A **lifetime**
 /// is not a char literal: `fn f<'a>(x: &'a str)` has one, and treating it as
 /// a literal would swallow the rest of the file.
+///
+/// The view is the **same length** as the file, byte for byte, so a position
+/// in one is a position in the other. That is what lets a gate read the
+/// *shape* of a thing from the code and its *contents* from the text: a
+/// command's id is a string, and a string is the subject there, but a `pub
+/// static` in a comment is not a command. §155.
 fn code_lines_kept(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut chars = source.chars().peekable();
@@ -2523,7 +2635,7 @@ fn code_lines_kept(source: &str) -> String {
                 in_line = false;
                 out.push('\n');
             } else {
-                out.push(' ');
+                blank(&mut out, c);
             }
             continue;
         }
@@ -2531,11 +2643,13 @@ fn code_lines_kept(source: &str) -> String {
             if c == '*' && chars.peek() == Some(&'/') {
                 chars.next();
                 in_block = false;
+                // Two bytes for two bytes: the view keeps the file's length.
+                out.push(' ');
                 out.push(' ');
             } else if c == '\n' {
                 out.push('\n');
             } else {
-                out.push(' ');
+                blank(&mut out, c);
             }
             continue;
         }
@@ -2545,7 +2659,7 @@ fn code_lines_kept(source: &str) -> String {
                 // a string. The line it ends is still a line of the file, and
                 // a check that names a line has to name the file's line —
                 // the tree's own `crates/io/src/format.rs` has three of them.
-                out.push(if c == '\n' { '\n' } else { ' ' });
+                blank(&mut out, c);
                 escaped = false;
                 continue;
             }
@@ -2559,7 +2673,7 @@ fn code_lines_kept(source: &str) -> String {
                     out.push(' ');
                 }
                 '\n' => out.push('\n'),
-                _ => out.push(' '),
+                _ => blank(&mut out, c),
             }
             continue;
         }
@@ -2591,7 +2705,7 @@ fn code_lines_kept(source: &str) -> String {
                     if c == '\\' {
                         out.push(' ');
                         if let Some(next) = chars.next() {
-                            out.push(if next == '\n' { '\n' } else { ' ' });
+                            blank(&mut out, next);
                         }
                         continue;
                     }
@@ -2599,13 +2713,28 @@ fn code_lines_kept(source: &str) -> String {
                         out.push(' ');
                         break;
                     }
-                    out.push(if c == '\n' { '\n' } else { ' ' });
+                    blank(&mut out, c);
                 }
             }
             _ => out.push(c),
         }
     }
     out
+}
+
+/// Blank a character, keeping the file's byte count.
+///
+/// A character can be more than one byte, and the code view has to be the
+/// same length as the file: a position in one is a position in the other.
+/// §155.
+fn blank(out: &mut String, c: char) {
+    if c == '\n' {
+        out.push('\n');
+        return;
+    }
+    for _ in 0..c.len_utf8() {
+        out.push(' ');
+    }
 }
 
 /// Whether the quote just read opens a char literal rather than a lifetime.
@@ -6092,6 +6221,103 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A reader that stands only in a comment is not a reader.
+    ///
+    /// The tree derives its parameter readers from its source, and a `fn` in
+    /// a doc comment is a sentence about a function, not a function. A
+    /// comment that shows a reader is the worst shape: the gate believed the
+    /// reader had no name argument of its own, read the **comment's** body,
+    /// and told the commands that they read a parameter the comment
+    /// invented. §155.
+    #[test]
+    fn a_reader_that_stands_only_in_a_comment_is_not_a_reader() {
+        let dir = std::env::temp_dir().join(format!("craftkit-comments-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "use craftkit_core::Params;\n\
+             \n\
+             /// It looks like `fn value_for(p: &Params<'_>) { p.num(\"ghost\") }`.\n\
+             /// And `fn ghost_reader(p: &Params<'_>) { p.num(\"ghost\") }`.\n\
+             pub fn value_for(p: &Params<'_>, key: &str) -> Option<f64> {\n\
+             p.num(key).ok().flatten()\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let readers = parameter_readers(&dir);
+        // One reader: the one that is code.
+        assert_eq!(readers.len(), 1, "{readers:?}");
+        assert_eq!(readers[0].name, "value_for", "{readers:?}");
+        // And it is the real one, with a name argument of its own.
+        assert!(readers[0].key.is_some(), "{readers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A command that stands only in a comment is not a command.
+    ///
+    /// The gate that says every parameter a command reads is declared reads
+    /// the registry out of the source, and a `pub static` in a doc comment is
+    /// a sentence about a command, not a command. The comment's command
+    /// declared a parameter that no command reads, and the gate reported a
+    /// command that does not exist. §155.
+    #[test]
+    fn a_command_that_stands_only_in_a_comment_is_not_a_command() {
+        let dir = std::env::temp_dir().join(format!("craftkit-cmds-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("commands.rs"),
+            "use crate::command::CommandSpec;\n\
+             \n\
+             /// A command looks like this:\n\
+             ///\n\
+             /// ```ignore\n\
+             /// pub static GHOST: CommandSpec = CommandSpec {\n\
+             ///     id: \"ghost.cmd\",\n\
+             ///     params: &[ParamDoc::req(\"ghost\", Doc::Text, \"Nobody reads this.\")],\n\
+             ///     run: |s, p| { let _ = s; let _ = p; },\n\
+             /// };\n\
+             /// ```\n\
+             pub static REAL: CommandSpec = CommandSpec {\n\
+             id: \"real.cmd\",\n\
+             params: &[ParamDoc::req(\"name\", Doc::Text, \"A name.\")],\n\
+             run: |s, p| { let _ = s; let _ = p; },\n\
+             };\n",
+        )
+        .expect("the fabricated code");
+
+        let commands = registry_commands(&dir);
+        assert_eq!(commands.len(), 1, "{commands:?}");
+        assert_eq!(commands[0].id, "real.cmd", "{commands:?}");
+        assert_eq!(commands[0].declared, vec!["name".to_string()], "{commands:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The code view is the same length as the file.
+    ///
+    /// The gate reads the *shape* of a thing from the code and its
+    /// *contents* from the text, and it takes one from the other by
+    /// position. That only works if the two views are the same length, byte
+    /// for byte: a block comment's end, a string's contents and a character
+    /// that is more than one byte all have to keep their place. §155.
+    #[test]
+    fn the_code_view_is_the_same_length_as_the_file() {
+        let source = "/* a comment */\n\
+                      fn f() {\n\
+                      let a = \"a string\";\n\
+                      let b = 'x';\n\
+                      let c = '\u{00e9}';\n\
+                      let d = \"a \\\n\
+                      continued string\";\n\
+                      // a line comment\n\
+                      }\n";
+        let code = code_lines_kept(source);
+        assert_eq!(code.len(), source.len(), "{code:?}");
+        assert_eq!(code.lines().count(), source.lines().count(), "{code:?}");
+    }
+
     /// A limit that only a test mentions is not enforced.
     ///
     /// The gate that says every limit in the model's table is enforced
@@ -7428,7 +7654,8 @@ printf '%s%d/%d caught.%s\\n' \\
         // reads: `node_by_id_or_name` reads `node` and `node_name`.
         let by_id_or_name = readers.iter().find(|r| r.name == "node_by_id_or_name").expect("it");
         assert!(by_id_or_name.key.is_none(), "it takes no name of its own");
-        let names = names_read(&by_id_or_name.body, by_id_or_name.line, &readers, 0);
+        let names =
+            names_read(&by_id_or_name.body, &by_id_or_name.code_body, by_id_or_name.line, &readers, 0);
         let mut read: Vec<&str> = names.iter().map(|(n, _)| n.as_str()).collect();
         read.sort();
         assert_eq!(read, vec!["node", "node_name"], "the names it reads: {read:?}");
@@ -7436,7 +7663,7 @@ printf '%s%d/%d caught.%s\\n' \\
         // And the two halves of the rule are told apart.
         let rename = commands.iter().find(|c| c.id == "doc.rename").expect("the command");
         assert_eq!(rename.declared, vec!["name".to_string()], "the names it declares");
-        let read = names_read(&rename.body, rename.body_line, &readers, 0);
+        let read = names_read(&rename.body, &rename.code_body, rename.body_line, &readers, 0);
         assert_eq!(read.len(), 1, "it reads one parameter: {read:?}");
         assert_eq!(read[0].0, "name", "and it is the one it declares");
     }
