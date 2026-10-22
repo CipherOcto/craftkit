@@ -1695,14 +1695,15 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
             std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
         // The tests are not the writer: a test may compare two shapes of the
         // same report with serde_json's own printer, and that is not the tree
-        // writing anything.
-        let production = match text.find("#[cfg(test)]") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
+        // writing anything. The cut **removes** the test items rather than
+        // truncating the file at the first one: production code after a test
+        // item is still production code, and an *indented* test attribute
+        // marks a method inside an impl block, not the end of the file.
+        // §156.
+        let production = production_of(&text);
         // Strings and comments do not count: this file names the writer, and
         // a doc comment that says `to_string_pretty` is saying the opposite.
-        let code = code_lines_kept(production);
+        let code = code_lines_kept(&production);
         for (needle, because) in [
             (
                 "to_string_pretty(",
@@ -2573,12 +2574,12 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
     for path in rust_files(&root.join("crates/ui/src")) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         // The tests are not the panels: a test may name the evaluator to
-        // prove that the shell does not call it.
-        let production = match text.find("\nmod tests {") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
-        let code = code_lines_kept(production);
+        // prove that the shell does not call it. The cut **removes** the test
+        // items rather than truncating the file at the test module: a test
+        // written outside a module is a test too, and production code after
+        // a test item is still production code. §156.
+        let production = production_of(&text);
+        let code = code_lines_kept(&production);
         let relative = relative_name(root, &path);
         for name in EVALUATOR_NAMES {
             if !has_word(&code, name) {
@@ -2930,13 +2931,13 @@ pub fn the_shell_does_not_write_the_document(root: &Path) -> Result<Vec<String>,
     for path in rust_files(&root.join("crates/ui/src")) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         // The tests are not the panels: a test may open a design to have
-        // something to draw.
-        let production = match text.find("\nmod tests {") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
-        // Only the tail is cut, so the line numbers are the file's.
-        let code = code_lines_kept(production);
+        // something to draw. The cut **removes** the test items rather than
+        // truncating the file at the test module: a test written outside a
+        // module is a test too, and production code after a test item is
+        // still production code. §156.
+        let production = production_of(&text);
+        // The cut keeps the lines, so the line numbers are the file's.
+        let code = code_lines_kept(&production);
         let relative = relative_name(root, &path);
         for name in DOCUMENT_WRITERS {
             if !has_word(&code, name) {
@@ -7768,6 +7769,117 @@ printf '%s%d/%d caught.%s\\n' \\
         .expect("the fabricated source");
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A writer after a test item is still a writer.
+    ///
+    /// The gate that says the tree writes its JSON with one writer cut each
+    /// file at its first test attribute, and a cut that **truncates** says
+    /// "everything after this is not production" — which is a claim about the
+    /// rest of the file that nobody checked. Production code after a test
+    /// item is still production code, and a writer of its own there was
+    /// invisible. §156.
+    #[test]
+    fn a_writer_after_a_test_item_is_still_a_writer() {
+        let dir = std::env::temp_dir().join(format!("craftkit-after-test-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        std::fs::write(io.join("format.rs"), good).expect("the fabricated source");
+        std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // The same writer, after a test item: still production, still caught.
+        std::fs::write(
+            io.join("format.rs"),
+            "let _ = craftkit_core::writer::write_json(&mut out, &value);\n\
+             #[cfg(test)]\nmod tests {\n    fn a_shape() {}\n}\n\
+             fn another() { let _ = serde_json::to_string_pretty(&value); }\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An indented test attribute does not truncate the file.
+    ///
+    /// A `#[cfg(test)]` that is **indented** marks a method inside an impl
+    /// block, and the methods around it are production code. The gate that
+    /// says the tree writes its JSON with one writer cut the file at the
+    /// first test attribute whatever its indentation, so an indented one
+    /// truncated the file there — and the gate reported that the design file
+    /// was not written with the tree's writer, which it is. §156.
+    #[test]
+    fn an_indented_test_attribute_does_not_truncate_the_file() {
+        let dir = std::env::temp_dir().join(format!("craftkit-indented-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
+
+        // The writer call is *after* the indented attribute, in the same impl
+        // block: the cut must not have hidden it.
+        std::fs::write(
+            io.join("format.rs"),
+            "impl Writer {\n    #[cfg(test)]\n    fn a_shape() {}\n\
+             fn write_it() { let _ = craftkit_core::writer::write_json(&mut out, &value); }\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test written outside a module is not the shell.
+    ///
+    /// The gate that says the shell never evaluates the document cut each
+    /// file at its test **module**, so a test written outside one — a
+    /// top-level `#[cfg(test)] fn` — was not cut at all, and the gate
+    /// reported the shell for naming the evaluator in its own test. §153
+    /// found this shape in the panic-boundary gate; §156 found it in these
+    /// two.
+    #[test]
+    fn a_test_outside_a_module_is_not_the_shell() {
+        let dir = std::env::temp_dir().join(format!("craftkit-shell-test-{}", std::process::id()));
+        let ui = dir.join("crates/ui/src");
+        std::fs::create_dir_all(&ui).expect("the fabricated tree");
+
+        // A test that names the evaluator: the tests are not the shell.
+        std::fs::write(
+            ui.join("shell.rs"),
+            "#[cfg(test)]\nfn a_test_only_helper() {\n    let _ = craftkit_eval::evaluate_once;\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_shell_does_not_evaluate(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a test that opens a design: the tests are not the shell.
+        std::fs::write(
+            ui.join("shell.rs"),
+            "#[cfg(test)]\nfn a_test_only_helper() {\n    let _ = Session::load_document;\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_shell_does_not_write_the_document(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // But the shell's own production code is still the shell.
+        std::fs::write(
+            ui.join("shell.rs"),
+            "fn a_production_helper() {\n    let _ = craftkit_eval::evaluate_once;\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_shell_does_not_evaluate(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

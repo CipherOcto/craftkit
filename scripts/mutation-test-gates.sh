@@ -4047,5 +4047,49 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the code view loses a byte" \
     "cargo test -p xtask --profile ci the_code_view_is_the_same_length_as_the_file"
 
+# A cut that truncates says "everything after this is not production", and
+# that is a claim about the rest of the file that nobody checked. Three
+# gates cut the tree's source that way. Measured, against the gates on a
+# copy of the tree: a production call to serde_json's pretty printer after
+# the test module was invisible to the gate that says the tree writes its
+# JSON with one writer; an indented test attribute -- which marks a method
+# inside an impl block -- truncated the file there, and the gate reported
+# that the design file was not written with the tree's writer, which it is;
+# and a test written outside a module was reported by the two gates that
+# say the shell never evaluates the document and never writes it. The
+# controls, with the same code where the gate was looking, were red. Section
+# 156.
+swap xtask/src/lists.rs \
+    '        let production = production_of(&text);
+        // Strings and comments do not count: this file names the writer, and' \
+    '        let production = match text.find("#[cfg(test)]") {
+            Some(at) => &text[..at],
+            None => &text[..],
+        };
+        // Strings and comments do not count: this file names the writer, and'
+expect_catch "gate: the JSON writer's cut truncates the file" \
+    "cargo test -p xtask --profile ci a_writer_after_a_test_item_is_still_a_writer"
+
+swap xtask/src/lists.rs \
+    '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {' \
+    '        if line.starts_with("mod tests {") || line.trim_start().starts_with("#[cfg(test)]") {'
+expect_catch "gate: the cut treats an indented test attribute as the end of the file" \
+    "cargo test -p xtask --profile ci an_indented_test_attribute_does_not_truncate_the_file"
+
+swap xtask/src/lists.rs \
+    '        let production = production_of(&text);
+        let code = code_lines_kept(&production);
+        let relative = relative_name(root, &path);
+        for name in EVALUATOR_NAMES {' \
+    '        let production = match text.find("\nmod tests {") {
+            Some(at) => &text[..at],
+            None => &text[..],
+        };
+        let code = code_lines_kept(&production);
+        let relative = relative_name(root, &path);
+        for name in EVALUATOR_NAMES {'
+expect_catch "gate: the shell's cut truncates the file" \
+    "cargo test -p xtask --profile ci a_test_outside_a_module_is_not_the_shell"
+
 restore
 finish

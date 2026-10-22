@@ -82,19 +82,20 @@ enforces nothing, and a test that calls a reader to prove the reader works
 does not make the reader a third home.
 
 So a gate whose subject is a *production* property cuts the file at its test
-module first. The tree's `production_of` helper does it, and four of the
-tree's gates already had a cut of their own before it: the panic-boundary
-check, the JSON writer's check, and the two that say the shell does not
-evaluate the document and does not write it. The limits gate, the raw
-reader's gate and the reader list use the helper now. The session's gate —
-which counts the session's public methods — skips a method marked
-`#[cfg(test)]` instead, because a helper inside an impl block is marked rather
-than put in a module.
+module first. The tree's `production_of` helper does it, and the gates that
+read the tree's source all use it now: the limits gate, the raw reader's
+gate, the reader list, the panic-boundary check, the JSON writer's check,
+and the two that say the shell does not evaluate the document and does not
+write it. The session's gate — which counts the session's public methods —
+skips a method marked `#[cfg(test)]` instead, because a helper inside an
+impl block is marked rather than put in a module.
 
 The helper **removes** the test items rather than truncating the file at the
 first one: production code after a test item is still production code, and a
 cut that hid it would hide a limit used further down and a panic caught
-further down.
+further down. §153 found the truncating cut and fixed the helper; §156
+found three gates that still had a cut of their own, and they were all
+truncating.
 
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
@@ -104,7 +105,13 @@ parameter reader — to prove the reader works — was reported as a third home
 of a reader that is allowed two. And a test-only method in the session's impl
 block was reported as "a public way to change the design is a second path".
 And a test written outside a module that caught a panic was reported as an
-undeclared panic boundary.
+undeclared panic boundary. And a production call to the pretty printer
+*after* a test item was invisible to the gate that says the tree writes its
+JSON with one writer, while an indented test attribute — which marks a
+method inside an impl block — truncated that file and made the gate report
+that the design file was not written with the tree's writer, which it is.
+And a test written outside a module was reported by the two gates that say
+the shell never evaluates the document and never writes it.
 
 And the gate that **derives** the tree's parameter readers — the gate whose
 whole point is that a reader is covered the day it is added — counted a test
@@ -227,6 +234,13 @@ let code = code_lines_kept(&text);
 - `the_code_view_is_the_same_length_as_the_file` — the two views are the
   same length, byte for byte, so a position in one is a position in the
   other.
+- `a_writer_after_a_test_item_is_still_a_writer` — a cut that truncates the
+  file at the first test item hides the production code after it.
+- `an_indented_test_attribute_does_not_truncate_the_file` — an indented
+  test attribute marks a method inside an impl block, not the end of the
+  file.
+- `a_test_outside_a_module_is_not_the_shell` — a test written outside a
+  module is a test too.
 
 ## See also
 
