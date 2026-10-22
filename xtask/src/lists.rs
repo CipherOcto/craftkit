@@ -192,12 +192,11 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         // The tests are not the production code: a test may catch a panic to
-        // assert that it was caught, and that is not a boundary.
-        let production = match text.find("\nmod tests {") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
-        if !code_lines_kept(production).contains("catch_unwind(") {
+        // assert that it was caught, and that is not a boundary. The cut has
+        // to reach a **top-level** test item as well as a test module, or a
+        // test written outside a module is counted as a boundary. §153.
+        let production = production_of(&text);
+        if !code_lines_kept(&production).contains("catch_unwind(") {
             continue;
         }
         let relative = relative_name(root, &path);
@@ -1394,7 +1393,7 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
         // reads a parameter, and a test that calls the reader to prove the
         // reader works is not a third place where the shape of a parameter is
         // decided. §151.
-        let code = code_lines_kept(production_of(&text));
+        let code = code_lines_kept(&production_of(&text));
         if !code.contains("raw_json(") {
             continue;
         }
@@ -4499,7 +4498,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let table = root.join("crates/model/src/lib.rs");
     let source =
         std::fs::read_to_string(&table).map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = code_lines_kept(production_of(&source));
+    let code = code_lines_kept(&production_of(&source));
     let Some((declared, rest)) = limits_table(&code) else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
@@ -4509,7 +4508,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };
         for name in &declared {
             if body.contains(name.as_str()) && !used.contains(name) {
                 used.push(name.clone());
@@ -4528,23 +4527,42 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
-/// The production code of a file: everything before its tests.
+/// The production code of a file: everything except its test items.
 ///
 /// The tests are not the production code, and a gate whose subject is a
 /// *production* property has to say so: a test may name the thing to prove
 /// that the production code does not do it. §150.
 ///
-/// The cut is at a line that **starts** a test module — `mod tests {` or a
-/// `#[cfg(test)]` attribute — so an indented `#[cfg(test)]` on an inner item
-/// does not take the rest of the file with it.
-fn production_of(text: &str) -> &str {
-    let mut cut = text.len();
-    for marker in ["\nmod tests {", "\n#[cfg(test)]"] {
-        if let Some(at) = text.find(marker) {
-            cut = cut.min(at);
+/// A **test item** is a `mod tests { … }` block, or a top-level item marked
+/// `#[cfg(test)]`. Both are removed **whole**, line by line, so that
+/// production code *after* a test item is still production code: a cut that
+/// truncated the file at the first test item would hide a limit used further
+/// down, and would hide a panic boundary caught further down. §153.
+///
+/// An **indented** `#[cfg(test)]` is not a test item: it marks a method
+/// inside an impl block, and the methods around it are production code.
+fn production_of(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut skipping = false;
+    for line in text.lines() {
+        if skipping {
+            // A top-level item ends at the first `}` in the first column:
+            // everything inside it is indented.
+            if line == "}" || line == ";" {
+                skipping = false;
+            }
+            out.push('\n');
+            continue;
         }
+        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
+            skipping = true;
+            out.push('\n');
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
     }
-    &text[..cut]
+    out
 }
 
 /// The limits the model's table declares, and the rest of the file.
@@ -5949,6 +5967,78 @@ mod tests {
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("a_public_way_in"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test that catches a panic is not a boundary.
+    ///
+    /// The gate says every file with a `catch_unwind` in it is a *declared*
+    /// boundary, and a test may catch a panic to assert that it was caught.
+    /// The gate cut the file at its test **module**, so a test written outside
+    /// a module — a top-level `#[cfg(test)] fn` — was counted as a boundary.
+    /// §153.
+    #[test]
+    fn a_test_that_catches_a_panic_is_not_a_boundary() {
+        let dir = std::env::temp_dir().join(format!("craftkit-boundary-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // The document has to name every declared boundary, or the gate says
+        // so and the test is about the wrong thing.
+        std::fs::write(
+            docs.join("one-trust-boundary.md"),
+            "The boundaries are `crates/kernel/src/lib.rs`, `crates/engine/src/session.rs`, \
+             `crates/control/src/server.rs` and `apps/craftkit/src/main.rs`.\n",
+        )
+        .expect("the fabricated document");
+        // A test outside a module, catching a panic.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "#[cfg(test)]\n\
+             fn a_test_catches() {\n\
+             let _ = std::panic::catch_unwind(|| 1);\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let problems = panic_boundaries_are_declared(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a production catch is still a boundary.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn f() {\n\
+             let _ = std::panic::catch_unwind(|| 1);\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+        let problems = panic_boundaries_are_declared(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("thing.rs"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Production code after a test item is still production code.
+    ///
+    /// §150's cut truncated the file at the first test item, so a limit used
+    /// *after* a test item was invisible to the gate that says every limit is
+    /// enforced. The cut now removes the test items and keeps the rest.
+    #[test]
+    fn production_code_after_a_test_item_is_still_production_code() {
+        let text = "fn uses_a_limit() -> usize { limits::MAX_NODES }\n\
+                    \n\
+                    #[cfg(test)]\n\
+                    fn a_test() {\n\
+                    let _ = 1;\n\
+                    }\n\
+                    \n\
+                    fn uses_another_limit() -> usize { limits::MAX_KEYS }\n";
+        let production = production_of(text);
+        assert!(production.contains("MAX_NODES"), "{production}");
+        assert!(production.contains("MAX_KEYS"), "{production}");
+        assert!(!production.contains("a_test"), "{production}");
+        // And the lines are still the file's lines.
+        assert_eq!(production.lines().count(), text.lines().count(), "{production}");
     }
 
     /// A limit that only a test mentions is not enforced.

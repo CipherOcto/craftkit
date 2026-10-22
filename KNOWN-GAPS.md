@@ -17561,6 +17561,82 @@ gate's subject is a *production* property, and a reader that does not know
 what production code is will believe whatever it finds.
 
 
+## 153. The gate that said every file that catches a panic is a boundary counted a test's catch as a boundary
+
+### The measurement
+
+§78's gate says every file with a `catch_unwind` in it is a **declared**
+boundary, and every declared boundary is named in the pattern document. The
+gate's own comment says why it cuts anything at all:
+
+> The tests are not the production code: a test may catch a panic to assert
+> that it was caught, and that is not a boundary.
+
+The cut was at the file's test **module**. A test written *outside* a module —
+a top-level `#[cfg(test)] fn` — was not cut, and was counted as a boundary.
+
+Measured, against the gate on a copy of the tree: a top-level `#[cfg(test)] fn`
+that caught a panic was reported — *"catches a panic, and the pattern document
+does not declare it a boundary"*. The control, with no such function, was
+green.
+
+**And the cut itself had a hole.** §150's `production_of` **truncated** the
+file at the first test item. A limit used, or a panic caught, *after* a test
+item would be invisible to every gate that used the cut — a false negative in
+the gate that exists to catch it.
+
+### Why nothing noticed
+
+**The tree's shape hides it.** Every `#[cfg(test)]` in the tree is the head of
+a `mod tests { … }` block, so the cut always found the module. A top-level
+test function is unusual in Rust — the convention is a test module — but it is
+legal, and the tree's gates' own fabricated trees are full of shapes the tree
+does not have.
+
+**The cut was written for a different question.** §150's cut was written to
+answer *"is this limit enforced in production?"*, and truncating the file
+answers that. §153's question is *"does this file catch a panic in
+production?"*, and truncating the file answers it **wrongly** when production
+code comes after a test item. Two questions, one cut, and the cut was right
+for one of them.
+
+### The fix
+
+**`production_of` removes the test items instead of truncating the file.** A
+test item is a `mod tests { … }` block, or a top-level item marked
+`#[cfg(test)]`, and it is removed line by line — so production code *after* it
+is still production code, and the lines are still the file's lines.
+
+An **indented** `#[cfg(test)]` is not a test item: it marks a method inside an
+impl block, and the methods around it are production code. The tree's
+`crates/engine/src/session.rs` has two such methods inside `impl Session`.
+
+**The boundary gate uses the helper**, so a test written outside a module is
+no longer a boundary.
+
+**Two unit tests**, each checked to fail when the rule it protects is taken
+out:
+
+| Test | What it holds |
+|---|---|
+| `a_test_that_catches_a_panic_is_not_a_boundary` | a test's catch is not a boundary, and a production catch still is |
+| `production_code_after_a_test_item_is_still_production_code` | the cut removes the test items and keeps the rest |
+
+**Two mutations**, one for the boundary gate's cut and one for the cut itself.
+
+### The lesson
+
+**A cut that hides is a cut that lies.** The first version of the cut was
+*right for the question it was written for* and wrong for the next one. A cut
+that removes the thing it means to remove says what it does; a cut that
+truncates says "everything after this is not production", which is a claim
+about the rest of the file that nobody checked.
+
+**A gate's own comment says what it means to check.** The boundary gate has
+said since §78 that a test's catch is not a boundary. The gate did not do
+that; it did the half of it that the tree's shape happened to exercise.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17618,6 +17694,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A limit only a test mentions is not enforcement** | `production_of` in `limits_are_enforced` | 2 mutations — §150 |
 | **A test that calls the raw reader is not a third home** | `production_of` in `the_raw_parameter_reader_has_two_homes` | 1 mutation — §151 |
 | **A test's method is not a public path into the design** | the `#[cfg(test)]` mark in `the_session_offers_no_second_path` | 1 mutation — §152 |
+| **A test that catches a panic is not a boundary** | `production_of` in `panic_boundaries_are_declared` | 1 mutation — §153 |
+| **Production code after a test item is still production code** | `production_of` removes the test items | 1 mutation — §153 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -18571,3 +18649,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     qualifier but not a changed constant), write the claim in a form the gate
     can read — the value in parentheses, as the limit-in-prose gate already
     reads a number — or accept that a re-export is stated and not checked.
+31. **Audit the gates that read the tree's source for the production/test
+    distinction.** §150 through §153 found the same defect in five gates in
+    a row: a gate whose subject is a *production* property opened a Rust file
+    and asked its question without saying what production code is. Five are
+    fixed — the limits gate, the raw reader's gate, the session's gate, the
+    panic-boundary gate and the two shell gates that already cut. The tree has
+    others. The one that is known to be open is the gate that derives the
+    tree's parameter readers: it scans the whole file for functions that take
+    a `Params`, so a test helper that takes one would be counted as a reader
+    — that is a fact about the scanner, and the *effect* of it has not been
+    measured. The work is a list of every gate that opens a Rust file, and a
+    decision for each: is its subject production code, and does it say so?

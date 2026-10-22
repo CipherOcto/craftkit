@@ -3850,8 +3850,8 @@ expect_catch "gate: the module gate reads the tree's source as text" \
 # The fourth out of the gate that says every limit in the model's table is
 # enforced somewhere in the tree.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };' \
-    '        let body = if path == table { rest.clone() } else { production_of(&text).to_string() };'
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };' \
+    '        let body = if path == table { rest.clone() } else { production_of(&text) };'
 expect_catch "gate: the limits gate reads the tree's strings as code" \
     "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_enforced"
 
@@ -3916,14 +3916,14 @@ expect_catch "gate: the tree grows a second code reader" \
 #
 # The first takes the cut out of the other files.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };' \
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };' \
     '        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };'
 expect_catch "gate: the limits gate reads the tree's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
 # And the second out of the file the limits table itself lives in.
 swap xtask/src/lists.rs \
-    '    let code = code_lines_kept(production_of(&source));' \
+    '    let code = code_lines_kept(&production_of(&source));' \
     '    let code = code_lines_kept(&source);'
 expect_catch "gate: the limits gate reads the table file's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
@@ -3936,7 +3936,7 @@ expect_catch "gate: the limits gate reads the table file's tests as enforcement"
 # production code was reported too -- the gate could not tell them apart.
 # Section 151.
 swap xtask/src/lists.rs \
-    '        let code = code_lines_kept(production_of(&text));' \
+    '        let code = code_lines_kept(&production_of(&text));' \
     '        let code = code_lines_kept(&text);'
 expect_catch "gate: the raw reader gate counts a test's call as a third home" \
     "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
@@ -3958,6 +3958,39 @@ swap xtask/src/lists.rs \
         }'
 expect_catch "gate: the session gate counts a test's method as a second path" \
     "cargo test -p xtask --profile ci a_test_only_method_is_not_a_second_path_into_the_design"
+
+# A test that catches a panic is not a boundary. The gate says every file
+# with a catch_unwind in it is a declared boundary, and a test may catch a
+# panic to assert that it was caught. The gate cut the file at its test
+# module, so a test written outside a module was counted as a boundary.
+# Measured: a top-level test function that caught a panic was reported, and
+# the control, with no such function, was green. Section 153.
+#
+# The first takes the wider cut out of the boundary gate.
+swap xtask/src/lists.rs \
+    '        let production = production_of(&text);
+        if !code_lines_kept(&production).contains("catch_unwind(") {' \
+    '        let production = match text.find("\nmod tests {") {
+            Some(at) => text[..at].to_string(),
+            None => text.to_string(),
+        };
+        if !code_lines_kept(&production).contains("catch_unwind(") {'
+expect_catch "gate: the boundary gate counts a test's catch as a boundary" \
+    "cargo test -p xtask --profile ci a_test_that_catches_a_panic_is_not_a_boundary"
+
+# And the second makes the cut truncate the file again, which hides
+# production code that comes after a test item.
+swap xtask/src/lists.rs \
+    '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
+            skipping = true;
+            out.push('"'"'\n'"'"');
+            continue;
+        }' \
+    '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
+            return out;
+        }'
+expect_catch "gate: the production cut hides the code after a test item" \
+    "cargo test -p xtask --profile ci production_code_after_a_test_item_is_still_production_code"
 
 restore
 finish

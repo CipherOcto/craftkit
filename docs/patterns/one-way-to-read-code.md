@@ -85,6 +85,11 @@ reader's gate use the helper now. The session's gate — which counts the
 session's public methods — skips a method marked `#[cfg(test)]` instead,
 because a helper inside an impl block is marked rather than put in a module.
 
+The helper **removes** the test items rather than truncating the file at the
+first one: production code after a test item is still production code, and a
+cut that hid it would hide a limit used further down and a panic caught
+further down.
+
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
 test that compares the limits with each other. The gate that says every limit
@@ -92,6 +97,8 @@ is enforced said **green**. And a third file whose *test* called the raw
 parameter reader — to prove the reader works — was reported as a third home
 of a reader that is allowed two. And a test-only method in the session's impl
 block was reported as "a public way to change the design is a second path".
+And a test written outside a module that caught a panic was reported as an
+undeclared panic boundary.
 
 ## In the code
 
@@ -146,6 +153,10 @@ let code = code_lines_kept(production_of(&text));
   third home of the raw reader.
 - `a_test_only_method_is_not_a_second_path_into_the_design` — a test's method
   is not a public path into the design.
+- `a_test_that_catches_a_panic_is_not_a_boundary` — a test's catch is not a
+  boundary.
+- `production_code_after_a_test_item_is_still_production_code` — the cut
+  removes the test items and keeps the rest.
 
 ## See also
 
