@@ -80,10 +80,11 @@ So a gate whose subject is a *production* property cuts the file at its test
 module first. The tree's `production_of` helper does it, and four of the
 tree's gates already had a cut of their own before it: the panic-boundary
 check, the JSON writer's check, and the two that say the shell does not
-evaluate the document and does not write it. The limits gate and the raw
-reader's gate use the helper now. The session's gate — which counts the
-session's public methods — skips a method marked `#[cfg(test)]` instead,
-because a helper inside an impl block is marked rather than put in a module.
+evaluate the document and does not write it. The limits gate, the raw
+reader's gate and the reader list use the helper now. The session's gate —
+which counts the session's public methods — skips a method marked
+`#[cfg(test)]` instead, because a helper inside an impl block is marked rather
+than put in a module.
 
 The helper **removes** the test items rather than truncating the file at the
 first one: production code after a test item is still production code, and a
@@ -99,6 +100,13 @@ of a reader that is allowed two. And a test-only method in the session's impl
 block was reported as "a public way to change the design is a second path".
 And a test written outside a module that caught a panic was reported as an
 undeclared panic boundary.
+
+And the gate that **derives** the tree's parameter readers — the gate whose
+whole point is that a reader is covered the day it is added — counted a test
+helper as a reader. A test helper that shares a name with a production reader
+is the worst shape: the gate believes the reader has no name argument of its
+own, reads the *test's* body, and tells the commands that they read a
+parameter the test invented.
 
 ## In the code
 
@@ -157,6 +165,8 @@ let code = code_lines_kept(production_of(&text));
   boundary.
 - `production_code_after_a_test_item_is_still_production_code` — the cut
   removes the test items and keeps the rest.
+- `a_test_helper_is_not_a_reader` — a test helper that takes a `&Params` is a
+  function, and it is not a reader the commands use.
 
 ## See also
 

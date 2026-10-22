@@ -17637,6 +17637,84 @@ said since §78 that a test's catch is not a boundary. The gate did not do
 that; it did the half of it that the tree's shape happened to exercise.
 
 
+## 154. The gate that derives the tree's parameter readers counted a test's helper as a reader
+
+### The measurement
+
+The tree does not write its parameter readers down: it **derives** them, so a
+reader that is added is covered the day it is added. A reader is a function
+whose signature takes a `&Params`, or a method of `Params` itself.
+
+A test helper that takes a `&Params` is such a function. The derivation read
+the tree's files whole, so a test helper became a reader.
+
+A test helper on its own is harmless: the gate looks for a reader's name as a
+**call** in a command's body, and a test helper is not called from one. But a
+test helper that shares a name with a production reader is worse than
+useless. The gate believes the test helper has no name argument of its own,
+so it reads the **test's** body, and whatever the test reads becomes a
+parameter the commands read.
+
+Measured, against the gate on a copy of the tree: a test helper named after a
+production reader, with no name argument of its own, made the gate report
+
+> crates/engine/src/commands.rs: line 449 reads the parameter `ghost`, which
+> `prop.set` does not declare
+
+and the same for `key.set`. The parameter `ghost` exists only in the test.
+The control, with no such helper, was green.
+
+### Why nothing noticed
+
+**The tree has no test helper that takes a `&Params`.** The tree's tests call
+the readers; they do not *take* one. So the shape that trips the gate is not
+in the tree — and the derivation is exactly the kind of rule that is only
+exercised by the shapes somebody happens to write.
+
+**The gate's own test did not fabricate one either.** The gate's test is about
+the tree's own commands and the tree's own readers, and it never made a
+fabricated tree with a test helper in it.
+
+**This was the last gate of the family that the audit had *reached*.** §150
+through §153 fixed the limits gate, the raw reader's gate, the session's gate
+and the panic-boundary gate — four gates in a row, all of them reading the
+tree's source without saying what production code is. This gate reads the
+tree's source the same way, and its subject is a *production* property: the
+readers the **commands** use. The broader work — a list of every gate that
+opens a Rust file, and a decision for each — is still open (item 31).
+
+### The fix
+
+**The derivation reads the production code.** `parameter_readers` runs
+`production_of` over each file before it looks for the readers, so a test
+helper is not in the list.
+
+**One unit test**, `a_test_helper_is_not_a_reader`, which was checked to fail
+when the rule is taken out — and which checks that the reader that survives
+is the **production** one, with a name argument of its own, so the fix cannot
+pass by leaving the test's reader in the list under another name.
+
+**One mutation**.
+
+### The lesson
+
+**A derived list is only as good as the code it is derived from.** The tree's
+argument for deriving the readers rather than writing them down is a good
+one — a reader that is added is covered the day it is added. But a derivation
+that reads the wrong part of the tree is a derivation of the wrong list, and
+the tree's rule about a test's code not being the production code applies to
+it like any other reader.
+
+**The gates that read the tree's source were all wrong in the same way, and
+the audit found them one at a time.** Five gates in five arcs: the limits
+gate, the raw reader's gate, the session's gate, the panic-boundary gate and
+the reader list. The two shell gates already cut at the test module, and they
+are the reason the shape was rare enough to survive. The pattern was
+predictable once it was named, and it was not named until a gate's *own*
+comment said *"the tests are not the production code"* — which was §78's
+sentence, sitting in a comment for seventy-two sections before §150 read it
+as a rule about the tree.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17696,6 +17774,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test's method is not a public path into the design** | the `#[cfg(test)]` mark in `the_session_offers_no_second_path` | 1 mutation — §152 |
 | **A test that catches a panic is not a boundary** | `production_of` in `panic_boundaries_are_declared` | 1 mutation — §153 |
 | **Production code after a test item is still production code** | `production_of` removes the test items | 1 mutation — §153 |
+| **A test helper that takes a `&Params` is not a reader** | `production_of` in `parameter_readers` | 1 mutation — §154 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -18650,14 +18729,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     can read — the value in parentheses, as the limit-in-prose gate already
     reads a number — or accept that a re-export is stated and not checked.
 31. **Audit the gates that read the tree's source for the production/test
-    distinction.** §150 through §153 found the same defect in five gates in
+    distinction.** §150 through §154 found the same defect in five gates in
     a row: a gate whose subject is a *production* property opened a Rust file
     and asked its question without saying what production code is. Five are
     fixed — the limits gate, the raw reader's gate, the session's gate, the
-    panic-boundary gate and the two shell gates that already cut. The tree has
-    others. The one that is known to be open is the gate that derives the
-    tree's parameter readers: it scans the whole file for functions that take
-    a `Params`, so a test helper that takes one would be counted as a reader
-    — that is a fact about the scanner, and the *effect* of it has not been
-    measured. The work is a list of every gate that opens a Rust file, and a
-    decision for each: is its subject production code, and does it say so?
+    panic-boundary gate and the gate that derives the tree's parameter
+    readers — and the two shell gates already cut at the test module. The
+    tree has others. The work that is still open is a list of every gate that
+    opens a Rust file, and a decision for each: is its subject production
+    code, and does it say so? §154 closed the last gate the audit had
+    *reached*; it did not enumerate the rest.

@@ -3992,5 +3992,20 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the production cut hides the code after a test item" \
     "cargo test -p xtask --profile ci production_code_after_a_test_item_is_still_production_code"
 
+# A test helper is not a reader. The tree derives its parameter readers from
+# its source -- a reader is a function whose signature takes a Params -- and
+# a test helper that takes one is such a function. A test helper that shares
+# a name with a production reader is worse than useless: the gate believes it
+# has no name argument of its own, reads the test's body, and tells the
+# commands that they read a parameter the test invented. Measured: a test
+# helper named after a production reader, with no name argument of its own,
+# made the gate report two commands reading a parameter called "ghost" --
+# while the control, with no such helper, was green. Section 154.
+swap xtask/src/lists.rs \
+    '        for (name, line, signature, body, block) in rust_functions(&relative, &production) {' \
+    '        for (name, line, signature, body, block) in rust_functions(&relative, &text) {'
+expect_catch "gate: the reader list counts a test's helper as a reader" \
+    "cargo test -p xtask --profile ci a_test_helper_is_not_a_reader"
+
 restore
 finish

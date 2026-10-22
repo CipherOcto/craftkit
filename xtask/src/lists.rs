@@ -2038,6 +2038,7 @@ const PARAMS_TYPE: &str = "Params";
 const KEY_ARG: &str = "key: &str";
 
 /// A function in the tree that can read a command parameter.
+#[derive(Debug)]
 struct Reader {
     /// The file line its `fn` is on.
     line: usize,
@@ -2249,12 +2250,20 @@ fn key_index(signature: &str) -> Option<usize> {
 /// `Params` itself. The list is **derived**, not written down: a reader that
 /// is added is covered the day it is added, and the gate cannot go blind
 /// because somebody forgot to update a list.
+///
+/// The list is derived from the **production** code: a test helper that takes
+/// a `&Params` is a function, and it is not a reader the commands use. A test
+/// helper that happens to share a name with a production reader is worse than
+/// useless — the gate believes the reader has no name argument of its own,
+/// reads the *test's* body, and tells the commands that they read a
+/// parameter the test invented. §154.
 fn parameter_readers(root: &Path) -> Vec<Reader> {
     let mut out = Vec::new();
     for path in rust_files(&root.join("crates")) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         let relative = relative_name(root, &path);
-        for (name, line, signature, body, block) in rust_functions(&relative, &text) {
+        let production = production_of(&text);
+        for (name, line, signature, body, block) in rust_functions(&relative, &production) {
             let is_method = has_word(&block, PARAMS_TYPE);
             let takes_params = signature.contains(&format!("&{PARAMS_TYPE}"));
             if !is_method && !takes_params {
@@ -6039,6 +6048,48 @@ mod tests {
         assert!(!production.contains("a_test"), "{production}");
         // And the lines are still the file's lines.
         assert_eq!(production.lines().count(), text.lines().count(), "{production}");
+    }
+
+    /// A test helper is not a reader.
+    ///
+    /// The tree derives its parameter readers from its source, and a test
+    /// helper that takes a `&Params` is a function. A test helper that shares
+    /// a name with a production reader is worse than useless: the gate
+    /// believes it has no name argument of its own, reads the **test's**
+    /// body, and tells the commands that they read a parameter the test
+    /// invented. §154.
+    #[test]
+    fn a_test_helper_is_not_a_reader() {
+        let dir = std::env::temp_dir().join(format!("craftkit-readers-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "use craftkit_core::Params;\n\
+             \n\
+             pub fn value_for(p: &Params<'_>, key: &str) -> Option<f64> {\n\
+             p.num(key).ok().flatten()\n\
+             }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             use crate::Params;\n\
+             fn value_for(p: &Params<'_>) -> Option<f64> {\n\
+             p.num(\"ghost\").ok().flatten()\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let readers = parameter_readers(&dir);
+        // One reader, not two.
+        assert_eq!(readers.len(), 1, "{readers:?}");
+        assert_eq!(readers[0].name, "value_for", "{readers:?}");
+        // And it is the production one: it has a name argument of its own,
+        // so the gate reads the name at the call site and not the test's
+        // body.
+        assert!(readers[0].key.is_some(), "{readers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A limit that only a test mentions is not enforced.
