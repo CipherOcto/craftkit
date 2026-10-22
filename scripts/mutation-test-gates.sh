@@ -71,13 +71,13 @@ readonly FILES=(
     crates/core/src/readers.rs
     crates/core/src/value.rs
     crates/core/src/tick.rs
+    crates/core/src/writer.rs
     crates/model/Cargo.toml
     crates/model/src/lib.rs
     crates/model/src/property.rs
     crates/io/src/lib.rs
     crates/io/src/format.rs
     crates/io/src/store.rs
-    crates/io/src/writer.rs
     crates/io/src/format/pending.rs
     crates/kernel/src/lib.rs
     crates/ui/Cargo.toml
@@ -3555,7 +3555,7 @@ expect_catch "prose: a quoted command spec is not the one in the code" \
 # The bound on the indentation is the whole of the fix: take it away and the
 # file is ten times the design again, and a design the model accepts no
 # longer fits in a file.
-swap crates/io/src/writer.rs \
+swap crates/core/src/writer.rs \
     'pub const MAX_INDENT_DEPTH: usize = 4;' \
     'pub const MAX_INDENT_DEPTH: usize = 64;'
 expect_catch "io: the writer indents as deep as the design goes" \
@@ -3579,6 +3579,28 @@ swap crates/io/src/format.rs \
     'pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * FILE_EXPANSION;' \
     'pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;'
 expect_catch "io: the file's cap is a number somebody chose" \
+    "cargo xtask lists"
+
+# The crash report wrote its files with serde_json's pretty printer -- the
+# tree's layout without the bound on the indentation -- so a report of a
+# design the model accepts was 73.5 MiB of text, and the crash reader refuses
+# anything past 64 MiB. The app wrote crash reports it could not read back.
+# §142.
+swap crates/engine/src/crash.rs \
+    '    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;' \
+    '    let text = serde_json::to_string_pretty(value).map_err(|e| format!("could not serialize: {e}"))?;
+    out.extend_from_slice(text.as_bytes());'
+expect_catch "engine: the crash report is written with an unbounded writer" \
+    "cargo test -p craftkit-engine --profile ci a_crash_report_of_a_big_design_can_be_read_back"
+
+# And a writer of its own that is bounded: the report would fit, and the
+# crash report's own test would not notice -- but the design in the crash
+# folder would not be the design on disk, and the gate says so.
+swap crates/engine/src/crash.rs \
+    '    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;' \
+    '    let text = serde_json::to_string(value).map_err(|e| format!("could not serialize: {e}"))?;
+    out.extend_from_slice(text.as_bytes());'
+expect_catch "engine: the crash report is written with a writer of its own" \
     "cargo xtask lists"
 
 restore

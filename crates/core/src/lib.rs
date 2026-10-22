@@ -36,6 +36,7 @@ pub mod params;
 pub mod readers;
 pub mod tick;
 pub mod value;
+pub mod writer;
 
 pub use ids::{DocumentId, IdCounter, NodeId};
 pub use params::{ParamError, Params};

@@ -303,19 +303,32 @@ pub fn write_to(base: &Path, report: &CrashReport) -> Result<PathBuf, String> {
     // The report's own folder is always ours: it is where the design sits.
     restrict(&dir, true);
 
-    let report_json =
-        serde_json::to_string_pretty(&report).map_err(|e| format!("could not serialize the report: {e}"))?;
+    // The report's three files are written with **the tree's one writer** —
+    // the same layout the design file is written in. They used to be written
+    // with `serde_json::to_string_pretty`, which is the same layout *without*
+    // the bound on the indentation: a report of a design the model accepts
+    // was 73.5 MiB of text, and the crash reader refuses anything past
+    // 64 MiB, so the app wrote crash reports it could not read back. §142.
+    let report_json = to_json(&report)?;
     write_atomic(&dir.join("report.json"), &report_json)?;
 
-    let design = serde_json::to_string_pretty(&report.design)
-        .map_err(|e| format!("could not serialize the design: {e}"))?;
+    let design = to_json(&report.design)?;
     write_atomic(&dir.join("design.json"), &design)?;
 
-    let replay = serde_json::to_string_pretty(&report.replay)
-        .map_err(|e| format!("could not serialize the replay: {e}"))?;
+    let replay = to_json(&report.replay)?;
     write_atomic(&dir.join("replay.json"), &replay)?;
 
     Ok(dir)
+}
+
+/// The tree's JSON layout, for one value.
+///
+/// The same writer the design file uses, so a design is the same bytes in the
+/// crash folder as it is on disk. §142.
+fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
+    let mut out: Vec<u8> = Vec::new();
+    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;
+    String::from_utf8(out).map_err(|e| format!("could not serialize: {e}"))
 }
 
 fn write_atomic(path: &Path, body: &str) -> Result<(), String> {
@@ -761,6 +774,65 @@ mod tests {
     fn mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+    }
+
+    /// A crash report of a design the model accepts can be read back.
+    ///
+    /// §142. The report's files were written with `serde_json::to_string_pretty`
+    /// — the tree's layout *without* the bound on the indentation — so a
+    /// report of a design the model accepts was 73.5 MiB of text, and the
+    /// crash reader refuses anything past 64 MiB. The app wrote crash reports
+    /// it could not read back, and the report is the one thing a crash must
+    /// produce.
+    #[test]
+    fn a_crash_report_of_a_big_design_can_be_read_back() {
+        let dir = temp_dir("big-design");
+        let mut s = Session::sample();
+        s.replace_document(a_big_design());
+        let report = build(&s, "prop.set", "boom");
+        let written = write_to(&dir, &report).expect("the report is written");
+
+        // The report is inside what the reader takes.
+        let size = std::fs::metadata(written.join("report.json")).expect("metadata").len();
+        let limit = u64::try_from(MAX_REPORT_BYTES).expect("the limit fits in a u64");
+        assert!(size <= limit, "the report is {size} bytes, and the reader stops at {MAX_REPORT_BYTES}");
+
+        // And it reads back as the report it was.
+        //
+        // The id counter is not part of the comparison: it is derived from
+        // the ids in use, and the tree says so itself — §72 — so a document is
+        // its settings and its nodes.
+        let back = show_in(&dir, &report.id).expect("the report reads back");
+        assert_eq!(back.design.meta, report.design.meta, "the settings came back changed");
+        assert_eq!(back.design.nodes, report.design.nodes, "the nodes came back changed");
+        assert_eq!(back.command, report.command, "the command came back changed");
+    }
+
+    /// A design the model accepts, and a big one: 32 properties with 10 000
+    /// keyframes on each — 29.3 MiB of memory, inside the model's budget.
+    fn a_big_design() -> craftkit_model::Document {
+        let mut doc = craftkit_model::Document::empty("Big");
+        let id = doc.add_node("n", craftkit_model::NodeKind::Source).expect("a node");
+        let mut group = craftkit_model::PropGroup::new("props", "Properties");
+        for p in 0..32u64 {
+            let mut prop =
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+            for t in 0..10_000i128 {
+                let Ok(key) = craftkit_model::Key::new(
+                    craftkit_core::Tick::from_raw(t),
+                    craftkit_core::Value::Num(t as f64),
+                    craftkit_model::Easing::Linear,
+                ) else {
+                    break;
+                };
+                if prop.keys.set(key).is_err() {
+                    break;
+                }
+            }
+            group.push(prop);
+        }
+        doc.get_mut(id).expect("just added").props = group;
+        doc
     }
 
     /// A crash report holds the user's design, and it was written

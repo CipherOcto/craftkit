@@ -258,7 +258,7 @@ impl Default for Format {
 /// 311 MiB of file for a 31 MiB design. §141.
 ///
 /// The writer's indentation now stops growing
-/// ([`crate::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
+/// ([`craftkit_core::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
 /// format rather than a function of the design. Measured over the same
 /// shapes, the worst case is **1.51** bytes of text per byte of memory.
 pub const FILE_EXPANSION: usize = 2;
@@ -372,7 +372,7 @@ impl File {
     /// agree about what a file is.
     pub fn to_text_bounded(&self, max: usize) -> Result<String, FormatError> {
         let mut out = LimitedWriter::new(max);
-        match crate::writer::write_json(&mut out, self) {
+        match craftkit_core::writer::write_json(&mut out, self) {
             Ok(()) => {}
             Err(e) if e.is_io() => {
                 return Err(FormatError::TooLargeToWrite { bytes: out.seen, limit: max });

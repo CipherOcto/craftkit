@@ -32,7 +32,6 @@
 
 pub mod format;
 pub mod store;
-pub mod writer;
 
 pub use format::{CURRENT, File, Format, FormatError, Meta, tag};
 pub use store::{SaveError, load, load_text, save, save_text};

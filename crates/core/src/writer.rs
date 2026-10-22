@@ -1,48 +1,54 @@
-//! How the design file is written: the JSON layout, and the bound on it.
+//! How the tree writes JSON: the layout, and the bound on it.
+//!
+//! This is the twin of [`crate::readers`]. The readers turn bytes into values
+//! within a bound; the writer turns values into bytes within a bound, and it
+//! is the **only** writer of the tree's JSON — the design file and the crash
+//! report's design are written by it, so a design is the same bytes in both
+//! places. §142.
 //!
 //! # Why the indentation stops
 //!
-//! The file is written pretty — one item per line, indented by its depth —
+//! The JSON is written pretty — one item per line, indented by its depth —
 //! because a person reads it, and because a diff of two saves shows only what
 //! changed.
 //!
 //! But the indentation **grows with the depth of the design**, and the depth
 //! is the design's own: a property tree may nest sixteen deep, and a keyframe
-//! inside it is written nine levels down. So the file's text was not a
-//! constant multiple of the design's memory. Measured over the shapes a
-//! document can take, the file was **2.5 times** the design for a flat one and
-//! **9.9 times** it for a deep one — and the tree's file cap (64 MiB) was
-//! smaller than the file that some designs *inside the model's own budget*
-//! needed: 311 MiB of file for a 31 MiB design. The tree could hold designs it
-//! could not save. §141.
+//! inside it is written nine levels down. So the text was not a constant
+//! multiple of the design's memory. Measured over the shapes a document can
+//! take, the text was **2.5 times** the design for a flat one and **9.9
+//! times** it for a deep one — and the tree's file cap (64 MiB) was smaller
+//! than the file that some designs *inside the model's own budget* needed:
+//! 311 MiB of file for a 31 MiB design. The tree could hold designs it could
+//! not save. §141.
 //!
-//! So the indentation stops growing past [`MAX_INDENT_DEPTH`]. The file is
+//! So the indentation stops growing past [`MAX_INDENT_DEPTH`]. The JSON is
 //! still one item per line and still diffs the same way; the lines below that
-//! depth are not indented further, and the file's text is at most
-//! [`crate::format::FILE_EXPANSION`] times the design's memory — a number
-//! that is measured rather than guessed.
+//! depth are not indented further, and the text is at most a measured
+//! constant times the design's memory — a number that is measured rather than
+//! guessed.
 
 use std::io::{self, Write};
 
 use serde::Serialize;
 use serde_json::ser::{Formatter, Serializer};
 
-/// How many levels of indentation the file gets.
+/// How many levels of indentation the tree's JSON gets.
 ///
 /// Past this, a line is not indented further. The number is a bound on the
-/// file's size, not a taste: it is the depth at which the indentation stops
+/// text's size, not a taste: it is the depth at which the indentation stops
 /// costing more than the design it describes. §141.
 pub const MAX_INDENT_DEPTH: usize = 4;
 
 /// What one level of indentation is worth.
 const INDENT: &[u8] = b"  ";
 
-/// The JSON layout the design file is written in.
+/// The JSON layout the tree writes.
 ///
 /// It is [`serde_json`]'s pretty formatter with one change: the indentation
 /// does not grow without bound. Everything else — where the newlines go, how
-/// a string is escaped, how a number is written — is serde_json's, so the file
-/// is the same JSON it always was, and only the spaces at the start of a line
+/// a string is escaped, how a number is written — is serde_json's, so the
+/// file is the same JSON it always was, and only the spaces at the start of a line
 /// differ. §141.
 pub struct FileFormatter {
     /// How deep the writer is. The file's own nesting is eight levels deep

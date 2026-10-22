@@ -16033,6 +16033,136 @@ accepts should be savable, and the writer should never have been asked.
 
 ---
 
+## 142. The crash report wrote the design with a writer of its own
+
+### The measurements
+
+A crash report is **input** for whoever reads it: the recipe
+(`docs/recipes/fix-a-crash.md`) asks for `report.json` from whoever had the
+crash, so the file arrives from another machine. The reader has a limit for
+that reason — `MAX_REPORT_BYTES`, 64 MiB (§72) — and the limit is applied
+while reading ✓.
+
+The writer had no limit at all, and it wrote the design with
+`serde_json::to_string_pretty` — the tree's layout *without* the bound on the
+indentation that §141 measured and bounded.
+
+So a crash report of a design the model accepts:
+
+| the design | its memory | `report.json` | `design.json` | the reader says |
+|---|---|---|---|---|
+| 32 properties × 10 000 keyframes | 29.31 MiB | **73.51 MiB** | 68.63 MiB | *refused* |
+| the same, in the deepest property tree | 31.14 MiB | **311.62 MiB** | 306.42 MiB | *refused* |
+
+```text
+show_in -> could not read .../report.json: the input is 77085244 bytes; the limit is 67108864
+```
+
+**The app wrote crash reports it could not read back.** And the crash report
+is the one thing a crash must produce: it is what carries the design, the
+command and the trace, and what the person who reads it needs in order to
+reproduce the crash at all.
+
+### Why nothing noticed
+
+**The writer was a copy.** The crash module lives in the engine, the engine
+had no dependency on the io crate, and so the crash folder had its own
+writer — a copy of the one the design file used, taken before §141 bounded
+it. §136's lesson, in a place where nothing noticed: *a copy of a writer is a
+copy that drifts*.
+
+**The reader's limit was tested and the writer's output was not.** §72's
+tests cover a report file over the limit ✓ — a file that is *too big* ✓ — and
+nothing compared what the writer *produced* with what the reader would take.
+§51's rule is that a limit belongs to both ends of a pipe, and the crash
+folder had one end of it.
+
+**Nothing compared the two designs.** The design on disk and the design in the
+crash folder were written by two writers, and no test said they were the same
+bytes — because there was nothing to say it.
+
+### The fix
+
+**The tree's JSON has one writer**, and it lives with the other half of the
+byte boundary: `craftkit_core::writer`, the twin of the bounded readers. The
+writer moved there from the io crate, so the io crate and the engine both use
+it and **no new dependency edge was needed** — the engine already depends on
+core, and the io crate already does too.
+
+**The crash report's three files are written with it.** `report.json`,
+`design.json` and `replay.json` are the tree's layout now, and the same
+bytes as the design file's.
+
+The measurements after:
+
+| the design | `report.json` | the reader |
+|---|---|---|
+| 32 properties × 10 000 keyframes | **44.21 MiB** | reads back |
+| the same, in the deepest property tree | **46.98 MiB** | reads back |
+
+### What now holds it
+
+Two mutations, and two tests:
+
+| Mutation | Caught by |
+|---|---|
+| the crash report is written with an unbounded writer | `a_crash_report_of_a_big_design_can_be_read_back` |
+| the crash report is written with a writer of its own | `the_tree_writes_its_json_with_one_writer` |
+
+The second one is the interesting one, and it is the first time in this tree
+that the two halves of a rule have been caught by two different things for a
+reason that is worth spelling out. The mutation writes the report
+**compactly** — which fits, which is why the crash report's own test passes
+under it — and the design in the crash folder would no longer be the design
+on disk. Only the gate sees that, because the gate reads the source and the
+test reads the bytes.
+
+### What is still open
+
+**A session that opened a big design still writes a report the reader
+refuses.** The report carries the design *and* the base the trace starts
+from, so it carries two designs: **84.11 MiB**, and
+
+```text
+show_in -> could not read .../report.json: the input is 88195291 bytes; the limit is 67108864
+```
+
+That is the owner's item 13 — *how a big crash report's base is carried* — and
+the app has no open path yet (§33), so the case is not reachable today. The
+writer's side is fixed; the shape of the report is the decision.
+
+**The crash report's cap is still a number somebody chose.** 64 MiB, written
+out as a literal. Item 13 says the derivation is not the decision and the
+value is, and this section did not take it.
+
+**The tree still bounds its inputs and not its outputs.** The control
+channel's reply for `engine.state` is **4.07 MiB** and for `plan.evaluate`
+**3.50 MiB**, on a design of ten thousand nodes — and both are one line of
+request. The crash folder is the sharp end of that, but the folder was the
+one that could be fixed without deciding what an agent may ask for; the
+control channel's replies are item 21 (*what an agent may do with a list that
+does not fit*), and they are not small enough to ignore.
+
+### The lesson
+
+**A reader's limit and a writer's output are one contract.** §51 wrote that
+down for the design file, and the crash folder had the same two halves with
+one of them missing — so the reader's limit was a fact about a file nobody
+could produce.
+
+**A copy of a writer is a copy that drifts, and the drift is invisible from
+one side.** The crash folder's writer was the design file's writer *before*
+§141 bounded it; §141 made the two different, and neither file said so. The
+writer moved to the layer that owns the tree's byte boundary so that the copy
+is not there to make, and the gate says so for the copies that are made
+anyway.
+
+**One design, one writer — and the rule is checkable.** The gate reads the
+source, and it is the only thing that can tell a bounded writer of the
+tree's own from a bounded writer of its own.
+
+---
+
 ---
 
 ---
@@ -16367,6 +16497,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A design the model accepts can always be saved** | `craftkit-io` test | 1 mutation — §141 |
 | **A design's file is bounded by the design it holds** | `craftkit-io` test | 1 mutation — §141 |
 | **The design file's cap is the design's budget, not a number of its own** | `cargo xtask lists` | 1 mutation — §141 |
+| **A crash report of a design the model accepts can be read back** | `craftkit-engine` test | 1 mutation — §142 |
+| **The tree's JSON has one writer, and the places that write a design use it** | `cargo xtask lists` | 1 mutation — §142 |
 | A wrong or missing token is refused | `craftkit-control` tests | — |
 | **A command tells the window the document changed** | `craftkit-control` tests + `scripts/live-window-check.sh` | 1 mutation — §21 |
 | Every UI icon is drawn in code | `cargo xtask assets` + `crates/ui` | icon table is data-driven |
@@ -16960,3 +17092,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     reader's parse, so that a hostile file costs a document and not a document
     plus its text; or accept both numbers as they are and write them down as
     the promise they are.
+27. **Decide how large a reply may be.** The tree bounds every input it
+    reads — the control channel's line, the MCP server's message, the CLI's
+    script, the design file — and bounds no output it writes. Measured: a
+    one-line request for `engine.state` on a design of ten thousand nodes
+    answers with **4.07 MiB**, and `plan.evaluate` with **3.50 MiB**. The
+    crash folder was the sharp end of that (§142 fixed the writer there, and
+    the report of a design the model accepts now reads back), but the control
+    channel's replies are still of whatever size the design makes them. The
+    choices are: bound the reply like the request and refuse the big ones,
+    which is the honest thing but leaves an agent unable to ask a question
+    about a big design; page the reply, which changes the protocol; or accept
+    the size and say what it costs, which is item 21's question about a list
+    that does not fit, asked of the whole reply rather than of one list.

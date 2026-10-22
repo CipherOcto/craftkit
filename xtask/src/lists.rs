@@ -1118,6 +1118,66 @@ pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Ve
     Ok(problems)
 }
 
+/// The tree's JSON has one writer, and the places that write a design use it.
+///
+/// §142. The crash report's three files were written with
+/// `serde_json::to_string_pretty` — the tree's layout *without* the bound on
+/// the indentation — so a report of a design the model accepts was 73.5 MiB of
+/// text, and the crash reader refuses anything past 64 MiB. The app wrote
+/// crash reports it could not read back.
+///
+/// The tree has one writer for its JSON (`craftkit_core::writer`), and the
+/// crash folder is written with it, so a design is the same bytes in the crash
+/// folder as it is on disk.
+pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<String>, String> {
+    let files =
+        [("crates/io/src/format.rs", "the design file"), ("crates/engine/src/crash.rs", "the crash report")];
+    let mut problems = Vec::new();
+    for (relative, what) in files {
+        let path = root.join(relative);
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+        // The tests are not the writer: a test may compare two shapes of the
+        // same report with serde_json's own printer, and that is not the tree
+        // writing anything.
+        let production = match text.find("#[cfg(test)]") {
+            Some(at) => &text[..at],
+            None => &text[..],
+        };
+        // Strings and comments do not count: this file names the writer, and
+        // a doc comment that says `to_string_pretty` is saying the opposite.
+        let code = code_lines_kept(production);
+        for (needle, because) in [
+            (
+                "to_string_pretty(",
+                "serde_json's pretty printer, which is the tree's layout without the bound on the \
+                 indentation",
+            ),
+            (
+                "to_writer_pretty(",
+                "serde_json's pretty writer, which is the tree's layout without the bound on the \
+                 indentation",
+            ),
+        ] {
+            if let Some(line) = code.lines().position(|l| l.contains(needle)).map(|n| n + 1) {
+                problems.push(format!(
+                    "{relative}: line {line} writes {what} with {because}; the tree has one writer \
+                     for its JSON, and it is `craftkit_core::writer`. §142."
+                ));
+            }
+        }
+        if !code.contains("craftkit_core::writer::write_json") {
+            problems.push(format!(
+                "{relative}: {what} is not written with the tree's writer \
+                 (`craftkit_core::writer::write_json`); a design written in two places has to be \
+                 written the same way in both. §142."
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
 /// The types the evaluator's answers arrive in.
 ///
 /// `Plan` is the whole answer, `NodeState` one node's, `Resolved` one
@@ -4042,6 +4102,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A cap that is a number of its own drifts from the budget.")),
     );
 
+    // The tree's JSON, and the writer it is written with. §142.
+    problems.extend(
+        the_tree_writes_its_json_with_one_writer(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     One design, one writer.")),
+    );
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -5683,6 +5750,61 @@ printf '%s%d/%d caught.%s\\n' \\
         .expect("the fabricated source");
         let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's JSON has one writer, and the places that write a design use
+    /// it. §142.
+    ///
+    /// The crash report's files were written with serde_json's pretty printer,
+    /// which is the tree's layout without the bound on the indentation, so the
+    /// app wrote crash reports it could not read back.
+    #[test]
+    fn a_design_written_with_a_writer_of_its_own_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_tree_writes_its_json_with_one_writer(&root).expect("runs").is_empty(),
+            "a design is written with a writer of its own"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-one-writer-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        std::fs::write(io.join("format.rs"), good).expect("the fabricated source");
+        std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // The crash folder, written with serde_json's pretty printer: the
+        // layout without the bound, and a report the reader refuses.
+        std::fs::write(engine.join("crash.rs"), "let _ = serde_json::to_string_pretty(&report);\n")
+            .expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 2, "{problems:#?}");
+
+        // And a writer of its own that is bounded: the report would fit, and
+        // the design in it would still not be the design on disk. One
+        // problem — the writer is not the tree's — and the crash report's
+        // test would not notice, which is why this is a gate.
+        std::fs::write(engine.join("crash.rs"), "let _ = serde_json::to_string(&report);\n")
+            .expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+
+        // And a test may compare two shapes of a report with serde_json's own
+        // printer: the tests are not the writer.
+        std::fs::write(
+            engine.join("crash.rs"),
+            "let _ = craftkit_core::writer::write_json(&mut out, &value);\n\
+             #[cfg(test)]\nmod tests {\n    fn a_shape() {\n        let _ = serde_json::to_string_pretty(&report);\n    }\n}\n",
+        )
+        .expect("the fabricated source");
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
