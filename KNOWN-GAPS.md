@@ -18903,6 +18903,148 @@ four times (§148, §149, §150, §157), each time by a *mention* rather than
 a use, and each time the mention was in the code the tree did have.
 
 
+## 165. The gate that says every field is hashed read the hash's shape out of the text, and §159's audit said it read the code
+
+§159 audited every gate that opens a Rust file and wrote down, for each, which
+view it read. One of its twenty rows reads:
+
+| `fingerprint_sees_every_field` | code view | the shape and the contents |
+
+**That row was wrong.** The gate — the one that says every field the model's
+types have is hashed — read the tree's source as **text**, in two places, and
+it had been that way since the gate was written. Both reads date from the
+first commit of the workspace.
+
+§159's audit was "derived by walking the tree's own build tool rather than by
+memory", and it was still wrong about one row in twenty. The audit looked at
+the gate's **subject** — the fingerprint's source *is* code — and wrote down
+the answer the subject implies, instead of looking at the **call** that read
+it.
+
+### What the gate is for, and why a false negative here is the worst kind
+
+The gate exists because of §80. The fingerprint is the evaluator's cache key,
+so a field the model grows and the hash forgets is a **silent wrong answer**:
+the cache is keyed on the fingerprint, it serves a state computed from the old
+value, and nothing says so. When §80 removed the keyframe's easing from the
+hash, **every test in the workspace stayed green**, because the test that
+guarded it was a hand-written list of the same fields the hash covers — a
+list that drifts with the thing it checks.
+
+So this gate is the tree's answer to that. A false negative in it is not a
+missed style rule: it is the exact failure the gate was built for, reported
+as a green build.
+
+### What was measured
+
+Against the real gate, on a copy of the tree, with the gate as it was before
+this section and with the fix in it. Every case has a control: the same tree
+with the thing *really* wrong, so a gate that said no to everything would
+pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | an `impl Ghost {` inside a raw string in `crates/model/src/fingerprint.rs` | **RED** — *"the fingerprint hashes `Ghost`, and the tree does not define it"* — a false positive: the tree has no `Ghost` | **green** | green, both — the same string with no impl in it |
+| B | a `}` inside a raw string, ending the impl block before the hash | **green** — the gate said nothing, though the hash had stopped reading `Node`'s field `name` | **RED** — *"the fingerprint does not hash `Node`'s field `name`"* | red, both — the hash really not reading the field |
+| C | a `pub struct Node` inside a raw string in `crates/model/src/document.rs` | **RED** — *"the fingerprint does not hash `Node`'s field `ghost`"*, a field the model does not have, while `name`, which it has, went unchecked | **green** | red, both — the model really having the field |
+
+Case A is the false positive: a sentence in a string about an impl block was
+an impl block, and the gate asked about a type the tree does not have. Its
+control is the same string with no impl in it, and it is green in both: the
+string itself is harmless, and it is the impl block inside it that did the
+damage.
+
+Case B is the false negative, and the sharp one. The `}` in the string ended
+the `Node` impl block, so the hash method after it was not a target at all:
+the gate checked the file's other four impl blocks and said **nothing** about
+`Node`, whose field the hash had stopped reading. A tree with only that one
+impl block would have got the complaint *"the fingerprint has no hash block
+for this check to read"* instead — a complaint about the hash's **existence**,
+which hides the complaint about the field.
+
+Case C is a false positive and a false negative in one gate: the string's
+declaration of `Node` was the type the tree has, so the gate asked the hash
+for the string's field `ghost` and did not ask for `name`.
+
+### The fix
+
+Two reads, both of them the tree's one reader:
+
+```rust
+// in fingerprint_sees_every_field
+let code = code_lines_kept(&source);       // was source.lines()
+let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+
+// in shape_of
+let code = code_lines_kept(&text);          // was text.lines()
+let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+```
+
+The gate needs no text view at all: everything it looks for is a **shape** (an
+impl block, a hash method, a type's declaration, where the type's fields
+end) or a **name in the code** (a field's name, a `self.field` read), and
+neither is ever a mention that should count. The reader blanks the string
+*contents* and the comments; it leaves the names alone, so the field names
+and the reads are still where they were.
+
+Nothing the tree claims stopped being checked. The tree's own fingerprint
+hashes every field its model has, the gate says so, and it says it by
+reading the same code it always read — only now it reads the code.
+
+### The unit tests
+
+Three, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `an_impl_inside_a_string_is_not_an_impl_block` | an `impl` inside a string is not an impl block |
+| `a_brace_inside_a_string_does_not_end_an_impl_block` | a `}` inside a string does not end an impl block |
+| `a_struct_inside_a_string_is_not_the_struct` | a `struct` inside a string is not the type the tree has |
+
+Each has a control: the same tree with the thing *really* wrong — a hash for
+a type the tree does not have, a hash that really does not read the field, a
+model that really has the field — is reported by the broken gate and by the
+fixed one alike.
+
+### The mutations
+
+Three, each putting the old text-reading back. The first mutation is caught
+by two of the tests, so the swap is written **twice**: one swap serves one
+gate, and a second `expect_catch` after the same swap would run against a
+restored tree and report a **miss** that is not one.
+
+### §159's audit table was a claim, and a claim needs a check
+
+The audit is the reason this gate was found at all: it named twenty gates and
+said what each one reads, and the four it named as still reading the text
+were exactly the four §161 fixed. It was wrong about one of the other
+fifteen, and nothing in the tree said so.
+
+The list is still worth having — §165's gate is the fifth the audit's
+question found, and every one of them was already named in the list. But the
+table cannot be trusted row by row, and it is written in the same confident
+register as the gates it describes. It is written down as item 40.
+
+### The lesson
+
+**A gate's subject is not its reader.** The fingerprint's source *is* code,
+and reading it the way a person reads a file is still reading it as text.
+§159's audit filled in that row from the subject and got it wrong; the fix
+looked at the *call* and got it right. The question a gate has to answer is
+not "is my subject code?" but "am I reading it as code?".
+
+**A false negative in the gate that exists to prevent a silent wrong answer
+is the worst kind of false negative.** §80 is why this gate is here. A green
+build in it says the evaluator's cache is keyed on the whole model, and case
+B is what that claim was worth: a hash that had stopped reading `name`, and a
+gate that said nothing.
+
+**An audit of twenty gates is twenty claims, and nothing checked them.** The
+list found four gates in §161 and a fifth here, and it was wrong about one of
+the other fifteen. A table that says what each gate reads is a table that has
+to be held to the same standard as the gates it describes — which is what
+item 40 asks for.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19292,6 +19434,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A bound only a longer name names in the prose is not named** | `has_word` in `the_byte_bounds_are_named_in_the_prose` | 1 mutation — §164 |
 | **A budget that names only a longer name is not the model's** | `has_word` in `the_memory_budgets_are_derived_from_the_models` | 1 mutation — §164 |
 | **The tree's writer is not a path that starts the same way** | `has_word` in `the_tree_writes_its_json_with_one_writer` | 1 mutation — §164 |
+| **An impl block inside a string is not an impl block** | the code view in `fingerprint_sees_every_field` | 1 mutation — §165 |
+| **A `}` inside a string does not end an impl block** | the code view in `fingerprint_sees_every_field` | 1 mutation — §165 |
+| **A struct inside a string is not the type the tree has** | the code view in `shape_of` | 1 mutation — §165 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -20075,3 +20220,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the second complaint, keep the substring and accept the first, or ask
     the reader's question differently — by the *shape* of the argument
     rather than by the name of its type.
+40. **Check the twenty rows of §159's audit.** §159 listed every gate
+    that opens a Rust file and said, for each, which view it reads — twenty
+    rows, "derived by walking the tree's own build tool rather than by
+    memory". **§165** found that one of those rows was **wrong**: the gate
+    that says every field the model's types have is hashed read the
+    fingerprint's source as **text**, in two places, since the gate was
+    written — and the row said "code view". The audit looked at the gate's
+    *subject* and filled in the answer the subject implies, so the row was
+    a guess dressed as an observation. The other fifteen rows have never
+    been asked. The choices are: a test per row that fabricates a file with
+    a string in it and asks the gate — the standard §161 and §165 applied —
+    a static check that reports every place a Rust file is opened without
+    the tree's one reader, or a line above the table saying that it is a
+    claim rather than a fact.

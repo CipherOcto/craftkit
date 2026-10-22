@@ -298,6 +298,56 @@ longer name. All four ask the tree's `has_word` now. A fifth gate asks a
 written down rather than changed: the two directions of its complaint pull
 against each other, and that is an owner's call.
 
+## And the shape of a thing is the code's shape
+
+§159 audited every gate that opens a Rust file and wrote down, for each,
+which view it reads. Its table has a row for the gate that says every field
+the model's types have is hashed:
+
+> `fingerprint_sees_every_field` — code view — the shape and the contents
+
+**That row was wrong.** The gate read the tree's source as **text**, in two
+places — the impl blocks and the hash methods, and the type's declaration and
+its fields — and it had been that way since the gate was written.
+
+The audit looked at the gate's **subject** and filled in the answer the
+subject implies. The fingerprint's source *is* code, so the row said "code
+view", and nobody looked at the call that read it. A gate's subject is not
+its reader: the question is not "is my subject code?" but "am I reading it
+as code?".
+
+Measured, against the real gate on a copy of the tree:
+
+| Case | What was done | What the gate said |
+|---|---|---|
+| A | an `impl Ghost {` inside a raw string | **RED** — a hash for a type the tree does not have |
+| B | a `}` inside a raw string, ending the impl block | **green** — the hash had stopped reading `Node`'s field `name`, and the gate said nothing |
+| C | a `pub struct Node` inside a raw string | **RED** — a field the model does not have, while the field it does have went unchecked |
+
+Case B is the one that matters. The gate exists because of §80: the
+fingerprint is the evaluator's cache key, so a field the hash forgets is a
+**silent wrong answer**, and when §80 removed the keyframe's easing from the
+hash, every test in the workspace stayed green. A false negative in *this*
+gate is the exact failure the gate was built for, reported as a green
+build.
+
+The gate needs no text view at all. Everything it looks for is a **shape**
+(an impl block, a hash method, a type's declaration, where the type's fields
+end) or a **name in the code** (a field's name, a `self.field` read), and
+neither is ever a mention that should count. The reader blanks the string
+*contents* and the comments and leaves the names alone, so both reads now
+go through it:
+
+```rust
+let code = code_lines_kept(&source);
+let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+```
+
+And the lesson is about the audit as much as about the gate: **an audit of
+twenty gates is twenty claims, and nothing checked them.** The list found
+four gates in §161 and a fifth here, and it was wrong about one of the other
+fifteen.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -425,6 +475,12 @@ let code = code_lines_kept(&text);
   a budget that names the model's only inside a longer name is its own.
 - `the_writer_is_not_a_path_that_starts_the_same_way` — the tree's writer is
   not a path that starts the same way.
+- `an_impl_inside_a_string_is_not_an_impl_block` — an `impl` inside a string
+  is not an impl block.
+- `a_brace_inside_a_string_does_not_end_an_impl_block` — a `}` inside a
+  string does not end an impl block.
+- `a_struct_inside_a_string_is_not_the_struct` — a `struct` inside a string
+  is not the type the tree has.
 
 ## See also
 

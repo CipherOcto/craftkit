@@ -5615,7 +5615,10 @@ pub fn fingerprint_sees_every_field(root: &Path) -> Result<Vec<String>, String> 
     let path = root.join("crates/model/src/fingerprint.rs");
     let source =
         std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let lines: Vec<String> = source.lines().map(|l| l.to_string()).collect();
+    // The **shape** comes from the code: an impl block or a hash method
+    // inside a string is a sentence about one, not one. §165.
+    let code = code_lines_kept(&source);
+    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
     let targets = fingerprint_targets(&lines);
     if targets.is_empty() {
         return Ok(vec!["the fingerprint has no hash block for this check to read".to_string()]);
@@ -5658,7 +5661,10 @@ enum Shape {
 fn shape_of(sources: &[PathBuf], name: &str) -> Option<(PathBuf, Shape)> {
     for path in sources {
         let Ok(text) = std::fs::read_to_string(path) else { continue };
-        let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+        // The code, not the text: a `struct` inside a string is a sentence
+        // about a struct, and a `}` inside one does not end it. §165.
+        let code = code_lines_kept(&text);
+        let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
         for (index, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
             let Some(rest) = after_visibility(trimmed) else { continue };
@@ -6919,6 +6925,113 @@ pub fn f() {}
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("format.rs"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An impl block inside a string is not an impl block.
+    ///
+    /// The gate that says every field the model's types have is hashed read
+    /// the **shape** out of the tree's source as text, so an `impl` inside a
+    /// string was an impl block, and the hash method after it belonged to a
+    /// type the tree does not have. §165.
+    #[test]
+    fn an_impl_inside_a_string_is_not_an_impl_block() {
+        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-impl-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(model.join("document.rs"), "pub struct Node {\n    pub name: String,\n}\n")
+            .expect("the fabricated type");
+        std::fs::write(
+            model.join("fingerprint.rs"),
+            "impl Node {\n    const NOTE: &str = r#\"\nimpl Ghost {\n\"#;\n    pub fn fingerprint(&self) -> u64 {\n        let _ = self.name;\n        0\n    }\n}\n",
+        )
+        .expect("the fabricated hash");
+
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a hash for a type the tree does not have is still reported.
+        std::fs::write(
+            model.join("fingerprint.rs"),
+            "impl Ghost {\n    pub fn fingerprint(&self) -> u64 {\n        0\n    }\n}\n",
+        )
+        .expect("the fabricated hash");
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("`Ghost`")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A `}` inside a string does not end an impl block.
+    ///
+    /// The same gate read the shape as text, and a `}` in a string ended the
+    /// impl block — so the hash method after it was not a target at all, and
+    /// the type's fields stopped being checked. §165.
+    #[test]
+    fn a_brace_inside_a_string_does_not_end_an_impl_block() {
+        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-brace-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(model.join("document.rs"), "pub struct Node {\n    pub name: String,\n}\n")
+            .expect("the fabricated type");
+        // The hash does not read the field, so the gate has something to
+        // report -- and the `}` that would hide the hash is in a string.
+        std::fs::write(
+            model.join("fingerprint.rs"),
+            "impl Node {\n    const NOTE: &str = r#\"\n}\n\"#;\n    pub fn fingerprint(&self) -> u64 {\n        0\n    }\n}\n",
+        )
+        .expect("the fabricated hash");
+
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("field `name`")), "{problems:#?}");
+
+        // And the same hash, with the `}` outside the string, is still
+        // reported: the field really is not read.
+        std::fs::write(
+            model.join("fingerprint.rs"),
+            "impl Node {\n    pub fn fingerprint(&self) -> u64 {\n        0\n    }\n}\n",
+        )
+        .expect("the fabricated hash");
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("field `name`")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A struct inside a string is not the struct.
+    ///
+    /// The same gate read the **declaration** of the type as text, so a
+    /// `pub struct Node` inside a string was the type the tree has, and the
+    /// fields it named were the fields the gate asked the hash for — fields
+    /// the model does not have, and a field the model does have went
+    /// unchecked. §165.
+    #[test]
+    fn a_struct_inside_a_string_is_not_the_struct() {
+        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-struct-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        // The string comes first, and the type it mentions has a field the
+        // model does not have.
+        std::fs::write(
+            model.join("document.rs"),
+            "const NOTE: &str = r#\"\npub struct Node {\n    pub ghost: u32,\n}\n\"#;\n\npub struct Node {\n    pub name: String,\n}\n",
+        )
+        .expect("the fabricated type");
+        std::fs::write(
+            model.join("fingerprint.rs"),
+            "impl Node {\n    pub fn fingerprint(&self) -> u64 {\n        let _ = self.name;\n        0\n    }\n}\n",
+        )
+        .expect("the fabricated hash");
+
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a field the model really has is still asked for.
+        std::fs::write(
+            model.join("document.rs"),
+            "pub struct Node {\n    pub name: String,\n    pub ghost: u32,\n}\n",
+        )
+        .expect("the fabricated type");
+        let problems = fingerprint_sees_every_field(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("field `ghost`")), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

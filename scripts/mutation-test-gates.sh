@@ -4472,5 +4472,61 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the writer gate reads a path inside a longer path" \
     "cargo test -p xtask --profile ci the_writer_is_not_a_path_that_starts_the_same_way"
 
+# The gate that says every field the model's types have is hashed read the
+# **shape** of the hash out of the tree's source, and it read it as **text**:
+# an impl block, a hash method and a struct declaration were found the way a
+# person reads a file. A string that mentions one of those is a sentence
+# about one, not one. Measured, against the real gate on a copy of the tree,
+# with the gate as it was before section 165 and with the fix in it. Each
+# case has a control: the same tree with the thing really wrong, so a gate
+# that said no to everything would pass the control too.
+#
+#   * an `impl Ghost {` inside a raw string in `crates/model/src/fingerprint.rs`
+#     was reported as a hash for a type the tree does not have -- a false
+#     positive. The control, the same string with no impl in it, was green
+#     in both.
+#   * a `}` inside a raw string ended the impl block, so the hash method
+#     after it was not a target at all and the type's fields stopped being
+#     checked -- a false negative: the hash had stopped reading `Node`'s
+#     field `name`, and the gate said nothing about it. The control, with
+#     the hash really not reading the field, was reported by both.
+#   * a `pub struct Node` inside a raw string in `crates/model/src/document.rs`
+#     was the type the tree has, so the gate asked the hash for the string's
+#     field `ghost` -- a field the model does not have -- and did not ask for
+#     `name`, which it has: a false positive and a false negative in one
+#     gate. The control, with the model really having the field, was
+#     reported by both.
+#
+# Section 165.
+swap xtask/src/lists.rs \
+    '    // The **shape** comes from the code: an impl block or a hash method
+    // inside a string is a sentence about one, not one. §165.
+    let code = code_lines_kept(&source);' \
+    '    // The **shape** comes from the code: an impl block or a hash method
+    // inside a string is a sentence about one, not one. §165.
+    let code = source.clone();'
+expect_catch "gate: an impl inside a string is not an impl block" \
+    "cargo test -p xtask --profile ci an_impl_inside_a_string_is_not_an_impl_block"
+
+swap xtask/src/lists.rs \
+    '    // The **shape** comes from the code: an impl block or a hash method
+    // inside a string is a sentence about one, not one. §165.
+    let code = code_lines_kept(&source);' \
+    '    // The **shape** comes from the code: an impl block or a hash method
+    // inside a string is a sentence about one, not one. §165.
+    let code = source.clone();'
+expect_catch "gate: a brace inside a string does not end an impl block" \
+    "cargo test -p xtask --profile ci a_brace_inside_a_string_does_not_end_an_impl_block"
+
+swap xtask/src/lists.rs \
+    '        // The code, not the text: a `struct` inside a string is a sentence
+        // about a struct, and a `}` inside one does not end it. §165.
+        let code = code_lines_kept(&text);' \
+    '        // The code, not the text: a `struct` inside a string is a sentence
+        // about a struct, and a `}` inside one does not end it. §165.
+        let code = text.clone();'
+expect_catch "gate: a struct inside a string is not the struct" \
+    "cargo test -p xtask --profile ci a_struct_inside_a_string_is_not_the_struct"
+
 restore
 finish
