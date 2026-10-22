@@ -4457,11 +4457,17 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
 /// The test is that every constant the table declares is **used in code**
 /// outside the table itself. A mention in a comment is not enforcement, and
 /// neither is a mention in prose, so both are left out.
+///
+/// A mention in a **test** is not enforcement either: a test that reads the
+/// limit to compare it with another limit is a sentence about the limit, in
+/// code. The tree's own `crates/model/src/lib.rs` has a test that reads
+/// `MAX_PROPERTIES` to check that the limits are ordered, and that read is
+/// perfectly good code — and it enforces nothing. §150.
 pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let table = root.join("crates/model/src/lib.rs");
     let source =
         std::fs::read_to_string(&table).map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = code_lines_kept(&source);
+    let code = code_lines_kept(production_of(&source));
     let Some((declared, rest)) = limits_table(&code) else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
@@ -4471,7 +4477,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };
+        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };
         for name in &declared {
             if body.contains(name.as_str()) && !used.contains(name) {
                 used.push(name.clone());
@@ -4488,6 +4494,25 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(problems)
+}
+
+/// The production code of a file: everything before its tests.
+///
+/// The tests are not the production code, and a gate whose subject is a
+/// *production* property has to say so: a test may name the thing to prove
+/// that the production code does not do it. §150.
+///
+/// The cut is at a line that **starts** a test module — `mod tests {` or a
+/// `#[cfg(test)]` attribute — so an indented `#[cfg(test)]` on an inner item
+/// does not take the rest of the file with it.
+fn production_of(text: &str) -> &str {
+    let mut cut = text.len();
+    for marker in ["\nmod tests {", "\n#[cfg(test)]"] {
+        if let Some(at) = text.find(marker) {
+            cut = cut.min(at);
+        }
+    }
+    &text[..cut]
 }
 
 /// The limits the model's table declares, and the rest of the file.
@@ -5799,6 +5824,57 @@ mod tests {
     /// a function that pads a sentence with spaces has the second.
     fn is_a_code_reader(body: &str) -> bool {
         body.contains("in_string") && (body.contains("push(' ')") || body.contains("push(b' ')"))
+    }
+
+    /// A limit that only a test mentions is not enforced.
+    ///
+    /// The gate that says every limit in the model's table is enforced
+    /// somewhere reads the tree's files whole, and a test **is** code: a test
+    /// that reads the limit to compare it with another limit is a sentence
+    /// about the limit, and it enforces nothing. The tree's own
+    /// `crates/model/src/lib.rs` has a test that reads `MAX_PROPERTIES` to
+    /// check that the limits are ordered, and that read is perfectly good
+    /// code — and it enforces nothing. §150.
+    #[test]
+    fn a_limit_only_a_test_mentions_is_still_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-limit-test-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n\
+             /// A limit nothing enforces.\n\
+             pub const MAX_UNUSED: usize = 7;\n\
+             }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             #[test]\n\
+             fn it_is_ordered() {\n\
+             let _ = crate::limits::MAX_UNUSED;\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated table");
+        // And the same, in another file.
+        std::fs::write(
+            model.join("other.rs"),
+            "fn f() -> usize { 1 }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             #[test]\n\
+             fn it_is_ordered() {\n\
+             let _ = crate::limits::MAX_UNUSED;\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_UNUSED"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The tree's own fingerprint: every field it hashes is a field the model

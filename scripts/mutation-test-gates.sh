@@ -3850,8 +3850,8 @@ expect_catch "gate: the module gate reads the tree's source as text" \
 # The fourth out of the gate that says every limit in the model's table is
 # enforced somewhere in the tree.
 swap xtask/src/lists.rs \
-    'let body = if path == table { rest.clone() } else { code_lines_kept(&text) };' \
-    'let body = if path == table { rest.clone() } else { text.clone() };'
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };' \
+    '        let body = if path == table { rest.clone() } else { production_of(&text).to_string() };'
 expect_catch "gate: the limits gate reads the tree's strings as code" \
     "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_enforced"
 
@@ -3905,6 +3905,28 @@ swap xtask/src/lists.rs \
 fn code_lines_kept(source: &str) -> String {'
 expect_catch "gate: the tree grows a second code reader" \
     "cargo test -p xtask --profile ci the_tree_has_one_code_reader"
+
+# A test is code, and it is not enforcement. The gate that says every limit
+# in the model's table is enforced somewhere reads the tree's files whole,
+# and a test that reads the limit to compare it with another limit enforces
+# nothing. Measured, against the gate on a copy of the tree: the limit's one
+# production use was replaced by a literal, its only remaining mention was in
+# a test, and the gate said green -- while the control, with the limit
+# mentioned nowhere, was red. Section 150.
+#
+# The first takes the cut out of the other files.
+swap xtask/src/lists.rs \
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(production_of(&text)) };' \
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };'
+expect_catch "gate: the limits gate reads the tree's tests as enforcement" \
+    "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
+
+# And the second out of the file the limits table itself lives in.
+swap xtask/src/lists.rs \
+    '    let code = code_lines_kept(production_of(&source));' \
+    '    let code = code_lines_kept(&source);'
+expect_catch "gate: the limits gate reads the table file's tests as enforcement" \
+    "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
 restore
 finish

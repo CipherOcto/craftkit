@@ -68,6 +68,25 @@ before — as three different helpers — and the gates that read a *symbol* or 
 *module* used none of them. A rule written three times is three chances to
 forget it, and the tree forgot it in three places at once.
 
+## And the tests are not the production code
+
+A gate that reads the tree's source has to know **what part of it is
+production**. A test is code, and a test that names a thing is a sentence
+about it: a test that reads a limit to check that the limits are ordered
+enforces nothing, and a test that calls a reader to prove the reader works
+does not make the reader a third home.
+
+So a gate whose subject is a *production* property cuts the file at its test
+module first. The tree's `production_of` helper does it, and four of the
+tree's gates already had a cut of their own before it: the panic-boundary
+check, the JSON writer's check, and the two that say the shell does not
+evaluate the document and does not write it.
+
+Measured: the model's limit on the number of properties in a node had its one
+production use replaced by a literal, and its only remaining mention was in a
+test that compares the limits with each other. The gate that says every limit
+is enforced said **green**.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -89,7 +108,7 @@ And the call sites. A gate that reads a source file does this and nothing else:
 
 ```rust
 let Ok(text) = std::fs::read_to_string(&path) else { continue };
-let code = code_lines_kept(&text);
+let code = code_lines_kept(production_of(&text));
 ```
 
 ## When NOT to use it
@@ -115,6 +134,8 @@ let code = code_lines_kept(&text);
   the gate notices.
 - `a_gate_that_names_a_line_names_the_file_s_own_line` — the line a gate
   reports is the line in the file.
+- `a_limit_only_a_test_mentions_is_still_caught` — a limit that only a test
+  mentions is not enforced.
 
 ## See also
 

@@ -17332,6 +17332,95 @@ the gate that was not doing its job said yes to everything it was asked. The
 measurement that found it was a probe that made the tree's *own* text lie.
 
 
+## 150. The gate that says every limit is enforced counted a test as enforcement
+
+### The measurement
+
+The tree's gate that says every limit in the model's table is enforced
+somewhere opens every Rust file in the tree and asks whether the limit's name
+appears in code outside the table itself.
+
+**A test is code.** A test that reads `limits::MAX_PROPERTIES` — to check that
+the limits are ordered with each other, say — is a *sentence about* the limit,
+exactly as a doc comment is, and it enforces nothing. The gate does not tell a
+test from the code the test is testing.
+
+Measured, against the gate on a copy of the tree: `MAX_PROPERTIES`'s one
+production use — the check in `crates/model/src/property.rs` that refuses a
+tree with more than fifty thousand properties — was replaced by a literal. The
+limit's only remaining mention was in `crates/model/src/lib.rs`'s test module,
+where the test compares the limits with each other. The gate said **green**.
+The tree's limit on the number of properties in a node was not enforced at
+all, and the gate whose job is to say so said nothing.
+
+The control is the same shape as §149's: with the limit mentioned **nowhere**,
+the gate was **red**.
+
+### Why nothing noticed
+
+**The tree has the distinction, and four of its gates use it.**
+`panic_boundaries_are_declared`, `the_tree_writes_its_json_with_one_writer`,
+`the_shell_does_not_evaluate` and `the_shell_does_not_write_the_document` all
+cut the file at its test module before they look at it, because a test may
+name the thing to prove that the **production** code does not do it.
+`limits_are_enforced` cuts nothing.
+
+**The gate's own test had the wrong shape.** `a_limit_nobody_enforces_is_caught`
+fabricates a tree with a limit nothing uses, and the file that does not use it
+is `fn f() -> usize { limits::MAX_OTHER }` — a function, which is production
+code by any reading. The test proves the gate catches a limit with no use,
+and says nothing about a limit with no use *outside the tests*.
+
+**§148 made the gate stricter and could not have made it stricter enough.**
+§148 stopped the gate from counting a limit that stood only in a string. A
+limit that stands only in a **test** is the same defect one level down, and
+the string fix could not have found it: the tree's own `crates/model/src/lib.rs`
+has a test that reads `MAX_PROPERTIES`, and that read is perfectly good code.
+
+### The fix
+
+**The limits gate cuts every file at its test module** before it looks for the
+limit's name — the same cut the tree's other four gates make. A limit that
+only a test mentions is a limit nobody enforces.
+
+The cut is in a helper, `production_of`, and it is at a line that **starts** a
+test module — `mod tests {` or a `#[cfg(test)]` attribute — so an indented
+`#[cfg(test)]` on an inner item does not take the rest of the file with it.
+
+**One unit test**, `a_limit_only_a_test_mentions_is_still_caught`, which was
+checked to fail when the rule is taken out — from either of the two places
+the cut is applied, the other files and the limits table's own file.
+
+**Two mutations**, one for each of those two places.
+
+### The lesson
+
+**A test is code, and it is not enforcement.** The tree's rule about strings
+says that a mention in a string is not a call. This is the same rule one
+level up: a mention in a test is not a bound. The two are the same mistake
+wearing different clothes — a reader that cannot tell *what kind of text* it
+is looking at will believe whatever it finds.
+
+**A gate that reads the tree's source has to know what part of it is
+production.** The tree's gates that cut at the test module are the gates
+whose subject is a *production* property: a boundary that catches a panic, a
+writer the production code uses, an evaluator the shell does not use. A limit
+that only a test mentions is not enforced, and saying so is the whole job.
+
+**The fix for a defect one level up is not the fix for the defect one level
+down.** §148 closed the string hole and could not have closed the test hole:
+the tree's own test module *legitimately* reads a limit, so no rule about
+strings could have caught it.
+
+**A verifier that names a test that does not exist reports a false pass.**
+The check that asks "does this mutation still get caught?" runs one test and
+reads the exit code — and `cargo test` exits **zero** when the filter matches
+nothing. A verifier that does not also assert that the test *ran* will report
+a mutation as harmless because it asked the wrong question. The mutation
+script has the right shape: it prints MISSED in red and fails the run, and it
+is what caught the anchor that §150 moved.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17386,6 +17475,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A comment in the tree's source is not code** | `code_lines_kept` | 1 mutation — §149 |
 | **A gate that names a line names the file's line** | `code_lines_kept` | 2 mutations — §149 |
 | **The tree reads its code one way** | `the_tree_has_one_code_reader` | 1 mutation — §149 |
+| **A limit only a test mentions is not enforcement** | `production_of` in `limits_are_enforced` | 2 mutations — §150 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
