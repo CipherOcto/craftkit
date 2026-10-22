@@ -18360,6 +18360,96 @@ other, because the tests run in parallel and the pid is the same for both.
 The gate under test was reading the *other* test's fixture and reported a
 method that is in neither. The name is part of the test.
 
+## 160. The cut that removes a test item ended it at the first `}` in the first column, and a `}` inside a string is not the end of an item
+
+### The measurement
+
+The tree's cut (`production_of`) removes a file's test items: a `mod tests { … }`
+block, or a top-level item marked `#[cfg(test)]`. It found the **end** of such
+an item by looking for a line that is exactly `}` — the rule being that a
+top-level item's body is indented, so the first `}` in the first column ends
+it.
+
+That rule is about the **text**. A `}` inside a string is not a brace, and
+the tree has one: `xtask/src/web.rs` has a raw string with a `}` at the start
+of a line. The cut ended there, and **eighteen test functions** after it were
+read as production code.
+
+Measured, against the real gates on a copy of the tree, with the cut as it
+was before the fix and as it is after it:
+
+| Case | What was done | Before | After |
+|---|---|---|---|
+| control | the tree as it stands | **green** | **green** |
+| A | a test that catches a panic, after the brace | **RED** — *"xtask/src/web.rs: catches a panic, and the pattern document does not declare it a boundary"* | **green** |
+| A-control | the same catch in production code | **RED** | **RED** |
+| B | the limit's every production use replaced by a literal, and a test after the brace that mentions the limit | **green** — the limit is enforced | **RED** — the limit is not enforced |
+| B-control | the limit's every production use replaced by a literal, and nothing mentioning it | **RED** | **RED** |
+
+Case A is a **false positive**: a test that catches a panic is not a panic
+boundary, and the gate said `xtask/src/web.rs` was one. The control puts the
+same catch in production code, and both readers report it — so the difference
+is where the catch is, not what it is.
+
+Case B is a **false negative**: a limit that nothing enforces looked enforced,
+because a *test* after the brace mentioned it. The control, with nothing
+mentioning it, is reported correctly by both.
+
+### Why nothing noticed
+
+**The defect was live, not latent.** Eighteen test functions in a file the
+gates read every day were being read as production code. It took a *count* to
+find it: §158's measurement counted the tree's raw strings, and one of them
+was the one with the `}` in it. A gate that reports nothing looks exactly like
+a gate that is right, and nobody was counting.
+
+**The tree's own source is the best fixture there is.** The shape that broke
+the cut was in the tree, in a file the cut reads, and every gate that reads
+the tree's source was affected. There was no need to imagine it.
+
+### The fix
+
+**The end of a top-level test item is found by matching its braces in the
+code view**, the way §157 already found the end of a test-only *method*. A
+`}` inside a string is not a brace, because in the code view a string's
+contents are blanked. An item with no braces — a `use`, a `const` — ends at
+its `;`.
+
+The search is bounded by the file, so a malformed file cannot make the cut
+swallow the rest of the file.
+
+**One unit test**, checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_brace_in_a_string_does_not_end_a_test_module` | a `}` inside a string does not end a test module, and the code around the module is still production code |
+
+**One mutation**, putting the old rule back.
+
+**One case was removed, and it is worth saying which.** §156's second case
+mutated the *truncating* cut, so that an indented `#[cfg(test)]` — which
+marks a method, not the end of the file — would truncate the file there.
+§160's fix removed the truncating cut, and with it the thing that case
+mutated: the mutation could no longer fail. A case that cannot fail is
+worse than no case, so it was removed rather than kept as a decoration. The
+rule it protected — *a cut that does not truncate the file* — is still
+protected by §153's case beside it, which truncates the cut at a test item
+and still bites.
+
+### The lesson
+
+**A cut has to find its end the way it finds its start.** §157 found the end
+of a test-only method by matching braces in the code view; the top-level
+item's end was found by a rule about the text. One question — *where does
+this item end?* — had two answers, and the one that was wrong was the one
+that was easier to write.
+
+**The tree's own source is the fixture, and a count finds what a reading
+misses.** Nobody read `xtask/src/web.rs` looking for a `}` at the start of a
+line. Counting the tree's raw strings for §158 found it in one line of
+output, and the defect it uncovered was already costing the tree eighteen
+test functions.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -18433,6 +18523,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A command id in a comment is not a command** | the code view in `registry_command_ids` | 1 mutation — §159 |
 | **A wire name in a comment is not a wire name** | the code view in `arms_named` | 1 mutation — §159 |
 | **A method in a comment is not a control method** | the code view in `control_methods` | 1 mutation — §159 |
+| **A brace inside a string does not end a test item** | the code view in `production_of` | 1 mutation — §160 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |
@@ -19446,3 +19537,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     sentence about code?* None of them has been measured yet — a claim in a
     string satisfies `attributed_code_is_in_the_file`, and a `pub mod` inside
     a string would be counted by `mod_groups`.
+36. **Decide what a file under a `tests/` directory is.** The tree's cut
+    removes a file's *test items* — a `mod tests { … }` block, a top-level
+    `#[cfg(test)]` item, a test-only method — and a file under a `tests/`
+    directory has none of those: it is a test file from its first line to
+    its last, and the cut leaves all of it. Measured after §160: the tree
+    has **fourteen** `#[test]` functions that the cut does not remove, and
+    every one of them is in `apps/craftkit-cli/tests/`. Nothing is broken by
+    it today — none of those tests catches a panic and none of them names a
+    limit — but the gates that read every Rust file (`limits_are_enforced`,
+    `panic_boundaries_are_declared`, `the_byte_bounds_are_named_in_the_prose`)
+    read a test file as production code, and the day one of them names a
+    limit or catches a panic, they will say so. The choices are: the cut
+    treats a file under a `tests/` directory as a test file, the gates that
+    walk the tree skip those directories, or the tree says a `tests/` file is
+    production code and means it.

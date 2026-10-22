@@ -3982,9 +3982,14 @@ expect_catch "gate: the boundary gate counts a test's catch as a boundary" \
 # production code that comes after a test item.
 swap xtask/src/lists.rs \
     '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
-            skipping = true;
-            out.push('"'"'\n'"'"');
-            index += 1;
+            // The item ends where its **braces** say, and the braces are
+            // found in the code view: a `}` inside a string is not a brace.
+            // §160.
+            let last = top_level_item_last_line(&code, &starts, &lines, index);
+            for _ in index..=last {
+                out.push('"'"'\n'"'"');
+            }
+            index = last + 1;
             continue;
         }' \
     '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
@@ -4071,11 +4076,15 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the JSON writer's cut truncates the file" \
     "cargo test -p xtask --profile ci a_writer_after_a_test_item_is_still_a_writer"
 
-swap xtask/src/lists.rs \
-    '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {' \
-    '        if line.starts_with("mod tests {") || line.trim_start().starts_with("#[cfg(test)]") {'
-expect_catch "gate: the cut treats an indented test attribute as the end of the file" \
-    "cargo test -p xtask --profile ci an_indented_test_attribute_does_not_truncate_the_file"
+# The second case of this section -- the one that made the cut treat an
+# indented test attribute as the end of the file -- was **removed** by section
+# 160, and it is worth saying why. Section 160 found the end of a test item
+# by matching its braces in the code view, and the cut that truncated the file
+# at a test marker is gone with it: the mutation that made the cut truncate
+# could no longer fail. A case that cannot fail is worse than no case, so it
+# was removed rather than kept as a decoration. The rule it protected -- a
+# cut that does not truncate the file -- is still protected by the case
+# above, which still bites.
 
 swap xtask/src/lists.rs \
     '        let production = production_of(&text);
@@ -4249,6 +4258,42 @@ swap xtask/src/lists.rs \
 '
 expect_catch "gate: the control methods read an arm out of a comment" \
     "cargo test -p xtask --profile ci a_method_in_a_comment_is_not_a_control_method"
+
+# A brace inside a string is not a brace. The cut that removes a test item
+# looked for the end of the item in the text, and a `}` inside a string ends
+# a string, not an item. The tree's own `xtask/src/web.rs` has a raw string
+# with a `}` at the start of a line: the cut ended there, and the eighteen
+# test functions after it were read as production code. Measured, against the
+# real gates on a copy of the tree, with the cut as it was before the fix and
+# with the fix in it:
+#
+#   * a test that catches a panic, after the brace, was reported as an
+#     undeclared panic boundary -- a false positive. The control, with the
+#     same catch in production code, was reported by both.
+#   * a limit whose every production use had been replaced by a literal, and
+#     which a test after the brace mentioned, was reported as enforced -- a
+#     false negative. The control, with nothing mentioning it, was reported
+#     correctly by both.
+#
+# The end of an item is found by matching its braces in the code view, the
+# way the end of a test-only method has been found since section 157. Section
+# 160.
+swap xtask/src/lists.rs \
+    $'    let Some(close) = matching(code, open, b\'{\', b\'}\') else {
+        return lines.len().saturating_sub(1);
+    };
+    line_of(code, close, lines)
+' \
+    $'    // The old rule: the first `}` in the first column ends the item.
+    for (at, line) in lines.iter().enumerate().skip(index) {
+        if *line == "}" {
+            return at;
+        }
+    }
+    lines.len().saturating_sub(1)
+'
+expect_catch "gate: the cut ends a test item at a brace inside a string" \
+    "cargo test -p xtask --profile ci a_brace_in_a_string_does_not_end_a_test_module"
 
 restore
 finish

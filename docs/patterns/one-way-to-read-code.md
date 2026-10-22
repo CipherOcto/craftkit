@@ -109,6 +109,15 @@ It removes the test-only **method** too — the method an *indented*
 around it stay visible. §157: a name in a test-only method is a name in a
 test, and three gates that read names were counting it.
 
+And it finds the **end** of a test item by matching its braces in the code
+view — for a test-only method since §157, and for a top-level item since
+§160. The end of an item used to be found in the *text*, by looking for a
+`}` in the first column, and a `}` inside a string is not a brace: the tree's
+own `xtask/src/web.rs` has a raw string with one, the cut ended there, and
+**eighteen test functions** after it were read as production code. A cut that
+finds the end of a thing the way it finds the beginning of it: in the code,
+where a brace is a brace.
+
 Measured: the model's limit on the number of properties in a node had its one
 production use replaced by a literal, and its only remaining mention was in a
 test that compares the limits with each other. The gate that says every limit
@@ -289,6 +298,8 @@ let code = code_lines_kept(&text);
   a wire name.
 - `a_method_in_a_comment_is_not_a_control_method` — an arm in a comment is
   not a method.
+- `a_brace_in_a_string_does_not_end_a_test_module` — a `}` inside a string
+  does not end a test item.
 
 ## See also
 

@@ -4821,24 +4821,18 @@ fn production_of(text: &str) -> String {
     }
 
     let mut out = String::with_capacity(text.len());
-    let mut skipping = false;
     let mut index = 0usize;
     while index < lines.len() {
         let line = lines[index];
-        if skipping {
-            // A top-level item ends at the first `}` in the first column:
-            // everything inside it is indented.
-            if line == "}" || line == ";" {
-                skipping = false;
-            }
-            out.push('\n');
-            index += 1;
-            continue;
-        }
         if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
-            skipping = true;
-            out.push('\n');
-            index += 1;
+            // The item ends where its **braces** say, and the braces are
+            // found in the code view: a `}` inside a string is not a brace.
+            // §160.
+            let last = top_level_item_last_line(&code, &starts, &lines, index);
+            for _ in index..=last {
+                out.push('\n');
+            }
+            index = last + 1;
             continue;
         }
         if is_indented_test_attribute(line)
@@ -4855,6 +4849,46 @@ fn production_of(text: &str) -> String {
         index += 1;
     }
     out
+}
+
+/// The last line of the top-level item a test marker starts.
+///
+/// The item ends where its **braces** say: the `}` that matches its `{`, or
+/// its `;` when it has no braces. The braces are found in the **code view**,
+/// because it has no strings in it — a `}` inside a string is not a brace.
+///
+/// The tree's own `xtask/src/web.rs` has one: a raw string with a `}` at the
+/// start of a line. The cut that ended at the first `}` in the first column
+/// ended there, and the **eighteen test functions** after it were read as
+/// production code. §160.
+///
+/// The search is bounded by the file, so a malformed file cannot make the
+/// cut swallow the rest of the file.
+fn top_level_item_last_line(code: &str, starts: &[usize], lines: &[&str], index: usize) -> usize {
+    let from = starts[index];
+    let Some(rest) = code.get(from..) else { return index };
+    let brace = rest.find('{');
+    let semi = rest.find(';');
+    // The first of the two is the item's own: an item with braces ends at
+    // the `}` that matches its `{`, and an item without any ends at its `;`.
+    let open = match (brace, semi) {
+        (Some(b), Some(s)) if s < b => return line_of(code, from + s, lines),
+        (Some(b), _) => from + b,
+        (None, Some(s)) => return line_of(code, from + s, lines),
+        (None, None) => return index,
+    };
+    let Some(close) = matching(code, open, b'{', b'}') else {
+        return lines.len().saturating_sub(1);
+    };
+    line_of(code, close, lines)
+}
+
+/// The line a byte of the file is on.
+///
+/// The file's lines are the file's lines, and the code view keeps every one
+/// of them, so a position in one is a position in the other. §155.
+fn line_of(code: &str, byte: usize, lines: &[&str]) -> usize {
+    code[..byte].matches('\n').count().min(lines.len().saturating_sub(1))
 }
 
 /// Whether a line is an **indented** `#[cfg(test)]` attribute.
@@ -6508,6 +6542,38 @@ mod tests {
         assert_eq!(commands[0].id, "real.cmd", "{commands:?}");
         assert_eq!(commands[0].declared, vec!["name".to_string()], "{commands:?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A brace inside a string does not end a test module.
+    ///
+    /// The cut that removes a test item looks for the end of the item, and a
+    /// `}` inside a string is not a brace. The tree's own
+    /// `xtask/src/web.rs` has a raw string with a `}` at the start of a line,
+    /// and the cut ended there — so the eighteen test functions after it were
+    /// read as production code. §160.
+    #[test]
+    fn a_brace_in_a_string_does_not_end_a_test_module() {
+        let source = r##"fn production() {}
+
+#[cfg(test)]
+mod tests {
+    const PAGE: &str = r#"<style>
+}
+</style>"#;
+    #[test]
+    fn a_test() {
+        let _ = PAGE;
+    }
+}
+
+fn also_production() {}
+"##;
+        let production = production_of(source);
+        // The whole module is gone, and the code around it is not.
+        assert!(!production.contains("a_test"), "{production}");
+        assert!(!production.contains("PAGE"), "{production}");
+        assert!(production.contains("fn production"), "{production}");
+        assert!(production.contains("fn also_production"), "{production}");
     }
 
     /// A raw string is a string, and its contents are not code.
