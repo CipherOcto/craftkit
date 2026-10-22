@@ -4426,5 +4426,51 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the matcher calls an empty name a word" \
     "cargo test -p xtask --profile ci an_empty_name_is_not_a_word"
 
+# A name is not a piece of a longer name, and four more gates asked the
+# question with a text test. Measured, against the real gates on a copy of
+# the tree, with the gates as they were before section 164 and with the fix
+# in them. Each case has a control: the same tree with the thing really
+# wrong, so a gate that said no to everything would pass the control too.
+#
+#   * a limit whose only use was inside `MAX_UNUSED_PER_NODE` was reported
+#     as **enforced** -- a false negative. The control, with the limit
+#     nowhere at all, was reported by both.
+#   * a bound that only `MAX_DOCUMENT_BYTES_LIMIT` named in the prose was
+#     reported as **named** -- a false negative. The control, with the bound
+#     named nowhere, was reported by both.
+#   * a budget that named the model's budget only inside a longer name was
+#     reported as **derived from the model** -- a false negative. The
+#     control, with the statement naming no model budget, was reported by
+#     both.
+#   * a file that named `craftkit_core::writer::write_json_pretty` was
+#     reported as written with the tree's **writer** -- a false negative.
+#     The control, with the file naming no writer at all, was reported by
+#     both.
+#
+# Section 164.
+swap xtask/src/lists.rs \
+    '            if has_word(&body, name) && !used.contains(name) {' \
+    '            if body.contains(name.as_str()) && !used.contains(name) {'
+expect_catch "gate: the limits gate reads a limit inside a longer name" \
+    "cargo test -p xtask --profile ci a_limit_only_a_longer_name_uses_is_still_caught"
+
+swap xtask/src/lists.rs \
+    '            if has_word(&prose, &name) {' \
+    '            if prose.contains(&name) {'
+expect_catch "gate: the prose names a bound inside a longer name" \
+    "cargo test -p xtask --profile ci a_bound_only_a_longer_name_names_in_the_prose_is_not_named"
+
+swap xtask/src/lists.rs \
+    '            if has_word(&statement, name) {' \
+    '            if statement.contains(name) {'
+expect_catch "gate: a budget names the model's budget inside a longer name" \
+    "cargo test -p xtask --profile ci a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model"
+
+swap xtask/src/lists.rs \
+    '        if !has_word(&code, "craftkit_core::writer::write_json") {' \
+    '        if !code.contains("craftkit_core::writer::write_json") {'
+expect_catch "gate: the writer gate reads a path inside a longer path" \
+    "cargo test -p xtask --profile ci the_writer_is_not_a_path_that_starts_the_same_way"
+
 restore
 finish

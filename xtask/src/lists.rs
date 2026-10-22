@@ -1615,7 +1615,7 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
             statement.push_str(lines[last].trim());
         }
         for name in names {
-            if statement.contains(name) {
+            if has_word(&statement, name) {
                 continue;
             }
             problems.push(format!(
@@ -1658,7 +1658,7 @@ pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         for name in byte_bounds(&code_lines_kept(&text)) {
-            if prose.contains(&name) {
+            if has_word(&prose, &name) {
                 continue;
             }
             problems.push(format!(
@@ -1749,7 +1749,7 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
                 ));
             }
         }
-        if !code.contains("craftkit_core::writer::write_json") {
+        if !has_word(&code, "craftkit_core::writer::write_json") {
             problems.push(format!(
                 "{relative}: {what} is not written with the tree's writer \
                  (`craftkit_core::writer::write_json`); a design written in two places has to be \
@@ -4822,7 +4822,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };
         for name in &declared {
-            if body.contains(name.as_str()) && !used.contains(name) {
+            if has_word(&body, name) && !used.contains(name) {
                 used.push(name.clone());
             }
         }
@@ -6807,6 +6807,118 @@ pub fn f() {}
         let problems = symbol_file_claims(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("the_ghost_test"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A limit only a longer name uses is still a limit nobody enforces.
+    ///
+    /// The gate that says every limit in the model's table is enforced
+    /// somewhere looked for the limit's name with a **substring** test, and
+    /// `MAX_UNUSED_PER_NODE` has `MAX_UNUSED` inside it. §164.
+    #[test]
+    fn a_limit_only_a_longer_name_uses_is_still_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-limits-longer-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n    /// A limit nothing uses.\n    pub const MAX_UNUSED: usize = 7;\n}\n",
+        )
+        .expect("the fabricated table");
+        // The longer name is not the limit.
+        std::fs::write(model.join("other.rs"), "fn f() -> usize { limits::MAX_UNUSED_PER_NODE }\n")
+            .expect("the fabricated code");
+
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_UNUSED"), "{problems:#?}");
+
+        // And the limit, used as a name, is enforced.
+        std::fs::write(model.join("other.rs"), "fn f() -> usize { limits::MAX_UNUSED }\n")
+            .expect("the fabricated code");
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A bound only a longer name names in the prose is not named in it.
+    ///
+    /// The gate that says every bound the tree has is named in the tree's
+    /// prose looked for the bound's name with a **substring** test, and
+    /// `MAX_DOCUMENT_BYTES_LIMIT` has `MAX_DOCUMENT_BYTES` inside it. §164.
+    #[test]
+    fn a_bound_only_a_longer_name_names_in_the_prose_is_not_named() {
+        let dir = std::env::temp_dir().join(format!("craftkit-bound-longer-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        let docs = dir.join("docs/architecture.md");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        std::fs::write(model.join("lib.rs"), "pub const MAX_DOCUMENT_BYTES: usize = 32 * 1024 * 1024;\n")
+            .expect("the fabricated source");
+        // The prose names the longer name, not the bound.
+        std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES_LIMIT`.\n").expect("the prose");
+
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_DOCUMENT_BYTES"), "{problems:#?}");
+
+        // And the bound, named as a name, is named.
+        std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES`.\n").expect("the prose");
+        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A budget that names the model's budget inside a longer name is its own.
+    ///
+    /// The gate that says the session's and the history's budgets come from
+    /// the model's looked for the model's name with a **substring** test.
+    /// §164.
+    #[test]
+    fn a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model() {
+        let dir = std::env::temp_dir().join(format!("craftkit-budget-longer-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(engine.join("history.rs"), "pub const HISTORY_EXPANSION: usize = 2;\n")
+            .expect("the fabricated source");
+        // The session's budget names the longer name, not the model's.
+        std::fs::write(
+            engine.join("session.rs"),
+            "pub const SESSION_OWN_DOCUMENTS: usize = 2;\n\
+             pub const SESSION_SNAPSHOT_DOCUMENTS: usize = 1;\n\
+             pub const HISTORY_EXPANSION: usize = 2;\n\
+             pub const SESSION_DOCUMENTS: usize = 4;\n\
+             pub const MAX_SESSION_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES_LIMIT * SESSION_DOCUMENTS;\n",
+        )
+        .expect("the fabricated source");
+
+        let problems = the_memory_budgets_are_derived_from_the_models(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("MAX_SESSION_BYTES")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's writer is not a path that starts the same way.
+    ///
+    /// The gate that says the tree's JSON has one writer looked for the
+    /// writer's path with a **substring** test, and
+    /// `craftkit_core::writer::write_json_pretty` has the writer's path
+    /// inside it. §164.
+    #[test]
+    fn the_writer_is_not_a_path_that_starts_the_same_way() {
+        let dir = std::env::temp_dir().join(format!("craftkit-writer-longer-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        let engine = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::write(io.join("format.rs"), "fn f() { craftkit_core::writer::write_json_pretty(); }\n")
+            .expect("the fabricated source");
+        // The crash report is written with the tree's writer.
+        std::fs::write(engine.join("crash.rs"), "fn f() { craftkit_core::writer::write_json(); }\n")
+            .expect("the fabricated source");
+
+        let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("format.rs"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

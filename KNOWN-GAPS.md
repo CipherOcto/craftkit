@@ -18800,6 +18800,109 @@ list that could not change — so it was proof of nothing. The fix is not a
 better fingerprint; it is a list that covers what the tool does.
 
 
+## 164. Four more gates asked whether a name was in some text, and a longer name answered for it
+
+§162 fixed two gates that asked *"is this name in that file?"* and answered
+with a substring test. The natural next question is how many other gates ask
+the same question the same way, and the answer is **four** — with one more
+that is a different question and is left alone, and written down.
+
+| Gate | What it asked | What answered for it |
+|---|---|---|
+| `limits_are_enforced` | is this limit used somewhere? | `MAX_UNUSED_PER_NODE` |
+| `the_byte_bounds_are_named_in_the_prose` | does a document name this bound? | `MAX_DOCUMENT_BYTES_LIMIT` |
+| `the_memory_budgets_are_derived_from_the_models` | does this budget name the model's budget? | `MAX_DOCUMENT_BYTES_LIMIT` |
+| `the_tree_writes_its_json_with_one_writer` | is this file written with the tree's writer? | `craftkit_core::writer::write_json_pretty` |
+
+All four are false negatives of the same kind, and all four are **latent**:
+nothing in the tree today is fooled by them, because no limit is the prefix
+of another limit and no bound is the prefix of another bound. They are
+measured here rather than asserted, because the tree's own §148, §149, §150
+and §157 are all about a gate that was fooled by a name that was not there.
+
+### What was measured
+
+Against the real gates, on a copy of the tree, with the gates as they were
+before this section and with the fix in them. Every case has a control: the
+same tree with the thing *really* wrong, so a gate that said no to
+everything would pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | a limit whose only use is `MAX_UNUSED_PER_NODE` | **green** — reported as enforced | **red** — "`MAX_UNUSED` … nothing in the tree uses it" | red, both |
+| B | a bound that only `MAX_DOCUMENT_BYTES_LIMIT` names in the prose | **green** — reported as named | **red** — "no document in the tree names it" | red, both |
+| C | a budget that names `MAX_DOCUMENT_BYTES_LIMIT` | **green** — reported as derived from the model | **red** — "writes `MAX_SESSION_BYTES` without `MAX_DOCUMENT_BYTES` in it" | red, both |
+| D | a file that names `craftkit_core::writer::write_json_pretty` | **green** — reported as written with the tree's writer | **red** — "is not written with the tree's writer" | red, both |
+
+### The fix
+
+Four one-line changes, all of them the tree's own matcher:
+
+```rust
+has_word(&body, name)                                  // was body.contains(name.as_str())
+has_word(&prose, &name)                                // was prose.contains(&name)
+has_word(&statement, name)                             // was statement.contains(name)
+has_word(&code, "craftkit_core::writer::write_json")   // was code.contains(...)
+```
+
+`has_word` asks the question §162's rule asks: the byte before the name and
+the byte after it must both be something that is not part of one. It works
+for a **path** as well as for a name, because `:` and `::` are not
+identifier bytes: the writer's path is bounded by the space before it and
+the `(` after it.
+
+Nothing the tree claims stopped being checked. The tree's own limits, its
+own budgets and its own writer are all still found where they were, and the
+gate that checks them stayed green.
+
+### The fifth gate, and why it was left alone
+
+The gate that derives the tree's parameter readers asks whether a
+function's **signature** holds `&Params` — and it asks it with a substring
+test, so `&ParamsExtra` would answer for it.
+
+That one is a different question, and the answer is not obviously "no". The
+gate's subject is *the tree's reader*: a function that takes the tree's
+`&Params` is a reader. A function that takes some other type is not a
+reader, and the tree has no such type today. But the gate also reports
+parameters a command **declares and never reads**, and a command that calls
+a function which is not a reader would be reported as declaring a parameter
+it does not read — a false complaint, in the other direction. The fix for
+one is not obviously the fix for the other, and it is an owner's call. It
+is written down as item 39.
+
+### The unit tests
+
+Four, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_limit_only_a_longer_name_uses_is_still_caught` | a limit used only inside a longer name is not enforced |
+| `a_bound_only_a_longer_name_names_in_the_prose_is_not_named` | a bound named only inside a longer name is not named |
+| `a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model` | a budget that names the model's only inside a longer name is its own |
+| `the_writer_is_not_a_path_that_starts_the_same_way` | the tree's writer is not a path that starts the same way |
+
+### The mutations
+
+Four, each putting the old rule back.
+
+### The lesson
+
+**One question, one answer.** §162 found two gates that asked whether a
+name was in a file and gave two different answers; §164 went looking for
+the rest of the same question and found four more, each with its own
+answer, in a gate whose subject was something else entirely — a limit, a
+bound, a budget, a writer. The tree already had the right answer
+(`has_word`) and the right place for it; four gates had not asked.
+
+**A gate that is fooled only by a name nobody wrote yet is still a gate
+that can be fooled.** All four defects here are latent: the tree has no
+`MAX_UNUSED_PER_NODE` and no `write_json_pretty`. The reason they are
+worth fixing is the tree's own history: the limits gate has been fooled
+four times (§148, §149, §150, §157), each time by a *mention* rather than
+a use, and each time the mention was in the code the tree did have.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19185,6 +19288,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test that is only the prefix of another test's name is not it** | `has_word` in `defines` | 1 mutation — §162 |
 | **An empty name is not a word** | the guard in `has_word` | 1 mutation — §162 |
 | **The mutation script's snapshot covers what a build writes** | `Cargo.lock` in `FILES` | 1 self-test — §163 |
+| **A limit only a longer name uses is not enforcement** | `has_word` in `limits_are_enforced` | 1 mutation — §164 |
+| **A bound only a longer name names in the prose is not named** | `has_word` in `the_byte_bounds_are_named_in_the_prose` | 1 mutation — §164 |
+| **A budget that names only a longer name is not the model's** | `has_word` in `the_memory_budgets_are_derived_from_the_models` | 1 mutation — §164 |
+| **The tree's writer is not a path that starts the same way** | `has_word` in `the_tree_writes_its_json_with_one_writer` | 1 mutation — §164 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -19953,3 +20060,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     restore puts it back, the fingerprint checksums it, and the script's
     self-test now has a fourth half that fails when a file a build writes
     is not in the snapshot.
+39. **Decide what the parameter-reader gate asks about a signature.** §164
+    found four gates that ask *is this name in that text?* with a substring
+    test and fixed them, and found a fifth that asks a **different**
+    question the same way. The gate that derives the tree's parameter
+    readers asks whether a function's signature holds `&Params`, and it
+    asks it with `signature.contains("&Params")`, so `&ParamsExtra` would
+    answer for it. The tree has no such type today, so the defect is
+    latent. The reason it is left alone is that the gate also reports
+    parameters a command **declares and never reads**: a command that
+    called a function which is not a reader would be reported as declaring
+    a parameter it does not read — a false complaint, in the other
+    direction. The choices are: match the type as a whole name and accept
+    the second complaint, keep the substring and accept the first, or ask
+    the reader's question differently — by the *shape* of the argument
+    rather than by the name of its type.

@@ -286,7 +286,17 @@ fn has_word(code: &str, name: &str) -> bool {
 
 The bytes are enough: an identifier's bytes are ASCII letters, digits and
 `_`, and a multi-byte character's bytes are all above that range, so a
-character is a boundary for free. §162.
+character is a boundary for free. It works for a **path** as well, because
+`:` and `::` are not identifier bytes. §162.
+
+**And the same question has one answer.** §162 fixed the two gates that
+asked it. §164 went looking for the rest of them and found four more — the
+limits gate, the byte-bounds gate, the memory-budgets gate and the JSON
+writer's gate — each with its own substring test and each fooled by a
+longer name. All four ask the tree's `has_word` now. A fifth gate asks a
+*different* question the same way (is a signature a reader's?) and is
+written down rather than changed: the two directions of its complaint pull
+against each other, and that is an owner's call.
 
 ## In the code
 
@@ -407,6 +417,14 @@ let code = code_lines_kept(&text);
   only the prefix of another test's name is not it.
 - `an_empty_name_is_not_a_word` — an empty name is not a word, and the
   matcher does not spin on it.
+- `a_limit_only_a_longer_name_uses_is_still_caught` — a limit used only
+  inside a longer name is not enforced.
+- `a_bound_only_a_longer_name_names_in_the_prose_is_not_named` — a bound
+  named only inside a longer name is not named.
+- `a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model` —
+  a budget that names the model's only inside a longer name is its own.
+- `the_writer_is_not_a_path_that_starts_the_same_way` — the tree's writer is
+  not a path that starts the same way.
 
 ## See also
 
