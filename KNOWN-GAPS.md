@@ -17189,6 +17189,149 @@ anybody wrote.
 
 ---
 
+## 149. The tree's rule that a mention in a string is not code was written three times, and the gates that read a symbol or a module used none of them
+
+### The measurement
+
+The tree has the rule that **a mention in a string is not code**. §78 wrote it
+down for one gate — *"a mention in a string is not a call: this file's own
+needle is one, and a check that flagged itself would be a check nobody
+trusts"* — and the tree has had a function for it ever since.
+
+It has had **four**.
+
+| Function | What it does | Where it came from |
+|---|---|---|
+| `code_only` | the comments and the string literals removed | §78, for the gate that reads the tree's calls |
+| `without_comments` | the comments removed, the strings **left in** | for the gate that reads the tree's limits, and as the first half of `code_only` |
+| `strip_code` | the comments, the strings and the char literals blanked, the byte length kept | §130, for the scanner that counts braces |
+| `code_lines_kept` | the comments and the strings blanked, **every line kept** | for the gates that report a line |
+
+Four copies of one rule is four chances to forget it, and three of the tree's
+gates had forgotten it.
+
+**Three gates read the tree's source as text.**
+
+| Gate | What it reads the text for | The helper it did not use |
+|---|---|---|
+| `symbol_file_claims` | whether the test a document names is really in the file the document names | all four — none |
+| `unknown_module_paths` | whether the module a document names is one the tree has | all four — none |
+| `limits_are_enforced` | whether a limit in the model's table is enforced somewhere | `without_comments`, which leaves the strings **in** |
+
+Measured, against the gates themselves, on a copy of the tree:
+
+| Case | What was done | What the gate said |
+|---|---|---|
+| A | the claimed test left the code and stood only inside a string | **green** |
+| B | the claimed test left the code and stood only inside a comment | **green** |
+| C | the claimed module left the code and stood only inside a string | **green** |
+| D | the limit's only use left the code and stood only inside a string | **green** |
+
+The controls are the important half. With the test **nowhere** at all, the
+symbol gate was **red**; with the module nowhere, the module gate was **red**;
+with the limit mentioned nowhere, the limits gate was **red**. So each gate
+knows how to say no — it just said yes to a *sentence about* a test.
+
+**And a fifth defect, in the gates that did read the code.** They read it with
+`code_only`, which removes a block comment **whole** — its newlines with it —
+so every line after a block comment moved up. Measured: with a block comment
+put in front of the design file's cap, the constant moved to line **293** of
+`crates/io/src/format.rs` and the gate that reports the line named **284**.
+
+### Why nothing noticed
+
+**The rule was written for a gate, not for the tree.** §78's rule was true, it
+was implemented once, in a helper, and it was applied once. §148 found the
+same thing about the tree's *limits* and fixed the four gates that read them.
+It did not look for a *second* copy of the rule — and the second copy was in
+the tree twice over.
+
+**The tree's tests are the hazard, and they are everywhere.** A gate that reads
+source has to be tested, and the test fabricates a source file — **in a
+string**. §148 said so at length. The limits gate's own test fabricates a file
+whose limit name stands in a **comment**, and the shape that hides this defect
+is a string — so the one test in the tree that came closest had the wrong
+shape. The symbol gate and the module gate had **no fabricated tree at all**,
+and so had no test that could have noticed.
+
+**Nobody read the tree's own gates as text.** Every claim the tree's documents
+make about the tree's *own* files was checked, and the tree's documents are
+careful. But a claim about a *symbol* in a *file* was checked against the
+file's **text**, and a name in a string is text.
+
+**The hole was latent, not live.** Every claim the tree's documents actually
+make about the tree's own files is true of the tree's *code* today — so the
+tree was not wrong, and the gate that was not doing its job still said yes.
+That is the worst shape a defect can have: nothing to see, and a check that
+cannot be caught.
+
+### The fix
+
+**One reader.** `code_lines_kept` is the tree's only way to read code out of a
+file. `code_only`, `without_comments` and `strip_code` are **deleted**. Seven
+gates already read the tree's source through it; **ten** more do now: the
+catch-unwind check, `defines`, `tree_modules`, the type scanner,
+`constants_in`, the file-cap gate, the memory-budgets gate, the byte-bounds
+gate, the limits gate and the fingerprint reader.
+
+**The one reader keeps every line.** Two things used to lose one:
+
+- a **block comment**, whose newlines `code_only` dropped whole;
+- a **string continuation** — a backslash at the end of a line inside a
+  string — whose newline was blanked. The tree's own
+  `crates/io/src/format.rs` has **three** of them, so this was not a shape but
+  a fact.
+
+Both are fixed, and a gate that names a line now names the **file's** line.
+
+**The one reader blanks a char literal.** `strip_code` did, and it was the
+reason the type scanner could count braces: `'{'` is a brace that is not a
+brace. The one reader does it too, and a **lifetime** is still not a char
+literal — `'a` is a name, and treating it as a literal would swallow the rest
+of the file.
+
+**Six unit tests**, each of which was checked to fail when the rule it
+protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_symbol_that_stands_only_in_a_string_is_not_a_symbol_of_the_tree` | the symbol gate says the claim is false |
+| `a_symbol_that_stands_only_in_a_comment_is_not_a_symbol_of_the_tree` | and the same for a comment |
+| `a_module_that_stands_only_in_a_string_is_not_a_module_of_the_tree` | the module gate says the module is not there |
+| `a_limit_that_stands_only_in_a_string_is_not_enforced` | a limit in a string is not enforcement |
+| `a_gate_that_names_a_line_names_the_file_s_own_line` | the line a gate reports is the line in the file |
+| `the_tree_has_one_code_reader` | the tree has one reader, and it is `code_lines_kept` |
+
+**Seven mutations**, one for each place the rule could be lost, each of which
+turns one test red.
+
+**And a pattern document**, `docs/patterns/one-way-to-read-code.md`, so the
+rule has a home that is not a helper's doc comment.
+
+### The lesson
+
+**A rule written three times is three chances to forget it.** §148's lesson was
+that a rule written for one gate is not a rule of the tree. This is the same
+lesson one step further out: the rule was written for one gate, then written
+*again* for a second gate, then a third — and the fourth copy is the one the
+tree ended up with. Copying a rule is not the same as sharing it.
+
+**A gate that reads a file as text will read a string as a file.** The tree's
+tests fabricate source files; that is what a test for a source-reading gate
+has to do, and it means the fabricated text is *indistinguishable* from the
+real thing unless the reader knows what a string is.
+
+**The gates that read the tree's own source are the tree's most fragile code,
+and they are the code nobody reviews.** Every other gate in the tree checks
+the tree's *content*. These check the tree's *text*, and the difference is
+invisible until the text lies.
+
+**A hole that is latent is still a hole, and it is the worst kind to find.** No
+claim in the tree was false because of this, so there was nothing to see; and
+the gate that was not doing its job said yes to everything it was asked. The
+measurement that found it was a probe that made the tree's *own* text lie.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -17237,6 +17380,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
 | **A limit in prose is the constant's value, whatever expression it is written as** | `prose_constants_match_the_code` | 2 mutations — §147 |
 | **The tree's limits are read from its code, not from its text** | `code_only` in the four gates that read them | 4 mutations — §148 |
+| **The tree's symbols are read from its code, not from its text** | `code_lines_kept` in `defines` | 1 mutation — §149 |
+| **The tree's modules are read from its code, not from its text** | `code_lines_kept` in `tree_modules` | 1 mutation — §149 |
+| **A limit in a string is not enforcement** | `code_lines_kept` in `limits_are_enforced` | 1 mutation — §149 |
+| **A comment in the tree's source is not code** | `code_lines_kept` | 1 mutation — §149 |
+| **A gate that names a line names the file's line** | `code_lines_kept` | 2 mutations — §149 |
+| **The tree reads its code one way** | `the_tree_has_one_code_reader` | 1 mutation — §149 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
 | **A rollback restores the document *and the plan*** | `loading_a_document_re_evaluates_the_plan` | 1 mutation — §43 |
 | **A rollback puts the dirty flag back** | `a_restore_puts_the_dirty_flag_back` | 1 mutation — §43 |

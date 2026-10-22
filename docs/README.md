@@ -51,6 +51,7 @@ in the tree, and when the rule does *not* apply.
 | [One trust boundary](patterns/one-trust-boundary.md) | two `catch_unwind` sites with distinct jobs, and no others |
 | [Exact time, not float seconds](patterns/exact-time-not-float-seconds.md) | instants are `Tick`s; seconds are an input format, never a storage format |
 | [A format change is one new file](patterns/format-changes.md) | one file in `format/pending/` per change; the release folds them in |
+| [One way to read code](patterns/one-way-to-read-code.md) | a gate that reads the tree's source reads the code, and there is one reader that does it |
 
 Two more ideas are documented where they are enforced rather than as separate
 files: hostile input has exactly one owner (`Params` and `Value` validate; the

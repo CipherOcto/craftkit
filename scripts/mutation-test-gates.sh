@@ -3760,7 +3760,7 @@ expect_catch "prose: a claim of division is not the constant's value" \
 # The first mutation takes the rule out of the gate that reads the tree's
 # constants for the prose.
 swap xtask/src/lists.rs \
-    '    let code = code_only(source);
+    '    let code = code_lines_kept(source);
     for line in code.lines() {' \
     '    let code = source.to_string();
     for line in code.lines() {'
@@ -3770,7 +3770,7 @@ expect_catch "gate: the prose reads the tree's limits out of text" \
 # The second takes it out of the gate that holds the design file's cap to the
 # model's budget.
 swap xtask/src/lists.rs \
-    '    let code = code_only(&text);
+    '    let code = code_lines_kept(&text);
     let lines: Vec<&str> = code.lines().collect();
     let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))' \
     '    let code = text.clone();
@@ -3782,7 +3782,7 @@ expect_catch "gate: the file cap reads the tree's limits out of text" \
 # The third takes it out of the gate that holds the memory budgets to the
 # model's budget.
 swap xtask/src/lists.rs \
-    '        let code = code_only(&text);
+    '        let code = code_lines_kept(&text);
         let lines: Vec<&str> = code.lines().collect();
         let Some(index) =' \
     '        let code = text.clone();
@@ -3794,10 +3794,117 @@ expect_catch "gate: the memory budgets read the tree's limits out of text" \
 # And the fourth out of the gate that says every bound the tree has is named
 # in the tree's prose.
 swap xtask/src/lists.rs \
-    'for name in byte_bounds(&code_only(&text)) {' \
+    'for name in byte_bounds(&code_lines_kept(&text)) {' \
     'for name in byte_bounds(&text) {'
 expect_catch "gate: the byte bounds read the tree's limits out of text" \
     "cargo test -p xtask --profile ci a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree"
+
+# The tree's rule that a mention in a string is not code was written three
+# times -- as code_only, as without_comments and as strip_code -- and the
+# gates that read a *symbol* or a *module* used none of them, so a rule that
+# existed in the tree was not applied to most of the tree. The tree has one
+# reader now, code_lines_kept, and every gate that reads the tree's source
+# goes through it. Measured, against the gates themselves on a copy of the
+# tree: a test that stood only inside a string satisfied a document's claim
+# about it; so did one that stood only inside a comment; so did a module;
+# so did a limit; and a block comment in front of a constant moved the line
+# the gate named by nine. Section 149.
+#
+# The first takes the rule out of the gate that checks the claims prose
+# makes about the tree's own files.
+swap xtask/src/lists.rs \
+    '    let code = code_lines_kept(source);
+    for keyword in ["fn ", "struct ", "enum ", "const ", "static ", "mod ", "trait ", "type "] {' \
+    '    let code = source.to_string();
+    for keyword in ["fn ", "struct ", "enum ", "const ", "static ", "mod ", "trait ", "type "] {'
+expect_catch "gate: the symbol gate reads the tree's source as text" \
+    "cargo test -p xtask --profile ci a_symbol_that_stands_only_in_a_string_is_not_a_symbol_of_the_tree"
+
+# The second takes the other half of the rule out of the one reader, so a
+# comment is code again.
+swap xtask/src/lists.rs \
+    "            '/' if chars.peek() == Some(&'/') => {
+                chars.next();
+                in_line = true;
+                out.push(' ');
+                out.push(' ');
+            }" \
+    "            '/' if chars.peek() == Some(&'/') => {
+                chars.next();
+                out.push(' ');
+                out.push(' ');
+            }"
+expect_catch "gate: the one reader keeps a comment's text" \
+    "cargo test -p xtask --profile ci a_symbol_that_stands_only_in_a_comment_is_not_a_symbol_of_the_tree"
+
+# The third takes the rule out of the gate that says every module path in
+# prose names a module this tree has.
+swap xtask/src/lists.rs \
+    '        let code = code_lines_kept(&text);
+        for line in code.lines() {' \
+    '        let code = text.clone();
+        for line in code.lines() {'
+expect_catch "gate: the module gate reads the tree's source as text" \
+    "cargo test -p xtask --profile ci a_module_that_stands_only_in_a_string_is_not_a_module_of_the_tree"
+
+# The fourth out of the gate that says every limit in the model's table is
+# enforced somewhere in the tree.
+swap xtask/src/lists.rs \
+    'let body = if path == table { rest.clone() } else { code_lines_kept(&text) };' \
+    'let body = if path == table { rest.clone() } else { text.clone() };'
+expect_catch "gate: the limits gate reads the tree's strings as code" \
+    "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_enforced"
+
+# The fifth takes the newline out of a string continuation. A string written
+# across two lines is two lines of the file, and the tree's own
+# crates/io/src/format.rs has three of them.
+swap xtask/src/lists.rs \
+    "                out.push(if c == '\n' { '\n' } else { ' ' });
+                escaped = false;" \
+    "                out.push(' ');
+                escaped = false;"
+expect_catch "gate: a string continuation loses the line it ends" \
+    "cargo test -p xtask --profile ci a_gate_that_names_a_line_names_the_file_s_own_line"
+
+# The sixth takes the newlines out of a block comment, which moves every
+# line after it.
+swap xtask/src/lists.rs \
+    "            } else if c == '\n' {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_string {" \
+    "            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_string {"
+expect_catch "gate: a block comment loses the lines it covers" \
+    "cargo test -p xtask --profile ci a_gate_that_names_a_line_names_the_file_s_own_line"
+
+# And the seventh grows the tree a second reader, which is the thing the
+# one-reader check exists to stop.
+swap xtask/src/lists.rs \
+    'fn code_lines_kept(source: &str) -> String {' \
+    'fn a_second_code_reader(source: &str) -> String {
+    let mut in_string = false;
+    let mut out = String::new();
+    for c in source.chars() {
+        if c == char::from(34) {
+            in_string = !in_string;
+        }
+        out.push('"'"' '"'"');
+    }
+    out
+}
+
+fn code_lines_kept(source: &str) -> String {'
+expect_catch "gate: the tree grows a second code reader" \
+    "cargo test -p xtask --profile ci the_tree_has_one_code_reader"
 
 restore
 finish

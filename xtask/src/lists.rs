@@ -197,7 +197,7 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
             Some(at) => &text[..at],
             None => &text[..],
         };
-        if !code_only(production).contains("catch_unwind(") {
+        if !code_lines_kept(production).contains("catch_unwind(") {
             continue;
         }
         let relative = relative_name(root, &path);
@@ -768,9 +768,14 @@ fn looks_like_a_test_name(name: &str) -> bool {
 ///
 /// Any of the ways this tree defines things, so the check is about the name
 /// and not about how it is spelled.
+///
+/// The **code** of the source, not its text: a test that stands only inside a
+/// string literal or a comment is not a test the tree has, and a document
+/// that claims it is there is claiming something false. §149.
 pub fn defines(source: &str, name: &str) -> bool {
+    let code = code_lines_kept(source);
     for keyword in ["fn ", "struct ", "enum ", "const ", "static ", "mod ", "trait ", "type "] {
-        if source.contains(&format!("{keyword}{name}")) {
+        if code.contains(&format!("{keyword}{name}")) {
             return true;
         }
     }
@@ -890,11 +895,16 @@ fn is_known_module_root(
 /// Every `mod` in every Rust file, and every `pub use` of one: the tree's
 /// modules are file modules, so the name is what a reader of the prose would
 /// search for.
+///
+/// The **code** of each file, not its text: a `mod` line that stands only
+/// inside a string literal is not a module the tree has, and a document that
+/// names it is naming something that is not there. §149.
 fn tree_modules(root: &Path) -> std::collections::BTreeSet<String> {
     let mut modules = std::collections::BTreeSet::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        for line in text.lines() {
+        let code = code_lines_kept(&text);
+        for line in code.lines() {
             let trimmed = line.trim();
             for keyword in ["mod ", "pub mod ", "pub(crate) mod "] {
                 let Some(rest) = trimmed.strip_prefix(keyword) else { continue };
@@ -1037,7 +1047,7 @@ fn tree_types(root: &Path) -> std::collections::BTreeMap<String, BTreeSet<String
     let mut types: std::collections::BTreeMap<String, BTreeSet<String>> = std::collections::BTreeMap::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        collect_types_in(&strip_code(&text), &mut types);
+        collect_types_in(&code_lines_kept(&text), &mut types);
     }
     types
 }
@@ -1333,112 +1343,6 @@ fn collect_items(body: &str, members: &mut BTreeSet<String>) {
     }
 }
 
-/// The source with its strings, char literals and comments blanked out.
-///
-/// The same length as the input, so every offset still points at the same
-/// thing — which is what makes it usable for counting braces. A **lifetime**
-/// is not a char literal: `fn f<'a>(x: &'a str)` has one, and treating it as
-/// a literal would swallow the rest of the file.
-fn strip_code(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(text.len());
-    let mut at = 0usize;
-    while at < bytes.len() {
-        match bytes[at] {
-            b'/' if bytes.get(at + 1) == Some(&b'/') => {
-                while at < bytes.len() && bytes[at] != b'\n' {
-                    out.push(b' ');
-                    at += 1;
-                }
-            }
-            b'/' if bytes.get(at + 1) == Some(&b'*') => {
-                let mut depth = 0usize;
-                while at < bytes.len() {
-                    if bytes[at] == b'/' && bytes.get(at + 1) == Some(&b'*') {
-                        depth += 1;
-                        out.push(b' ');
-                        out.push(b' ');
-                        at += 2;
-                        continue;
-                    }
-                    if bytes[at] == b'*' && bytes.get(at + 1) == Some(&b'/') {
-                        depth -= 1;
-                        out.push(b' ');
-                        out.push(b' ');
-                        at += 2;
-                        if depth == 0 {
-                            break;
-                        }
-                        continue;
-                    }
-                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
-                    at += 1;
-                }
-            }
-            b'"' => {
-                out.push(b' ');
-                at += 1;
-                while at < bytes.len() {
-                    if bytes[at] == b'\\' {
-                        out.push(b' ');
-                        at += 1;
-                        if at < bytes.len() {
-                            out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
-                            at += 1;
-                        }
-                        continue;
-                    }
-                    if bytes[at] == b'"' {
-                        out.push(b' ');
-                        at += 1;
-                        break;
-                    }
-                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
-                    at += 1;
-                }
-            }
-            b'\'' => {
-                // A char literal, or a lifetime.
-                let literal = match bytes.get(at + 1) {
-                    Some(b'\\') => true,
-                    Some(_) => bytes.get(at + 2) == Some(&b'\''),
-                    None => false,
-                };
-                if !literal {
-                    out.push(b'\'');
-                    at += 1;
-                    continue;
-                }
-                out.push(b' ');
-                at += 1;
-                while at < bytes.len() {
-                    if bytes[at] == b'\\' {
-                        out.push(b' ');
-                        at += 1;
-                        if at < bytes.len() {
-                            out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
-                            at += 1;
-                        }
-                        continue;
-                    }
-                    if bytes[at] == b'\'' {
-                        out.push(b' ');
-                        at += 1;
-                        break;
-                    }
-                    out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
-                    at += 1;
-                }
-            }
-            byte => {
-                out.push(byte);
-                at += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// Every `Cargo.toml` in the tree, except the ones in a build directory.
 fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -1573,7 +1477,7 @@ pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Ve
     let mut problems = Vec::new();
     // The code, not the text: a cap that stands only inside a string literal
     // is not a cap. §148.
-    let code = code_only(&text);
+    let code = code_lines_kept(&text);
     let lines: Vec<&str> = code.lines().collect();
     let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_FILE_BYTES"))
     else {
@@ -1660,7 +1564,7 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
         };
         // The code, not the text: a budget that stands only inside a string
         // literal is not a budget. §148.
-        let code = code_only(&text);
+        let code = code_lines_kept(&text);
         let lines: Vec<&str> = code.lines().collect();
         let Some(index) =
             lines.iter().position(|l| l.trim_start().starts_with(&format!("pub const {constant}")))
@@ -1723,7 +1627,7 @@ pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>
     let mut problems = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        for name in byte_bounds(&code_only(&text)) {
+        for name in byte_bounds(&code_lines_kept(&text)) {
             if prose.contains(&name) {
                 continue;
             }
@@ -2572,12 +2476,27 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
-/// The source with its comments and its string contents blanked out, and
-/// every line kept.
+/// The source with its comments, its string contents and its char literals
+/// blanked out, and every line kept.
 ///
-/// `code_only` removes a block comment whole — newlines and all — so the line
-/// numbers of what is left are not the file's. This keeps them: a check that
-/// names a line has to name the **file's** line.
+/// This is the tree's **one** way to read code out of a file, and there is
+/// one because §149 measured what happens when there are three: the rule that
+/// a mention in a string is not code was written three times — as
+/// `code_only`, as `without_comments` and as `strip_code` — and the gates
+/// that read a *symbol* or a *module* used none of them, so a test that
+/// stood only inside a string satisfied a document's claim about it. A rule
+/// written three times is three chances to forget it.
+///
+/// Every line is kept, because a check that names a line has to name the
+/// **file's** line: dropping a block comment's newlines moved the line of
+/// every constant after it, and the gate that reported the line was wrong by
+/// the size of the comment.
+///
+/// A **char literal** is blanked too, because a brace inside one is not a
+/// brace: the scanner that reads a type's members counts braces, and a
+/// `'{'` in the source would open a body that is not there. A **lifetime**
+/// is not a char literal: `fn f<'a>(x: &'a str)` has one, and treating it as
+/// a literal would swallow the rest of the file.
 fn code_lines_kept(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut chars = source.chars().peekable();
@@ -2609,8 +2528,12 @@ fn code_lines_kept(source: &str) -> String {
         }
         if in_string {
             if escaped {
+                // A **continuation**: a backslash at the end of a line inside
+                // a string. The line it ends is still a line of the file, and
+                // a check that names a line has to name the file's line —
+                // the tree's own `crates/io/src/format.rs` has three of them.
+                out.push(if c == '\n' { '\n' } else { ' ' });
                 escaped = false;
-                out.push(' ');
                 continue;
             }
             match c {
@@ -2644,10 +2567,48 @@ fn code_lines_kept(source: &str) -> String {
                 out.push(' ');
                 out.push(' ');
             }
+            '\'' => {
+                // A char literal, or a lifetime.
+                if !opens_a_char_literal(&chars) {
+                    out.push('\'');
+                    continue;
+                }
+                out.push(' ');
+                while let Some(c) = chars.next() {
+                    if c == '\\' {
+                        out.push(' ');
+                        if let Some(next) = chars.next() {
+                            out.push(if next == '\n' { '\n' } else { ' ' });
+                        }
+                        continue;
+                    }
+                    if c == '\'' {
+                        out.push(' ');
+                        break;
+                    }
+                    out.push(if c == '\n' { '\n' } else { ' ' });
+                }
+            }
             _ => out.push(c),
         }
     }
     out
+}
+
+/// Whether the quote just read opens a char literal rather than a lifetime.
+///
+/// `'a'` is a literal and `'a` is a lifetime. The difference is the quote that
+/// closes it: a literal is one character — or an escape — between two quotes,
+/// and a lifetime is a name with no closing quote. The escape counts because
+/// `'\''` is three characters and `'a'` is one, and the two have to be told
+/// apart the same way.
+fn opens_a_char_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    let mut ahead = chars.clone();
+    match ahead.next() {
+        Some('\\') => true,
+        Some(_) => ahead.next() == Some('\''),
+        None => false,
+    }
 }
 
 /// Whether `code` contains `name` as a whole word.
@@ -4327,7 +4288,7 @@ fn constants_in(source: &str) -> Vec<(String, String)> {
     // literal is not a constant of the tree, and a fabricated one can mask a
     // real drift. The tree has the rule already — §78's `code_only` — and it
     // is applied here. §148.
-    let code = code_only(source);
+    let code = code_lines_kept(source);
     for line in code.lines() {
         let trimmed = line.trim();
         let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
@@ -4500,7 +4461,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let table = root.join("crates/model/src/lib.rs");
     let source =
         std::fs::read_to_string(&table).map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = without_comments(&source);
+    let code = code_lines_kept(&source);
     let Some((declared, rest)) = limits_table(&code) else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
@@ -4510,7 +4471,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let body = if path == table { rest.clone() } else { without_comments(&text) };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };
         for name in &declared {
             if body.contains(name.as_str()) && !used.contains(name) {
                 used.push(name.clone());
@@ -4557,97 +4518,6 @@ fn limits_table(code: &str) -> Option<(Vec<String>, String)> {
     let declared = constants_in(block).into_iter().map(|(name, _)| name).collect();
     let rest = format!("{}{}", &code[..open], &code[end..]);
     Some((declared, rest))
-}
-
-/// The code in a file, with the comments removed.
-///
-/// A limit that only a comment mentions is not enforced, so the check has to
-/// see code and not prose. A string is left alone: a `//` inside one is not
-/// a comment, and neither is a `//` in a URL.
-fn without_comments(source: &str) -> String {
-    let mut out = String::with_capacity(source.len());
-    let mut chars = source.chars().peekable();
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut in_block = false;
-    while let Some(c) = chars.next() {
-        if in_block {
-            if c == '*' && chars.peek() == Some(&'/') {
-                chars.next();
-                in_block = false;
-            }
-            continue;
-        }
-        if in_string {
-            out.push(c);
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-            continue;
-        }
-        match c {
-            '"' => {
-                in_string = true;
-                out.push(c);
-            }
-            '/' if chars.peek() == Some(&'/') => {
-                for c in chars.by_ref() {
-                    if c == '\n' {
-                        out.push('\n');
-                        break;
-                    }
-                }
-            }
-            '/' if chars.peek() == Some(&'*') => {
-                chars.next();
-                in_block = true;
-            }
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
-/// The code in a file, with the comments **and the string literals** removed.
-///
-/// A mention in a string is not a call: this file's own needle is one, and a
-/// check that flagged itself would be a check nobody trusts. §78.
-fn code_only(source: &str) -> String {
-    let without = without_comments(source);
-    let chars: Vec<char> = without.chars().collect();
-    let mut out = String::with_capacity(without.len());
-    let mut at = 0usize;
-    let mut in_string = false;
-    let mut escaped = false;
-    while at < chars.len() {
-        let c = chars[at];
-        at += 1;
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-            // A newline inside a string stays a newline: the gates that read
-            // a file's code report the line a thing is on, and a line number
-            // that moved is a line number that is wrong. §148.
-            out.push(if c == '\n' { '\n' } else { ' ' });
-            continue;
-        }
-        if c == '"' {
-            in_string = true;
-            out.push(' ');
-            continue;
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// A citation that names a test, and the line it points at.
@@ -5248,7 +5118,7 @@ pub fn fingerprint_sees_every_field(root: &Path) -> Result<Vec<String>, String> 
         let Shape::Named(fields) = shape else { continue };
         // Comments and strings are left out: a sentence about a field is not a
         // read of it.
-        let code = code_only(&body.join("\n"));
+        let code = code_lines_kept(&body.join("\n"));
         for field in fields {
             if !reads_field(&code, &receiver, &field) {
                 problems.push(format!(
@@ -5710,6 +5580,225 @@ mod tests {
         let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A symbol that stands only in a string is not a symbol of the tree.
+    ///
+    /// The gate that checks the claims prose makes about the tree's own files
+    /// read the file as **text**, so a test that stood only inside a string
+    /// literal satisfied a document's claim about it. Measured: the claim was
+    /// true when the test was in the code, true when it stood in a string,
+    /// true when it stood in a comment, and false — as it should be — only
+    /// when it was nowhere. §149.
+    #[test]
+    fn a_symbol_that_stands_only_in_a_string_is_not_a_symbol_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-symbol-string-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // The test the document claims is there, standing only in a string.
+        std::fs::write(core.join("lib.rs"), "const FABRICATED: &str = \"fn the_ghost_test() {}\";\n")
+            .expect("the fabricated source");
+        std::fs::write(
+            docs.join("claim.md"),
+            "The `the_ghost_test` test in `crates/core/src/lib.rs` checks it.\n",
+        )
+        .expect("the fabricated claim");
+
+        let problems = symbol_file_claims(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("the_ghost_test"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A symbol that stands only in a comment is not a symbol of the tree.
+    ///
+    /// The same gate, the other half of the rule: a comment is a sentence
+    /// about the code, and a sentence is not a test. §149.
+    #[test]
+    fn a_symbol_that_stands_only_in_a_comment_is_not_a_symbol_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-symbol-comment-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(core.join("lib.rs"), "// fn the_ghost_test() {}\n").expect("the fabricated source");
+        std::fs::write(
+            docs.join("claim.md"),
+            "The `the_ghost_test` test in `crates/core/src/lib.rs` checks it.\n",
+        )
+        .expect("the fabricated claim");
+
+        let problems = symbol_file_claims(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("the_ghost_test"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A module that stands only in a string is not a module of the tree.
+    ///
+    /// The gate that says every module path in prose names a module this tree
+    /// has read the tree's files as **text**, so a `mod` line that stood only
+    /// inside a string literal satisfied a document's claim about it. §149.
+    #[test]
+    fn a_module_that_stands_only_in_a_string_is_not_a_module_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-module-string-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // A `mod` line of its own, standing only inside a string: the shape
+        // the reader of the tree's *text* would have taken for a module.
+        std::fs::write(core.join("lib.rs"), "const FABRICATED: &str = \"\\\nmod ghostmod;\n\";\n")
+            .expect("the fabricated source");
+        std::fs::write(docs.join("claim.md"), "The `ghostmod::handle` entry point does the work.\n")
+            .expect("the fabricated claim");
+
+        let problems = unknown_module_paths(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("ghostmod"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A limit that stands only in a string is not enforced.
+    ///
+    /// The gate that says every limit in the model's table is enforced
+    /// somewhere read the tree's files with the comments taken out and the
+    /// strings **left in**, so a limit whose only mention was a string
+    /// counted as enforced. §149.
+    #[test]
+    fn a_limit_that_stands_only_in_a_string_is_not_enforced() {
+        let dir = std::env::temp_dir().join(format!("craftkit-limit-string-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n    /// A limit nothing uses.\n    pub const MAX_UNUSED: usize = 7;\n}\n",
+        )
+        .expect("the fabricated table");
+        // The limit's name, in a string and nowhere else.
+        std::fs::write(model.join("other.rs"), "const NOTE: &str = \"MAX_UNUSED\";\n")
+            .expect("the fabricated code");
+
+        let problems = limits_are_enforced(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_UNUSED"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A gate that names a line names the **file's** line.
+    ///
+    /// Three ways a reader can lose a line: a block comment, whose newlines
+    /// used to be dropped whole; a string continuation, whose newline used to
+    /// be blanked; and a line comment, which was always safe. The tree's own
+    /// `crates/io/src/format.rs` has three continuations, so the second of
+    /// those was not a shape but a fact. §149.
+    #[test]
+    fn a_gate_that_names_a_line_names_the_file_s_own_line() {
+        let dir = std::env::temp_dir().join(format!("craftkit-line-{}", std::process::id()));
+        let io = dir.join("crates/io/src");
+        std::fs::create_dir_all(&io).expect("the fabricated tree");
+        std::fs::write(
+            io.join("format.rs"),
+            "pub const FILE_EXPANSION: usize = 2;\n\
+             /*\n\
+              * A block comment.\n\
+              */\n\
+             const NOTE: &str = \"a string \\\n\
+             that continues\";\n\
+             // a line comment\n\
+             pub const MAX_FILE_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * 2;\n",
+        )
+        .expect("the fabricated source");
+
+        let problems = the_file_cap_is_derived_from_the_designs_budget(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        // The cap is on the eighth line of the file, and that is the line the
+        // gate has to name.
+        assert!(problems[0].contains("line 8"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree has one way to read code out of a file.
+    ///
+    /// The rule that a mention in a string is not code was written three
+    /// times — as `code_only`, as `without_comments` and as `strip_code` —
+    /// and the gates that read a symbol or a module used none of them, so a
+    /// test that stood only inside a string satisfied a document's claim
+    /// about it. Three copies of a rule is three chances to forget it, and
+    /// the tree forgot it in three places at once. §149.
+    ///
+    /// The marker is a reader, and a reader has two parts: it keeps track of
+    /// whether it is inside a string (`in_string`), and it **blanks** what is
+    /// inside one (`push(' ')`). The tree has two other scanners that skip
+    /// strings — `matching` and `arguments_of` — and neither blanks
+    /// anything, so the pair tells them apart. §149.
+    #[test]
+    fn the_tree_has_one_code_reader() {
+        let root = crate::root().expect("the workspace root");
+        let mut readers = Vec::new();
+        for name in
+            ["lib.rs", "assets.rs", "ci.rs", "doctor.rs", "layers.rs", "lists.rs", "wasm.rs", "web.rs"]
+        {
+            let path = root.join("xtask/src").join(name);
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            // The tests are not the production code, and this test's own
+            // marker is the very word it looks for.
+            let production = match text.find("\nmod tests {") {
+                Some(at) => &text[..at],
+                None => &text[..],
+            };
+            readers.extend(code_readers_in(production));
+        }
+        assert_eq!(readers, vec!["code_lines_kept".to_string()], "the tree reads code one way");
+    }
+
+    /// The functions in a source that read code out of a file, by name.
+    ///
+    /// A reader knows a string is not code — so it says `in_string` — and it
+    /// blanks what is inside one — so it says `push(' ')`. A scanner that only
+    /// *skips* a string says the first and not the second, and is not a
+    /// reader: it wants to know where the string ends, not what the code
+    /// around it says.
+    fn code_readers_in(source: &str) -> Vec<String> {
+        let mut readers = Vec::new();
+        let mut name = String::new();
+        let mut body = String::new();
+        let mut pending = String::new();
+        for line in source.lines() {
+            if line.starts_with("///") {
+                pending.push_str(line);
+                pending.push('\n');
+                continue;
+            }
+            let head = line.strip_prefix("pub ").unwrap_or(line);
+            if let Some(rest) = head.strip_prefix("fn ") {
+                if !name.is_empty() && is_a_code_reader(&body) {
+                    readers.push(name.clone());
+                }
+                name = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                body = std::mem::take(&mut pending);
+                continue;
+            }
+            if !name.is_empty() {
+                body.push_str(line);
+                body.push('\n');
+            }
+        }
+        if !name.is_empty() && is_a_code_reader(&body) {
+            readers.push(name);
+        }
+        readers
+    }
+
+    /// Whether a function's body reads code out of a source.
+    ///
+    /// The two halves of the rule: it tracks the strings, and it blanks
+    /// them. Either half alone is not enough — `matching` has the first, and
+    /// a function that pads a sentence with spaces has the second.
+    fn is_a_code_reader(body: &str) -> bool {
+        body.contains("in_string") && (body.contains("push(' ')") || body.contains("push(b' ')"))
     }
 
     /// The tree's own fingerprint: every field it hashes is a field the model
@@ -7176,7 +7265,7 @@ printf '%s%d/%d caught.%s\\n' \\
                       const CLOSE: char = '}';\n\
                       // a comment with a } in it\n\
                       pub fn quoted() -> &'static str { \"a } brace\" }\n";
-        let stripped = strip_code(source);
+        let stripped = code_lines_kept(source);
         // The braces inside the string and the char literals are gone, and the
         // lifetime is still a lifetime.
         assert!(!stripped.contains("'{'"), "{stripped}");
