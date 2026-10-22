@@ -18621,6 +18621,119 @@ named 19 257 characters of the file instead of the eighteen characters of
 the claim, and a report nobody can read is a report nobody reads.
 
 
+## 162. Two gates asked whether a name was in a file, and a longer name answered for it
+
+Item 37 asked for a claim's name to be matched as a name. Two gates ask
+whether a name is in a file, and both answered with a **text** test that a
+longer name satisfies.
+
+- `attributed_code_is_in_the_file` asks whether the method a document claims
+  is in that file, and it asked `code.contains(name)`. `observe` has `serve`
+  inside it, so a file with `pub fn observe(&mut self)` satisfied a claim
+  about `serve`.
+- `symbol_file_claims` asks whether the test a document claims is in that
+  file, and it asked `code.contains("fn " + name)`. `fn the_ghost_test_two`
+  has `fn the_ghost_test` inside it, so a file with that test satisfied a
+  claim about `the_ghost_test`.
+
+Both are false negatives of the same kind: **a gate that asks "is this name
+here?" and means "is there a word with this in it?"** accepts a claim that
+is false. Neither is a soundness problem for the tree's own documents —
+every claim the tree makes is true — but both gates are supposed to catch a
+document that is *wrong*, and both would have accepted it.
+
+### What was measured
+
+Against the real gates, on a copy of the tree, with the gates as they were
+before this section and with the fix in them. Every case has a control: the
+same tree with the name *really* absent, so a gate that said no to
+everything would pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | a document claims `Ghost::serve` is in `crates/core/src/ids.rs`, which has `pub fn observe(..)` and no `serve` | **green** — accepted | **red** — "says `Ghost::serve` is in `crates/core/src/ids.rs`, and it is not" | red, both |
+| B | a document claims the test `the_ghost_test` is in `crates/core/src/lib.rs`, which has `fn the_ghost_test_two()` and no `the_ghost_test` | **green** — accepted | **red** — "says `the_ghost_test` is in `crates/core/src/lib.rs`, and it is not" | red, both |
+
+Both were false negatives: the gate accepted a document that was wrong.
+
+### The fix
+
+**The tree already had the rule.** `has_word` — in the same file, used by
+the gate that derives the tree's parameter readers — asks exactly the
+question these two gates were asking badly: *is this name here, as a whole
+name?* The byte before it and the byte after it must both be something that
+is not part of an identifier, and the bytes are enough: an identifier's
+bytes are ASCII letters, digits and `_`, and a multi-byte character's bytes
+are all above that range, so a character is a boundary for free.
+
+Both gates use it now. `defines` keeps its keyword — a test is `fn <name>`,
+a type is `struct <name>` — and asks the same question about the whole
+`"fn <name>"`: the keyword supplies the left boundary and the name's
+right-hand side supplies the right one.
+
+**The first version of the fix wrote a second copy of the rule, and the
+pattern document says what that costs.** "A rule written three times is
+three chances to forget it" is the tree's own sentence about its code
+reader, and the tree has been bitten by that three times over. The copy is
+gone; the two gates ask the tree's one matcher.
+
+`has_word` also learned to refuse an empty name. It searches with `find`,
+which answers at every position for an empty needle, and it advances the
+cursor to the end of the match — so an empty name would have spun the
+search forever. Nothing in the tree asks it about an empty name today, and
+a gate that cannot finish is worse than a gate that is wrong.
+
+**Nothing the tree claims stopped being checked.** The tree's own documents
+make sixteen claims about a file's code and eleven about a file's test, and
+all twenty-seven still hold: the gate that checks them stayed green, and
+the tree's list of claims is in §161's section.
+
+### The unit tests
+
+Three, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_claim_satisfied_by_a_substring_is_not_satisfied` | a name inside a longer name does not satisfy a claim |
+| `a_test_satisfied_by_a_longer_name_is_not_satisfied` | a test that is only the prefix of another test's name does not satisfy a claim |
+| `an_empty_name_is_not_a_word` | an empty name is not a word, and the search does not spin on it |
+
+### The mutations
+
+Three, each putting the old rule back — with one exception, and the
+exception is worth naming.
+
+The third mutation does **not** take the empty-name guard out. Taking it
+out would leave the matcher searching for a needle that matches everywhere
+with a cursor that never moves, and the case would **hang** rather than
+fail: the mutation suite would run until its timeout and the run would be
+gone. A mutation that hangs the suite is worse than no mutation, so that
+case changes the guard's answer instead — *an empty name is a word* — which
+the test catches in a second. The rule the mutation protects is the same
+one; the way it is broken is the way that fails rather than hangs.
+
+### The lesson
+
+**§161 and §162 are the same rule twice, and the second half was invisible
+until the first was fixed.** §161 asked *where* a name is looked for — the
+code, not the text — and §162 asks *how* it is matched: as a whole name,
+not as a piece of one. A gate that reads the right part of a file and then
+matches what it finds the wrong way is still a gate that can be fooled, and
+the two halves hide each other: a substring test looks like it works until
+the tree has a word that starts with the name someone claimed.
+
+**A name is a name, and the test has to know where the name ends.** The
+byte before and the byte after are the whole of it. Everything else — the
+keyword, the owner, the `::` — is decoration on a name that either is in
+the file or is not.
+
+**Look for the rule before writing it.** The tree's whole-word matcher was
+there all along, in the same file, used by a gate three doors away. The
+first version of the fix wrote a second copy, and the only reason it was
+noticed is that the tree's own pattern document had already said what a
+second copy costs.
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19002,6 +19115,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A mention inside a string does not satisfy a claim** | the code view in `attributed_code_is_in_the_file` | 1 mutation — §161 |
 | **A variant inside a comment is not a variant** | the code view in `area_variants` | 1 mutation — §161 |
 | **A claim is about the file that follows it** | the direction in `attributed_code_is_in_the_file` | 1 mutation — §161 |
+| **A name inside a longer name does not satisfy a claim** | `has_word` in `attributed_code_is_in_the_file` | 1 mutation — §162 |
+| **A test that is only the prefix of another test's name is not it** | `has_word` in `defines` | 1 mutation — §162 |
+| **An empty name is not a word** | the guard in `has_word` | 1 mutation — §162 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -19735,19 +19851,26 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     treats a file under a `tests/` directory as a test file, the gates that
     walk the tree skip those directories, or the tree says a `tests/` file is
     production code and means it.
-37. **Match a claim's name as a name, not as a piece of a longer word.** The
-    gate that says the code a document claims is in a file asks whether the
-    method is in that file, and it answers with a **substring** test:
-    `code.contains(name)`. A name that appears only inside a longer
-    identifier satisfies the claim. Measured after §161: a document claiming
-    that `Ghost::serve` is in `crates/core/src/ids.rs` was **accepted** —
-    `ids.rs` has `pub fn observe(...)` and no `serve` — while the control,
-    with a name that is nowhere at all, was reported by both. The name has
-    to be matched as an identifier: preceded, and followed, by something that
-    is not part of one. (The tree already asks the question twice in two
-    places with two different rules: `defines` looks for `fn <name>`, which
-    matches `fn servex`, and this gate looks for `<name>`, which matches
-    `observe`. Neither asks whether the name is a name.)
+37. ~~**Match a claim's name as a name, not as a piece of a longer word.**~~
+    **Done, and it was two gates, not one.** The gate that says the code a
+    document claims is in a file asks whether the method is in that file, and
+    it answered with a **substring** test: `code.contains(name)`. A name
+    that appears only inside a longer identifier satisfies the claim.
+    Measured after §161: a document claiming that `Ghost::serve` is in
+    `crates/core/src/ids.rs` was **accepted** — `ids.rs` has
+    `pub fn observe(...)` and no `serve` — while the control, with a name
+    that is nowhere at all, was reported by both. **§162** fixed it, and
+    found the second gate while looking: `symbol_file_claims` asks whether
+    the test a document claims is in that file, and it asked
+    `code.contains("fn " + name)`, which `fn the_ghost_test_two` satisfies
+    for `the_ghost_test`. Both were measured, both were false negatives,
+    and both gates now ask the same question with the tree's own
+    `has_word` — which was there all along, and which the first version of
+    the fix failed to find and wrote a second copy of instead. The matcher
+    requires the byte before the name and the byte after it to be something
+    that is not part of one. Nothing the
+    tree's documents claim stopped being checked: its sixteen claims about
+    a file's code and its eleven about a file's test all still hold.
 38. **Put `Cargo.lock` in the mutation script's snapshot.** The script's
     `FILES` list is a contract — a mutation outside it is refused, because
     the script could not put it back — and `Cargo.lock` is not on it. One of

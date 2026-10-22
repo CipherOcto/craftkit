@@ -4362,5 +4362,53 @@ swap xtask/src/lists.rs \
 expect_catch "gate: a claim is paired with the file before it" \
     "cargo test -p xtask --profile ci a_claim_after_a_clause_boundary_is_not_about_the_file_before_it"
 
+# A name is not a piece of a longer name. Two gates ask whether a name is in
+# a file, and both answered with a text test that a longer name satisfies:
+# the claim gate with `code.contains(name)`, which `observe` satisfies for
+# `serve`, and the symbol gate with `code.contains("fn " + name)`, which
+# `fn the_ghost_test_two` satisfies for `the_ghost_test`. Measured, against
+# the real gates on a copy of the tree, with the gates as they were before
+# section 162 and with the fix in them:
+#
+#   * a document claiming that `Ghost::serve` is in `crates/core/src/ids.rs`
+#     was **accepted** -- a false negative. `ids.rs` has `pub fn observe(..)`
+#     and no `serve`. The control, with a name that is nowhere at all, was
+#     reported by both.
+#   * a document claiming that the test `the_ghost_test` is in
+#     `crates/core/src/lib.rs` was **accepted** -- a false negative. The file
+#     has `fn the_ghost_test_two()` and no `the_ghost_test`. The control, with
+#     the test nowhere at all, was reported by both.
+#
+# Section 162.
+swap xtask/src/lists.rs \
+    '                    Claim::Method(name) => has_word(&view, name),' \
+    '                    Claim::Method(name) => view.contains(name.as_str()),'
+expect_catch "gate: a claim is satisfied by a name inside a longer name" \
+    "cargo test -p xtask --profile ci a_claim_satisfied_by_a_substring_is_not_satisfied"
+
+swap xtask/src/lists.rs \
+    '        if has_word(&code, &format!("{keyword}{name}")) {' \
+    '        if code.contains(&format!("{keyword}{name}")) {'
+expect_catch "gate: a claimed test is satisfied by a longer test's name" \
+    "cargo test -p xtask --profile ci a_test_satisfied_by_a_longer_name_is_not_satisfied"
+
+# The matcher has to refuse an empty name, and it has to do so *quickly*:
+# it searches with `find`, which answers at every position for an empty
+# needle, and it advances its cursor to the end of the match, so an empty
+# name would have left the cursor where it was and the search would never
+# end. The mutation here is not "remove the guard" -- that would hang the
+# run rather than fail it, and a mutation that hangs the suite is worse
+# than no mutation -- but "call an empty name a word", which the test
+# catches in a second. Section 162.
+swap xtask/src/lists.rs \
+    '    if name.is_empty() {
+        return false;
+    }' \
+    '    if name.is_empty() {
+        return true;
+    }'
+expect_catch "gate: the matcher calls an empty name a word" \
+    "cargo test -p xtask --profile ci an_empty_name_is_not_a_word"
+
 restore
 finish

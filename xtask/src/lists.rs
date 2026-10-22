@@ -794,10 +794,13 @@ fn looks_like_a_test_name(name: &str) -> bool {
 /// The **code** of the source, not its text: a test that stands only inside a
 /// string literal or a comment is not a test the tree has, and a document
 /// that claims it is there is claiming something false. §149.
+///
+/// And the name is a **whole** name: `the_ghost_test_two` is not
+/// `the_ghost_test`. §162.
 pub fn defines(source: &str, name: &str) -> bool {
     let code = code_lines_kept(source);
     for keyword in ["fn ", "struct ", "enum ", "const ", "static ", "mod ", "trait ", "type "] {
-        if code.contains(&format!("{keyword}{name}")) {
+        if has_word(&code, &format!("{keyword}{name}")) {
             return true;
         }
     }
@@ -2871,6 +2874,11 @@ fn opens_a_char_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> boo
 /// A whole word, because `Evaluator` is not `Evaluators` and `evaluate_once`
 /// is not `evaluate_once_at`.
 fn has_word(code: &str, name: &str) -> bool {
+    // An empty name is not a word, and the search below would not move on:
+    // `find("")` answers at every position, and `at` would never advance.
+    if name.is_empty() {
+        return false;
+    }
     let bytes = code.as_bytes();
     let mut at = 0usize;
     while at < code.len() {
@@ -4416,7 +4424,9 @@ pub fn attributed_code_is_in_the_file(root: &Path) -> Result<Vec<String>, String
                 // 19 000 characters of the wrong thing. §161.
                 let view = code_lines_kept(&body);
                 let present = match &claim {
-                    Claim::Method(name) => view.contains(name.as_str()),
+                    // The name is a **whole** name: `observe` does not
+                    // contain `serve`. §162.
+                    Claim::Method(name) => has_word(&view, name),
                     Claim::Statement(line) => {
                         // The claim is blanked the same way the file is, so a
                         // statement with a string in it still matches the line
@@ -6740,6 +6750,63 @@ pub fn f() {}
 
         let count = area_variants(&dir).expect("the variants");
         assert_eq!(count, 1, "{count}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A name that stands only inside a longer name is not the name.
+    ///
+    /// The gate that says the code a document claims is in a file asks
+    /// whether the method is in that file, and it answered with a
+    /// **substring** test: `observe` has `serve` inside it. §162.
+    #[test]
+    fn a_claim_satisfied_by_a_substring_is_not_satisfied() {
+        let dir = std::env::temp_dir().join(format!("craftkit-claim-substring-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // `observe` has `serve` inside it, and the file has no `serve`.
+        std::fs::write(core.join("ids.rs"), "pub fn observe(&mut self) {}\n").expect("the fabricated code");
+        std::fs::write(docs.join("thing.md"), "The `Ghost::serve` lives in `crates/core/src/ids.rs`.\n")
+            .expect("the fabricated prose");
+
+        let problems = attributed_code_is_in_the_file(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("Ghost::serve"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An empty name is not a word, and the search must not spin on it.
+    ///
+    /// The matcher searches with `find`, which answers at every position for
+    /// an empty needle, and it advances its cursor to the end of the match —
+    /// so an empty name would have left the cursor where it was. §162.
+    #[test]
+    fn an_empty_name_is_not_a_word() {
+        assert!(!has_word("pub fn f() {}", ""), "an empty name is not a word");
+        assert!(!has_word("", ""), "an empty name is not a word");
+    }
+
+    /// A test whose name is only the prefix of another test's name is not it.
+    ///
+    /// The gate that says a test a document claims is in a file looks for
+    /// `fn <name>`, and the prefix matched `fn <name>_two` as well. §162.
+    #[test]
+    fn a_test_satisfied_by_a_longer_name_is_not_satisfied() {
+        let dir = std::env::temp_dir().join(format!("craftkit-test-longer-name-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        // `the_ghost_test_two` is not `the_ghost_test`.
+        std::fs::write(core.join("lib.rs"), "pub fn real() {}\n\n#[test]\nfn the_ghost_test_two() {}\n")
+            .expect("the fabricated code");
+        std::fs::write(docs.join("thing.md"), "The `the_ghost_test` test is in `crates/core/src/lib.rs`.\n")
+            .expect("the fabricated prose");
+
+        let problems = symbol_file_claims(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("the_ghost_test"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -258,6 +258,36 @@ reporting about, and the message printed nineteen thousand characters of the
 file instead of the eighteen characters of the claim. A report nobody can
 read is a report nobody reads.
 
+## And a name is a whole name
+
+Reading the right part of a file is only half of it. A gate that asks "is
+this name in this file?" has to know **where the name ends**, and the two
+gates that ask it did not:
+
+- the claim gate asked `code.contains(name)`, and `observe` has `serve`
+  inside it;
+- the symbol gate asked `code.contains("fn " + name)`, and
+  `fn the_ghost_test_two` has `fn the_ghost_test` inside it.
+
+Both accepted a document that was wrong. The rule is the same as the one
+the reader obeys, applied to the name instead of the file: **a name is a
+whole name**, so the byte before it and the byte after it must both be
+something that is not part of one.
+
+The tree already had that rule, in the same file: `has_word`, used by the
+gate that derives the tree's parameter readers. The two gates above now ask
+it, and the pattern holds — one helper, one rule.
+
+```rust
+fn has_word(code: &str, name: &str) -> bool {
+    // the byte before and the byte after must not be part of an identifier
+}
+```
+
+The bytes are enough: an identifier's bytes are ASCII letters, digits and
+`_`, and a multi-byte character's bytes are all above that range, so a
+character is a boundary for free. §162.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -371,6 +401,12 @@ let code = code_lines_kept(&text);
   comment is not a variant.
 - `a_claim_after_a_clause_boundary_is_not_about_the_file_before_it` — a
   claim is about the file that follows it, not the one before it.
+- `a_claim_satisfied_by_a_substring_is_not_satisfied` — a name inside a
+  longer name does not satisfy a claim.
+- `a_test_satisfied_by_a_longer_name_is_not_satisfied` — a test that is
+  only the prefix of another test's name is not it.
+- `an_empty_name_is_not_a_word` — an empty name is not a word, and the
+  matcher does not spin on it.
 
 ## See also
 
