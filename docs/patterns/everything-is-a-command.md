@@ -33,7 +33,22 @@ pub struct CommandSpec {
     pub enabled: fn(&Session) -> bool,
     pub run: fn(&mut Session, &Params<'_>) -> Result<Outcome, EngineError>,
 }
+
+pub enum Area {
+    Document,
+    Node,
+    Property,
+    Keyframes,
+    Playback,
+    History,
+    Debug,
+}
 ```
+
+`Area` is the whole vocabulary of where a command can appear, and it is an
+enum because the set is closed: a new area is a change to the enum, and the
+compiler says so. `Debug` is in it because the cross-cutting commands belong
+to no panel, and they are still commands.
 
 Three fields do the load-bearing work:
 

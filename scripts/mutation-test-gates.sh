@@ -120,6 +120,7 @@ readonly FILES=(
     docs/design/file-format.md
     docs/patterns/clone-before-edit.md
     docs/patterns/everything-is-a-command.md
+    docs/patterns/exact-time-not-float-seconds.md
     docs/agent-playbook.md
     AGENTS.md
     README.md
@@ -3675,6 +3676,55 @@ swap docs/patterns/clone-before-edit.md \
     '`craftkit_engine::history::HISTORY_EXPANSION` — not to raise `MAX_ENTRIES`,' \
     '`craftkit_engine::history::HISTORY_EXPANSION` and add a size cap — not to raise `MAX_ENTRIES`,'
 expect_catch "prose: the pattern tells a reader to add a size cap" \
+    "cargo xtask lists"
+
+# The gate that compares an exact block with the code it names read
+# functions, structs and statics, and nothing else. The tree's time pattern
+# quotes a const in an exact block, and that const was invisible to the gate:
+# measured, the source could change the number and the document could say any
+# number at all, and the gate stayed green. An enum was worse in both
+# directions -- quoted beside other code it was not compared, and quoted on
+# its own it was reported as "quotes no code", which is a false alarm against
+# a correct document. Section 146.
+#
+# The first mutation changes the number the document quotes. The gate has to
+# notice that the document is no longer the code.
+swap docs/patterns/exact-time-not-float-seconds.md \
+    'pub const TICKS_PER_SECOND: i128 = 254_016_000_000;' \
+    'pub const TICKS_PER_SECOND: i128 = 254_016_000_001;'
+expect_catch "prose: a const in an exact block drifts" \
+    "cargo xtask lists"
+
+# The second changes the enum the pattern quotes, the way a variant is added
+# to the source and the document is not told.
+swap docs/patterns/everything-is-a-command.md \
+    '    Playback,
+    History,
+    Debug,
+}' \
+    '    Playback,
+    History,
+    Debug,
+    Audio,
+}'
+expect_catch "prose: an enum in an exact block drifts" \
+    "cargo xtask lists"
+
+# And the third quotes something the gate cannot compare. A block marked
+# `exact` promises that it is the code in the file, so an item the gate does
+# not compare has to be reported by name -- not passed over in silence.
+swap docs/patterns/everything-is-a-command.md \
+    'pub enum Area {
+    Document,' \
+    'impl Area {
+    pub fn key(self) -> &'"'"'static str {
+        "area"
+    }
+}
+
+pub enum Area {
+    Document,'
+expect_catch "prose: an exact block quotes something the gate cannot compare" \
     "cargo xtask lists"
 
 restore

@@ -16763,6 +16763,156 @@ after it as if they meant something. That guard is why a stale anchor is a
 void run and not a false green, and it is the reason the suite is trusted to
 answer "does anything notice".
 
+## 146. The gate that compares an exact block with the code read three kinds of item, and the tree quotes a fourth
+
+### The measurement
+
+A block marked `exact` in one of the tree's documents promises two things: that
+it is the code in the file it names, and that it has been checked against it.
+The gate that keeps that promise is `quoted_code_matches_the_source` in
+`xtask/src/lists.rs`. §75 wrote it for structs, §140 extended it to statics,
+and §140 left the general problem written down:
+
+> The gate that compares code has to know every shape of code.
+
+It knew three. `functions_in` read the functions of a block, `structs_in` the
+structs, `statics_in` the statics. Everything else in a block was invisible.
+
+**The tree quotes a fourth shape today.** `docs/patterns/exact-time-not-float-seconds.md`
+has an exact block, and the block holds two items:
+
+```text
+// crates/core/src/tick.rs
+pub const TICKS_PER_SECOND: i128 = 254_016_000_000;
+
+pub struct Tick(i128);
+```
+
+The struct was compared. **The const was not.** Measured, against the gate
+itself on a copy of the tree:
+
+| Mutation | What changed | The gate said |
+|---|---|---|
+| M1 | the source's `TICKS_PER_SECOND` changed | **green** — 0 problems |
+| M2 | the document's quoted `TICKS_PER_SECOND` changed | **green** — 0 problems |
+| M3 | an exact block that quotes an enum and nothing else | **red** — *"quotes no code"* |
+| M4 | an exact block that quotes an enum beside a function, and the source's enum grew a variant | **green** — 0 problems |
+
+M1 and M2 are the hole: the document may quote any number at all and the gate
+is satisfied, because the number is not in a shape it reads. M3 is the other
+side of the same hole, and it is worse in a different way: a block that quotes
+an enum — **correctly**, exactly as the file has it — is reported as broken.
+The gate told a maintainer that a true statement was false.
+
+M4 is M1 and M3 together: an enum quoted beside other code is neither compared
+nor reported. It is passed as checked.
+
+**The shapes are not hypothetical.** `Method`, the control channel's whole
+vocabulary, is an enum; §143's defect was a variant of one. `Area`, the
+toolbar's vocabulary, is an enum. `Doc`, `Value`, `EngineError` and `Icon`
+are enums. The tree's own documents quote the enum `Area` and the constant
+`TICKS_PER_SECOND` — and §143 had already noticed that the gate "still does
+not compare enums".
+
+### Why nothing noticed
+
+**The gate reported the shapes it did not know as if they were not code.** The
+message *"the block at line N is marked exact but quotes no code"* is the
+gate's way of saying *I found nothing here*. For a block of prose it is right.
+For a block of an enum it is a false alarm, and a false alarm is the kind of
+failure that teaches people to ignore a check.
+
+**A block that quotes something the gate cannot compare was passed as
+checked.** The gate did not know what it was not looking at, so it had nothing
+to say about it. There was no way to write *"I did not compare this"* — the
+answer was a `Vec<String>` of problems, and the absence of a problem was the
+absence of a claim.
+
+**A gate that compares three shapes reads as a gate that compares code.** The
+gate's own summary line in `cargo xtask lists` says *"every exact block quotes
+the code it claims to"*, and the test it is backed by — `a_quoted_struct_that_drifted_is_caught`
+— is about structs. Nothing in the tree said "the shapes it knows are functions,
+structs and statics", because that is the kind of limit that lives in the
+implementation and not in a sentence.
+
+### The fix
+
+**One classifier, used by both the comparators and the report.** `item_head`
+reads a line and says what kind of item it starts — `fn`, `struct`, `enum`,
+`static`, `const`, `trait`, `type`, `use`, `impl`, `mod`, `macro_rules!` — and
+`item_name` reads the name and what follows it. Both the comparison and the
+"not compared" report go through them, so they cannot disagree: a kind no
+comparator handles is a kind the report names.
+
+**Every kind is either compared or reported.**
+
+| Kind | What the gate does with it |
+|---|---|
+| `fn`, `static` | compared line for line (§75, §140) |
+| `const`, `type` | compared line for line — the statement runs to its `;` |
+| `enum`, `trait` | compared line for line — the body runs to its `}` |
+| `struct` | compared as its fields (§75) |
+| `use` | the source has to contain that declaration |
+| `impl`, `mod`, `macro_rules!` | **reported by name** — this check does not compare them |
+
+The last row is the point. A block marked `exact` promises that it is the code
+in the file; an item the gate cannot compare takes the promise away, so the
+gate says so instead of passing the block as checked. *"the block at line 37
+quotes a `impl`, which this check does not compare"* is a true statement about
+a document that is not fully checked, and it tells the reader what to do.
+
+**The tree's documents now exercise the new shapes.** The pattern document
+*everything is a command* quotes `Area` in its exact block, because the enum is
+the toolbar's vocabulary and the block already said `pub area: Area`. The time
+pattern's const was already quoted and is now compared.
+
+**Five unit tests**, in the same fabricated-tree style as §75's:
+
+| Test | What it holds |
+|---|---|
+| `a_quoted_const_that_drifted_is_caught` | a const's number may not drift |
+| `a_quoted_enum_that_drifted_is_caught` | an enum's variants may not drift |
+| `a_block_that_quotes_an_enum_is_not_a_false_alarm` | a correct enum block is not "no code" |
+| `an_item_the_gate_cannot_compare_is_reported_by_name` | an `impl` is named, not skipped |
+| `a_quoted_use_the_source_does_not_have_is_caught` | a declaration the source lacks is caught |
+
+**Three mutations**, in `scripts/mutation-test-gates.sh`:
+
+- *"prose: a const in an exact block drifts"* — the document's `TICKS_PER_SECOND`
+  changes, and `cargo xtask lists` has to notice that the document is no longer
+  the code.
+- *"prose: an enum in an exact block drifts"* — the pattern's `Area` grows a
+  variant the source does not have.
+- *"prose: an exact block quotes something the gate cannot compare"* — an `impl`
+  is put in the block, and the gate has to name it.
+
+Measured after the fix, on the same copy of the tree: M1 red, M2 red, M3
+green, M4 red, and M5 — the `impl` — red with the name in the message.
+
+### The lesson
+
+**A gate that covers half of a path shape is a gate that looks complete.**
+§130's module-path gate checked `a::b` and said, in its own comment, that a
+type path was "not this check's business". §143 was that business. §146 is
+the same mistake in the same place: the gate knew three shapes of code and
+said nothing about the rest, and the tree's own documents quoted a fourth.
+
+**A gate that cannot say "I did not check this" will pass things it did not
+check.** The absence of a problem was the absence of a claim, and a claim has
+to be answerable. The `Vec<String>` of problems could not hold "I did not
+compare this", so the fix was to make the gate know every shape it might meet
+and to name the ones it cannot compare.
+
+**A false alarm is not a smaller defect than a missed one.** M3 — a correct
+block reported as broken — would have cost more than M1, because a gate that
+calls correct documents broken is a gate people stop reading.
+
+**The tree's own documents are the test corpus, and they had the shape in them
+all along.** `TICKS_PER_SECOND` was quoted in an exact block from §52 onwards;
+`Area` was quoted nowhere, but `Method` is the control channel's whole
+vocabulary and §143 had already been bitten by one of its variants. The gate
+was tested against structs because structs were what the first recipe quoted.
+
 ---
 
 ---
@@ -16811,6 +16961,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The CLI's help lists every subcommand** | `the_help_lists_every_subcommand_the_parser_accepts` | 1 mutation — §38 |
 | **A symbol claimed to be in a file is in it** | `symbol_file_claims` | 1 mutation — §39 |
 | **An exact block quotes the code it claims to — functions, structs and statics** | `quoted_code_matches_the_source` | 4 mutations — §40, §75, §140 |
+| **An exact block quotes the code it claims to — consts, enums, traits and type aliases too** | `quoted_code_matches_the_source` | 2 mutations — §146 |
+| **An exact block that quotes something the gate cannot compare is named** | `quoted_code_matches_the_source` | 1 mutation — §146 |
 | **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
 | **Code prose attributes to a file is in that file** | `attributed_code_is_in_the_file` | 2 mutations — §42 |
@@ -17729,4 +17881,24 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     quotes an enum is reported as *"quotes no code"*, so nothing may quote
     one. The work is small — the variant names, in order, the way a struct's
     fields are compared — and §140's lesson applies directly: *"The gate that
-    compares code has to know every shape of code."*
+    compares code has to know every shape of code."* **Closed by §146**: the
+    gate now reads consts, enums, traits and type aliases as well, compares a
+    `use` against the file it names, and reports the kinds it cannot compare
+    (`impl`, `mod`, `macro_rules!`) by name instead of passing them as checked.
+    Measured before the fix: the tree's own `TICKS_PER_SECOND` quote was
+    invisible to the gate, and an enum-only block was reported as broken.
+29. **Decide what the command trace may cost, and derive it from something.**
+    §144 derived the history's budget and the session's from the model's
+    budget and left two alone. The trace's memory budget is
+    `craftkit_engine::MAX_TRACE_MEMORY_BYTES` — **8 MiB**, a literal — and the
+    trace's *text* budget is that over the JSON expansion, **256 KiB**
+    (`MAX_TRACE_BYTES`). Nothing in the tree says what the number buys, and it
+    is the one budget that does not scale with the model the way the others
+    do: the trace holds the **commands** that led to the design, not the
+    design, so a session at the model's limit and a session with a tiny design
+    have the same trace. The choices are: derive the trace's budget from the
+    model's budget the way §144 derived the other two, scale it by the design
+    the trace belongs to, or keep the literal and write down what it is for.
+    The trace's own cap is not the whole story: §64 recorded that the crash
+    replay's cost is quadratic in the number of steps, so a bigger trace buys
+    a slower replay.

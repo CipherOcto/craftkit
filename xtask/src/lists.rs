@@ -3493,56 +3493,29 @@ pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String
                 ));
                 continue;
             };
-            let quoted = functions_in(&block);
-            let structs = structs_in(&block);
-            let statics = statics_in(&block);
-            if quoted.is_empty() && structs.is_empty() && statics.is_empty() {
+            let quotes = quotes_in(&block);
+            if quotes.compared.is_empty() && quotes.uses.is_empty() && quotes.incomparable.is_empty() {
                 problems.push(format!(
                     "{relative}: the block at line {number} is marked exact but quotes no code"
                 ));
                 continue;
             }
-            for (name, lines) in quoted {
-                match function_in(&code, &name) {
-                    None => problems.push(format!(
-                        "{relative}: the block at line {number} quotes `{name}`, and {source} has no function of that name"
-                    )),
-                    Some(original) if original == lines => {}
-                    Some(original) => problems.push(format!(
-                        "{relative}: the block at line {number} quotes `{name}`, and it is not the one in {source}\n     \
-                         the document says:\n{}\n     the file says:\n{}",
-                        indent(&lines),
-                        indent(&original)
-                    )),
+            for item in quotes.compared {
+                problems.extend(compare_item(&relative, number, &source, &code, item));
+            }
+            for (index, statement) in quotes.uses {
+                if !code.lines().any(|line| line.trim() == statement) {
+                    problems.push(format!(
+                        "{relative}: the block at line {} uses `{statement}`, and {source} does not have it",
+                        number + 1 + index
+                    ));
                 }
             }
-            for (name, fields) in structs {
-                match struct_in(&code, &name) {
-                    None => problems.push(format!(
-                        "{relative}: the block at line {number} quotes the struct `{name}`, and {source} has no struct of that name"
-                    )),
-                    Some(original) if original == fields => {}
-                    Some(original) => problems.push(format!(
-                        "{relative}: the block at line {number} quotes the struct `{name}`, and it is not the one in {source}\n     \
-                         the document says:\n{}\n     the file says:\n{}",
-                        indent(&fields.iter().map(|(n, t)| format!("{n}: {t}")).collect::<Vec<_>>()),
-                        indent(&original.iter().map(|(n, t)| format!("{n}: {t}")).collect::<Vec<_>>())
-                    )),
-                }
-            }
-            for (name, lines) in statics {
-                match static_in(&code, &name) {
-                    None => problems.push(format!(
-                        "{relative}: the block at line {number} quotes `{name}`, and {source} has no static of that name"
-                    )),
-                    Some(original) if original == lines => {}
-                    Some(original) => problems.push(format!(
-                        "{relative}: the block at line {number} quotes `{name}`, and it is not the one in {source}\n     \
-                         the document says:\n{}\n     the file says:\n{}",
-                        indent(&lines),
-                        indent(&original)
-                    )),
-                }
+            for (index, kind) in quotes.incomparable {
+                problems.push(format!(
+                    "{relative}: the block at line {} quotes a `{kind}`, which this check does not compare",
+                    number + 1 + index
+                ));
             }
         }
     }
@@ -3550,38 +3523,256 @@ pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String
     Ok(problems)
 }
 
-/// The statics a block quotes, as (name, lines).
+/// An item an `exact` block quotes.
+///
+/// Every kind the gate can compare is one of these, and nothing else is: an
+/// item it cannot compare is reported by name rather than skipped, because a
+/// block marked `exact` promises that it is the code in the file. §146.
+enum Quoted {
+    /// An item compared line for line: a function, a static, a const, an
+    /// enum, a trait or a type alias.
+    Lines { kind: &'static str, name: String, lines: Vec<String> },
+    /// A struct, compared as its fields.
+    Fields { name: String, fields: Vec<(String, String)> },
+}
+
+/// What an `exact` block quotes, and what the gate does with each item.
+struct Quotes {
+    /// The items the gate compares with the source.
+    compared: Vec<Quoted>,
+    /// The `use` declarations the block holds, as (index in the block, text).
+    uses: Vec<(usize, String)>,
+    /// The items the gate cannot compare, as (index in the block, kind).
+    incomparable: Vec<(usize, &'static str)>,
+}
+
+/// The kinds of Rust item a block can start.
+///
+/// The list is what the gate *recognises*, so it is kept to the kinds the
+/// tree's documents quote or would quote next. A kind that is not here is not
+/// seen at all — which is why `impl`, `mod` and `macro_rules!` are here even
+/// though they are not compared: they are reported instead.
+const ITEM_KINDS: &[&str] =
+    &["fn", "struct", "enum", "static", "const", "trait", "type", "use", "impl", "mod", "macro_rules!"];
+
+/// What the gate does with a kind of item.
+enum Comparison {
+    /// Compared line for line.
+    Lines,
+    /// Compared as its fields.
+    Fields,
+    /// A declaration the source has to contain.
+    Context,
+    /// Not compared: reported by name.
+    Incomparable,
+}
+
+/// What the gate does with a kind of item.
+fn comparison_of(kind: &str) -> Comparison {
+    match kind {
+        "fn" | "static" | "const" | "enum" | "trait" | "type" => Comparison::Lines,
+        "struct" => Comparison::Fields,
+        "use" => Comparison::Context,
+        _ => Comparison::Incomparable,
+    }
+}
+
+/// The item a line starts, as (kind, the rest of the line).
+///
+/// One classifier for the comparators and for the "not compared" report, so
+/// the two cannot disagree: a kind no comparator handles is a kind the
+/// report names. §146.
+fn item_head(line: &str) -> Option<(&'static str, &str)> {
+    let rest = after_visibility(line.trim())?;
+    let rest = rest.strip_prefix("unsafe ").unwrap_or(rest);
+    let rest = rest.strip_prefix("async ").unwrap_or(rest);
+    for kind in ITEM_KINDS {
+        let Some(tail) = rest.strip_prefix(*kind) else { continue };
+        if !tail.starts_with(' ') && !tail.starts_with('\t') {
+            continue;
+        }
+        return Some((kind, tail.trim_start()));
+    }
+    None
+}
+
+/// The name of an item and what follows it, as (name, rest).
+fn item_name<'a>(kind: &str, tail: &'a str) -> Option<(String, &'a str)> {
+    if kind == "use" {
+        return None;
+    }
+    if kind == "static" && tail.starts_with("mut ") {
+        return None;
+    }
+    let end = tail
+        .char_indices()
+        .find(|(_, c)| !(c.is_alphanumeric() || *c == '_'))
+        .map(|(at, _)| at)
+        .unwrap_or(tail.len());
+    if end == 0 {
+        return None;
+    }
+    Some((tail[..end].to_string(), tail[end..].trim_start()))
+}
+
+/// What an `exact` block quotes.
+///
+/// Only items at the left margin: a nested item is part of the item around
+/// it, and the item around it is compared whole.
+fn quotes_in(block: &[String]) -> Quotes {
+    let mut quotes = Quotes { compared: Vec::new(), uses: Vec::new(), incomparable: Vec::new() };
+    for (index, line) in block.iter().enumerate() {
+        if !at_left_margin(line) {
+            continue;
+        }
+        let Some((kind, tail)) = item_head(line) else { continue };
+        match comparison_of(kind) {
+            Comparison::Lines => {
+                let Some((name, _)) = item_name(kind, tail) else { continue };
+                quotes.compared.push(Quoted::Lines { kind, name, lines: item_lines(block, index, kind) });
+            }
+            Comparison::Fields => {
+                let Some((name, rest)) = item_name(kind, tail) else { continue };
+                if rest.starts_with('{') {
+                    quotes.compared.push(Quoted::Fields { name, fields: struct_fields(&block[index..]) });
+                } else if let Some(types) = tuple_fields(rest) {
+                    quotes.compared.push(Quoted::Fields { name, fields: types });
+                }
+            }
+            Comparison::Context => quotes.uses.push((index, line.trim().to_string())),
+            Comparison::Incomparable => quotes.incomparable.push((index, kind)),
+        }
+    }
+    quotes
+}
+
+/// Compare one quoted item with the one in the source.
+fn compare_item(relative: &str, number: usize, source: &str, code: &str, item: Quoted) -> Vec<String> {
+    match item {
+        Quoted::Lines { kind, name, lines } => match item_in(code, kind, &name) {
+            None => vec![format!(
+                "{relative}: the block at line {number} quotes `{name}`, and {source} has no {kind} of that name"
+            )],
+            Some(original) if original == lines => Vec::new(),
+            Some(original) => vec![format!(
+                "{relative}: the block at line {number} quotes `{name}`, and it is not the one in {source}\n     \
+                 the document says:\n{}\n     the file says:\n{}",
+                indent(&lines),
+                indent(&original)
+            )],
+        },
+        Quoted::Fields { name, fields } => match struct_in(code, &name) {
+            None => vec![format!(
+                "{relative}: the block at line {number} quotes the struct `{name}`, and {source} has no struct of that name"
+            )],
+            Some(original) if original == fields => Vec::new(),
+            Some(original) => vec![format!(
+                "{relative}: the block at line {number} quotes the struct `{name}`, and it is not the one in {source}\n     \
+                 the document says:\n{}\n     the file says:\n{}",
+                indent(&fields.iter().map(|(n, t)| format!("{n}: {t}")).collect::<Vec<_>>()),
+                indent(&original.iter().map(|(n, t)| format!("{n}: {t}")).collect::<Vec<_>>())
+            )],
+        },
+    }
+}
+
+/// An item in `code`, by kind and name.
+///
+/// The source is searched at any depth: a method is quoted from inside the
+/// `impl` block that holds it, and the quote is written flat.
+fn item_in(code: &str, kind: &str, name: &str) -> Option<Vec<String>> {
+    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
+    let index = lines.iter().position(|line| {
+        let Some((found, tail)) = item_head(line) else { return false };
+        if found != kind {
+            return false;
+        }
+        item_name(kind, tail).is_some_and(|(found, _)| found == name)
+    })?;
+    Some(item_lines(&lines, index, kind))
+}
+
+/// The lines of an item, from its first line to the one that ends it.
+fn item_lines(lines: &[String], start: usize, kind: &str) -> Vec<String> {
+    match kind {
+        "fn" => function_lines(lines, start),
+        "static" => static_lines(lines, start),
+        "const" | "type" => const_lines(lines, start),
+        "enum" | "trait" => braced_lines(lines, start),
+        _ => vec![lines[start].trim().to_string()],
+    }
+}
+
+/// The lines of a braced item, from its first line to the `}` that closes it.
+fn braced_lines(lines: &[String], start: usize) -> Vec<String> {
+    let indent = indent_of(&lines[start]);
+    let mut out = vec![lines[start].trim().to_string()];
+    for line in &lines[start + 1..] {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        out.push(trimmed.to_string());
+        if trimmed == "}" && indent_of(line) == indent {
+            break;
+        }
+    }
+    out
+}
+
+/// The lines of a statement, from its first line to the `;` that ends it.
+///
+/// A const or a type alias may hold its value over several lines, so the
+/// statement ends at the semicolon and not at the end of the first line.
+fn const_lines(lines: &[String], start: usize) -> Vec<String> {
+    let indent = indent_of(&lines[start]);
+    let mut out = vec![lines[start].trim().to_string()];
+    if lines[start].trim_end().ends_with(';') {
+        return out;
+    }
+    let mut depth = bracket_depth(&lines[start]);
+    for line in &lines[start + 1..] {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        depth += bracket_depth(trimmed);
+        out.push(trimmed.to_string());
+        if depth <= 0 && trimmed.ends_with(';') && indent_of(line) == indent {
+            break;
+        }
+    }
+    out
+}
+
+/// How many brackets a line opens beyond the ones it closes.
+fn bracket_depth(line: &str) -> i32 {
+    let mut depth = 0;
+    for ch in line.chars() {
+        match ch {
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            _ => {}
+        }
+    }
+    depth
+}
+
+/// How far a line is indented.
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Whether a line starts at the left margin, where an item starts.
+fn at_left_margin(line: &str) -> bool {
+    !line.is_empty() && !line.starts_with(' ') && !line.starts_with('\t')
+}
+
+/// The lines of a static, from its `static` line to the `};` that closes it.
 ///
 /// A static is quoted **whole**: the recipe for adding a command shows the
 /// command, and a command that is one field out of date is a command that
 /// does not compile. §140.
-fn statics_in(block: &[String]) -> Vec<(String, Vec<String>)> {
-    let mut found = Vec::new();
-    for (index, line) in block.iter().enumerate() {
-        let Some(rest) = after_visibility(line.trim()) else { continue };
-        let Some(rest) = rest.strip_prefix("static ") else { continue };
-        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        if name.is_empty() {
-            continue;
-        }
-        found.push((name, static_lines(block, index)));
-    }
-    found
-}
-
-/// A static in `code`, by name.
-fn static_in(code: &str, name: &str) -> Option<Vec<String>> {
-    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
-    let index = lines.iter().position(|line| {
-        let Some(rest) = after_visibility(line.trim()) else { return false };
-        let Some(rest) = rest.strip_prefix("static ") else { return false };
-        let found: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        found == name
-    })?;
-    Some(static_lines(&lines, index))
-}
-
-/// The lines of a static, from its `static` line to the `};` that closes it.
 fn static_lines(lines: &[String], start: usize) -> Vec<String> {
     let indent = lines[start].len() - lines[start].trim_start().len();
     let mut out = vec![lines[start].trim().to_string()];
@@ -3598,30 +3789,6 @@ fn static_lines(lines: &[String], start: usize) -> Vec<String> {
         out.push(trimmed.to_string());
     }
     out
-}
-
-/// The structs a block quotes, as (name, fields).
-///
-/// Only a **braced** struct: a tuple struct has no fields to compare, and an
-/// enum's variants are a different shape (and are usually quoted with
-/// elisions in them, which is exactly what the `exact` marker forbids).
-fn structs_in(block: &[String]) -> Vec<(String, Vec<(String, String)>)> {
-    let mut found = Vec::new();
-    for (index, line) in block.iter().enumerate() {
-        let Some(rest) = after_visibility(line.trim()) else { continue };
-        let Some(rest) = rest.strip_prefix("struct ") else { continue };
-        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        if name.is_empty() {
-            continue;
-        }
-        let tail = rest[name.len()..].trim_start();
-        if tail.starts_with('{') {
-            found.push((name, struct_fields(&block[index..])));
-        } else if let Some(types) = tuple_fields(tail) {
-            found.push((name, types));
-        }
-    }
-    found
 }
 
 /// The types of a tuple struct, in order: (position, type).
@@ -3666,23 +3833,19 @@ fn struct_fields(lines: &[String]) -> Vec<(String, String)> {
 
 /// A struct in `code`, by name, as its fields.
 fn struct_in(code: &str, name: &str) -> Option<Vec<(String, String)>> {
-    let lines: Vec<&str> = code.lines().collect();
+    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
     let index = lines.iter().position(|line| {
-        let Some(rest) = after_visibility(line.trim()) else { return false };
-        let Some(rest) = rest.strip_prefix("struct ") else { return false };
-        let found: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        found == name
+        let Some((kind, tail)) = item_head(line) else { return false };
+        if kind != "struct" {
+            return false;
+        }
+        item_name(kind, tail).is_some_and(|(found, _)| found == name)
     })?;
-    let line = lines[index].trim();
-    let rest = line.strip_prefix("pub ").unwrap_or(line);
-    let rest = rest.strip_prefix("struct ").unwrap_or(rest);
-    let found: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-    let tail = rest[found.len()..].trim_start();
-    if tail.starts_with('{') {
-        let owned: Vec<String> = lines[index..].iter().map(|l| (*l).to_string()).collect();
-        return Some(struct_fields(&owned));
+    let (_, rest) = item_head(&lines[index]).and_then(|(kind, tail)| item_name(kind, tail))?;
+    if rest.starts_with('{') {
+        return Some(struct_fields(&lines[index..]));
     }
-    tuple_fields(tail)
+    tuple_fields(rest)
 }
 
 /// The documents that may carry an `exact` block.
@@ -3723,31 +3886,6 @@ fn source_named_by(block: &[String]) -> Option<String> {
         let name = rest.split('\u{2014}').next().unwrap_or(rest).trim();
         if name.ends_with(".rs") && name.contains('/') { Some(name.to_string()) } else { None }
     })
-}
-
-/// The functions a block quotes, as (name, lines).
-fn functions_in(block: &[String]) -> Vec<(String, Vec<String>)> {
-    let mut found = Vec::new();
-    for (index, line) in block.iter().enumerate() {
-        let Some(rest) = after_visibility(line.trim()) else { continue };
-        let Some(rest) = rest.strip_prefix("fn ") else { continue };
-        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        if name.is_empty() {
-            continue;
-        }
-        found.push((name, function_lines(block, index)));
-    }
-    found
-}
-
-/// A function in `code`, by name.
-fn function_in(code: &str, name: &str) -> Option<Vec<String>> {
-    let lines: Vec<String> = code.lines().map(|l| l.to_string()).collect();
-    let index = lines.iter().position(|line| {
-        let Some(rest) = after_visibility(line.trim()) else { return false };
-        rest.starts_with(&format!("fn {name}("))
-    })?;
-    Some(function_lines(&lines, index))
 }
 
 /// The line with its visibility keyword removed, if it has one.
@@ -5454,6 +5592,157 @@ mod tests {
         let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("gone"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A quoted const that drifted is caught.
+    ///
+    /// The gate read functions, structs and statics and nothing else, so a
+    /// const in an exact block was invisible to it: the tree quotes one, in
+    /// the time pattern, and the quote could have said any number at all.
+    /// §146.
+    #[test]
+    fn a_quoted_const_that_drifted_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-quote-const-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(core.join("tick.rs"), "pub const TICKS_PER_SECOND: i128 = 254_016_000_000;\n")
+            .expect("the fabricated source");
+        let quote = |value: &str| {
+            format!(
+                "```rust exact\n// crates/core/src/tick.rs\npub const TICKS_PER_SECOND: i128 = {value};\n```\n"
+            )
+        };
+
+        std::fs::write(docs.join("quote.md"), quote("254_016_000_000")).expect("the fabricated quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        std::fs::write(docs.join("quote.md"), quote("999_999_999_999")).expect("the fabricated quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("TICKS_PER_SECOND"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A quoted enum that drifted is caught.
+    ///
+    /// The control channel's whole vocabulary is an enum, and §143's defect
+    /// was a variant of one, so the shape a document is most likely to quote
+    /// is the shape the gate could not see. §146.
+    #[test]
+    fn a_quoted_enum_that_drifted_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-quote-enum-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            engine.join("command.rs"),
+            "pub enum Area {\n    Document,\n    Node,\n    Debug,\n}\n",
+        )
+        .expect("the fabricated source");
+        let quote = |variants: &str| {
+            format!("```rust exact\n// crates/engine/src/command.rs\npub enum Area {{\n{variants}}}\n```\n")
+        };
+
+        std::fs::write(docs.join("quote.md"), quote("    Document,\n    Node,\n    Debug,\n"))
+            .expect("the fabricated quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // A variant the source has and the document does not.
+        std::fs::write(docs.join("quote.md"), quote("    Document,\n    Node,\n"))
+            .expect("the fabricated quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("Area"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A block that quotes an enum is not told it quotes no code.
+    ///
+    /// Before §146 the gate reported an enum-only block as *"quotes no code"*,
+    /// which is a false alarm: the block was right and the gate could not
+    /// read it. A gate that calls a correct document broken teaches people to
+    /// ignore it.
+    #[test]
+    fn a_block_that_quotes_an_enum_is_not_a_false_alarm() {
+        let dir = std::env::temp_dir().join(format!("craftkit-quote-enum-only-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(engine.join("command.rs"), "pub enum Area {\n    Document,\n}\n")
+            .expect("the fabricated source");
+        std::fs::write(
+            docs.join("quote.md"),
+            "```rust exact\n// crates/engine/src/command.rs\npub enum Area {\n    Document,\n}\n```\n",
+        )
+        .expect("the fabricated quote");
+
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An item the gate cannot compare is reported by name.
+    ///
+    /// The other half of §146: a block marked `exact` promises that it is the
+    /// code in the file. An `impl` block cannot be compared line for line, so
+    /// the gate says so instead of passing the block as checked.
+    #[test]
+    fn an_item_the_gate_cannot_compare_is_reported_by_name() {
+        let dir = std::env::temp_dir().join(format!("craftkit-quote-impl-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(engine.join("command.rs"), "pub enum Area {\n    Document,\n}\n")
+            .expect("the fabricated source");
+        std::fs::write(
+            docs.join("quote.md"),
+            "```rust exact\n// crates/engine/src/command.rs\nimpl Area {\n    pub fn key(self) -> u8 {\n        0\n    }\n}\n```\n",
+        )
+        .expect("the fabricated quote");
+
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("impl"), "{problems:#?}");
+        assert!(problems[0].contains("does not compare"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A `use` the source does not have is caught.
+    ///
+    /// A declaration is not an item to compare, but it is code the quote
+    /// depends on: a document that says `use craftkit_model::Document;` when
+    /// the file says something else does not compile. §146.
+    #[test]
+    fn a_quoted_use_the_source_does_not_have_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-quote-use-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(model.join("document.rs"), "use craftkit_core::Ids;\n\npub struct Report;\n")
+            .expect("the fabricated source");
+        let quote = |statement: &str| {
+            format!(
+                "```rust exact\n// crates/model/src/document.rs\n{statement}\n\npub struct Report;\n```\n"
+            )
+        };
+
+        std::fs::write(docs.join("quote.md"), quote("use craftkit_core::Ids;")).expect("the quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        std::fs::write(docs.join("quote.md"), quote("use craftkit_core::Tick;")).expect("the quote");
+        let problems = quoted_code_matches_the_source(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("craftkit_core::Tick"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
