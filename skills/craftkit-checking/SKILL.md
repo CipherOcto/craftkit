@@ -412,7 +412,7 @@ cargo run -q -p craftkit-cli -- mcp
 
 JSON-RPC 2.0 over stdio, one message per line. `initialize`, `notifications/initialized`,
 `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`,
-`ping`, `shutdown`. Tools are generated from the command
+`prompts/list`, `prompts/get`, `ping`, `shutdown`. Tools are generated from the command
 registry: `node.add` → `craftkit_node_add` (`crates/mcp/src/tools.rs:79`), plus three
 built-ins, `craftkit_status`, `craftkit_commands` and `craftkit_crashes`. The last
 one reads the crash reports this machine has written: `action` is `list`, `show` or
@@ -426,6 +426,13 @@ node of the design (`craftkit://node/n12`). The first two hold exactly what
 `craftkit_status` and `craftkit_commands` hold, because they are built by the same
 calls. A URI that names no resource is refused with `-32002`, not with "no such
 method". §176.
+
+A **prompt** is the protocol's third part, and it *says*: a templated message that
+tells an agent what to do. Three of them — `add-node`, `set-property`, `key-property`
+— and each one names a command (`node.add`, `prop.set`, `key.set`) and is built from
+the registry's own words for it, so a prompt cannot describe a command differently
+from the tree does. `prompts/get` needs the prompt's required arguments; a missing one
+is refused with `-32602`. §178.
 
 ---
 

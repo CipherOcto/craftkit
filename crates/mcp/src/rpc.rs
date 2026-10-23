@@ -238,14 +238,17 @@ pub fn initialize_result() -> Json {
 /// The capabilities this server offers.
 ///
 /// **The capability follows the list.** `resources` is advertised exactly
-/// when the server serves a resource, so a client that reads the capability
-/// knows whether to ask for one — and the server never claims a capability it
-/// does not have. §176.
+/// when the server serves a resource, and `prompts` exactly when it serves a
+/// prompt, so a client that reads the capability knows whether to ask — and
+/// the server never claims a capability it does not have. §176, §178.
 pub fn capabilities() -> Json {
     let mut caps = Map::new();
     caps.insert("tools".to_string(), json!({ "listChanged": false }));
     if crate::resources::serves_any() {
         caps.insert("resources".to_string(), json!({ "subscribe": false, "listChanged": false }));
+    }
+    if !crate::prompts::PROMPTS.is_empty() {
+        caps.insert("prompts".to_string(), json!({ "listChanged": false }));
     }
     Json::Object(caps)
 }

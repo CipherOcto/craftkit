@@ -11,6 +11,8 @@
 //! | `resources/list` | Every resource: the state a client can read. |
 //! | `resources/templates/list` | Every resource template: a URI with a variable in it. |
 //! | `resources/read` | Reads one resource by URI. |
+//! | `prompts/list` | Every prompt: the workflows a client can offer. |
+//! | `prompts/get` | One prompt's message, with its arguments substituted. |
 //! | `ping` | Liveness. |
 //! | `shutdown` | Replies, then the caller stops. |
 //!
@@ -45,7 +47,7 @@ use craftkit_engine::Session;
 use serde_json::{Value as Json, json};
 
 use crate::rpc::{self, Error as RpcParseError, Request, Response, code};
-use crate::{resources, tools};
+use crate::{prompts, resources, tools};
 
 /// Serve MCP over stdio until the input ends or `shutdown` arrives.
 pub fn serve(session: Arc<Mutex<Session>>) -> Result<(), String> {
@@ -178,13 +180,15 @@ fn dispatch(request: &Request, session: &Mutex<Session>) -> Response {
             Response::result(id, json!({ "resourceTemplates": resources::templates_json() }))
         }
         "resources/read" => read_resource(&id, request, session),
+        "prompts/list" => Response::result(id, json!({ "prompts": prompts::list_json() })),
+        "prompts/get" => get_prompt(&id, request, session),
         "shutdown" => Response::result(id, json!({})),
         other => Response::failure(
             id,
             code::METHOD_NOT_FOUND,
             format!(
                 "`{other}` is not a method; try initialize, tools/list, tools/call, resources/list, \
-                 resources/read, ping or shutdown"
+                 resources/read, prompts/list, prompts/get, ping or shutdown"
             ),
         ),
     }
@@ -241,6 +245,36 @@ fn read_resource(id: &Json, request: &Request, session: &Mutex<Session>) -> Resp
         Err(resources::ReadError::Session) => {
             Response::failure(id.clone(), code::INTERNAL_ERROR, "the session is unavailable")
         }
+    }
+}
+
+/// Fetch one prompt's message.
+///
+/// A prompt that is not there, or one that is missing an argument it needs,
+/// is refused with the parameters error — the client asked for something the
+/// server does not have, and said so in the wrong shape. §178.
+fn get_prompt(id: &Json, request: &Request, session: &Mutex<Session>) -> Response {
+    let Some(name) = request.params.get("name").and_then(Json::as_str) else {
+        return Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`name` is required and must be a string; call prompts/list",
+        );
+    };
+    let arguments =
+        request.params.get("arguments").cloned().unwrap_or_else(|| Json::Object(Default::default()));
+    match prompts::message(name, &arguments, session) {
+        Ok(message) => Response::result(id.clone(), message),
+        Err(prompts::PromptError::NotFound(missing)) => Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            format!("no prompt named `{missing}`; call prompts/list"),
+        ),
+        Err(prompts::PromptError::Missing { prompt, argument }) => Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            format!("the prompt `{prompt}` needs its `{argument}`"),
+        ),
     }
 }
 
@@ -373,6 +407,74 @@ mod tests {
         let list = r["result"]["resourceTemplates"].as_array().expect("templates");
         assert!(!list.is_empty(), "the server advertises no templates");
         assert!(list.iter().any(|t| t["uriTemplate"] == json!("craftkit://node/{id}")), "{list:?}");
+    }
+
+    /// The server serves prompts, and says so in the handshake.
+    #[test]
+    fn initialize_advertises_the_prompts_it_serves() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+        assert!(r["result"]["capabilities"]["prompts"].is_object(), "{r}");
+    }
+
+    /// Every prompt the server advertises can be fetched.
+    ///
+    /// The advertisement and the dispatch are one list, so a prompt cannot be
+    /// advertised without being fetchable. §171's rule. §178.
+    #[test]
+    fn every_advertised_prompt_can_be_fetched() {
+        let session = session();
+        let listed = ask(r#"{"jsonrpc":"2.0","id":1,"method":"prompts/list"}"#);
+        let list = listed["result"]["prompts"].as_array().expect("prompts");
+        assert!(!list.is_empty(), "the server advertises no prompts");
+        for prompt in list {
+            let name = prompt["name"].as_str().expect("a name");
+            // The arguments come from the advertisement, so the test also
+            // checks that the arguments a prompt advertises are the ones it
+            // needs.
+            let mut arguments = serde_json::Map::new();
+            for argument in prompt["arguments"].as_array().expect("arguments") {
+                let argument_name = argument["name"].as_str().expect("a name");
+                let value = match argument_name {
+                    "kind" => "filter",
+                    "name" => "Probe",
+                    "node" => "1",
+                    "path" => "amount",
+                    "value" => "1",
+                    "time" => "0",
+                    other => panic!("the prompt `{name}` has an argument `{other}` this test does not know"),
+                };
+                arguments.insert(argument_name.to_string(), json!(value));
+            }
+            let arguments = serde_json::Value::Object(arguments);
+            let line = format!(
+                r#"{{"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{{"name":"{name}","arguments":{arguments}}}}}"#
+            );
+            let reply = handle_line(&line, &session).expect("a reply");
+            let text = reply.to_line().expect("json");
+            let got: Json = serde_json::from_str(&text).expect("parses back");
+            assert!(got.get("result").is_some(), "{name} is advertised and cannot be fetched: {text}");
+            assert_eq!(
+                got["result"]["messages"][0]["role"],
+                json!("user"),
+                "a prompt's message is a user message: {text}"
+            );
+        }
+    }
+
+    /// A prompt that is not there is refused, and so is one that is missing
+    /// an argument it needs.
+    #[test]
+    fn a_prompt_that_cannot_be_fetched_says_so() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"nope"}}"#);
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+
+        // `kind` is required, and the prompt says so.
+        let r = ask(r#"{"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"add-node"}}"#);
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+
+        // And a call with no name at all is a bad request.
+        let r = ask(r#"{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{}}"#);
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
     }
 
     /// Every tool the server advertises can be called.

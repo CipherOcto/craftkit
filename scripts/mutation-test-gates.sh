@@ -94,6 +94,7 @@ readonly FILES=(
     crates/ui/src/raster.rs
     crates/mcp/src/server.rs
     crates/mcp/src/rpc.rs
+    crates/mcp/src/prompts.rs
     crates/mcp/src/resources.rs
     crates/mcp/src/tools.rs
     crates/engine/src/crash.rs
@@ -5116,6 +5117,48 @@ swap crates/engine/src/commands.rs \
     'if end < start {'
 expect_catch "engine: the range may be empty" \
     "cargo test -p craftkit-engine --profile ci no_command_reports_an_internal_error"
+
+# ------------------------------------------------------- the MCP prompts ----
+# Section 178. The server had tools and resources and no prompts, so the
+# protocol's third part was a method that did not exist. The rules the port
+# carries are the ones that keep an instruction honest: it names a command
+# the tree has, the message is built from the registry's own words, what is
+# advertised can be fetched, and the suggestions are the tree's and not a
+# copy of them.
+#
+# The first break is the one that matters most: a prompt that names a
+# command the registry does not have is an instruction the agent will follow
+# into a call that is not there, and nothing in the tree would have said so.
+
+swap crates/mcp/src/prompts.rs \
+    'command: "prop.set",' \
+    'command: "prop.setx",'
+expect_catch "mcp: a prompt names a command the registry does not have" \
+    "cargo test -p craftkit-mcp --profile ci every_prompt_names_a_command_the_registry_has"
+
+# The second leaves the placeholder in the message, so the prompt tells the
+# agent to call a command whose name was never filled in.
+swap crates/mcp/src/prompts.rs \
+    '    text = text.replace("{command}", &id);' \
+    '    text = text.clone();'
+expect_catch "mcp: the message does not carry the registry's words" \
+    "cargo test -p craftkit-mcp --profile ci the_message_carries_the_registry_s_words"
+
+# The third advertises a prompt the dispatch cannot fetch — the defect the
+# family had with its tools.
+swap crates/mcp/src/prompts.rs \
+    '.find(|p| p.name == name)' \
+    '.filter(|p| p.name != "add-node").find(|p| p.name == name)'
+expect_catch "mcp: a prompt is advertised and cannot be fetched" \
+    "cargo test -p craftkit-mcp --profile ci every_advertised_prompt_can_be_fetched"
+
+# And the fourth answers with a copy of the tree's values, which goes stale
+# the day a node is renamed.
+swap crates/mcp/src/prompts.rs \
+    '        Live::NodeKinds => craftkit_model::NodeKind::all().iter().map(|k| k.label().to_string()).collect(),' \
+    '        Live::NodeKinds => vec!["filter".to_string()],'
+expect_catch "mcp: the suggestions are a copy and not live" \
+    "cargo test -p craftkit-mcp --profile ci the_suggestions_are_live"
 
 restore
 finish

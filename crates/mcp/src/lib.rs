@@ -36,6 +36,14 @@
 //! resource **is**. The resources here are the open design and the command
 //! catalogue — read by the same calls the `craftkit_status` and
 //! `craftkit_commands` tools make, so the two cannot drift apart. §176.
+//!
+//! ## Prompts
+//!
+//! The protocol's third part: a prompt **says**. A prompt is a templated
+//! message that tells an agent what to do, and the server offers three —
+//! add a node, set a property, key a property. Each one names a command and
+//! is built from the registry's own words for it, so a prompt cannot
+//! describe a command differently from the tree does. §178.
 
 #![deny(
     clippy::unwrap_used,
@@ -47,11 +55,13 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod prompts;
 pub mod resources;
 pub mod rpc;
 pub mod server;
 pub mod tools;
 
+pub use prompts::{PROMPTS, PromptError};
 pub use resources::{RESOURCES, ReadError as ResourceReadError, TEMPLATES};
 pub use rpc::{Error as RpcError, Request as RpcRequest, Response as RpcResponse};
 pub use server::{handle_line, serve};

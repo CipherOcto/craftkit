@@ -20847,6 +20847,92 @@ the code as it was written, not over the code as it will be.
 construction. Forbidding the *error the guard produces* is not true by
 construction — and it is what found the two bounds.
 
+## 178. The MCP server had the protocol's two thirds and not the third
+
+### The finding
+
+§176 added the resources. The protocol has a third part, and it was still
+missing: a **prompt** is a templated message that tells an agent what to
+do, which is what a client offers as a slash command. The server answered
+`prompts/list` and `prompts/get` with *"not a method"*, and the handshake
+advertised `tools` and `resources` alone.
+
+The family serves them: **VC** five, and the rest one to three each. §176's
+item 46.
+
+### The port
+
+`crates/mcp/src/prompts.rs`: three prompts, and the rules that keep an
+instruction honest.
+
+| The prompt | The command it drives | Its arguments |
+|---|---|---|
+| `add-node` | `node.add` | `kind` (the model's own kinds), `name` |
+| `set-property` | `prop.set` | `node` (the open design's nodes), `path` (its property paths), `value` |
+| `key-property` | `key.set` | `node`, `path`, `time`, `value` |
+
+### The rules, and why each one is here
+
+**A prompt names a command the tree has, and the message is built from the
+registry.** A prompt does not write a command's name. It names the
+**command**, and the message is filled in from the same `CommandSpec` the
+tools and the docs use: the id, the label, the description and the
+parameters. So a prompt cannot describe a command differently from the tree
+does — there is only one copy of the description — and a prompt that names a
+command the registry does not have is caught by a test rather than by a
+client's 404.
+
+**The gate caught the author.** The first version of the `set-property`
+prompt named `property.set`; the command is `prop.set`. The test that says
+*"every prompt names a command the registry has"* failed on the first run,
+which is the whole argument for writing it.
+
+**One list.** `prompts/list` advertises from `PROMPTS` and `prompts/get`
+dispatches through the same list. §171's rule, applied to the protocol's
+third part.
+
+**The suggestions are live.** An argument's values are read from the tree
+*now*: the node kinds from the model, the command ids from the registry, the
+nodes and the property paths from the open design. A fixed list would be a
+copy of the truth, and a copy goes stale the day a node is renamed.
+
+**The capability follows the list.** The handshake advertises `prompts`
+exactly when the server serves a prompt, like `resources`. §176's rule.
+
+### The mutations
+
+Four, one per rule, each caught by the test that names it:
+
+| Mutation | What it breaks | The test that catches it |
+|---|---|---|
+| a prompt names `prop.setx` | an instruction that sends the agent into a call that is not there | `every_prompt_names_a_command_the_registry_has` |
+| the registry's words are not put in the message | the message keeps a `{command}` placeholder | `the_message_carries_the_registry_s_words` |
+| the dispatch cannot fetch a prompt the list advertises | the advertised surface and the implementation disagree | `every_advertised_prompt_can_be_fetched` |
+| the suggestions are a fixed list | a copy of the tree's values, which goes stale | `the_suggestions_are_live` |
+
+All four were checked to be caught, one at a time, on the tree.
+
+### What the gate cannot see
+
+- **The prompts are thin.** craftkit's commands are node and property edits,
+  so a prompt is a workflow of one or two commands. The family's richest
+  prompts ("design a poster") are worth nothing here, because craftkit is
+  not a poster.
+- **The suggestions are the tree's, but only the ones the tree exposes.**
+  A property path the model does not publish is not suggested.
+- **`completion/complete` is still open.** It is the protocol's fourth
+  method, and it is from a later revision of the protocol than the one this
+  server declares — so serving it honestly means negotiating the version
+  first. §176's item 46, still open.
+
+### The lesson
+
+**A prompt is an instruction, and an instruction that names the wrong thing
+fails silently.** It does not crash and it does not error: the agent reads
+it, believes it, and calls something that is not there — and the tree never
+gets to say so. That is why the prompt does not *write* the command's name.
+It names the command, and the registry writes the name.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21277,6 +21363,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **No command reports an internal error, whatever it is given** | the properties in `crates/engine/tests/properties.rs` | 2 mutations — §177 |
 | **A refused command leaves the document exactly as it was** | the same | the engine's own promise — §177 |
 | **A command's own bound agrees with the model's rule** | the same | 2 mutations — §177 |
+| **A prompt names a command the registry has** | `prompts::PROMPTS` | 1 mutation — §178 |
+| **A prompt's message carries the registry's own words** | the same | 1 mutation — §178 |
+| **A prompt that is advertised can be fetched** | `prompts::PROMPTS` | 1 mutation — §178 |
+| **A prompt's suggestions are the tree's, not a copy** | `prompts::Live` | 1 mutation — §178 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
