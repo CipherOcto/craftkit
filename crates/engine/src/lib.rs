@@ -50,7 +50,7 @@ pub use error::EngineError;
 pub use history::History;
 pub use log::LogBook;
 pub use params::Doc;
-pub use session::{MAX_SESSION_BYTES, Outcome, SESSION_DOCUMENTS, Session};
+pub use session::{MAX_SESSION_BYTES, Outcome, SESSION_DOCUMENTS, Session, sample_steps};
 
 /// How much memory the command trace may hold.
 ///

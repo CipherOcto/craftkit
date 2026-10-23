@@ -205,6 +205,121 @@ pub struct Seed {
 /// corpus check needs to know which file is the one it trusts.
 pub const SEED_NAME: &str = "seed.craftkit";
 
+/// The name the seed file has when the seed is a **script**.
+pub const SCRIPT_SEED_NAME: &str = "seed.json";
+
+/// Which file the fuzzer breaks.
+///
+/// §182: the fuzzer had one shape — one file, one command — and the tree has
+/// three doors that read a file. The design file was the first and the script
+/// is the second. Each target carries the three things that make it a target:
+/// the name its corpus is written under, the words its child is called with,
+/// and how its corpus is written.
+///
+/// **The corpus of each is written by the tree's own program.** That is
+/// §180's rule and it is why a target cannot be added without a writer: a
+/// corpus written by hand would be a second copy of the format, and it would
+/// drift — the fuzzer would be breaking a format nothing else in the tree
+/// speaks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Target {
+    /// A design file, read by `craftkit-cli eval`.
+    Design,
+    /// A script of commands, read by `craftkit-cli run`.
+    Script,
+}
+
+impl Target {
+    /// Every target, in the order the runs happen.
+    pub const ALL: [Target; 2] = [Target::Design, Target::Script];
+
+    /// The name the corpus is written under.
+    pub fn seed_name(self) -> &'static str {
+        match self {
+            Target::Design => SEED_NAME,
+            Target::Script => SCRIPT_SEED_NAME,
+        }
+    }
+
+    /// The name the broken inputs are written under.
+    pub fn input_name(self) -> &'static str {
+        match self {
+            Target::Design => "input.craftkit",
+            Target::Script => "input.json",
+        }
+    }
+
+    /// The extension a finding of this target carries.
+    ///
+    /// The target is in the name as well, so two targets' findings cannot
+    /// collide in one folder — and the note beside a finding is always
+    /// `.note.json`, so a script's finding (a `.json` file) and its note are
+    /// two files and not one.
+    pub fn finding_extension(self) -> &'static str {
+        match self {
+            Target::Design => "craftkit",
+            Target::Script => "json",
+        }
+    }
+
+    /// The words the child is called with, before the file.
+    pub fn child_args(self) -> Vec<String> {
+        match self {
+            Target::Design => vec!["eval".to_string()],
+            Target::Script => vec!["run".to_string()],
+        }
+    }
+
+    /// The word the notes and the report use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Target::Design => "design",
+            Target::Script => "script",
+        }
+    }
+
+    /// The corpus, written by the tree's own program.
+    pub fn seed(self, cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, String> {
+        match self {
+            Target::Design => seed_designs(cli, dir, options),
+            Target::Script => seed_scripts(cli, dir, options),
+        }
+    }
+}
+
+/// A seed, from the command line's point of view.
+fn parse_target(raw: &str) -> Result<Target, String> {
+    match raw {
+        "design" => Ok(Target::Design),
+        "script" => Ok(Target::Script),
+        other => Err(format!("`--target` wants `design` or `script`, and `{other}` is neither")),
+    }
+}
+
+/// Which targets a run covers.
+///
+/// **A target and a selection are different things.** A target is a file the
+/// fuzzer breaks; a selection is how many of them the run breaks. The
+/// selection is `all` by default, because a fuzzer that only watched one
+/// door would be watching the door the tree already knew about. §182.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Selection {
+    /// Every target.
+    All,
+    /// One named target.
+    One(Target),
+}
+
+impl Selection {
+    /// The targets this selection covers.
+    pub fn targets(self) -> Vec<Target> {
+        match self {
+            Selection::All => Target::ALL.to_vec(),
+            Selection::One(target) => vec![target],
+        }
+    }
+}
+
 /// The six ways a seed is broken.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mutation {
@@ -319,8 +434,35 @@ pub fn seed_designs(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<See
     Ok(vec![Seed { name: "the sample design".to_string(), bytes }])
 }
 
+/// The corpus for the script door: one valid script, written by the tree's
+/// own program.
+///
+/// The tree's program is `craftkit-cli script --out`, which writes a script
+/// with the tree's own writer — the same writer a person would use. §182 gave
+/// the tree that writer: before it, the only producer of a script printed a
+/// report's replay to stdout, so this corpus could not be written at all.
+///
+/// **The seed is checked before it is broken**, like the design's: the fuzzer
+/// hands the seed to the same child it hands the mutants to, and refuses to
+/// go on unless the child *accepts* it.
+fn seed_scripts(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, String> {
+    let path = dir.join(SCRIPT_SEED_NAME);
+    let args = vec!["script".to_string(), "--out".to_string(), path.to_string_lossy().into_owned()];
+    let outcome = crate::command_timed(cli, &args, dir, options.timeout, &options.child_env)?;
+    if !outcome.timed_out && outcome.code != Some(0) {
+        return Err(format!(
+            "the tree did not write a seed script: `{} script --out {}` said\n{}",
+            cli.display(),
+            path.display(),
+            outcome.all()
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    Ok(vec![Seed { name: "the sample script".to_string(), bytes }])
+}
+
 /// Break one seed, in one way.
-fn mutate(rng: &mut Rng, seeds: &[Seed]) -> Mutated {
+fn mutate(rng: &mut Rng, seeds: &[Seed], target: Target) -> Mutated {
     let seed = &seeds[rng.below(seeds.len())];
     let mutation = MUTATIONS[rng.below(MUTATIONS.len())];
     let bytes = match mutation {
@@ -330,7 +472,7 @@ fn mutate(rng: &mut Rng, seeds: &[Seed]) -> Mutated {
         Mutation::Duplicate => duplicate(rng, &seed.bytes),
         Mutation::Delete => delete(rng, &seed.bytes),
         Mutation::Hostile => hostile(rng, &seed.bytes),
-        Mutation::Structure => structure(rng, &seed.bytes),
+        Mutation::Structure => structure(rng, &seed.bytes, target),
     };
     Mutated { mutation, seed: seed.name.clone(), bytes }
 }
@@ -438,20 +580,39 @@ fn hostile(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
     }
 }
 
-/// The design's own shape, broken — with the file still valid JSON.
+/// The file's own shape, broken — with the file still valid JSON.
 ///
 /// The other six mutations break the *file*: the JSON stops parsing, and the
 /// reader turns the file away at the first line. That is the reader working,
 /// but it is only the outermost part of the reader. This one breaks the
-/// *document*: the file parses, the tag is right, and everything after that
-/// is the reader's own rules — the node count, the frame rate, the range,
-/// the ids, the property tree.
+/// *shape*: the file parses, and everything after that is the reader's own
+/// rules.
+///
+/// Each breakage is one of the rules the reader states, pushed past it — and
+/// **the rules are the target's own**. A design's shape is its document; a
+/// script's shape is its list of commands. §182.
+fn structure(rng: &mut Rng, bytes: &[u8], target: Target) -> Vec<u8> {
+    match target {
+        Target::Design => break_the_document(rng, bytes),
+        Target::Script => break_the_script(rng, bytes),
+    }
+}
+
+/// The design's own shape, broken — with the file still valid JSON.
+///
+/// This one breaks the *document*: the file parses, the tag is right, and
+/// everything after that is the reader's own rules — the node count, the
+/// frame rate, the range, the ids, the property tree.
 ///
 /// Each breakage is one of the rules the model states, pushed past it.
-fn structure(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
+fn break_the_document(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
     let Ok(text) = std::str::from_utf8(bytes) else { return bytes.to_vec() };
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else { return bytes.to_vec() };
-    let mut document = value.get("document").cloned().unwrap_or(serde_json::Value::Null);
+    // A file with no document in it is not a design, and there is nothing of
+    // the design's shape to break: the mutation leaves it alone rather than
+    // inventing a document for it.
+    let Some(document) = value.get("document").cloned() else { return bytes.to_vec() };
+    let mut document = document;
     match rng.below(8) {
         // More nodes than a document may hold.
         0 => {
@@ -502,6 +663,60 @@ fn structure(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
         map.insert("document".to_string(), document);
     }
     serde_json::to_string(&value).unwrap_or_else(|_| text.to_string()).into_bytes()
+}
+
+/// The script's own shape, broken — with the file still valid JSON.
+///
+/// A script is a **list of commands**, so the shape that matters is the
+/// list, and the rules that matter are the ones the reader states about it:
+/// a step is an object, a step names a command as a string, a step's
+/// parameters are an object, the command is one the registry has, and the
+/// parameters are ones the command's own readers accept.
+///
+/// The last one is the interesting one: a script carries **commands**, so a
+/// broken script is not only a broken file — it is a broken *instruction*, and
+/// the instruction is aimed at the engine. §177's property is the check that
+/// matters here: the document must still be valid afterwards. §182.
+fn break_the_script(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(bytes) else { return bytes.to_vec() };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else { return bytes.to_vec() };
+    let Some(list) = value.get("commands").and_then(|c| c.as_array()) else { return bytes.to_vec() };
+    let mut commands = list.clone();
+    if commands.is_empty() {
+        return bytes.to_vec();
+    }
+    match rng.below(6) {
+        // A step that is not an object at all.
+        0 => commands[0] = serde_json::json!("node.add"),
+        // A step whose command is not a string.
+        1 => set_in_step(&mut commands[0], "command", serde_json::json!(7)),
+        // A step whose parameters are not an object.
+        2 => set_in_step(&mut commands[0], "params", serde_json::json!([1, 2, 3])),
+        // A command the registry does not have.
+        3 => set_in_step(&mut commands[0], "command", serde_json::json!("node.explode")),
+        // A parameter the command's own reader cannot hold: a magnitude past
+        // the tree's own limit, which the reader has to refuse.
+        4 => set_in_step(&mut commands[0], "params", serde_json::json!({ "amount": 1e300 })),
+        // A base that is not a document.
+        _ => {
+            if let Some(map) = value.as_object_mut() {
+                map.insert("base".to_string(), serde_json::json!({ "nodes": "not an array" }));
+            }
+        }
+    }
+    if let Some(map) = value.as_object_mut() {
+        map.insert("commands".to_string(), serde_json::json!(commands));
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| text.to_string()).into_bytes()
+}
+
+/// Set one key of a step, if the step is an object.
+///
+/// A step that is not an object has no keys, and the value's own index would
+/// panic on one — so the shape is asked first.
+fn set_in_step(step: &mut serde_json::Value, key: &str, value: serde_json::Value) {
+    let Some(map) = step.as_object_mut() else { return };
+    map.insert(key.to_string(), value);
 }
 
 /// Make a broken input smaller, while it still breaks the same way.
@@ -584,8 +799,17 @@ pub struct Options {
     pub timeout: Duration,
     /// Where the working inputs and the findings go.
     pub out: PathBuf,
+    /// Which targets the run covers.
+    ///
+    /// §182: the tree has more than one door that reads a file, and each
+    /// needs its own corpus and its own child.
+    pub selection: Selection,
     /// The words the child is called with, before the file.
-    pub child_args: Vec<String>,
+    ///
+    /// `None` means: **the target's own words** — `eval` for a design, `run`
+    /// for a script. The self-test sets it, because its fake child is called
+    /// by the test harness's own filter rather than by a subcommand.
+    pub child_args: Option<Vec<String>>,
     /// The environment the child is given.
     pub child_env: Vec<(String, String)>,
     /// How many times the minimiser may ask about a smaller input.
@@ -609,7 +833,8 @@ impl Options {
             seed: DEFAULT_SEED,
             timeout: DEFAULT_TIMEOUT,
             out: root.join("fuzz-out"),
-            child_args: vec!["eval".to_string()],
+            selection: Selection::All,
+            child_args: None,
             child_env: Vec::new(),
             minimise_budget: MINIMISE_BUDGET,
             seed_bytes: None,
@@ -653,14 +878,27 @@ pub fn find_cli(root: &Path) -> Result<PathBuf, String> {
 }
 
 /// Hand one file to the child and wait for it.
-fn run_child(cli: &Path, options: &Options, file: &Path, dir: &Path) -> Result<crate::TimedOutput, String> {
-    let mut args = options.child_args.clone();
+///
+/// The child is called with the **target's** words — `eval` for a design,
+/// `run` for a script — unless the caller has overridden them, which only
+/// this file's own self-test does. §182.
+fn run_child(
+    cli: &Path,
+    options: &Options,
+    target: Target,
+    file: &Path,
+    dir: &Path,
+) -> Result<crate::TimedOutput, String> {
+    let mut args = match &options.child_args {
+        Some(args) => args.clone(),
+        None => target.child_args(),
+    };
     args.push(file.to_string_lossy().into_owned());
     crate::command_timed(cli, &args, dir, options.timeout, &options.child_env)
 }
 
-/// The run.
-pub fn fuzz(root: &Path, options: &Options) -> Result<Report, String> {
+/// The run, against one target.
+pub fn fuzz(root: &Path, options: &Options, target: Target) -> Result<Report, String> {
     if options.iterations == 0 {
         return Err("a run of no inputs is not a run; give it at least one".to_string());
     }
@@ -675,27 +913,28 @@ pub fn fuzz(root: &Path, options: &Options) -> Result<Report, String> {
     std::fs::create_dir_all(&findings)
         .map_err(|e| format!("could not create {}: {e}", findings.display()))?;
 
-    let seed_path = work.join(SEED_NAME);
+    let seed_path = work.join(target.seed_name());
     let seeds = match &options.seed_bytes {
         Some(bytes) => {
             std::fs::write(&seed_path, bytes)
                 .map_err(|e| format!("could not write {}: {e}", seed_path.display()))?;
             vec![Seed { name: "the seed the caller gave".to_string(), bytes: bytes.clone() }]
         }
-        None => seed_designs(&cli, &work, options)?,
+        None => target.seed(&cli, &work, options)?,
     };
     if seeds.is_empty() {
         return Err("the corpus is empty, so there is nothing to break".to_string());
     }
-    // The seed must be a design the tree reads. If it is not, every mutant
-    // of it is refused at the first line, the run is green, and the green
-    // says nothing: a fuzzer whose corpus is rubbish passes for ever.
-    let outcome = run_child(&cli, options, &seed_path, root)?;
+    // The seed must be a file the tree reads. If it is not, every mutant of
+    // it is refused at the first line, the run is green, and the green says
+    // nothing: a fuzzer whose corpus is rubbish passes for ever.
+    let outcome = run_child(&cli, options, target, &seed_path, root)?;
     let verdict = classify(outcome.code, &outcome.stdout, &outcome.stderr, outcome.timed_out);
     if verdict != Verdict::Accepted {
         return Err(format!(
-            "the seed design {} was not accepted by the tree ({}) — a corpus the reader turns \
+            "the seed {} {} was not accepted by the tree ({}) — a corpus the reader turns \
              away tests nothing, so the run stops here",
+            target.name(),
             seed_path.display(),
             verdict.name()
         ));
@@ -705,16 +944,16 @@ pub fn fuzz(root: &Path, options: &Options) -> Result<Report, String> {
     let mut report = Report::default();
 
     for index in 0..options.iterations {
-        let mutated = mutate(&mut rng, &seeds);
+        let mutated = mutate(&mut rng, &seeds, target);
         // One working file, overwritten every time. The inputs are scratch:
         // a crash is minimised into `findings/`, and a run that found nothing
         // has nothing worth keeping. Five hundred files of several megabytes
         // each would be ninety megabytes of nothing on the build machine.
-        let file = work.join("input.craftkit");
+        let file = work.join(target.input_name());
         std::fs::write(&file, &mutated.bytes)
             .map_err(|e| format!("could not write {}: {e}", file.display()))?;
 
-        let outcome = run_child(&cli, options, &file, root)?;
+        let outcome = run_child(&cli, options, target, &file, root)?;
         let verdict = classify(outcome.code, &outcome.stdout, &outcome.stderr, outcome.timed_out);
         report.tried += 1;
         match verdict {
@@ -722,11 +961,11 @@ pub fn fuzz(root: &Path, options: &Options) -> Result<Report, String> {
             Verdict::Refused => report.refused += 1,
             Verdict::Crash | Verdict::Hang => {
                 let smaller = minimise(&mutated.bytes, options.minimise_budget, |candidate| {
-                    let path = work.join("candidate.craftkit");
+                    let path = work.join(target.input_name());
                     if std::fs::write(&path, candidate).is_err() {
                         return false;
                     }
-                    match run_child(&cli, options, &path, root) {
+                    match run_child(&cli, options, target, &path, root) {
                         Ok(outcome) => {
                             classify(outcome.code, &outcome.stdout, &outcome.stderr, outcome.timed_out)
                                 == verdict
@@ -734,11 +973,11 @@ pub fn fuzz(root: &Path, options: &Options) -> Result<Report, String> {
                         Err(_) => false,
                     }
                 });
-                let name = format!("{}-{:05}", verdict.name(), index);
-                let path = findings.join(format!("{name}.craftkit"));
+                let name = format!("{}-{}-{:05}", target.name(), verdict.name(), index);
+                let path = findings.join(format!("{name}.{}", target.finding_extension()));
                 std::fs::write(&path, &smaller)
                     .map_err(|e| format!("could not write {}: {e}", path.display()))?;
-                let note = findings.join(format!("{name}.json"));
+                let note = path.with_extension("note.json");
                 std::fs::write(&note, note_text(&mutated, verdict, &smaller, &outcome))
                     .map_err(|e| format!("could not write {}: {e}", note.display()))?;
                 report.findings.push(path);
@@ -790,20 +1029,35 @@ pub fn command(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
         return Ok(crate::Outcome::Ran);
     }
     let options = options_from(root, args)?;
-    let report = fuzz(root, &options)?;
-    println!(
-        "   {} input(s): {} accepted, {} refused, {} crash(es), {} hang(s)",
-        report.tried, report.accepted, report.refused, report.crashes, report.hangs
-    );
-    if !report.findings.is_empty() {
-        for finding in &report.findings {
+    // **Every target, unless one is named.** §182: the tree has more than one
+    // door that reads a file, and a fuzzer that only watched one of them
+    // would be watching the door the tree already knew about.
+    let targets = options.selection.targets();
+    let mut crashes = 0usize;
+    let mut hangs = 0usize;
+    let mut findings: Vec<PathBuf> = Vec::new();
+    for target in targets {
+        let report = fuzz(root, &options, target)?;
+        println!(
+            "   {}: {} input(s): {} accepted, {} refused, {} crash(es), {} hang(s)",
+            target.name(),
+            report.tried,
+            report.accepted,
+            report.refused,
+            report.crashes,
+            report.hangs
+        );
+        crashes += report.crashes;
+        hangs += report.hangs;
+        findings.extend(report.findings);
+    }
+    if !findings.is_empty() {
+        for finding in &findings {
             println!("   finding: {}", finding.display());
         }
         return Err(format!(
-            "the fuzzer found {} crash(es) and {} hang(s); the findings are in {}",
-            report.crashes,
-            report.hangs,
-            report.findings[0].parent().map(|p| p.display().to_string()).unwrap_or_default()
+            "the fuzzer found {crashes} crash(es) and {hangs} hang(s); the findings are in {}",
+            findings[0].parent().map(|p| p.display().to_string()).unwrap_or_default()
         ));
     }
     Ok(crate::Outcome::Ran)
@@ -819,6 +1073,7 @@ pub fn usage() -> String {
         "  --seed N        the seed; the same seed tries the same inputs (default: 0x5eedf0f21a3b5c7d)",
         "  --timeout SECS  how long one input may take (default: 10)",
         "  --out DIR       where the inputs and the findings go (default: fuzz-out)",
+        "  --target WHICH  which file to break: design, script, or all (default: all)",
         "",
     ]
     .join("\n")
@@ -853,6 +1108,13 @@ fn options_from(root: &Path, args: &[String]) -> Result<Options, String> {
             }
             "--out" => {
                 options.out = PathBuf::from(value_of(args, &mut index, "--out")?);
+            }
+            "--target" => {
+                let raw = value_of(args, &mut index, "--target")?;
+                options.selection = match raw.as_str() {
+                    "all" => Selection::All,
+                    other => Selection::One(parse_target(other)?),
+                };
             }
             other => return Err(format!("`cargo xtask fuzz` does not take `{other}`\n\n{}", usage())),
         }
@@ -963,16 +1225,37 @@ mod tests {
         }
     }
 
+    /// A script to break, for the tests that do not need the tree's own.
+    ///
+    /// The same shape the tree's own writer writes — `craftkit-cli script
+    /// --out` — and the CLI's own test suite is where the proof that the
+    /// tree reads it lives, because the proof needs the binary. This one is
+    /// here so that the *mutations* can be checked without one. §182.
+    fn a_script() -> Seed {
+        Seed {
+            name: "a hand-written script".to_string(),
+            bytes: br#"{
+  "name": "a hand-written script",
+  "commands": [
+    { "command": "node.add", "params": { "name": "In", "kind": "source", "amount": 1 } },
+    { "command": "node.add", "params": { "name": "Out", "kind": "sink", "amount": 1 } }
+  ]
+}
+"#
+            .to_vec(),
+        }
+    }
+
     #[test]
     fn the_same_seed_gives_the_same_mutations() {
         let seeds = vec![a_design()];
         let first: Vec<Mutated> = {
             let mut rng = Rng::new(DEFAULT_SEED);
-            (0..20).map(|_| mutate(&mut rng, &seeds)).collect()
+            (0..20).map(|_| mutate(&mut rng, &seeds, Target::Design)).collect()
         };
         let second: Vec<Mutated> = {
             let mut rng = Rng::new(DEFAULT_SEED);
-            (0..20).map(|_| mutate(&mut rng, &seeds)).collect()
+            (0..20).map(|_| mutate(&mut rng, &seeds, Target::Design)).collect()
         };
         for (a, b) in first.iter().zip(second.iter()) {
             assert_eq!(a.mutation, b.mutation, "the same seed chose two different mutations");
@@ -992,9 +1275,9 @@ mod tests {
         let mut first = Rng::new(DEFAULT_SEED);
         let mut second = Rng::new(DEFAULT_SEED);
         let mut other = Rng::new(DEFAULT_SEED + 1);
-        let one: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut first, &seeds).bytes).collect();
-        let two: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut second, &seeds).bytes).collect();
-        let three: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut other, &seeds).bytes).collect();
+        let one: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut first, &seeds, Target::Design).bytes).collect();
+        let two: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut second, &seeds, Target::Design).bytes).collect();
+        let three: Vec<Vec<u8>> = (0..20).map(|_| mutate(&mut other, &seeds, Target::Design).bytes).collect();
         assert_eq!(one, two, "the same seed produced two different runs");
         assert_ne!(one, three, "two different seeds produced the same run");
     }
@@ -1005,7 +1288,7 @@ mod tests {
         let mut rng = Rng::new(DEFAULT_SEED);
         let mut seen: Vec<Mutation> = Vec::new();
         for _ in 0..400 {
-            let mutated = mutate(&mut rng, &seeds);
+            let mutated = mutate(&mut rng, &seeds, Target::Design);
             let original = seeds.iter().find(|s| s.name == mutated.seed).expect("the seed is known");
             assert_ne!(
                 mutated.bytes,
@@ -1025,12 +1308,92 @@ mod tests {
         let seeds = vec![a_design()];
         let mut rng = Rng::new(DEFAULT_SEED + 1);
         for _ in 0..200 {
-            let mutated = mutate(&mut rng, &seeds);
+            let mutated = mutate(&mut rng, &seeds, Target::Design);
             assert!(!mutated.bytes.is_empty(), "an empty file is not a mutation");
         }
     }
 
     // ------------------------------------------------------------ the corpus --
+
+    /// The two targets break **their own** shapes.
+    ///
+    /// §182: a design's shape is its document and a script's shape is its
+    /// list of commands, so the shape that is broken has to be the target's.
+    /// A single shape mutation would break a design's document when it was
+    /// handed a script — which is a mutation that changes nothing, and a
+    /// mutation that changes nothing is a gate that cannot fail.
+    #[test]
+    fn the_two_targets_break_their_own_shapes() {
+        let design = a_design();
+        let script = a_script();
+
+        // The script's mutation leaves a design alone: a design has no
+        // commands to break.
+        let mut rng = Rng::new(DEFAULT_SEED);
+        assert_eq!(
+            break_the_script(&mut rng, &design.bytes),
+            design.bytes,
+            "a design was broken as if it were a script"
+        );
+
+        // And the design's mutation leaves a script alone: a script has no
+        // document to break.
+        let mut rng = Rng::new(DEFAULT_SEED);
+        assert_eq!(
+            break_the_document(&mut rng, &script.bytes),
+            script.bytes,
+            "a script was broken as if it were a design"
+        );
+    }
+
+    /// The script's shape is broken **with the file still valid JSON**.
+    ///
+    /// That is the whole point of the shape mutation: the other six break the
+    /// file, and the reader turns it away at the first line — the reader
+    /// working, but only its outermost part. This one has to reach the
+    /// reader's own rules about commands.
+    #[test]
+    fn the_script_s_shape_is_broken_with_the_file_still_valid_json() {
+        let script = a_script();
+        let mut rng = Rng::new(DEFAULT_SEED);
+        for _ in 0..200 {
+            let broken = break_the_script(&mut rng, &script.bytes);
+            assert_ne!(broken, script.bytes, "the mutation left the script alone");
+            let value: serde_json::Value =
+                serde_json::from_slice(&broken).expect("the broken script is still JSON");
+            assert!(value.get("commands").is_some(), "the commands are still there");
+        }
+    }
+
+    /// A run covers every target unless one is named.
+    ///
+    /// §182: a fuzzer that only watched one door would be watching the door
+    /// the tree already knew about.
+    #[test]
+    fn a_run_covers_every_target_unless_one_is_named() {
+        assert_eq!(Selection::All.targets().len(), Target::ALL.len());
+        assert_eq!(Selection::One(Target::Script).targets(), vec![Target::Script]);
+
+        let options =
+            options_from(Path::new("."), &["--target".to_string(), "script".to_string()]).expect("read");
+        assert_eq!(options.selection, Selection::One(Target::Script));
+        assert!(
+            options_from(Path::new("."), &["--target".to_string(), "nonsense".to_string()]).is_err(),
+            "a target that is not one of the tree's doors was accepted"
+        );
+    }
+
+    /// Each target's child is the command that reads **that** file.
+    ///
+    /// A design is read by `eval` and a script by `run`, and a target that
+    /// called the wrong one would be handing a script to a reader that
+    /// expects a design — which refuses it at the first line, and the run
+    /// would be green for the wrong reason.
+    #[test]
+    fn each_target_s_child_reads_that_kind_of_file() {
+        assert_eq!(Target::Design.child_args(), vec!["eval".to_string()]);
+        assert_eq!(Target::Script.child_args(), vec!["run".to_string()]);
+    }
 
     #[test]
     fn the_seed_is_a_design_the_tree_reads() {
@@ -1081,7 +1444,8 @@ mod tests {
     #[test]
     fn a_run_of_no_inputs_is_refused() {
         let options = Options { iterations: 0, ..Options::defaults(Path::new(".")) };
-        let error = fuzz(Path::new("."), &options).expect_err("a run of nothing must not pass");
+        let error =
+            fuzz(Path::new("."), &options, Target::Design).expect_err("a run of nothing must not pass");
         assert!(error.contains("not a run"), "{error}");
     }
 
@@ -1176,7 +1540,8 @@ mod tests {
             seed: DEFAULT_SEED,
             timeout: Duration::from_secs(120),
             out: out.clone(),
-            child_args: vec!["--exact".to_string(), FAKE_CHILD_TEST.to_string(), "eval".to_string()],
+            selection: Selection::One(Target::Design),
+            child_args: Some(vec!["--exact".to_string(), FAKE_CHILD_TEST.to_string(), "eval".to_string()]),
             child_env: vec![(FAKE_CHILD_ENV.to_string(), "1".to_string())],
             minimise_budget: 3,
             // The seed comes from here rather than from the tree's program:
@@ -1185,7 +1550,7 @@ mod tests {
             seed_bytes: Some(a_design().bytes),
         };
 
-        let report = fuzz(Path::new("."), &options).expect("the fuzzer runs");
+        let report = fuzz(Path::new("."), &options, Target::Design).expect("the fuzzer runs");
         assert_eq!(report.tried, 3, "the fuzzer tried {} inputs", report.tried);
         assert_eq!(report.crashes, 3, "the fake child dies on every input");
         assert_eq!(report.findings.len(), 3, "a crash was not written out");
@@ -1194,7 +1559,7 @@ mod tests {
             assert!(finding.is_file(), "{} was not written", finding.display());
             let bytes = std::fs::read(finding).expect("reads");
             assert!(!bytes.is_empty(), "{} is empty", finding.display());
-            let note = finding.with_extension("json");
+            let note = finding.with_extension("note.json");
             assert!(note.is_file(), "{} was not written", note.display());
             let text = std::fs::read_to_string(&note).expect("reads");
             assert!(text.contains("\"verdict\": \"crash\""), "{text}");

@@ -5347,6 +5347,80 @@ pub const MAX_COMMAND_STEPS: usize = 10_000;'
 expect_catch "gate: the tree declares the step bound twice" \
     "cargo test -p xtask --profile ci the_two_doors_share_one_step_bound"
 
+# ------------------------------------------------------- the script's writer ----
+# Section 182. The tree read three files and could write only one of them: the
+# design file had a writer (craftkit-cli sample --out), the script had none,
+# and the crash report had only the desktop app's panic hook.
+#
+# Without a writer for the script, the fuzzer's rule -- the corpus is written
+# by the tree's own program -- could not be applied to the script door at
+# all, and a hand-written corpus would have been a second copy of the format.
+#
+# The rules the port carries: the tree writes a script, the script it writes
+# is one the tree reads, it is the sample's own commands (one copy), and the
+# fuzzer breaks that shape rather than a design's.
+
+# The first: the tree's script writer writes a script the tree refuses. A
+# corpus the reader turns away tests nothing.
+swap apps/craftkit-cli/src/cli.rs \
+    '    let text = script_text(&script_value("the sample design", None, commands))?;' \
+    '    let text = script_text(&json!({ "name": "the sample design", "commands": "not an array" }))?;'
+expect_catch "the tree's script writer writes a script the tree refuses" \
+    "cargo test -p craftkit-cli --profile ci the_script_is_written_and_read_back_by_the_tree"
+
+# The second: the script writer keeps a copy of the sample's commands instead
+# of the sample's own. The script would still run -- so the first test passes
+# -- and it would drift from the sample the moment the sample changed.
+swap apps/craftkit-cli/src/cli.rs \
+    '    let commands: Vec<Json> = craftkit_engine::sample_steps()
+        .into_iter()
+        .map(|(command, params)| json!({ "command": command, "params": params }))
+        .collect();' \
+    '    let commands: Vec<Json> =
+        vec![json!({ "command": "node.add", "params": { "name": "In", "kind": "source" } })];'
+expect_catch "the script writer keeps a copy of the sample's commands" \
+    "cargo test -p craftkit-cli --profile ci the_script_is_the_sample_designs_own_commands"
+
+# The third: the fuzzer's corpus for the script door is written by something
+# that is not the tree's writer. The seed is then a file the reader turns
+# away, the seed check refuses it, and the run stops -- which is the rule
+# working, but only if the rule is there.
+swap xtask/src/fuzz.rs \
+    '    let args = vec!["script".to_string(), "--out".to_string(), path.to_string_lossy().into_owned()];' \
+    '    let args = vec!["sample".to_string(), "--out".to_string(), path.to_string_lossy().into_owned()];'
+expect_catch "the script door's corpus is not written by the tree's writer" \
+    "cargo xtask fuzz --target script --iters 5 --out /tmp/craftkit-mutation-fuzz"
+
+# The fourth: the script's shape is not broken at all. The other six
+# mutations break the file, and the reader turns it away at the first line --
+# so a shape mutation that changes nothing is a fuzzer that only ever tests
+# the JSON parser.
+swap xtask/src/fuzz.rs \
+    'fn break_the_script(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {' \
+    'fn break_the_script(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
+    let _ = rng;
+    return bytes.to_vec();'
+expect_catch "the script's shape is not broken" \
+    "cargo test -p xtask --profile ci the_script_s_shape_is_broken_with_the_file_still_valid_json"
+
+# The fifth: the script door's child is the wrong command. A design is read
+# by `eval` and a script by `run`, and handing one to the other refuses it
+# at the first line.
+swap xtask/src/fuzz.rs \
+    '            Target::Script => vec!["run".to_string()],' \
+    '            Target::Script => vec!["eval".to_string()],'
+expect_catch "the script door's child reads the wrong kind of file" \
+    "cargo test -p xtask --profile ci each_target_s_child_reads_that_kind_of_file"
+
+# And the sixth: a run covers one door when it should cover them all. A
+# fuzzer that watches one door is watching the door the tree already knew
+# about.
+swap xtask/src/fuzz.rs \
+    '            Selection::All => Target::ALL.to_vec(),' \
+    '            Selection::All => vec![Target::Design],'
+expect_catch "a run covers one door when it should cover them all" \
+    "cargo test -p xtask --profile ci a_run_covers_every_target_unless_one_is_named"
+
 
 restore
 finish

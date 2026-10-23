@@ -39,6 +39,8 @@ pub enum Command {
     Eval { file: PathBuf, at: Option<String> },
     /// Write a sample design to a file.
     Sample { out: PathBuf },
+    /// Write a script of commands to a file.
+    Script { out: PathBuf },
     /// Run a script and render a frame.
     Snapshot { script: PathBuf, out: PathBuf, sample: bool },
     /// Read the crash folder.
@@ -152,6 +154,31 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
             }
             let out = out.ok_or(UsageError::MissingValue { flag: "--out".into() })?;
             Ok(Some(Command::Sample { out }))
+        }
+        "script" => {
+            // Write a script of commands. The tree had no writer for the
+            // script format — the only producer printed a report's replay to
+            // stdout — and §180's rule is that a fuzzer's corpus is written
+            // by the tree's own program. §182.
+            let (mut seen_out, mut out) = (false, None);
+            let mut i = 1;
+            while i < argv.len() {
+                match argv[i].as_str() {
+                    "--out" => {
+                        let value = argv
+                            .get(i + 1)
+                            .ok_or_else(|| UsageError::MissingValue { flag: "--out".into() })?;
+                        once(&mut seen_out, "--out")?;
+                        out = Some(PathBuf::from(value));
+                        i += 2;
+                    }
+                    other => {
+                        return Err(UsageError::BadValue { flag: "script".into(), value: other.into() });
+                    }
+                }
+            }
+            let out = out.ok_or(UsageError::MissingValue { flag: "--out".into() })?;
+            Ok(Some(Command::Script { out }))
         }
         "snapshot" => {
             let script = positional(&argv[1..], "snapshot")?;
@@ -327,6 +354,29 @@ mod tests {
             parse(&argv(&["snapshot", "s.json"])),
             Err(UsageError::MissingValue { flag: "--out".into() })
         );
+    }
+
+    #[test]
+    fn sample_needs_an_output() {
+        assert_eq!(
+            parse(&argv(&["sample", "--out", "d.craftkit"])),
+            Ok(Some(Command::Sample { out: PathBuf::from("d.craftkit") }))
+        );
+        assert_eq!(parse(&argv(&["sample"])), Err(UsageError::MissingValue { flag: "--out".into() }));
+    }
+
+    /// The script writer needs a file to write to, and takes nothing else.
+    ///
+    /// §182: the tree had no writer for the script format, and this is it.
+    #[test]
+    fn script_needs_an_output_and_takes_nothing_else() {
+        assert_eq!(
+            parse(&argv(&["script", "--out", "s.json"])),
+            Ok(Some(Command::Script { out: PathBuf::from("s.json") }))
+        );
+        assert_eq!(parse(&argv(&["script"])), Err(UsageError::MissingValue { flag: "--out".into() }));
+        assert!(parse(&argv(&["script", "--out", "s.json", "--wat"])).is_err());
+        assert!(parse(&argv(&["script", "--out", "a.json", "--out", "b.json"])).is_err());
     }
 
     #[test]

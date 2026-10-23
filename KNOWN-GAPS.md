@@ -21397,6 +21397,148 @@ to edit". Those are the owner's, and this arc does not pretend to answer
 them. What it does is make sure that the tree's own limit is a limit, and
 that the number behind it is the number the tree's other numbers imply.
 
+## 182. The tree read three files and could write one of them
+
+### The finding
+
+§180's rule is that a fuzzer's corpus is **written by the tree's own
+program**, so the format the fuzzer breaks is the format the program speaks.
+A corpus written by hand would be a second copy of the format, and it would
+drift.
+
+Applying that rule to the tree's other two doors shows what they were
+missing. The tree reads three files:
+
+| The door | The file | Who writes it in the tree |
+|---|---|---|
+| `craftkit-cli eval` | a design | `craftkit-cli sample --out` — §180 |
+| `craftkit-cli run` | a script | **nobody** |
+| `craftkit-cli crashes replay` | a crash report | **the desktop app's panic hook, and nothing else** |
+
+**The script had no writer.** Measured, by reading every producer in the
+tree: the only code that writes the script format is `replay_as_script`
+(`apps/craftkit-cli/src/cli.rs:386`), and it **prints to stdout** — it
+writes no file — and it only runs on a report that already exists. And a
+report needs a crash. So the tree could not write a script on demand, and
+the script door could not be fuzzed under §180's rule at all.
+
+**The crash report had no headless writer.** The only producer of a report
+anywhere in the tree is the desktop app's panic hook (`apps/craftkit/src/main.rs:628`
+— the one `set_hook` in the tree). The CLI's crash actions are **list, show
+and replay** (`apps/craftkit-cli/src/args.rs:56`), and the engine catches
+every panic inside a command (`crates/engine/src/session.rs:526`) and
+returns it as an ordinary error. So a headless process cannot produce a
+report by any path.
+
+That is why §180's fuzzer had exactly **one** shape — one file, one command,
+one corpus — and it was not the fuzzer's shape that was the limitation. It
+was the **tree's writers** that were the limitation.
+
+### The port
+
+**The tree can write a script.** `craftkit-cli script --out <file>` writes
+one, with the tree's own writer, next to the tree's own reader.
+
+**And the script it writes is the sample design's own commands.** The sample
+is built *through the registry* — three `node.add` commands
+(`crates/engine/src/session.rs:245`) — so the tree knows what the sample is
+made of, and those three are the script. One copy:
+`craftkit_engine::sample_steps`, which `Session::sample()` itself uses. A
+script writer that kept its own list would be a second copy of the sample,
+and it would drift the moment the sample changed.
+
+**The two writers of the script format go through one shape.** `script_value`
+builds it, for both the tree's own script and a report's replay, so the two
+cannot drift into two formats.
+
+**The fuzzer learns a target.** A target is the three things a door needs:
+the name its corpus is written under, the words its child is called with, and
+how its corpus is written. `Target::Design` is the first and `Target::Script`
+is the second, and `--target` picks one or all of them — **all by default**,
+because a fuzzer that watched one door would be watching the door the tree
+already knew about.
+
+**And the shape that is broken is the target's own.** A design's shape is its
+document; a script's shape is its **list of commands**. The script's
+breakages are: a step that is not an object, a step whose command is not a
+string, a step whose parameters are not an object, a command the registry
+does not have, a parameter past the tree's own magnitude limit, and a base
+that is not a document.
+
+The last one is the important one, and it is the difference between the two
+doors: **a script carries commands**, so a broken script is not only a
+broken file — it is a broken *instruction*, and the instruction is aimed at
+the engine. §177's property is the check that matters here: the document
+must still be valid afterwards.
+
+Measured, by hand, on the corpus the tree writes:
+
+```
+$ craftkit-cli run bad.json
+craftkit-cli: bad.json is not a script: invalid type: integer `7`, expected a string
+craftkit-cli: step 1/3: `node.add` rejected its parameters: `amount` parameter is out of range
+craftkit-cli: step 1/3: there is no command `node.explode`; run `craftkit-cli commands` for the list
+```
+
+Three different rules, three different refusals, and none of them is the
+JSON parser.
+
+### The gate's own teeth
+
+Six mutations, one per rule:
+
+| The mutation | The gate that catches it |
+|---|---|
+| the tree's script writer writes a script the tree refuses | `the_script_is_written_and_read_back_by_the_tree` |
+| the script writer keeps a **copy** of the sample's commands | `the_script_is_the_sample_designs_own_commands` |
+| the script door's corpus is not written by the tree's writer | `cargo xtask fuzz --target script` |
+| the script's shape is not broken at all | `the_script_s_shape_is_broken_with_the_file_still_valid_json` |
+| the script door's child reads the wrong kind of file | `each_target_s_child_reads_that_kind_of_file` |
+| a run covers one door when it should cover them all | `a_run_covers_every_target_unless_one_is_named` |
+
+The second one is the one that matters: the script it writes would still
+**run**, so every test that asks "is the script valid?" passes. What is
+broken is the **sharing** with the sample, and only a test that reads both
+sides can see it — the same shape as §181's third mutation, and the same
+lesson: **a copy of the right number passes every check on the number.**
+
+The third one is the one that proves the rule end to end: the gate is the
+fuzzer itself, and the mutation makes the corpus a file the tree turns away,
+so the fuzzer's own seed check stops the run.
+
+### The measured result
+
+The run of the port, in `cargo xtask ci`:
+
+```
+── fuzz
+   design: 500 input(s): 15 accepted, 485 refused, 0 crash(es), 0 hang(s)
+   script: 500 input(s): 21 accepted, 479 refused, 0 crash(es), 0 hang(s)
+```
+
+Two doors, a thousand broken files, **no crash and no hang**. The script
+door's accepted inputs are the ones whose mutation left a script the tree
+could still run — a number replaced by another number, a command's name
+shortened, a step removed. That is the reader working.
+
+### The lesson
+
+**A fuzzer's shape is bounded by the writers the tree has, not by the
+fuzzer.** The first version of the fuzzer had one target because the tree
+had one writer. Adding a target meant adding a writer, and the writer was
+the real work — the target was the easy half.
+
+**And a format with a reader and no writer is a format that will drift.**
+The script format lived in a doc comment, in a test's hand-written JSON, and
+in a printer nobody could call on demand. Giving it a writer turned three
+copies of it into one.
+
+**What is still not ported is the third door.** The crash report has no
+headless writer, so it is not fuzzed — and that is the right order: the
+writer first, then the fuzzer. The report's format is written by the
+desktop app and read by the CLI, and a corpus for it has to be a *folder* of
+three files, not a file. That is §183's work, and it is a bigger one.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21848,6 +21990,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Both doors compare against the tree's bound, not a copy of it** | the same | 1 mutation — §181 |
 | **The bound is at least what the trace can hold, and at most what the model allows** | `the_step_bound_is_the_trace_s_capacity_and_the_model_s_node_budget` | the numbers the port measured — §181 |
 | **A bound the tree has is named in the prose — bytes, memory or steps** | `the_bounds_are_named_in_the_prose` | 1 mutation — §181 |
+| **The tree can write a script, and the script it writes is one the tree reads** | `craftkit-cli script --out` | 1 mutation — §182 |
+| **The script is the sample's own commands, and there is one copy** | `craftkit_engine::sample_steps` | 1 mutation — §182 |
+| **The fuzzer's corpus for each door is written by the tree's own program** | `Target::seed` | 1 mutation — §182 |
+| **Each target breaks its own shape** | `structure` in `xtask/src/fuzz.rs` | 1 mutation — §182 |
+| **Each target's child reads that kind of file** | `Target::child_args` | 1 mutation — §182 |
+| **A run covers every door unless one is named** | `Selection::targets` | 1 mutation — §182 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -22809,16 +22957,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     bound, named once, and tested it against the tree's own capacities in
     both directions.
 
-    The other half of this item is still open, and it is **harder than it
-    looks**, because §180's rule — *the corpus is written by the tree's own
-    program* — cannot be applied to either of these two doors yet. Measured:
-    the tree has **no writer for a script** (the only producer,
-    `replay_as_script`, prints to stdout and only from a report), and **no
-    headless writer for a crash report** (the only producer is the desktop
-    app's panic hook, and the CLI's crash actions are list, show and
-    replay). So the work is not "point the fuzzer at another command" — it
-    is **give the tree the writers it is missing**, and then the corpus can
-    be the tree's own.
+    **§182 was this item's second half, for the script door.** §180's rule
+    is that the corpus is written by the tree's own program, and the tree
+    had **no writer for a script**: the only producer printed a report's
+    replay to stdout, and a report needs a crash. So §182 gave the tree a
+    script writer (`craftkit-cli script --out`, writing the sample design's
+    own commands), and the fuzzer a second target — with the script's own
+    shape broken (a step that is not an object, a command the registry does
+    not have, a parameter past the magnitude limit), because a script
+    **carries commands** and a broken script is a broken instruction.
+
+    **What is left is the replay door**, and it is the bigger one. A crash
+    report is a **folder** of three files, not a file, and the tree has no
+    headless writer for one: the only producer in the tree is the desktop
+    app's panic hook, and the CLI's crash actions are list, show and replay.
+    So the work is a writer *and* a corpus that is a folder *and* a child
+    that takes an id rather than a path.
 
 48. **Decide what a script may cost, and what a command may cost.** §181
     bounded the *number* of commands a script or a replay may run, and left

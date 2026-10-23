@@ -393,6 +393,7 @@ Headless, through the CLI:
 craftkit-cli run script.json --out part.step
 craftkit-cli eval design.craftkit
 craftkit-cli sample --out design.craftkit
+craftkit-cli script --out script.json
 craftkit-cli snapshot script.json --out shot.png
 craftkit-cli commands
 ```
@@ -410,6 +411,11 @@ craftkit-cli commands
 > on the file's size. Every command clones the document, so the cost of a
 > script is quadratic in the document it builds: 10 000 steps took 165 s, and
 > the file's 1 MiB limit is no proxy for that at all. §181.
+>
+> The tree can **write** a script too: `craftkit-cli script --out script.json`
+> writes the sample design's own commands, with the tree's own writer. That is
+> what lets the fuzzer break the script door: the corpus is the tree's own
+> format, not a second copy of it. §182.
 
 The contract `crates/control` must satisfy is real and testable now:
 `Method::parse`, `dispatch`, `token_path`. See

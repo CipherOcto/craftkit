@@ -175,6 +175,26 @@ fn step_size(step: &TraceStep) -> usize {
     serde_json::to_string(step).map(|s| s.len()).unwrap_or(0)
 }
 
+/// The commands that build the sample design.
+///
+/// The sample is built **through the registry** — three `node.add` commands —
+/// so the tree knows what the sample is made of. They are here, as a list,
+/// so that there is **one copy** of them: §182 gave the tree a writer for
+/// the script format, and a script writer that kept its own list of the
+/// sample's commands would be a second copy of the sample.
+///
+/// The list is *the sample's*, not a script's: a script that runs these
+/// three commands builds the same document, and the tree's own writer is
+/// what turns one into the other.
+pub fn sample_steps() -> Vec<(String, serde_json::Value)> {
+    [("Level", "source", 1.0), ("Taper", "filter", 0.5), ("Out", "sink", 1.0)]
+        .into_iter()
+        .map(|(name, kind, amount)| {
+            ("node.add".to_string(), serde_json::json!({ "name": name, "kind": kind, "amount": amount }))
+        })
+        .collect()
+}
+
 /// A live editing session.
 ///
 /// Every surface — the window, the CLI, the control channel, the MCP server,
@@ -244,10 +264,8 @@ impl Session {
     /// session opens clean.
     pub fn sample() -> Self {
         let mut s = Self::new("Sample plan");
-        for (name, kind, amount) in [("Level", "source", 1.0), ("Taper", "filter", 0.5), ("Out", "sink", 1.0)]
-        {
-            let outcome =
-                s.execute("node.add", &serde_json::json!({ "name": name, "kind": kind, "amount": amount }));
+        for (command, params) in sample_steps() {
+            let outcome = s.execute(&command, &params);
             debug_assert!(outcome.is_ok(), "the sample document must build: {outcome:?}");
         }
         // The sample is the *starting state*, not something the user did: a

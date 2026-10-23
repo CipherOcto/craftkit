@@ -38,6 +38,7 @@ impl Cli {
             crate::args::Command::Run { script, sample } => run_script(script, *sample),
             crate::args::Command::Eval { file, at } => eval(file, at.as_deref()),
             crate::args::Command::Sample { out } => sample(out),
+            crate::args::Command::Script { out } => script(out),
             crate::args::Command::Snapshot { script, out, sample } => snapshot(script, out, *sample),
             crate::args::Command::Crashes { action } => crashes(action),
             crate::args::Command::Mcp => mcp(),
@@ -321,6 +322,52 @@ fn sample(out: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// --------------------------------------------------------------- script --
+
+/// Write a script of commands to a file.
+///
+/// **The tree had no writer for the script format.** The only producer was
+/// `replay_as_script`, which prints a report's replay to stdout — and a
+/// report needs a crash, so the tree could not write a script on demand. That
+/// mattered because §180's rule is that a fuzzer's corpus is written by the
+/// tree's own program: without a writer, the script door could not be
+/// fuzzed at all, and a hand-written corpus would have been a second copy of
+/// the format. §182.
+///
+/// The script it writes is the **sample design's own commands**: the tree
+/// builds the sample through three `node.add` commands, and those three are
+/// the script. One copy — `craftkit_engine::sample_steps` — and the sample
+/// and the script cannot drift apart.
+fn script(out: &Path) -> Result<(), String> {
+    let commands: Vec<Json> = craftkit_engine::sample_steps()
+        .into_iter()
+        .map(|(command, params)| json!({ "command": command, "params": params }))
+        .collect();
+    let text = script_text(&script_value("the sample design", None, commands))?;
+    std::fs::write(out, text).map_err(|e| format!("could not write {}: {e}", out.display()))?;
+    println!("wrote {}", out.display());
+    Ok(())
+}
+
+/// A script, as the tree writes it.
+///
+/// The reader is [`load_script`] and the writer is here, and there is **one**
+/// shape for both: the two things the tree writes — a script of its own
+/// commands, and a report's replay — go through this, so the two cannot
+/// drift into two formats. §182.
+fn script_value(name: &str, base: Option<Json>, commands: Vec<Json>) -> Json {
+    let mut script = json!({ "name": name, "commands": commands });
+    if let Some(base) = base {
+        script["base"] = base;
+    }
+    script
+}
+
+/// A script, as text.
+fn script_text(script: &Json) -> Result<String, String> {
+    serde_json::to_string_pretty(script).map_err(|e| e.to_string())
+}
+
 // ------------------------------------------------------------- snapshot --
 
 fn snapshot(script: &Path, out: &Path, sample: bool) -> Result<(), String> {
@@ -387,12 +434,11 @@ fn replay_as_script(id: &str) -> Result<(), String> {
     let report = craftkit_engine::crash::show(id)?;
     let commands: Vec<Json> =
         report.replay.iter().map(|step| json!({ "command": step.command, "params": step.params })).collect();
-    let script = json!({
-        "name": format!("replay of {id}"),
-        "base": report.base,
-        "commands": commands,
-    });
-    let text = serde_json::to_string_pretty(&script).map_err(|e| e.to_string())?;
+    // The same shape the tree's own script writer uses, so the two cannot
+    // drift into two formats. §182.
+    let base = serde_json::to_value(&report.base).map_err(|e| e.to_string())?;
+    let script = script_value(&format!("replay of {id}"), Some(base), commands);
+    let text = script_text(&script)?;
     // The script has to be one `craftkit-cli run` can read back, and the
     // reader's limit is a limit on text. A report whose base is too big to
     // carry in a script says so here, rather than printing a script that

@@ -81,7 +81,7 @@ Run one on its own while you work; run `ci` when you are done.
 | `web` | the two hand-written JavaScript files: the canvas id, the bundle path, the worker's precache shell, the service worker's three safety rules, and `node --check` | a rename that missed `index.html`/`sw.js`, an unregistered worker |
 | `clippy` | `-D clippy::all -D warnings`, `--all-targets`, `--profile ci` | a warning you were going to ignore; a lint the house deny exists to catch |
 | `tests` | behaviour, including `hostile_params_never_panic` and the properties in `crates/core/tests/properties.rs` | a new command that panics on a hostile parameter |
-| `fuzz` | the design-file reader, handed broken files by `cargo xtask fuzz`: a crash or a hang is a bug, a refusal is the reader working | a reader that panics on a file it should have refused |
+| `fuzz` | the two readers the tree has a writer for — the design file and the script — handed broken files by `cargo xtask fuzz`: a crash or a hang is a bug, a refusal is the reader working | a reader that panics on a file it should have refused; a corpus that is not the tree's own format |
 | `wasm` | every library crate and `craftkit-web` still build for `wasm32-unknown-unknown` | a new dependency that is not wasm-safe |
 
 One more gate is **not** a phase of `ci`: `cargo xtask deny` checks the

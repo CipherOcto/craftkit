@@ -154,7 +154,7 @@ cargo xtask deny     # the dependency policy: licences, bans, sources, advisorie
 | `web` | the canvas id, the bundle path, and the service worker's safety rules |
 | `clippy` | `-D clippy::all -D warnings`, every target |
 | `tests` | every crate, every app, and the gates themselves |
-| `fuzz` | the design-file reader survives broken files: no crash, no hang |
+| `fuzz` | the two readers survive broken files: a design and a script, no crash and no hang |
 | `wasm` | every library crate still builds for the browser |
 
 A gate that cannot run says **skipped**, with a reason, in the middle of the
