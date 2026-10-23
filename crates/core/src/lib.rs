@@ -20,6 +20,14 @@
 //! And one more thing, added because the same mistake was made in four
 //! places at once: [`read_line_bounded`] — a reader that applies its limit
 //! *before* the allocation, rather than after it.
+//!
+//! # The readers are checked by properties
+//!
+//! The readers and the parameter readers are the code that turns hostile
+//! input into typed values, so they are the code where a panic is a real
+//! bug. They are checked in `crates/core/tests/properties.rs`, by generated
+//! inputs rather than by a table of the ones somebody thought of: any bytes,
+//! any JSON, any limit. §175.
 
 #![deny(
     clippy::unwrap_used,

@@ -36,6 +36,15 @@
 use crate::{Color, Value, finite};
 use serde_json::Value as Json;
 
+/// The largest magnitude an integer parameter may have.
+///
+/// **This is not the rule a caller sees.** [`Params::num`] has already
+/// refused anything over [`crate::MAX_MAGNITUDE`], so this cannot fire
+/// today. It is here so that a change to that bound cannot make the cast in
+/// [`Params::int`] silently truncate — and it is named so that the number
+/// is not written out twice. §175.
+const MAX_INT_MAGNITUDE: f64 = 9e15;
+
 /// A read-only view over a command's parameters.
 #[derive(Debug, Clone, Default)]
 pub struct Params<'a> {
@@ -110,7 +119,11 @@ impl<'a> Params<'a> {
     pub fn int(&self, key: &str) -> Result<Option<i64>, ParamError> {
         match self.num(key)? {
             None => Ok(None),
-            Some(v) if v.fract() == 0.0 && v.abs() < 9e15 => Ok(Some(v as i64)),
+            // The magnitude is already bounded — `num` refuses anything over
+            // `MAX_MAGNITUDE` before this point — so `MAX_INT_MAGNITUDE`
+            // cannot fire today. It is here so that a change to that bound
+            // cannot make the cast below silently truncate. §175.
+            Some(v) if v.fract() == 0.0 && v.abs() < MAX_INT_MAGNITUDE => Ok(Some(v as i64)),
             Some(v) => Err(ParamError { key: key.to_string(), detail: format!("{v} is not a whole number") }),
         }
     }

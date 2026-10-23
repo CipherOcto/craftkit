@@ -913,7 +913,7 @@ mod tests {
     fn an_oversized_file_is_refused_before_it_is_parsed() {
         let big = "x".repeat(65 * 1024 * 1024);
         let err = File::from_text(&big).expect_err("refused");
-        assert!(err.to_string().contains("limit is"), "{err}");
+        assert!(err.to_string().contains("limit"), "{err}");
     }
 
     /// A file carrying a name the grammar cannot write is refused.

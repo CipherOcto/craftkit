@@ -35,8 +35,18 @@ use std::path::Path;
 /// Why a bounded read could not produce a line.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReadError {
-    /// The line was longer than the limit.
-    #[error("the input is {len} bytes; the limit is {max}")]
+    /// The input was longer than the limit.
+    ///
+    /// `len` is how long the input is **when that is known**: the file reader
+    /// knows the file's size before it reads a byte of it, and reports that.
+    /// A stream reader stops at the limit, so it cannot know how much was
+    /// left — it reports the bytes it read, which is the limit plus one.
+    ///
+    /// The message says what is true in both cases. It used to say *"the
+    /// input is {len} bytes"*, which was the file's size for one reader and
+    /// the limit plus one for the other, so a caller that printed it was
+    /// told a length that was not the input's. §175.
+    #[error("the input is longer than the limit of {max} bytes")]
     TooLong { len: usize, max: usize },
     /// The bytes could not be read.
     ///

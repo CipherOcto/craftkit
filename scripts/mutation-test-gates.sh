@@ -71,7 +71,9 @@ readonly FILES=(
     crates/core/Cargo.toml
     crates/core/src/lib.rs
     crates/core/src/ids.rs
+    crates/core/src/params.rs
     crates/core/src/readers.rs
+    crates/core/tests/properties.rs
     crates/core/src/value.rs
     crates/core/src/tick.rs
     crates/core/src/writer.rs
@@ -5004,6 +5006,37 @@ swap apps/craftkit-cli/src/args.rs \
     '        "-V" => Ok(Some(Command::Version)),'
 expect_catch "cli: the parser stops accepting the version flag" \
     "cargo test -p craftkit-cli --profile ci the_version_is_asked_for_in_two_ways"
+
+# --------------------------------------------------- the property tests ----
+# Section 175. The house's promise is that hostile input is refused, and it
+# was checked by a table of inputs somebody thought of. The first two breaks
+# are the ones the table misses: each is a bound off by one, in a place where
+# every hand-written test used a value far enough from the edge that the slip
+# changed nothing. The third is about the suites themselves.
+#
+# The gates named here are the **properties**, and they are named one by one
+# because that is the point: the unit tests do not catch the first two, so a
+# case that ran the whole crate would not say that the property is what
+# caught it.
+swap crates/core/src/readers.rs \
+    '                    content_len = content_len.saturating_add(index);' \
+    '                    content_len = content_len.saturating_add(index + 1);'
+expect_catch "reader: the line's length counts the newline" \
+    "cargo test -p craftkit-core --profile ci a_line_longer_than_the_limit_is_refused_with_its_true_length"
+
+swap crates/core/src/params.rs \
+    '                if s.len() > max {' \
+    '                if s.len() > max + 1 {'
+expect_catch "params: the text cap is one too large" \
+    "cargo test -p craftkit-core --profile ci a_text_parameter_never_exceeds_its_limit"
+
+# And the suites stop running from a fixed seed, so a CI run can fail at
+# random. The rule is a test rather than a comment, so it can be caught.
+swap crates/core/tests/properties.rs \
+    '    Config { failure_persistence: None, rng_seed: RngSeed::Fixed(SEED), cases: CASES, ..Config::default() }' \
+    '    Config { failure_persistence: None, rng_seed: RngSeed::Random, cases: CASES, ..Config::default() }'
+expect_catch "property: the suites stop running from a fixed seed" \
+    "cargo test -p craftkit-core --profile ci the_property_suites_run_from_a_fixed_seed_and_write_nothing_down"
 
 restore
 finish

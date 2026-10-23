@@ -46,6 +46,11 @@ eframe = { version = "0.33", default-features = false, features = [
 ] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Property tests. A **dev-dependency** only: it is never linked into a
+# shipped binary, so it is in the test build and not in the product. The
+# family uses proptest and nothing else. §175.
+proptest = "1"
+
 # Browser only. See apps/craftkit-web/Cargo.toml, where they are target-gated.
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

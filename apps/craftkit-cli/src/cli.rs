@@ -700,7 +700,12 @@ mod tests {
         let filler = "x".repeat(33 * 1024 * 1024);
         std::fs::write(&path, format!(r#"{{"commands":[],"name":"{filler}"}}"#)).expect("write");
         let err = load_script(&path).expect_err("refused");
-        assert!(err.contains("limit is"), "{err}");
+        // The message says the input is **longer than** the limit, and names
+        // the limit. It used to say "the input is N bytes; the limit is M",
+        // and N was the limit plus one for a reader that stops at the limit
+        // — so the number was not the input's. §175.
+        assert!(err.contains("limit"), "{err}");
+        assert!(err.contains(&MAX_SCRIPT_BYTES.to_string()), "{err}");
     }
 
     #[test]

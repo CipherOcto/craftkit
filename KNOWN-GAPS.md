@@ -20342,6 +20342,244 @@ by hand.
 number comes from the manifest, at compile time, by the same inheritance
 every other crate in the tree uses. There is no second copy to forget.
 
+## 175. Property tests: the promise, written as a generator
+
+### The finding
+
+The survey of what the family has and this tree did not
+(`craft-knowledge/09-portable-practices.md`) turned up the largest gap in
+this file, and it is not a missing feature. It is a missing *kind of test*.
+
+**The family writes property tests, and this tree does not.**
+
+| Repo | Manifests that name a property framework |
+|---|---:|
+| **F** | 10 |
+| **SC** | 8 |
+| **VC** | 12 |
+| **E** | 5 |
+| **P** | 4 |
+| **S** | 1 |
+| **craftkit** | **0** |
+
+Every one of the family uses **proptest**; `quickcheck` appears in none. So
+the port is not a choice between frameworks — it is a choice between
+`proptest` and nothing. (Each count above includes that repo's workspace
+manifest: **36** crate manifests, **41** files.)
+
+### What this tree had instead
+
+A good test, and the house's own headline promise:
+
+```rust
+fn hostile_params_never_panic() {
+    // Every registered command, fired at every documented parameter name
+    // with hostile values.
+}
+```
+
+It derives its parameter names from the registry, so it stays true as
+commands are added — §92 fixed a version of it that fired five fixed
+parameter objects and left **27** of the commands' documented parameters
+unfired.
+
+**And it is still a table.** A fixed set of hostile *values*, fired at every
+name. The names are complete; the values are guesses. There is a string of
+fifty-one bytes, a negative number, a null — and there is every other string
+and number and list, none of which anybody thought of.
+
+### The port
+
+`proptest` as a **dev-dependency** — never linked into a shipped binary —
+and nine properties over the code that turns hostile input into typed
+values, plus a test for the configuration they run with:
+`crates/core/tests/properties.rs`.
+
+| The property | What it holds |
+|---|---|
+| `a_bounded_line_read_keeps_at_most_the_limit` | the reader's answer is never longer than the limit |
+| `a_bounded_line_read_leaves_the_reader_at_the_next_line` | it stops at the end of the line, so a server that carries on stays in step |
+| `a_line_longer_than_the_limit_is_refused_with_its_true_length` | the length in the error is the line's length, not the limit and not a guess |
+| `a_bounded_whole_read_answers_with_the_input_or_refuses_it` | it answers with the whole input or refuses it, and never with a truncated version |
+| `a_parameter_is_read_or_refused` | no JSON value makes a reader panic |
+| `a_text_parameter_never_exceeds_its_limit` | the bound holds, and a value over it is refused |
+| `a_number_parameter_is_finite_and_an_integer_parameter_is_whole` | a number is finite; an integer is whole and in range |
+| `a_number_list_is_all_numbers_or_is_refused` | a list is all numbers, or it is refused |
+| `a_colour_parameter_is_three_or_four_channels_and_is_refused_when_one_is_out_of_range` | the channels it answers with are the ones it was given, and it refuses one that is out of range |
+
+**The JSON strategy is written here**, in twenty lines of `prop_oneof!`:
+`proptest` has no `serde_json` strategy, and a hand-written one is not a
+dependency.
+
+### What the property test found
+
+The first version of the whole-input property was **wrong**, and the
+generator said so in seconds:
+
+```text
+minimal failing input: (data, max) = ([0, 0, 0, 194, 128, 128], 0)
+Test failed: unexpected: Err(Utf8Error { .. }) / Err(TooLong { len: 1, max: 0 })
+```
+
+The property had said "the outcome depends on whether the whole input is
+text". It does not: the reader reads at most `max + 1` bytes and decides on
+**those**. The property was corrected to say so.
+
+And in correcting it, a second thing showed up — in the **code**, not in the
+property:
+
+> `read_to_string_bounded` reports `len: out.len()`, which is `max + 1` — the
+> bytes it read. The error's message says *"the input is {len} bytes"*, and
+> for a stream that is **not the input's length**. It is the limit plus one.
+
+`read_file_bounded` replaces the number with the file's real size, so the
+file path is honest; the stream path was not, and nothing said so. The
+message now says what is true in both cases, and the doc comment says what
+`len` is.
+
+**That is what a generator is for.** A hand-written test of the same reader
+would have said *"the input is too long"* and been right about the outcome
+and wrong about the number, and it would have kept being wrong.
+
+### A property that depends on luck is a property that stops catching
+
+The family pins the seed of its property suites, and the reason is in its own
+words: *"so a CI run can never fail at random"*. That is right, and craftkit
+does the same — `proptest`'s failure persistence is switched off as well, so
+no file of machine-written seeds appears in the tree, and
+`PROPTEST_CASES=5000 PROPTEST_RNG_SEED=<n>` is how a developer looks
+further.
+
+**And pinning the seed exposed a weakness that a random seed had hidden.**
+
+The text property was written first with a random text and a random limit:
+
+```rust
+fn a_text_parameter_never_exceeds_its_limit(text in ".{0,40}", max in 0usize..40)
+```
+
+With a **random** seed it caught a cap that was one byte too large. With the
+**fixed** seed it did not, and the mutation was reported as **MISSED**. The
+reason is not subtle: the text's length and the limit were drawn
+independently, so the case that matters — a text of exactly the limit plus
+one — was drawn only by luck.
+
+The generator now asks for the length **in terms of the limit**:
+
+```rust
+fn a_text_parameter_never_exceeds_its_limit(max in 0usize..40, over in 0usize..3)
+```
+
+so the boundary is always one of the cases, and the mutation is caught every
+time. The same was done for the list's length and for the line's length --
+and the line's property also had to ask for a **terminated** line, because
+the reader counts a line two ways and a property with only one of them
+misses a break in the other.
+
+**A property is only as good as the cases its generator builds.** A random
+generator over a random bound is a generator that hopes.
+
+### A bound in the code that cannot fire
+
+The number property found a second thing, and this one is in the product
+rather than in the test.
+
+`Params::int` refuses a value that is not a whole number, and it looks like
+this:
+
+```rust
+Some(v) if v.fract() == 0.0 && v.abs() < 9e15 => Ok(Some(v as i64)),
+```
+
+But `int` reads its value through `num`, and `num` refuses anything over
+`MAX_MAGNITUDE` — which is **1e9**. So the `9e15` **cannot fire**: a number
+big enough to reach it was refused a step earlier, and a reader of the code
+would take `9e15` for the rule.
+
+The bound is now named (`MAX_INT_MAGNITUDE`) and says what it is: a guard
+against a future change to `MAX_MAGNITUDE` making the cast silently
+truncate. It is not the rule, and it does not pretend to be.
+
+This is the same shape as §149 — *"a limit in a string is not
+enforcement"* — one level down: a limit in the **code** that is not
+reachable is not a limit, it is a number that reads like a rule.
+
+### The property that clippy caught
+
+The colour property's first version said *"every channel it answers with is
+in range"*. **A channel is a `u8`**, so the comparison could not fail — and
+clippy, which is already in the tree and runs on every target, refused it:
+
+```text
+error: comparison is useless due to type limits
+  --> crates/core/tests/properties.rs:233:17
+```
+
+**A property that cannot fail is a gate that cannot fail**, and here the
+lint that said so was already switched on. The property now says the thing
+worth saying: the channels it answers with are **the ones it was given**,
+and a channel out of range is refused.
+
+### The property that is deliberately not written
+
+**"No command panics."** `Session::execute` runs every command under a
+`catch_unwind`, so that is already structurally true at the command
+boundary, and a test of it would prove nothing about the code underneath. A
+gate that cannot fail is worse than no gate, and this one cannot fail by
+construction.
+
+So the properties here are on the code **below** the boundary — the readers
+and the parameter readers — where a panic is a real bug, and they are about
+the **bounds**, because a bound is a fact about the output that no amount of
+luck can fake.
+
+### The mutations
+
+Three. Two break a bound by one, and each is caught by a property that the
+hand-written tests do not catch; the third breaks the rule that makes the
+other two reliable:
+
+| Mutation | What it breaks | Why the old tests missed it |
+|---|---|---|
+| the line reader counts the newline in the line's length | the reported length is one more than the line's | every old test with a newline in it checked the *outcome*, not the number |
+| the text parameter's cap is one too large | a text one byte over the limit is accepted | the old test used a text of fifty bytes against a limit of ten, so an off-by-one changed nothing |
+| the suites stop running from a fixed seed | a CI run can fail at random | nothing — the rule was a comment until it became a test |
+
+All three were checked to be caught, one at a time, on the tree.
+
+**The second one was missed, once.** It was caught with a random seed and
+**not** caught with the fixed seed, and the reason was the generator rather
+than the gate: the text's length and the limit were drawn independently, so
+the case that mattered was drawn by luck. The generator now asks for the
+length in terms of the limit, and the mutation is caught every time. That
+is the section's own lesson, and it was learned by the mutation missing.
+
+### What the gate cannot see
+
+- **The properties are a sample.** `proptest` runs 256 cases by default and
+  shrinks a failure; it is not a proof. A property that holds for every
+  generated input is evidence, not certainty.
+- **The generator's shape is the coverage.** The JSON strategy generates the
+  kinds a parameter holds, not every JSON there is. A value shape the
+  strategy does not produce is not covered.
+- **The engine's commands.** These properties are on the readers. The
+  commands are covered by the hand-written table, and by the mutation
+  suite's own breaking of them — but a *generated* parameter for every
+  command is the next piece of work, and it is open.
+
+### The lesson
+
+**A table of hostile inputs is a list of guesses, and a generator is the
+same rule without the guessing.** The house's promise is that hostile
+input is refused. The hand-written tests check the inputs somebody
+imagined; the properties check the rest.
+
+**And a generator corrects the tester.** The first version of the
+whole-input property was wrong, and the wrongness was found by the
+generator in seconds — and it was wrong in a way that pointed at a real
+inaccuracy in the code, in an error message that had been there since the
+beginning.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -20756,6 +20994,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A mutation that cannot run is skipped, not passed** | `expect_catch_needs` in the mutation script | the skipped line — §173 |
 | **The CLI answers what version it is** | `cli::version_line` | 1 mutation — §174 |
 | **The version the CLI prints is the crate's own** | `env!("CARGO_PKG_VERSION")` | 1 mutation — §174 |
+| **A reader keeps at most its limit** | the properties in `crates/core/tests/properties.rs` | 1 mutation — §175 |
+| **A reader reports the length it counted, not the limit** | the same | 1 mutation — §175 |
+| **A parameter's bound holds, and a value over it is refused** | the same | 1 mutation — §175 |
+| **A refused input says how long the input was** | the message in `crates/core/src/readers.rs` | the property that found it — §175 |
+| **A property suite runs from a fixed seed, and writes nothing down** | `config()` in `crates/core/tests/properties.rs` | 1 mutation — §175 |
+| **A bound that cannot fire says so** | `MAX_INT_MAGNITUDE` in `crates/core/src/params.rs` | the property that found it — §175 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -21633,3 +21877,27 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     tree moves up, the advisory comes back on its own — the gate will say so
     if the exception is still there — and the line can be deleted rather than
     re-justified.
+
+45. **Fire every command at every parameter with *generated* values.** Section
+    175 put the properties on the readers and the parameter readers, which is
+    where a panic would be a real bug. The commands are still covered by a
+    table.
+
+    The table is `hostile_params_never_panic`, and it is good: it derives the
+    **parameter names** from the registry, so it stays true as commands are
+    added. What it does not do is generate the **values** — it fires a fixed
+    set at every name, and the fixed set is a list of guesses.
+
+    The work is a generator per parameter *kind*, not per command: the
+    registry already says what each parameter is, so a value of the right
+    kind with the wrong contents — a number of the wrong magnitude, a string
+    with a newline in it, a list of the wrong length — is a small, finite
+    job. Then the property is the one the house already wants: **no command,
+    with any parameter, leaves a document the file reader would refuse.**
+
+    The trap to avoid is the one section 175 names: `Session::execute` runs
+    every command under a `catch_unwind`, so "no command panics" is already
+    structurally true and a test of it proves nothing. The property has to be
+    about the **document** — that it is still valid, and that the dirty flag
+    and the undo stack are what they were — because that is the part the
+    panic boundary does not restore for you.
