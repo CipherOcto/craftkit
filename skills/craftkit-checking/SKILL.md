@@ -75,6 +75,7 @@ Run one on its own while you work; run `ci` when you are done.
 |---|---|---|
 | `fmt` | formatting is not a reviewer's problem | an unformatted file after an edit |
 | `assets` | every icon is drawn in code; every file asset has a row in `ATTRIBUTION.md`; **nothing in the tree is written in another language** | a checked-in PNG/SVG/font, an `include_bytes!` of an image, an asset with no attribution row, **a `.py`/`.js`/`.sh` that is not one of the five declared exceptions** |
+| `cleanroom` | **no product's name is in the tree outside prose** — the rule and the table of products are in `docs/clean-room.md` | a fixture, a test or a file name that carries another product's name; a product name in a string literal |
 | `lists` | the lines many changes touch: the deny attribute, the layer table in `docs/architecture.md`, sorted `mod` groups, the crate roots, and every field the model's fingerprint hashes | a new crate missing the deny attribute, a `TABLE` row with no matching doc row, an unsorted `mod` block, **a field added to a type the fingerprint walks** (§80) |
 | `layers` | `TABLE` is the layering rules | a dependency upward (`craftkit-core` naming `craftkit-io`), a UI crate below L6 |
 | `web` | the two hand-written JavaScript files: the canvas id, the bundle path, the worker's precache shell, the service worker's three safety rules, and `node --check` | a rename that missed `index.html`/`sw.js`, an unregistered worker |
@@ -86,6 +87,7 @@ Green output for each (observed):
 
 ```
 ── assets   ok: no embedded image assets, every asset is attributed, and nothing outside Rust crept in
+── cleanroom ok: no product's name is in the tree outside prose
 ── lists    ok: 13 crate roots share one deny line, the layer table matches the docs, lists are sorted, …
 ── layers   craftkit-core L0 … craftkit-ui L6, apps + xtask exempt
 ── web      ok: the canvas, the bundle path, the worker's shell and its rules all agree
@@ -471,6 +473,7 @@ snapshot and reports `EngineError::Internal`.
 | `doctor` exits non-zero before any gate | `cargo xtask doctor` | rustc older than `rust-version`; update the toolchain, do not edit `Cargo.toml` |
 | `fmt` gate fails | `cargo fmt --all` | an edit left unformatted; the diff it prints is the fix |
 | `assets` reports an embedded asset | `cargo xtask assets` | a checked-in image; draw it in `crates/ui/src/icons.rs` instead |
+| `cleanroom` names a product | `cargo xtask cleanroom` | a name in a source file, a test or a file name; the rule allows the name in prose only — see `docs/clean-room.md` |
 | `assets` reports an unattributed file | — | add a row to `ATTRIBUTION.md` naming file, what, and where it came from |
 | `lists` says "no deny attribute" | `cargo xtask lists` | new crate root; copy the block from any other crate |
 | `lists` says the deny is "not the house one" | — | right lints, wrong **set or order**; whitespace does not matter |

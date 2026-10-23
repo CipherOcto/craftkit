@@ -37,7 +37,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::{assets, cargo, doctor, layers, lists, step, wasm, web};
+use crate::{assets, cargo, cleanroom, doctor, layers, lists, step, wasm, web};
 
 /// One step of the gate.
 pub struct Phase {
@@ -58,6 +58,7 @@ pub struct Phase {
 pub const PHASES: &[Phase] = &[
     Phase { name: "fmt", run: fmt },
     Phase { name: "assets", run: assets::run },
+    Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
     Phase { name: "layers", run: layers::run },
     Phase { name: "web", run: web::run },
@@ -179,7 +180,7 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["fmt", "assets", "lists", "layers", "web", "clippy", "tests", "wasm"],
+            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "wasm"],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"
@@ -200,7 +201,7 @@ mod tests {
         let without_wasm: Vec<&str> = PHASES.iter().filter(|p| p.name != "wasm").map(|p| p.name).collect();
         let line = summary(0.0, &without_wasm, &["wasm"]);
         assert!(
-            !line.contains("— fmt, assets, lists, layers, web, clippy, tests, wasm."),
+            !line.contains("— fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm."),
             "a skipped phase must not be listed as one that ran: {line}"
         );
         assert!(line.contains("skipped, not passed: wasm"), "{line}");

@@ -22,6 +22,7 @@
 //! |---|---|
 //! | [`layers`] | the dependency layering, and the UI boundary |
 //! | [`assets`] | "every icon is drawn in code; every file is attributed" |
+//! | [`cleanroom`] | "no product's name is in the tree outside prose" |
 //! | [`lists`] | the shared lines and sorted lists many changes touch |
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
@@ -43,9 +44,11 @@
 
 pub mod assets;
 pub mod ci;
+pub mod cleanroom;
 pub mod doctor;
 pub mod layers;
 pub mod lists;
+pub mod tree;
 pub mod wasm;
 pub mod web;
 
@@ -60,6 +63,7 @@ The gates. Run `ci` before every commit; the rest are what it runs.
 
   layers      enforce the crate dependency layering (docs/architecture.md)
   assets      every icon is drawn in code and every file asset is attributed
+  cleanroom   no product's name is in the tree outside prose (docs/clean-room.md)
   lists       the shared lines and sorted lists many changes add to stay sorted
   web         check the browser entry page and the service worker
   wasm        every crate below the apps still builds for wasm32-unknown-unknown
@@ -89,6 +93,7 @@ pub fn run() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("layers") => layers::run(&root).map(drop),
         Some("assets") => assets::run(&root).map(drop),
+        Some("cleanroom") => cleanroom::run(&root).map(drop),
         Some("lists") => lists::run(&root).map(drop),
         Some("web") => web::run(&root).map(drop),
         Some("wasm") => wasm::run(&root).map(drop),

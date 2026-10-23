@@ -19397,7 +19397,151 @@ constant with the same name**: `crates/core/src/params.rs` has its own
 `const MAX_DEPTH: u8 = 8`, and the limits gate, which asks whether a *name*
 is in the tree, took that for the model's `MAX_DEPTH: usize = 32`. Measured:
 with the model's limit left unenforced, the gate said **green**; with the
-other constant renamed, it said the limit was unused. That is §168.
+other constant renamed, it said the limit was unused. That is **§172**.
+
+## 168. The clean-room rule had no gate, and two of the family's repos stated it in opposite words
+
+§167's closing note promised the same-name hole in the limits gate as **§168**.
+This section took that number, so that hole is **§172** now; the promise is
+kept and the number moved.
+
+### The finding
+
+Two repos in the family state the clean-room rule, and they say opposite things
+about whether the competitor may be **observed**:
+
+| Repo | The rule |
+|---|---|
+| **soundcraft** (`AGENTS.md:22`) | *"Pro Tools is installed on the dev machine and may be **observed** black-box: run it, use its UI with synthetic sessions, take screenshots by window id."* |
+| **vectorcraft** (`AGENTS.md:17`) | *"Adobe's Terms of Use forbid reverse engineering, **including observing a program's inputs and outputs to recreate it**. So: never launch, run, script, automate …, screenshot or measure Illustrator."* |
+
+Both are marked as owner-level rules. **They cannot both be the family's rule.**
+
+The stricter one is the right one, and the reason is not taste: the other
+party's terms decide what a clean-room claim may rest on, and a rule that
+depends on what their licence happens to allow is a rule that changes when
+their lawyers read it. So the stricter one is the rule here.
+
+And the stricter repo is the one whose **gate does not exist**:
+`vectorcraft/AGENTS.md:20` says *"cargo xtask cleanroom (run by cargo xtask ci)
+fails on Adobe copyright notices and on fixtures made with Adobe applications"* —
+and there is no `cleanroom` subcommand in that tree.
+
+So the family had: a rule that could not be checked, a rule that was checked by
+nothing, and two rules that disagreed.
+
+### What this tree had
+
+craftkit's own rule was the **strong** half and nothing else:
+
+> **Independent.** Behaviour is designed from public specifications, general
+> conventions and user feedback. No commercial CAD product's code, icons,
+> artwork, help text, tooltips, templates, test data, measurements or generated
+> files. Nothing is copied from another project's source.
+
+Nothing about *running* a product. And **no gate at all**: the rule was a
+sentence in `AGENTS.md` that no tool could check, in a tree whose whole
+argument is that a rule no gate enforces is a wish.
+
+### What it cost
+
+Nothing is broken today, and that is the point worth measuring rather than
+asserting.
+
+Measured on the tree as it stood, with a list of **32** product names — the
+commercial CAD and graphics products the family competes with, and the
+copyleft projects whose source may never be read — against **every file that
+is not prose**: **zero hits**. 92 files scanned, no path and no line naming
+any of them.
+
+So the cost was never a bug. It was a promise with nothing behind it, and a
+promise is exactly the thing that fails silently: the day somebody adds a
+fixture named after a competitor, or a tooltip that quotes one, this tree would
+have said nothing.
+
+### The fix
+
+**The rule is a document, and the table of products is in it.** The document is
+`docs/clean-room.md`, and the gate reads the table from there — so the rule
+and the list of names live together, and a product named in the rule is a
+product the gate checks.
+
+**The gate is `cargo xtask cleanroom`.** It walks the tree, skips prose (a
+product's name may appear in the rule, in `AGENTS.md`, in a note about why
+something is the way it is), and fails with the file, the line and the name it
+found. It checks the **path** as well as the content, because a file called
+`solidworks-export.dxf` is as much a copy of somebody else's work as a
+function that writes one — and a two-word product's name cannot hold a space
+in a Rust file name, so the path is checked in three forms (the name, the name
+with dashes, the name with underscores).
+
+**The rule in `AGENTS.md` now says the whole rule**, including the part about
+not running a product, and points at the document and the gate.
+
+**One walk.** The assets gate and the clean-room gate needed the same walk of
+the tree, and the assets gate had two copies of it (`walk` and `collect`, near
+identical). There is now one, in `xtask/src/tree.rs`, and both gates use it.
+
+### What the gate cannot see
+
+Written into the rule itself, because a gate that pretends to check everything
+is worse than one that says what it misses:
+
+> Copied code does not carry the product's name. A gate that checked that
+> would be a gate that could never pass, and a gate that can never pass is a
+> rule written in prose.
+
+So the gate is the part that can be mechanical, and the review is the rest.
+The review is why the document exists: a reviewer who reads the table knows
+what to look for, and a reviewer who was never told does not.
+
+### The unit tests
+
+Ten, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `the_table_is_read_from_the_rule` | the products come from the rule's table, in order, with their kinds |
+| `a_document_with_no_table_names_no_products` | a rule with no table yields no products |
+| `a_row_with_an_empty_cell_is_a_broken_rule` | a row with an empty cell is an error, not an exemption |
+| `a_product_name_in_a_source_file_is_reported_with_its_line` | a name in a source file is reported with the file and the line |
+| `a_product_name_in_prose_is_not_reported` | the same name in a Markdown file is not a violation |
+| `a_product_name_in_a_file_name_is_reported` | a name in a path is a violation |
+| `a_name_that_is_not_the_products_name_is_not_the_product` | `Zorbix900` is not `Zorbix 900` |
+| `the_case_of_a_name_does_not_matter` | the match is case-insensitive |
+| `a_rule_that_names_no_product_is_reported_rather_than_passed` | an empty table is an error, not a pass |
+| `a_missing_rule_is_reported_rather_than_passed` | a missing document is an error, not a pass |
+| `this_repository_carries_no_product_name_outside_prose` | the real tree, against the real rule |
+
+The tests use **invented** names (`Zorbix 900`, `Quibble Draw`), because the
+gate scans the tree it lives in: a file that has to prove the gate works has
+to be able to name what it looks for without being the thing it forbids. The
+real names are in the rule, and the last test checks the real tree against it.
+
+### The mutations
+
+Three, each putting the old rule back:
+
+| Mutation | What it breaks |
+|---|---|
+| the table read returns nothing | the gate checks nothing and passes everything |
+| the match becomes case-sensitive | a name written in lower case is missed |
+| the path check loses its other two forms | a two-word product's name in a file name is missed |
+
+### The lesson
+
+**A rule that names a product is a product the gate checks.** The table is in
+the rule, and the rule is what the gate reads — so the two cannot drift, and a
+product added to the rule is enforced the moment it is added.
+
+**The stricter of two contradictory rules is the one whose authority is not the
+other party's terms.** Two repos of one family, one owner, two rules about
+whether the competitor may be looked at. The rule that survives is the one
+that does not depend on a licence somebody else wrote.
+
+**And a rule with no gate is a wish, even a true one.** This tree's rule was
+true — measured, zero hits — and it was still a promise with nothing behind
+it. The day it stopped being true, nothing would have said so.
 
 ## What enforces what
 
@@ -19797,6 +19941,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An embed call inside a string is not an embed** | the code view in `find_embedded` | 1 mutation — §166 |
 | **A file under a `tests` directory is a test file** | the path in `production_of` | 1 mutation — §167 |
 | **A test that catches a panic is not a boundary** | the path in `production_of` | 1 mutation — §167 |
+| **No product's name is in the tree outside prose** | the table in `docs/clean-room.md` | 2 mutations — §168 |
+| **A product's name in a file name is the product's name** | the three forms in `path_mentions` | 1 mutation — §168 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

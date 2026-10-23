@@ -90,7 +90,7 @@ fn relative_name(path: &Path) -> String {
 /// Foreign-source files in the tree that no exception allows.
 pub fn find_foreign_source(root: &Path) -> Result<Vec<String>, String> {
     let mut all = Vec::new();
-    walk(root, root, &mut all, is_foreign_source)?;
+    crate::tree::walk(root, root, &mut all, &is_foreign_source)?;
     let mut found: Vec<String> = all
         .iter()
         .map(|p| relative_name(p))
@@ -99,9 +99,6 @@ pub fn find_foreign_source(root: &Path) -> Result<Vec<String>, String> {
     found.sort();
     Ok(found)
 }
-
-/// Paths never inspected: build output and version control.
-const IGNORED_DIRS: &[&str] = &["target", ".git", "node_modules", "dist"];
 
 /// The `include`-shaped calls that would pull a file into the programs.
 pub const EMBED_CALLS: &[&str] = &["include_bytes!", "include_str!", "include!"];
@@ -160,42 +157,14 @@ pub fn is_asset(path: &Path) -> bool {
 
 /// The files under `root` that are assets, as paths relative to `root`.
 ///
-/// `walk` is hand-written rather than done with a glob crate: it is twenty
-/// lines, and it lets the tests run on a temporary directory with no filesystem
-/// assumptions beyond "a directory is a directory".
+/// The walk is the tree's one (`crate::tree::walk`): it is hand-written rather
+/// than done with a glob crate, and it lets the tests run on a temporary
+/// directory with no filesystem assumptions beyond "a directory is a directory".
 pub fn find_assets(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
-    walk(root, root, &mut found, is_asset)?;
+    crate::tree::walk(root, root, &mut found, &is_asset)?;
     found.sort();
     Ok(found)
-}
-
-fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>, keep: fn(&Path) -> bool) -> Result<(), String> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        // A directory that cannot be read is skipped, not fatal: a permission
-        // error on one path should not fail a gate about the whole repository.
-        Err(_) => return Ok(()),
-    };
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if IGNORED_DIRS.contains(&name.as_str()) || name.starts_with('.') {
-                continue;
-            }
-            walk(root, &path, found, keep)?;
-        } else if keep(&path)
-            && let Ok(relative) = path.strip_prefix(root)
-        {
-            found.push(relative.to_path_buf());
-        }
-    }
-    Ok(())
 }
 
 /// Every file under `root` that has no asset extension, for attribution checks.
@@ -205,36 +174,11 @@ fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>, keep: fn(&Path) -> bo
 /// temporary tree.
 pub fn find_sources(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
-    collect(root, root, &mut found, &|path| path.extension().and_then(|e| e.to_str()) == Some("rs"))?;
+    crate::tree::walk(root, root, &mut found, &|path| {
+        path.extension().and_then(|e| e.to_str()) == Some("rs")
+    })?;
     found.sort();
     Ok(found)
-}
-
-fn collect(
-    root: &Path,
-    dir: &Path,
-    found: &mut Vec<PathBuf>,
-    want: &dyn Fn(&Path) -> bool,
-) -> Result<(), String> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(_) => return Ok(()),
-    };
-    for entry in entries.into_iter().flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if IGNORED_DIRS.contains(&name.as_str()) || name.starts_with('.') {
-                continue;
-            }
-            collect(root, &path, found, want)?;
-        } else if want(&path)
-            && let Ok(relative) = path.strip_prefix(root)
-        {
-            found.push(relative.to_path_buf());
-        }
-    }
-    Ok(())
 }
 
 /// Find embedding calls that pull an asset into the programs.

@@ -111,6 +111,7 @@ readonly FILES=(
     apps/craftkit-cli/src/cli.rs
     apps/craftkit-web/src/main.rs
     xtask/src/assets.rs
+    xtask/src/cleanroom.rs
     xtask/src/ci.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
@@ -1557,6 +1558,42 @@ swap xtask/src/ci.rs '        crate::Outcome::Ran => ran.push(name),
         crate::Outcome::Skipped => ran.push(name),'
 expect_catch "ci: a skipped phase is counted as one that ran" \
     "cargo test -p xtask --profile ci a_phase_that_could_not_run_is_not_counted_as_one_that_ran"
+
+# ------------------------------------------------------------- cleanroom ----
+# The clean-room gate: the tree may not carry another product's material.
+#
+# Three mutations, each putting the rule back the way it was before the gate
+# existed -- the rule was a sentence in AGENTS.md and no tool could check it.
+# §168.
+#
+# The first is the one that matters: a gate that reads no table checks nothing
+# and passes everything, and it would still say "ok" on a tree full of copies.
+swap xtask/src/cleanroom.rs \
+    '    let products = prohibited(&text)?;' \
+    '    let products: Vec<Prohibited> = Vec::new();'
+expect_catch "cleanroom: the rule's table is read as empty, so the gate checks nothing" \
+    "cargo test -p xtask --profile ci a_product_name_in_a_source_file_is_reported_with_its_line"
+
+# The second: a product's name in a file is written however the writer felt
+# like writing it, and a name in lower case is the product as much as the same
+# name in capitals is. The name here is invented: the clean-room rule says a
+# product's name may not appear outside prose, and a shell script is not prose.
+swap xtask/src/cleanroom.rs \
+    '    let haystack = haystack.to_lowercase();
+    let name = name.to_lowercase();' \
+    '    let haystack = haystack.to_string();
+    let name = name.to_string();'
+expect_catch "cleanroom: a product's name written in lower case is missed" \
+    "cargo test -p xtask --profile ci the_case_of_a_name_does_not_matter"
+
+# The third: a two-word product's name cannot hold a space in a Rust file
+# name, so the path is checked in three forms. Lose two of them and a file
+# called "zorbix-export.rs" is not a violation any more.
+swap xtask/src/cleanroom.rs \
+    '            if path_mentions(&shown, &product.name) {' \
+    '            if mentions(&shown, &product.name) {'
+expect_catch "cleanroom: a two-word product's name in a file name is missed" \
+    "cargo test -p xtask --profile ci a_product_name_in_a_file_name_is_reported"
 
 # ------------------------------------------------------------------- web ----
 # The *element's* id, not merely the first mention of the name. An earlier

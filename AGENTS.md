@@ -124,7 +124,11 @@ needs and then runs it. §118.
 - **Independent.** Behaviour is designed from public specifications, general
   conventions and user feedback. No commercial CAD product's code, icons,
   artwork, help text, tooltips, templates, test data, measurements or generated
-  files. Nothing is copied from another project's source.
+  files. Nothing is copied from another project's source, and **no commercial
+  product is run** — not launched, scripted, automated, screenshotted or
+  measured, and not compared against. The rule and the table of products are in
+  [`docs/clean-room.md`](docs/clean-room.md); `cargo xtask cleanroom` checks
+  the tree against it, and fails with the file, the line and the name.
 - **Assets are absolutely essential.** craftkit contains **no iconography, images,
   fonts or artwork of any kind.** Every UI icon is drawn in code from original
   coordinates in `crates/ui/src/icons.rs`. `cargo xtask assets` fails the build
