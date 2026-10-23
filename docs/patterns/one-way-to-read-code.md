@@ -141,6 +141,30 @@ is the worst shape: the gate believes the reader has no name argument of its
 own, reads the *test's* body, and tells the commands that they read a
 parameter the test invented.
 
+**And a cut that knows what a test item is has to know what a test file
+is.** The cut removes a file's *test items* — a `mod tests { … }` block, a
+top-level `#[cfg(test)]` item, a test-only method — and Rust puts a crate's
+integration tests in `tests/`, where each file is a crate of its own: a file
+there is a test from its first line to its last, with no item in it to
+remove. The tree had **fourteen** `#[test]` functions in
+`apps/craftkit-cli/tests/` that the cut left in, and every gate that reads
+the tree's source and cuts it read them as production code.
+
+Measured, against the real gates on a copy of the tree: a `catch_unwind` in
+a test file was reported as a boundary the pattern document does not
+declare, and a limit whose only use was in a test file was reported as
+**enforced**. Both are the gates answering wrongly, in opposite directions.
+
+So the cut takes the file's **path** as well as its text:
+
+```rust
+fn is_a_test_file(path: &Path) -> bool {
+    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))
+}
+```
+
+and asks it line by line, so the line count stays the file's. §167.
+
 ## And a string is sometimes the subject
 
 A gate that reads the tree's source can be **two gates at once**: one that
@@ -543,6 +567,10 @@ let code = code_lines_kept(&text);
   a block comment is not an embed.
 - `an_embed_call_in_a_string_is_not_an_embed` — an embed call inside a
   string is not an embed.
+- `a_file_under_a_tests_directory_is_a_test_file` — a file under a `tests`
+  directory is a test file from its first line to its last.
+- `a_test_file_does_not_catch_a_panic_as_a_boundary` — a test that catches a
+  panic is not a boundary.
 
 ## See also
 

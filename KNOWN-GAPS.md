@@ -19195,6 +19195,210 @@ wrong, and here the list was missing a gate as well. The list is still worth
 more than nothing — every gate this section found was found *by asking its
 question* — but it cannot be trusted row by row, and item 40 stays open.
 
+## 167. A file under a `tests` directory is a test file from its first line to its last
+
+Item 36 asked what a file under a `tests/` directory is. The tree's own rule
+answers it, and has answered it since §150:
+
+> The tests are not the production code, and a gate whose subject is a
+> *production* property has to say so.
+
+Rust's convention puts a crate's integration tests in `tests/`, and each file
+in it is a crate of its own: everything in such a file is a test. The tree's
+**cut** — the one place that knows what production code is — removed a
+file's *test items* (a `mod tests { … }` block, a top-level `#[cfg(test)]`
+item, a test-only method) and had no word for a file that is a test from its
+first line to its last.
+
+So it was not a decision to be made. It was a cut that was narrower than the
+rule it implements.
+
+### What it cost
+
+The tree has **fourteen** `#[test]` functions that the cut does not remove,
+and every one of them is in `apps/craftkit-cli/tests/` — three integration
+test files, `command_effects_survive_the_file.rs`, `crash_pipeline.rs` and
+`mcp_stdio.rs`. They were read as production code by every gate that reads
+the tree's source and cuts it.
+
+Nothing was broken by it today. The gates that read every Rust file and
+cut it are `panic_boundaries_are_declared`, `limits_are_enforced`,
+`parameter_readers`, `the_raw_parameter_reader_has_two_homes`,
+`the_tree_writes_its_json_with_one_writer`, `the_shell_does_not_evaluate`
+and `the_shell_does_not_write_the_document`, and none of those test files
+catches a panic or names a limit today.
+
+The day one of them does, two of those gates answer wrongly, and the answers
+are in opposite directions.
+
+### What was measured
+
+Against the real gates, on a copy of the tree, with the gates as they were
+before this section and with the fix in them. Every case has a control: the
+same tree with the thing *really* wrong, so a gate that said no to
+everything would pass the control too.
+
+| Case | What was done | Before | After | Control |
+|---|---|---|---|---|
+| A | a `catch_unwind` in a file under `apps/craftkit-cli/tests/` | **RED** — *"catches a panic, and the pattern document does not declare it a boundary"* — a false positive: a test that catches a panic to prove it was caught is not a boundary | **green** | red, both — the catch in a production file |
+| B | the model's `MAX_PROPERTIES` use replaced by a literal, and a file under `tests/` that names the limit | **green** — the limit was reported as **enforced** — a false negative: nothing in the product enforced it | **RED** — *"`MAX_PROPERTIES` is in the model's limits table and nothing in the tree uses it"* | red, both — the replacement with no test file |
+
+Case A is the false positive, and it is the one the tree's own words make
+unforgivable. The panic-boundary gate exists because a boundary has to be
+*written down* before it is written — the pattern document lists the four
+files that catch a panic. A test that catches a panic to prove it was caught
+is the opposite of a boundary, and the gate was reporting it as one.
+
+Case B is the false negative, and it is the worse of the two. The limits
+gate exists because a limit nobody enforces protects nothing — §74 found one
+and the tree has been finding them since (§148, §149, §150, §157). A limit
+whose only use is in a test file is not enforced by anything, and the gate
+said it was.
+
+### The fix
+
+One rule, in the one place that already had one:
+
+```rust
+fn is_a_test_file(path: &Path) -> bool {
+    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))
+}
+```
+
+and the cut asks it, line by line, so that the line count stays the file's:
+
+```rust
+if is_a_test_file(path) {
+    // The whole file is a test: every line goes, and the lines stay.
+    out.push('\n');
+    index += 1;
+    continue;
+}
+```
+
+The cut now takes the file's **path** as well as its text. That is the whole
+change: eight call sites, one of them the limits table, and every one of
+them already had the path in hand.
+
+Nothing the tree claims stopped being checked. The tree's own limits are
+still enforced where they were, the tree's four boundaries are still the
+four the pattern document declares, and both gates stayed green.
+
+### The unit tests
+
+Two, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_file_under_a_tests_directory_is_a_test_file` | the cut removes a file under a `tests` directory whole, and the lines stay the file's |
+| `a_test_file_does_not_catch_a_panic_as_a_boundary` | a test that catches a panic is not a boundary, and a production file that catches one is |
+
+The first test holds both halves: the same file outside a `tests` directory
+keeps its code, so the **path** is what makes the difference and not the
+file's shape.
+
+### The mutations
+
+Two, each putting the old rule back — the directory name with the `s` taken
+off, which is the mistake the rule is most likely to be made in. Each
+mutation is caught by **both** of the tests, so each swap is written
+**twice**: one swap serves one gate.
+
+### The mutation that broke a different gate
+
+The suite caught this section's own change, and it caught it for a reason that
+had nothing to do with the rule.
+
+Adding the path to `production_of` changed the **text** of every call to it,
+so the anchors that name those calls had to change too. The reader-list case
+— *"the reader list counts a test's helper as a reader"* — mutated
+
+```rust
+let production = production_of(&text);
+let code = code_lines_kept(&production);
+```
+
+into the same call with the text used whole. That two-line anchor became
+**ambiguous** once five call sites said `production_of(&path, &text)`, and the
+way to make it unique was to add a third line:
+
+```rust
+let production = production_of(&path, &text);
+let code = code_lines_kept(&production);
+let relative = relative_name(root, &path);
+```
+
+**That three-line block is unique — in the wrong function.** The reader list
+(`parameter_readers`) writes its lines in the other order:
+
+```rust
+let relative = relative_name(root, &path);
+let production = production_of(&path, &text);
+let code = code_lines_kept(&production);
+```
+
+and the first occurrence of the three-line block in the file belongs to
+`the_shell_does_not_evaluate`. The swap therefore broke the **shell** gate's
+cut, the reader list stayed whole, the test passed, and the run said:
+
+```
+1 of 368 gate(s) MISSED their mutation:
+   • gate: the reader list counts a test's helper as a reader
+```
+
+**The anchor was present, unique, and in a different gate.** The script's rule
+— *"One swap, one gate"* — has a second half that this section did not know:
+**one swap, *the* gate.** A mutation that is applied and does nothing to the
+rule it claims to test is not a weak mutation; it is a mutation of some other
+rule, and it reports itself as a hole in a gate that was never broken.
+
+Measured, on the real tree:
+
+| | Before | After |
+|---|---|---|
+| The case | **MISSED** — the reader list was never broken | **caught** — the test fails with two readers instead of one (`left: 2, right: 1`) |
+
+The fix is an anchor that names the reader list's own call:
+
+```rust
+let relative = relative_name(root, &path);
+let production = production_of(&path, &text);
+let code = code_lines_kept(&production);
+for function in rust_functions(&relative, &production, &code) {
+```
+
+The fourth line is the one that carries the meaning: `rust_functions` is
+called from exactly one place in the tree, so the anchor cannot be anywhere
+else. **An anchor should be as long as it takes to be unambiguous about *which*
+gate it is in, and one line longer than it needs to be is cheaper than a
+twenty-minute run that measures nothing.**
+
+### The lesson
+
+**A cut that knows what a test item is has to know what a test file is.**
+The cut was careful — §153, §156, §157, §160 all made it more careful about
+*items* — and never asked about *files*. The rule it implements is about
+test code, and a `tests/` directory is test code without an item in it.
+
+**Item 36 was not a decision.** It is written down as a decision because the
+author of it could not see the rule that settled it, and the rule was in the
+tree's own source: "the tests are not the production code". A question the
+tree has already answered is a question to look up, not to escalate.
+
+**And the suite has a rule of its own that this section learned the hard way.**
+The mutation that tests a gate has to break *that* gate. A swap that is
+applied, is unique, and lands somewhere else is not a caught mutation and not
+a missed one — it is a measurement of a gate nobody asked about, wearing the
+name of a gate that was never broken.
+
+**And the measurement found a second hole.** Choosing a limit to measure
+this one, the obvious candidate turned out to be answered by a **different
+constant with the same name**: `crates/core/src/params.rs` has its own
+`const MAX_DEPTH: u8 = 8`, and the limits gate, which asks whether a *name*
+is in the tree, took that for the model's `MAX_DEPTH: usize = 32`. Measured:
+with the model's limit left unenforced, the gate said **green**; with the
+other constant renamed, it said the limit was unused. That is §168.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19591,6 +19795,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An `impl` inside a string is not the session's impl block** | the code view in `impl_block` | 1 mutation — §166 |
 | **An embed call inside a block comment is not an embed** | the code view in `find_embedded` | 1 mutation — §166 |
 | **An embed call inside a string is not an embed** | the code view in `find_embedded` | 1 mutation — §166 |
+| **A file under a `tests` directory is a test file** | the path in `production_of` | 1 mutation — §167 |
+| **A test that catches a panic is not a boundary** | the path in `production_of` | 1 mutation — §167 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -20309,21 +20515,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     gate read as two. The claim is now paired with the file that *follows*
     it, the way §39's rule pairs a test with its file. Five unit tests, five
     mutations.
-36. **Decide what a file under a `tests/` directory is.** The tree's cut
-    removes a file's *test items* — a `mod tests { … }` block, a top-level
-    `#[cfg(test)]` item, a test-only method — and a file under a `tests/`
-    directory has none of those: it is a test file from its first line to
-    its last, and the cut leaves all of it. Measured after §160: the tree
-    has **fourteen** `#[test]` functions that the cut does not remove, and
-    every one of them is in `apps/craftkit-cli/tests/`. Nothing is broken by
-    it today — none of those tests catches a panic and none of them names a
-    limit — but the gates that read every Rust file (`limits_are_enforced`,
-    `panic_boundaries_are_declared`, `the_byte_bounds_are_named_in_the_prose`)
-    read a test file as production code, and the day one of them names a
-    limit or catches a panic, they will say so. The choices are: the cut
-    treats a file under a `tests/` directory as a test file, the gates that
-    walk the tree skip those directories, or the tree says a `tests/` file is
-    production code and means it.
+36. ~~**Decide what a file under a `tests/` directory is.**~~ **Done, and
+    it was not a decision: the tree's own rule answers it.** "The tests are
+    not the production code, and a gate whose subject is a *production*
+    property has to say so" — and Rust puts a crate's integration tests in
+    `tests/`, where each file is a crate of its own, so everything in such a
+    file is a test. The tree's cut removes a file's *test items* and had no
+    word for a file that is a test from its first line to its last, and the
+    tree's **fourteen** `#[test]` functions in `apps/craftkit-cli/tests/`
+    were read as production code. **§167** made the cut take the file's
+    path and remove a `tests/` file whole. Measured, against the real gates
+    on a copy of the tree: a `catch_unwind` in a test file was reported as a
+    boundary the pattern document does not declare (a false positive), and a
+    limit used only in a test file was reported as **enforced** (a false
+    negative). Both are green now; both controls were red before and after.
 37. ~~**Match a claim's name as a name, not as a piece of a longer word.**~~
     **Done, and it was two gates, not one.** The gate that says the code a
     document claims is in a file asks whether the method is in that file, and
@@ -20398,3 +20603,32 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     check — every place a Rust file is opened without the tree's one reader,
     which would catch the next one without a human asking — and a line above
     the table saying that it is a claim rather than a fact.
+41. **Make a mutation's anchor name the gate it breaks.** The script's rule is
+    "one swap, one gate", and it has a second half that §167 learned the hard
+    way: **one swap, *the* gate.** An anchor that is present, unique and in
+    the wrong function is not a caught mutation and not a missed one — it is a
+    measurement of a gate nobody asked about, reported under the name of a
+    gate that was never broken. §167's own change created one: adding the
+    path to `production_of` changed every call's text, the two-line anchor
+    became ambiguous, and the third line that made it unique belonged to a
+    *different* function. The run said "1 of 368 gate(s) MISSED their
+    mutation" and was right to — the reader list was never broken. The fix
+    was an anchor that includes the reader list's own call, so it cannot be
+    anywhere else. The choice left is between a **static check** that reports
+    the function each anchor sits in, so a human can see it move, and a
+    convention that every anchor is quoted with enough context to be unique
+    *and* located.
+42. **Find out why one engine test failed once.** During §167's validation,
+    `cargo xtask ci` failed in `craftkit-engine --lib`. The tree had just been
+    edited — prose in `KNOWN-GAPS.md` — and the mutation suite had just run
+    over it. The failure was **not reproduced in ten subsequent runs**: six of
+    `cargo test -p craftkit-engine --lib --profile ci`, three of
+    `cargo test --workspace --profile ci` and two of `cargo xtask ci` all
+    passed. Nothing in the engine holds global mutable state, its only
+    temporary directory is tagged per test, and no leftover process or crash
+    folder was found. So the flake is real, rare, and **unexplained** — which
+    is the worst of the three. The choices are: run the workspace tests in a
+    loop under `ci` until one fails and capture the name (slow, and the cost
+    falls on every run), or run the engine's tests under a repetition count
+    in the `ci` profile only.
+

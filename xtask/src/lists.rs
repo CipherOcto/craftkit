@@ -195,7 +195,7 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
         // assert that it was caught, and that is not a boundary. The cut has
         // to reach a **top-level** test item as well as a test module, or a
         // test written outside a module is counted as a boundary. §153.
-        let production = production_of(&text);
+        let production = production_of(&path, &text);
         if !code_lines_kept(&production).contains("catch_unwind(") {
             continue;
         }
@@ -1419,7 +1419,7 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
         // reads a parameter, and a test that calls the reader to prove the
         // reader works is not a third place where the shape of a parameter is
         // decided. §151.
-        let code = code_lines_kept(&production_of(&text));
+        let code = code_lines_kept(&production_of(&path, &text));
         if !code.contains("raw_json(") {
             continue;
         }
@@ -1726,7 +1726,7 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
         // item is still production code, and an *indented* test attribute
         // marks a method inside an impl block, not the end of the file.
         // §156.
-        let production = production_of(&text);
+        let production = production_of(&path, &text);
         // Strings and comments do not count: this file names the writer, and
         // a doc comment that says `to_string_pretty` is saying the opposite.
         let code = code_lines_kept(&production);
@@ -2330,7 +2330,7 @@ fn parameter_readers(root: &Path) -> Vec<Reader> {
     for path in rust_files(&root.join("crates")) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
         let relative = relative_name(root, &path);
-        let production = production_of(&text);
+        let production = production_of(&path, &text);
         let code = code_lines_kept(&production);
         for function in rust_functions(&relative, &production, &code) {
             let is_method = has_word(&function.block, PARAMS_TYPE);
@@ -2604,7 +2604,7 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
         // items rather than truncating the file at the test module: a test
         // written outside a module is a test too, and production code after
         // a test item is still production code. §156.
-        let production = production_of(&text);
+        let production = production_of(&path, &text);
         let code = code_lines_kept(&production);
         let relative = relative_name(root, &path);
         for name in EVALUATOR_NAMES {
@@ -3068,7 +3068,7 @@ pub fn the_shell_does_not_write_the_document(root: &Path) -> Result<Vec<String>,
         // truncating the file at the test module: a test written outside a
         // module is a test too, and production code after a test item is
         // still production code. §156.
-        let production = production_of(&text);
+        let production = production_of(&path, &text);
         // The cut keeps the lines, so the line numbers are the file's.
         let code = code_lines_kept(&production);
         let relative = relative_name(root, &path);
@@ -4823,7 +4823,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let table = root.join("crates/model/src/lib.rs");
     let source =
         std::fs::read_to_string(&table).map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = code_lines_kept(&production_of(&source));
+    let code = code_lines_kept(&production_of(&table, &source));
     let Some((declared, rest)) = limits_table(&code) else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
@@ -4833,7 +4833,7 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };
         for name in &declared {
             if has_word(&body, name) && !used.contains(name) {
                 used.push(name.clone());
@@ -4870,9 +4870,16 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
 /// production code, and they stay visible, because the method is removed
 /// line by line and not by truncating the file at it. §157.
 ///
+/// A file under a **tests directory** is a test file from its first line to
+/// its last: Rust's convention puts a crate's integration tests there, and
+/// each file in it is a crate of its own. Everything in such a file is a
+/// test, so the cut removes the whole of it — and the tree's fourteen
+/// `#[test]` functions in `apps/craftkit-cli/tests/` stop being read as
+/// production code. §167.
+///
 /// The line count is the file's, whatever is removed: a gate that names a
 /// line has to name the file's line.
-fn production_of(text: &str) -> String {
+fn production_of(path: &Path, text: &str) -> String {
     let code = code_lines_kept(text);
     let lines: Vec<&str> = text.lines().collect();
     // The byte offset of each line's first byte.
@@ -4887,6 +4894,12 @@ fn production_of(text: &str) -> String {
     let mut index = 0usize;
     while index < lines.len() {
         let line = lines[index];
+        if is_a_test_file(path) {
+            // The whole file is a test: every line goes, and the lines stay.
+            out.push('\n');
+            index += 1;
+            continue;
+        }
         if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
             // The item ends where its **braces** say, and the braces are
             // found in the code view: a `}` inside a string is not a brace.
@@ -4912,6 +4925,16 @@ fn production_of(text: &str) -> String {
         index += 1;
     }
     out
+}
+
+/// Whether a file is a test file: a file under a `tests` directory.
+///
+/// Rust's convention: a crate's `tests` directory holds its integration
+/// tests, and each file in it is a crate of its own. Nothing in such a file
+/// is production code, and the cut that removes a file's test items has to
+/// know that. §167.
+fn is_a_test_file(path: &Path) -> bool {
+    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))
 }
 
 /// The last line of the top-level item a test marker starts.
@@ -6489,7 +6512,7 @@ mod tests {
                     }\n\
                     \n\
                     fn uses_another_limit() -> usize { limits::MAX_KEYS }\n";
-        let production = production_of(text);
+        let production = production_of(Path::new("crates/model/src/lib.rs"), text);
         assert!(production.contains("MAX_NODES"), "{production}");
         assert!(production.contains("MAX_KEYS"), "{production}");
         assert!(!production.contains("a_test"), "{production}");
@@ -6637,12 +6660,68 @@ mod tests {
 
 fn also_production() {}
 "##;
-        let production = production_of(source);
+        let production = production_of(Path::new("crates/model/src/lib.rs"), source);
         // The whole module is gone, and the code around it is not.
         assert!(!production.contains("a_test"), "{production}");
         assert!(!production.contains("PAGE"), "{production}");
         assert!(production.contains("fn production"), "{production}");
         assert!(production.contains("fn also_production"), "{production}");
+    }
+
+    /// A file under a `tests` directory is a test file from its first line
+    /// to its last.
+    ///
+    /// The cut removes a file's *test items* — a `mod tests { … }` block, a
+    /// top-level `#[cfg(test)]` item — and an integration test file has none
+    /// of those: Rust puts a crate's integration tests in `tests/`, and each
+    /// file in it is a crate of its own, so everything in it is a test. The
+    /// tree's fourteen `#[test]` functions in `apps/craftkit-cli/tests/` were
+    /// read as production code. §167.
+    #[test]
+    fn a_file_under_a_tests_directory_is_a_test_file() {
+        let text = "//! A test file.\n#[test]\nfn it_works() {\n    let _ = limits::MAX_NODES;\n}\n";
+        let production = production_of(Path::new("apps/craftkit-cli/tests/probe.rs"), text);
+        assert!(!production.contains("MAX_NODES"), "{production}");
+        assert!(!production.contains("it_works"), "{production}");
+        // And the lines are still the file's lines.
+        assert_eq!(production.lines().count(), text.lines().count(), "{production}");
+
+        // And the same file, outside a tests directory, keeps its code: the
+        // path is what makes the difference.
+        let production = production_of(Path::new("crates/core/src/lib.rs"), text);
+        assert!(production.contains("MAX_NODES"), "{production}");
+    }
+
+    /// A test file does not catch a panic as a boundary.
+    ///
+    /// The gate that says every file that catches a panic is a boundary read
+    /// a file under a `tests/` directory as production code, so an
+    /// integration test that catches a panic to prove it was caught was
+    /// reported as a boundary the pattern document does not declare. §167.
+    #[test]
+    fn a_test_file_does_not_catch_a_panic_as_a_boundary() {
+        let dir = std::env::temp_dir().join(format!("craftkit-boundary-test-{}", std::process::id()));
+        let core = dir.join("crates/core/src");
+        let tests = dir.join("apps/craftkit-cli/tests");
+        let docs = dir.join("docs/patterns");
+        std::fs::create_dir_all(&core).expect("the fabricated tree");
+        std::fs::create_dir_all(&tests).expect("the fabricated tree");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        let catch = "fn f() {\n    let _ = catch_unwind(|| 1);\n}\n";
+        std::fs::write(core.join("lib.rs"), catch).expect("the fabricated code");
+        std::fs::write(tests.join("probe.rs"), catch).expect("the fabricated test");
+        std::fs::write(
+            docs.join("one-trust-boundary.md"),
+            "crates/kernel/src/lib.rs crates/engine/src/session.rs crates/control/src/server.rs \
+             apps/craftkit/src/main.rs\n",
+        )
+        .expect("the fabricated document");
+
+        let problems = panic_boundaries_are_declared(&dir).expect("the check runs");
+        // The test file is not a boundary, and the production file is.
+        assert!(!problems.iter().any(|p| p.contains("tests/probe.rs")), "{problems:#?}");
+        assert!(problems.iter().any(|p| p.contains("crates/core/src/lib.rs")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A deny attribute that stands only in a string is not a deny attribute.

@@ -1139,10 +1139,12 @@ expect_catch "prose: a symbol claimed to be in a file is not in it" \
 # `mutates` flag is what an agent reads before using a command as a probe.
 swap crates/engine/src/commands.rs \
     '    run: |s, p| {
-        let rate = s.document().meta.frame_rate();' \
+        let rate = s.document().meta.frame_rate();
+        let to = match opt_time(p, "seconds", rate)? {' \
     '    run: |s, p| {
         s.doc_mut().meta.name = "written by a read-only command".to_string();
-        let rate = s.document().meta.frame_rate();'
+        let rate = s.document().meta.frame_rate();
+        let to = match opt_time(p, "seconds", rate)? {'
 expect_catch "a read-only command writes to the document" \
     "cargo test -p craftkit-engine --profile ci read_only"
 
@@ -1218,8 +1220,12 @@ expect_catch "engine: a command that changes nothing is allowed" \
 # The rollback in that branch, which is what puts the dirty flag back.
 swap crates/engine/src/session.rs \
     '                        self.restore(snapshot, before_dirty);
-                        let err = EngineError::Internal {' \
-    '                        let err = EngineError::Internal {'
+                        let err = EngineError::Internal {
+                            id: id.to_string(),
+                            detail: "the command declared that it mutates the document but changed nothing"' \
+    '                        let err = EngineError::Internal {
+                            id: id.to_string(),
+                            detail: "the command declared that it mutates the document but changed nothing"'
 expect_catch "engine: a refused no-op leaves the dirty flag set" \
     "cargo test -p craftkit-engine --profile ci marks_the_project_dirty"
 
@@ -2978,9 +2984,11 @@ expect_catch "engine: a range that moves under the playhead leaves it there" \
 # ...and a document that arrived from outside with its own range did the same
 # thing to the playhead. §115.
 swap crates/engine/src/session.rs \
-    '        self.clamp_playhead_into_range();
+    '        self.evaluator.invalidate();
+        self.clamp_playhead_into_range();
         self.recompute();' \
-    '        self.recompute();'
+    '        self.evaluator.invalidate();
+        self.recompute();'
 expect_catch "engine: a document that arrives leaves the playhead outside it" \
     "cargo test -p craftkit-engine --profile ci a_document_that_arrives_with_its_own_range_takes_the_playhead_with_it"
 
@@ -3867,8 +3875,8 @@ expect_catch "gate: the module gate reads the tree's source as text" \
 # The fourth out of the gate that says every limit in the model's table is
 # enforced somewhere in the tree.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };' \
-    '        let body = if path == table { rest.clone() } else { production_of(&text) };'
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };' \
+    '        let body = if path == table { rest.clone() } else { production_of(&path, &text) };'
 expect_catch "gate: the limits gate reads the tree's strings as code" \
     "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_enforced"
 
@@ -3933,14 +3941,14 @@ expect_catch "gate: the tree grows a second code reader" \
 #
 # The first takes the cut out of the other files.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&text)) };' \
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };' \
     '        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };'
 expect_catch "gate: the limits gate reads the tree's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
 # And the second out of the file the limits table itself lives in.
 swap xtask/src/lists.rs \
-    '    let code = code_lines_kept(&production_of(&source));' \
+    '    let code = code_lines_kept(&production_of(&table, &source));' \
     '    let code = code_lines_kept(&source);'
 expect_catch "gate: the limits gate reads the table file's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
@@ -3953,7 +3961,7 @@ expect_catch "gate: the limits gate reads the table file's tests as enforcement"
 # production code was reported too -- the gate could not tell them apart.
 # Section 151.
 swap xtask/src/lists.rs \
-    '        let code = code_lines_kept(&production_of(&text));' \
+    '        let code = code_lines_kept(&production_of(&path, &text));' \
     '        let code = code_lines_kept(&text);'
 expect_catch "gate: the raw reader gate counts a test's call as a third home" \
     "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
@@ -3985,7 +3993,7 @@ expect_catch "gate: the session gate counts a test's method as a second path" \
 #
 # The first takes the wider cut out of the boundary gate.
 swap xtask/src/lists.rs \
-    '        let production = production_of(&text);
+    '        let production = production_of(&path, &text);
         if !code_lines_kept(&production).contains("catch_unwind(") {' \
     '        let production = match text.find("\nmod tests {") {
             Some(at) => text[..at].to_string(),
@@ -4024,11 +4032,21 @@ expect_catch "gate: the production cut hides the code after a test item" \
 # helper named after a production reader, with no name argument of its own,
 # made the gate report two commands reading a parameter called "ghost" --
 # while the control, with no such helper, was green. Section 154.
+# The anchor has to name the **reader list's own** call. An anchor that is
+# merely present somewhere in the file is not enough: a two-line anchor was
+# ambiguous after §167, and it was disambiguated by adding a third line --
+# which moved it to a different function entirely. The mutation then broke a
+# gate nobody asked about, the reader list stayed whole, and the case was
+# reported MISSED. §167.
 swap xtask/src/lists.rs \
-    '        let production = production_of(&text);
-        let code = code_lines_kept(&production);' \
-    '        let production = text.clone();
-        let code = code_lines_kept(&production);'
+    '        let relative = relative_name(root, &path);
+        let production = production_of(&path, &text);
+        let code = code_lines_kept(&production);
+        for function in rust_functions(&relative, &production, &code) {' \
+    '        let relative = relative_name(root, &path);
+        let production = text.clone();
+        let code = code_lines_kept(&production);
+        for function in rust_functions(&relative, &production, &code) {'
 expect_catch "gate: the reader list counts a test's helper as a reader" \
     "cargo test -p xtask --profile ci a_test_helper_is_not_a_reader"
 
@@ -4083,7 +4101,7 @@ expect_catch "gate: the code view loses a byte" \
 # controls, with the same code where the gate was looking, were red. Section
 # 156.
 swap xtask/src/lists.rs \
-    '        let production = production_of(&text);
+    '        let production = production_of(&path, &text);
         // Strings and comments do not count: this file names the writer, and' \
     '        let production = match text.find("#[cfg(test)]") {
             Some(at) => &text[..at],
@@ -4104,7 +4122,7 @@ expect_catch "gate: the JSON writer's cut truncates the file" \
 # above, which still bites.
 
 swap xtask/src/lists.rs \
-    '        let production = production_of(&text);
+    '        let production = production_of(&path, &text);
         let code = code_lines_kept(&production);
         let relative = relative_name(root, &path);
         for name in EVALUATOR_NAMES {' \
@@ -4610,6 +4628,36 @@ swap xtask/src/assets.rs \
                 let rest = &code_line[at + call.len()..];'
 expect_catch "gate: an embed call in a string is not an embed" \
     "cargo test -p xtask --profile ci an_embed_call_in_a_string_is_not_an_embed"
+
+# The cut that removes a file's test items did not know that a file under a
+# `tests` directory is a test file from its first line to its last: Rust
+# puts a crate's integration tests there, and each file in it is a crate of
+# its own. Measured, against the real gates on a copy of the tree, with the
+# gates as they were before section 167 and with the fix in them. Each case
+# has a control: the same tree with the thing really wrong, so a gate that
+# said no to everything would pass the control too.
+#
+#   * a `catch_unwind` in a file under `tests/` was reported as a boundary
+#     the pattern document does not declare -- a false positive: a test that
+#     catches a panic to prove it was caught is not a boundary. The control,
+#     with the catch in a production file, was reported by both.
+#   * a limit whose only use was in a file under `tests/` was reported as
+#     **enforced** -- a false negative: nothing in the product enforced it.
+#     The control, with the production use replaced by a literal and no test
+#     file, was reported by both.
+#
+# Section 167.
+swap xtask/src/lists.rs \
+    '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))' \
+    '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("test"))'
+expect_catch "gate: a file under a tests directory is a test file" \
+    "cargo test -p xtask --profile ci a_file_under_a_tests_directory_is_a_test_file"
+
+swap xtask/src/lists.rs \
+    '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))' \
+    '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("test"))'
+expect_catch "gate: a test file does not catch a panic as a boundary" \
+    "cargo test -p xtask --profile ci a_test_file_does_not_catch_a_panic_as_a_boundary"
 
 restore
 finish
