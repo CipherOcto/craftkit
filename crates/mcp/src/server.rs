@@ -170,7 +170,10 @@ fn answer(line: &str, session: &Mutex<Session>) -> Answer {
 fn dispatch(request: &Request, session: &Mutex<Session>) -> Response {
     let id = request.id.clone().unwrap_or(Json::Null);
     match request.method.as_str() {
-        "initialize" => Response::result(id, rpc::initialize_result()),
+        "initialize" => {
+            let requested = request.params.get("protocolVersion").and_then(Json::as_str);
+            Response::result(id, rpc::initialize_result(requested))
+        }
         "notifications/initialized" | "notifications/cancelled" => Response::result(id, json!({})),
         "ping" => Response::result(id, json!({})),
         "tools/list" => Response::result(id, json!({ "tools": tools::tools_json() })),
@@ -182,6 +185,7 @@ fn dispatch(request: &Request, session: &Mutex<Session>) -> Response {
         "resources/read" => read_resource(&id, request, session),
         "prompts/list" => Response::result(id, json!({ "prompts": prompts::list_json() })),
         "prompts/get" => get_prompt(&id, request, session),
+        "completion/complete" => complete(&id, request, session),
         "shutdown" => Response::result(id, json!({})),
         other => Response::failure(
             id,
@@ -274,6 +278,89 @@ fn get_prompt(id: &Json, request: &Request, session: &Mutex<Session>) -> Respons
             id.clone(),
             code::INVALID_PARAMS,
             format!("the prompt `{prompt}` needs its `{argument}`"),
+        ),
+    }
+}
+
+/// Answer a completion request.
+///
+/// The protocol's fourth method: the suggestions for one argument, either of
+/// a prompt or of a resource template. The values come from the same
+/// declaration the prompt or the template advertises, and they are filtered
+/// by what the caller has typed. §179.
+fn complete(id: &Json, request: &Request, session: &Mutex<Session>) -> Response {
+    let Some(reference) = request.params.get("ref") else {
+        return Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`ref` is required; it names a prompt or a resource template",
+        );
+    };
+    let Some(argument) = request.params.get("argument") else {
+        return Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`argument` is required; it names the argument and what has been typed",
+        );
+    };
+    let Some(argument_name) = argument.get("name").and_then(Json::as_str) else {
+        return Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`argument.name` is required and must be a string",
+        );
+    };
+    // What the user has typed so far. The protocol's own field, and the one
+    // the suggestions are filtered by.
+    let typed = argument.get("value").and_then(Json::as_str).unwrap_or("");
+
+    match reference.get("type").and_then(Json::as_str) {
+        Some("ref/prompt") => {
+            let Some(name) = reference.get("name").and_then(Json::as_str) else {
+                return Response::failure(
+                    id.clone(),
+                    code::INVALID_PARAMS,
+                    "`ref.name` is required for a prompt; call prompts/list",
+                );
+            };
+            match prompts::complete(name, argument_name, typed, session) {
+                Ok(suggestions) => Response::result(id.clone(), suggestions.to_json()),
+                Err(prompts::PromptError::NotFound(missing)) => Response::failure(
+                    id.clone(),
+                    code::INVALID_PARAMS,
+                    format!("no prompt named `{missing}`; call prompts/list"),
+                ),
+                Err(prompts::PromptError::Missing { prompt, argument }) => Response::failure(
+                    id.clone(),
+                    code::INVALID_PARAMS,
+                    format!("the prompt `{prompt}` has no argument `{argument}`"),
+                ),
+            }
+        }
+        Some("ref/resource") => {
+            let Some(uri) = reference.get("uri").and_then(Json::as_str) else {
+                return Response::failure(
+                    id.clone(),
+                    code::INVALID_PARAMS,
+                    "`ref.uri` is required for a resource; call resources/templates/list",
+                );
+            };
+            match resources::complete(uri, argument_name, typed, session) {
+                Ok(suggestions) => Response::result(id.clone(), suggestions.to_json()),
+                Err(resources::ReadError::NotFound(missing)) => Response::failure(
+                    id.clone(),
+                    code::INVALID_PARAMS,
+                    format!("no resource template `{missing}`; call resources/templates/list"),
+                ),
+                Err(resources::ReadError::Session) => {
+                    Response::failure(id.clone(), code::INTERNAL_ERROR, "the session is unavailable")
+                }
+            }
+        }
+        _ => Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`ref.type` must be `ref/prompt` or `ref/resource`",
         ),
     }
 }
@@ -474,6 +561,86 @@ mod tests {
 
         // And a call with no name at all is a bad request.
         let r = ask(r#"{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{}}"#);
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+    }
+
+    /// The handshake answers the client's revision when this server speaks
+    /// it, and one it speaks when it does not.
+    ///
+    /// The specification's rule, and the one that lets a client know what it
+    /// is talking to. §179.
+    #[test]
+    fn the_handshake_answers_a_revision_this_server_speaks() {
+        for version in crate::SUPPORTED_VERSIONS {
+            let line = format!(
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"{version}"}}}}"#
+            );
+            let r = ask(&line);
+            assert_eq!(r["result"]["protocolVersion"], json!(version), "{r}");
+        }
+        // A revision this server does not speak: the answer is still one it
+        // does, so the client can tell what it is talking to.
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2030-01-01"}}"#,
+        );
+        let answered = r["result"]["protocolVersion"].as_str().expect("a version");
+        assert!(crate::SUPPORTED_VERSIONS.contains(&answered), "the server answered `{answered}`");
+    }
+
+    /// The completion method answers with the prompt's own suggestions, and
+    /// with the ones that begin with what the caller typed.
+    #[test]
+    fn completion_answers_the_prompt_arguments_suggestions() {
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":1,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"add-node"},"argument":{"name":"kind","value":"s"}}}"#,
+        );
+        let values = r["result"]["completion"]["values"].as_array().expect("values");
+        assert!(!values.is_empty(), "{r}");
+        assert!(
+            values.iter().all(|v| v.as_str().unwrap_or_default().to_ascii_lowercase().starts_with('s')),
+            "a suggestion does not begin with what was typed: {r}"
+        );
+        assert_eq!(r["result"]["completion"]["hasMore"], json!(false), "{r}");
+        assert!(r["result"]["completion"]["total"].as_u64().unwrap_or(0) >= values.len() as u64, "{r}");
+    }
+
+    /// The completion method answers for a resource template's variable too.
+    #[test]
+    fn completion_answers_the_resource_templates_suggestions() {
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":1,"method":"completion/complete","params":{"ref":{"type":"ref/resource","uri":"craftkit://node/{id}"},"argument":{"name":"id","value":""}}}"#,
+        );
+        let values = r["result"]["completion"]["values"].as_array().expect("values");
+        assert!(!values.is_empty(), "{r}");
+        assert!(
+            values.iter().all(|v| v.as_str().unwrap_or_default().starts_with('n')),
+            "a node id is not in the tree's spelling: {r}"
+        );
+    }
+
+    /// A completion that cannot be answered says so.
+    #[test]
+    fn a_completion_that_cannot_be_answered_says_so() {
+        // A prompt that is not there.
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":1,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"nope"},"argument":{"name":"kind","value":""}}}"#,
+        );
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+
+        // An argument the prompt does not have.
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":2,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"add-node"},"argument":{"name":"nope","value":""}}}"#,
+        );
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+
+        // A reference of a kind the protocol does not have.
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":3,"method":"completion/complete","params":{"ref":{"type":"ref/nonsense"},"argument":{"name":"kind","value":""}}}"#,
+        );
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+
+        // And a request with no reference at all.
+        let r = ask(r#"{"jsonrpc":"2.0","id":4,"method":"completion/complete","params":{}}"#);
         assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
     }
 

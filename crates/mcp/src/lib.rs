@@ -67,8 +67,47 @@ pub use rpc::{Error as RpcError, Request as RpcRequest, Response as RpcResponse}
 pub use server::{handle_line, serve};
 pub use tools::{Tool, all, command_for, tool_for, tool_name, tools_json};
 
-/// The protocol version this server speaks.
-pub const PROTOCOL_VERSION: &str = "2024-11-05";
+/// Every protocol revision this server can speak, **newest first**.
+///
+/// **One list.** The handshake answers the client's revision when it is in
+/// this list, and the server's own — the first entry — when it is not. There
+/// is no second copy of the answer anywhere. §179.
+///
+/// The list says what the server can *speak*, which is a promise about the
+/// whole protocol and not only about the methods craftkit happens to
+/// implement:
+///
+/// | The revision | What it changed | craftkit |
+/// |---|---|---|
+/// | `2025-06-18` | structured tool output, elicitation, resource links — and **batching removed** | **yes** — the tools already answer with `structuredContent` |
+/// | `2025-03-26` | the `completions` capability, batching, tool annotations | **no** — it added batching, and this server does not read a batch |
+/// | `2024-11-05` | the first | **yes** |
+///
+/// The middle revision is left out on purpose. Claiming it would promise a
+/// server that reads a JSON-RPC batch, and this one does not: a request that
+/// is an array is refused as "not a JSON-RPC object". Saying so is better
+/// than saying it and being wrong.
+pub const SUPPORTED_VERSIONS: [&str; 2] = ["2025-06-18", "2024-11-05"];
+
+/// The revision this server speaks when the client asks for one it does not
+/// have: the newest it supports.
+///
+/// **The first entry of the list**, so the answer is drawn from the list and
+/// cannot drift from it. §179.
+pub const PROTOCOL_VERSION: &str = SUPPORTED_VERSIONS[0];
+
+/// The revision to answer the handshake with.
+///
+/// **The client's, if this server speaks it; the server's own otherwise.**
+/// The specification says exactly this: a server that supports the
+/// requested revision answers with it, and a server that does not answers
+/// with a revision it does support. §179.
+pub fn negotiate(requested: Option<&str>) -> &str {
+    match requested {
+        Some(version) if SUPPORTED_VERSIONS.contains(&version) => version,
+        _ => PROTOCOL_VERSION,
+    }
+}
 
 /// What this server calls itself.
 pub const SERVER_NAME: &str = "craftkit";

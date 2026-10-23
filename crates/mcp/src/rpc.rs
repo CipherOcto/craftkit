@@ -191,6 +191,55 @@ pub mod code {
     pub const RESOURCE_NOT_FOUND: i64 = -32002;
 }
 
+/// How many values one completion reply may carry.
+///
+/// The protocol's maximum.
+pub const MAX_VALUES: usize = 100;
+
+/// The suggestions for one argument, and how many there were.
+///
+/// The count is kept beside the values because the protocol asks for it: a
+/// reply that is cut short has to say that it was cut short, or the client
+/// shows a list that looks complete and is not. §179.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestions {
+    /// The values to send, at most [`MAX_VALUES`].
+    pub values: Vec<String>,
+    /// How many matched, before the cap.
+    pub total: usize,
+}
+
+impl Suggestions {
+    /// Whether the list was cut short.
+    pub fn has_more(&self) -> bool {
+        self.total > self.values.len()
+    }
+
+    /// The reply the protocol expects.
+    pub fn to_json(&self) -> Json {
+        json!({
+            "completion": {
+                "values": self.values,
+                "total": self.total,
+                "hasMore": self.has_more(),
+            }
+        })
+    }
+}
+
+/// Whether a value begins with what the caller typed.
+///
+/// **Case-insensitive**, the way the tree matches a name everywhere else: a
+/// path segment matches a property label case-insensitively, so a
+/// suggestion that only matched exactly would be a different rule for the
+/// same word. §179.
+pub fn starts_with(value: &str, typed: &str) -> bool {
+    if typed.is_empty() {
+        return true;
+    }
+    value.to_ascii_lowercase().starts_with(&typed.to_ascii_lowercase())
+}
+
 /// Why a line could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
@@ -227,21 +276,28 @@ pub fn kind_of(v: &Json) -> &'static str {
 }
 
 /// The `initialize` result.
-pub fn initialize_result() -> Json {
+pub fn initialize_result(requested: Option<&str>) -> Json {
+    let version = crate::negotiate(requested);
     json!({
-        "protocolVersion": crate::PROTOCOL_VERSION,
-        "capabilities": capabilities(),
+        "protocolVersion": version,
+        "capabilities": capabilities(version),
         "serverInfo": { "name": crate::SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
     })
 }
 
-/// The capabilities this server offers.
+/// The capabilities this server offers, to a client that negotiated
+/// `version`.
 ///
 /// **The capability follows the list.** `resources` is advertised exactly
 /// when the server serves a resource, and `prompts` exactly when it serves a
 /// prompt, so a client that reads the capability knows whether to ask — and
 /// the server never claims a capability it does not have. §176, §178.
-pub fn capabilities() -> Json {
+///
+/// **And a capability is advertised only to a client that negotiated a
+/// revision which has it.** `completions` arrived in `2025-03-26`; a client
+/// that negotiated `2024-11-05` has never heard of it, and advertising it
+/// would be a claim about a protocol the client is not speaking. §179.
+pub fn capabilities(version: &str) -> Json {
     let mut caps = Map::new();
     caps.insert("tools".to_string(), json!({ "listChanged": false }));
     if crate::resources::serves_any() {
@@ -250,7 +306,21 @@ pub fn capabilities() -> Json {
     if !crate::prompts::PROMPTS.is_empty() {
         caps.insert("prompts".to_string(), json!({ "listChanged": false }));
     }
+    if version_has_completions(version) {
+        caps.insert("completions".to_string(), json!({}));
+    }
     Json::Object(caps)
+}
+
+/// Whether a revision of the protocol has the completion method and the
+/// capability that announces it.
+///
+/// `2025-03-26` added both. The revisions are ISO dates, so "after" is a
+/// string comparison — and the revision asked about is always one this
+/// server supports, because the handshake answers only with a revision from
+/// the list. §179.
+pub fn version_has_completions(version: &str) -> bool {
+    version >= "2025-03-26"
 }
 
 #[cfg(test)]
@@ -355,9 +425,47 @@ mod tests {
 
     #[test]
     fn the_initialize_result_advertises_tools_and_names_the_server() {
-        let r = initialize_result();
+        let r = initialize_result(None);
         assert_eq!(r["protocolVersion"], json!(crate::PROTOCOL_VERSION));
         assert!(r["capabilities"]["tools"].is_object(), "{r}");
         assert_eq!(r["serverInfo"]["name"], json!("craftkit"));
+    }
+
+    /// The handshake answers the client's revision when this server speaks
+    /// it, and its own when it does not.
+    ///
+    /// The specification says exactly this, and it is the rule that lets a
+    /// client and a server agree on what they are talking about. §179.
+    #[test]
+    fn the_handshake_answers_a_revision_this_server_speaks() {
+        for version in crate::SUPPORTED_VERSIONS {
+            let r = initialize_result(Some(version));
+            assert_eq!(r["protocolVersion"], json!(version), "the client's revision was not answered");
+        }
+        for asked in ["1999-01-01", "2030-01-01", "nonsense", ""] {
+            let r = initialize_result(Some(asked));
+            let answered = r["protocolVersion"].as_str().expect("a version");
+            assert!(
+                crate::SUPPORTED_VERSIONS.contains(&answered),
+                "the server answered `{asked}` with `{answered}`, which it does not speak"
+            );
+        }
+        // And a client that says nothing gets the server's own.
+        let r = initialize_result(None);
+        assert_eq!(r["protocolVersion"], json!(crate::PROTOCOL_VERSION));
+    }
+
+    /// A capability is advertised only to a client that negotiated a revision
+    /// which has it.
+    ///
+    /// `completions` arrived in `2025-03-26`; a client on `2024-11-05` has
+    /// never heard of it. §179.
+    #[test]
+    fn a_capability_is_advertised_only_to_a_client_that_can_use_it() {
+        let old = capabilities("2024-11-05");
+        assert!(old["completions"].is_null(), "a 2024 client was offered completions: {old}");
+
+        let new = capabilities("2025-06-18");
+        assert!(new["completions"].is_object(), "a 2025 client was not offered completions: {new}");
     }
 }

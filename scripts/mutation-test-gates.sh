@@ -92,6 +92,7 @@ readonly FILES=(
     crates/ui/src/automation.rs
     crates/ui/src/shell.rs
     crates/ui/src/raster.rs
+    crates/mcp/src/lib.rs
     crates/mcp/src/server.rs
     crates/mcp/src/rpc.rs
     crates/mcp/src/prompts.rs
@@ -5159,6 +5160,53 @@ swap crates/mcp/src/prompts.rs \
     '        Live::NodeKinds => vec!["filter".to_string()],'
 expect_catch "mcp: the suggestions are a copy and not live" \
     "cargo test -p craftkit-mcp --profile ci the_suggestions_are_live"
+
+# --------------------------------------------- the protocol's version ----
+# Section 179. The server spoke one revision of the protocol and answered
+# every client with it, whatever the client asked for, and the protocol's
+# fourth method — the one that suggests values for an argument — was a method
+# that did not exist.
+#
+# The rules the port carries are the specification's own: the handshake
+# answers the client's revision when this server speaks it and one it speaks
+# when it does not; a capability is advertised only to a client that
+# negotiated a revision which has it; and the suggestions are filtered by
+# what the caller has typed.
+
+# The first answers a revision this server does not speak — the client's,
+# echoed. The specification forbids it: the server must answer a revision it
+# supports.
+swap crates/mcp/src/lib.rs \
+    '        Some(version) if SUPPORTED_VERSIONS.contains(&version) => version,' \
+    '        Some(version) if !version.is_empty() => version,'
+expect_catch "mcp: the server answers a revision it does not speak" \
+    "cargo test -p craftkit-mcp --profile ci the_handshake_answers_a_revision_this_server_speaks"
+
+# The second answers the server's own revision even when the client's is one
+# it speaks — so a client that asked for a revision and got another may
+# disconnect, which the specification tells it to do.
+swap crates/mcp/src/lib.rs \
+    '        Some(version) if SUPPORTED_VERSIONS.contains(&version) => version,' \
+    '        Some(version) if SUPPORTED_VERSIONS.contains(&version) => PROTOCOL_VERSION,'
+expect_catch "mcp: the server does not answer the revision the client asked for" \
+    "cargo test -p craftkit-mcp --profile ci the_handshake_answers_a_revision_this_server_speaks"
+
+# The third offers a capability to a client whose revision has never heard of
+# it: `completions` arrived in 2025-03-26.
+swap crates/mcp/src/rpc.rs \
+    '    version >= "2025-03-26"' \
+    '    version >= "2024-11-05"'
+expect_catch "mcp: a 2024 client is offered completions" \
+    "cargo test -p craftkit-mcp --profile ci a_capability_is_advertised_only_to_a_client_that_can_use_it"
+
+# And the fourth answers with every value, every time — which is not a
+# suggestion.
+swap crates/mcp/src/rpc.rs \
+    '    value.to_ascii_lowercase().starts_with(&typed.to_ascii_lowercase())' \
+    '    let _ = value;
+    true'
+expect_catch "mcp: the suggestions are not filtered by what was typed" \
+    "cargo test -p craftkit-mcp --profile ci the_suggestions_are_filtered_by_what_was_typed"
 
 restore
 finish

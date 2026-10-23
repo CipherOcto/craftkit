@@ -90,6 +90,11 @@ pub struct Template {
     pub mime: &'static str,
     /// What it holds, read now, given the variable's value.
     pub read: fn(&Mutex<Session>, &str) -> Result<Json, ReadError>,
+    /// What the variable may be, read now.
+    ///
+    /// The suggestions a client offers while the user types the variable.
+    /// §179.
+    pub values: fn(&Mutex<Session>) -> Vec<String>,
 }
 
 /// Every template, in `resources/templates/list` order.
@@ -102,7 +107,43 @@ pub static TEMPLATES: &[Template] = &[Template {
                       its properties. The id is the one the design prints, `n12`.",
     mime: "application/json",
     read: node,
+    values: node_ids,
 }];
+
+/// The ids of the open design's nodes, in the spelling the tree prints.
+///
+/// The same spelling the read side accepts, so a suggestion is a value that
+/// works. §179.
+fn node_ids(session: &Mutex<Session>) -> Vec<String> {
+    let Ok(guard) = session.lock() else { return Vec::new() };
+    guard.document().nodes.iter().map(|node| node.id.to_string()).collect()
+}
+
+/// The suggestions for a template's variable.
+///
+/// The values come from the template's own declaration and are filtered by
+/// what the caller has typed — the same rule the prompt arguments use. §179.
+pub fn complete(
+    template_uri: &str,
+    variable: &str,
+    typed: &str,
+    session: &Mutex<Session>,
+) -> Result<crate::rpc::Suggestions, ReadError> {
+    let template = TEMPLATES
+        .iter()
+        .find(|t| t.uri == template_uri)
+        .ok_or_else(|| ReadError::NotFound(template_uri.to_string()))?;
+    let Some(name) = template.uri.split_once('{').and_then(|(_, rest)| rest.strip_suffix('}')) else {
+        return Err(ReadError::NotFound(template_uri.to_string()));
+    };
+    if name != variable {
+        return Err(ReadError::NotFound(variable.to_string()));
+    }
+    let matching: Vec<String> =
+        (template.values)(session).into_iter().filter(|v| crate::rpc::starts_with(v, typed)).collect();
+    let total = matching.len();
+    Ok(crate::rpc::Suggestions { values: matching.into_iter().take(crate::rpc::MAX_VALUES).collect(), total })
+}
 
 /// Whether the server serves a resource at all.
 ///

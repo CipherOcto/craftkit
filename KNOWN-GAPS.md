@@ -20933,6 +20933,128 @@ it, believes it, and calls something that is not there — and the tree never
 gets to say so. That is why the prompt does not *write* the command's name.
 It names the command, and the registry writes the name.
 
+## 179. The server spoke one revision of the protocol, and answered every client with it
+
+### The finding
+
+§178 added the prompts. The protocol has a fourth part and a fifth rule, and
+both were missing.
+
+**The version was not negotiated.** Measured on the tree before this section:
+`initialize` did not read the client's `protocolVersion` at all. It answered
+every client with the one revision it knew:
+
+```json
+{"protocolVersion":"2024-11-05"}
+```
+
+The specification's rule is not that:
+
+> If the server supports the requested protocol version, it **MUST** respond
+> with the same version. Otherwise, the server **MUST** respond with another
+> protocol version it supports. — [the lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle)
+
+So the server *could* have answered with its own revision, and did. But it
+answered a client that asked for `2025-06-18` with `2024-11-05`, and the
+client — which the specification tells to *disconnect* when it gets a revision
+it cannot use — had no way to ask for something else.
+
+**And the fourth method did not exist.** `completion/complete` — the
+suggestions for an argument — arrived in the `2025-03-26` revision, together
+with the `completions` capability that announces it. craftkit answered it
+with *"not a method"*.
+
+### Which revisions this server can honestly speak
+
+The list says what the server can *speak*, which is a promise about the whole
+protocol and not only about the methods craftkit happens to implement. So it
+was measured against the revisions' changelogs:
+
+| The revision | What it changed | craftkit |
+|---|---|---|
+| `2025-06-18` | structured tool output, elicitation, resource links — and **batching removed** | **yes** — the tools already answer with `structuredContent` |
+| `2025-03-26` | the `completions` capability, **batching**, tool annotations | **no** — it added batching, and this server does not read a batch |
+| `2024-11-05` | the first | **yes** |
+
+**The middle revision is left out on purpose.** Claiming it would promise a
+server that reads a JSON-RPC batch: a request that is an array is refused
+today, as *"this is not a JSON-RPC object"*. Saying so is better than saying
+it and being wrong — and it is the same rule §173 used for the licence
+policy: the manifests were made honest, not the rule.
+
+So the server speaks `2025-06-18` and `2024-11-05`, and `SUPPORTED_VERSIONS`
+is the one list of that.
+
+### The port
+
+**The handshake negotiates.** `crate::negotiate` answers the client's
+revision when it is in the list, and the server's own — *the first entry of
+the list* — when it is not. There is no second copy of the answer anywhere:
+`PROTOCOL_VERSION` is `SUPPORTED_VERSIONS[0]`.
+
+**A capability is advertised only to a client that negotiated a revision
+which has it.** `completions` arrived in `2025-03-26`, so a client that
+negotiated `2024-11-05` is not offered it. Advertising it would be a claim
+about a protocol the client is not speaking.
+
+**`completion/complete` answers.** The reference is a prompt or a resource
+template, and the argument carries what the caller has typed:
+
+```json
+{"ref":{"type":"ref/prompt","name":"add-node"},"argument":{"name":"kind","value":"s"}}
+```
+
+```json
+{"completion":{"values":["source","sink"],"total":2,"hasMore":false}}
+```
+
+**The suggestions are the tree's and they are filtered.** The values come
+from the prompt's own declaration (§178) or the template's own, and they are
+filtered by what the caller has typed — case-insensitively, the way the tree
+matches a name everywhere else. A list of every value, every time, is not a
+suggestion.
+
+### The mutations
+
+Four, one per rule, each caught by the test that names it:
+
+| Mutation | What it breaks | The test that catches it |
+|---|---|---|
+| the handshake answers the client's revision whatever it is | the server answers a revision it does not speak | `the_handshake_answers_a_revision_this_server_speaks` |
+| the handshake answers its own revision whatever the client asked for | a client that asked for a revision it supports may disconnect | the same |
+| `completions` is offered to a `2024-11-05` client | a capability from a revision the client never negotiated | `a_capability_is_advertised_only_to_a_client_that_can_use_it` |
+| the suggestions are not filtered | every value, every time | `the_suggestions_are_filtered_by_what_was_typed` |
+
+All four were checked to be caught, one at a time, on the tree.
+
+### What the gate cannot see
+
+- **The list is a promise about the whole protocol.** craftkit speaks
+  `2025-06-18` without implementing elicitation or resource links, because
+  both are optional and a server may leave them out. A client that *needs*
+  one of them is out of luck, and the list does not say so.
+- **`2025-03-26` stays out until the server reads a batch.** That is the
+  next piece of work, and it is a piece of the framing rather than of the
+  surface.
+- **The completion is a prefix match.** The specification says to return
+  suggestions "sorted by relevance" and to implement fuzzy matching "where
+  appropriate"; craftkit filters by prefix and sorts by the tree's own order.
+- **The suggestions are the tree's, but only the ones the tree exposes.** A
+  property path the model does not publish is not suggested.
+
+### The lesson
+
+**A version is a claim about the whole protocol, so the claim has to be
+measured against the revision's changelog and not against the methods that
+happen to be implemented.** craftkit could have added `completion/complete`
+and declared `2024-11-05`; that would have been a server serving a method
+from a revision it claimed not to speak.
+
+**And a server that supports more than one revision has to say so.** The
+one revision craftkit knew was not a gap — it was a *choice*. The gap was
+that the choice was invisible: the client could not find out what else the
+server would speak, and the server had no list to find out from.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21367,6 +21489,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A prompt's message carries the registry's own words** | the same | 1 mutation — §178 |
 | **A prompt that is advertised can be fetched** | `prompts::PROMPTS` | 1 mutation — §178 |
 | **A prompt's suggestions are the tree's, not a copy** | `prompts::Live` | 1 mutation — §178 |
+| **The handshake answers a revision this server speaks** | `crate::negotiate` | 2 mutations — §179 |
+| **The server's own revision is the list's first entry** | `PROTOCOL_VERSION` | 1 mutation — §179 |
+| **A capability is offered only to a client that negotiated a revision with it** | `rpc::capabilities` | 1 mutation — §179 |
+| **The suggestions are filtered by what the caller typed** | `rpc::starts_with` | 1 mutation — §179 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

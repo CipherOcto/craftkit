@@ -412,7 +412,7 @@ cargo run -q -p craftkit-cli -- mcp
 
 JSON-RPC 2.0 over stdio, one message per line. `initialize`, `notifications/initialized`,
 `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`,
-`prompts/list`, `prompts/get`, `ping`, `shutdown`. Tools are generated from the command
+`prompts/list`, `prompts/get`, `completion/complete`, `ping`, `shutdown`. Tools are generated from the command
 registry: `node.add` → `craftkit_node_add` (`crates/mcp/src/tools.rs:79`), plus three
 built-ins, `craftkit_status`, `craftkit_commands` and `craftkit_crashes`. The last
 one reads the crash reports this machine has written: `action` is `list`, `show` or
@@ -433,6 +433,18 @@ tells an agent what to do. Three of them — `add-node`, `set-property`, `key-pr
 the registry's own words for it, so a prompt cannot describe a command differently
 from the tree does. `prompts/get` needs the prompt's required arguments; a missing one
 is refused with `-32602`. §178.
+
+The **version** is negotiated in the handshake: the server answers the client's
+revision when it speaks it, and one it speaks when it does not. It speaks
+`2025-06-18` and `2024-11-05` — and *not* `2025-03-26`, which added JSON-RPC
+batching that this server does not read. A client on `2024-11-05` is not offered
+the `completions` capability, because that revision has never heard of it. §179.
+
+`completion/complete` is the protocol's fourth method: the suggestions for one
+argument, filtered by what has been typed. The reference is
+`{"type":"ref/prompt","name":…}` or `{"type":"ref/resource","uri":…}`, and the
+argument is `{"name":…,"value":…}`. The values come from the prompt's own
+declaration or the template's own, so they follow the tree. §179.
 
 ---
 

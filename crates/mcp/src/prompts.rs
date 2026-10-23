@@ -38,12 +38,6 @@ use std::sync::Mutex;
 use craftkit_engine::Session;
 use serde_json::{Value as Json, json};
 
-/// How many values one argument's suggestions may carry.
-///
-/// The protocol's maximum for a completion reply is a hundred; the tree's
-/// own rule is that a list a client reads is small enough to read.
-const MAX_VALUES: usize = 100;
-
 /// A catalogue the suggestions are read from, so they follow the tree instead
 /// of a copy of it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -69,13 +63,15 @@ pub enum Values {
 
 impl Values {
     /// The suggestions, read now.
+    ///
+    /// **Not cut short here.** The protocol's cap of a hundred is applied
+    /// after the filter, so that the count the client is told is the count
+    /// of everything that matched. §179.
     fn resolve(self, session: &Mutex<Session>) -> Vec<String> {
-        let mut out = match self {
+        match self {
             Values::Fixed(values) => values.iter().map(|v| (*v).to_string()).collect(),
             Values::Live(live) => live_values(live, session),
-        };
-        out.truncate(MAX_VALUES);
-        out
+        }
     }
 }
 
@@ -386,12 +382,15 @@ pub fn message(name: &str, arguments: &Json, _session: &Mutex<Session>) -> Resul
 /// The suggestions for one prompt argument.
 ///
 /// The values come from the argument's own declaration, so a suggestion can
-/// never be for an argument the prompt does not have.
+/// never be for an argument the prompt does not have — and they are
+/// **filtered by what the caller has typed**, because that is what the
+/// method is for. §179.
 pub fn complete(
     prompt_name: &str,
     argument_name: &str,
+    typed: &str,
     session: &Mutex<Session>,
-) -> Result<Vec<String>, PromptError> {
+) -> Result<crate::rpc::Suggestions, PromptError> {
     let prompt = PROMPTS
         .iter()
         .find(|p| p.name == prompt_name)
@@ -399,7 +398,10 @@ pub fn complete(
     let argument = prompt.arguments.iter().find(|a| a.name == argument_name).ok_or_else(|| {
         PromptError::Missing { prompt: prompt.name.to_string(), argument: argument_name.to_string() }
     })?;
-    Ok(argument.values.resolve(session))
+    let matching: Vec<String> =
+        argument.values.resolve(session).into_iter().filter(|v| crate::rpc::starts_with(v, typed)).collect();
+    let total = matching.len();
+    Ok(crate::rpc::Suggestions { values: matching.into_iter().take(crate::rpc::MAX_VALUES).collect(), total })
 }
 
 #[cfg(test)]
@@ -483,17 +485,35 @@ mod tests {
     #[test]
     fn the_suggestions_are_live() {
         let s = session();
-        let kinds = complete("add-node", "kind", &s).expect("the argument is known");
+        let kinds = complete("add-node", "kind", "", &s).expect("the argument is known");
         let model: Vec<String> =
             craftkit_model::NodeKind::all().iter().map(|k| k.label().to_string()).collect();
-        assert_eq!(kinds, model, "the suggestions are not the model's own");
-
-        let commands = complete("add-node", "kind", &s).expect("the argument is known");
-        assert!(!commands.is_empty());
+        assert_eq!(kinds.values, model, "the suggestions are not the model's own");
+        assert_eq!(kinds.total, model.len(), "the count is not the model's own");
 
         // A prompt that has no such argument says so, rather than answering
         // with nothing.
-        assert!(complete("add-node", "nope", &s).is_err(), "an unknown argument was answered");
-        assert!(complete("nope", "kind", &s).is_err(), "an unknown prompt was answered");
+        assert!(complete("add-node", "nope", "", &s).is_err(), "an unknown argument was answered");
+        assert!(complete("nope", "kind", "", &s).is_err(), "an unknown prompt was answered");
+    }
+
+    /// The suggestions are filtered by what the caller has typed.
+    ///
+    /// That is the whole point of the method: a list of every value, every
+    /// time, is not a suggestion. §179.
+    #[test]
+    fn the_suggestions_are_filtered_by_what_was_typed() {
+        let s = session();
+        let all = complete("add-node", "kind", "", &s).expect("the argument is known");
+        let some = complete("add-node", "kind", "s", &s).expect("the argument is known");
+        assert!(some.total < all.total, "the filter did not narrow the list");
+        assert!(
+            some.values.iter().all(|v| v.to_ascii_lowercase().starts_with('s')),
+            "a suggestion does not begin with what was typed: {:?}",
+            some.values
+        );
+        // And the match is case-insensitive, the way the tree matches names.
+        let upper = complete("add-node", "kind", "S", &s).expect("the argument is known");
+        assert_eq!(upper.values, some.values, "the match was case-sensitive");
     }
 }
