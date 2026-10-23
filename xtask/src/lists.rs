@@ -1369,20 +1369,14 @@ fn collect_items(body: &str, members: &mut BTreeSet<String>) {
 }
 
 /// Every `Cargo.toml` in the tree, except the ones in a build directory.
-fn collect_manifests(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if name.starts_with('.') || name == "target" || name == "node_modules" {
-                continue;
-            }
-            collect_manifests(&path, out);
-        } else if name == "Cargo.toml" {
-            out.push(path);
-        }
-    }
+///
+/// The tree's one walk, with this gate's idea of what a manifest is. §170.
+fn collect_manifests(root: &Path, out: &mut Vec<std::path::PathBuf>) {
+    let mut found: Vec<std::path::PathBuf> = Vec::new();
+    crate::tree::walk(root, root, &mut found, &|path| {
+        path.file_name().and_then(|name| name.to_str()) == Some("Cargo.toml")
+    });
+    out.extend(found.into_iter().map(|relative| root.join(relative)));
 }
 
 /// The two files that may read a parameter's raw JSON.
@@ -1408,7 +1402,7 @@ const RAW_PARAMETER_HOMES: &[&str] = &["crates/core/src/params.rs", "crates/engi
 /// and a seventh would not have had to be careful.
 pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>, String> {
     let mut sources = Vec::new();
-    collect_rust(root, &mut sources)?;
+    collect_rust(root, &mut sources);
     let mut problems = Vec::new();
     for path in sources {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
@@ -1436,6 +1430,87 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
     }
     problems.sort();
     Ok(problems)
+}
+
+/// The tree's walk has one home.
+///
+/// Every recursive directory walk in the tree's own source must be
+/// `xtask/src/tree.rs`'s `walk`.
+///
+/// §170: the assets gate had the walk twice and the lists gate three times,
+/// and the copies had already drifted — `collect_manifests` did not ignore
+/// `dist` while the other two did — so a gate that walks the tree and a gate
+/// that walks it differently do not see the same tree. §168 folded the assets
+/// gate's two into one and wrote that there was now one walk; the lists
+/// gate's three were still there.
+pub fn the_walk_has_one_home(root: &Path) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (file, line, name) in directory_walks(root) {
+        if file == "xtask/src/tree.rs" && name == "walk" {
+            continue;
+        }
+        problems.push(format!(
+            "{file}:{line}: `{name}` walks the tree, and the tree's walk is \
+             `xtask/src/tree.rs`"
+        ));
+    }
+    problems.sort();
+    problems
+}
+
+/// Every recursive directory walk in the tree's own source.
+///
+/// A function that reads a directory and calls itself is a walk. The engine's
+/// crash folder makes directories and does not read them, so it is not one.
+///
+/// The **tests** do not count: a test that walks a temporary directory is
+/// testing the walk, not holding down a rule about what a gate sees. §170.
+fn directory_walks(root: &Path) -> Vec<(String, usize, String)> {
+    let mut out = Vec::new();
+    let mut sources = Vec::new();
+    collect_rust(&root.join("xtask/src"), &mut sources);
+    for path in sources {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let production = production_of(&path, &text);
+        let code = code_lines_kept(&production);
+        let relative = relative_name(root, &path);
+        for function in rust_functions(&relative, &production, &code) {
+            if !function.code_body.contains("read_dir") {
+                continue;
+            }
+            if !calls_itself(&function) {
+                continue;
+            }
+            out.push((relative.clone(), function.line, function.name));
+        }
+    }
+    out
+}
+
+/// Does this function call itself?
+///
+/// A call and not a mention: the name, then a bracket, and not inside a
+/// string — the body is the code view, so a name in a string is a sentence
+/// about a call.
+fn calls_itself(function: &Function) -> bool {
+    let body = &function.code_body;
+    let bytes = body.as_bytes();
+    let mut at = 0usize;
+    while let Some(found) = body[at..].find(&function.name) {
+        let start = at + found;
+        at = start + function.name.len();
+        // The name must stand alone: `walk` is not `walkdir`.
+        if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+            continue;
+        }
+        // And it must be a call.
+        let Some(open) = body[at..].find('(') else { continue };
+        if !body[at..at + open].trim().is_empty() {
+            continue;
+        }
+        return true;
+    }
+    false
 }
 
 /// The clippy settings that re-enable a lint in test code, and the lint each
@@ -3108,7 +3183,7 @@ pub fn citation_drift(root: &Path) -> Result<Vec<String>, String> {
     // second component is a score for preferring the citation's own suffix
     // match over a first-found name.
     let mut sources: Vec<PathBuf> = Vec::new();
-    collect_rust(root, &mut sources)?;
+    collect_rust(root, &mut sources);
 
     let mut problems = Vec::new();
     for doc in prose_files(root) {
@@ -3309,39 +3384,15 @@ fn prose_files(root: &Path) -> Vec<PathBuf> {
 /// of them. A walk that only looks at the top level is a walk that looks
 /// almost nowhere, and it did not say so anywhere.
 fn collect_markdown(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if name.starts_with('.') || matches!(name.as_str(), "target" | "node_modules" | "dist") {
-                continue;
-            }
-            collect_markdown(&path, out);
-        } else if path.extension().and_then(|x| x.to_str()) == Some("md") {
-            out.push(path);
-        }
-    }
+    let mut found: Vec<PathBuf> = Vec::new();
+    crate::tree::walk(dir, dir, &mut found, &|path| path.extension().and_then(|x| x.to_str()) == Some("md"));
+    out.extend(found.into_iter().map(|relative| dir.join(relative)));
 }
 
-fn collect_rust(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(()),
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if name.starts_with('.') || matches!(name.as_str(), "target" | "node_modules" | "dist") {
-                continue;
-            }
-            collect_rust(&path, out)?;
-        } else if path.extension().and_then(|x| x.to_str()) == Some("rs") {
-            out.push(path);
-        }
-    }
-    Ok(())
+fn collect_rust(dir: &Path, out: &mut Vec<PathBuf>) {
+    let mut found: Vec<PathBuf> = Vec::new();
+    crate::tree::walk(dir, dir, &mut found, &|path| path.extension().and_then(|x| x.to_str()) == Some("rs"));
+    out.extend(found.into_iter().map(|relative| dir.join(relative)));
 }
 
 /// The file a citation names, preferring one whose tail matches what was written.
@@ -4795,7 +4846,7 @@ fn operand_key(token: &str) -> Option<String> {
 /// Every Rust file in the tree.
 fn rust_files(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    collect_rust(root, &mut found).unwrap_or_default();
+    collect_rust(root, &mut found);
     found
 }
 
@@ -5692,6 +5743,13 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A parameter is read by a reader, and never indexed.")),
     );
 
+    // The tree's walk, and the one home it has. §170.
+    problems.extend(
+        the_walk_has_one_home(root)
+            .into_iter()
+            .map(|p| format!("{p}\n     Two walks are two rules about what a gate sees.")),
+    );
+
     // The clippy settings, and the lints they re-enable. §136.
     problems.extend(
         every_test_only_setting_names_a_denied_lint(root)?
@@ -5764,8 +5822,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
              reads is declared, every gate the tree names exists, every \
-             command is documented, every gate runs in `ci`, and the session \
-             offers no way into the design but the registry",
+             command is documented, every gate runs in `ci`, the tree's walk \
+             has one home, and the session offers no way into the design but \
+             the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -6411,6 +6470,97 @@ mod tests {
         let root = crate::root().expect("the workspace root");
         let problems = the_gates_are_real(&root).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    // ------------------------------------------------------- §170 ----------
+
+    /// The tree has one walk.
+    ///
+    /// The real tree, not a copy of it. §168 wrote that there was now one
+    /// walk, and the same commit left three of them behind.
+    #[test]
+    fn the_tree_has_one_walk() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_walk_has_one_home(&root);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A second walk is caught.
+    ///
+    /// The check reads the tree's own source, so the tree it reads has to be
+    /// *made*: a file with a walk of its own, beside the one that is allowed.
+    #[test]
+    fn a_second_walk_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-walk-{}", std::process::id()));
+        let src = dir.join("xtask/src");
+        std::fs::create_dir_all(&src).expect("the fabricated tree");
+        std::fs::write(
+            src.join("tree.rs"),
+            "pub fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>, want: &dyn Fn(&Path) -> bool) {\n\
+             \x20   let Ok(entries) = std::fs::read_dir(dir) else { return };\n\
+             \x20   for entry in entries.flatten() {\n\
+             \x20       let path = entry.path();\n\
+             \x20       if path.is_dir() { walk(root, &path, found, want); } else { found.push(path); }\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated walk");
+        std::fs::write(
+            src.join("other.rs"),
+            "fn another_walk(dir: &Path, out: &mut Vec<PathBuf>) {\n\
+             \x20   let Ok(entries) = std::fs::read_dir(dir) else { return };\n\
+             \x20   for entry in entries.flatten() {\n\
+             \x20       let path = entry.path();\n\
+             \x20       if path.is_dir() { another_walk(&path, out); } else { out.push(path); }\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated second walk");
+
+        let problems = the_walk_has_one_home(&dir);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("another_walk"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A walk in a test is not a second home.
+    ///
+    /// The rule is about what a gate sees, and a test that walks a temporary
+    /// directory is testing the walk rather than holding down the rule.
+    #[test]
+    fn a_walk_in_a_test_is_not_a_second_home() {
+        let dir = std::env::temp_dir().join(format!("craftkit-walk-test-{}", std::process::id()));
+        let src = dir.join("xtask/src");
+        std::fs::create_dir_all(&src).expect("the fabricated tree");
+        std::fs::write(
+            src.join("tree.rs"),
+            "pub fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>, want: &dyn Fn(&Path) -> bool) {\n\
+             \x20   let Ok(entries) = std::fs::read_dir(dir) else { return };\n\
+             \x20   for entry in entries.flatten() {\n\
+             \x20       let path = entry.path();\n\
+             \x20       if path.is_dir() { walk(root, &path, found, want); } else { found.push(path); }\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated walk");
+        std::fs::write(
+            src.join("other.rs"),
+            "#[cfg(test)]\n\
+             mod tests {\n\
+             \x20   fn a_test_walk(dir: &Path, out: &mut Vec<PathBuf>) {\n\
+             \x20       let Ok(entries) = std::fs::read_dir(dir) else { return };\n\
+             \x20       for entry in entries.flatten() {\n\
+             \x20           let path = entry.path();\n\
+             \x20           if path.is_dir() { a_test_walk(&path, out); } else { out.push(path); }\n\
+             \x20       }\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated test walk");
+
+        let problems = the_walk_has_one_home(&dir);
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The tree's own limits table: every limit in it is enforced.

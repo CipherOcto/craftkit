@@ -426,6 +426,31 @@ That is why the reader had to become **public**: it was a private `fn` in
 `lists.rs`, and the alternative was a second copy of the rule in
 `assets.rs` — the thing the tree's one-reader test exists to stop.
 
+## And there is one way to find the files
+
+**A gate that walks the tree walks it one way.** The one way is `walk`, in
+`xtask/src/tree.rs`. It takes a root, a directory to start in and a predicate,
+and it gives back the files under that root the predicate accepts — and
+nothing in the build output, nothing under a dot-directory, and nothing in
+`target`, `.git`, `node_modules` or `dist`.
+
+The rule exists because the copies had already drifted. §168 folded the
+assets gate's two walks into this one and wrote that *"there is now one, in
+`xtask/src/tree.rs`, and both gates use it"*. **That was false when it was
+written**: the lists gate still had three of its own — `collect_manifests`,
+`collect_markdown` and `collect_rust` — and they did not agree about what to
+skip. `collect_manifests` did not ignore `dist`; the other two did.
+
+So the gate that holds it down is `the_walk_has_one_home`: every recursive
+directory walk in the tree's own build tool must be `tree::walk`. A **test**
+is not a second home — a test that walks a temporary directory is testing the
+walk, not holding down a rule about what a gate sees.
+
+The rule and the copy live in the same file. `xtask/src/tree.rs` says where
+the walk came from, which copies it replaced and what each of them skipped.
+**A copy that forgets where it came from is a copy that drifts**, so the
+record is in the file and not only in the history.
+
 ## In the code
 
 The reader, `xtask/src/lists.rs`:
@@ -478,6 +503,8 @@ let code = code_lines_kept(&text);
 
 - `the_tree_has_one_code_reader` — counts the readers in the tree's own build
   tool, and there is exactly one.
+- `the_tree_has_one_walk` — counts the recursive directory walks in the tree's
+  own build tool, and there is exactly one. §170.
 - `a_symbol_that_stands_only_in_a_string_is_not_a_symbol_of_the_tree`, and the
   three beside it — each one takes the rule out of one gate and checks that
   the gate notices.

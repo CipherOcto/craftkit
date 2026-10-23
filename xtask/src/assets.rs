@@ -90,7 +90,7 @@ fn relative_name(path: &Path) -> String {
 /// Foreign-source files in the tree that no exception allows.
 pub fn find_foreign_source(root: &Path) -> Result<Vec<String>, String> {
     let mut all = Vec::new();
-    crate::tree::walk(root, root, &mut all, &is_foreign_source)?;
+    crate::tree::walk(root, root, &mut all, &is_foreign_source);
     let mut found: Vec<String> = all
         .iter()
         .map(|p| relative_name(p))
@@ -162,7 +162,7 @@ pub fn is_asset(path: &Path) -> bool {
 /// directory with no filesystem assumptions beyond "a directory is a directory".
 pub fn find_assets(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
-    crate::tree::walk(root, root, &mut found, &is_asset)?;
+    crate::tree::walk(root, root, &mut found, &is_asset);
     found.sort();
     Ok(found)
 }
@@ -176,7 +176,7 @@ pub fn find_sources(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
     crate::tree::walk(root, root, &mut found, &|path| {
         path.extension().and_then(|e| e.to_str()) == Some("rs")
-    })?;
+    });
     found.sort();
     Ok(found)
 }

@@ -128,7 +128,7 @@ pub fn inspect(root: &Path) -> Result<Vec<String>, String> {
     }
 
     let mut files = Vec::new();
-    crate::tree::walk(root, root, &mut files, &|path| !is_prose(path))?;
+    crate::tree::walk(root, root, &mut files, &|path| !is_prose(path));
     let mut hits = Vec::new();
     for relative in files {
         let shown = relative.to_string_lossy().replace('\\', "/");

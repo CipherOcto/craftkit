@@ -588,6 +588,60 @@ swap xtask/src/lib.rs \
     '    ("bundle", ""),'
 expect_catch "gates: an exception that says no reason is accepted" "cargo xtask lists"
 
+# ------------------------------------------------------ the tree has one walk ----
+# §170. The tree's walk had four homes: one in `xtask/src/tree.rs` and three in
+# `xtask/src/lists.rs`. The copies had already drifted — `collect_manifests`
+# did not ignore `dist` while the other two did — so a gate that walks the
+# tree and a gate that walks it differently do not see the same tree.
+#
+# The gate says a recursive directory walk has one home. These two plant a
+# second one and require the gate to notice: the first in the gate's own
+# file, the second in another, because a check that only looks in one place
+# is a check that looks almost nowhere.
+swap xtask/src/lists.rs \
+    '#[cfg(test)]
+mod tests {
+    use super::*;' \
+    '/// A second walk of the tree, planted to prove the gate notices.
+fn a_second_walk(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            a_second_walk(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;'
+expect_catch "gate: the tree grows a second walk of its files" "cargo xtask lists"
+
+swap xtask/src/assets.rs \
+    '#[cfg(test)]
+mod tests {
+    use super::*;' \
+    '/// A second walk of the tree, planted to prove the gate notices.
+fn another_walk(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            another_walk(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;'
+expect_catch "gate: a second walk of the tree, in another file" "cargo xtask lists"
+
 # --------------------------------------------------------------------- io ----
 # A format change is one file in `format/pending/`, and the migration it holds
 # only runs if it is also listed in the `FILES` table. An unlisted file was
@@ -4180,15 +4234,25 @@ expect_catch "gate: the production cut hides the code after a test item" \
 # which moved it to a different function entirely. The mutation then broke a
 # gate nobody asked about, the reader list stayed whole, and the case was
 # reported MISSED. §167.
+#
+# §170 added a second gate that reads the tree's source, and its code had the
+# same four lines. Both anchors here became ambiguous again, and an ambiguous
+# anchor lands on the **first** match -- which is the reader list today and
+# might not be tomorrow. So both anchors now end with the reader list's own
+# next line, `let is_method = has_word(&function.block, PARAMS_TYPE);`, which
+# is in no other function. The probe that reports an anchor in a file twice is
+# how it was found, and it is the same rule §167 learned.
 swap xtask/src/lists.rs \
     '        let relative = relative_name(root, &path);
         let production = production_of(&path, &text);
         let code = code_lines_kept(&production);
-        for function in rust_functions(&relative, &production, &code) {' \
+        for function in rust_functions(&relative, &production, &code) {
+            let is_method = has_word(&function.block, PARAMS_TYPE);' \
     '        let relative = relative_name(root, &path);
         let production = text.clone();
         let code = code_lines_kept(&production);
-        for function in rust_functions(&relative, &production, &code) {'
+        for function in rust_functions(&relative, &production, &code) {
+            let is_method = has_word(&function.block, PARAMS_TYPE);'
 expect_catch "gate: the reader list counts a test's helper as a reader" \
     "cargo test -p xtask --profile ci a_test_helper_is_not_a_reader"
 
@@ -4203,8 +4267,10 @@ expect_catch "gate: the reader list counts a test's helper as a reader" \
 # report a command that does not exist. The controls, with the same prose
 # and no signature, were green. Section 155.
 swap xtask/src/lists.rs \
-    '        for function in rust_functions(&relative, &production, &code) {' \
-    '        for function in rust_functions(&relative, &production, &production) {'
+    '        for function in rust_functions(&relative, &production, &code) {
+            let is_method = has_word(&function.block, PARAMS_TYPE);' \
+    '        for function in rust_functions(&relative, &production, &production) {
+            let is_method = has_word(&function.block, PARAMS_TYPE);'
 expect_catch "gate: the reader list reads a comment as a reader" \
     "cargo test -p xtask --profile ci a_reader_that_stands_only_in_a_comment_is_not_a_reader"
 

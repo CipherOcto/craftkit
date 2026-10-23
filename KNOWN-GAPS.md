@@ -19737,6 +19737,167 @@ that has already drifted.** Three lists existed; `bundle` was in one of them
 and worked fine. The fix was not a better list. It was **one list, used
 twice**.
 
+## 170. The tree had one walk, and it had four
+
+§168 and §169 took the first two findings. This section takes the third: the
+family shares code by copying, and **the copy loses its record**.
+
+### The finding
+
+Measured across the family: **eight** files in `soundcraft/crates/video/` are
+byte-identical to another repo's H.264/ProRes/ISOBMFF internals, and the copy
+has **no README** — so the record of what the code is and where it came from
+did not travel with it. And **24** Lucide SVGs in `vectorcraft/assets/icons/`
+are byte-identical to another repo's, each with its own row missing.
+
+The practice is not the copying. The practice is that **a copy is made and the
+record stays behind**.
+
+### What this tree had
+
+The tree's own answer to "one way to do a thing" is a set of checks that count
+the homes: `the_tree_has_one_code_reader`, `the_raw_parameter_reader_has_two_homes`,
+`the_session_offers_no_second_path`. So the tree knows the shape of this
+defect — and it had one.
+
+§168's commit added `xtask/src/tree.rs` — *"the tree's one walk"* — folded the
+assets gate's two copies of the walk into it, and wrote:
+
+> **One walk.** The assets gate and the clean-room gate needed the same walk of
+> the tree, and the assets gate had two copies of it (`walk` and `collect`, near
+> identical). There is now one, in `xtask/src/tree.rs`, and both gates use it.
+
+**That was false when it was written.** The same commit left **three** copies
+behind in the lists gate:
+
+| The walk | Where | Ignores |
+|---|---|---|
+| `walk` | `xtask/src/tree.rs` | `target`, `.git`, `node_modules`, `dist`, every dot-directory |
+| `collect_manifests` | `xtask/src/lists.rs` | `target`, `node_modules`, every dot-directory — **not `dist`** |
+| `collect_markdown` | `xtask/src/lists.rs` | `target`, `node_modules`, `dist`, every dot-directory |
+| `collect_rust` | `xtask/src/lists.rs` | `target`, `node_modules`, `dist`, every dot-directory |
+
+**Four homes, and they had already drifted.** `collect_manifests` did not skip
+`dist` while the other two did, so a `Cargo.toml` in a build directory was a
+manifest to one gate and not to another. A gate that walks the tree and a gate
+that walks it differently do not see the same tree, and the difference is a
+file nobody looked at.
+
+And the record was nowhere a reader would find it. The rule *"the tree has
+one walk"* was written in **no** document a reader would find — not in
+`AGENTS.md`, not in the pattern document, not in the architecture document.
+Only in `KNOWN-GAPS.md`, and in the file's own doc comment, which cited
+**§169** — a section about something else entirely. The walk was added in
+§168's commit.
+
+### What it cost
+
+Nothing was broken, and the drift was one file deep. The cost is the class:
+**a copy that does not say where it came from is a copy that drifts**, and
+nothing in the tree would have noticed. §168's closing sentence is the proof:
+a claim that was wrong in the same commit that made it, written by the person
+who had just looked at the copies.
+
+### The fix
+
+**One walk, and it says where it came from.** The three copies in the lists
+gate are now three lines each over `tree::walk`, and the ignore list is one
+list. `xtask/src/tree.rs` says what it replaced, which copy skipped what, and
+why the file exists — the record travels with the file, not only in the
+history.
+
+**The walk cannot fail, and it does not pretend that it can.** `tree::walk`
+returned a `Result` it could never fail with: a directory it cannot read is
+skipped, not an error. It returns nothing now, and the four call sites say so.
+
+**The rule is written where a reader looks** — in
+`docs/patterns/one-way-to-read-code.md`, under *"And there is one way to find
+the files"*.
+
+### The gate
+
+`cargo xtask lists` now holds it down: **every recursive directory walk in the
+tree's own build tool must be `tree::walk`.** A walk is a function that reads
+a directory and calls itself; the engine's crash folder makes directories and
+does not read them, so it is not one. A **test** is not a second home either:
+a test that walks a temporary directory is testing the walk, not holding down
+a rule about what a gate sees.
+
+### What the gate cannot see
+
+- **A walk that is not a walk of files.** The check says *a function that
+  reads a directory and calls itself*. A helper that recurses over
+  directories for another reason — creating them, say — would be reported.
+  There is none today; a future one would need the rule widened, and the
+  report would say which function it was.
+- **A walk in another crate.** The check reads the tree's own build tool,
+  because that is where the walk is. A crate that walked the tree would be a
+  different question.
+- **That the one walk is *used*.** The check says there is one walk, not that
+  every gate uses it. A gate that grew its own walk would be caught; a gate
+  that stopped using the tree's one would not.
+
+### Two rules that were measured and rejected
+
+The obvious companions to this one were measured on the tree and **rejected**,
+because a gate that cries wolf is a gate nobody reads:
+
+| The rule | What it would have reported |
+|---|---|
+| a `§NNN` in a source file must name a section that mentions that file | **827** of **998** references |
+| the same, for a module's own note only | **25** of **37** references |
+
+A section reference is usually a pointer to a *lesson*, not to a section about
+that file — and the sections are about gates and rules, not about files. So the
+citation that is wrong in `xtask/src/tree.rs` (it says §169; the walk is §168)
+is **not** mechanically checkable, and this section fixes it by hand rather
+than pretending otherwise. The one thing a tool *can* say is that a `§NNN`
+names a section that exists: **2 666** references in the tree, **3** of which
+do not, and all three are promises of §172 — a section that is written next.
+
+### The unit tests
+
+Three:
+
+| Test | What it holds |
+|---|---|
+| `the_tree_has_one_walk` | the real tree has one walk |
+| `a_second_walk_is_caught` | a fabricated tree with a second walk is reported |
+| `a_walk_in_a_test_is_not_a_second_home` | a test's walk is not a second home |
+
+The two fabricated ones use a tree of two files, because the check reads the
+tree's own source and a source that is wrong has to be *made*.
+
+### The mutations
+
+Two, each planting a second walk and requiring the gate to notice — the first
+in the gate's own file, the second in another, because a check that looks in
+one place is a check that looks almost nowhere:
+
+| Mutation | What it breaks |
+|---|---|
+| a second walk in `xtask/src/lists.rs` | the tree grows a second copy of the rule |
+| a second walk in `xtask/src/assets.rs` | and the check only looks in one file |
+
+Both were checked to be caught, one at a time, on the tree.
+
+### The lesson
+
+**A copy that forgets where it came from is a copy that drifts.** The tree
+had four walks and they had already disagreed about what to skip. The copies
+were not wrong when they were written; they were wrong later, and nothing said
+so.
+
+**A claim in a commit message is not a gate.** §168 wrote that there was one
+walk, in the same commit that left three behind. The claim was true of the
+file it named and false of the tree.
+
+**And a rule that lives only in the history is a rule that does not live.** The
+"one walk" rule was in `KNOWN-GAPS.md` and in the file's own comment, and in
+neither `AGENTS.md` nor the pattern document nor the architecture document —
+which is why the file's comment could point at the wrong section and nothing
+would say.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -20141,6 +20302,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every command is documented** | the crate's own table of commands | 1 mutation — §169 |
 | **Every gate runs in `ci`** | the exceptions list in `xtask/src/lib.rs` | 2 mutations — §169 |
 | **The lists of what `ci` runs are the lists `ci` runs** | the usage text and the README | 2 mutations — §169 |
+| **The tree's walk has one home** | `xtask/src/tree.rs` | 2 mutations — §170 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
