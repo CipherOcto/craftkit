@@ -20722,6 +20722,131 @@ are not "there are resources" — they are "what is advertised can be read",
 that goes stale, and a stale list is worse than no list: it sends a client
 looking for something that is not there.
 
+## 177. The promise was checked by a table of guesses, on the wrong side
+
+### The finding
+
+The tree's headline promise is that hostile input is **refused**, not
+survived. It was checked — but on one side only.
+
+`hostile_params_never_panic` fires a fixed set of values at every documented
+parameter name. The names are complete, because they come from the registry;
+the values are guesses (§175). And the mutation suite mutates the **tree**,
+not the **input**: every one of its 394 cases breaks a line of *this* code to
+see whether a gate notices. **Nothing in the tree fed the reader a byte
+nobody chose.**
+
+So the side where hostile bytes actually enter — the design file — was
+checked by twenty hand-written cases and by nothing else.
+
+### What was measured first
+
+Two probes, run outside the tree, against the real crates:
+
+| The probe | What it did | What happened |
+|---|---|---|
+| the reader | 200,000 mutated design files, through the reader, the loader and three commands | 199,409 refused, 591 read, **0 panics** |
+| the commands | every command at every parameter with hostile values — 574 calls, 395 of them *accepted* by the reader, so they reached the command's logic | **0 internal errors** |
+
+**The promise held.** Nothing in the tree was checking that it held, and a
+promise that is only checked by hand is a promise that stops holding the
+day somebody changes a bound.
+
+### The port
+
+Two property suites, both on a fixed seed and with no failure file (§175's
+rule):
+
+| The file | The properties |
+|---|---|
+| `crates/io/tests/properties.rs` | a file with **one byte changed**, a **truncated** file, and a file with **one hostile value** in it: each is read or refused, and a file that is read holds a document the model accepts |
+| `crates/engine/tests/properties.rs` | **no command**, with any generated parameter value, reports an internal error; a **refused** command leaves the document exactly as it was |
+
+### Looking through the guard
+
+`Session::execute` runs every command under a `catch_unwind`, so a panic in a
+command does not reach the caller: the guard turns it into an
+`EngineError::Internal`. That is why *"no command panics"* is a property
+that cannot fail — §175 named it, and it is still true.
+
+**This property looks through the guard.** It forbids the *error the guard
+produces*, so a panic the guard caught is a failure of the property. The
+guard hides a panic from the process; it cannot hide it from this.
+
+The two other kinds of `Internal` are forbidden with it, and they are worth
+forbidding for the same reason: a command that leaves the document in a state
+the file format refuses, and a command that says it does not change the
+document and does, are both bugs no caller can see.
+
+### What the property found
+
+**Two of `doc.range`'s own bounds were enforced by nothing.**
+
+The command checks the frame rate and checks that the range is not empty,
+and the model checks the same two things again. The two checks were
+*copies*, and nothing checked that the copies agreed.
+
+Measured, one variable at a time, on the tree:
+
+| The mutation | What happened | Caught by |
+|---|---|---|
+| `f < 1` → `f < 0` | `doc.range` with a frame rate of zero **succeeded**; the document it left had a rate of zero, which the file format refuses; the engine's own check turned that into *"failed unexpectedly"* | the new property — and **nothing** in the tree's tests |
+| `end <= start` → `end < start` | the same, with an empty range | the new property — and **nothing** in the tree's tests |
+
+The failure the property reports names the cause exactly:
+
+```text
+`doc.range` reported an internal error for fps = 0: `doc.range` failed unexpectedly
+(the command left the document in a state the file format refuses: bad metadata:
+frame rate 0 is not usable: it must be between 1 and 1000)
+```
+
+**Both mutations are caught by the property and by no other gate in the
+tree.** They are in the mutation suite now, each naming the property that
+catches it.
+
+### A property that depends on luck is a property that stops catching — again
+
+The first version of the engine property used **the same plausible value for
+every parameter of a kind**. So `doc.range`'s `start` and `end` were both
+zero, the command refused *"the end must be after the start"* before it ever
+looked at the frame rate, and the hostile value **never reached the code it
+was meant to test**. The mutation was missed, and the property passed for the
+wrong reason.
+
+The generator now gives the *n*th instant a distinct plausible value, and
+builds the hostile instant as **the other end's value**, so the empty-range
+boundary is always one of the cases rather than one case in a thousand.
+
+§175's lesson, the second time, and it cost the same: a property is only as
+good as the cases its generator builds.
+
+### What the gate cannot see
+
+- **The reader's properties have no known mutation.** They are a guard, not
+  a finder: the reader survived 200,000 mutated files, and no single line
+  change was found that makes it accept one it should refuse. The gate is
+  there because the reader is the one place hostile bytes enter, and a panic
+  there is caught by nothing at all.
+- **The properties are a sample.** 256 cases from a fixed seed. A property
+  that holds for every generated input is evidence, not certainty.
+- **The generator's shape is the coverage.** The hostile values are the ones
+  the tree's rules are about — an unknown node, a path that names nothing,
+  an instant far outside the range. A shape the generator does not produce is
+  not covered.
+
+### The lesson
+
+**The mutation suite mutates the tree; a property mutates the input.** Both
+are ways of asking "what if this were wrong?", and the tree had only the
+first. A gate that never feeds the code a byte nobody chose is a gate over
+the code as it was written, not over the code as it will be.
+
+**And a property can be stronger than the guard it sits behind.**
+`Session::execute`'s `catch_unwind` makes *"no command panics"* true by
+construction. Forbidding the *error the guard produces* is not true by
+construction — and it is what found the two bounds.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21148,6 +21273,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A missing resource says it is a missing resource** | `code::RESOURCE_NOT_FOUND` | 1 mutation — §176 |
 | **A resource holds what its tool holds** | the same read call, compared in a test | 1 mutation — §176 |
 | **A property's value has one shape in the plan and in the resource** | `PropGroup::flatten` | the shape the port found — §176 |
+| **A hostile file is read or refused** | the properties in `crates/io/tests/properties.rs` | a guard — §177 |
+| **No command reports an internal error, whatever it is given** | the properties in `crates/engine/tests/properties.rs` | 2 mutations — §177 |
+| **A refused command leaves the document exactly as it was** | the same | the engine's own promise — §177 |
+| **A command's own bound agrees with the model's rule** | the same | 2 mutations — §177 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -22028,27 +22157,31 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
 45. **Fire every command at every parameter with *generated* values.** Section
     175 put the properties on the readers and the parameter readers, which is
-    where a panic would be a real bug. The commands are still covered by a
-    table.
+    where a panic would be a real bug, and section 177 put them on the
+    **commands** — every command at every parameter, with generated values.
 
-    The table is `hostile_params_never_panic`, and it is good: it derives the
-    **parameter names** from the registry, so it stays true as commands are
-    added. What it does not do is generate the **values** — it fires a fixed
-    set at every name, and the fixed set is a list of guesses.
-
-    The work is a generator per parameter *kind*, not per command: the
-    registry already says what each parameter is, so a value of the right
-    kind with the wrong contents — a number of the wrong magnitude, a string
-    with a newline in it, a list of the wrong length — is a small, finite
-    job. Then the property is the one the house already wants: **no command,
-    with any parameter, leaves a document the file reader would refuse.**
+    What is left of this item is the *shape* of the generator. §177's
+    generator has one hostile value per parameter kind, and the ones it has
+    are the ones the tree's rules are about: an unknown node, a path that
+    names nothing, an instant far outside the range, a frame rate of zero.
+    What it does not have is a generator per kind that walks the *whole*
+    range of that kind — every number magnitude, every time spelling, every
+    path grammar shape.
 
     The trap to avoid is the one section 175 names: `Session::execute` runs
     every command under a `catch_unwind`, so "no command panics" is already
     structurally true and a test of it proves nothing. The property has to be
     about the **document** — that it is still valid, and that the dirty flag
     and the undo stack are what they were — because that is the part the
-    panic boundary does not restore for you.
+    panic boundary does not restore for you. §177 does the second half of
+    that ("a refused command leaves the document exactly as it was"); the
+    first half is the engine's own check, and the property is what watches
+    it.
+
+    The other trap is the one §177 paid for: **the plausible values are
+    part of the generator.** A generator that gives two ends of a range the
+    same value makes the command refuse before it looks at the hostile one,
+    and the property passes for the wrong reason.
 
 46. **Give the MCP server the other half of the protocol: prompts and
     completion.** Section 176 added the resources, and left the two methods

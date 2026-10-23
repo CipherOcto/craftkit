@@ -74,6 +74,8 @@ readonly FILES=(
     crates/core/src/params.rs
     crates/core/src/readers.rs
     crates/core/tests/properties.rs
+    crates/engine/tests/properties.rs
+    crates/io/tests/properties.rs
     crates/core/src/value.rs
     crates/core/src/tick.rs
     crates/core/src/writer.rs
@@ -5080,6 +5082,40 @@ swap crates/mcp/src/resources.rs \
     '    Ok(Json::Array(Vec::new()))'
 expect_catch "mcp: a resource holds something other than its tool" \
     "cargo test -p craftkit-mcp --profile ci a_resource_holds_what_its_tool_holds"
+
+# ------------------------------------------------- the hostile inputs ----
+# Section 177. The tree's promise is that hostile input is refused. It was
+# checked by a table of inputs somebody thought of, and the mutation suite
+# mutates the *tree*, not the *input* — so the input side was checked by
+# nobody. The properties here fire *generated* values at every parameter of
+# every command, and look at the answer rather than at the absence of a
+# crash.
+#
+# The two breaks below are `doc.range`'s own bounds, one off. Both were
+# caught by the property and by **nothing** in the tree's own tests: with
+# the bound loosened the command succeeded, the document it left was one
+# the file format refuses, and the engine reported the tree's own
+# unexpected failure instead of a refusal with a reason.
+#
+# The gate named here is the **property**, because that is the point: a case
+# that ran the whole crate would not say that the property is what caught
+# it.
+
+# The first lets the frame rate be zero. The model refuses a rate of zero,
+# so the command leaves a document the file reader would refuse — and the
+# engine's own check turns that into "failed unexpectedly".
+swap crates/engine/src/commands.rs \
+    'if f < 1 || f > i64::from(limits::MAX_FRAME_RATE) {' \
+    'if f < 0 || f > i64::from(limits::MAX_FRAME_RATE) {'
+expect_catch "engine: the frame rate may be zero" \
+    "cargo test -p craftkit-engine --profile ci no_command_reports_an_internal_error"
+
+# The second lets the range be empty: the end at the start.
+swap crates/engine/src/commands.rs \
+    'if end <= start {' \
+    'if end < start {'
+expect_catch "engine: the range may be empty" \
+    "cargo test -p craftkit-engine --profile ci no_command_reports_an_internal_error"
 
 restore
 finish

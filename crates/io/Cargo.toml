@@ -16,3 +16,8 @@ thiserror = { workspace = true }
 log = { workspace = true }
 craftkit-core = { workspace = true }
 craftkit-model = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+craftkit-model = { workspace = true }
