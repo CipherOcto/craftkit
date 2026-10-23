@@ -83,6 +83,12 @@ Run one on its own while you work; run `ci` when you are done.
 | `tests` | behaviour, including `hostile_params_never_panic` | a new command that panics on a hostile parameter |
 | `wasm` | every library crate and `craftkit-web` still build for `wasm32-unknown-unknown` | a new dependency that is not wasm-safe |
 
+One more gate is **not** a phase of `ci`: `cargo xtask deny` checks the
+dependency policy — licences, bans, sources and advisories — against
+`deny.toml`. It needs `cargo-deny` and a network, so CI runs it as its own
+job; the rule and the table of licences are in
+[`docs/dependency-policy.md`](../../docs/dependency-policy.md).
+
 Green output for each (observed):
 
 ```

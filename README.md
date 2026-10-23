@@ -141,6 +141,7 @@ at all, which is how the web build stays testable in CI.
 ```bash
 cargo xtask doctor   # blocking / degraded / info about this machine
 cargo xtask ci       # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+cargo xtask deny     # the dependency policy: licences, bans, sources, advisories
 ```
 
 | Gate | What it protects |

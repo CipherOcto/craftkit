@@ -5394,6 +5394,11 @@ pub fn the_gates_are_real(root: &Path) -> Result<Vec<String>, String> {
     }
 
     problems.extend(gate_problems(root, &commands, &phases)?);
+
+    // And a command `ci` does not run must still be run, by name, in the
+    // workflow. §173.
+    problems.extend(workflow_problems(root, &commands)?);
+
     Ok(problems)
 }
 
@@ -5497,6 +5502,74 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
     }
 
     Ok(problems)
+}
+
+/// The workflow that decides where the gates run.
+const WORKFLOW: &str = ".github/workflows/ci.yml";
+
+/// A command `ci` does not run must be run by name in the workflow.
+///
+/// §173. The list of commands `ci` does not run exists so that a command can
+/// be something other than a phase of `ci` — the licence policy needs the
+/// network and a licence database, and a gate that fails for want of either
+/// gets switched off. But a check that only runs when somebody remembers it
+/// is the same defect as a check that does not exist (§169), so the exception
+/// is only safe while the workflow still runs the command, on every push.
+///
+/// This is what makes it safe. The defect it was written for was real: the
+/// licence policy ran in the workflow as `cargo deny check`, typed into the
+/// YAML, with no command of its own in the tree — so the tree could not say
+/// what the policy was, and the workflow's own header ("the gates live in
+/// `cargo xtask`, not in this file") was false of the one gate that had no
+/// name.
+pub fn workflow_problems(root: &Path, commands: &[GateCommand]) -> Result<Vec<String>, String> {
+    let text = std::fs::read_to_string(root.join(WORKFLOW))
+        .map_err(|e| format!("could not read {WORKFLOW}: {e}"))?;
+    let mut problems = Vec::new();
+    for command in commands.iter().filter(|command| !command.gate) {
+        if !runs_by_name(&text, command.name) {
+            problems.push(format!(
+                "`cargo xtask {}` is not a phase of `ci`, and {WORKFLOW} never runs it by name",
+                command.name
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// Whether the workflow *runs* `cargo xtask <name>`.
+///
+/// Two things this has to get right, and the first one was got wrong once.
+///
+/// **A comment is not a command.** The workflow explains what it does in prose,
+/// and the prose must not satisfy a rule about what it runs. The first version
+/// of this check searched the whole file, and it passed on a workflow whose
+/// only mention of the command was in a comment — which is the defect §170
+/// is about, in a new place: a gate that passes for the wrong reason.
+///
+/// **The name must be the whole word.** `cargo xtask ci` is not satisfied by
+/// `cargo xtask ci-something`, and a check that could be satisfied by the
+/// wrong text is a check that passes for the wrong reason.
+fn runs_by_name(text: &str, name: &str) -> bool {
+    let needle = format!("cargo xtask {name}");
+    for line in text.lines() {
+        // Everything from an unquoted `#` is a comment: in YAML and in a
+        // `run:` block, and that is the only kind of `#` this workflow has.
+        let code = match line.find('#') {
+            Some(at) => &line[..at],
+            None => line,
+        };
+        let mut rest = code;
+        while let Some(at) = rest.find(&needle) {
+            let after = &rest[at + needle.len()..];
+            let boundary = after.chars().next().map(|c| !(c.is_alphanumeric() || c == '-' || c == '_'));
+            if boundary.unwrap_or(true) {
+                return true;
+            }
+            rest = &rest[at + needle.len()..];
+        }
+    }
+    false
 }
 
 pub fn run(root: &Path) -> Result<crate::Outcome, String> {
@@ -5822,7 +5895,8 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
              reads is declared, every gate the tree names exists, every \
-             command is documented, every gate runs in `ci`, the tree's walk \
+             command is documented, every gate runs in `ci`, every command `ci` \
+             does not run is run by name in the workflow, the tree's walk \
              has one home, and the session offers no way into the design but \
              the registry",
             roots.len()

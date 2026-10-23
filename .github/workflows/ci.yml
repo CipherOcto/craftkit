@@ -152,6 +152,11 @@ jobs:
 
   # Not part of `cargo xtask ci`, because it needs a network and a licence
   # database, and a gate that fails for want of either gets switched off.
+  #
+  # It is a gate all the same, and it has a name in the tree: `cargo xtask
+  # deny`. The workflow runs that command, so the rule and the check that
+  # applies it live in the same place, and the header at the top of this file
+  # is true of every gate here. §173.
   policy:
     name: policy
     runs-on: ubuntu-latest
@@ -164,10 +169,17 @@ jobs:
 
       - name: Install cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # `fetch` installs the tool and its advisory database without
+          # checking anything: the check is the tree's own gate, below, so
+          # there is one place that decides and not two.
+          command: fetch
 
-      # Licences and sources. `deny.toml` is in the repository; this reads it.
+      # Licences, bans, sources and advisories. `deny.toml` is in the
+      # repository; `cargo xtask deny` reads it. The rule, and the table of
+      # licences, are in docs/dependency-policy.md.
       - name: Licence and advisory policy
-        run: cargo deny check
+        run: cargo xtask deny
 
       # ATTRIBUTION.md must exist and agree with the tree. Already part of
       # `cargo xtask assets`; run again on its own so a failure here is

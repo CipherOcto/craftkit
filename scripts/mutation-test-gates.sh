@@ -65,6 +65,8 @@ readonly FILES=(
     Cargo.toml
     ATTRIBUTION.md
     clippy.toml
+    deny.toml
+    .github/workflows/ci.yml
     docs/architecture.md
     crates/core/Cargo.toml
     crates/core/src/lib.rs
@@ -113,6 +115,7 @@ readonly FILES=(
     xtask/src/assets.rs
     xtask/src/cleanroom.rs
     xtask/src/ci.rs
+    xtask/src/deny.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
     xtask/src/lib.rs
@@ -247,6 +250,7 @@ guarded() {
 declare -a CAUGHT=()
 declare -a MISSED=()
 declare -a BROKE=()
+declare -a SKIPPED=()
 CASES=0
 
 # Does the output say the tree did not compile?
@@ -308,6 +312,31 @@ expect_miss() {
     fi
 }
 
+# A case that can only run where a tool is installed.
+#
+# Where the tool is not there, the case is reported as **skipped** — never as
+# caught, and never as missed. A mutation that cannot run has tested nothing,
+# and reporting it as caught would be the one lie this script exists to stop.
+# §173.
+#
+# The tool is a program on the PATH. The case is then run exactly as
+# `expect_catch` runs it, so the tree is restored either way.
+#
+# A skipped case is **not** counted in `CASES`. The closing ratio counts the
+# cases that ran, so "384/384 caught" means every case that ran was caught,
+# and the skipped ones are named underneath it. Counting a case that never ran
+# in the denominator would dress it up as a tested one.
+expect_catch_needs() {
+    local label="$1" gate="$2" tool="$3"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        SKIPPED+=("$label — $tool is not installed")
+        printf '  %sskipped%s %s\n' "$YELLOW" "$RESET" "$label"
+        printf '          %s is not installed; the rule was not tested\n' "$tool"
+        return
+    fi
+    expect_catch "$label" "$gate"
+}
+
 # Report what happened and exit with the truth.
 #
 # The exit status is part of the result, not a formality: this script is a gate,
@@ -317,7 +346,13 @@ expect_miss() {
 finish() {
     local status=0
     echo
-    if [[ ${#MISSED[@]} -eq 0 && ${#BROKE[@]} -eq 0 ]]; then
+    if [[ $CASES -eq 0 ]]; then
+        # Every case was skipped, so nothing was tested. A run that tested
+        # nothing must not print a ratio: "0/0 caught" is a green light for a
+        # dark room. §173.
+        printf '%sno case ran.%s Every case was skipped; nothing was tested.\n' "$YELLOW" "$RESET"
+        status=1
+    elif [[ ${#MISSED[@]} -eq 0 && ${#BROKE[@]} -eq 0 ]]; then
         printf '%s%d/%d caught.%s The `known` line is a limit of wasm32 itself, not a gate that passed.\n' \
             "$GREEN" "${#CAUGHT[@]}" "$CASES" "$RESET"
     else
@@ -335,6 +370,12 @@ finish() {
                 "$RED" "$RESET"
         fi
         status=1
+    fi
+
+    # A skipped case is reported as skipped. Never as caught, never as passed.
+    if [[ ${#SKIPPED[@]} -gt 0 ]]; then
+        printf '%s%d case(s) skipped, not passed:%s\n' "$YELLOW" "${#SKIPPED[@]}" "$RESET"
+        for f in "${SKIPPED[@]}"; do printf '   • %s\n' "$f"; done
     fi
 
     if [[ "$(fingerprint)" != "$BEFORE" ]]; then
@@ -4895,6 +4936,53 @@ swap xtask/src/lists.rs \
     '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("test"))'
 expect_catch "gate: a test file does not catch a panic as a boundary" \
     "cargo test -p xtask --profile ci a_test_file_does_not_catch_a_panic_as_a_boundary"
+
+# ------------------------------------------------- the dependency policy ----
+# Section 173. The licence policy was a gate with no name in the tree, and it
+# had never been green: `cargo deny check` failed three of its four sections.
+# It is a named gate now, and the three cases below break the three links that
+# make it a gate rather than a line of YAML.
+#
+# The first two are the rule in `xtask/src/deny.rs`, which is a function of its
+# own so that a test can pin it: a gate that could not run, and a gate whose
+# policy does not hold, must both be something other than a pass. Neither
+# needs cargo-deny installed, which is why they are unit tests and not runs of
+# the tool.
+swap xtask/src/deny.rs \
+    '        return if required { Conclusion::Required } else { Conclusion::NotChecked };' \
+    '        return Conclusion::Pass;'
+expect_catch "policy: a tool that is not installed counts as a pass" \
+    "cargo test -p xtask --profile ci a_tool_that_is_not_installed_is_not_a_pass"
+
+# The variable is renamed so the swap still compiles: a mutation that does not
+# compile tests nothing, and the script says so loudly.
+swap xtask/src/deny.rs \
+    '        Some(code) => Conclusion::Failed(code),' \
+    '        Some(_code) => Conclusion::Pass,'
+expect_catch "policy: a policy that does not hold counts as a pass" \
+    "cargo test -p xtask --profile ci a_policy_that_does_not_hold_is_a_failure_and_not_a_skip"
+
+# The third link: a command `ci` does not run must be run by name in the
+# workflow. The workflow's prose still mentions `cargo xtask deny` after this
+# swap -- in a comment -- so the case is also the one that says a mention is
+# not a command. The first version of the check searched the whole file and
+# passed on exactly this tree.
+swap .github/workflows/ci.yml \
+    '        run: cargo xtask deny' \
+    '        run: cargo deny check'
+expect_catch "policy: the workflow stops running the tree's gate by name" \
+    "cargo xtask lists"
+
+# And the policy itself: the licence the tree's own dependencies need, taken
+# out of the allow list. This one needs the tool, so it is skipped where the
+# tool is not installed -- reported as skipped, never as caught.
+swap deny.toml \
+    '    "BSL-1.0",
+' \
+    ''
+expect_catch_needs "policy: a licence the tree needs is taken out of the allow list" \
+    "cargo xtask deny" \
+    "cargo-deny"
 
 restore
 finish

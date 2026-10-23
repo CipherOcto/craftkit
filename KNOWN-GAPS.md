@@ -20018,6 +20018,243 @@ would have noticed.
 built-ins was `+ 3` in a test, three arms in a `match`, and three entries in a
 `Vec<Tool>`. The test was checking the arithmetic of a list it did not own.
 
+## 173. The licence policy was a gate with no name, and it had never been green
+
+§168 to §171 took the four findings of the comparison between two repos of
+the family. This section is the first port from a *third* one, and it was
+found by looking for what the family has and this tree did not.
+
+### The finding
+
+Three repos of the family keep a dependency policy in a `deny.toml` and check
+it in CI. One of them has it as a command in its own build tool —
+`cargo xtask deny` — and its `ci` runs it. Two of them check it in the
+workflow, by typing the tool into the YAML.
+
+craftkit did the second thing, and it is worth being exact about what that
+means here, because the workflow's own header says the opposite:
+
+> The gates live in `cargo xtask`, not in this file. That is deliberate: the
+> rules are versioned with the code they check, they run identically on a
+> laptop and here, and they are unit-tested.
+
+and then, forty lines down, in the `policy` job:
+
+```yaml
+      - name: Licence and advisory policy
+        run: cargo deny check
+```
+
+**The one gate in the tree with no name in the tree was in the file that
+declares that every gate has one.** That is §169's defect — a gate with no
+name — in the place §169's rule was written to prevent it.
+
+### What it cost
+
+More than a missing name. The gate had **never been green**. Measured, with
+the real tool, on the tree as it stood:
+
+```text
+advisories FAILED, bans FAILED, licenses FAILED, sources ok
+```
+
+Three of the four sections failed. Every one of them was this tree's own
+doing, and each was measured on its own, with one variable changed at a
+time.
+
+#### The bans: fifty-one wildcards that were all `{ workspace = true }`
+
+`deny.toml` said `wildcards = "deny"`, and the tree's internal dependencies
+were declared like this:
+
+```toml
+craftkit-core = { path = "crates/core" }
+```
+
+No version. cargo-deny has to read that as `*`, and it is right to: a crate
+that publishes a path dependency without a version can only publish it as `*`.
+The rule was correct and the manifest was the problem — the manifest made a
+promise about publishing that the version field was supposed to keep.
+
+| Change | Result |
+|---|---|
+| `allow-wildcard-paths = true` (what one repo of the family does) | **still FAILED** — the exemption does not apply to a crate that could be published |
+| `{ path = "crates/core", version = "0.1.0" }` for all nine internal crates | **bans ok** |
+
+The rule was left exactly as strict as it was: `wildcards = "deny"` and
+`allow-wildcard-paths = false`. Nothing was switched off to make the check
+pass; the manifests were made honest instead. The version is the workspace
+version, so it is one number, in one place.
+
+#### The licences: two crates, three refusals
+
+The allow list held nine identifiers. The tree's graph mentions eighteen
+distinct licence identifiers across 312 packages in `Cargo.lock`, and three
+refusals came out of it:
+
+| Crate | Its licence | Why it is there |
+|---|---|---|
+| `clipboard-win 5.4.1` | `BSL-1.0` | via `arboard` → `egui-winit` → `eframe` |
+| `error-code 3.4.0` | `BSL-1.0` | via `clipboard-win` |
+| `epaint_default_fonts 0.33.3` | `(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0` | via `epaint` → `egui`: the UI toolkit's default fonts, and the expression asks for the font licences as well |
+
+The third one is the interesting shape: the licence is not a single
+identifier, it is an expression with parentheses, and a checker that splits on
+`OR` and `AND` without honouring the brackets gets the wrong answer. The
+first version of the measurement here did exactly that, and the second
+version — a small SPDX evaluator with the grammar's precedence — did not.
+
+The fix is the one repo of the family already uses for the same three
+crates: `BSL-1.0` in the allow list, and an **exception for one crate**:
+
+```toml
+[[licenses.exceptions]]
+crate = "epaint_default_fonts"
+allow = ["OFL-1.1", "Ubuntu-font-1.0"]
+```
+
+With those two rows: **licences ok**.
+
+#### The advisories: one crate nobody can replace yet
+
+`unmaintained = "all"` is the rule the tree wants, and it caught one crate:
+
+```text
+error[unmaintained]: `ttf-parser` is unmaintained
+├── ID: RUSTSEC-2026-0192
+├── Solution: No safe upgrade is available!
+```
+
+`ttf-parser` comes only through `ab_glyph` → `epaint` → `egui`. The advisory
+says *unmaintained*, not vulnerable: the author has stepped down and there is
+no fixed release. The successor is `skrifa`, and it arrives with egui 0.34 —
+this tree is on 0.33, and crates.io has 0.37.
+
+A whole category was not relaxed. One advisory was **named**, with the reason
+and the condition for removing it:
+
+```toml
+ignore = [
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes only through ab_glyph -> epaint -> egui; unmaintained, not vulnerable, and no fixed release exists" },
+]
+```
+
+**advisories ok, bans ok, licenses ok, sources ok.**
+
+### The fix
+
+**The gate got a name.** `cargo xtask deny` reads `deny.toml` and runs
+`cargo deny check`. It has three rules, and they are the house's:
+
+| Rule | Why |
+|---|---|
+| a policy that does not hold is a **failure** | not a warning, not a note |
+| the tool is not installed is **not a pass** | it is a skip, printed as a skip, with the command that installs it |
+| where the tool is **required**, its absence is a failure | in CI the policy job installs the tool first, so a machine that failed to install it must not turn the policy into a skip |
+
+**And the workflow runs that command.** The `policy` job now says
+`run: cargo xtask deny`, so the rule and the check that applies it live in
+the same place, and the header at the top of the workflow is true of every
+gate in it.
+
+**The rule and the list live together.** `docs/dependency-policy.md` holds
+the rule in prose and the table of licences with a reason for each, the same
+way `docs/clean-room.md` holds the clean-room rule and its table of
+products (§168).
+
+**And the exception cannot become a hole.** The list of commands `ci` does
+not run exists so that a command can be something other than a phase of
+`ci`. That is a door, and §169's own words say what a door like that is
+worth: *"a check that runs only when somebody remembers it — a gate that is
+real but never runs, which is the same defect as a gate that does not exist."*
+So the tree now holds the door shut with a rule:
+
+> **A command `ci` does not run must be run by name in the workflow.**
+
+`cargo xtask lists` checks it, against `.github/workflows/ci.yml`. The
+exception is still an exception — it still says why — but it is an exception
+that something checks.
+
+### The gate that passed for the wrong reason
+
+The first version of that rule searched the whole workflow file for the
+string `cargo xtask deny`. It passed on the tree, and it would have gone on
+passing forever.
+
+It was measured, not argued about. The workflow's `run:` line was changed
+from `cargo xtask deny` to `cargo deny check` — the tree's gate replaced by
+the tool it calls — and the gate stayed green:
+
+```text
+── lists
+   ok: … every gate runs in `ci`, every command `ci` does not run is run by
+   name in the workflow, …
+```
+
+The reason was a **comment**: the workflow explains the policy in prose, and
+the prose said "cargo xtask deny". A mention is not a command.
+
+So the rule now reads the file's **code**, not its text: everything from an
+unquoted `#` is stripped before the search, and the name must be the whole
+word. With the same swap:
+
+```text
+error: 1 shared-list problem(s):
+   • `cargo xtask deny` is not a phase of `ci`, and .github/workflows/ci.yml never runs it by name
+```
+
+This is §170's defect in a new place, and the house has now paid for it
+twice: a copy of the tree's walk that had drifted, and a copy of the tree's
+rule that had drifted — a check that read the file as text when the file has
+two kinds of content.
+
+### What the gate cannot see
+
+- **That a licence was read.** A licence identifier in a manifest is a claim
+  by the author; the tool checks the claim. The table in
+  `docs/dependency-policy.md` is where the human decision goes.
+- **That the advisory database is current.** The check reads the database
+  cargo-deny fetched; a stale database finds fewer advisories.
+- **The licences of a dependency's own dependencies at run time.** The check
+  is about the graph, not about what a binary does at run time.
+
+### The mutations
+
+Four, each breaking one link:
+
+| Mutation | What it breaks | Caught by |
+|---|---|---|
+| a missing tool counts as a pass | the gate reports a policy it never checked as green | a unit test |
+| a failing policy counts as a pass | the gate reports a broken policy as green | a unit test |
+| the workflow stops running the tree's gate by name | a command `ci` does not run stops being run, and nothing notices | `cargo xtask lists` |
+| a licence the tree needs is taken out of the allow list | the policy stops covering the tree's own dependencies | `cargo xtask deny` |
+
+The first two are caught by the unit tests in `xtask/src/deny.rs`, without
+`cargo-deny` installed — the rule is a function of its own, so it can be
+pinned by a test rather than only by the tool (§102's lesson). The third is
+caught by `cargo xtask lists`. The fourth needs the tool, so the mutation
+script now has a way to say so: a case that cannot run is reported as
+**skipped, not passed**, and is not counted in the closing ratio — a case
+that never ran must not be dressed up as one that was tested.
+
+### The lesson
+
+**A gate in a workflow is a gate with no name, and a gate with no name is a
+gate nobody can find.** The policy was real, it ran on every push, and there
+was nothing in the tree that said so.
+
+**And a policy that has never passed is a rule in prose.** `deny.toml` looked
+like a policy. Fifty-one "wildcard" errors and three licence refusals say it
+was a list of intentions, written next to a tree that did not match it. The
+check was not merely failing to be green — it was failing, and nobody had
+run it, because the thing that ran it was a line of YAML that nobody reads
+unless it goes red, and it had been red since it was written.
+
+**A rule that reads a file must know which part of the file is the rule.**
+The workflow has code and prose, and the first version of the check could not
+tell them apart. §170 was a copy of the tree's walk; this was a copy of the
+tree's rule, and it had drifted in exactly the same way.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -20425,6 +20662,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's walk has one home** | `xtask/src/tree.rs` | 2 mutations — §170 |
 | **Every tool the MCP advertises can be called** | `BUILT_INS` in `crates/mcp/src/tools.rs` | 1 mutation — §171 |
 | **Every tool the MCP can call is advertised** | the same table | 1 mutation — §171 |
+| **A dependency policy that does not hold fails the gate** | `deny::conclude` | 1 mutation — §173 |
+| **A tool that is not installed is not a pass** | `deny::conclude` | 1 mutation — §173 |
+| **A command `ci` does not run is run by name in the workflow** | `cargo xtask lists` | 1 mutation — §173 |
+| **Only licences the tree's own dependencies need are linked** | `cargo xtask deny` | 1 mutation — §173 |
+| **A mutation that cannot run is skipped, not passed** | `expect_catch_needs` in the mutation script | the skipped line — §173 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -21282,3 +21524,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     let a document that wants to mention one write it that way. The third is a
     convention, and §167's item 41 is about conventions and anchors, so the
     two belong in the same conversation.
+
+44. **Move egui to 0.34 and drop the `ttf-parser` exception.** §173's policy
+    names one advisory and says when it goes:
+
+    ```toml
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes only through ab_glyph -> epaint -> egui; unmaintained, not vulnerable, and no fixed release exists" }
+    ```
+
+    The successor is `skrifa`, from the fontations project, and it arrives
+    with egui 0.34. This tree is on **0.33**; crates.io has **0.37**. So the
+    exception is not a permanent widening of the policy — it is a note that
+    says what is waiting to remove it.
+
+    Two things are worth doing together, and the second is the reason this is
+    an item rather than a note: the egui upgrade is a real piece of work (the
+    0.33 → 0.34 series changed the text layout and the font handling), and
+    the exception is *proof* that the upgrade has not happened yet. When the
+    tree moves up, the advisory comes back on its own — the gate will say so
+    if the exception is still there — and the line can be deleted rather than
+    re-justified.

@@ -26,6 +26,7 @@
 //! | [`lists`] | the shared lines and sorted lists many changes touch |
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
+//! | [`deny`] | the dependency policy: licences, bans, sources, advisories |
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
@@ -46,6 +47,7 @@
 pub mod assets;
 pub mod ci;
 pub mod cleanroom;
+pub mod deny;
 pub mod doctor;
 pub mod layers;
 pub mod lists;
@@ -102,6 +104,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: wasm::run,
     },
     Subcommand {
+        name: "deny",
+        what: "the dependency policy: licences, bans, sources and advisories (deny.toml)",
+        run: deny::run,
+    },
+    Subcommand {
         name: "bundle",
         what: "build the browser bundle (it writes files; `ci` does not run it)",
         run: wasm::bundle,
@@ -118,7 +125,7 @@ pub const COMMANDS: &[Subcommand] = &[
     },
 ];
 
-/// The commands `ci` does not run, and why each one is not a gate.
+/// The commands `ci` does not run, and why each one is not a phase of it.
 ///
 /// A command that checks something and is not a phase of `ci` is a check that
 /// runs only when somebody remembers it — a gate that is real but never runs,
@@ -129,9 +136,17 @@ pub const COMMANDS: &[Subcommand] = &[
 /// says otherwise, in one line, here, with a reason a reviewer can read. The
 /// alternative — a flag on each command — is a flag nobody has to justify,
 /// and a gate can be silenced by forgetting one character.
+///
+/// **And a command in this list must be run by name in the workflow.** That is
+/// what makes the exception safe rather than a hole: the check that `ci` does
+/// not run is still run, on every push, by the job that owns it. `cargo xtask
+/// lists` holds this: a command listed here that the workflow never runs is a
+/// check that only happens when somebody remembers, and it is reported as
+/// such. §173.
 pub const NOT_GATES: &[(&str, &str)] = &[
     ("bundle", "it writes files into the tree"),
     ("doctor", "it reports on the machine, not on the code"),
+    ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
 ];
 

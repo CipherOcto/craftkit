@@ -2,6 +2,10 @@
 #
 # The rule the whole house follows: dependencies are a supply-chain decision, so
 # it is checked, not reviewed-and-forgotten.
+#
+# The rule, and the table of licences, are in docs/dependency-policy.md. This
+# file is what `cargo deny check` reads; the gate that reads it is
+# `cargo xtask deny`.
 
 [graph]
 all-features = false
@@ -10,7 +14,14 @@ all-features = false
 version = 2
 unmaintained = "all"          # a stale crate is a risk, not a convenience
 yanked = "warn"
-ignore = []
+ignore = [
+    # ttf-parser comes only through ab_glyph -> epaint -> egui, and the
+    # advisory says *unmaintained*, not vulnerable: the author has stepped
+    # down and there is no fixed release. The successor (skrifa, from the
+    # fontations project) arrives with egui 0.34, and this tree is on 0.33.
+    # Remove this line when egui moves up. §173.
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes only through ab_glyph -> epaint -> egui; unmaintained, not vulnerable, and no fixed release exists" },
+]
 
 [licenses]
 version = 2
@@ -24,8 +35,19 @@ allow = [
     "Unicode-3.0",
     "CC0-1.0",
     "MPL-2.0",
+    # Boost Software License 1.0. clipboard-win and error-code, which come
+    # with egui's clipboard support, are BSL-1.0 and nothing else. §173.
+    "BSL-1.0",
 ]
 confidence-threshold = 0.9
+
+# egui's default UI fonts (Ubuntu-Light, Hack, the emoji icon font) are shipped
+# inside the epaint_default_fonts crate, which egui depends on. The crate's own
+# licence expression requires the font licences as well as MIT or Apache-2.0,
+# so they are named here rather than refused. §173.
+[[licenses.exceptions]]
+crate = "epaint_default_fonts"
+allow = ["OFL-1.1", "Ubuntu-font-1.0"]
 
 [bans]
 multiple-versions = "warn"
