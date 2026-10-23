@@ -40,8 +40,22 @@ impl Cli {
             crate::args::Command::Snapshot { script, out, sample } => snapshot(script, out, *sample),
             crate::args::Command::Crashes { action } => crashes(action),
             crate::args::Command::Mcp => mcp(),
+            crate::args::Command::Version => {
+                println!("{}", version_line());
+                Ok(())
+            }
         }
     }
+}
+
+/// The line `--version` prints.
+///
+/// **The version is the crate's, not a written-out one.** It comes from
+/// `env!("CARGO_PKG_VERSION")`, which is the crate's inherited
+/// `[workspace.package] version` — so it is right by construction, and there
+/// is no second copy to forget when the tree is released. §174.
+pub fn version_line() -> String {
+    format!("craftkit-cli {}", env!("CARGO_PKG_VERSION"))
 }
 
 // -------------------------------------------------------------- commands --

@@ -77,6 +77,9 @@ COMMANDS:
     mcp                      Speak MCP over stdio, for an agent's tool loop.
     help                     Print this message.
 
+OPTIONS:
+    -V, --version            Print the version.
+
 Run `craftkit-cli commands` for the full catalogue with every parameter
 documented. Every one of them is the same command the window's toolbar runs.
 
@@ -260,6 +263,28 @@ mod usage_tests {
                 "the help mentions `{name}` and the parser does not accept it: {parser:?}"
             );
         }
+    }
+
+    /// The version the CLI prints is the crate's own version, and the line
+    /// names the program.
+    ///
+    /// The version is the one string a bug report quotes, and the CLI is the
+    /// program an agent drives — so it is the one whose version matters most.
+    /// It comes from `env!("CARGO_PKG_VERSION")`, which is the inherited
+    /// workspace version, so it cannot be stale; a version written out by
+    /// hand would be, and nothing would say so. §174.
+    #[test]
+    fn the_version_line_names_the_program_and_its_version() {
+        let line = crate::cli::version_line();
+        assert!(line.starts_with("craftkit-cli "), "{line}");
+        assert!(line.ends_with(env!("CARGO_PKG_VERSION")), "{line}");
+        assert_ne!(line.trim(), "craftkit-cli", "the version line has no version in it");
+    }
+
+    /// The help says the version can be asked for.
+    #[test]
+    fn the_help_names_the_version_flag() {
+        assert!(USAGE.contains("--version"), "the help does not mention the version flag");
     }
 
     /// The one thing anybody must know to write a `script.json`, and it used to

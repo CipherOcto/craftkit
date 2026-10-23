@@ -45,6 +45,8 @@ pub enum Command {
     Mcp,
     /// Print the usage text.
     Help,
+    /// Print the version.
+    Version,
 }
 
 /// What to do with the crash folder.
@@ -69,6 +71,10 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
 
     match first.as_str() {
         "help" | "-h" | "--help" => Ok(Some(Command::Help)),
+        // The version, the way the window and the browser build answer it.
+        // The CLI is the program an agent drives, so it is the one whose
+        // version matters most. §174.
+        "-V" | "--version" => Ok(Some(Command::Version)),
         "commands" => {
             let (mut seen_json, mut json) = (false, false);
             for arg in &argv[1..] {
@@ -244,6 +250,15 @@ mod tests {
     fn help_is_asked_for_in_three_ways() {
         for form in ["help", "-h", "--help"] {
             assert_eq!(parse(&argv(&[form])), Ok(Some(Command::Help)), "{form}");
+        }
+    }
+
+    /// The version is asked for in the two ways the window and the browser
+    /// build accept it. §174.
+    #[test]
+    fn the_version_is_asked_for_in_two_ways() {
+        for form in ["-V", "--version"] {
+            assert_eq!(parse(&argv(&[form])), Ok(Some(Command::Version)), "{form}");
         }
     }
 

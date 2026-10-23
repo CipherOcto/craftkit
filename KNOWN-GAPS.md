@@ -20255,6 +20255,93 @@ The workflow has code and prose, and the first version of the check could not
 tell them apart. §170 was a copy of the tree's walk; this was a copy of the
 tree's rule, and it had drifted in exactly the same way.
 
+## 174. The headless CLI has no `--version`, and the other two programs do
+
+### The finding
+
+The survey of what the family has and this tree did not
+(`craft-knowledge/09-portable-practices.md`) turned up one more, and it is
+the smallest thing in this file: **two of the three programs in this tree
+print their version, and the third does not.**
+
+| Program | `--version` | `-V` |
+|---|:--:|:--:|
+| `craftkit` (the window) | ✅ `apps/craftkit/src/main.rs:191` | ✅ |
+| `craftkit-web` (the browser build) | ✅ `apps/craftkit-web/src/main.rs:396` | ✅ |
+| `craftkit-cli` (headless) | — | — |
+
+Measured: `grep -rn '"--version"' apps/` finds the flag in the window and in
+the web build, and **nowhere in `apps/craftkit-cli/src/`**.
+
+The family has it in every CLI:
+
+| | |
+|---|---|
+| `pdfcraft/apps/pdfcraft-cli/src/main.rs:62` | `Some("--version") => version(),` |
+| `soundcraft/apps/soundcraft-cli/src/main.rs:68` | `"--version" \| "-V" \| "version" => {` |
+| `vectorcraft/apps/vectorcraft-cli/src/main.rs:151` | `Some("-V" \| "--version") => {` |
+
+### Why it matters
+
+**The CLI is the program an agent drives.** The window is for a person and
+the web build is for a page; the headless CLI is what a script, a CI job and
+an agent's tool loop actually run. So the one program whose version matters
+most is the one that will not say it.
+
+An agent that asked `craftkit-cli --version` got a usage error — *"no such
+command: --version"* — and no version at all, while `craftkit --version`
+answered `craftkit 0.1.0` on the same tree.
+
+The version is also the one string a bug report quotes, so the program that
+has to be quoted cannot say what it is.
+
+### The fix
+
+**The CLI prints its version, the way the other two do.** `-V` and
+`--version`, in the parser, in the dispatch, and in the help.
+
+The number is `env!("CARGO_PKG_VERSION")` — the crate's own version, which
+it inherits from `[workspace.package] version` with `version.workspace =
+true`. **It is not written out.** A version that is typed into a binary is a
+version that is wrong after the next release, and nothing notices.
+
+### What was not ported, and why
+
+The family also has **`cargo xtask version`** — five repos of six have it.
+It is a *release* tool: it prints the workspace version, and `version set
+X.Y.Z` changes it and refreshes the lock file.
+
+**craftkit has no release process**, so the tool that serves one has no
+user. And §173's rule says a command `ci` does not run must be run by name
+in a workflow — so adding a release tool before there is a release workflow
+would break the rule that was added a section ago, in the right way: the
+rule is telling the truth about a command that has nothing to do.
+
+The family's own tree agrees: `pdfcraft` runs `cargo xtask version set` in
+`release.yml`, not in `ci.yml`. The tool arrives with the release.
+
+### The gate
+
+Two tests:
+
+| Test | What it holds |
+|---|---|
+| `the_version_is_asked_for_in_two_ways` | `-V` and `--version` both reach the version |
+| `the_version_line_names_the program_and_its_version` | the line names the program and carries the crate's version, not a written-out one |
+
+And the mutation: the version line stops carrying the version — caught by the
+second test.
+
+### The lesson
+
+**A tree of programs has to answer the same question the same way.** Three
+programs, one rule, and the one that was left out is the one nobody looks at
+by hand.
+
+**And a version that is written out is a version that is wrong.** The
+number comes from the manifest, at compile time, by the same inheritance
+every other crate in the tree uses. There is no second copy to forget.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -20667,6 +20754,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A command `ci` does not run is run by name in the workflow** | `cargo xtask lists` | 1 mutation — §173 |
 | **Only licences the tree's own dependencies need are linked** | `cargo xtask deny` | 1 mutation — §173 |
 | **A mutation that cannot run is skipped, not passed** | `expect_catch_needs` in the mutation script | the skipped line — §173 |
+| **The CLI answers what version it is** | `cli::version_line` | 1 mutation — §174 |
+| **The version the CLI prints is the crate's own** | `env!("CARGO_PKG_VERSION")` | 1 mutation — §174 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

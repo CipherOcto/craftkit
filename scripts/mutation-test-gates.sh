@@ -4984,5 +4984,26 @@ expect_catch_needs "policy: a licence the tree needs is taken out of the allow l
     "cargo xtask deny" \
     "cargo-deny"
 
+# ------------------------------------------------------- the version flag ----
+# Section 174. Two of the three programs in the tree printed their version and
+# the headless CLI did not -- and the headless CLI is the one an agent
+# drives, so it is the one whose version matters most.
+#
+# The version line stops carrying the version. It is the whole of the rule:
+# the number comes from the manifest, at compile time, and a version written
+# out by hand would be wrong after the next release with nothing to say so.
+swap apps/craftkit-cli/src/cli.rs \
+    '    format!("craftkit-cli {}", env!("CARGO_PKG_VERSION"))' \
+    '    format!("craftkit-cli")'
+expect_catch "cli: the version line stops carrying the version" \
+    "cargo test -p craftkit-cli --profile ci the_version_line_names_the_program_and_its_version"
+
+# And the parser stops accepting the long spelling of the flag.
+swap apps/craftkit-cli/src/args.rs \
+    '        "-V" | "--version" => Ok(Some(Command::Version)),' \
+    '        "-V" => Ok(Some(Command::Version)),'
+expect_catch "cli: the parser stops accepting the version flag" \
+    "cargo test -p craftkit-cli --profile ci the_version_is_asked_for_in_two_ways"
+
 restore
 finish
