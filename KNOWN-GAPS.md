@@ -22801,6 +22801,25 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     proves nothing. The property has to be about the **document** — that it
     is still valid afterwards — which is what §177 already checks.
 
+    **§181 was this item's first half.** Reading those two doors to write
+    this note found that the **script door had no step bound at all** — its
+    only limit was the file's bytes, and a script of the limit's size holds
+    29 958 steps — and that the replay door's bound was 20 000, which its own
+    doc comment called "about ten thousand steps". §181 gave both doors one
+    bound, named once, and tested it against the tree's own capacities in
+    both directions.
+
+    The other half of this item is still open, and it is **harder than it
+    looks**, because §180's rule — *the corpus is written by the tree's own
+    program* — cannot be applied to either of these two doors yet. Measured:
+    the tree has **no writer for a script** (the only producer,
+    `replay_as_script`, prints to stdout and only from a report), and **no
+    headless writer for a crash report** (the only producer is the desktop
+    app's panic hook, and the CLI's crash actions are list, show and
+    replay). So the work is not "point the fuzzer at another command" — it
+    is **give the tree the writers it is missing**, and then the corpus can
+    be the tree's own.
+
 48. **Decide what a script may cost, and what a command may cost.** §181
     bounded the *number* of commands a script or a replay may run, and left
     the *cost* alone, because the cost is a question the tree cannot answer
