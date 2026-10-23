@@ -75,6 +75,43 @@ pub const MAX_TRACE_MEMORY_BYTES: usize = 8 * 1024 * 1024;
 /// *means* is now stated. §70.
 pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;
 
+/// How many commands one script or one replay may run.
+///
+/// **One bound for both doors.** A script is a list of commands and a replay
+/// is a list of commands, and the tree hands one to the other: `crashes
+/// replay --script` prints a replay **as a script**, and `craftkit-cli run`
+/// reads a script. Two bounds would mean the tree could print a script it
+/// would then refuse to run. §181.
+///
+/// Three derivations, and they agree on ten thousand.
+///
+/// - **The trace's capacity.** A crash report carries the commands that ran,
+///   and the trace is bounded by [`MAX_TRACE_BYTES`] — by *bytes*, not by a
+///   count. The shortest step the tree can produce is 34 bytes
+///   (`{"command":"node.add","params":{}}`), so the trace holds at most 7 710
+///   of them, and measured, that is exactly what it holds. A report with more
+///   steps than that was not written by this tree.
+/// - **The model's node budget.** A design may hold
+///   [`craftkit_model::limits::MAX_NODES`] nodes. A script that asks for more
+///   commands than the model allows nodes is asking for work the model
+///   refuses at the last step, and refusing it at the last step is the
+///   expensive way to refuse it.
+/// - **What the tree already said.** §48 bounded the replay at "about ten
+///   thousand steps", and the constant said twenty thousand: the prose and the
+///   code disagreed, and the prose was right.
+///
+/// The cost is not linear. **Every** command clones the document — mutating
+/// or not — so `n` commands that each grow the document cost O(n²) in the
+/// nodes copied. Measured: 1 000 steps took 1.1 s, 2 000 took 4.7 s, 4 000
+/// took 24.9 s and 10 000 took 165 s. Ten thousand steps is therefore
+/// minutes, not seconds, and the bound is a bound and not a formality. §181.
+///
+/// The bound says *how many*, not *how fast*. Making the cost linear is a
+/// different question and it has an owner: the per-command clone is the price
+/// of putting the design back when a command fails or panics. §52, and the
+/// suggested order's item 7.
+pub const MAX_COMMAND_STEPS: usize = 10_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +127,49 @@ mod tests {
             );
         }
         assert_eq!(ids().len(), all().len(), "ids() lost or duplicated a command");
+    }
+
+    /// The step bound is the tree's own capacity, in both directions.
+    ///
+    /// §181. A bound on a script or a replay has to be **at least** what the
+    /// trace can hold — a report this tree wrote must be replayable — and
+    /// **at most** what the model allows — a script must not ask for more work
+    /// than building the largest design the model allows. The old bound of
+    /// twenty thousand was over the second and under nothing: it was more
+    /// than twice what a report can hold, and twice what the model allows.
+    ///
+    /// Both halves are checked against the tree's own numbers rather than
+    /// against a number written here, so the test fails when the tree changes
+    /// and the bound does not.
+    #[test]
+    fn the_step_bound_is_the_trace_s_capacity_and_the_model_s_node_budget() {
+        // At least: the shortest step the registry can produce. The trace is
+        // bounded by *bytes*, so the shortest step is the one that buys the
+        // most steps — and the bound has to cover the most.
+        let shortest = ids().iter().map(|id| id.len()).min().unwrap_or(0);
+        let step = serde_json::to_string(&session::TraceStep {
+            command: "x".repeat(shortest),
+            params: serde_json::json!({}),
+        })
+        .map(|s| s.len())
+        .unwrap_or(0);
+        assert!(step > 0, "the registry has no command to measure a step with");
+        assert!(
+            MAX_TRACE_BYTES / step <= MAX_COMMAND_STEPS,
+            "the trace holds {} step(s) of the shortest kind, and the bound is {MAX_COMMAND_STEPS}: \
+             a report this tree wrote could not be replayed",
+            MAX_TRACE_BYTES / step
+        );
+
+        // At most: the model's node budget.
+        //
+        // Asserted with locals so clippy does not fold them into a constant
+        // comparison — the same trick the model's limit test uses.
+        let (steps, nodes) = (MAX_COMMAND_STEPS, craftkit_model::limits::MAX_NODES);
+        assert!(
+            steps <= nodes,
+            "a script may run {steps} step(s), and the model allows {nodes} node(s): \
+             a script may ask for more work than building the largest design the model allows"
+        );
     }
 }

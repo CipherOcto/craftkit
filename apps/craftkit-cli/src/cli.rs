@@ -203,7 +203,25 @@ fn load_script(path: &Path) -> Result<Script, String> {
     // is the one the whole tree uses. §64.
     let body = craftkit_core::read_file_bounded(path, MAX_SCRIPT_BYTES)
         .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    serde_json::from_str(&body).map_err(|e| format!("{} is not a script: {e}", path.display()))
+    let script: Script =
+        serde_json::from_str(&body).map_err(|e| format!("{} is not a script: {e}", path.display()))?;
+    // The byte limit is a **bad proxy** for the step count, and it was the
+    // only limit there was. A script of the limit's size holds tens of
+    // thousands of short steps — measured, 29 958 of them — and every command
+    // clones the document, so the cost of running them is quadratic. The
+    // bound is the tree's own, and the replay door shares it: the tree prints
+    // a replay *as a script*, so the two doors have to agree on what a
+    // script may hold. §181.
+    if script.commands.len() > craftkit_engine::MAX_COMMAND_STEPS {
+        return Err(format!(
+            "the script has {} step(s), and a script runs at most {} step(s) \
+             (`craftkit_engine::MAX_COMMAND_STEPS`): \
+             split it into scripts of at most that many steps",
+            script.commands.len(),
+            craftkit_engine::MAX_COMMAND_STEPS
+        ));
+    }
+    Ok(script)
 }
 
 fn run_script(path: &Path, sample: bool) -> Result<(), String> {
@@ -686,6 +704,52 @@ mod tests {
     fn a_missing_script_is_refused_by_name() {
         let err = load_script(Path::new("/nonexistent/script.json")).expect_err("refused");
         assert!(err.contains("script.json"), "{err}");
+    }
+
+    /// A script with more steps than the tree's bound is refused, and the
+    /// message names the bound.
+    ///
+    /// §181: the script door had **no** step bound at all. The only limit was
+    /// the file's bytes, and a script of the limit's size holds 29 958 short
+    /// steps — and every command clones the document, so those steps cost
+    /// quadratic time. The byte limit was a bad proxy for the step count.
+    ///
+    /// The bound is the tree's own, and the replay door shares it: the tree
+    /// prints a replay *as a script*, so the two doors have to agree.
+    #[test]
+    fn a_script_with_too_many_steps_is_refused_with_the_bound_in_the_message() {
+        let body = script_with_steps(craftkit_engine::MAX_COMMAND_STEPS + 1);
+        let path = write_script("toomanysteps", &body);
+        let err = load_script(&path).expect_err("refused");
+        assert!(err.contains(&craftkit_engine::MAX_COMMAND_STEPS.to_string()), "{err}");
+        assert!(err.contains("MAX_COMMAND_STEPS"), "the bound is not findable: {err}");
+    }
+
+    /// A script *at* the bound is accepted.
+    ///
+    /// The other half of the rule above: a bound that refuses one step too
+    /// few is a bound that refuses work the tree would have done. §181.
+    #[test]
+    fn a_script_at_the_step_bound_is_accepted() {
+        let body = script_with_steps(craftkit_engine::MAX_COMMAND_STEPS);
+        let path = write_script("atbound", &body);
+        let script = load_script(&path).expect("a script at the bound loads");
+        assert_eq!(script.commands.len(), craftkit_engine::MAX_COMMAND_STEPS);
+    }
+
+    /// A script of `n` short steps, as the reader will see it.
+    fn script_with_steps(n: usize) -> String {
+        let step = r#"{"command":"node.add","params":{}}"#;
+        let mut body = String::with_capacity(n * (step.len() + 1) + 16);
+        body.push_str(r#"{"commands":["#);
+        for i in 0..n {
+            if i > 0 {
+                body.push(',');
+            }
+            body.push_str(step);
+        }
+        body.push_str("]}");
+        body
     }
 
     #[test]

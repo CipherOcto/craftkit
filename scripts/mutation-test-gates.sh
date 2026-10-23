@@ -923,7 +923,7 @@ expect_catch "crash: a report file of any size is read" \
 # And the same for the steps, which the replay *runs*. The cost is quadratic,
 # so the bound has to be checked before the first step, not after.
 swap crates/engine/src/crash.rs \
-    '    if report.replay.len() > MAX_REPLAY_STEPS {' \
+    '    if report.replay.len() > crate::MAX_COMMAND_STEPS {' \
     '    if false {'
 expect_catch "crash: a replay runs as many steps as the report holds" \
     "cargo test -p craftkit-engine --profile ci too_many_steps"
@@ -4094,8 +4094,8 @@ expect_catch "gate: the memory budgets read the tree's limits out of text" \
 # And the fourth out of the gate that says every bound the tree has is named
 # in the tree's prose.
 swap xtask/src/lists.rs \
-    'for name in byte_bounds(&code_lines_kept(&text)) {' \
-    'for name in byte_bounds(&text) {'
+    'for name in the_tree_s_bounds(&code_lines_kept(&text)) {' \
+    'for name in the_tree_s_bounds(&text) {'
 expect_catch "gate: the byte bounds read the tree's limits out of text" \
     "cargo test -p xtask --profile ci a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree"
 
@@ -5282,6 +5282,70 @@ swap xtask/src/fuzz.rs \
     '        let _ = "the fake fuzz child, on purpose";'
 expect_catch "fuzz: the fuzzer finds nothing, because the child does not die" \
     "cargo test -p xtask --profile ci the_fuzzer_finds_a_crash_it_made"
+
+# ------------------------------------------------------------ the step bound ----
+# Section 181. The tree had two doors that run a list of commands -- a script
+# and a crash replay -- and two numbers for them. The replay door's number was
+# 20 000, which was more than twice what a report this tree wrote can hold and
+# twice what the model allows; the script door had no number at all, only the
+# file's bytes.
+#
+# The rules the port carries: each door refuses a list that is too long, both
+# doors read the *same* number, and the tree declares that number once.
+
+# The first: the script door stops refusing. Without it a script of the
+# limit's size holds 29 958 short steps, and every one of them clones the
+# document.
+swap apps/craftkit-cli/src/cli.rs \
+    '    if script.commands.len() > craftkit_engine::MAX_COMMAND_STEPS {' \
+    '    if script.commands.len() > craftkit_engine::MAX_COMMAND_STEPS * 2 {'
+expect_catch "the script door does not refuse a script with too many steps" \
+    "cargo test -p craftkit-cli --profile ci a_script_with_too_many_steps_is_refused_with_the_bound_in_the_message"
+
+# The second: the replay door stops refusing.
+swap crates/engine/src/crash.rs \
+    '    if report.replay.len() > crate::MAX_COMMAND_STEPS {' \
+    '    if report.replay.len() > crate::MAX_COMMAND_STEPS * 2 {'
+expect_catch "the replay door does not refuse a report with too many steps" \
+    "cargo test -p craftkit-engine --profile ci a_replay_with_too_many_steps_is_refused_before_it_runs"
+
+# The third: the script door grows a **copy** of the number. The number is
+# still right -- it is the same number -- so every test that checks the value
+# passes. What is broken is the *sharing*: from today the two doors can drift,
+# and the gate that says they share one bound is the only thing that sees it.
+swap apps/craftkit-cli/src/cli.rs \
+    '    if script.commands.len() > craftkit_engine::MAX_COMMAND_STEPS {
+        return Err(format!(
+            "the script has {} step(s), and a script runs at most {} step(s) \
+             (`craftkit_engine::MAX_COMMAND_STEPS`): \
+             split it into scripts of at most that many steps",
+            script.commands.len(),
+            craftkit_engine::MAX_COMMAND_STEPS
+        ));
+    }' \
+    '    if script.commands.len() > 10_000 {
+        return Err(format!(
+            "the script has {} step(s), and a script runs at most {} step(s) \
+             (the bound): \
+             split it into scripts of at most that many steps",
+            script.commands.len(),
+            10_000
+        ));
+    }'
+expect_catch "gate: the script door keeps a copy of the bound instead of the tree's" \
+    "cargo test -p xtask --profile ci the_two_doors_share_one_step_bound"
+
+# And the fourth: the bound is declared a second time. One bound, one name,
+# one number -- a second declaration is a second number, even when the two
+# agree today.
+swap crates/engine/src/crash.rs \
+    'pub use crate::session::TraceStep as ReplayStep;' \
+    'pub use crate::session::TraceStep as ReplayStep;
+
+/// A second home for the bound.
+pub const MAX_COMMAND_STEPS: usize = 10_000;'
+expect_catch "gate: the tree declares the step bound twice" \
+    "cargo test -p xtask --profile ci the_two_doors_share_one_step_bound"
 
 
 restore

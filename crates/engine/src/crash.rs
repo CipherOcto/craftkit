@@ -91,19 +91,6 @@ pub fn report_memory_budget(text_bytes: usize) -> usize {
     text_bytes.saturating_add(2 * craftkit_model::limits::MAX_DOCUMENT_BYTES)
 }
 
-/// How many steps a replay will run.
-///
-/// The trace a session keeps is bounded by [`crate::MAX_TRACE_BYTES`], which
-/// is at most about ten thousand steps — so a report with more than that was
-/// not written by this tree, and running it is work nobody asked for.
-///
-/// The cost is not linear. Every command clones the document, so a replay of
-/// `n` commands that each add a node costs O(n²) in the nodes copied.
-/// Measured: 500 steps took 0.8 s, 1 000 took 3.3 s, 2 000 took 13.1 s and
-/// 4 000 took 55.6 s. A report big enough to hold two million steps would
-/// therefore run for years.
-pub const MAX_REPLAY_STEPS: usize = 20_000;
-
 /// One replayable step.
 ///
 /// A trace step and a replay step are the same thing: a command id and the
@@ -526,10 +513,15 @@ pub fn reproduce_in(dir: &Path, id: &str) -> Result<ReplayOutcome, String> {
     // The step count is checked **before** the first step runs. A report with
     // a million steps is not a report this tree wrote, and the cost of
     // running it is quadratic in the document it builds.
-    if report.replay.len() > MAX_REPLAY_STEPS {
+    //
+    // The bound is the tree's own, and the script door shares it: a replay
+    // and a script are the same shape — a list of commands — and the tree
+    // hands one to the other. §181.
+    if report.replay.len() > crate::MAX_COMMAND_STEPS {
         return Err(format!(
-            "the report has {} step(s), and a replay runs at most {MAX_REPLAY_STEPS}",
-            report.replay.len()
+            "the report has {} step(s), and a replay runs at most {}",
+            report.replay.len(),
+            crate::MAX_COMMAND_STEPS
         ));
     }
     let mut session = Session::new("replay");
@@ -1121,6 +1113,10 @@ mod tests {
     ///
     /// The cost of a replay is quadratic in the number of steps, so this is
     /// checked **before** the first step runs rather than after. §48.
+    ///
+    /// The bound is the tree's own step bound, shared with the script door:
+    /// a report this tree wrote can always be replayed, and a script cannot
+    /// ask for more work than a replay may do. §181.
     #[test]
     fn a_replay_with_too_many_steps_is_refused_before_it_runs() {
         let dir = temp_dir("too-many-steps");
@@ -1129,7 +1125,7 @@ mod tests {
         // Read-only steps, so that a *missing* bound would cost seconds here
         // rather than the hours it would cost with steps that build a
         // document — the point of the test is the refusal, not the work.
-        report.replay = (0..=MAX_REPLAY_STEPS)
+        report.replay = (0..=crate::MAX_COMMAND_STEPS)
             .map(|_| ReplayStep { command: "plan.evaluate".into(), params: json!({}) })
             .collect();
         write_to(&dir, &report).expect("written");

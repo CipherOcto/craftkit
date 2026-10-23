@@ -21234,6 +21234,169 @@ on purpose and checking that the test notices. A fuzzer that had found
 nothing in a thousand runs would look exactly like a fuzzer that cannot find
 anything at all.
 
+## 181. The script door had no bound at all, and the replay door's bound was twice what the tree can write
+
+### The finding
+
+The tree has exactly **two doors that run a list of commands**:
+
+| The door | What it runs | What bounded it |
+|---|---|---|
+| the script | `craftkit-cli run script.json`, `craftkit-cli snapshot script.json` | the file's **bytes** — 1 MiB |
+| the replay | `craftkit-cli crashes replay <id>` | `MAX_REPLAY_STEPS` — **20 000** |
+
+They are the same shape and the tree **hands one to the other**:
+`crashes replay --script` prints a replay *as a script*, and `craftkit-cli
+run` reads a script. Two doors that take each other's output and do not
+agree on what a list may hold is a door that prints something it will then
+refuse to run.
+
+**The script door had no step bound at all.** Its only limit was the file's
+size, and the file's size is a **bad proxy** for the number of steps. A
+script of 1 MiB written compactly holds, measured by generating them:
+
+```
+a script of 1048576 bytes holds 29958 compact step(s)
+```
+
+Twenty-nine thousand nine hundred and fifty-eight steps, against a bound of
+twenty thousand on the other door — and **no bound at all** on this one.
+
+**The replay door's bound was twice what the tree can write.** The constant's
+own doc comment said:
+
+> The trace a session keeps is bounded by `MAX_TRACE_BYTES`, which is at most
+> about ten thousand steps — so a report with more than that was not written
+> by this tree, and running it is work nobody asked for.
+
+…and the constant said **twenty thousand**. The prose and the code disagreed,
+and the prose was right. §48 wrote the sentence; §52 measured the cost; and
+nobody compared the two.
+
+**The tree's own numbers say what the bound should be**, and three of them
+agree on ten thousand:
+
+| The number | What it is | Measured |
+|---|---|---|
+| **7 710** | the most steps the crash trace can hold | **7 710**, exactly |
+| **10 000** | the model's node budget (`MAX_NODES`) | — |
+| **20 000** | what the replay door said | — |
+
+The trace is bounded by *bytes*, not by a count: `MAX_TRACE_BYTES` is
+262 144, and the shortest step the tree can produce is 34 bytes
+(`{"command":"node.add","params":{}}`), so the trace holds at most 7 710 of
+them. Measured, with the commands the tree really runs:
+
+| The step | Its bytes | The trace holds |
+|---|---|---|
+| `node.add` with no parameters | 34 | **7 710** |
+| `plan.evaluate` | 39 | 6 721 |
+| `node.add` with a kind | 49 | 5 349 |
+
+So a report with more than 7 710 steps **was not written by this tree** — and
+the replay door would have run it. The other end: a script may not ask for
+more work than building the largest design the model allows, which is
+`MAX_NODES` = 10 000 commands' worth of nodes. The bound is therefore in the
+window **[7 710, 10 000]**, and 20 000 is outside it — more than twice what a
+report can hold, and twice what the model allows.
+
+**And the cost is quadratic.** Every command clones the document — mutating
+or not — so `n` commands that each grow the document cost O(n²) in the nodes
+copied. Measured, with `node.add`:
+
+| Steps | 1 000 | 2 000 | 4 000 | 6 000 | 8 000 | 10 000 |
+|---|---|---|---|---|---|---|
+| Seconds | 1.09 | 4.70 | 24.92 | 63.52 | 109.84 | **165.27** |
+
+Ten thousand steps is **two minutes and forty-five seconds**, and the peak
+resident memory was 92.6 MiB. The 29 958 steps the byte limit allowed sit on
+the same curve — extrapolated, not measured, at roughly **25 minutes**.
+
+### The port
+
+**One bound, in the engine, named once.** `craftkit_engine::MAX_COMMAND_STEPS`
+is 10 000, and its doc says where the number comes from — the trace's
+capacity, the model's node budget, and the sentence §48 already wrote. The
+replay's `MAX_REPLAY_STEPS` is **gone**: two names for one number is how two
+doors drift apart, and the tree now has one name for the number.
+
+**The script door refuses, and says what the bound is.** A script with more
+than `MAX_COMMAND_STEPS` steps is refused with the limit in the message and
+the constant's name in it, so a reader can look it up:
+
+```
+the script has 10001 step(s), and a script runs at most 10000 step(s)
+(`craftkit_engine::MAX_COMMAND_STEPS`): split it into scripts of at most
+that many steps
+```
+
+**The prose gate learned about steps.** The gate that says *every bound the
+tree has is named in the tree's prose* looked for names that said **bytes**
+or **memory**. A count of steps is a bound like any other — a reader who
+cannot look it up cannot check it — so the gate looks for **steps** too, and
+`MAX_COMMAND_STEPS` is now named in `docs/architecture.md`.
+
+**And a new gate keeps the two doors on one number.** It checks three
+things, and each is a way the doors could drift: the bound is declared
+**once** (in production code — a constant inside a test is that test's own);
+the **replay** door compares against it; and the **script** door compares
+against it. A door that mentions the bound in its *message* and compares
+against a number of its own has a **copy** of the number, and a copy is how
+two doors drift apart.
+
+**The bound is the tree's own, not a number of its own.** The engine's test
+checks the bound against the tree's capacities in both directions: at least
+what the trace can hold, because a report this tree wrote must be replayable;
+and at most what the model allows, because a script must not ask for more
+work than building the largest design the model allows. The old constant
+failed the second half — 20 000 > 10 000 — which is why the test is written
+against the tree's numbers and not against a number written down.
+
+### The gate's own teeth
+
+Four mutations, one per rule, and a control that says the unmutated tree
+passes all of them:
+
+| The mutation | The gate that catches it |
+|---|---|
+| the script door's bound is doubled | `a_script_with_too_many_steps_is_refused_with_the_bound_in_the_message` |
+| the replay door's bound is doubled | `a_replay_with_too_many_steps_is_refused_before_it_runs` |
+| the script door keeps a **copy** of the number instead of the tree's | `the_two_doors_share_one_step_bound` |
+| the bound is **declared twice** | `the_two_doors_share_one_step_bound` |
+
+The third is the one that matters, and it is the one that is *not* caught by
+a test that checks the value: the copy has the same number, so every test
+that asks "is the bound right?" passes. What is broken is the **sharing**,
+and only the gate that reads the two doors' code can see it.
+
+### The measured result
+
+The bound, from the tree's own numbers:
+
+| | Before | After |
+|---|---|---|
+| the replay door | 20 000 steps | **10 000** steps |
+| the script door | 29 958 steps (the byte limit) | **10 000** steps |
+| one number for both | no | **yes** |
+| the cost at the bound | 165 s (extrapolated) | **165 s** (measured) |
+
+### The lesson
+
+**A byte limit is not a step limit, and a limit that is a bad proxy is worse
+than no limit**, because it looks like a bound. The script door had 1 MiB of
+bytes and called it a policy.
+
+**Two doors that take each other's output have to share one number**, and two
+names for one number is the same as two numbers.
+
+**And the cost is a different question from the bound.** The bound says how
+many; it does not say how fast, and it cannot: ten thousand steps is two
+minutes and forty-five seconds because **every command clones the document**
+— item 7's copy-on-write question and item 18's "what a document may cost
+to edit". Those are the owner's, and this arc does not pretend to answer
+them. What it does is make sure that the tree's own limit is a limit, and
+that the number behind it is the number the tree's other numbers imply.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21679,6 +21842,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The fuzzer can find a crash** | `the_fuzzer_finds_a_crash_it_made` | 1 mutation — §180 |
 | **A hang is a hang, not a crash** | the same `classify` | the property that found it — §180 |
 | **A smaller crash is still a crash** | `minimise` | 1 mutation — §180 |
+| **A script with too many steps is refused, and the message names the bound** | `load_script` in `apps/craftkit-cli/src/cli.rs` | 1 mutation — §181 |
+| **A report with too many steps is refused before the first step runs** | `reproduce_in` in `crates/engine/src/crash.rs` | 1 mutation — §181 |
+| **The tree declares the step bound once** | `the_step_bound_is_one_number_and_both_doors_name_it` | 1 mutation — §181 |
+| **Both doors compare against the tree's bound, not a copy of it** | the same | 1 mutation — §181 |
+| **The bound is at least what the trace can hold, and at most what the model allows** | `the_step_bound_is_the_trace_s_capacity_and_the_model_s_node_budget` | the numbers the port measured — §181 |
+| **A bound the tree has is named in the prose — bytes, memory or steps** | `the_bounds_are_named_in_the_prose` | 1 mutation — §181 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -22631,3 +22800,34 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     under a `catch_unwind`, so "no command panics" is structurally true and
     proves nothing. The property has to be about the **document** — that it
     is still valid afterwards — which is what §177 already checks.
+
+48. **Decide what a script may cost, and what a command may cost.** §181
+    bounded the *number* of commands a script or a replay may run, and left
+    the *cost* alone, because the cost is a question the tree cannot answer
+    for itself.
+
+    The measurement is the whole of the argument: **every** command clones
+    the document — mutating or not — so a script of `n` commands that each
+    grow the document costs O(n²) in the nodes copied. Measured, with
+    `node.add`: 1 000 steps took 1.1 s, 2 000 took 4.7 s, 4 000 took 24.9 s,
+    6 000 took 63.5 s, 8 000 took 109.8 s and 10 000 took **165 s**. A
+    script at the tree's own bound is therefore **two minutes and
+    forty-five seconds** — and that is the *bound*, not a mistake.
+
+    Two answers, and both are the owner's:
+
+    - **Make the clone cheap** — item 7's copy-on-write. The snapshot shares
+      the property tree with the live document and clones only the branch a
+      command writes. That is a change to the model's ownership rules, and
+      it makes the cost linear in the number of commands.
+    - **Limit the cost, not the count** — item 18's "what a document may
+      cost to edit". `MAX_DOCUMENT_BYTES` is a *storage* limit and says
+      nothing about what a design costs to drive; a second limit, on the
+      cost, would be a new number in a new place.
+
+    What §181 did is make the tree's own limit a real limit and put the
+    number behind it where the tree's other numbers are, so that the
+    decision above has something to decide *about*. The tree still has no
+    way to measure the cost of a command without building a document at the
+    limit to measure it on — which is what §103 and §181 did, and why these
+    numbers are here and not in a gate.

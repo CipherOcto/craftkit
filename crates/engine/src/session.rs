@@ -1851,6 +1851,31 @@ mod tests {
         assert!(held <= crate::MAX_TRACE_BYTES, "the trace holds {held} bytes");
     }
 
+    /// The trace cannot hold more steps than the tree's step bound.
+    ///
+    /// §181: a crash report carries the trace, and a report with more steps
+    /// than the trace can hold was not written by this tree. So the bound on a
+    /// replay has to be **at least** what the trace holds — and the cheapest
+    /// way to show that is to fill the trace and watch it drop.
+    ///
+    /// The commands are read-only on purpose: the point is the trace's
+    /// capacity, not what the commands cost.
+    #[test]
+    fn the_trace_holds_fewer_steps_than_the_step_bound() {
+        let mut s = sample();
+        for _ in 0..=crate::MAX_COMMAND_STEPS {
+            let _ = s.execute("plan.evaluate", &json!({}));
+        }
+        assert!(
+            s.trace_dropped() > 0,
+            "the trace held {} step(s) after {} command(s), and the bound is {}: \
+             a report with that many steps could not be replayed",
+            s.trace().len(),
+            s.trace_total(),
+            crate::MAX_COMMAND_STEPS
+        );
+    }
+
     /// The trace's budget is derived from the memory it may hold.
     ///
     /// The trace holds parsed values, and a parsed JSON value costs up to

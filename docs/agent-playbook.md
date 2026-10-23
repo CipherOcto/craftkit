@@ -402,6 +402,14 @@ craftkit-cli commands
 > tessellated shapes, samples the font atlas for the text, and writes a PNG — so
 > a frame can be produced on a build machine with no display and no GPU. That is
 > how the picture a UI change needs gets produced.
+>
+> A **script** is a list of commands, and it is bounded: at most
+> `craftkit_engine::MAX_COMMAND_STEPS` (10 000) steps, refused with the limit
+> in the message. The bound is the same one a crash replay uses, because the
+> tree prints a replay *as* a script — and it is a bound on the **count**, not
+> on the file's size. Every command clones the document, so the cost of a
+> script is quadratic in the document it builds: 10 000 steps took 165 s, and
+> the file's 1 MiB limit is no proxy for that at all. §181.
 
 The contract `crates/control` must satisfy is real and testable now:
 `Method::parse`, `dispatch`, `token_path`. See

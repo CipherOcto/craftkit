@@ -1432,6 +1432,93 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
     Ok(problems)
 }
 
+/// The name of the tree's step bound.
+///
+/// §181. The count of commands one script or one crash replay may run.
+const STEP_BOUND: &str = "MAX_COMMAND_STEPS";
+
+/// The two doors that run a list of commands.
+///
+/// A script and a crash replay are the same shape — a list of commands — and
+/// the tree hands one to the other: `crashes replay --script` prints a replay
+/// **as a script**, and `craftkit-cli run` reads a script.
+const STEP_BOUND_DOORS: [&str; 2] = ["crates/engine/src/crash.rs", "apps/craftkit-cli/src/cli.rs"];
+
+/// The tree has one step bound, and both doors name it.
+///
+/// §181. The finding was two doors with two numbers — and one of the two
+/// doors had no number at all. The script door's only limit was the file's
+/// bytes, and a script of the limit's size holds 29 958 short steps; the
+/// replay door's limit was 20 000, which was more than twice what a report
+/// this tree wrote can hold and twice what the model allows.
+///
+/// The rule is in three parts, and each part is a way the two could drift:
+///
+/// - the bound is declared **once** — a second declaration is a second
+///   number, even if the two agree today;
+/// - the **replay** door names it;
+/// - the **script** door names it.
+pub fn the_step_bound_is_one_number_and_both_doors_name_it(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    // Declared once, in **production** code: a constant inside a test is that
+    // test's own, and a second declaration is a second number even when the
+    // two agree today.
+    let mut declarations = Vec::new();
+    for path in rust_files(root) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let code = code_lines_kept(&production_of(&path, &text));
+        for (n, line) in code.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
+            let Some((name, _)) = rest.split_once(':') else { continue };
+            if name.trim() == STEP_BOUND {
+                declarations.push(format!("{}:{}", relative_name(root, &path), n + 1));
+            }
+        }
+    }
+    if declarations.len() != 1 {
+        problems.push(format!(
+            "the tree declares `{STEP_BOUND}` {} time(s) ({}); one bound, one name, one number — \
+             a second declaration is a second number",
+            declarations.len(),
+            declarations.join(", ")
+        ));
+    }
+
+    // And both doors **compare** against it, in their production code. A name
+    // in a comment is not a name, a name in a test is the *test's* name, and a
+    // name in a message is not the door's bound: the door's bound is the
+    // comparison that refuses.
+    for door in STEP_BOUND_DOORS {
+        let path = root.join(door);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            problems.push(format!("{door}: the file this gate reads is not there"));
+            continue;
+        };
+        let code = code_lines_kept(&production_of(&path, &text));
+        if !compares_against_the_bound(&code, STEP_BOUND) {
+            problems.push(format!(
+                "{door}: this door does not compare against `{STEP_BOUND}`; a script and a replay \
+                 are the same shape and the tree hands one to the other, so they share one bound"
+            ));
+        }
+    }
+
+    problems.sort();
+    Ok(problems)
+}
+
+/// Whether a file's code compares something against a named bound.
+///
+/// The file naming the bound is not enough: the door's *refusal* has to be
+/// the thing that names it. A door that mentions the bound in its message and
+/// compares against a number of its own has a **copy** of the number, and a
+/// copy is how two doors drift apart.
+fn compares_against_the_bound(code: &str, name: &str) -> bool {
+    code.lines().any(|line| line.contains(name) && (line.contains('>') || line.contains('<')))
+}
+
 /// The tree's walk has one home.
 ///
 /// Every recursive directory walk in the tree's own source must be
@@ -1719,10 +1806,14 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
 ///
 /// The rule, in two halves:
 ///
-/// - a bound whose name says **bytes** or **memory** is named in the tree's
-///   prose, so a reader can look it up;
+/// - a bound whose name says **bytes**, **memory** or **steps** is named in
+///   the tree's prose, so a reader can look it up;
 /// - the prose does not tell a reader to **add a size cap** the tree has.
-pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, String> {
+///
+/// §181 added the steps: the count of commands a script may run was the
+/// tree's one bound that no document named, and the tree had two of them —
+/// one in the replay door, and one in the script door that did not exist.
+pub fn the_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, String> {
     let mut prose = String::new();
     for doc in prose_files(root) {
         let Ok(text) = std::fs::read_to_string(&doc) else { continue };
@@ -1732,7 +1823,7 @@ pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>
     let mut problems = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        for name in byte_bounds(&code_lines_kept(&text)) {
+        for name in the_tree_s_bounds(&code_lines_kept(&text)) {
             if has_word(&prose, &name) {
                 continue;
             }
@@ -1757,8 +1848,17 @@ pub fn the_byte_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>
     Ok(problems)
 }
 
-/// The bounds in a file of Rust whose names say bytes or memory.
-fn byte_bounds(source: &str) -> Vec<String> {
+/// The bounds in a file of Rust whose names say bytes, memory or steps.
+///
+/// Three kinds of bound, and the rule is the same for all of them: a bound a
+/// reader cannot look up is a bound a reader cannot check.
+///
+/// The steps are here because of §181. The tree's one bound that no document
+/// named was the count of commands a script may run, and the tree had two
+/// of them — one in the replay door and one in the script door that did not
+/// exist. A bound nobody can look up is a bound nobody can check, and the
+/// check that proves it is the one that reads the prose.
+fn the_tree_s_bounds(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in source.lines() {
         let trimmed = line.trim_start();
@@ -1768,7 +1868,7 @@ fn byte_bounds(source: &str) -> Vec<String> {
         if !name.starts_with("MAX_") {
             continue;
         }
-        if name.contains("BYTES") || name.contains("MEMORY") {
+        if name.contains("BYTES") || name.contains("MEMORY") || name.ends_with("STEPS") {
             found.push(name.to_string());
         }
     }
@@ -5853,10 +5953,15 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The bounds the tree has, and the ones its prose names. §145.
     problems.extend(
-        the_byte_bounds_are_named_in_the_prose(root)?
+        the_bounds_are_named_in_the_prose(root)?
             .into_iter()
             .map(|p| format!("{p}\n     Name the bound, so a reader can look it up.")),
     );
+
+    // The step bound, and the two doors that share it. §181.
+    problems.extend(the_step_bound_is_one_number_and_both_doors_name_it(root)?.into_iter().map(|p| {
+        format!("{p}\n     One bound for both doors, or the tree prints a script it will refuse to run.")
+    }));
 
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
@@ -5889,7 +5994,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              methods are the methods the prose lists, every module path in prose \
              names a module this tree has, every type path in prose names a \
              member the type has, every memory budget is derived from the \
-             model's, every byte bound is named in the prose, the shell never \
+             model's, every bound is named in the prose, the two doors share one \
+             step bound, the shell never \
              evaluates the \
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
@@ -6924,7 +7030,7 @@ mod tests {
         .expect("the fabricated source");
         std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES`.\n").expect("the prose");
 
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -7749,13 +7855,13 @@ pub fn f() {}
         // The prose names the longer name, not the bound.
         std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES_LIMIT`.\n").expect("the prose");
 
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("MAX_DOCUMENT_BYTES"), "{problems:#?}");
 
         // And the bound, named as a name, is named.
         std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES`.\n").expect("the prose");
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -9946,7 +10052,7 @@ printf '%s%d/%d caught.%s\\n' \\
     fn a_byte_bound_the_prose_does_not_name_is_caught() {
         let root = crate::root().expect("root");
         assert!(
-            the_byte_bounds_are_named_in_the_prose(&root).expect("runs").is_empty(),
+            the_bounds_are_named_in_the_prose(&root).expect("runs").is_empty(),
             "a byte bound the tree has is not named in the prose"
         );
 
@@ -9958,7 +10064,7 @@ printf '%s%d/%d caught.%s\\n' \\
         std::fs::write(src.join("history.rs"), "pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;\n")
             .expect("the fabricated source");
         std::fs::write(docs.join("notes.md"), "Nothing here names a bound.\n").expect("the fabricated prose");
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
 
         // And a document that tells a reader to add a size cap the tree has.
@@ -9966,15 +10072,80 @@ printf '%s%d/%d caught.%s\\n' \\
         // wraps it is the same sentence.
         std::fs::write(docs.join("notes.md"), "The fix is to add a size\ncap.\n")
             .expect("the fabricated prose");
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert_eq!(problems.len(), 2, "{problems:#?}");
 
         // And once the prose names the bound, there is nothing to report.
         std::fs::write(docs.join("notes.md"), "`MAX_HISTORY_BYTES` is the budget.\n")
             .expect("the fabricated prose");
-        let problems = the_byte_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A **step** bound the prose does not name is caught, and one it names is
+    /// not.
+    ///
+    /// §181: the count of commands a script may run was the tree's one bound
+    /// that no document named, and the gate that says every bound is named in
+    /// the prose only looked for names that said *bytes* or *memory*. A count
+    /// of steps is a bound like any other — a reader who cannot look it up
+    /// cannot check it — so the gate looks for *steps* too.
+    #[test]
+    fn a_step_bound_the_prose_does_not_name_is_caught() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_bounds_are_named_in_the_prose(&root).expect("runs").is_empty(),
+            "a bound the tree has is not named in the prose"
+        );
+
+        let dir = std::env::temp_dir().join(format!("craftkit-step-bounds-{}", std::process::id()));
+        let docs = dir.join("docs");
+        let src = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::create_dir_all(&src).expect("the fabricated tree");
+        std::fs::write(src.join("lib.rs"), "pub const MAX_COMMAND_STEPS: usize = 10_000;\n")
+            .expect("the fabricated source");
+        std::fs::write(docs.join("notes.md"), "Nothing here names a bound.\n").expect("the fabricated prose");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_COMMAND_STEPS"), "{problems:#?}");
+
+        // And once the prose names the bound, there is nothing to report.
+        std::fs::write(docs.join("notes.md"), "`MAX_COMMAND_STEPS` is the bound.\n")
+            .expect("the fabricated prose");
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The two doors that run a list of commands share one bound, and the tree
+    /// declares that bound once.
+    ///
+    /// §181. The finding was two doors with two numbers, and one of them with
+    /// no number at all. The gate is what stops them drifting again, and it
+    /// has three parts: the bound is declared once, the replay door names it,
+    /// and the script door names it.
+    #[test]
+    fn the_two_doors_share_one_step_bound() {
+        let root = crate::root().expect("root");
+        assert!(
+            the_step_bound_is_one_number_and_both_doors_name_it(&root).expect("runs").is_empty(),
+            "the two doors do not share one step bound"
+        );
+
+        // The two doors are the two the tree has: the script and the replay.
+        assert_eq!(STEP_BOUND_DOORS.len(), 2, "a third door is a third bound");
+        for door in STEP_BOUND_DOORS {
+            assert!(root.join(door).exists(), "{door} is not in the tree");
+        }
+
+        // A name in a comment is not a name: the reader is the code.
+        let commented = "/// The bound is MAX_COMMAND_STEPS.\nfn f() {}\n";
+        assert!(!code_lines_kept(commented).contains(STEP_BOUND), "a comment is not a call");
+        let named = "fn f() { let _ = crate::MAX_COMMAND_STEPS; }\n";
+        assert!(code_lines_kept(named).contains(STEP_BOUND), "a name is a name");
     }
 }
