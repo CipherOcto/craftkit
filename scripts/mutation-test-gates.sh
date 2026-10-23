@@ -115,6 +115,7 @@ readonly FILES=(
     xtask/src/ci.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
+    xtask/src/lib.rs
     docs/recipes/add-a-command.md
     docs/recipes/add-a-control-channel-method.md
     docs/recipes/add-an-icon.md
@@ -482,6 +483,110 @@ expect_catch "lists: the workspace member list is unsorted" "cargo xtask lists"
 # was caused by this audit editing the very files it cited.
 append docs/architecture.md 'See `crates/core/src/lib.rs:9999` for the root.'
 expect_catch "lists: prose cites a line that is not in the file" "cargo xtask lists"
+
+# --------------------------------------------------------- the gates are real ----
+# §169. Three claims: a gate the tree names exists, every command is documented,
+# and every gate runs. A sibling repo's `AGENTS.md` named `cargo xtask
+# cleanroom` and neither the command nor the step was there — a promise with
+# nothing behind it.
+#
+# The first: the check that reads a command's name out of the prose. If it
+# looks for the wrong phrase it finds nothing, and a document can promise a
+# gate that does not exist for ever.
+swap xtask/src/lists.rs \
+    '    const PHRASE: &str = "cargo xtask ";' \
+    '    const PHRASE: &str = "cargo xtaskx ";'
+expect_catch "gates: a document names a gate that does not exist, and nothing notices" \
+    "cargo test -p xtask --profile ci a_gate_the_prose_names_but_that_does_not_exist_is_caught"
+
+# The second: a command that is in no table is a command nobody finds. `bundle`
+# ran, and was in neither the usage text nor the crate's own table, for as long
+# as the tree has had it.
+swap xtask/src/lists.rs \
+    '    for command in commands {
+        let row = format!("//! | [`{name}`]", name = command.name);' \
+    '    for command in commands.iter().filter(|command| command.name.is_empty()) {
+        let row = format!("//! | [`{name}`]", name = command.name);'
+expect_catch "gates: a command that is in no table is not noticed" \
+    "cargo test -p xtask --profile ci a_command_the_table_does_not_list_is_caught"
+
+# The third: whether a command is a gate is *derived* from the list of
+# exceptions, so that the default is "it is a gate" and silencing one takes a
+# line and a reason. If the derivation is lost, the exceptions list is a list of
+# words, and `bundle` — which writes files — is a gate that `ci` runs.
+swap xtask/src/lib.rs \
+    'pub fn is_gate(name: &str) -> bool {
+    !NOT_GATES.iter().any(|(not, _)| *not == name)
+}' \
+    'pub fn is_gate(name: &str) -> bool {
+    let _ = name;
+    true
+}'
+expect_catch "gates: a command that `ci` does not run is treated as one it does" \
+    "cargo xtask lists"
+
+# The fourth: a document's table of gates, read as empty. Every phase of `ci`
+# then looks undocumented, and the tables that say what protects what are
+# worthless. The tree keeps more than one — the README's and the checking
+# skill's — and this is the check that reads both.
+swap xtask/src/lists.rs \
+    '        let rows = gate_rows(&text);' \
+    '        let rows: Vec<String> = Vec::new();'
+expect_catch "gates: a document's table of gates is read as empty" \
+    "cargo test -p xtask --profile ci a_gate_the_readme_lists_but_that_does_not_exist_is_caught"
+
+# The fourth, second half: the checking skill numbers its sections, so its
+# table of gates is under "## 2. The gates". Stop recognising the number and
+# the skill's table is not read at all — and the gate says nothing, because a
+# document it does not read cannot disagree with it.
+swap xtask/src/lists.rs \
+    '        Some((number, rest)) if number.chars().all(|c| c.is_ascii_digit()) => rest,' \
+    '        Some((number, rest)) if number.chars().all(|c| c.is_ascii_digit()) => text,'
+expect_catch "gates: the checking skill's table of gates stops being read" \
+    "cargo test -p xtask --profile ci a_numbered_gates_section_is_the_gates_section"
+
+# The fifth: the usage text's line for `ci` is a list beside the list it
+# copies. Compared against nothing, it is never wrong, and the usage text can
+# leave out a phase without anybody noticing.
+swap xtask/src/lists.rs \
+    '        let named = list_names(ci.what);
+        if named != phases {' \
+    '        let named = list_names(ci.what);
+        if named.len() > 100 {'
+expect_catch "gates: the usage text's list of the phases is compared against nothing" \
+    "cargo test -p xtask --profile ci the_usage_text_must_name_the_phases_and_only_them"
+
+# The sixth: and the same for the README's own line for `ci`.
+swap xtask/src/lists.rs \
+    '            if named != phases {
+                problems.push(format!(
+                    "README.md says `ci` runs {}, and `ci` runs {}",' \
+    '            if named.len() > 100 {
+                problems.push(format!(
+                    "README.md says `ci` runs {}, and `ci` runs {}",'
+expect_catch "gates: the README's list of the phases is compared against nothing" \
+    "cargo test -p xtask --profile ci the_readme_must_name_the_phases_and_only_them"
+
+# The seventh: the usage text is written from the command table, so it cannot
+# forget a command. Write it from part of the table and it forgets three —
+# and `bundle`, which writes files into the tree, is one of them.
+swap xtask/src/lib.rs \
+    '    for command in COMMANDS {
+        out.push_str(&format!("  {:<10} {}\n", command.name, command.what));
+    }' \
+    '    for command in COMMANDS.iter().take(6) {
+        out.push_str(&format!("  {:<10} {}\n", command.name, command.what));
+    }'
+expect_catch "gates: the usage text is written from part of the command table" \
+    "cargo test -p xtask --profile ci every_command_is_in_the_usage_text"
+
+# The eighth: an exception with no reason is a gate that was silenced. The
+# list is closed and every entry is checked, but the reason is what a reviewer
+# reads, and an empty one says nothing.
+swap xtask/src/lib.rs \
+    '    ("bundle", "it writes files into the tree"),' \
+    '    ("bundle", ""),'
+expect_catch "gates: an exception that says no reason is accepted" "cargo xtask lists"
 
 # --------------------------------------------------------------------- io ----
 # A format change is one file in `format/pending/`, and the migration it holds

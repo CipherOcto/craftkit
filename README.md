@@ -151,8 +151,8 @@ cargo xtask ci       # fmt, assets, cleanroom, lists, layers, web, clippy, tests
 | `lists` | one deny attribute everywhere; the layer table matches the code *and* `cargo metadata`; sorted lists |
 | `layers` | strictly-lower dependencies; no UI toolkit below L6 |
 | `web` | the canvas id, the bundle path, and the service worker's safety rules |
-| clippy | `-D clippy::all -D warnings`, every target |
-| tests | every crate, every app, and the gates themselves |
+| `clippy` | `-D clippy::all -D warnings`, every target |
+| `tests` | every crate, every app, and the gates themselves |
 | `wasm` | every library crate still builds for the browser |
 
 A gate that cannot run says **skipped**, with a reason, in the middle of the

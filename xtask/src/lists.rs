@@ -5159,7 +5159,295 @@ pub fn mutation_ratio_is_computed(text: &str) -> Vec<String> {
     problems
 }
 
-/// The gate.
+/// One command, as the check sees it.
+pub struct GateCommand<'a> {
+    /// The name the user types.
+    pub name: &'a str,
+    /// The one line that says what it does.
+    pub what: &'a str,
+    /// Whether `ci` runs it.
+    pub gate: bool,
+}
+
+/// The command names a document mentions after `cargo xtask`, and where.
+///
+/// A name is the run of letters and dashes that follows the phrase. A
+/// placeholder — `<cmd>` — is not a name, and is skipped; so is an option —
+/// `--help` — because a command's name starts with a letter.
+pub fn named_commands(text: &str) -> Vec<(usize, String)> {
+    const PHRASE: &str = "cargo xtask ";
+    let mut out = Vec::new();
+    let mut rest = text;
+    // The line the first character of `rest` is on.
+    let mut base = 1usize;
+    while let Some(at) = rest.find(PHRASE) {
+        let line = base + rest[..at].matches('\n').count();
+        let after = &rest[at + PHRASE.len()..];
+        let name: String = after.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+        if name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            out.push((line, name));
+        }
+        // The text after the phrase is on the phrase's own line.
+        base = line;
+        rest = &rest[at + PHRASE.len()..];
+    }
+    out
+}
+
+/// The names a comma-separated list holds.
+///
+/// The first word of each part: `fmt --check` is the phase `fmt`, and
+/// `clippy -D warnings` is the phase `clippy`.
+pub fn list_names(text: &str) -> Vec<String> {
+    text.split(',')
+        .map(|part| part.split_whitespace().next().unwrap_or("").to_string())
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+/// The lines of a document's section with this heading.
+///
+/// The heading, not the first match in the file: `cargo xtask ci` appears
+/// twice in the README — once in the quick start, where the comment says how
+/// long it takes, and once in the table of gates, where the comment says what
+/// it runs. Only the second one is a list of gates.
+pub fn section(text: &str, heading: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            inside = trimmed.trim_start_matches("## ").trim() == heading;
+            continue;
+        }
+        if inside {
+            lines.push(line.to_string());
+        }
+    }
+    lines
+}
+
+/// Is this heading the tree's gates section?
+///
+/// `## The gates` in the README and `## 2. The gates` in the checking skill
+/// are the same section; the number in front of it is that document's own
+/// numbering and means nothing here.
+///
+/// The heading, and not the word `Gate` in a table header, because two other
+/// documents have tables headed `Gate` that are about something else:
+/// `docs/patterns/one-way-to-read-code.md` has two, and their rows are
+/// function names.
+pub fn is_the_gates_heading(heading: &str) -> bool {
+    let text = heading.trim();
+    let text = match text.split_once(". ") {
+        Some((number, rest)) if number.chars().all(|c| c.is_ascii_digit()) => rest,
+        _ => text,
+    };
+    text.trim() == "The gates"
+}
+
+/// The rows of a table of gates: the first cell of each, without the backticks.
+///
+/// The first table of the gates section. A section that has no table has no
+/// rows, and a document with no gates section has no rows either.
+pub fn gate_rows(text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            inside = is_the_gates_heading(trimmed.trim_start_matches("## "));
+            continue;
+        }
+        if inside {
+            lines.push(line.to_string());
+        }
+    }
+    let mut rows = Vec::new();
+    let mut in_table = false;
+    for line in lines {
+        let line = line.trim();
+        if line.starts_with('|') {
+            in_table = true;
+            if line.starts_with("|---") {
+                continue;
+            }
+            let Some(first) = line.split('|').nth(1) else { continue };
+            let name = first.trim().trim_matches('`').to_string();
+            if name.is_empty() || name == "Gate" {
+                continue;
+            }
+            rows.push(name);
+            continue;
+        }
+        if in_table {
+            break;
+        }
+    }
+    rows
+}
+
+/// The phases the README's own line for `ci` names.
+///
+/// The comment after the `#` on the `cargo xtask ci` line of the gates
+/// section, split into names.
+pub fn readme_ci_phases(readme: &str) -> Option<Vec<String>> {
+    let line = section(readme, "The gates")
+        .into_iter()
+        .find(|line| line.trim_start().starts_with("cargo xtask ci"))?;
+    let comment = line.split('#').nth(1)?;
+    Some(list_names(comment))
+}
+
+/// The gates the tree names must exist, every command must be documented, and
+/// every command that checks something must run.
+///
+/// Three claims, and the family has broken all three at once. A document that
+/// says `cargo xtask something` is a promise that `something` exists: in a
+/// sibling repo, `AGENTS.md` says *"cargo xtask cleanroom (run by cargo xtask
+/// ci)"* — and neither the command nor the step was there.
+///
+/// A command that is not in this crate's own table of commands is a command
+/// nobody finds: `bundle` ran, and was in neither the usage text nor the
+/// table, for as long as the tree has had it.
+///
+/// And a command that checks something and is not a phase of `ci` is a check
+/// that runs only when somebody remembers it.
+pub fn the_gates_are_real(root: &Path) -> Result<Vec<String>, String> {
+    let commands: Vec<GateCommand> = crate::COMMANDS
+        .iter()
+        .map(|command| GateCommand {
+            name: command.name,
+            what: command.what,
+            gate: crate::is_gate(command.name),
+        })
+        .collect();
+    let phases: Vec<&str> = crate::ci::PHASES.iter().map(|phase| phase.name).collect();
+    let mut problems = Vec::new();
+
+    // Every exception names a command that exists, is not a phase, and says
+    // why. An exception with no reason is a gate that was silenced.
+    for (name, reason) in crate::NOT_GATES {
+        if !commands.iter().any(|command| command.name == *name) {
+            problems.push(format!(
+                "`{name}` is listed as a command `ci` does not run, and there is no such command"
+            ));
+        }
+        if phases.contains(name) {
+            problems.push(format!("`{name}` is listed as a command `ci` does not run, and `ci` runs it"));
+        }
+        if reason.trim().is_empty() {
+            problems
+                .push(format!("`{name}` is listed as a command `ci` does not run, and it says no reason"));
+        }
+    }
+
+    problems.extend(gate_problems(root, &commands, &phases)?);
+    Ok(problems)
+}
+
+/// The check itself, with the commands and the phases given.
+///
+/// Given rather than read, so that a test can ask it about a tree and a list
+/// that disagree — which is the whole of what it is for.
+pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    // Every command the prose names must be a command.
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let relative = relative_name(root, &doc);
+        for (line, name) in named_commands(&text) {
+            if !commands.iter().any(|command| command.name == name) {
+                problems.push(format!(
+                    "{relative}:{line}: it says `cargo xtask {name}`, and there is no such command"
+                ));
+            }
+        }
+    }
+
+    // Every command must be in this crate's own table of commands.
+    let source = std::fs::read_to_string(root.join("xtask/src/lib.rs"))
+        .map_err(|e| format!("could not read xtask/src/lib.rs: {e}"))?;
+    for command in commands {
+        let row = format!("//! | [`{name}`]", name = command.name);
+        if !source.contains(&row) {
+            problems.push(format!(
+                "xtask/src/lib.rs does not list `{}` in its table of commands: {row}",
+                command.name
+            ));
+        }
+    }
+
+    // A command that checks something must be a phase of `ci`.
+    for command in commands.iter().filter(|command| command.gate) {
+        if !phases.contains(&command.name) {
+            problems
+                .push(format!("`cargo xtask {}` checks something, and `ci` does not run it", command.name));
+        }
+    }
+
+    // Every document that keeps a table of gates must list the phases of `ci`,
+    // and only them. The tree keeps more than one: the README's and the
+    // checking skill's. A gate that stops running must stop being documented
+    // in both, and a documented gate that does not exist is caught here.
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let rows = gate_rows(&text);
+        if rows.is_empty() {
+            continue;
+        }
+        let relative = relative_name(root, &doc);
+        for phase in phases {
+            if !rows.iter().any(|row| row == phase) {
+                problems.push(format!(
+                    "{relative}: its table of gates does not list the `{phase}` phase of `ci`"
+                ));
+            }
+        }
+        for row in &rows {
+            let known =
+                phases.contains(&row.as_str()) || commands.iter().any(|command| command.name == row.as_str());
+            if !known {
+                problems.push(format!(
+                    "{relative}: its table of gates lists `{row}`, and there is no such command"
+                ));
+            }
+        }
+    }
+
+    let readme = std::fs::read_to_string(root.join("README.md"))
+        .map_err(|e| format!("could not read README.md: {e}"))?;
+
+    // The usage text's line for `ci` must name the phases, and only them.
+    if let Some(ci) = commands.iter().find(|command| command.name == "ci") {
+        let named = list_names(ci.what);
+        if named != phases {
+            problems.push(format!(
+                "the usage text says `ci` runs {}, and `ci` runs {}",
+                named.join(", "),
+                phases.join(", ")
+            ));
+        }
+    }
+
+    // And so must the README's own line for `ci`.
+    match readme_ci_phases(&readme) {
+        Some(named) => {
+            if named != phases {
+                problems.push(format!(
+                    "README.md says `ci` runs {}, and `ci` runs {}",
+                    named.join(", "),
+                    phases.join(", ")
+                ));
+            }
+        }
+        None => problems.push("README.md has no line saying what `cargo xtask ci` runs".to_string()),
+    }
+
+    Ok(problems)
+}
+
 pub fn run(root: &Path) -> Result<crate::Outcome, String> {
     step("lists");
     let mut problems = Vec::new();
@@ -5169,6 +5457,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
         return Err("found no crate roots at all; the scan is wrong, not the repository".to_string());
     }
     problems.extend(check_roots(&roots));
+
+    // The gates the tree names, and the gates that run.
+    problems.extend(the_gates_are_real(root)?);
 
     // The layering table, in the code and in the documentation.
     let architecture = root.join(ARCHITECTURE);
@@ -5472,8 +5763,9 @@ pub fn run(root: &Path) -> Result<crate::Outcome, String> {
              document, the shell never writes the document, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
-             reads is declared, and the session offers no way into the design \
-             but the registry",
+             reads is declared, every gate the tree names exists, every \
+             command is documented, every gate runs in `ci`, and the session \
+             offers no way into the design but the registry",
             roots.len()
         );
         return Ok(crate::Outcome::Ran);
@@ -5843,6 +6135,283 @@ fn reads_field(body: &str, receiver: &str, field: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------- §169 ----------
+
+    /// A tree with the three files the gate reads.
+    fn fabricated_tree(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("craftkit-gates-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("docs")).expect("the fabricated tree");
+        std::fs::create_dir_all(dir.join("xtask/src")).expect("the fabricated tree");
+        dir
+    }
+
+    /// The commands and the phases a fabricated tree agrees on.
+    fn fabricated_commands() -> Vec<GateCommand<'static>> {
+        vec![
+            GateCommand { name: "fmt", what: "one formatting", gate: true },
+            GateCommand { name: "assets", what: "icons in code", gate: true },
+            GateCommand { name: "lists", what: "sorted lists", gate: true },
+            GateCommand { name: "ci", what: "fmt, assets, lists", gate: false },
+        ]
+    }
+
+    fn fabricated_phases() -> Vec<&'static str> {
+        vec!["fmt", "assets", "lists"]
+    }
+
+    /// A README that agrees with the fabricated commands.
+    fn fabricated_readme() -> String {
+        "# Craftkit\n\n\
+         ## The gates\n\n\
+         ```bash\n\
+         cargo xtask ci       # fmt, assets, lists\n\
+         ```\n\n\
+         | Gate | What it protects |\n\
+         |---|---|\n\
+         | `fmt` | one formatting |\n\
+         | `assets` | icons in code |\n\
+         | `lists` | sorted lists |\n"
+            .to_string()
+    }
+
+    /// A table of commands that agrees with the fabricated commands.
+    fn fabricated_table() -> String {
+        "//! | [`fmt`] | one formatting |\n\
+         //! | [`assets`] | icons in code |\n\
+         //! | [`lists`] | sorted lists |\n\
+         //! | [`ci`] | the runner |\n"
+            .to_string()
+    }
+
+    /// The tree as it is when everything agrees.
+    ///
+    /// The control for the tests below: if this tree has a problem, every
+    /// other test in this group is measuring noise.
+    #[test]
+    fn a_tree_that_agrees_with_itself_has_no_problems() {
+        let dir = fabricated_tree("clean");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A document that names a gate which does not exist is caught.
+    ///
+    /// This is the failure the family hit: `AGENTS.md` said *"cargo xtask
+    /// cleanroom (run by cargo xtask ci)"*, and neither the command nor the
+    /// step was there.
+    #[test]
+    fn a_gate_the_prose_names_but_that_does_not_exist_is_caught() {
+        let dir = fabricated_tree("phantom");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+        std::fs::write(dir.join("docs/AGENTS.md"), "Run `cargo xtask cleanroom` before every commit.\n")
+            .expect("the fabricated document");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("cargo xtask cleanroom"), "{problems:#?}");
+        assert!(problems[0].contains("docs/AGENTS.md:1"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A command nobody can find is caught.
+    ///
+    /// `bundle` ran, and was in neither the usage text nor the crate's own
+    /// table, for as long as the tree has had it.
+    #[test]
+    fn a_command_the_table_does_not_list_is_caught() {
+        let dir = fabricated_tree("unlisted");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let mut commands = fabricated_commands();
+        commands.push(GateCommand { name: "bundle", what: "writes files", gate: false });
+        let problems = gate_problems(&dir, &commands, &fabricated_phases()).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("bundle"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A gate that `ci` does not run is caught.
+    ///
+    /// A command that checks something and is not a phase of `ci` is a check
+    /// that runs only when somebody remembers it.
+    #[test]
+    fn a_gate_that_ci_does_not_run_is_caught() {
+        let dir = fabricated_tree("unrun");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        let mut table = fabricated_table();
+        table.push_str("//! | [`layers`] | the layering |\n");
+        std::fs::write(dir.join("xtask/src/lib.rs"), table).expect("the fabricated table");
+
+        let mut commands = fabricated_commands();
+        commands.push(GateCommand { name: "layers", what: "the layering", gate: true });
+        let problems = gate_problems(&dir, &commands, &fabricated_phases()).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("layers"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A phase of `ci` the README does not list is caught.
+    #[test]
+    fn a_phase_the_readme_does_not_list_is_caught() {
+        let dir = fabricated_tree("undocumented");
+        let readme = fabricated_readme().replace("| `lists` | sorted lists |\n", "");
+        std::fs::write(dir.join("README.md"), readme).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("lists")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A row in the README's table that is not a command is caught.
+    ///
+    /// The other direction: a gate that stopped running must stop being
+    /// documented, or the README keeps promising a check that is not there.
+    #[test]
+    fn a_gate_the_readme_lists_but_that_does_not_exist_is_caught() {
+        let dir = fabricated_tree("stale");
+        let readme = fabricated_readme()
+            .replace("| `lists` | sorted lists |", "| `ghost` | a gate that is not there |");
+        std::fs::write(dir.join("README.md"), readme).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("ghost")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The usage text's line for `ci` must name the phases, and only them.
+    ///
+    /// The line is a list beside the list it copies. §169.
+    #[test]
+    fn the_usage_text_must_name_the_phases_and_only_them() {
+        let dir = fabricated_tree("usage");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let mut commands = fabricated_commands();
+        commands[3].what = "fmt, assets";
+        let problems = gate_problems(&dir, &commands, &fabricated_phases()).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("usage text"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// And so must the README's own line for `ci`.
+    #[test]
+    fn the_readme_must_name_the_phases_and_only_them() {
+        let dir = fabricated_tree("readmephases");
+        let readme = fabricated_readme().replace("# fmt, assets, lists", "# fmt, assets");
+        std::fs::write(dir.join("README.md"), readme).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("README.md"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A name after `cargo xtask` is a name, with the line it is on.
+    #[test]
+    fn named_commands_finds_names_and_skips_the_rest() {
+        let text = "Run `cargo xtask lists` and `cargo xtask --help`.\n\
+                    The command is `cargo xtask <cmd>`.\n\
+                    And `cargo xtask cleanroom`.\n";
+        let found = named_commands(text);
+        let names: Vec<&str> = found.iter().map(|(_, name)| name.as_str()).collect();
+        assert_eq!(names, vec!["lists", "cleanroom"], "{found:#?}");
+        assert_eq!(found[0].0, 1);
+        assert_eq!(found[1].0, 3);
+    }
+
+    /// A comma-separated list of gates is read as its first words.
+    #[test]
+    fn list_names_takes_the_first_word_of_each_part() {
+        let names = list_names("fmt --check, assets, cleanroom, clippy -D warnings");
+        assert_eq!(names, vec!["fmt", "assets", "cleanroom", "clippy"]);
+    }
+
+    /// The README's table of gates is the one under its heading.
+    ///
+    /// The file opens with a table about value kinds. Reading the first table
+    /// in the file would read the wrong one.
+    #[test]
+    fn the_gate_table_is_the_one_under_the_heading() {
+        let readme = "# Craftkit\n\n\
+             | Kind | What it does |\n\
+             |---|---|\n\
+             | `Source` | introduces a value |\n\n\
+             ## The gates\n\n\
+             | Gate | What it protects |\n\
+             |---|---|\n\
+             | `fmt` | one formatting |\n";
+        assert_eq!(gate_rows(readme), vec!["fmt"]);
+    }
+
+    /// A numbered heading is the same section.
+    ///
+    /// The checking skill numbers its sections, and its table of gates is
+    /// under `## 2. The gates`.
+    #[test]
+    fn a_numbered_gates_section_is_the_gates_section() {
+        assert!(is_the_gates_heading("The gates"));
+        assert!(is_the_gates_heading("2. The gates"));
+        assert!(!is_the_gates_heading("The shape"));
+        assert!(!is_the_gates_heading("The gates and the checks"));
+    }
+
+    /// A table headed `Gate` that is about something else is left alone.
+    ///
+    /// `docs/patterns/one-way-to-read-code.md` has two of them, and their
+    /// rows are function names.
+    #[test]
+    fn a_gate_table_that_is_not_the_gates_section_is_not_read() {
+        let doc = "# Reading code\n\n\
+             ## The one way\n\n\
+             | Gate | What it was reading the text for |\n\
+             |---|---|\n\
+             | `check_roots` | the deny attribute every crate root must carry |\n";
+        assert!(gate_rows(doc).is_empty());
+    }
+
+    /// The phases the README's `ci` line names are the ones in the gates
+    /// section — not the quick start's, which says how long `ci` takes.
+    #[test]
+    fn the_readmes_ci_line_is_the_one_in_the_gates_section() {
+        let readme = "# Craftkit\n\n\
+             ```bash\n\
+             cargo xtask ci       # is it green? seconds warm, minutes cold\n\
+             ```\n\n\
+             ## The gates\n\n\
+             ```bash\n\
+             cargo xtask ci       # fmt, assets, lists\n\
+             ```\n";
+        assert_eq!(
+            readme_ci_phases(readme),
+            Some(vec!["fmt".to_string(), "assets".to_string(), "lists".to_string()])
+        );
+    }
+
+    /// The real tree, not a copy of it: the gates it names are real.
+    #[test]
+    fn the_real_tree_agrees_with_itself() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_gates_are_real(&root).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
 
     /// The tree's own limits table: every limit in it is enforced.
     ///

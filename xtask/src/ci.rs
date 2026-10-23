@@ -241,25 +241,25 @@ mod tests {
     }
 
     #[test]
-    fn every_named_gate_exists_as_a_command() {
+    fn every_phase_of_ci_is_named_in_the_usage_text() {
         // The failure this catches: `ci` runs a check, the usage text forgets
-        // it, and an agent reads the usage text.
-        let usage = crate::USAGE;
+        // it, and an agent reads the usage text. Every phase is named by
+        // `ci`'s own line, so `fmt` and `clippy` are named too — they were
+        // exceptions to this test until that line listed them.
+        let usage = crate::usage();
         for phase in PHASES {
-            if phase.name == "fmt" || phase.name == "clippy" {
-                continue; // part of "ci"'s line, not commands of their own
-            }
             assert!(usage.contains(phase.name), "`{}` is not in the usage text", phase.name);
         }
-        assert!(usage.contains("wasm"));
-        assert!(usage.contains("doctor"));
     }
 
     #[test]
-    fn no_phase_is_named_after_a_command_that_does_not_exist() {
-        let usage = crate::USAGE;
-        for command in ["layers", "assets", "lists", "web", "wasm", "doctor", "ci"] {
-            assert!(usage.contains(command), "`{command}` is missing from the usage text");
+    fn every_command_is_in_the_usage_text() {
+        // The failure this catches: a command exists and runs, and neither
+        // the usage text nor the crate's own table mentions it. `bundle` ran,
+        // and was in neither, for as long as the tree has had it. §169.
+        let usage = crate::usage();
+        for command in crate::COMMANDS {
+            assert!(usage.contains(command.name), "`{}` is missing from the usage text", command.name);
         }
     }
 }

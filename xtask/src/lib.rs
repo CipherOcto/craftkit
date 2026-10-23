@@ -26,6 +26,7 @@
 //! | [`lists`] | the shared lines and sorted lists many changes touch |
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
+//! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
 //!
@@ -55,24 +56,117 @@ pub mod web;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+/// A command `cargo xtask` accepts.
+///
+/// The name, what it does, and what it runs. **One list**, so the usage text,
+/// this module's own table and the gate that checks the prose cannot disagree
+/// about what the commands are. §169.
+pub struct Subcommand {
+    /// What the user types.
+    pub name: &'static str,
+    /// What it does, in one line.
+    pub what: &'static str,
+    /// What it runs.
+    pub run: fn(&Path) -> Result<Outcome, String>,
+}
+
+/// Every command, in the order the usage text lists them.
+///
+/// `doctor` and `ci` are here too, so that the list of what `cargo xtask`
+/// accepts is one list.
+pub const COMMANDS: &[Subcommand] = &[
+    Subcommand {
+        name: "layers",
+        what: "enforce the crate dependency layering (docs/architecture.md)",
+        run: layers::run,
+    },
+    Subcommand {
+        name: "assets",
+        what: "every icon is drawn in code and every file asset is attributed",
+        run: assets::run,
+    },
+    Subcommand {
+        name: "cleanroom",
+        what: "no product's name is in the tree outside prose (docs/clean-room.md)",
+        run: cleanroom::run,
+    },
+    Subcommand {
+        name: "lists",
+        what: "the shared lines and sorted lists many changes add to stay sorted",
+        run: lists::run,
+    },
+    Subcommand { name: "web", what: "check the browser entry page and the service worker", run: web::run },
+    Subcommand {
+        name: "wasm",
+        what: "every crate below the apps still builds for wasm32-unknown-unknown",
+        run: wasm::run,
+    },
+    Subcommand {
+        name: "bundle",
+        what: "build the browser bundle (it writes files; `ci` does not run it)",
+        run: wasm::bundle,
+    },
+    Subcommand {
+        name: "doctor",
+        what: "report whether this machine can build the project, and what is missing",
+        run: run_doctor,
+    },
+    Subcommand {
+        name: "ci",
+        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, wasm",
+        run: run_ci,
+    },
+];
+
+/// The commands `ci` does not run, and why each one is not a gate.
+///
+/// A command that checks something and is not a phase of `ci` is a check that
+/// runs only when somebody remembers it — a gate that is real but never runs,
+/// which is the same defect as a gate that does not exist. §169.
+///
+/// **The default is the other way round.** A command that is not in this list
+/// is a gate, and `ci` runs it. So a new command is a gate until somebody
+/// says otherwise, in one line, here, with a reason a reviewer can read. The
+/// alternative — a flag on each command — is a flag nobody has to justify,
+/// and a gate can be silenced by forgetting one character.
+pub const NOT_GATES: &[(&str, &str)] = &[
+    ("bundle", "it writes files into the tree"),
+    ("doctor", "it reports on the machine, not on the code"),
+    ("ci", "it is the runner"),
+];
+
+/// Whether `ci` runs this command.
+pub fn is_gate(name: &str) -> bool {
+    !NOT_GATES.iter().any(|(not, _)| *not == name)
+}
+
+/// `doctor` as a command: it reports, and its failure is the command's failure.
+fn run_doctor(root: &Path) -> Result<Outcome, String> {
+    doctor::run(root)?;
+    Ok(Outcome::Ran)
+}
+
+/// `ci` as a command: the whole gate.
+fn run_ci(root: &Path) -> Result<Outcome, String> {
+    ci::run(root)?;
+    Ok(Outcome::Ran)
+}
+
 /// The usage text, printed by `cargo xtask --help`.
-pub const USAGE: &str = "\
-usage: cargo xtask <command>
-
-The gates. Run `ci` before every commit; the rest are what it runs.
-
-  layers      enforce the crate dependency layering (docs/architecture.md)
-  assets      every icon is drawn in code and every file asset is attributed
-  cleanroom   no product's name is in the tree outside prose (docs/clean-room.md)
-  lists       the shared lines and sorted lists many changes add to stay sorted
-  web         check the browser entry page and the service worker
-  wasm        every crate below the apps still builds for wasm32-unknown-unknown
-  doctor      report whether this machine can build the project, and what is missing
-  ci          fmt --check, assets, lists, layers, web, clippy -D warnings,
-              then the tests, then the wasm check
-
-  -h, --help  this message
-";
+///
+/// Generated from the command table, so it cannot forget a command: a command
+/// that is not in the usage text is a command nobody finds.
+pub fn usage() -> String {
+    let mut out = String::from(
+        "usage: cargo xtask <command>\n\n\
+         The gates. Run `ci` before every commit; the rest are what it runs.\n\n",
+    );
+    for command in COMMANDS {
+        out.push_str(&format!("  {:<10} {}\n", command.name, command.what));
+    }
+    out.push_str("\n  -h, --help  this message\n");
+    out
+}
 
 /// Dispatch one `cargo xtask` invocation.
 ///
@@ -91,20 +185,17 @@ pub fn run() -> ExitCode {
     // The gates report `Outcome` so `ci` can tell a phase that ran from one that
     // was skipped. Standalone, both outcomes mean the same thing: no failure.
     let result = match args.first().map(String::as_str) {
-        Some("layers") => layers::run(&root).map(drop),
-        Some("assets") => assets::run(&root).map(drop),
-        Some("cleanroom") => cleanroom::run(&root).map(drop),
-        Some("lists") => lists::run(&root).map(drop),
-        Some("web") => web::run(&root).map(drop),
-        Some("wasm") => wasm::run(&root).map(drop),
-        Some("bundle") => wasm::bundle(&root).map(drop),
-        Some("doctor") => doctor::run(&root),
-        Some("ci") => ci::run(&root).map(drop),
         Some("-h" | "--help" | "help") | None => {
-            print!("{USAGE}");
+            print!("{}", usage());
             Ok(())
         }
-        Some(other) => Err(format!("unknown command `{other}`\n\n{USAGE}")),
+        // The command table is the only list of what `cargo xtask` accepts, so
+        // a command cannot exist without being in it, and the usage text is
+        // written from it. §169.
+        Some(other) => match COMMANDS.iter().find(|command| command.name == other) {
+            Some(command) => (command.run)(&root).map(drop),
+            None => Err(format!("unknown command `{other}`\n\n{}", usage())),
+        },
     };
 
     match result {

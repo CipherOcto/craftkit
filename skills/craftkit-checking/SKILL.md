@@ -80,7 +80,7 @@ Run one on its own while you work; run `ci` when you are done.
 | `layers` | `TABLE` is the layering rules | a dependency upward (`craftkit-core` naming `craftkit-io`), a UI crate below L6 |
 | `web` | the two hand-written JavaScript files: the canvas id, the bundle path, the worker's precache shell, the service worker's three safety rules, and `node --check` | a rename that missed `index.html`/`sw.js`, an unregistered worker |
 | `clippy` | `-D clippy::all -D warnings`, `--all-targets`, `--profile ci` | a warning you were going to ignore; a lint the house deny exists to catch |
-| tests | behaviour, including `hostile_params_never_panic` | a new command that panics on a hostile parameter |
+| `tests` | behaviour, including `hostile_params_never_panic` | a new command that panics on a hostile parameter |
 | `wasm` | every library crate and `craftkit-web` still build for `wasm32-unknown-unknown` | a new dependency that is not wasm-safe |
 
 Green output for each (observed):

@@ -19543,6 +19543,200 @@ that does not depend on a licence somebody else wrote.
 true — measured, zero hits — and it was still a promise with nothing behind
 it. The day it stopped being true, nothing would have said so.
 
+## 169. The tree named a gate that did not exist, and named a command that could not be found
+
+§168 took the clean-room rule. This section takes the other half of the
+comparison: the family's habit of **naming a gate as though it were there**.
+
+### The finding
+
+In a sibling repo, `AGENTS.md:20` says:
+
+> `cargo xtask cleanroom` (run by `cargo xtask ci`) fails on Adobe copyright
+> notices and on fixtures made with Adobe applications.
+
+Neither the subcommand nor the step exists in that tree. The document makes a
+promise with nothing behind it, and the promise is in the file every agent
+reads first.
+
+The habit has three parts, and each one is a way a gate stops being real:
+
+1. **A named gate exists.** A document says `cargo xtask something`, and
+   `something` is not a command.
+2. **Every gate is documented.** A command exists and runs, and no list of the
+   commands mentions it.
+3. **Every gate runs.** A command that checks something is not a phase of `ci`,
+   so it runs when somebody remembers it — which is never, in a hurry.
+
+### What this tree had
+
+Three lists of what `cargo xtask` accepts, and **nothing that compared them**:
+
+| List | Where | What it held |
+|---|---|---|
+| the dispatch | `xtask/src/lib.rs`, a `match` on the first argument | 9 commands |
+| the usage text | `xtask/src/lib.rs`, a hand-written `const USAGE` | 8 commands |
+| the crate's own table | the module table at the top of `xtask/src/lib.rs` | 8 commands |
+
+Measured at `ffcdd09`, the tree as it stood:
+
+- The dispatch accepted **9** commands; the usage text listed **8**; the
+  crate's own table listed **8**.
+- The one missing from **both** lists was **`bundle`** — and `bundle` worked.
+  It builds the browser bundle; it is in `KNOWN-GAPS.md:552`, and the page it
+  serves imports the file it writes.
+- The prose was honest: **25** prose files, **89** `cargo xtask <name>`
+  mentions, **8** distinct names, and **none** of them was a command that did
+  not exist. The drift was between the code's own lists, not in the documents.
+- The phases of `ci` were **9**, of which **3** — `fmt`, `clippy`, `tests` —
+  are not commands of their own. The old test that checked the usage text
+  against the phases had a **hand-kept exception list** for exactly those, in
+  the test, where a reader would not look for it.
+- The tree keeps **two** tables of gates — the README's and the checking
+  skill's — and **nothing compared either with the phases**. The skill's
+  `tests` row was written `| tests |` while every other row in both tables was
+  written `` | `tests` | ``: the same habit, in a second file.
+
+### What it cost
+
+Nothing was broken. That is the finding, not a reassurance: the cost of a
+gate that is not listed is not a failure, it is **a gate nobody runs** and a
+command nobody finds.
+
+`bundle` is the sharp end of it. A browser deployment needs it, the page's
+`index.html` names it, and it was in neither of the two lists that say what
+`cargo xtask` accepts. It was found — by reading the source — and not by any
+gate, because no gate compared the three lists.
+
+### The fix
+
+**One list of the commands, and the usage text is written from it.**
+`xtask/src/lib.rs` now has a `COMMANDS` table — the name, the one line that
+says what it does, and what it runs — and the dispatch is a lookup in that
+table. The usage text is generated from it. A command that is not in the table
+cannot be dispatched, and a command in the table cannot be missing from the
+usage text: the same list, used twice.
+
+**Whether `ci` runs a command is derived, not declared.** The old shape was a
+flag on each command, and a flag is a flag somebody can forget or flip. Now the
+default is the other way round: **a command is a gate unless it is listed as an
+exception**, and the exceptions are a closed list with a reason each:
+
+| Command | Why `ci` does not run it |
+|---|---|
+| `bundle` | it writes files into the tree |
+| `doctor` | it reports on the machine, not on the code |
+| `ci` | it is the runner |
+
+So a new command is a gate until somebody says otherwise, in one line, with a
+reason a reviewer can read. Silencing one is visible.
+
+**The gate is `cargo xtask lists`, and it checks six things:**
+
+| Check | What it catches |
+|---|---|
+| every command the prose names exists | a document promising a gate that is not there |
+| every command is in the crate's own table | a command nobody finds |
+| every gate is a phase of `ci` | a check that runs when somebody remembers |
+| every document's table of gates is exactly the phases | a gate that stopped running, still documented |
+| the usage text names exactly the phases | a list of what `ci` runs that is not what `ci` runs |
+| the README's own line names exactly the phases | and again, in the command block |
+
+Every check reports the file and the line, so the report says where to look.
+
+**The tree keeps two tables of gates**, and both are checked: the README's
+under `## The gates`, and the checking skill's under `## 2. The gates`. The
+skill numbers its sections, so the heading is recognised with or without its
+number. That second table had drifted in exactly the way the README's had —
+its `tests` row was written `| tests |` while every other row in both tables
+was written `| \`tests\` |`. The same habit, in two files, which is what a
+habit looks like.
+
+### What the gate cannot see
+
+Written here because a gate that pretends to check everything is worse than
+one that says what it misses:
+
+- **A command that is not named anywhere.** A gate nobody writes about is
+  invisible to a check that reads documents. The gate reads the prose, the
+  crate's own table and every document's table of gates — a command in none of
+  them is not found. The mitigation is the other direction: the table is *one*
+  table, so the command exists in the code and in the usage text whether or
+  not anybody writes about it.
+- **Whether a command checks anything.** Whether a command is a gate is
+  derived from the exception list, not from reading its code. The exception
+  list is closed and every entry must give a reason, but the reason is a
+  sentence, and a sentence is a reviewer's job, not a tool's.
+- **The order of the phases.** The gate checks that the usage text and the
+  README name the phases; it does not check that they name them *in the order
+  `ci` runs them*. The lists are compared as sets.
+
+### The unit tests
+
+Fifteen, each checked to fail when the rule it protects is taken out:
+
+| Test | What it holds |
+|---|---|
+| `a_tree_that_agrees_with_itself_has_no_problems` | the control: a tree that says what it does has no problems |
+| `a_gate_the_prose_names_but_that_does_not_exist_is_caught` | the family failure: a document naming a gate that is not there |
+| `a_command_the_table_does_not_list_is_caught` | the `bundle` failure: a command in no table |
+| `a_gate_that_ci_does_not_run_is_caught` | a check that runs when somebody remembers |
+| `a_phase_the_readme_does_not_list_is_caught` | a phase of `ci` the README does not document |
+| `a_gate_the_readme_lists_but_that_does_not_exist_is_caught` | a documented gate that is not there |
+| `the_usage_text_must_name_the_phases_and_only_them` | the usage text's list of what `ci` runs |
+| `the_readme_must_name_the_phases_and_only_them` | the README's list of what `ci` runs |
+| `named_commands_finds_names_and_skips_the_rest` | a name, a placeholder and an option are not the same thing |
+| `list_names_takes_the_first_word_of_each_part` | `fmt --check` is the phase `fmt` |
+| `the_gate_table_is_the_one_under_the_heading` | the README opens with a table that is not the table of gates |
+| `a_numbered_gates_section_is_the_gates_section` | `## 2. The gates` is the same section |
+| `a_gate_table_that_is_not_the_gates_section_is_not_read` | a table headed `Gate` about something else is left alone |
+| `the_readmes_ci_line_is_the_one_in_the_gates_section` | the quick start says how long `ci` takes, not what it runs |
+| `the_real_tree_agrees_with_itself` | the real tree, against the real command table |
+
+The first eight use a **fabricated tree** — a directory with a README, a
+crate table and one document — because the rules are about a tree and a tree
+has to be *made* to be wrong. The last one is the real tree.
+
+Two of the old tests in `xtask/src/ci.rs` were replaced: the one that checked
+the usage text against the phases had a hand-kept exception list, and the one
+that checked the usage text against a hand-written list of command names
+missed `bundle` — which is the defect this section is about. They are now
+`every_phase_of_ci_is_named_in_the_usage_text` and
+`every_command_is_in_the_usage_text`, and both read the command table.
+
+### The mutations
+
+Nine, each putting the old rule back:
+
+| Mutation | What it breaks |
+|---|---|
+| the phrase the check reads a name out of is wrong | a document can name a gate that does not exist for ever |
+| the command table check's loop never runs | a command in no table is not noticed |
+| the derivation of "is a gate" is lost | `bundle` becomes a gate that `ci` runs |
+| a document's table of gates is read as empty | every phase looks undocumented |
+| a numbered gates section stops being recognised | the checking skill's table is not read at all |
+| the usage text's list is compared against nothing | the usage text can leave out a phase |
+| the README's list is compared against nothing | the README can leave out a phase |
+| the usage text is written from part of the table | the usage text forgets three commands |
+| an exception with no reason is accepted | a gate was silenced and nothing says so |
+
+All nine were checked to be caught, one at a time, on the tree.
+
+### The lesson
+
+**A named gate is a promise, and a promise needs something behind it.** The
+family's failure was not a wrong rule; it was a rule with no gate, named as
+though it had one.
+
+**The default should be the safe one.** A command is a gate unless somebody
+says otherwise. The alternative — a flag per command — is a flag nobody has
+to justify, and a gate can be silenced by forgetting one character.
+
+**And a list that is written by hand beside the code it describes is a list
+that has already drifted.** Three lists existed; `bundle` was in one of them
+and worked fine. The fix was not a better list. It was **one list, used
+twice**.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -19943,6 +20137,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test that catches a panic is not a boundary** | the path in `production_of` | 1 mutation — §167 |
 | **No product's name is in the tree outside prose** | the table in `docs/clean-room.md` | 2 mutations — §168 |
 | **A product's name in a file name is the product's name** | the three forms in `path_mentions` | 1 mutation — §168 |
+| **A gate the tree names exists** | the command table in `xtask/src/lib.rs` | 1 mutation — §169 |
+| **Every command is documented** | the crate's own table of commands | 1 mutation — §169 |
+| **Every gate runs in `ci`** | the exceptions list in `xtask/src/lib.rs` | 2 mutations — §169 |
+| **The lists of what `ci` runs are the lists `ci` runs** | the usage text and the README | 2 mutations — §169 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -20778,3 +20976,25 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     falls on every run), or run the engine's tests under a repetition count
     in the `ci` profile only.
 
+43. **Decide whether a gate named in prose without the command in front of it
+    counts.** §169's gate reads one phrase out of the prose — `cargo xtask
+    <name>` — and checks that the name is a command. That is the phrase the
+    family's own failure used, but it is one phrase. A document can name a gate
+    as *"the `cleanroom` step"*, or *"the clean-room gate"*, or *"the cleanroom
+    check"*, and the gate will not see it.
+
+    Measured on the tree: **170** mentions of a command's name in the prose
+    with no `cargo xtask` in front of it, of which **81** are inside a
+    backticked code span. Almost none of those 81 is a gate reference — they
+    are file names (`xtask/src/layers.rs`), symbol names (`PHASES`), or the
+    first cell of a table. So a bare-name check is a **heuristic**, and §29 is
+    the precedent for what that costs: the tree already has gates that read
+    what prose *says*, and they are the ones that need the most care.
+
+    The choices are: leave the gate reading one phrase and accept that a
+    document can name a gate in a form it does not recognise; build a
+    word-list check and own the false positives; or make the *form* the
+    rule — a gate's name is always written `cargo xtask <name>` in prose — and
+    let a document that wants to mention one write it that way. The third is a
+    convention, and §167's item 41 is about conventions and anchors, so the
+    two belong in the same conversation.
