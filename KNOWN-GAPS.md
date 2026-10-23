@@ -21055,6 +21055,185 @@ one revision craftkit knew was not a gap — it was a *choice*. The gap was
 that the choice was invisible: the client could not find out what else the
 server would speak, and the server had no list to find out from.
 
+## 180. The reader was the widest door in the program, and nothing was pushing on it
+
+### The finding
+
+§175 put property tests on the readers, and §177 put them on the commands.
+Both were about the same promise — *hostile input is refused, not survived* —
+and both were about the **parameters** and the **bytes**.
+
+**The file was never a hostile input.** The tree's own property suite
+generates bytes and feeds them to `craftkit_io::load`, and the reader refused
+every one of them. That is a good result and a narrow one: the generator
+builds the *boundaries the reader states* — a file of exactly the limit, a
+file one byte over it, a file that is not JSON — and a reader that is wrong
+in a way that needs one particular document is not found by it.
+
+The gap was not in the tests. It was that **nothing ever handed the program a
+file nobody designed.** Every file in the tree was written by the tree's own
+writer. Every design anybody opened was written by the tree's own writer.
+The widest door in the program had exactly one source of traffic.
+
+The family has one answer to this, and only one of the six has it: **PC**
+(`pdfcraft/xtask/src/fuzz.rs`) has a `cargo xtask fuzz`. The other five —
+artcraft, effectcraft, filmcraft, soundcraft, vectorcraft — have none.
+
+### The port
+
+**`cargo xtask fuzz` is a phase of `ci`.** A fuzzer that runs only when
+somebody remembers it is the same defect as a check that does not exist
+(§169), so it is a phase, between the tests and the wasm check: it needs the
+CLI the tests have just built, and a crash it finds is worth more than a
+four-minute wasm build.
+
+**The corpus is written by the tree's own program.** `craftkit-cli sample
+--out` writes the seed — the same writer that saves a user's design, in the
+same program an agent drives. A corpus written by hand would be a second copy
+of the file format, and it would drift: the fuzzer would be breaking a
+format nothing else in the tree speaks.
+
+**And the xtask depends on nothing of the tree's own.** That is the second
+half of the same rule, and it is there because the first half was wrong at
+first — see *The finding the port made about itself*, below.
+
+**Seven ways to break a file.** A bit turned over; the file cut short; a
+piece of another design spliced in; a piece repeated; a piece taken out; a
+number replaced by one the reader cannot hold; and — the one that reaches
+past the JSON parser — **the document's own shape broken with the file still
+valid JSON**: more nodes than the model allows, a frame rate of zero, a
+frame rate over the limit, an empty range, a range outside what a time can
+be, two nodes with one id, a note longer than the model allows, and a
+document replaced by something that is not one.
+
+The last one is the important one. The other six break the *file*, and the
+reader turns it away at the first line — the reader working, but only its
+outermost part. The seventh breaks the *document*, so the file parses, the
+tag is right, and everything after that is the reader's own rules.
+
+**A crash is three things, and one of them is easy to miss.**
+
+| The child | The verdict |
+|---|---|
+| died by a signal | **crash** |
+| exited 101 — the code a Rust program uses when it dies of a panic | **crash** |
+| printed `panicked at` | **crash** |
+| ran past the timeout | **hang** |
+| exited 0 | accepted |
+| exited 1 or 2 | refused |
+
+The third row is the one that matters. The engine runs every command under
+`catch_unwind`, so a panic *inside a command* is turned into an ordinary
+error and the process still exits cleanly — only the message says what
+happened. **A reader that is "handled" by an error message is still a reader
+that panicked**, and an exit-code-only classifier would call that a refusal.
+
+**A refusal is not a crash.** Most of what the fuzzer produces is a refusal,
+and a run in which every input was refused is a good run.
+
+**The child is a separate process.** Two reasons, and both are reasons the
+check can fail at all: a hang is only visible from outside — a program that
+loops forever cannot time itself out — and running the reader in the fuzzer's
+own process would catch the panic and carry on, hiding the one place a panic
+still shows, which is the reader, before the session exists.
+
+**A crash is minimised.** A crash in a two-thousand-byte file is a puzzle; a
+crash in a forty-byte file is a sentence. The minimiser cuts the tail and
+then takes pieces out of the middle, and keeps a smaller input only while it
+still breaks the same way.
+
+**The run is reproducible.** One fixed seed, one fixed list of mutations, one
+fixed order. Two runs try the same inputs in the same order, so a crash
+found on a laptop is the same crash on the build machine.
+
+### The finding the port made about itself
+
+The first version of the port had the xtask depend on `craftkit-io` and
+`craftkit-model`, so the fuzzer could write its corpus in process with the
+tree's own writer.
+
+**The mutation suite caught it**, and it caught it in the one case that
+depends on the property the change took away:
+
+```
+1 of 414 mutation(s) broke the build, so no gate ran:
+   • model: the fingerprint forgets a field the model has
+```
+
+That case adds a field to a model type — a field the fingerprint does not
+hash — and the gate that catches it is the `lists` gate, which **reads the
+tree**. Before the change the `lists` gate ran against a tree whose model did
+not compile, because the xtask did not depend on the model. After the change
+the xtask could not be built at all, so the gate could not run, and the case
+became "the tree did not compile, so no test ran: the rule is untested".
+
+**The property that was lost is real.** The xtask is the tool that *checks*
+the tree, and a checker that cannot run when the tree does not compile is a
+checker that is silent exactly when it is needed — and the `lists` gate reads
+the tree as text precisely so that it can say something about a broken tree.
+One broken mutation case was the visible cost; the invisible cost was every
+future case of the same kind.
+
+So the corpus comes from the tree's **program** instead of from the tree's
+**library**: `craftkit-cli sample --out` writes the seed, the xtask reads the
+bytes back, and the xtask's dependencies are `serde` and `serde_json` and
+nothing else. The corpus is still written by the tree's own writer — it is
+the same call, in the same program, and now the CLI has a command worth
+having on its own.
+
+**And the seed is checked before it is broken.** The fuzzer hands the seed to
+the same child it hands the mutants to, and refuses to go on unless the child
+*accepts* it. A corpus the reader turns away is a corpus that tests nothing,
+and a fuzzer whose corpus is rubbish is green for the wrong reason — the
+worst kind of green, because it looks exactly like a clean run.
+
+### The gate's own teeth
+
+A fuzzer that has never found anything is a fuzzer nobody knows works.
+
+So the tree proves it can find one: `xtask/src/fuzz.rs` runs the whole loop —
+mutate, hand it to a child, read the verdict, minimise it, write the finding
+out — against a child that **dies on purpose**, and checks that a finding
+came out the other end.
+
+The child is **the tree's own test binary**, called with the name of the test
+that is the child. The fixture does nothing unless the parent says so —
+`CRAFTKIT_FUZZ_FAKE_CHILD` — which is the same shape as the tree's other
+child probes. The harness runs it, the test harness catches the panic, and
+the process exits **101**: the code a Rust program exits with when it dies of
+a panic. The classifier sees 101 and says *crash*.
+
+This is portable without a compiler, a shell or a second binary, and it is
+the same mechanism on every platform. It was measured before it was written:
+the Rust test harness **ors** its filters, so a child called with the
+fixture's name runs that test and no other, and it exits 101 when the test
+fails.
+
+### The measured result
+
+The run of the port, against the tree's own CLI:
+
+```
+500 input(s): 15 accepted, 485 refused, 0 crash(es), 0 hang(s)
+```
+
+Ten seconds, a few kilobytes of scratch. **No crash**, which is the answer
+the reader deserves: it refused everything it should have refused, and the
+fifteen files it accepted were files whose mutation left them valid.
+
+### The lesson
+
+**A property test builds the boundaries the code states. A fuzzer builds the
+inputs the code never imagined.** Neither replaces the other, and the tree
+needed both: the properties are what *prove* a bound, and the fuzzer is what
+*finds* the case the bound was not drawn around.
+
+**And a check that has never failed is not known to work.** The fuzzer's own
+teeth are proved the same way every other gate's are: by breaking the loop
+on purpose and checking that the test notices. A fuzzer that had found
+nothing in a thousand runs would look exactly like a fuzzer that cannot find
+anything at all.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21493,6 +21672,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The server's own revision is the list's first entry** | `PROTOCOL_VERSION` | 1 mutation — §179 |
 | **A capability is offered only to a client that negotiated a revision with it** | `rpc::capabilities` | 1 mutation — §179 |
 | **The suggestions are filtered by what the caller typed** | `rpc::starts_with` | 1 mutation — §179 |
+| **A broken file is refused, and a crash is a crash** | `classify` in `xtask/src/fuzz.rs` | 2 mutations — §180 |
+| **The fuzzer's corpus is a design the tree reads** | `craftkit-cli sample --out` | 1 mutation — §180 |
+| **The xtask checks the tree without depending on it** | `xtask/Cargo.toml` | the mutation suite found it — §180 |
+| **The fuzzer's run is reproducible** | the fixed seed in `Rng` | 1 mutation — §180 |
+| **The fuzzer can find a crash** | `the_fuzzer_finds_a_crash_it_made` | 1 mutation — §180 |
+| **A hang is a hang, not a crash** | the same `classify` | the property that found it — §180 |
+| **A smaller crash is still a crash** | `minimise` | 1 mutation — §180 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -22399,23 +22585,49 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     same value makes the command refuse before it looks at the hostile one,
     and the property passes for the wrong reason.
 
-46. **Give the MCP server the other half of the protocol: prompts and
-    completion.** Section 176 added the resources, and left the two methods
-    that are still missing: `prompts/list`, `prompts/get` and
-    `completion/complete`.
+46. ~~**Give the MCP server the other half of the protocol: prompts and
+    completion.**~~ **Done.** §178 added the prompts and §179 the completion
+    and the version negotiation it belongs to — `prompts/list`, `prompts/get`
+    and `completion/complete` all answer now, and the server speaks two
+    revisions of the protocol rather than one.
 
-    The family's richest is **VC** (`vectorcraft/crates/mcp/src/prompts.rs`):
-    prompts and completion built from the **same live catalogues the tools
-    use**, so a suggestion is a real command id rather than a fixed list that
-    goes stale. That is the part worth porting — not the shape.
+    The trap the item named was the one that mattered: a prompt's arguments
+    and the completion values that suggest them are two lists, and two lists
+    drift. §178 made them one — the prompt's message is built from the
+    registry's own `CommandSpec`, so it cannot name a command that does not
+    exist — and §179 made the completion values come from the same live
+    catalogue.
 
-    The work needs two things this tree does not have yet: a **workflow** to
-    offer as a prompt (craftkit's commands are node and property edits; a
-    prompt is a sequence of them, and the tree has no sequence), and a
-    **catalogue to complete from** that is live rather than copied.
+    What the item asked for and did not get is a **workflow** to offer as a
+    prompt: craftkit's commands are node and property edits, and a prompt is
+    a sequence of them. The three prompts that exist are single commands with
+    their arguments filled in. A prompt that *ran* several commands would
+    need the tree to have a sequence, and it does not.
 
-    The trap is the one the tree keeps meeting: a prompt's arguments and the
-    completion values that suggest them are two lists, and two lists drift.
-    The port should make them one — the same way §171 made the tools'
-    advertisement and dispatch one list, and §176 made the resources'
-    advertisement and dispatch one list.
+47. **Fuzz the other two files the tree reads.** §180 fuzzes the design file,
+    and the design file is the widest door — but it is not the only one.
+
+    The tree reads two more files from disk, and both are read the same way:
+    the **script** (`craftkit-cli run script.json`, `snapshot script.json`)
+    and the **crash report's replay** (`craftkit-cli crashes replay <id>`).
+    Both go through `craftkit_core::read_file_bounded` and
+    `serde_json::from_str`, so both have the shape §180 fuzzes — and neither
+    has been fuzzed.
+
+    The work is small, because the machinery is there: the fuzzer's target is
+    a command and a file, and the script's command is `run` rather than
+    `eval`. The seeds are the other half: a script is written by hand, so
+    the corpus has to be written by hand too — and this is the one place
+    where "the tree's own writer" is not available, because the tree has no
+    script writer. That is worth knowing before starting: the corpus is a
+    second copy of the script format, and §180's rule — *the corpus is
+    written by the tree* — does not apply to it.
+
+    The interesting difference is what a hostile script can do that a hostile
+    design cannot: **it carries commands**. A script is a list of commands
+    and their parameters, so the fuzzer is not only breaking a file, it is
+    aiming commands at the engine. That is §177's subject with a different
+    input, and the same trap applies: `Session::execute` runs every command
+    under a `catch_unwind`, so "no command panics" is structurally true and
+    proves nothing. The property has to be about the **document** — that it
+    is still valid afterwards — which is what §177 already checks.

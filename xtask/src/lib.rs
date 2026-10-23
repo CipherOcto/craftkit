@@ -27,6 +27,7 @@
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
 //! | [`deny`] | the dependency policy: licences, bans, sources, advisories |
+//! | [`fuzz`] | the design-file reader, fuzzed: broken files in, crashes out |
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
@@ -49,6 +50,7 @@ pub mod ci;
 pub mod cleanroom;
 pub mod deny;
 pub mod doctor;
+pub mod fuzz;
 pub mod layers;
 pub mod lists;
 pub mod tree;
@@ -56,20 +58,26 @@ pub mod wasm;
 pub mod web;
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
+use std::time::{Duration, Instant};
 
 /// A command `cargo xtask` accepts.
 ///
 /// The name, what it does, and what it runs. **One list**, so the usage text,
 /// this module's own table and the gate that checks the prose cannot disagree
 /// about what the commands are. §169.
+///
+/// The arguments are passed in rather than read from the environment,
+/// because a command with a flag is a command somebody can find: the
+/// environment is for configuration that has to cross a process boundary,
+/// not for the knobs of a tool.
 pub struct Subcommand {
     /// What the user types.
     pub name: &'static str,
     /// What it does, in one line.
     pub what: &'static str,
     /// What it runs.
-    pub run: fn(&Path) -> Result<Outcome, String>,
+    pub run: fn(&Path, &[String]) -> Result<Outcome, String>,
 }
 
 /// Every command, in the order the usage text lists them.
@@ -109,6 +117,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: deny::run,
     },
     Subcommand {
+        name: "fuzz",
+        what: "fuzz the design-file reader: broken files in, crashes out",
+        run: fuzz::command,
+    },
+    Subcommand {
         name: "bundle",
         what: "build the browser bundle (it writes files; `ci` does not run it)",
         run: wasm::bundle,
@@ -120,7 +133,7 @@ pub const COMMANDS: &[Subcommand] = &[
     },
     Subcommand {
         name: "ci",
-        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, wasm",
+        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, fuzz, wasm",
         run: run_ci,
     },
 ];
@@ -156,13 +169,13 @@ pub fn is_gate(name: &str) -> bool {
 }
 
 /// `doctor` as a command: it reports, and its failure is the command's failure.
-fn run_doctor(root: &Path) -> Result<Outcome, String> {
+fn run_doctor(root: &Path, _args: &[String]) -> Result<Outcome, String> {
     doctor::run(root)?;
     Ok(Outcome::Ran)
 }
 
 /// `ci` as a command: the whole gate.
-fn run_ci(root: &Path) -> Result<Outcome, String> {
+fn run_ci(root: &Path, _args: &[String]) -> Result<Outcome, String> {
     ci::run(root)?;
     Ok(Outcome::Ran)
 }
@@ -208,7 +221,7 @@ pub fn run() -> ExitCode {
         // a command cannot exist without being in it, and the usage text is
         // written from it. §169.
         Some(other) => match COMMANDS.iter().find(|command| command.name == other) {
-            Some(command) => (command.run)(&root).map(drop),
+            Some(command) => (command.run)(&root, &args[1..]).map(drop),
             None => Err(format!("unknown command `{other}`\n\n{}", usage())),
         },
     };
@@ -322,13 +335,100 @@ pub fn command(program: &str, args: &[&str], dir: &Path) -> Result<Output, Strin
     Ok(Output { code: status.code().unwrap_or(-1), stdout, stderr })
 }
 
+/// What a child did, when it was run with a time limit.
+#[derive(Debug)]
+pub struct TimedOutput {
+    /// The exit code, or `None` when the child died by a signal.
+    pub code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    /// Whether the child had to be killed for running too long.
+    pub timed_out: bool,
+}
+
+impl TimedOutput {
+    /// Everything the child said, for a failure report.
+    pub fn all(&self) -> String {
+        let mut s = String::new();
+        if !self.stdout.trim().is_empty() {
+            s.push_str(self.stdout.trim());
+        }
+        if !self.stderr.trim().is_empty() {
+            if !s.is_empty() {
+                s.push('\n');
+            }
+            s.push_str(self.stderr.trim());
+        }
+        if s.is_empty() { format!("(exit code {}) with no output", self.code.unwrap_or(-1)) } else { s }
+    }
+}
+
+/// Run `program` with `args`, and kill it if it runs for longer than `timeout`.
+///
+/// The same file-based capture as [`command`], for the same reason: a pipe
+/// can be unreadable in a sandboxed environment, and a gate that cannot hear
+/// the child cannot report what the child said.
+///
+/// The time limit is the reason this exists at all. A child that never
+/// finishes is a thing a parent can see and a program cannot: `fuzz` needs
+/// to tell a hang from a refusal, and only the outside can tell.
+pub fn command_timed(
+    program: &Path,
+    args: &[String],
+    dir: &Path,
+    timeout: Duration,
+    env: &[(String, String)],
+) -> Result<TimedOutput, String> {
+    let capture = Capture::new(&program.to_string_lossy())?;
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(capture.stdout.try_clone().map_err(|e| format!("{e}"))?)
+        .stderr(capture.stderr.try_clone().map_err(|e| format!("{e}"))?)
+        .envs(env.iter().map(|(k, v)| (k, v)))
+        .spawn()
+        .map_err(|e| {
+            let _ = capture.cleanup();
+            format!("could not run `{}`: {e}", program.display())
+        })?;
+
+    let started = Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    let _ = child.kill();
+                    timed_out = true;
+                    break child.wait().map_err(|e| {
+                        let _ = capture.cleanup();
+                        format!("could not wait for `{}`: {e}", program.display())
+                    })?;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(e) => {
+                let _ = capture.cleanup();
+                return Err(format!("could not wait for `{}`: {e}", program.display()));
+            }
+        }
+    };
+
+    let stdout = capture.read(&capture.paths[0])?;
+    let stderr = capture.read(&capture.paths[1])?;
+    let _ = capture.cleanup();
+
+    Ok(TimedOutput { code: status.code(), stdout, stderr, timed_out })
+}
+
 /// Two temporary files, one per stream, removed on the way out.
 struct Capture {
     stdout: std::fs::File,
     stderr: std::fs::File,
     paths: [std::path::PathBuf; 2],
 }
-
 impl Capture {
     fn new(program: &str) -> Result<Self, String> {
         // A counter rather than the program name alone: two invocations of the

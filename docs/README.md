@@ -36,6 +36,7 @@ the layer table in `architecture.md`, and the deny attribute in every crate root
 | [`agent-playbook.md`](agent-playbook.md) | How to drive craftkit as an agent: commands, the control channel, MCP |
 | [`clean-room.md`](clean-room.md) | What this tree may not contain, and the products whose names may not appear in it |
 | [`dependency-policy.md`](dependency-policy.md) | What this tree may depend on: the licences, the bans, the sources, the advisories |
+| [`fuzzing.md`](fuzzing.md) | How the design-file reader is fuzzed, and what a crash means |
 | [`patterns/`](patterns/) | The recurring rules, one file each — the things you must not do differently |
 | [`recipes/`](recipes/) | Worked end-to-end tasks against real commands |
 | [`design/`](design/) | The `.craftkit` file format and the plan model in detail |

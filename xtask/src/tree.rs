@@ -19,18 +19,24 @@
 //!
 //! | The walk | Ignores |
 //! |---|---|
-//! | this one | `target`, `.git`, `node_modules`, `dist`, and every dot-directory |
+//! | this one | `target`, `.git`, `node_modules`, `dist`, `fuzz-out`, and every dot-directory |
 //! | `collect_manifests` | `target`, `node_modules`, and every dot-directory — **not `dist`** |
 //! | `collect_markdown`, `collect_rust` | `target`, `node_modules`, `dist`, and every dot-directory |
 //!
 //! A gate that walks the tree and a gate that walks the tree differently do
 //! not see the same tree, and the difference is a file nobody looked at. §170
 //! folded the three in and added the gate that keeps it that way.
+//!
+//! `fuzz-out` is in the list for a reason of its own: it holds the fuzzer's
+//! broken inputs, which are files of bytes nobody wrote. A gate that read one
+//! of them would be reading a thing that is *meant* to be nonsense — and the
+//! cleanroom gate, which looks for another product's name in the tree, would
+//! find one in a mutation sooner or later. §180.
 
 use std::path::{Path, PathBuf};
 
 /// Paths never inspected: build output and version control.
-pub const IGNORED_DIRS: &[&str] = &["target", ".git", "node_modules", "dist"];
+pub const IGNORED_DIRS: &[&str] = &["target", ".git", "node_modules", "dist", "fuzz-out"];
 
 /// Every file under `root` that `want` accepts, as paths relative to `root`.
 ///

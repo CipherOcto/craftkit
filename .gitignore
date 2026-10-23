@@ -10,6 +10,10 @@
 # Crash reports contain the user's plan. They are theirs, and they are local.
 /crash-reports/
 
+# The fuzzer's working inputs and its findings: files of bytes nobody wrote.
+# Local, and never in the repository. §180.
+/fuzz-out/
+
 # Editors and operating systems.
 .DS_Store
 *.swp

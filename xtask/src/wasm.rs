@@ -72,7 +72,7 @@ pub fn target_installed() -> bool {
 }
 
 /// The gate.
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("wasm");
     if !target_installed() {
         skipped(
@@ -140,7 +140,7 @@ fn bundler_blocker(root: &Path) -> Option<String> {
 ///
 /// Returns [`crate::Outcome::Skipped`] with a printed reason when the tool is
 /// missing or the wrong version: never a pass.
-pub fn bundle(root: &Path) -> Result<crate::Outcome, String> {
+pub fn bundle(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("bundle");
     let Some(why) = bundler_blocker(root) else {
         crate::cargo(&["build", "-p", "craftkit-web", "--target", TARGET, "--release"], root)?;

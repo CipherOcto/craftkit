@@ -37,6 +37,8 @@ pub enum Command {
     Run { script: PathBuf, sample: bool },
     /// Open a design and evaluate it.
     Eval { file: PathBuf, at: Option<String> },
+    /// Write a sample design to a file.
+    Sample { out: PathBuf },
     /// Run a script and render a frame.
     Snapshot { script: PathBuf, out: PathBuf, sample: bool },
     /// Read the crash folder.
@@ -125,6 +127,31 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
                 }
             }
             Ok(Some(Command::Eval { file, at }))
+        }
+        "sample" => {
+            // Write a design to a file. The fuzzer's corpus comes from here:
+            // the seed is written by the tree's own writer, through the
+            // tree's own program, so the format the fuzzer breaks is the
+            // format the program speaks. §180.
+            let (mut seen_out, mut out) = (false, None);
+            let mut i = 1;
+            while i < argv.len() {
+                match argv[i].as_str() {
+                    "--out" => {
+                        let value = argv
+                            .get(i + 1)
+                            .ok_or_else(|| UsageError::MissingValue { flag: "--out".into() })?;
+                        once(&mut seen_out, "--out")?;
+                        out = Some(PathBuf::from(value));
+                        i += 2;
+                    }
+                    other => {
+                        return Err(UsageError::BadValue { flag: "sample".into(), value: other.into() });
+                    }
+                }
+            }
+            let out = out.ok_or(UsageError::MissingValue { flag: "--out".into() })?;
+            Ok(Some(Command::Sample { out }))
         }
         "snapshot" => {
             let script = positional(&argv[1..], "snapshot")?;

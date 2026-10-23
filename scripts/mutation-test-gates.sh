@@ -123,6 +123,7 @@ readonly FILES=(
     xtask/src/cleanroom.rs
     xtask/src/ci.rs
     xtask/src/deny.rs
+    xtask/src/fuzz.rs
     xtask/src/doctor.rs
     xtask/src/lists.rs
     xtask/src/lib.rs
@@ -1781,9 +1782,10 @@ expect_catch "eval: the fingerprint stops looking at the keyframes" \
 # tests, wasm" and exiting 0, because the closing line was a string literal
 # rather than a record of what had run. Both halves are checked here.
 swap xtask/src/ci.rs '    Phase { name: "tests", run: tests },
+    Phase { name: "fuzz", run: fuzz::command },
     Phase { name: "wasm", run: wasm::run },
 ' ''
-expect_catch "ci: the tests and wasm phases vanish from the run" \
+expect_catch "ci: the tests, fuzz and wasm phases vanish from the run" \
     "cargo test -p xtask --profile ci the_phases_are_the_documented_ones_and_come_first"
 
 # The closing line itself: naming a phase that did not run is the whole defect,
@@ -5207,6 +5209,80 @@ swap crates/mcp/src/rpc.rs \
     true'
 expect_catch "mcp: the suggestions are not filtered by what was typed" \
     "cargo test -p craftkit-mcp --profile ci the_suggestions_are_filtered_by_what_was_typed"
+
+# --------------------------------------------------------- the fuzzer ----
+# Section 180. The reader was the widest door in the program and nothing was
+# pushing on it: every file the tree ever read was written by the tree's own
+# writer.
+#
+# The rules the port carries: a crash is three things (a signal, the panic
+# exit code, the panic message), a hang is a hang and not a crash, the
+# corpus is written by the tree's own writer, the seed decides the run, a
+# smaller crash is still a crash, and — the rule the whole thing rests on —
+# the fuzzer can find a crash at all.
+
+# The first: the panic message is not a crash. This is the one that matters,
+# because the engine runs every command under `catch_unwind`: a panic inside
+# a command leaves the process exiting 1, and only the message says what
+# happened.
+swap xtask/src/fuzz.rs \
+    '    if stdout.contains(PANIC_MARKER) || stderr.contains(PANIC_MARKER) {' \
+    '    if false {'
+expect_catch "fuzz: a panic the program survived is not a crash" \
+    "cargo test -p xtask --profile ci a_panic_message_is_a_crash_even_when_the_process_survived"
+
+# The second: the panic exit code is not a crash.
+swap xtask/src/fuzz.rs \
+    '    if code == Some(PANIC_EXIT_CODE) {' \
+    '    if code == Some(PANIC_EXIT_CODE - 1) {'
+expect_catch "fuzz: the panic exit code is not a crash" \
+    "cargo test -p xtask --profile ci a_panic_exit_code_is_a_crash"
+
+# The third: a hang is reported as a crash — the wrong kind of bug, and a
+# report that sends the reader to the wrong place.
+swap xtask/src/fuzz.rs \
+    '    if timed_out {' \
+    '    if false {'
+expect_catch "fuzz: a hang is reported as a crash" \
+    "cargo test -p xtask --profile ci a_hang_is_a_hang_and_not_a_crash"
+
+# The fourth: the corpus is written by something that is not the tree's
+# writer. The seed is then a file the reader turns away — so every mutant of
+# it is refused at the first line, the fuzzer tests nothing, and it is green
+# for the wrong reason. The corpus is the tree's *program* writing it: the
+# CLI's `sample --out`.
+swap apps/craftkit-cli/src/cli.rs \
+    '    craftkit_io::save(out, session.document()).map_err(|e| e.to_string())?;' \
+    '    std::fs::write(out, "{}").map_err(|e| e.to_string())?;'
+expect_catch "fuzz: the corpus is not a design the tree reads" \
+    "cargo test -p craftkit-cli --profile ci the_sample_design_is_written_and_read_back_by_the_tree"
+
+# The fifth: the seed is ignored. The run is then the same twenty inputs,
+# whatever the seed says — reproducible, and not a search.
+swap xtask/src/fuzz.rs \
+    '        Rng(seed)' \
+    '        Rng(0)'
+expect_catch "fuzz: the seed does not decide the run" \
+    "cargo test -p xtask --profile ci the_seed_decides_the_run"
+
+# The sixth: the minimiser throws away the smaller input — or rather, keeps
+# the smaller one that does *not* break, which is worse than keeping
+# nothing.
+swap xtask/src/fuzz.rs \
+    '            best.truncate(cut);' \
+    '            best.truncate(best.len());'
+expect_catch "fuzz: the minimiser keeps the whole file" \
+    "cargo test -p xtask --profile ci the_minimiser_keeps_a_smaller_input_that_still_breaks"
+
+# And the seventh, which is the rule the whole thing rests on: the fake
+# child does not die. Without it the fuzzer finds nothing, finds nothing
+# always, and looks exactly like a fuzzer that works.
+swap xtask/src/fuzz.rs \
+    '        panic!("the fake fuzz child, on purpose");' \
+    '        let _ = "the fake fuzz child, on purpose";'
+expect_catch "fuzz: the fuzzer finds nothing, because the child does not die" \
+    "cargo test -p xtask --profile ci the_fuzzer_finds_a_crash_it_made"
+
 
 restore
 finish

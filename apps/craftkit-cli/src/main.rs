@@ -19,6 +19,7 @@
 //! craftkit-cli commands [--json]           list every command and its parameters
 //! craftkit-cli run <script.json> [--sample] run a script of commands
 //! craftkit-cli eval <file.craftkit>          open a design and report on it
+//! craftkit-cli sample --out <file.craftkit>  write a sample design to a file
 //! craftkit-cli snapshot <script.json> --out shot.png   run a script, draw a frame
 //!
 //! Text rasterises as solid glyph quads in the PNG (egui 0.33 exposes no texture
@@ -70,6 +71,8 @@ COMMANDS:
     commands                 List every command and its parameters.
     run <script.json>        Run a script of commands.
     eval <file.craftkit>     Open a design and report what it evaluates to.
+    sample --out <file.craftkit>
+                             Write a sample design to a file.
     snapshot <script.json> --out <file.png>
                              Run a script and write a rendered frame.
     crashes <list|show|replay> [ID]

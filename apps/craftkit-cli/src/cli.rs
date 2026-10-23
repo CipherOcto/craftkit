@@ -37,6 +37,7 @@ impl Cli {
             crate::args::Command::Commands { json: as_json } => commands(*as_json),
             crate::args::Command::Run { script, sample } => run_script(script, *sample),
             crate::args::Command::Eval { file, at } => eval(file, at.as_deref()),
+            crate::args::Command::Sample { out } => sample(out),
             crate::args::Command::Snapshot { script, out, sample } => snapshot(script, out, *sample),
             crate::args::Command::Crashes { action } => crashes(action),
             crate::args::Command::Mcp => mcp(),
@@ -283,6 +284,23 @@ fn eval(file: &Path, at: Option<&str>) -> Result<(), String> {
 fn note_line(note: &str) -> Option<String> {
     let note = note.trim();
     if note.is_empty() { None } else { Some(format!("note: {note}")) }
+}
+
+// --------------------------------------------------------------- sample --
+
+/// Write the sample design to a file.
+///
+/// **The sample is written by the tree's own writer**, through the tree's own
+/// program: `craftkit_io::save` is the same call the desktop app makes when a
+/// person saves a design. That is what makes it worth having as a command
+/// rather than a fixture in a test: the fuzzer's corpus is a design this
+/// program wrote, so the format it breaks is the format the program speaks.
+/// §180.
+fn sample(out: &Path) -> Result<(), String> {
+    let session = Session::sample();
+    craftkit_io::save(out, session.document()).map_err(|e| e.to_string())?;
+    println!("wrote {}", out.display());
+    Ok(())
 }
 
 // ------------------------------------------------------------- snapshot --

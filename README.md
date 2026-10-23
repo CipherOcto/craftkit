@@ -140,7 +140,7 @@ at all, which is how the web build stays testable in CI.
 
 ```bash
 cargo xtask doctor   # blocking / degraded / info about this machine
-cargo xtask ci       # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+cargo xtask ci       # fmt, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
 cargo xtask deny     # the dependency policy: licences, bans, sources, advisories
 ```
 
@@ -154,6 +154,7 @@ cargo xtask deny     # the dependency policy: licences, bans, sources, advisorie
 | `web` | the canvas id, the bundle path, and the service worker's safety rules |
 | `clippy` | `-D clippy::all -D warnings`, every target |
 | `tests` | every crate, every app, and the gates themselves |
+| `fuzz` | the design-file reader survives broken files: no crash, no hang |
 | `wasm` | every library crate still builds for the browser |
 
 A gate that cannot run says **skipped**, with a reason, in the middle of the

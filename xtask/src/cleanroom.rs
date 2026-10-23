@@ -161,7 +161,7 @@ pub fn inspect(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Run the gate.
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     crate::step("cleanroom");
     let hits = inspect(root)?;
     if hits.is_empty() {

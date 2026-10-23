@@ -10,6 +10,7 @@
 //! web                a second
 //! clippy -D warnings minutes
 //! tests              minutes
+//! fuzz               seconds
 //! wasm               minutes
 //! ```
 //!
@@ -21,6 +22,11 @@
 //! the same target directory, so the second one blocks on cargo's build lock
 //! anyway. Running them at once would print interleaved output and make the
 //! failure of either harder to read, for no time saved.
+//!
+//! The fuzz phase sits between the tests and the wasm check for two reasons.
+//! It needs the CLI the tests have just built, so it must come after them; and
+//! a crash it finds is worth more than a wasm build that takes four minutes to
+//! find out about, so it must come before.
 //!
 //! # What it stops at
 //!
@@ -37,12 +43,12 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::{assets, cargo, cleanroom, doctor, layers, lists, step, wasm, web};
+use crate::{assets, cargo, cleanroom, doctor, fuzz, layers, lists, step, wasm, web};
 
 /// One step of the gate.
 pub struct Phase {
     pub name: &'static str,
-    pub run: fn(&Path) -> Result<crate::Outcome, String>,
+    pub run: fn(&Path, &[String]) -> Result<crate::Outcome, String>,
 }
 
 /// The phases, in order. Public so a test can assert the order and the set.
@@ -64,11 +70,12 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "web", run: web::run },
     Phase { name: "clippy", run: clippy },
     Phase { name: "tests", run: tests },
+    Phase { name: "fuzz", run: fuzz::command },
     Phase { name: "wasm", run: wasm::run },
 ];
 
 /// `cargo fmt --check`.
-pub fn fmt(root: &Path) -> Result<crate::Outcome, String> {
+pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("fmt");
     cargo(&["fmt", "--all", "--check"], root)?;
     println!("   ok");
@@ -79,7 +86,7 @@ pub fn fmt(root: &Path) -> Result<crate::Outcome, String> {
 ///
 /// `--all-targets` matters: the tests are where the interesting code is, and a
 /// gate that does not look at them is not looking at most of the repository.
-pub fn clippy(root: &Path) -> Result<crate::Outcome, String> {
+pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("clippy");
     cargo(
         &[
@@ -108,7 +115,7 @@ pub fn clippy(root: &Path) -> Result<crate::Outcome, String> {
 /// Running them at once would print interleaved output and make the failure of
 /// either harder to read, for no time saved. [`PHASES`] is a sequence, so
 /// running them in order is what this file does by construction.
-pub fn tests(root: &Path) -> Result<crate::Outcome, String> {
+pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
     cargo(&["test", "--workspace", "--profile", "ci"], root)?;
     println!("   ok");
@@ -145,7 +152,7 @@ pub fn run(root: &Path) -> Result<(), String> {
 
     // The first failure. See "What it stops at" above.
     for phase in PHASES {
-        match (phase.run)(root) {
+        match (phase.run)(root, &[]) {
             Ok(outcome) => record(outcome, phase.name, &mut ran, &mut skipped),
             Err(e) => return Err(format!("`{}` failed\n\n{e}", phase.name)),
         }
@@ -180,11 +187,27 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "wasm"],
+            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "fuzz", "wasm",],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"
         );
+    }
+
+    /// The fuzz phase runs after the tests, because it fuzzes the binary the
+    /// tests built.
+    ///
+    /// It is a phase and not a separate command somebody has to remember:
+    /// a check that runs only when somebody remembers it is the same defect
+    /// as a check that does not exist (§169).
+    #[test]
+    fn the_fuzz_phase_runs_after_the_tests_and_before_the_wasm_check() {
+        let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
+        let tests = names.iter().position(|n| *n == "tests").expect("tests is a phase");
+        let fuzz = names.iter().position(|n| *n == "fuzz").expect("fuzz is a phase");
+        let wasm = names.iter().position(|n| *n == "wasm").expect("wasm is a phase");
+        assert!(tests < fuzz, "the fuzzer runs before the CLI it fuzzes is built");
+        assert!(fuzz < wasm, "a crash is worth more than a four-minute wasm build");
     }
 
     #[test]
@@ -232,7 +255,7 @@ mod tests {
     fn every_phase_reports_an_outcome_rather_than_barely_succeeding() {
         // A gate that could not say whether it ran is a gate `ci` cannot report
         // honestly, which is the failure the line above is about.
-        fn returns_an_outcome(f: fn(&Path) -> Result<crate::Outcome, String>) {
+        fn returns_an_outcome(f: fn(&Path, &[String]) -> Result<crate::Outcome, String>) {
             let _ = f;
         }
         for phase in PHASES {

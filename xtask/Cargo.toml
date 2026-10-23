@@ -20,3 +20,9 @@ path = "src/main.rs"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+# **Nothing of the tree's own.** The xtask is the tool that checks the tree,
+# and a checker that cannot be built when the tree does not compile is a
+# checker that is silent exactly when it is needed: the `lists` gate reads
+# the tree as text precisely so it can say something about a broken tree.
+# The fuzzer's corpus comes from the tree's *program* instead — see
+# `xtask/src/fuzz.rs` and §180.

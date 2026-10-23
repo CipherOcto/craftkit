@@ -294,7 +294,7 @@ pub fn load(root: &Path) -> Result<Vec<Krate>, String> {
 }
 
 /// The gate.
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("layers");
     let crates = load(root)?;
     report(&check(&crates))?;

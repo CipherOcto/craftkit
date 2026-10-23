@@ -304,7 +304,7 @@ pub fn check(index: &str, worker: &str) -> Vec<Problem> {
 }
 
 /// The gate.
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("web");
     let index = read(root, INDEX)?;
     let worker = read(root, SERVICE_WORKER)?;

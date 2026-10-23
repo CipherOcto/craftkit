@@ -5572,7 +5572,7 @@ fn runs_by_name(text: &str, name: &str) -> bool {
     false
 }
 
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
     let mut problems = Vec::new();
 

@@ -121,7 +121,7 @@ pub fn required() -> bool {
 }
 
 /// The gate.
-pub fn run(root: &Path) -> Result<Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<Outcome, String> {
     step("deny");
     if !installed(root) {
         return match conclude(false, required(), None) {

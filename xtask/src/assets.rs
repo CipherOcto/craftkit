@@ -342,7 +342,7 @@ pub fn inspect(root: &Path) -> Result<Findings, String> {
 }
 
 /// The gate.
-pub fn run(root: &Path) -> Result<crate::Outcome, String> {
+pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("assets");
     let findings = inspect(root)?;
 
