@@ -89,6 +89,72 @@ impl Response {
     }
 }
 
+/// A tool result that succeeded.
+///
+/// MCP tool results are *content*: a client shows the text and reads the
+/// machine-readable answer from `structuredContent`.
+pub fn tool_ok(id: &Json, data: Json) -> Response {
+    Response::result(
+        id.clone(),
+        json!({
+            "content": [{
+                "type": "text",
+                "text": summarise(&data),
+            }],
+            "isError": false,
+            "structuredContent": data,
+        }),
+    )
+}
+
+/// A tool result that failed.
+///
+/// `isError: true` is how a failure is reported. The text is still the
+/// human-readable reason, and `structuredContent` carries the engine's stable
+/// `kind` so a client can branch without reading prose.
+pub fn tool_error(id: &Json, kind: &str, message: &str, command: Option<&str>) -> Response {
+    Response::result(
+        id.clone(),
+        json!({
+            "content": [{ "type": "text", "text": message }],
+            "isError": true,
+            "structuredContent": { "kind": kind, "command": command, "message": message },
+        }),
+    )
+}
+
+/// One readable line for the text content.
+///
+/// MCP clients show this to a person, so it must be prose. The machine-readable
+/// answer is in `structuredContent`.
+fn summarise(data: &Json) -> String {
+    let line = match data {
+        Json::Null => "done".to_string(),
+        Json::Object(map) => {
+            let parts: Vec<String> = map.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+            if parts.is_empty() { "done".to_string() } else { parts.join(", ") }
+        }
+        other => other.to_string(),
+    };
+    truncate(&line, MAX_TEXT)
+}
+
+/// How long the human-readable content may be.
+///
+/// Bounded because it is shown in a chat transcript. The full answer is always
+/// in `structuredContent`, so truncating here loses presentation, never
+/// information.
+const MAX_TEXT: usize = 400;
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut cut: String = s.chars().take(max).collect();
+    cut.push('…');
+    cut
+}
+
 /// A JSON-RPC error object.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RpcError {

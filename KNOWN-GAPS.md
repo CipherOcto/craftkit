@@ -19898,6 +19898,126 @@ neither `AGENTS.md` nor the pattern document nor the architecture document —
 which is why the file's comment could point at the wrong section and nothing
 would say.
 
+## 171. The MCP advertised a surface the implementation did not have — and this tree nearly did the same
+
+§168, §169 and §170 took the first three findings. This section takes the
+fourth: **the advertised surface matches the implementation**.
+
+### The finding
+
+In one repo of the family, the MCP server's `tools/list` advertises **five**
+tools and its `tools/call` answers to **seventeen**:
+
+| | |
+|---|---|
+| the dispatch | `crates/automation/src/mcp.rs:126` — `list_commands`, `execute`, `batch`, `inspect_session`, `new_session`, `open_session`, `save_session`, `import_audio`, `bounce_mix`, `parity`, `screenshot`, `ui_inspect`, `ui_set`, `menu_invoke`, `click`, `drag`, `key` |
+| the advertisement | `crates/automation/src/mcp.rs:25` — `open_session`, `parity`, `screenshot`, `ui_inspect`, `ui_set` |
+
+Twelve of the seventeen are invisible to a client that discovers tools the way
+MCP clients do. The repo's own `docs/mcp.md:87` documents **all seventeen**,
+so the document and the implementation agree and the advertisement does not.
+
+And the finding that matters for this tree is the second half of the family's
+note: *"this is the kind of drift the family's own gates are meant to catch,
+and neither clone has a gate that would."*
+
+### What this tree had
+
+craftkit's MCP advertised **26** tools — 23 commands and 3 built-ins — and
+dispatched **26**. It was consistent.
+
+But it was consistent by luck, not by construction. The built-ins were listed
+in **three** places:
+
+| The list | Where |
+|---|---|
+| the advertisement | `built_in()` in `crates/mcp/src/tools.rs` — a `Vec<Tool>` |
+| the dispatch | a hand-written `match name` in `crates/mcp/src/server.rs` — three arms |
+| the count | a test asserting `command::all().len() + 3` |
+
+Nothing compared them. A fourth built-in added to the first list would be
+advertised and refused: *"`craftkit_whatever` is not a tool; call tools/list"*
+— the exact shape of the family's finding, one list away.
+
+### What it cost
+
+Nothing today, and that is the point worth measuring rather than asserting.
+The tools a command exposes are derived from the registry on **both** sides —
+`tool_for` builds the tool and `command_for` finds the command back — so the
+23 command tools could not drift. Only the built-ins could, and there were
+three of them.
+
+### The fix
+
+**One list.** `BUILT_INS` carries the name, the description, the schema **and
+the handler**. `tools/list` advertises from it; `tools/call` dispatches through
+it. A built-in that is advertised is callable, and a built-in that is callable
+is advertised, because there is nowhere else to put either.
+
+The count in the test is `BUILT_INS.len()` — the table's, not a number written
+beside it.
+
+**The tool-result helpers moved to `rpc.rs`.** `tool_ok`, `tool_error` and the
+one-line summary are the *protocol's* shape, and the tools module needs them to
+build a result. They were in the server, which meant the tools module could
+not hold a handler.
+
+**And the abandoned string surgery is gone.** `command_for` computed a
+dotted id from the tool name, then discarded it and looked the command up in
+the table anyway — the leftover of a guess the code no longer makes. The
+prefix check it needed is one `starts_with`.
+
+### The gate
+
+Two tests, one in each direction:
+
+| Test | What it holds |
+|---|---|
+| `every_advertised_tool_can_be_called` | every tool the server advertises is a tool it answers to |
+| `every_built_in_is_advertised` | every tool it answers to is a tool it advertises |
+
+The first is **end to end**: it calls every advertised tool over the wire and
+requires that none of them is refused. That is the shape of the family's
+defect — advertised and not callable — measured the way a client would
+measure it.
+
+### What the gate cannot see
+
+- **The tools a command exposes** are derived from the registry on both sides,
+  so they cannot drift; the test covers them anyway, because a test that
+  covers only the part that cannot fail is a test that proves nothing about
+  the part that can.
+- **A tool that is advertised with the wrong schema.** The gate asks whether
+  the tool can be called, not whether its arguments are described correctly.
+- **A built-in that answers with the wrong thing.** `craftkit_status` that
+  returned the catalogue would pass both tests.
+
+### The unit tests
+
+The two above, plus the count test that now reads `BUILT_INS.len()`.
+
+### The mutations
+
+Two, each breaking the link in one direction:
+
+| Mutation | What it breaks |
+|---|---|
+| the dispatch looks the tool up in the wrong case | every advertised tool is a tool the server refuses |
+| one built-in is filtered out of the advertisement | a callable tool is one no client finds |
+
+Both were checked to be caught, one at a time, on the tree.
+
+### The lesson
+
+**A surface that is advertised and a surface that is implemented are two
+things until one list holds both.** The family's server advertised five tools
+and dispatched seventeen; the document described all seventeen; and no gate
+would have noticed.
+
+**And a number written beside a list is a second list.** The count of the
+built-ins was `+ 3` in a test, three arms in a `match`, and three entries in a
+`Vec<Tool>`. The test was checking the arithmetic of a list it did not own.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -20303,6 +20423,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every gate runs in `ci`** | the exceptions list in `xtask/src/lib.rs` | 2 mutations — §169 |
 | **The lists of what `ci` runs are the lists `ci` runs** | the usage text and the README | 2 mutations — §169 |
 | **The tree's walk has one home** | `xtask/src/tree.rs` | 2 mutations — §170 |
+| **Every tool the MCP advertises can be called** | `BUILT_INS` in `crates/mcp/src/tools.rs` | 1 mutation — §171 |
+| **Every tool the MCP can call is advertised** | the same table | 1 mutation — §171 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

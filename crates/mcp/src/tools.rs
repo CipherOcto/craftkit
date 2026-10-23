@@ -14,8 +14,12 @@
 //! that says "number" for something that also accepts `"12f"` is a schema that
 //! lies.
 
-use craftkit_engine::{Doc, command};
+use std::sync::Mutex;
+
+use craftkit_engine::{Doc, Session, command};
 use serde_json::{Map, Value as Json, json};
+
+use crate::rpc::{self, Response};
 
 /// One MCP tool.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,11 +40,31 @@ impl Tool {
     }
 }
 
+/// A tool that is not a command.
+///
+/// It carries **what it is** — the name and the description a client reads —
+/// and **what it does** — the handler. One record, so the advertisement and
+/// the dispatch cannot disagree about which tools exist. §171.
+pub struct BuiltIn {
+    /// The name the client calls it by.
+    pub name: &'static str,
+    /// What it does, in one line.
+    pub description: &'static str,
+    /// The schema its arguments have.
+    pub schema: fn() -> Json,
+    /// What it does when it is called.
+    pub call: fn(id: &Json, arguments: &Json, session: &Mutex<Session>) -> Response,
+}
+
 /// The tools that are not a command.
 ///
 /// Three of them, and they are about the *server* rather than the document:
 /// the running session, the catalogue, and the crash reports this machine
 /// has written.
+///
+/// **One list.** `tools/list` advertises from it and `tools/call` dispatches
+/// through it, so a tool cannot be advertised without being callable, or
+/// callable without being advertised. §171.
 ///
 /// The comment that used to sit here said *"`session.state` and
 /// `diagnostics.list` are commands already, so they appear from the registry"*.
@@ -48,56 +72,116 @@ impl Tool {
 /// `session.state` is **not** a command — it is the control channel's method,
 /// and the registry has no such id — so it did not appear, and the sentence
 /// was wrong about the one thing it was explaining. §113.
-fn built_in() -> Vec<Tool> {
-    vec![
-        Tool {
-            name: "craftkit_status".to_string(),
-            description: "The running session: the document's name, its note, its frame rate and \
-                          its range, its nodes, the playhead, whether the document has unsaved \
-                          changes, how deep the undo stack is and how much memory it holds, the \
-                          last commands that ran, and the plan. Call this first."
-                .to_string(),
-            input_schema: object_schema(&[]),
-        },
-        Tool {
-            name: "craftkit_commands".to_string(),
-            description: "The full command catalogue with every parameter documented, for when \
-                          `craftkit_execute` refuses and you want to see what the command actually \
-                          takes."
-                .to_string(),
-            input_schema: object_schema(&[]),
-        },
-        Tool {
-            name: "craftkit_crashes".to_string(),
-            description: "The crash reports this machine has written. `action` is list, show or \
-                          replay; `show` and `replay` need the report's `id`. A report holds the \
-                          design that crashed and the commands that ran, and `replay` runs those \
-                          commands again and says whether the design comes back the same."
-                .to_string(),
-            input_schema: object_schema(&[
-                (
-                    "action".to_string(),
-                    json!({
-                        "type": "string",
-                        "enum": ["list", "show", "replay"],
-                        "description": "list the reports, show one, or replay one.",
-                    }),
-                ),
-                (
-                    "id".to_string(),
-                    json!({
-                        "type": "string",
-                        "description": "The report's id, from the list. Required for show and replay.",
-                    }),
-                ),
-            ]),
-        },
-    ]
+pub const BUILT_INS: &[BuiltIn] = &[
+    BuiltIn {
+        name: "craftkit_status",
+        description: "The running session: the document's name, its note, its frame rate and \
+                      its range, its nodes, the playhead, whether the document has unsaved \
+                      changes, how deep the undo stack is and how much memory it holds, the \
+                      last commands that ran, and the plan. Call this first.",
+        schema: no_arguments,
+        call: status,
+    },
+    BuiltIn {
+        name: "craftkit_commands",
+        description: "The full command catalogue with every parameter documented, for when \
+                      `craftkit_execute` refuses and you want to see what the command actually \
+                      takes.",
+        schema: no_arguments,
+        call: commands,
+    },
+    BuiltIn {
+        name: "craftkit_crashes",
+        description: "The crash reports this machine has written. `action` is list, show or \
+                      replay; `show` and `replay` need the report's `id`. A report holds the \
+                      design that crashed and the commands that ran, and `replay` runs those \
+                      commands again and says whether the design comes back the same.",
+        schema: crash_arguments,
+        call: crashes,
+    },
+];
+
+/// The built-in a name is, if it is one.
+///
+/// The dispatch's half of [`BUILT_INS`]. §171.
+pub fn built_in(name: &str) -> Option<&'static BuiltIn> {
+    BUILT_INS.iter().find(|built_in| built_in.name == name)
+}
+
+/// The built-in tools, as the client sees them.
+fn built_in_tools() -> Vec<Tool> {
+    BUILT_INS
+        .iter()
+        .map(|built_in| Tool {
+            name: built_in.name.to_string(),
+            description: built_in.description.to_string(),
+            input_schema: (built_in.schema)(),
+        })
+        .collect()
+}
+
+/// The schema of a tool that takes nothing.
+fn no_arguments() -> Json {
+    object_schema(&[])
+}
+
+/// The schema of the crash reports' tool.
+fn crash_arguments() -> Json {
+    object_schema(&[
+        (
+            "action".to_string(),
+            json!({
+                "type": "string",
+                "enum": ["list", "show", "replay"],
+                "description": "list the reports, show one, or replay one.",
+            }),
+        ),
+        (
+            "id".to_string(),
+            json!({
+                "type": "string",
+                "description": "The report's id, from the list. Required for show and replay.",
+            }),
+        ),
+    ])
+}
+
+/// The running session.
+fn status(id: &Json, _arguments: &Json, session: &Mutex<Session>) -> Response {
+    let Ok(guard) = session.lock() else {
+        return rpc::tool_error(id, "poisoned", "the session is unavailable", None);
+    };
+    rpc::tool_ok(id, guard.snapshot_json())
+}
+
+/// The command catalogue.
+fn commands(id: &Json, _arguments: &Json, _session: &Mutex<Session>) -> Response {
+    rpc::tool_ok(id, craftkit_engine::catalogue())
+}
+
+/// The crash reports this machine has written.
+///
+/// The tree's answer to "my application crashed", and the agent holding the
+/// tool is the one most likely to be holding it because of a crash. §113.
+fn crashes(id: &Json, arguments: &Json, session: &Mutex<Session>) -> Response {
+    let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");
+    let report_id = arguments.get("id").and_then(Json::as_str);
+    let from = match session.lock() {
+        Ok(guard) => guard.document().meta.name.clone(),
+        Err(_) => {
+            return rpc::tool_error(id, "poisoned", "the session is unavailable", None);
+        }
+    };
+    let dir = craftkit_engine::crash::report_dir();
+    match craftkit_engine::crash::action_in(&dir, action, report_id, &from) {
+        Ok(data) => rpc::tool_ok(id, data),
+        Err(e) => rpc::tool_error(id, e.kind(), &e.message(), None),
+    }
 }
 
 /// Every tool, built-ins first and then the commands in registry order.
 pub fn all() -> Vec<Tool> {
-    let mut tools = built_in();
+    let mut tools = built_in_tools();
     tools.extend(command::all().iter().map(|spec| tool_for(spec)));
     tools
 }
@@ -118,15 +202,14 @@ pub fn tool_name(id: &str) -> String {
 /// The command id behind a tool name, if it is one.
 pub fn command_for(name: &str) -> Option<&'static str> {
     let prefix = format!("{}_", crate::SERVER_NAME);
-    let rest = name.strip_prefix(&prefix)?;
-    let dotted = rest.replacen('_', ".", 1);
-    // Reconstruct the full id from the command table rather than by string
-    // surgery: `prop_set` and `prop.reset` are one command, and guessing which
-    // dots were separators is exactly the kind of guess that goes wrong.
-    command::all().iter().find(|c| tool_name(c.id) == name).map(|c| c.id).or_else(|| {
-        let _ = dotted;
-        None
-    })
+    if !name.starts_with(&prefix) {
+        return None;
+    }
+    // The full id is reconstructed from the command table rather than by
+    // string surgery: `prop_set` and `prop.reset` are one command, and
+    // guessing which dots were separators is exactly the kind of guess that
+    // goes wrong. §171.
+    command::all().iter().find(|c| tool_name(c.id) == name).map(|c| c.id)
 }
 
 /// The MCP tool for a command.
@@ -263,13 +346,30 @@ mod tests {
     fn every_command_becomes_exactly_one_tool() {
         let tools = all();
         // The built-ins are the three that are not a command: the running
-        // session, the catalogue, and the crash reports. §113.
-        assert_eq!(tools.len(), command::all().len() + 3);
+        // session, the catalogue, and the crash reports. §113. The count is
+        // the table's, not a number written here. §171.
+        assert_eq!(tools.len(), command::all().len() + BUILT_INS.len());
         let mut names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         names.sort_unstable();
         let before = names.len();
         names.dedup();
         assert_eq!(before, names.len(), "two tools share a name");
+    }
+
+    /// Every built-in is advertised.
+    ///
+    /// The other direction: a tool the server can call but does not
+    /// advertise is a tool no client finds. §171.
+    #[test]
+    fn every_built_in_is_advertised() {
+        let advertised = all();
+        for built_in in BUILT_INS {
+            assert!(
+                advertised.iter().any(|tool| tool.name == built_in.name),
+                "{} is callable but not advertised",
+                built_in.name
+            );
+        }
     }
 
     /// The crash reports are a tool.

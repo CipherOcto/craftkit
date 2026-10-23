@@ -189,38 +189,12 @@ fn call_tool(id: &Json, request: &Request, session: &Mutex<Session>) -> Response
         return run(id, session, command, &arguments);
     }
 
-    match name {
-        "craftkit_status" => {
-            let Ok(guard) = session.lock() else {
-                return tool_error(id, "poisoned", "the session is unavailable", None);
-            };
-            tool_ok(id, guard.snapshot_json())
-        }
-        "craftkit_commands" => tool_ok(id, craftkit_engine::catalogue()),
-        "craftkit_crashes" => {
-            // The crash reports are the tree's answer to "my application
-            // crashed", and the agent holding the tool is the one most likely
-            // to be holding it because of a crash. §113.
-            let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");
-            let report_id = arguments.get("id").and_then(Json::as_str);
-            let from = match session.lock() {
-                Ok(guard) => guard.document().meta.name.clone(),
-                Err(_) => {
-                    return tool_error(id, "poisoned", "the session is unavailable", None);
-                }
-            };
-            let dir = craftkit_engine::crash::report_dir();
-            match craftkit_engine::crash::action_in(&dir, action, report_id, &from) {
-                Ok(data) => tool_ok(id, data),
-                Err(e) => tool_error(id, e.kind(), &e.message(), None),
-            }
-        }
-        other => Response::failure(
-            id.clone(),
-            code::METHOD_NOT_FOUND,
-            format!("`{other}` is not a tool; call tools/list"),
-        ),
+    // The built-in tools, from the same list `tools/list` advertises. §171.
+    if let Some(built_in) = tools::built_in(name) {
+        return (built_in.call)(id, &arguments, session);
     }
+
+    Response::failure(id.clone(), code::METHOD_NOT_FOUND, format!("`{name}` is not a tool; call tools/list"))
 }
 
 /// Run a command and wrap the outcome as tool content.
@@ -229,7 +203,7 @@ fn run(id: &Json, session: &Mutex<Session>, command: &str, arguments: &Json) -> 
         match session.lock() {
             Ok(mut guard) => guard.execute(command, arguments),
             Err(_) => {
-                return tool_error(
+                return rpc::tool_error(
                     id,
                     "poisoned",
                     "another command panicked and the session is unavailable",
@@ -239,66 +213,9 @@ fn run(id: &Json, session: &Mutex<Session>, command: &str, arguments: &Json) -> 
         }
     };
     match outcome {
-        Ok(o) => tool_ok(id, o.data.clone()),
-        Err(e) => tool_error(id, e.kind(), &e.to_string(), e.command()),
+        Ok(o) => rpc::tool_ok(id, o.data.clone()),
+        Err(e) => rpc::tool_error(id, e.kind(), &e.to_string(), e.command()),
     }
-}
-
-fn tool_ok(id: &Json, data: Json) -> Response {
-    Response::result(
-        id.clone(),
-        json!({
-            "content": [{
-                "type": "text",
-                "text": summarise(&data),
-            }],
-            "isError": false,
-            "structuredContent": data,
-        }),
-    )
-}
-
-fn tool_error(id: &Json, kind: &str, message: &str, command: Option<&str>) -> Response {
-    Response::result(
-        id.clone(),
-        json!({
-            "content": [{ "type": "text", "text": message }],
-            "isError": true,
-            "structuredContent": { "kind": kind, "command": command, "message": message },
-        }),
-    )
-}
-
-/// One readable line for the text content.
-///
-/// MCP clients show this to a person, so it must be prose. The machine-readable
-/// answer is in `structuredContent`.
-fn summarise(data: &Json) -> String {
-    let line = match data {
-        Json::Null => "done".to_string(),
-        Json::Object(map) => {
-            let parts: Vec<String> = map.iter().map(|(k, v)| format!("{k}: {v}")).collect();
-            if parts.is_empty() { "done".to_string() } else { parts.join(", ") }
-        }
-        other => other.to_string(),
-    };
-    truncate(&line, MAX_TEXT)
-}
-
-/// How long the human-readable content may be.
-///
-/// Bounded because it is shown in a chat transcript. The full answer is always
-/// in `structuredContent`, so truncating here loses presentation, never
-/// information.
-const MAX_TEXT: usize = 400;
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let mut cut: String = s.chars().take(max).collect();
-    cut.push('…');
-    cut
 }
 
 #[cfg(test)]
@@ -348,6 +265,32 @@ mod tests {
         let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
         assert_eq!(r["result"]["protocolVersion"], json!(crate::PROTOCOL_VERSION));
         assert!(r["result"]["capabilities"]["tools"].is_object(), "{r}");
+    }
+
+    /// Every tool the server advertises can be called.
+    ///
+    /// The defect, in one repo of the family: `tools/list` advertised five
+    /// tools and `tools/call` answered to seventeen, so a client that
+    /// discovers tools the way MCP clients do never saw the other twelve.
+    ///
+    /// The advertisement and the dispatch are one list now, so this cannot
+    /// drift; the test is what says so. §171.
+    #[test]
+    fn every_advertised_tool_can_be_called() {
+        let session = session();
+        for tool in tools::all() {
+            let line = format!(
+                r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{}","arguments":{{}}}}}}"#,
+                tool.name
+            );
+            let reply = handle_line(&line, &session).expect("a reply");
+            let text = reply.to_line().expect("json");
+            assert!(
+                !text.contains("is not a tool"),
+                "{} is advertised and cannot be called: {text}",
+                tool.name
+            );
+        }
     }
 
     #[test]

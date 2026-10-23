@@ -753,6 +753,35 @@ swap crates/mcp/src/server.rs \
 expect_catch "mcp: a shutdown sent as a notification is silently ignored" \
     "cargo test -p craftkit-mcp --profile ci shutdown"
 
+# ------------------------------------------------------------------- mcp ----
+# §171. The advertisement and the dispatch are one list now, and these two
+# break the link in each direction.
+#
+# The first: the dispatch looks the tool up in the wrong case, so every tool
+# the server advertises is a tool it refuses to call. This is the family's
+# defect -- in one repo of the family, `tools/list` advertised five tools and
+# `tools/call` answered to seventeen, so twelve of them were invisible to a
+# client that discovers tools the way MCP clients do.
+swap crates/mcp/src/server.rs \
+    '    if let Some(built_in) = tools::built_in(name) {' \
+    '    if let Some(built_in) = tools::built_in(&name.to_uppercase()) {'
+expect_catch "mcp: the dispatch looks the tool up in the wrong case" \
+    "cargo test -p craftkit-mcp --profile ci every_advertised_tool_can_be_called"
+
+# The second: the other direction. A tool the server can call but does not
+# advertise is a tool no client finds, and it is the half the first mutation
+# cannot see.
+swap crates/mcp/src/tools.rs \
+    '    BUILT_INS
+        .iter()
+        .map(|built_in| Tool {' \
+    '    BUILT_INS
+        .iter()
+        .filter(|built_in| built_in.name != "craftkit_crashes")
+        .map(|built_in| Tool {'
+expect_catch "mcp: a built-in is callable but not advertised" \
+    "cargo test -p craftkit-mcp --profile ci every_built_in_is_advertised"
+
 # `craftkit-cli crashes` reads the crash folder a person is told to open first
 # when the app dies, and on a machine where nothing has crashed that folder is
 # empty — so the command had never run against a real report.
@@ -3080,15 +3109,15 @@ expect_catch "ui: the browser panel ignores what it knows about the stash" \
 # The crash reports were written for an agent to read, and the front end whose
 # reader is an agent could not read them. §113.
 swap crates/mcp/src/tools.rs \
-    '            name: "craftkit_crashes".to_string(),' \
-    '            name: "craftkit_crashs".to_string(),'
+    '        name: "craftkit_crashes",' \
+    '        name: "craftkit_crashs",'
 expect_catch "mcp: the crash reports are published under a name nobody calls" \
     "cargo test -p craftkit-mcp --profile ci the_crash_reports_are_a_tool"
 
 # The tool ignored the action it was given, so every request was a list. §113.
-swap crates/mcp/src/server.rs \
-    '            let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");' \
-    '            let action = "list";'
+swap crates/mcp/src/tools.rs \
+    '    let action = arguments.get("action").and_then(Json::as_str).unwrap_or("list");' \
+    '    let action = "list";'
 expect_catch "mcp: the crash tool ignores the action it is given" \
     "cargo test -p craftkit-mcp --profile ci a_crash_action_that_does_not_exist_is_refused"
 
