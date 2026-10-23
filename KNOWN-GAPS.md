@@ -20580,6 +20580,148 @@ generator in seconds — and it was wrong in a way that pointed at a real
 inaccuracy in the code, in an error message that had been there since the
 beginning.
 
+## 176. The MCP server served tools and nothing else
+
+### The finding
+
+The survey of what the family has and this tree did not
+(`craft-knowledge/09-portable-practices.md` §4.4) turned up a surface that was
+missing rather than a rule that was broken.
+
+**The server spoke half the protocol.** Measured on the tree, before this
+section, by sending the four methods to the real binary over stdio:
+
+```text
+{"jsonrpc":"2.0","id":1,"method":"resources/list"}
+{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"craftkit://design"}}
+{"jsonrpc":"2.0","id":3,"method":"prompts/list"}
+{"jsonrpc":"2.0","id":4,"method":"completion/complete"}
+```
+
+All four answered the same:
+
+```text
+{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"`resources/list` is not a method; try initialize, tools/list, tools/call, ping or shutdown"}}
+```
+
+and the handshake advertised the `tools` capability alone:
+
+```json
+{"capabilities":{"tools":{"listChanged":false}},"protocolVersion":"2024-11-05"}
+```
+
+A client that reads the protocol's other half — which is how a client
+discovers what a server *has* rather than what it can *do* — was told the
+server had none of it. The family serves both halves. Measured as **how many
+of the protocol's six** resource, prompt and completion methods each server
+answers: **VC** six, **P** and **SC** four, **S** and **E** three, **F** two,
+and craftkit none.
+
+### The port
+
+`crates/mcp/src/resources.rs`: two resources, one template, and the three
+methods that read them.
+
+| The URI | What it holds |
+|---|---|
+| `craftkit://design` | the open design: name, note, frame rate, range, nodes, playhead, dirty flag, undo depth, log, plan |
+| `craftkit://commands` | the command catalogue, with every parameter documented |
+| `craftkit://node/{id}` | one node: id, name, kind, muted, and its properties |
+
+The new methods are `resources/list`, `resources/templates/list` and
+`resources/read`, so the server now answers **three of the six**.
+`prompts/list`, `prompts/get` and `completion/complete` are still open — a
+prompt is a reusable workflow and this tree has no workflow worth offering
+yet; a guess would be a prompt that says nothing.
+
+### The rules, and why each one is here
+
+**One list.** `resources/list` advertises from `RESOURCES` and `resources/read`
+dispatches through the same list. A resource cannot be advertised without
+being readable, or readable without being advertised. §171's rule — the one
+that caught the family advertising five tools and answering to seventeen —
+applied to the half of the protocol that was missing.
+
+**The capability follows the list.** The handshake advertises `resources`
+**exactly when** the server serves a resource. A server that claims a
+capability it does not have is worse than one that claims none: a client that
+believes it may ask for a resource will treat the refusal as a bug in the
+client.
+
+**A missing resource says it is a missing resource.** The refusal carries
+`-32002`, not `-32601`. This is the distinction the family makes, and it is
+not cosmetic: a client that reads `-32601` concludes "this server has no
+resources", and stops asking. A client that reads `-32002` concludes "I
+asked for the wrong URI", and asks again.
+
+**A resource holds what its tool holds.** `craftkit://design` is built by the
+same call as `craftkit_status`; `craftkit://commands` by the same call as
+`craftkit_commands`. Two answers to one question is how a client ends up
+acting on the one that is out of date — and the test compares the two
+contents, so they cannot drift.
+
+### What the port found
+
+The node resource was going to carry the model's own `PropGroup`
+serialisation, because that is what `Node` holds and it is one call. It is
+also this:
+
+```json
+{"Prop":{"hint":"Toggle","id":1,"keys":[],"label":"enabled","locked":false,"value":{"t":"bool","v":true}}}
+```
+
+**A tagged enum, in a shape no command in this tree emits.** The tree's own
+flat view of a property — the one the plan publishes, the one `property.set`
+addresses — is `{path, id, value, animated}`, and it is built by the model's
+`PropGroup::flatten` and the property's value at the playhead.
+
+So the resource uses that, and the tree now has **one** shape for a
+property's value in three places: the plan, the plan's node, and the
+resource. The alternative was a second spelling of a thing the tree already
+spells one way, and a client would have had to know which was which.
+
+### The mutations
+
+Four, one per rule, each caught by the test that names it:
+
+| Mutation | What it breaks | The test that catches it |
+|---|---|---|
+| the read dispatch loses a resource the list still advertises | the advertised surface and the implementation disagree | `every_advertised_resource_can_be_read` |
+| the handshake advertises `prompts` instead of `resources` | the server claims a capability it does not have | `initialize_advertises_the_resources_it_serves` |
+| a missing resource is answered with "no such method" | a client concludes the server has no resources | `an_unknown_resource_is_refused_with_its_own_code` |
+| a resource answers with something other than its tool | two answers to one question | `a_resource_holds_what_its_tool_holds` |
+
+All four were checked to be caught, one at a time, on the tree.
+
+### What the gate cannot see
+
+- **The content is the tool's content *now*.** The comparison is between two
+  reads of the same session, so it catches a resource that was built
+  differently — it does not catch a resource that is right now and wrong after
+  the next command.
+- **`prompts` and `completion` are still open.** The port covered the half of
+  the protocol that reads state; the half that offers workflows does not
+  exist yet, and this tree has no workflow worth offering.
+- **A resource is not a command.** It reads; it changes no state, leaves no
+  undo entry and writes no file. That is what makes it safe to add without
+  the engine knowing about it — and it is also what makes it useless for
+  anything that acts.
+
+### The lesson
+
+**A protocol has two halves, and a server that speaks one of them is a
+server whose capabilities are half-discoverable.** The tools were the half
+that acts; the resources are the half that is. A client that only reads
+`tools/list` never learns that the design can be read without being
+changed.
+
+**And the advertisement is the thing that has to be true.** The rules here
+are not "there are resources" — they are "what is advertised can be read",
+"the capability says what there is", "a refusal says what was missing", and
+"a resource holds what its tool holds". A surface without those is a list
+that goes stale, and a stale list is worse than no list: it sends a client
+looking for something that is not there.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -21000,6 +21142,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A refused input says how long the input was** | the message in `crates/core/src/readers.rs` | the property that found it — §175 |
 | **A property suite runs from a fixed seed, and writes nothing down** | `config()` in `crates/core/tests/properties.rs` | 1 mutation — §175 |
 | **A bound that cannot fire says so** | `MAX_INT_MAGNITUDE` in `crates/core/src/params.rs` | the property that found it — §175 |
+| **A resource the server advertises can be read** | `resources::RESOURCES` | 1 mutation — §176 |
+| **A resource the server can read is advertised** | `resources::RESOURCES` | 1 mutation — §176 |
+| **The handshake advertises the capability the server has** | `rpc::capabilities` | 1 mutation — §176 |
+| **A missing resource says it is a missing resource** | `code::RESOURCE_NOT_FOUND` | 1 mutation — §176 |
+| **A resource holds what its tool holds** | the same read call, compared in a test | 1 mutation — §176 |
+| **A property's value has one shape in the plan and in the resource** | `PropGroup::flatten` | the shape the port found — §176 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -21901,3 +22049,24 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     about the **document** — that it is still valid, and that the dirty flag
     and the undo stack are what they were — because that is the part the
     panic boundary does not restore for you.
+
+46. **Give the MCP server the other half of the protocol: prompts and
+    completion.** Section 176 added the resources, and left the two methods
+    that are still missing: `prompts/list`, `prompts/get` and
+    `completion/complete`.
+
+    The family's richest is **VC** (`vectorcraft/crates/mcp/src/prompts.rs`):
+    prompts and completion built from the **same live catalogues the tools
+    use**, so a suggestion is a real command id rather than a fixed list that
+    goes stale. That is the part worth porting — not the shape.
+
+    The work needs two things this tree does not have yet: a **workflow** to
+    offer as a prompt (craftkit's commands are node and property edits; a
+    prompt is a sequence of them, and the tree has no sequence), and a
+    **catalogue to complete from** that is live rather than copied.
+
+    The trap is the one the tree keeps meeting: a prompt's arguments and the
+    completion values that suggest them are two lists, and two lists drift.
+    The port should make them one — the same way §171 made the tools'
+    advertisement and dispatch one list, and §176 made the resources'
+    advertisement and dispatch one list.

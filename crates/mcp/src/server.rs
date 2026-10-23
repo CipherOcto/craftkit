@@ -4,16 +4,26 @@
 //!
 //! | Method | What it does |
 //! |---|---|
-//! | `initialize` | Handshake. Advertises tools and nothing else. |
+//! | `initialize` | Handshake. Advertises the tools and the resources it serves. |
 //! | `notifications/initialized` | Acknowledged by doing nothing — it is a notification. |
 //! | `tools/list` | Every tool, generated from the command registry. |
 //! | `tools/call` | Runs one tool against the session. |
+//! | `resources/list` | Every resource: the state a client can read. |
+//! | `resources/templates/list` | Every resource template: a URI with a variable in it. |
+//! | `resources/read` | Reads one resource by URI. |
 //! | `ping` | Liveness. |
 //! | `shutdown` | Replies, then the caller stops. |
 //!
 //! Anything else is `METHOD_NOT_FOUND` with the list of what does exist. A
 //! guessed method that silently returned `null` is how an agent concludes the
 //! server works but the feature does not.
+//!
+//! # `resources/read` results
+//!
+//! A resource is *content*, like a tool result: `{"contents":[{"uri":…,"mimeType":…,"text":…}]}`.
+//! A URI that names no resource is `RESOURCE_NOT_FOUND` — **not**
+//! `METHOD_NOT_FOUND`, because the client asked for something and something
+//! was there to ask for. §176.
 //!
 //! # `tools/call` results
 //!
@@ -35,7 +45,7 @@ use craftkit_engine::Session;
 use serde_json::{Value as Json, json};
 
 use crate::rpc::{self, Error as RpcParseError, Request, Response, code};
-use crate::tools;
+use crate::{resources, tools};
 
 /// Serve MCP over stdio until the input ends or `shutdown` arrives.
 pub fn serve(session: Arc<Mutex<Session>>) -> Result<(), String> {
@@ -163,11 +173,19 @@ fn dispatch(request: &Request, session: &Mutex<Session>) -> Response {
         "ping" => Response::result(id, json!({})),
         "tools/list" => Response::result(id, json!({ "tools": tools::tools_json() })),
         "tools/call" => call_tool(&id, request, session),
+        "resources/list" => Response::result(id, json!({ "resources": resources::list_json() })),
+        "resources/templates/list" => {
+            Response::result(id, json!({ "resourceTemplates": resources::templates_json() }))
+        }
+        "resources/read" => read_resource(&id, request, session),
         "shutdown" => Response::result(id, json!({})),
         other => Response::failure(
             id,
             code::METHOD_NOT_FOUND,
-            format!("`{other}` is not a method; try initialize, tools/list, tools/call, ping or shutdown"),
+            format!(
+                "`{other}` is not a method; try initialize, tools/list, tools/call, resources/list, \
+                 resources/read, ping or shutdown"
+            ),
         ),
     }
 }
@@ -195,6 +213,35 @@ fn call_tool(id: &Json, request: &Request, session: &Mutex<Session>) -> Response
     }
 
     Response::failure(id.clone(), code::METHOD_NOT_FOUND, format!("`{name}` is not a tool; call tools/list"))
+}
+
+/// Read one resource.
+///
+/// A URI that names nothing is refused with the server's own
+/// resource-not-found code, so a client can tell "there is no such resource"
+/// from "this server has no resources". §176.
+fn read_resource(id: &Json, request: &Request, session: &Mutex<Session>) -> Response {
+    let Some(uri) = request.params.get("uri").and_then(Json::as_str) else {
+        return Response::failure(
+            id.clone(),
+            code::INVALID_PARAMS,
+            "`uri` is required and must be a string; call resources/list",
+        );
+    };
+    match resources::read(uri, session) {
+        Ok((mime, body)) => Response::result(
+            id.clone(),
+            json!({ "contents": [{ "uri": uri, "mimeType": mime, "text": body.to_string() }] }),
+        ),
+        Err(resources::ReadError::NotFound(missing)) => Response::failure(
+            id.clone(),
+            code::RESOURCE_NOT_FOUND,
+            format!("no resource at `{missing}`; call resources/list"),
+        ),
+        Err(resources::ReadError::Session) => {
+            Response::failure(id.clone(), code::INTERNAL_ERROR, "the session is unavailable")
+        }
+    }
 }
 
 /// Run a command and wrap the outcome as tool content.
@@ -265,6 +312,67 @@ mod tests {
         let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
         assert_eq!(r["result"]["protocolVersion"], json!(crate::PROTOCOL_VERSION));
         assert!(r["result"]["capabilities"]["tools"].is_object(), "{r}");
+    }
+
+    /// The server serves resources, and says so in the handshake.
+    ///
+    /// The capability follows the list: it is advertised exactly when there
+    /// is a resource to ask for, so a client never has to try to find out.
+    /// §176.
+    #[test]
+    fn initialize_advertises_the_resources_it_serves() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+        assert!(r["result"]["capabilities"]["resources"].is_object(), "{r}");
+        assert!(resources::serves_any(), "the server advertises resources and serves none");
+    }
+
+    /// Every resource the server advertises can be read.
+    ///
+    /// The advertisement and the dispatch are one list, so a resource cannot
+    /// be advertised without being readable. §171's rule, applied to the half
+    /// of the protocol that was missing. §176.
+    #[test]
+    fn every_advertised_resource_can_be_read() {
+        let session = session();
+        let listed = ask(r#"{"jsonrpc":"2.0","id":1,"method":"resources/list"}"#);
+        let list = listed["result"]["resources"].as_array().expect("resources");
+        assert!(!list.is_empty(), "the server advertises no resources");
+        for resource in list {
+            let uri = resource["uri"].as_str().expect("a uri");
+            let line =
+                format!(r#"{{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{{"uri":"{uri}"}}}}"#);
+            let reply = handle_line(&line, &session).expect("a reply");
+            let text = reply.to_line().expect("json");
+            let read: Json = serde_json::from_str(&text).expect("parses back");
+            assert!(read.get("result").is_some(), "{uri} is advertised and cannot be read: {text}");
+            assert_eq!(read["result"]["contents"][0]["uri"], json!(uri), "{text}");
+        }
+    }
+
+    /// A URI that names no resource is refused **as a missing resource**.
+    ///
+    /// `-32601` would say "this server has no such method", and a client
+    /// reading that would conclude the server has no resources at all — and
+    /// stop asking. §176.
+    #[test]
+    fn an_unknown_resource_is_refused_with_its_own_code() {
+        let r =
+            ask(r#"{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"craftkit://nope"}}"#);
+        assert_eq!(r["error"]["code"], json!(code::RESOURCE_NOT_FOUND), "{r}");
+        assert_eq!(r["error"]["code"], json!(-32002), "{r}");
+
+        // And a missing `uri` is a bad request, not a missing resource.
+        let r = ask(r#"{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{}}"#);
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+    }
+
+    /// The templates are advertised with the protocol's own spelling.
+    #[test]
+    fn the_templates_are_advertised() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}"#);
+        let list = r["result"]["resourceTemplates"].as_array().expect("templates");
+        assert!(!list.is_empty(), "the server advertises no templates");
+        assert!(list.iter().any(|t| t["uriTemplate"] == json!("craftkit://node/{id}")), "{list:?}");
     }
 
     /// Every tool the server advertises can be called.

@@ -92,6 +92,7 @@ readonly FILES=(
     crates/ui/src/raster.rs
     crates/mcp/src/server.rs
     crates/mcp/src/rpc.rs
+    crates/mcp/src/resources.rs
     crates/mcp/src/tools.rs
     crates/engine/src/crash.rs
     crates/engine/src/command.rs
@@ -5037,6 +5038,48 @@ swap crates/core/tests/properties.rs \
     '    Config { failure_persistence: None, rng_seed: RngSeed::Random, cases: CASES, ..Config::default() }'
 expect_catch "property: the suites stop running from a fixed seed" \
     "cargo test -p craftkit-core --profile ci the_property_suites_run_from_a_fixed_seed_and_write_nothing_down"
+
+# ------------------------------------------------- the MCP resources ----
+# Section 176. The server served tools and nothing else, so a client that
+# read the protocol's other half was told the method did not exist. The
+# rules the port carries are the ones that keep a surface honest: what is
+# advertised can be read, what is read is advertised, the capability says
+# so, a missing resource says so, and a resource holds what its tool holds.
+#
+# The gates named here are the **tests**, one by one, because that is the
+# point: a case that ran the whole crate would not say which rule caught it.
+
+# The first takes a resource out of the read dispatch while the list still
+# advertises it: the defect the family had with tools.
+swap crates/mcp/src/resources.rs \
+    '    if let Some(resource) = RESOURCES.iter().find(|r| r.uri == uri) {' \
+    '    if let Some(resource) = RESOURCES.iter().find(|r| r.uri == uri && !r.uri.ends_with("commands")) {'
+expect_catch "mcp: a resource is advertised and cannot be read" \
+    "cargo test -p craftkit-mcp --profile ci every_advertised_resource_can_be_read"
+
+# The second advertises a capability the server does not have, and hides the
+# one it does.
+swap crates/mcp/src/rpc.rs \
+    '        caps.insert("resources".to_string(), json!({ "subscribe": false, "listChanged": false }));' \
+    '        caps.insert("prompts".to_string(), json!({ "subscribe": false, "listChanged": false }));'
+expect_catch "mcp: the handshake hides the capability the server has" \
+    "cargo test -p craftkit-mcp --profile ci initialize_advertises_the_resources_it_serves"
+
+# The third answers a missing resource with "no such method", which is how a
+# client concludes the server has no resources at all.
+swap crates/mcp/src/server.rs \
+    '            code::RESOURCE_NOT_FOUND,' \
+    '            code::METHOD_NOT_FOUND,'
+expect_catch "mcp: a missing resource says it is a missing method" \
+    "cargo test -p craftkit-mcp --profile ci an_unknown_resource_is_refused_with_its_own_code"
+
+# And the fourth lets a resource answer with something other than what its
+# tool holds: two answers to one question.
+swap crates/mcp/src/resources.rs \
+    '    Ok(craftkit_engine::catalogue())' \
+    '    Ok(Json::Array(Vec::new()))'
+expect_catch "mcp: a resource holds something other than its tool" \
+    "cargo test -p craftkit-mcp --profile ci a_resource_holds_what_its_tool_holds"
 
 restore
 finish

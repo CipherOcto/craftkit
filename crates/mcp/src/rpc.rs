@@ -181,6 +181,14 @@ pub mod code {
     ///
     /// `data.kind` holds one of the engine's stable failure kinds.
     pub const CRAFTKIT_ERROR: i64 = -32000;
+
+    /// The URI named a resource this server does not have.
+    ///
+    /// **Not** `METHOD_NOT_FOUND`: the client asked for something and
+    /// something was there to ask for. A client that reads `-32601` and
+    /// concludes "this server has no resources" would be wrong — and it would
+    /// be wrong in a way that stops it asking again. §176.
+    pub const RESOURCE_NOT_FOUND: i64 = -32002;
 }
 
 /// Why a line could not be read.
@@ -222,9 +230,24 @@ pub fn kind_of(v: &Json) -> &'static str {
 pub fn initialize_result() -> Json {
     json!({
         "protocolVersion": crate::PROTOCOL_VERSION,
-        "capabilities": { "tools": { "listChanged": false } },
+        "capabilities": capabilities(),
         "serverInfo": { "name": crate::SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
     })
+}
+
+/// The capabilities this server offers.
+///
+/// **The capability follows the list.** `resources` is advertised exactly
+/// when the server serves a resource, so a client that reads the capability
+/// knows whether to ask for one — and the server never claims a capability it
+/// does not have. §176.
+pub fn capabilities() -> Json {
+    let mut caps = Map::new();
+    caps.insert("tools".to_string(), json!({ "listChanged": false }));
+    if crate::resources::serves_any() {
+        caps.insert("resources".to_string(), json!({ "subscribe": false, "listChanged": false }));
+    }
+    Json::Object(caps)
 }
 
 #[cfg(test)]

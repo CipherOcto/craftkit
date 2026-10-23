@@ -28,6 +28,14 @@
 //! JSON-RPC 2.0 over stdio, one message per line. Line framing rather than
 //! `Content-Length` headers: it is what the current MCP stdio transport uses,
 //! and it keeps `nc` usable as a debugging tool.
+//!
+//! ## Resources
+//!
+//! The server also serves the protocol's other half: `resources/list`,
+//! `resources/read` and `resources/templates/list`. A tool **acts**; a
+//! resource **is**. The resources here are the open design and the command
+//! catalogue — read by the same calls the `craftkit_status` and
+//! `craftkit_commands` tools make, so the two cannot drift apart. §176.
 
 #![deny(
     clippy::unwrap_used,
@@ -39,10 +47,12 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod resources;
 pub mod rpc;
 pub mod server;
 pub mod tools;
 
+pub use resources::{RESOURCES, ReadError as ResourceReadError, TEMPLATES};
 pub use rpc::{Error as RpcError, Request as RpcRequest, Response as RpcResponse};
 pub use server::{handle_line, serve};
 pub use tools::{Tool, all, command_for, tool_for, tool_name, tools_json};
