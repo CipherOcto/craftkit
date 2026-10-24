@@ -85,8 +85,7 @@ pub const BUILT_INS: &[BuiltIn] = &[
     BuiltIn {
         name: "craftkit_commands",
         description: "The full command catalogue with every parameter documented, for when \
-                      `craftkit_execute` refuses and you want to see what the command actually \
-                      takes.",
+                      a command refuses and you want to see what the command actually takes.",
         schema: no_arguments,
         call: commands,
     },
@@ -354,6 +353,48 @@ mod tests {
         let before = names.len();
         names.dedup();
         assert_eq!(before, names.len(), "two tools share a name");
+    }
+
+    /// Every tool name a description mentions is a tool this server
+    /// advertises.
+    ///
+    /// The `craftkit_commands` tool's description said "for when
+    /// **`craftkit_execute`** refuses" — and the server advertises no such
+    /// tool. The commands are advertised one by one (`craftkit_node_add`,
+    /// `craftkit_prop_set`, …) and the registry has no `execute` command, so
+    /// an agent that read the description, looked for the tool and did not
+    /// find it, could conclude the server cannot run commands at all. §198.
+    ///
+    /// A description is the one thing a client reads before it calls
+    /// anything, so a name in it is a promise that the name exists — and the
+    /// list of names is right here, so the check is one list against itself.
+    #[test]
+    fn every_tool_name_in_a_description_is_a_tool_the_server_advertises() {
+        let tools = all();
+        for tool in &tools {
+            for mentioned in tool_names_in(&tool.description) {
+                assert!(
+                    tools.iter().any(|other| other.name == mentioned),
+                    "`{}` mentions `{}`, which this server does not advertise",
+                    tool.name,
+                    mentioned
+                );
+            }
+        }
+    }
+
+    /// The tool names a description mentions.
+    ///
+    /// A word that starts with the server's own prefix: `craftkit_` and then
+    /// letters and underscores. The description is prose, so the words are
+    /// split on everything that is not part of a name.
+    fn tool_names_in(description: &str) -> Vec<String> {
+        let prefix = format!("{}_", crate::SERVER_NAME);
+        description
+            .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+            .filter(|word| word.starts_with(&prefix) && word.len() > prefix.len())
+            .map(str::to_string)
+            .collect()
     }
 
     /// Every built-in is advertised.

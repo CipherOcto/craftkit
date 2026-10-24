@@ -23383,6 +23383,92 @@ users are.
 branch on the failure".** The kind's own doc says *never on the message text*
 — and the CLI offered nothing else.
 
+## 198. The tree's agent-facing documents named things the tree does not have
+
+### The finding
+
+Two documents an agent reads first named things that are not there.
+
+**The MCP server's own tool description.** `craftkit_commands` said:
+
+> The full command catalogue with every parameter documented, for when
+> `craftkit_execute` refuses and you want to see what the command actually
+> takes.
+
+**Measured**, on the running server: `tools/list` advertises **26** tools —
+the three built-ins and the twenty-three commands, one by one
+(`craftkit_node_add`, `craftkit_prop_set`, …) — and `craftkit_execute` is
+**not one of them**. The registry has no `execute` command, so there is no
+such tool to call.
+
+An agent that reads the description, looks for the tool and does not find it,
+can conclude that the server cannot run commands at all — and the description
+is the one thing a client reads before it calls anything.
+
+**The playbook's command line.** `docs/agent-playbook.md:393` said:
+
+```bash
+craftkit-cli run script.json --out part.step
+```
+
+**Measured**: the CLI refuses it — "`--out` is not a value for `run`", exit 2
+— and the line under the block says "**These exist.** `apps/craftkit-cli` is
+implemented, and the subcommands above are its real surface"
+(`docs/agent-playbook.md:401`).
+
+And there is no STEP export anywhere in the tree: `run` takes a script and
+runs it, and every "step" in the tree's own words is a step of a **format
+change**, not a STEP file.
+
+### The port
+
+**A description names a tool that exists.** The name is gone from the
+description — "for when *a command* refuses" — because the tool that refuses
+is a different tool for every command.
+
+**And the gate: one list against itself.** Every tool name a description
+mentions is a tool the server advertises:
+
+```rust
+for tool in &tools {
+    for mentioned in tool_names_in(&tool.description) {
+        assert!(tools.iter().any(|other| other.name == mentioned), …);
+    }
+}
+```
+
+The list of names is the server's own `all()`, so the check is one list
+against itself — no second copy — and the check is mechanical: a word that
+starts with the server's own prefix.
+
+**And the playbook's line is the command that exists.**
+`craftkit-cli run script.json`.
+
+### The gate's own teeth
+
+One new mutation: put the name back. The test must notice.
+
+```text
+thread 'tools::tests::every_tool_name_in_a_description_is_a_tool_the_server_advertises' panicked at
+crates/mcp/src/tools.rs:376:17:
+`craftkit_commands` mentions `craftkit_execute`, which this server does not advertise
+```
+
+### The lesson
+
+**A name in a description is a promise that the name exists.** The
+description is the first thing a client reads, and it is read *because* the
+client does not know the server yet. A name it cannot find teaches the
+client something false about the server.
+
+**And "the lines above are its real surface" is a claim that wants a gate.**
+The playbook's own sentence says the command lines exist, and the CLI's
+parser says otherwise about one of them. The MCP's half got a gate because
+the list of names was right there; the playbook's half does not have one yet
+— the CLI is a **binary** crate, so the xtask cannot depend on its parser,
+and the check has to live in the CLI's own tests or the CLI has to grow a lib
+target. That is item 59, and it is a shape question, not a finding.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23885,6 +23971,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every ending of a command is in the log** | the same | the same — §196 |
 | **A failure the CLI prints carries the kind** | `failed` in `apps/craftkit-cli/src/cli.rs` | 1 mutation — §197 |
 | **The three doors carry the same classification** | the same | the control channel and the MCP carry it already — §197 |
+| **Every tool name a description mentions is a tool the server advertises** | `crates/mcp/src/tools.rs` | 1 mutation — §198 |
+| **A description names a tool that exists** | the same | the same — §198 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25178,3 +25266,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     one document, and the description's name is one name in one description.
     Both are measured as **wrong**, which is the thing a tree like this
     cannot afford to be wrong about in its agent-facing documents.
+
+    **Done in §198** for the MCP's half: the description no longer names a
+    tool that does not exist, and a new gate holds it — *every tool name a
+    description mentions is a tool the server advertises*, checked against the
+    server's own list, with a mutation that puts the name back.
+
+    **Still open** for the playbook's half: the line is now the command that
+    exists (`craftkit-cli run script.json`), but nothing holds it. The check
+    needs the CLI's **parser**, and the CLI is a binary crate — so either the
+    check lives in the CLI's own tests (reading the tree's documents from
+    there) or the CLI grows a lib target and the xtask can depend on it. The
+    second is a small change to the tree's shape, and the first is a small
+    change to where a gate lives. The owner's call, with item 8: a gate that
+    checks what prose says is a heuristic.

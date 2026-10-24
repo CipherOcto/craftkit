@@ -5962,5 +5962,21 @@ swap apps/craftkit-cli/src/cli.rs \
 expect_catch 'cli: a failure the CLI prints does not carry the kind' \
     "cargo test -p craftkit-cli --profile ci --test script a_failure_the_cli_prints_carries_the_kind"
 
+# ------------------------------------------- the tool names in a description ----
+# Section 198. The `craftkit_commands` tool's description said "for when
+# `craftkit_execute` refuses" -- and the server advertises no such tool. The
+# commands are advertised one by one -- `craftkit_node_add`,
+# `craftkit_prop_set` -- and the registry has no `execute` command, so an
+# agent that read the description, looked for the tool and did not find it,
+# could conclude the server cannot run commands at all.
+#
+# The break puts the name back. The test that holds the descriptions must
+# notice.
+swap crates/mcp/src/tools.rs \
+    '                      a command refuses and you want to see what the command actually takes.' \
+    '                      `craftkit_execute` refuses and you want to see what the command actually takes.'
+expect_catch 'mcp: a description names a tool the server does not advertise' \
+    "cargo test -p craftkit-mcp --profile ci every_tool_name_in_a_description_is_a_tool_the_server_advertises"
+
 restore
 finish

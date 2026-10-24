@@ -390,7 +390,7 @@ and one question had two answers. §107.
 Headless, through the CLI:
 
 ```bash
-craftkit-cli run script.json --out part.step
+craftkit-cli run script.json
 craftkit-cli eval design.craftkit
 craftkit-cli sample --out design.craftkit
 craftkit-cli script --out script.json
