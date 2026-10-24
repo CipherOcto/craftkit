@@ -2339,9 +2339,22 @@ fn impl_blocks(source: &str) -> Vec<(String, usize, usize)> {
 /// its parameters by name and a name is a string — and the code view has
 /// blanked it. The code body is carried beside it, so that a reader call in
 /// a string is not mistaken for a call. §155.
-struct Function {
+pub(crate) struct Function {
     /// Its name.
-    name: String,
+    pub(crate) name: String,
+    /// The file line its `fn` keyword is on.
+    ///
+    /// Not the line of its body: a signature may be written over three
+    /// lines, and a reader that wants to say *where* a thing is has to say
+    /// where the `fn` is. §184.
+    pub(crate) fn_line: usize,
+    /// The file line its body ends on.
+    ///
+    /// A line after the body is not inside the function: the tree writes a
+    /// `static` between two functions often enough that "the last function
+    /// before this line" is not the same thing as "the function this line is
+    /// in". §184.
+    pub(crate) end_line: usize,
     /// The file line its `fn` is on.
     line: usize,
     /// Its signature, as it is written.
@@ -2361,7 +2374,7 @@ struct Function {
 /// same bytes, with the comments, the string contents and the char literals
 /// blanked out. The two are the same length, so a position in one is a
 /// position in the other. §155.
-fn rust_functions(file: &str, source: &str, code: &str) -> Vec<Function> {
+pub(crate) fn rust_functions(file: &str, source: &str, code: &str) -> Vec<Function> {
     let bytes = code.as_bytes();
     let blocks = impl_blocks(code);
     let mut out = Vec::new();
@@ -2383,15 +2396,21 @@ fn rust_functions(file: &str, source: &str, code: &str) -> Vec<Function> {
         let signature = code[open + 1..close].to_string();
         let after = close + 1;
         let brace = code[after..].find('{').map(|i| after + i);
-        let (body, code_body, line) = match brace {
+        let (body, code_body, line, end_line) = match brace {
             Some(bs) => {
                 let line = code[..bs].lines().count() + 1;
                 match matching(code, bs, b'{', b'}') {
-                    Some(be) => (source[bs..=be].to_string(), code[bs..=be].to_string(), line),
-                    None => (String::new(), String::new(), line),
+                    Some(be) => {
+                        let end_line = code[..be].lines().count() + 1;
+                        (source[bs..=be].to_string(), code[bs..=be].to_string(), line, end_line)
+                    }
+                    None => (String::new(), String::new(), line, line),
                 }
             }
-            None => (String::new(), String::new(), code[..open].lines().count() + 1),
+            None => {
+                let line = code[..open].lines().count() + 1;
+                (String::new(), String::new(), line, line)
+            }
         };
         // The block the function is written in: the innermost `impl` that
         // holds it.
@@ -2401,7 +2420,16 @@ fn rust_functions(file: &str, source: &str, code: &str) -> Vec<Function> {
             .max_by_key(|(_, first, _)| *first)
             .map(|(header, _, _)| header.clone())
             .unwrap_or_default();
-        out.push(Function { name, line, signature, body, code_body, block });
+        out.push(Function {
+            name,
+            fn_line: code[..start].lines().count() + 1,
+            end_line,
+            line,
+            signature,
+            body,
+            code_body,
+            block,
+        });
     }
     let _ = file;
     out

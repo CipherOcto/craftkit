@@ -21539,7 +21539,6 @@ writer first, then the fuzzer. The report's format is written by the
 desktop app and read by the CLI, and a corpus for it has to be a *folder* of
 three files, not a file. That is the next arc.
 
-## What enforces what
 ## 183. The crash report's reader read a report the model refuses
 
 ### The finding
@@ -21667,6 +21666,162 @@ with a hole in it — it is the *absence* of a rule.
 **And the readers have to agree.** The same document, refused by one reader
 and read by another, is the tree's promise failing in the place nobody looks:
 not in the reader under test, but in the *other* one.
+
+## 184. The instrument's own anchors were found twenty-five minutes late, and the report said what, not where
+
+### The finding
+
+The tree has an instrument: `scripts/mutation-test-gates.sh` breaks each rule
+on purpose and requires the gate to notice. Its **anchors** — the text each
+case looks for in the tree — are the instrument's own weak point.
+
+The script has **423** `swap` blocks. Each names a file and an anchor, and
+the anchor is written in one of **three** quoting conventions:
+
+| The convention | How it is written | How many arguments the script uses it for |
+|---|---|---|
+| single quotes | `'text'`, with an apostrophe inside as `'"'"'` | 822 |
+| double quotes | `"text"`, with `\"` for a quote | 16 |
+| ANSI-C | `$'text'`, with `\'` for a quote | 8 |
+
+**Twenty-two** of the single-quoted words carry an apostrophe that way. A
+reader that understands one convention finds a third of the arguments and says
+nothing about the rest — and a reader that understands two of the three finds
+the wrong ones, because a word is a *run* of quoted pieces: `'it'"'"'s'` is
+one word, and it is `it's`.
+
+The script does check its anchors. `swap` refuses an anchor that is not there
+(§46), and it says so loudly. But it refuses it **when the case is reached** —
+up to twenty-five minutes into a run, with the tree already changed twenty
+times — and it says **what** the anchor was, never **where** it had been.
+
+Two of the anchors were **not unique**, and `swap` replaces the *first*
+match:
+
+| The anchor | The file | How many places |
+|---|---|---|
+| `    mutates: false,` / `    undoable: false,` | `crates/engine/src/commands.rs` | **5** |
+| `        let code = code_lines_kept(&production_of(&path, &text));` | `xtask/src/lists.rs` | **3** |
+
+The first was **documented as deliberate**:
+
+> The anchor is the pair of flags, and it has to be: a longer one would run
+> into the apostrophe in "the plan's rate", and an apostrophe closes the
+> shell's single-quoted string. The pair is not unique -- four commands have
+> it -- and `swap` replaces the first, which is `playback.seek`.
+
+Two claims in that note are false. The pair is in **five** places, not four,
+and the anchor did not have to stop at the apostrophe: the shell writes an
+apostrophe inside a single-quoted string as `'"'"'`, and **this script does it
+in twenty-two places**. The case worked — the rule it breaks is global over
+the commands, so it caught the break wherever the swap landed — but it was a
+case about *whichever command happened to be first*, and it worked by luck.
+
+The second was luck too, and it still is: the three places are the raw
+reader's gate, the step bound's gate and the step bound's door loop, and the
+swap replaces the **first** of them. It happened to be the one the case was
+about.
+
+### The port
+
+**A gate that reads the script and checks every anchor.**
+`cargo xtask anchors` walks the script the way the shell reads it — a `#` at
+the start of a word is a comment, a quoted word is one word however many
+pieces it is made of, a word may span lines — and checks four things:
+
+1. the file the anchor names is in the tree;
+2. it is in the script's `FILES` list, so a mutation to it can be put back;
+3. the anchor is in that file, and it is there **exactly once**;
+4. the script calls `cargo xtask anchors` **before its first swap**.
+
+The report names **where**: the line of the script that writes the anchor, the
+line of the file it lands on, and the function it is in when the file has one.
+
+**The reader refuses to guess.** An escape it does not know is an **error**,
+not a letter. A reader that guesses is a reader that lies, and a gate that
+lies about where an anchor is is worse than no gate.
+
+**It is a command of its own, and not a phase of `lists`.** This is the part
+that had to be thought about rather than written. A mutation removes the
+anchor it names — that is what a mutation *is* — so an anchor gate inside
+`lists` would report **every** case as caught, whatever the case was for, and
+the eleven cases that run `lists` would say nothing about the gate they were
+written for. That is the script's own rule 4 — *one swap, one gate* — broken
+in the worst possible way: every case passing, for the wrong reason.
+
+So it is a command, and a command that checks something is a phase of `ci`
+(§169). `cargo xtask ci` runs `fmt, anchors, assets, cleanroom, lists,
+layers, web, clippy, tests, fuzz, wasm`.
+
+**And the script checks its anchors before it starts.** The pre-flight runs
+`cargo xtask anchors` before the first mutation. Measured, with a moved
+anchor in the tree:
+
+```
+before:  the run stops when the case that uses the anchor is reached
+         — up to twenty-five minutes in
+after:   the run stops in 0 seconds, with the file, the line and the
+         function
+```
+
+**And the two ambiguous anchors were re-anchored.** The commands.rs anchor
+now names one command — the flags *and* the `enabled` line that follows them
+— and the lists.rs anchor now names the gate it is about, by including the
+line that follows it. Both are still one text and one swap.
+
+### The gate's own teeth
+
+Two new mutations, and two re-anchored cases:
+
+| The mutation | The gate that catches it |
+|---|---|
+| an anchor that moved is not found | `cargo xtask anchors` |
+| an anchor that names two places is reported | the same |
+| the raw reader gate counts a test's call as a third home | `a_test_that_calls_the_raw_reader_is_not_a_third_home` (re-anchored) |
+| a command that does not mutate is undoable anyway | `no_command_that_does_not_mutate_is_undoable` (re-anchored) |
+
+The two rules about the script's own text — that a file an anchor names can be
+put back, and that the script checks its anchors before it starts — **cannot
+be given a mutation**: the script is not in `FILES`, because bash reads a
+script incrementally and a mutation to it would leave the shell reading at a
+byte offset that is not the start of a command (§102). They are covered by
+unit tests on a fabricated tree instead, and each of those tests fails if its
+rule is removed. That is a weaker kind of evidence and the matrix says so.
+
+### The measured result
+
+```
+── anchors
+   ok: every anchor in scripts/mutation-test-gates.sh is in the tree, and each one names a single place
+```
+
+**423** anchors, **114** distinct, in **74** files: all present, all unique,
+all in a file the script can put back. Before this, two of them named five
+places and three places, and neither said so.
+
+### The lesson
+
+**The instrument needs the same care as the thing it measures.** The tree has
+a gate for every rule it has, and the script that proves those gates work had
+its own weak point — in the text it looks for — with nothing checking it.
+
+**An anchor that names several places names none of them.** `swap` replaces
+the first match, so an anchor that matches five places is a case about
+whichever of the five happens to be written first. The case still caught the
+break, because the rule it breaks was global — but "it worked" is not the
+same as "it was aimed".
+
+**And a comment that explains why a thing cannot be done is a claim to
+check.** "A longer one would run into the apostrophe, and an apostrophe
+closes the shell's single-quoted string" was written as a fact about the
+shell, and it was false: the script itself writes `'"'"'` in twenty-two
+places. A note that says *why* something is impossible is worth more than a
+note that says it is.
+
+**A gate that runs late is a gate that is late.** The check was there; it
+just ran twenty-five minutes after the thing it was about, in a run where
+everything before it had already been mutated. The fix was not a new check —
+it was the same check, at the front.
 
 ## What enforces what
 
@@ -22129,6 +22284,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The reason names the document that is wrong** | `checked_document` | 1 mutation — §183 |
 | **A report with one byte changed, one hostile value, or cut short is read or refused** | `crates/engine/tests/crash_properties.rs` | the property — §183 |
 | **The replay door refuses a report or replays it, and never panics** | the same | the property — §183 |
+| **Every anchor in the mutation script is in the file it names** | `cargo xtask anchors` | 1 mutation — §184 |
+| **Every anchor names exactly one place** | the same | 1 mutation — §184 |
+| **Every file an anchor names can be put back** | the same | the unit test — §184 |
+| **The script checks its anchors before its first swap** | the same | the unit test — §184 |
+| **The reader understands the three quoting conventions, and refuses the ones it does not** | `swaps` in `xtask/src/anchors.rs` | the unit tests — §184 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -22950,6 +23110,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the function each anchor sits in, so a human can see it move, and a
     convention that every anchor is quoted with enough context to be unique
     *and* located.
+
+    **§184 built the static check.** `cargo xtask anchors` reads the script,
+    checks that every anchor is in the file it names and names **exactly
+    one** place, and reports the line of the script that writes the anchor,
+    the line of the file it lands on, and the function it is in. It found two
+    anchors that named **five** places and **three** places — one of them
+    documented as deliberate, on a note about the shell that was false — and
+    both were re-anchored. What is left is the convention: an anchor quoted
+    with enough context to be unique *and* located is now checkable, and the
+    gate says where each one is.
 42. **Find out why one engine test failed once.** During §167's validation,
     `cargo xtask ci` failed in `craftkit-engine --lib`. The tree had just been
     edited — prose in `KNOWN-GAPS.md` — and the mutation suite had just run
@@ -23137,3 +23307,21 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     way to measure the cost of a command without building a document at the
     limit to measure it on — which is what §103 and §181 did, and why these
     numbers are here and not in a gate.
+
+49. **Make the mutation script's own rules mutation-testable.** §184 gave the
+    script's anchors a gate, and two of the four rules that gate checks are
+    about the script's *own* text: that a file an anchor names is in the
+    script's `FILES` list, and that the script calls the anchors gate before
+    its first swap. Neither can be given a mutation, because the script is not
+    in `FILES` — bash reads a script incrementally, so a mutation to it would
+    leave the shell reading at a byte offset that is not the start of a
+    command (§102's own reason). They are covered by unit tests on a
+    fabricated tree, and a unit test is weaker evidence than a mutation.
+
+    The way out is to put the script's **data** in a file the script *reads*:
+    the list of files it snapshots, and perhaps the anchors themselves. A file
+    that is read is a file that can be mutated, and a mutation of the `FILES`
+    list is a mutation of the contract between the script and the restore.
+    The cost is a second file to keep in step with the script — which is the
+    trade §182 made for the script format, and the reason it was worth it
+    there.

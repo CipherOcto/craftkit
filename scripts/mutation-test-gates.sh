@@ -119,6 +119,7 @@ readonly FILES=(
     apps/craftkit-cli/src/args.rs
     apps/craftkit-cli/src/cli.rs
     apps/craftkit-web/src/main.rs
+    xtask/src/anchors.rs
     xtask/src/assets.rs
     xtask/src/cleanroom.rs
     xtask/src/ci.rs
@@ -253,6 +254,29 @@ guarded() {
         "  It is not in FILES, so snapshot() never copied it, restore() cannot put it" \
         "  back and fingerprint() never looks at it. Add it to FILES first." >&2
     exit 1
+}
+
+# The anchors, checked before anything is mutated. §184.
+#
+# The `swap` helper refuses an anchor that is not there, and it refuses it when
+# the case is reached -- up to twenty-five minutes into a run, with the tree
+# already changed twenty times, and the report says what the anchor was and
+# never where it had been. So every anchor is checked first, all of them at
+# once, and the report says where each one is.
+#
+# This is a gate of its own and not a phase of `lists`: a mutation removes the
+# anchor it names -- that is what a mutation is -- so an anchor gate inside
+# `lists` would report every case as caught, whatever the case was for.
+check_anchors() {
+    local out rc
+    out="$(cargo xtask anchors 2>&1)"; rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '\n%sTHE SCRIPT HAS AN ANCHOR THAT IS NOT WHERE IT SAYS.%s\n' "$RED" "$RESET" >&2
+        printf '%s\n' "$out" >&2
+        printf '  Every anchor is checked before the run starts, so this is found in a\n' >&2
+        printf '  second rather than twenty-five minutes in. Fix the anchor, or the case.\n' >&2
+        exit 1
+    fi
 }
 
 declare -a CAUGHT=()
@@ -394,6 +418,12 @@ finish() {
     fi
     exit $status
 }
+
+# The self-test does not run the anchors check: that mode runs without any
+# cargo at all, and it is about the exit status, not about the anchors.
+if [[ "${1:-}" != "--self-test" ]]; then
+    check_anchors
+fi
 
 snapshot
 readonly BEFORE="$(fingerprint)"
@@ -2579,17 +2609,26 @@ expect_catch "model: a write that changes nothing does not say so" \
 # commands -- `playback.seek`, `plan.evaluate`, `diagnostics.list` and
 # `session.stats` -- declared `undoable: true` and never could, and the flag
 # is published to agents in the command schema. §94.
-# The anchor is the pair of flags, and it has to be: a longer one would run
-# into the apostrophe in "the plan's rate", and an apostrophe closes the
-# shell's single-quoted string. The pair is not unique -- four commands have
-# it -- and `swap` replaces the first, which is `playback.seek`. That is
-# enough: whichever command it lands on, a command that does not mutate and
-# claims to be undoable breaks the rule.
+#
+# The anchor names one command. It used to be the pair of flags alone, and five
+# commands have that pair, so `swap` replaced the first of them and the case
+# was a case about whichever command happened to be first. The rule it breaks
+# -- a command that does not mutate is not undoable -- is global over the
+# commands, so it caught the break; but an anchor that names five places names
+# none of them, and the anchors gate says so. §184.
+#
+# The comment above used to say that a longer anchor "would run into the
+# apostrophe in the plan's rate, and an apostrophe closes the shell's
+# single-quoted string". That is not true. The shell writes an apostrophe
+# inside a single-quoted string as '"'"', and this script does it in twenty-one
+# places. The anchor below has no apostrophe in it; it could have had one.
 swap crates/engine/src/commands.rs \
     '    mutates: false,
-    undoable: false,' \
+    undoable: false,
+    enabled: has_nodes,' \
     '    mutates: false,
-    undoable: true,'
+    undoable: true,
+    enabled: has_nodes,'
 expect_catch "engine: a command that does not mutate is undoable anyway" \
     "cargo test -p craftkit-engine --profile ci no_command_that_does_not_mutate_is_undoable"
 
@@ -4237,9 +4276,16 @@ expect_catch "gate: the limits gate reads the table file's tests as enforcement"
 # file whose *test* called the reader was reported, and the same call in
 # production code was reported too -- the gate could not tell them apart.
 # Section 151.
+#
+# The anchor names the line after it as well, because the line on its own is
+# in three places in this file and `swap` replaces the first of them. It
+# happened to be the right one -- the raw reader's gate is the first of the
+# three -- and that is luck, not a rule. §184.
 swap xtask/src/lists.rs \
-    '        let code = code_lines_kept(&production_of(&path, &text));' \
-    '        let code = code_lines_kept(&text);'
+    '        let code = code_lines_kept(&production_of(&path, &text));
+        if !code.contains("raw_json(") {' \
+    '        let code = code_lines_kept(&text);
+        if !code.contains("raw_json(") {'
 expect_catch "gate: the raw reader gate counts a test's call as a third home" \
     "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
 
@@ -5448,6 +5494,38 @@ swap crates/engine/src/crash.rs \
 expect_catch "the reason does not name the document that is wrong" \
     "cargo test -p craftkit-engine --profile ci a_report_whose_design_the_model_refuses_is_refused"
 
+# ------------------------------------------------- the script's own anchors ----
+# Section 184. The instrument's anchors are text in the tree. The `swap`
+# helper refuses an anchor that is not there, and it refuses it when the case
+# is reached -- up to twenty-five minutes into a run, with the tree already
+# changed twenty times -- and the report says what the anchor was and never
+# where it had been.
+#
+# The gate is `cargo xtask anchors`, and it is a command of its own rather
+# than a phase of `lists`. A mutation removes the anchor it names -- that is
+# what a mutation is -- so an anchor gate inside `lists` would report every
+# case as caught, whatever the case was for, and the eleven cases that run
+# `lists` would say nothing about the gate they were written for.
+#
+# The first break: an anchor that moved. The reader's own limit changes by
+# one, so the text the case names is not in the file any more. The swap
+# changes nothing the case was about; it is here to move the anchor.
+swap crates/core/src/readers.rs \
+    '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
+    '    reader.take(max as u64 + 2).read_to_string(&mut out).map_err(io_error)?;'
+expect_catch "anchors: an anchor that moved is not found" \
+    "cargo xtask anchors"
+
+# The second break: an anchor that names two places. `swap` replaces the
+# first, so an anchor that matches twice is a case about whichever of the two
+# happens to be written first -- and the tree grows a second copy of a line
+# every time somebody pastes a command spec.
+swap crates/engine/src/crash.rs \
+    'pub use crate::session::TraceStep as ReplayStep;' \
+    'pub use crate::session::TraceStep as ReplayStep;
+pub use crate::session::TraceStep as ReplayStep;'
+expect_catch "anchors: an anchor that names two places is reported" \
+    "cargo xtask anchors"
 
 restore
 finish

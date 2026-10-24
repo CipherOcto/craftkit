@@ -140,13 +140,14 @@ at all, which is how the web build stays testable in CI.
 
 ```bash
 cargo xtask doctor   # blocking / degraded / info about this machine
-cargo xtask ci       # fmt, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
+cargo xtask ci       # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
 cargo xtask deny     # the dependency policy: licences, bans, sources, advisories
 ```
 
 | Gate | What it protects |
 |---|---|
 | `fmt` | one formatting, so diffs are about the change |
+| `anchors` | the mutation script's anchors are in the tree, and each names one place |
 | `assets` | no embedded images; every file attributed; no stale attribution rows |
 | `cleanroom` | no product's name in the tree outside prose ([`docs/clean-room.md`](docs/clean-room.md)) |
 | `lists` | one deny attribute everywhere; the layer table matches the code *and* `cargo metadata`; sorted lists |

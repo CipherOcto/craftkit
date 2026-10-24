@@ -4,6 +4,7 @@
 //!
 //! ```text
 //! fmt --check        a second, and a diff to read
+//! anchors            a second
 //! assets             a second
 //! lists              a second
 //! layers             a second
@@ -16,6 +17,11 @@
 //!
 //! The cheap file-reading gates come first so a formatting slip is reported in
 //! a second rather than after a compile. The expensive gates come last.
+//!
+//! The **anchors** phase is second because it protects the instrument every
+//! other measurement comes from: `scripts/mutation-test-gates.sh` finds a moved
+//! anchor when the case that uses it is reached, which is up to twenty-five
+//! minutes into a run. Checked up front, it is a second. §184.
 //!
 //! The wasm check is *not* run concurrently with the tests, and the reason is
 //! worth stating because it looks like an oversight: both are cargo builds into
@@ -43,7 +49,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::{assets, cargo, cleanroom, doctor, fuzz, layers, lists, step, wasm, web};
+use crate::{anchors, assets, cargo, cleanroom, doctor, fuzz, layers, lists, step, wasm, web};
 
 /// One step of the gate.
 pub struct Phase {
@@ -63,6 +69,7 @@ pub struct Phase {
 /// the phases that ran, and `the_closing_line_names_what_actually_ran` pins it.
 pub const PHASES: &[Phase] = &[
     Phase { name: "fmt", run: fmt },
+    Phase { name: "anchors", run: anchors::run },
     Phase { name: "assets", run: assets::run },
     Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
@@ -187,7 +194,19 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "fuzz", "wasm",],
+            vec![
+                "fmt",
+                "anchors",
+                "assets",
+                "cleanroom",
+                "lists",
+                "layers",
+                "web",
+                "clippy",
+                "tests",
+                "fuzz",
+                "wasm",
+            ],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"

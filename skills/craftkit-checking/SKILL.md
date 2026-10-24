@@ -74,6 +74,7 @@ Run one on its own while you work; run `ci` when you are done.
 | Gate | What it protects | What it typically catches |
 |---|---|---|
 | `fmt` | formatting is not a reviewer's problem | an unformatted file after an edit |
+| `anchors` | every anchor in `scripts/mutation-test-gates.sh` is in the tree, and each names one place | an anchor that moved (the mutation would change nothing); an anchor that matches five places, so the swap breaks the wrong one |
 | `assets` | every icon is drawn in code; every file asset has a row in `ATTRIBUTION.md`; **nothing in the tree is written in another language** | a checked-in PNG/SVG/font, an `include_bytes!` of an image, an asset with no attribution row, **a `.py`/`.js`/`.sh` that is not one of the five declared exceptions** |
 | `cleanroom` | **no product's name is in the tree outside prose** — the rule and the table of products are in `docs/clean-room.md` | a fixture, a test or a file name that carries another product's name; a product name in a string literal |
 | `lists` | the lines many changes touch: the deny attribute, the layer table in `docs/architecture.md`, sorted `mod` groups, the crate roots, every bound the tree has named in the prose, and every field the model's fingerprint hashes | a new crate missing the deny attribute, a `TABLE` row with no matching doc row, an unsorted `mod` block, **a bound the tree has that no document names** (§181), **a field added to a type the fingerprint walks** (§80) |

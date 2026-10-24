@@ -20,6 +20,7 @@
 //!
 //! | Command | What it protects |
 //! |---|---|
+//! | [`anchors`] | the mutation script's anchors are in the tree, and each names one place |
 //! | [`layers`] | the dependency layering, and the UI boundary |
 //! | [`assets`] | "every icon is drawn in code; every file is attributed" |
 //! | [`cleanroom`] | "no product's name is in the tree outside prose" |
@@ -45,6 +46,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod anchors;
 pub mod assets;
 pub mod ci;
 pub mod cleanroom;
@@ -85,6 +87,11 @@ pub struct Subcommand {
 /// `doctor` and `ci` are here too, so that the list of what `cargo xtask`
 /// accepts is one list.
 pub const COMMANDS: &[Subcommand] = &[
+    Subcommand {
+        name: "anchors",
+        what: "the mutation script's anchors are in the tree, and each names one place",
+        run: anchors::run,
+    },
     Subcommand {
         name: "layers",
         what: "enforce the crate dependency layering (docs/architecture.md)",
@@ -133,7 +140,7 @@ pub const COMMANDS: &[Subcommand] = &[
     },
     Subcommand {
         name: "ci",
-        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, fuzz, wasm",
+        what: "fmt --check, anchors, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, fuzz, wasm",
         run: run_ci,
     },
 ];
