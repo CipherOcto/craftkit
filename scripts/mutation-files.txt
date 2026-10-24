@@ -1,0 +1,99 @@
+# The files a mutation may write to.
+#
+# This is the contract between the script and the restore: a mutation to a
+# file that is not on this list cannot be put back, and the script's `guarded`
+# refuses it. The gate `cargo xtask anchors` reads this file too, so the list
+# lives in one place and both doors read it.
+#
+# The script reads it rather than carrying it, because a list inside a script
+# cannot be broken: bash reads a script as it goes, so a case cannot edit the
+# script it is running. A file that is read is a file that can be mutated, and
+# a mutation of this list is a mutation of the contract. Section 187.
+#
+# One path per line, relative to the repository root. A blank line, a
+# duplicate, or a path that is not in the tree is reported by the gate.
+Cargo.lock
+Cargo.toml
+ATTRIBUTION.md
+clippy.toml
+deny.toml
+.github/workflows/ci.yml
+docs/architecture.md
+crates/core/Cargo.toml
+crates/core/src/lib.rs
+crates/core/src/ids.rs
+crates/core/src/params.rs
+crates/core/src/readers.rs
+crates/core/tests/properties.rs
+crates/engine/tests/properties.rs
+crates/engine/tests/crash_properties.rs
+crates/io/tests/properties.rs
+crates/core/src/value.rs
+crates/core/src/tick.rs
+crates/core/src/writer.rs
+crates/model/Cargo.toml
+crates/model/src/lib.rs
+crates/model/src/property.rs
+crates/io/src/lib.rs
+crates/io/src/format.rs
+crates/io/src/store.rs
+crates/io/src/format/pending.rs
+crates/kernel/src/lib.rs
+crates/ui/Cargo.toml
+crates/ui/src/lib.rs
+crates/ui/src/automation.rs
+crates/ui/src/shell.rs
+crates/ui/src/raster.rs
+crates/mcp/src/lib.rs
+crates/mcp/src/server.rs
+crates/mcp/src/rpc.rs
+crates/mcp/src/prompts.rs
+crates/mcp/src/resources.rs
+crates/mcp/src/tools.rs
+crates/engine/src/crash.rs
+crates/engine/src/command.rs
+crates/engine/src/commands.rs
+crates/engine/src/history.rs
+crates/engine/src/params.rs
+crates/engine/src/lib.rs
+crates/engine/src/log.rs
+crates/engine/src/session.rs
+crates/control/src/server.rs
+crates/control/src/protocol.rs
+crates/control/src/token.rs
+crates/model/src/keyframe.rs
+crates/model/src/document.rs
+crates/model/src/fingerprint.rs
+crates/model/src/path.rs
+crates/eval/src/evaluate.rs
+apps/craftkit/src/main.rs
+apps/craftkit-cli/src/main.rs
+apps/craftkit-cli/src/args.rs
+apps/craftkit-cli/src/cli.rs
+apps/craftkit-web/src/main.rs
+xtask/src/anchors.rs
+xtask/src/assets.rs
+xtask/src/cleanroom.rs
+xtask/src/ci.rs
+xtask/src/deny.rs
+xtask/src/fuzz.rs
+xtask/src/doctor.rs
+xtask/src/lists.rs
+xtask/src/lib.rs
+docs/recipes/add-a-command.md
+docs/recipes/add-a-control-channel-method.md
+docs/recipes/add-an-icon.md
+docs/recipes/change-the-file-format.md
+docs/recipes/fix-a-crash.md
+docs/design/file-format.md
+docs/patterns/clone-before-edit.md
+docs/patterns/everything-is-a-command.md
+docs/patterns/exact-time-not-float-seconds.md
+docs/agent-playbook.md
+AGENTS.md
+README.md
+apps/craftkit-web/index.html
+xtask/src/wasm.rs
+apps/craftkit-web/sw.js
+scripts/live-window-check.sh
+scripts/mutation-files.txt

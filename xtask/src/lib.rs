@@ -20,7 +20,7 @@
 //!
 //! | Command | What it protects |
 //! |---|---|
-//! | [`anchors`] | the mutation script's anchors are in the tree, and each names one place |
+//! | [`anchors`] | the mutation script's anchors and its file list are in the tree, and it checks itself before it starts |
 //! | [`layers`] | the dependency layering, and the UI boundary |
 //! | [`assets`] | "every icon is drawn in code; every file is attributed" |
 //! | [`cleanroom`] | "no product's name is in the tree outside prose" |
@@ -89,7 +89,7 @@ pub struct Subcommand {
 pub const COMMANDS: &[Subcommand] = &[
     Subcommand {
         name: "anchors",
-        what: "the mutation script's anchors are in the tree, and each names one place",
+        what: "the mutation script's anchors and its file list are in the tree, and it checks itself before it starts",
         run: anchors::run,
     },
     Subcommand {

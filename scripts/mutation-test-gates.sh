@@ -59,93 +59,67 @@
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+readonly GREEN=$'\033[32m'
+readonly RED=$'\033[31m'
+readonly YELLOW=$'\033[33m'
+readonly RESET=$'\033[0m'
+
 # Every file a mutation may write to.
-readonly FILES=(
-    Cargo.lock
-    Cargo.toml
-    ATTRIBUTION.md
-    clippy.toml
-    deny.toml
-    .github/workflows/ci.yml
-    docs/architecture.md
-    crates/core/Cargo.toml
-    crates/core/src/lib.rs
-    crates/core/src/ids.rs
-    crates/core/src/params.rs
-    crates/core/src/readers.rs
-    crates/core/tests/properties.rs
-    crates/engine/tests/properties.rs
-    crates/engine/tests/crash_properties.rs
-    crates/io/tests/properties.rs
-    crates/core/src/value.rs
-    crates/core/src/tick.rs
-    crates/core/src/writer.rs
-    crates/model/Cargo.toml
-    crates/model/src/lib.rs
-    crates/model/src/property.rs
-    crates/io/src/lib.rs
-    crates/io/src/format.rs
-    crates/io/src/store.rs
-    crates/io/src/format/pending.rs
-    crates/kernel/src/lib.rs
-    crates/ui/Cargo.toml
-    crates/ui/src/lib.rs
-    crates/ui/src/automation.rs
-    crates/ui/src/shell.rs
-    crates/ui/src/raster.rs
-    crates/mcp/src/lib.rs
-    crates/mcp/src/server.rs
-    crates/mcp/src/rpc.rs
-    crates/mcp/src/prompts.rs
-    crates/mcp/src/resources.rs
-    crates/mcp/src/tools.rs
-    crates/engine/src/crash.rs
-    crates/engine/src/command.rs
-    crates/engine/src/commands.rs
-    crates/engine/src/history.rs
-    crates/engine/src/params.rs
-    crates/engine/src/lib.rs
-    crates/engine/src/log.rs
-    crates/engine/src/session.rs
-    crates/control/src/server.rs
-    crates/control/src/protocol.rs
-    crates/control/src/token.rs
-    crates/model/src/keyframe.rs
-    crates/model/src/document.rs
-    crates/model/src/fingerprint.rs
-    crates/model/src/path.rs
-    crates/eval/src/evaluate.rs
-    apps/craftkit/src/main.rs
-    apps/craftkit-cli/src/main.rs
-    apps/craftkit-cli/src/args.rs
-    apps/craftkit-cli/src/cli.rs
-    apps/craftkit-web/src/main.rs
-    xtask/src/anchors.rs
-    xtask/src/assets.rs
-    xtask/src/cleanroom.rs
-    xtask/src/ci.rs
-    xtask/src/deny.rs
-    xtask/src/fuzz.rs
-    xtask/src/doctor.rs
-    xtask/src/lists.rs
-    xtask/src/lib.rs
-    docs/recipes/add-a-command.md
-    docs/recipes/add-a-control-channel-method.md
-    docs/recipes/add-an-icon.md
-    docs/recipes/change-the-file-format.md
-    docs/recipes/fix-a-crash.md
-    docs/design/file-format.md
-    docs/patterns/clone-before-edit.md
-    docs/patterns/everything-is-a-command.md
-    docs/patterns/exact-time-not-float-seconds.md
-    docs/agent-playbook.md
-    AGENTS.md
-    README.md
-    apps/craftkit-web/index.html
-    xtask/src/wasm.rs
-    apps/craftkit-web/sw.js
-    scripts/live-window-check.sh
-)
+#
+# The list is a file the script *reads*, not an array it carries. §187: bash
+# reads a script as it goes, so a case cannot edit the script it is running --
+# and a list inside the script could not be broken. A file that is read is a
+# file that can be mutated, and a mutation of this list is a mutation of the
+# contract between the script and the restore.
+#
+# The gate `cargo xtask anchors` reads the same file, so there is one list and
+# both doors read it.
+readonly FILES_FILE="scripts/mutation-files.txt"
+
+# The list, read from that file.
+#
+# The format is one path per line; a line that starts with `#` is a comment.
+# Every path must be a file in the tree -- a blank line is not a file, and the
+# message says which of the two it is -- and the list must not be empty. The
+# script refuses all three rather than snapshotting nothing and saying so at
+# the end. The gate reads the same file and holds the same rules, so the two
+# never disagree about what the list says.
+FILES=()
+FILE_COUNT=0
+while IFS= read -r path || [ -n "$path" ]; do
+    case "$path" in
+        '#'*) continue ;;
+    esac
+    if [ ! -f "$path" ]; then
+        if [ -z "$path" ]; then
+            printf '%sTHE FILE LIST HAS A BLANK LINE.%s\n' "$RED" "$RESET" >&2
+            printf '  %s is the list; a blank line in it is not a path.\n' "$FILES_FILE" >&2
+        else
+            printf '%sTHE FILE LIST NAMES A FILE THAT IS NOT IN THE TREE.%s\n' "$RED" "$RESET" >&2
+            printf '  %s lists %s, and there is no such file.\n' "$FILES_FILE" "$path" >&2
+        fi
+        exit 1
+    fi
+    FILES+=("$path")
+    FILE_COUNT=$((FILE_COUNT + 1))
+done < "$FILES_FILE"
+if [ "$FILE_COUNT" -eq 0 ]; then
+    printf '%sTHE FILE LIST IS EMPTY.%s\n' "$RED" "$RESET" >&2
+    printf '  %s lists no files, so no mutation could be put back.\n' "$FILES_FILE" >&2
+    exit 1
+fi
+
+# `--check` says whether the list is usable, and nothing else.
+#
+# The list's rules are the gate's rules, and the gate is the authority. This
+# is the script's own half of them: the fast refusal before the gate runs,
+# and a way to break it on purpose -- a case cannot run the script that runs
+# the cases, so this is what a case runs. §187.
+if [[ "${1:-}" == "--check" ]]; then
+    printf 'the file list is usable: %s file(s) in %s\n' "$FILE_COUNT" "$FILES_FILE"
+    exit 0
+fi
+
 # Created rather than edited, so restoring means removing them.
 readonly EPHEMERAL=(
     crates/unlisted
@@ -160,11 +134,6 @@ cleanup() {
     rm -rf "$SNAPSHOT"
 }
 trap cleanup EXIT
-
-readonly GREEN=$'\033[32m'
-readonly RED=$'\033[31m'
-readonly YELLOW=$'\033[33m'
-readonly RESET=$'\033[0m'
 
 snapshot() {
     for f in "${FILES[@]}"; do
@@ -252,9 +221,41 @@ guarded() {
     done
     printf '%sMUTATION TARGET IS NOT SNAPSHOTTED%s\n  %s\n\n%s\n%s\n' \
         "$RED" "$RESET" "$target" \
-        "  It is not in FILES, so snapshot() never copied it, restore() cannot put it" \
-        "  back and fingerprint() never looks at it. Add it to FILES first." >&2
+        "  It is not in the list of files a mutation may write to, so snapshot() never" \
+        "  copied it, restore() cannot put it back and fingerprint() never looks at it." \
+        "  Add it to $FILES_FILE first." >&2
     exit 1
+}
+
+# A copy of the script with one thing changed, for the gate to check.
+#
+# The script cannot be changed while it runs: bash reads a script as it goes,
+# so an edit in the middle of a run leaves the shell reading at a byte offset
+# that is not the start of a command (§102). A copy is a different file, and
+# the copy goes in the snapshot directory, which the run deletes.
+#
+# The change is applied the way `swap` applies one, and it fails the same way:
+# a copy that changes nothing is a copy that tests nothing. §187.
+broken_copy() {
+    local out="$1" from="$2" to="$3"
+    if ! python3 - "$out" "$from" "$to" <<'PYCOPY'
+import sys
+out, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open("scripts/mutation-test-gates.sh").read()
+if old not in text:
+    sys.exit(
+        "BROKEN COPY DID NOT APPLY\n"
+        f"  looking for: {old!r}\n"
+        "  This is a bug in scripts/mutation-test-gates.sh: the anchor moved.\n"
+        "  A copy that changes nothing tests nothing."
+    )
+open(out, "w").write(text.replace(old, new, 1))
+PYCOPY
+    then
+        printf '\n%sTHE BROKEN COPY DID NOT APPLY, SO THE RUN IS VOID.%s\n' "$RED" "$RESET" >&2
+        printf '  Fix the text, or the case. The results below are about nothing.\n' >&2
+        exit 1
+    fi
 }
 
 # The anchors, checked before anything is mutated. §184.
@@ -5569,6 +5570,82 @@ swap crates/engine/tests/crash_properties.rs \
     '        .join("shared");'
 expect_catch "property: two properties share one corpus" \
     "cargo test -p craftkit-engine --profile ci two_properties_do_not_share_a_corpus"
+
+# ------------------------------------------------- the script's own rules ----
+# Section 187. Two of the anchors gate's rules are about the script's own
+# text: that a file an anchor names is on the list of files a mutation may
+# write to, and that the script checks its anchors before it starts.
+#
+# Neither could be given a mutation, because the list and the call were
+# inside the script -- and bash reads a script as it goes, so a case cannot
+# edit the script it is running. The list is a file the script reads, and the
+# gate has a --script flag, so both rules can be broken.
+#
+# The first break: the list loses a file an anchor names. A mutation to that
+# file could not be put back, and the gate must say so.
+#
+# The path becomes a comment rather than disappearing, because a swap that
+# removed the text would take the anchor with it and the gate would report
+# the missing anchor instead: a case caught for the wrong reason tests
+# nothing.
+swap scripts/mutation-files.txt \
+    'crates/engine/src/crash.rs' \
+    '# crates/engine/src/crash.rs'
+expect_catch "the file list lost a file an anchor names" \
+    "cargo xtask anchors"
+
+# The second break: the list names a file that is not in the tree. The script
+# would snapshot nothing for it and the restore would put nothing back.
+swap scripts/mutation-files.txt \
+    'crates/ui/src/lib.rs' \
+    'crates/ui/src/lib.rs
+crates/ui/src/not-a-file.rs'
+expect_catch "the file list names a file that is not in the tree" \
+    "cargo xtask anchors"
+
+# The third break: the list has a blank line. A blank line is not a path,
+# and the script refuses it before it does anything else.
+swap scripts/mutation-files.txt \
+    'crates/core/src/value.rs' \
+    'crates/core/src/value.rs
+'
+expect_catch "the script refuses a list with a blank line" \
+    "scripts/mutation-test-gates.sh --check"
+
+# The fourth break: the list names a file that is not in the tree, and the
+# script refuses that too -- the gate's rule and the script's rule are the
+# same rule, and each door has to notice it.
+swap scripts/mutation-files.txt \
+    'crates/core/src/value.rs' \
+    'crates/core/src/value.rs
+crates/core/src/not-a-file.rs'
+expect_catch "the script refuses a list with a file that is not in the tree" \
+    "scripts/mutation-test-gates.sh --check"
+
+# The fifth break: the list names the same file twice. The same file twice
+# is not two files.
+swap scripts/mutation-files.txt \
+    'crates/core/src/value.rs' \
+    'crates/core/src/value.rs
+Cargo.lock'
+expect_catch "the file list lists the same file twice" \
+    "cargo xtask anchors"
+
+# The sixth break: the script does not check its anchors before it starts.
+# The copy is what the gate reads, because the script cannot be changed while
+# it runs.
+broken_copy "$SNAPSHOT/no-preflight.sh" \
+    '    check_anchors' \
+    '    # check_anchors'
+expect_catch "the script does not check its anchors before it starts" \
+    "cargo xtask anchors --script $SNAPSHOT/no-preflight.sh"
+
+# The seventh break: the script calls its check, and the check runs nothing.
+broken_copy "$SNAPSHOT/no-gate.sh" \
+    'out="$(cargo xtask anchors 2>&1)"; rc=$?' \
+    'out="$(cargo xtask nothing 2>&1)"; rc=$?'
+expect_catch "the script's check does not run the anchors gate" \
+    "cargo xtask anchors --script $SNAPSHOT/no-gate.sh"
 
 restore
 finish

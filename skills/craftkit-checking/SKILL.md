@@ -66,7 +66,7 @@ claims to support.
 file moves):
 
 ```
-fmt --check  →  assets  →  lists  →  layers  →  web  →  clippy  →  tests  →  fuzz  →  wasm
+fmt --check  →  anchors  →  assets  →  cleanroom  →  lists  →  layers  →  web  →  clippy  →  tests  →  fuzz  →  wasm
 ```
 
 Run one on its own while you work; run `ci` when you are done.
@@ -74,7 +74,7 @@ Run one on its own while you work; run `ci` when you are done.
 | Gate | What it protects | What it typically catches |
 |---|---|---|
 | `fmt` | formatting is not a reviewer's problem | an unformatted file after an edit |
-| `anchors` | every anchor in `scripts/mutation-test-gates.sh` is in the tree, and each names one place | an anchor that moved (the mutation would change nothing); an anchor that matches five places, so the swap breaks the wrong one |
+| `anchors` | every anchor in `scripts/mutation-test-gates.sh` is in the tree, each names one place, the list of files a mutation may write to holds only files that are in the tree, and the script checks its anchors before it starts | an anchor that moved (the mutation would change nothing); an anchor that matches five places, so the swap breaks the wrong one; a file on the list that is not in the tree, so a mutation to it could not be put back; the same file on the list twice |
 | `assets` | every icon is drawn in code; every file asset has a row in `ATTRIBUTION.md`; **nothing in the tree is written in another language** | a checked-in PNG/SVG/font, an `include_bytes!` of an image, an asset with no attribution row, **a `.py`/`.js`/`.sh` that is not one of the five declared exceptions** |
 | `cleanroom` | **no product's name is in the tree outside prose** — the rule and the table of products are in `docs/clean-room.md` | a fixture, a test or a file name that carries another product's name; a product name in a string literal |
 | `lists` | the lines many changes touch: the deny attribute, the layer table in `docs/architecture.md`, sorted `mod` groups, the crate roots, every bound the tree has named in the prose, and every field the model's fingerprint hashes | a new crate missing the deny attribute, a `TABLE` row with no matching doc row, an unsorted `mod` block, **a bound the tree has that no document names** (§181), **a field added to a type the fingerprint walks** (§80) |
@@ -150,6 +150,7 @@ change a gate:
 ```bash
 scripts/mutation-test-gates.sh            # break each rule, require the gate to notice
 scripts/mutation-test-gates.sh --self-test   # must exit NON-ZERO — it proves the script fails
+scripts/mutation-test-gates.sh --check       # is the list of files a mutation may write to usable?
 ```
 
 `--self-test` injects one synthetic case that is guaranteed to miss. It is
@@ -160,6 +161,13 @@ When you add a gate, add a line that breaks its rule and asserts it rejects the
 tree. When you change a gate, the mutation that found the old bug is still in the
 script — that is what stops it coming back. The script runs in CI as the
 `mutation` job.
+
+**And a rule about the script's own text needs its own door.** The script
+cannot be edited while it runs — bash reads a script as it goes — so the list
+of files a mutation may write to lives in `scripts/mutation-files.txt`, which
+the script and `cargo xtask anchors` both read, and `cargo xtask anchors
+--script PATH` checks a **copy** of the script. A copy is the only thing a
+case can break. §187.
 
 ### The one check that needs a display
 

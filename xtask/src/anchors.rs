@@ -14,6 +14,10 @@
 //!   an anchor that matches five places points at none of them.
 //! - **Every file an anchor names can be put back.** A mutation to a file the
 //!   script does not snapshot is a mutation the script cannot undo.
+//! - **The list is a list.** Every path on it is a file in the tree, no path
+//!   is on it twice, and it is not empty. §187.
+//! - **The script calls its check before its first swap**, and that check runs
+//!   this gate. §187.
 //!
 //! # Why it is a command of its own
 //!
@@ -40,13 +44,37 @@
 //! The reader and the shell agree: the script's own `swap` refuses an anchor
 //! that is not there, so a run that reaches a case proves the shell found
 //! what this reader says is there.
+//!
+//! # The list
+//!
+//! The files a mutation may write to live in [`FILES_FILE`], and the script
+//! reads that file rather than carrying the list. §187: a list inside a
+//! script cannot be broken, because bash reads a script as it goes and a
+//! case cannot edit the script it is running — so the rule that says a
+//! mutation to a file the script cannot put back is refused had never been
+//! shown to fail against the real list. A file that is read is a file that
+//! can be mutated.
+//!
+//! # Checking a script that is not the tree's own
+//!
+//! `--script PATH` checks another script against the same tree. Two of the
+//! rules are about the script's own text, and the only way to break one is
+//! to break a **copy** of it: the script cannot be changed while it runs.
+//! §187.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::Outcome;
 
 /// The script that holds the anchors.
 pub const SCRIPT: &str = "scripts/mutation-test-gates.sh";
+
+/// The file that holds the list of files a mutation may write to.
+///
+/// §187. The list used to be an array inside the script, and the gate read
+/// it by parsing the script's text. That made the list a second copy of a
+/// fact the script owned, and it made the list impossible to break.
+pub const FILES_FILE: &str = "scripts/mutation-files.txt";
 
 /// One `swap` block in the script.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -274,29 +302,110 @@ fn ansi_escape(script: &str, at: usize) -> Result<(char, usize), String> {
         SCRIPT, next as char
     ))
 }
-/// The files the script snapshots.
+/// The files a mutation may write to, and what is wrong with the list.
 ///
-/// A mutation to a file that is not in this list cannot be put back, and the
-/// script's own `guarded` refuses such a mutation when it reaches it.
-pub fn files_list(script: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut inside = false;
-    for line in script.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("readonly FILES=(") {
-            inside = true;
+/// §187. The list is a file, so it is read rather than parsed out of the
+/// script, and so it can be broken on purpose. The problems are the list's
+/// own: a blank line is not a path, the same path twice is not two files,
+/// and a path that is not in the tree is a file the script cannot snapshot
+/// and cannot put back.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct List {
+    /// The paths, in the order the file lists them.
+    pub paths: Vec<String>,
+    /// What is wrong with the list.
+    pub problems: Vec<String>,
+}
+
+/// Read the list of files a mutation may write to.
+///
+/// The script reads the same file, so the two never disagree about what the
+/// list says: the script refuses a blank line and a path that is not in the
+/// tree, and this refuses them too.
+///
+/// The format is one path per line. A line that starts with `#` is a
+/// comment, and nothing else is: a path is not trimmed, so a path with a
+/// space in it is a path that is not in the tree.
+pub fn read_list(root: &Path) -> Result<List, String> {
+    let path = root.join(FILES_FILE);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("could not read {FILES_FILE}: {e}"))?;
+    let mut list = List::default();
+    let mut first_seen: std::collections::BTreeMap<&str, usize> = Default::default();
+    for (index, line) in text.lines().enumerate() {
+        let number = index + 1;
+        if line.starts_with('#') {
             continue;
         }
-        if inside {
-            if trimmed == ")" {
-                break;
+        if line.is_empty() {
+            // A refinement of the rule below, not a second rule: a blank
+            // line is a path that is not in the tree, and the message says
+            // which of the two it is, because "lists ``" is not something a
+            // reader can act on.
+            list.problems
+                .push(format!("{FILES_FILE}: line {number} is blank, and a blank line is not a path"));
+            continue;
+        }
+        if let Some(earlier) = first_seen.get(line) {
+            list.problems
+                .push(format!("{FILES_FILE}: line {number} lists `{line}`, and line {earlier} lists it too"));
+            continue;
+        }
+        first_seen.insert(line, number);
+        if !root.join(line).is_file() {
+            list.problems.push(format!(
+                "{FILES_FILE}: line {number} lists `{line}`, and that file is not in the tree"
+            ));
+        }
+        list.paths.push(line.to_string());
+    }
+    if list.paths.is_empty() {
+        list.problems.push(format!("{FILES_FILE} lists no files at all"));
+    }
+    Ok(list)
+}
+
+/// The script's own anchor check, by name.
+///
+/// The definition is `check_anchors() {` and the call is `check_anchors` on a
+/// line of its own.
+const CHECK: &str = "check_anchors";
+
+/// The command the script's check runs.
+const GATE: &str = "cargo xtask anchors";
+
+/// The line the script calls its anchor check on.
+///
+/// The gate looks for the **call**, and not for the command the check runs.
+/// §187: the string `cargo xtask anchors` is in the function's body, so a
+/// gate that looked for that string passed a script that never called the
+/// function at all — and passed a script that called it after the first
+/// mutation, which is the defect the call is there to prevent.
+fn the_call_site(script: &str) -> Option<usize> {
+    script.lines().enumerate().find_map(|(index, line)| (line.trim() == CHECK).then_some(index + 1))
+}
+
+/// The lines of the script's own anchor check.
+///
+/// The function is written the way the script writes its functions: a line
+/// that opens it, the lines of its body, and a line that is `}` and nothing
+/// else. The body is what says which command the script runs, and the gate
+/// reads it because the call alone does not say it.
+fn the_body_of_the_check(script: &str) -> Option<String> {
+    let mut lines = script.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "check_anchors() {" {
+            let mut body = String::new();
+            for line in lines {
+                if line.trim() == "}" {
+                    return Some(body);
+                }
+                body.push_str(line);
+                body.push('\n');
             }
-            if !trimmed.is_empty() {
-                out.push(trimmed.to_string());
-            }
+            return None;
         }
     }
-    out
+    None
 }
 
 /// Where an anchor is, in the file it names.
@@ -346,29 +455,36 @@ fn occurrences(text: &str, needle: &str) -> Vec<usize> {
     out
 }
 
-/// The command the script calls to check its anchors.
-///
-/// The gate reads the script, so the call is in the script: the gate can
-/// check that the script makes it, and does so before the first mutation.
-const CALL: &str = "cargo xtask anchors";
-
 /// The mutation script's anchors are in the tree, and each names one place.
 ///
-/// §184. Four rules, and each is a way the instrument could lie about what it
+/// §184. Six rules, and each is a way the instrument could lie about what it
 /// was testing.
 ///
 /// The anchors are grouped: twenty-seven of them are used by more than one
 /// case, and a report that said the same thing twice about the same text
 /// would be a report nobody reads.
 pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
-    let script =
-        std::fs::read_to_string(root.join(SCRIPT)).map_err(|e| format!("could not read {SCRIPT}: {e}"))?;
+    the_anchors_are_in_the_tree_of(root, &root.join(SCRIPT))
+}
+
+/// The same check, for a script the caller names.
+///
+/// §187. Two of the rules are about the script's own text, and the script
+/// cannot be edited while it runs — bash reads a script as it goes — so the
+/// only way to break one of them is to break a **copy**. The tree it is
+/// checked against is still the tree.
+pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result<Vec<String>, String> {
+    let script = std::fs::read_to_string(script_path)
+        .map_err(|e| format!("could not read {}: {e}", script_path.display()))?;
     let swaps = swaps(&script)?;
     if swaps.is_empty() {
-        return Err(format!("{SCRIPT} has no swap blocks; the reader is wrong, not the script"));
+        return Err(format!(
+            "{} has no swap blocks; the reader is wrong, not the script",
+            script_path.display()
+        ));
     }
-    let files = files_list(&script);
-    let mut problems = Vec::new();
+    let list = read_list(root)?;
+    let mut problems = list.problems.clone();
 
     // The files the anchors name, and the lines of the script that name them.
     let mut by_file: std::collections::BTreeMap<String, Vec<usize>> = Default::default();
@@ -385,17 +501,17 @@ pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
         if text.is_none() {
             problems.push(format!(
                 "{}: the anchor names `{}` (line{} {}), and that file is not in the tree",
-                SCRIPT,
+                script_path.display(),
                 file,
                 if lines.len() == 1 { "" } else { "s" },
                 lines.iter().map(|n| n.to_string()).collect::<Vec<String>>().join(", ")
             ));
         }
-        if !files.iter().any(|listed| listed == file) {
+        if !list.paths.iter().any(|listed| listed == file) {
             problems.push(format!(
-                "{}: the anchor names `{}` (line{} {}), and the script's FILES list does not \
-                 have it, so a mutation to it could not be put back",
-                SCRIPT,
+                "{}: the anchor names `{}` (line{} {}), and the list of files a mutation may \
+                 write to does not have it, so a mutation to it could not be put back",
+                script_path.display(),
                 file,
                 if lines.len() == 1 { "" } else { "s" },
                 lines.iter().map(|n| n.to_string()).collect::<Vec<String>>().join(", ")
@@ -409,7 +525,7 @@ pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
         let Some(text) = texts.get(file).and_then(|text| text.as_ref()) else { continue };
         let where_ = format!(
             "{}: the anchor for `{}` (line{} {})",
-            SCRIPT,
+            script_path.display(),
             file,
             if lines.len() == 1 { "" } else { "s" },
             lines.iter().map(|n| n.to_string()).collect::<Vec<String>>().join(", ")
@@ -438,22 +554,33 @@ pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
     // twenty-five minutes after the thing it is about is a gate that is
     // twenty-five minutes late.
     if let Some(first) = swaps.first() {
-        if let Some(at) = script.find(CALL) {
-            let line = line_of(&script, at);
-            if line > first.line {
-                problems.push(format!(
-                    "{}: the script calls `{CALL}` on line {line}, and its first swap block is \
-                     on line {}: a moved anchor is found when the case that uses it is reached, \
-                     which is up to twenty-five minutes into a run",
-                    SCRIPT, first.line
-                ));
-            }
-        } else {
-            problems.push(format!(
-                "{}: the script never calls `{CALL}`: a moved anchor is found when the case that \
-                 uses it is reached, which is up to twenty-five minutes into a run",
-                SCRIPT
-            ));
+        match the_call_site(&script) {
+            Some(line) if line <= first.line => {}
+            Some(line) => problems.push(format!(
+                "{}: the script calls `{CHECK}` on line {line}, and its first swap block is \
+                 on line {}: a moved anchor is found when the case that uses it is reached, \
+                 which is up to twenty-five minutes into a run",
+                script_path.display(),
+                first.line
+            )),
+            None => problems.push(format!(
+                "{}: the script never calls `{CHECK}`: a moved anchor is found when the case \
+                 that uses it is reached, which is up to twenty-five minutes into a run",
+                script_path.display()
+            )),
+        }
+        // And the call runs the gate. A script that calls a check which
+        // checks nothing has not checked its anchors.
+        match the_body_of_the_check(&script) {
+            Some(body) if body.contains(GATE) => {}
+            Some(_) => problems.push(format!(
+                "{}: the script calls `{CHECK}`, and its body does not run `{GATE}`",
+                script_path.display()
+            )),
+            None => problems.push(format!(
+                "{}: the script has no `{CHECK}()` to call, or the function is never closed",
+                script_path.display()
+            )),
         }
     }
 
@@ -462,18 +589,48 @@ pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The gate.
-pub fn run(root: &Path, _args: &[String]) -> Result<Outcome, String> {
+pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
     crate::step("anchors");
-    let problems = the_anchors_are_in_the_tree(root)?;
+    let script = the_script_to_check(root, args)?;
+    let problems = the_anchors_are_in_the_tree_of(root, &script)?;
     if !problems.is_empty() {
-        let mut message = format!("{} problem(s) in {SCRIPT}:\n", problems.len());
+        let mut message = format!("{} problem(s) in {}:\n", problems.len(), script.display());
         for problem in &problems {
             message.push_str(&format!("   • {problem}\n"));
         }
         return Err(message);
     }
-    println!("   ok: every anchor in {SCRIPT} is in the tree, and each one names a single place");
+    println!("   ok: every anchor in {} is in the tree, and each one names a single place", script.display());
     Ok(Outcome::Ran)
+}
+
+/// The script the gate checks: the tree's own, unless another one is named.
+///
+/// §187. `--script PATH` is how a rule about the script's own text is broken
+/// on purpose: the script cannot be edited while it runs, so a copy is
+/// checked instead.
+fn the_script_to_check(root: &Path, args: &[String]) -> Result<PathBuf, String> {
+    let mut script = root.join(SCRIPT);
+    let mut index = 0usize;
+    while index < args.len() {
+        let Some(flag) = args.get(index) else { break };
+        match flag.as_str() {
+            "--script" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("`--script` needs a path".to_string());
+                };
+                script = if Path::new(value).is_absolute() { PathBuf::from(value) } else { root.join(value) };
+                index += 2;
+            }
+            other => {
+                return Err(format!(
+                    "`cargo xtask anchors` does not take `{other}`\n\n  usage: cargo xtask anchors \
+                     [--script PATH]"
+                ));
+            }
+        }
+    }
+    Ok(script)
 }
 
 #[cfg(test)]
@@ -564,15 +721,7 @@ mod tests {
 
     // ------------------------------------------------------- the list ----
 
-    #[test]
-    fn the_files_list_is_the_one_the_script_snapshots() {
-        let script = "readonly FILES=(\n    Cargo.toml\n    crates/a.rs\n)\n";
-        assert_eq!(files_list(script), vec!["Cargo.toml".to_string(), "crates/a.rs".to_string()]);
-    }
-
-    // ------------------------------------------------------- the gate ----
-
-    /// A tree with the script and one file in it.
+    /// A tree with the script, the list and a second file in it.
     ///
     /// The name is unique to the call: the tests run at the same time, and
     /// two of them sharing one directory would delete each other's tree
@@ -585,20 +734,97 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("scripts")).expect("the fabricated tree");
         std::fs::create_dir_all(dir.join("crates")).expect("the fabricated tree");
+        std::fs::write(dir.join("crates/a.rs"), "the anchor\n").expect("the fabricated file");
+        std::fs::write(dir.join("crates/b.rs"), "the other file\n").expect("the fabricated file");
         dir
+    }
+
+    /// The script's own anchor check: the function, and what it runs.
+    ///
+    /// §187: the gate looks for the **call**, not for the command the
+    /// function runs, so a fabricated script with only the function is a
+    /// script that never checks its anchors.
+    fn a_check_that(body: &str) -> String {
+        format!("check_anchors() {{\n    {body}\n}}\n")
     }
 
     /// A script and a file that agree.
     fn a_good_tree() -> std::path::PathBuf {
         let dir = a_tree("good");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/a.rs\n").expect("the fabricated list");
         std::fs::write(
             dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/a.rs\n)\ncargo xtask anchors\nswap crates/a.rs 'the anchor' 'the break'\n",
+            format!(
+                "{}check_anchors\nswap crates/a.rs 'the anchor' 'the break'\n",
+                a_check_that("cargo xtask anchors")
+            ),
         )
         .expect("the fabricated script");
         std::fs::write(dir.join("crates/a.rs"), "the anchor\n").expect("the fabricated file");
         dir
     }
+
+    #[test]
+    fn the_list_is_read_from_the_file_the_script_reads() {
+        let dir = a_tree("list");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/a.rs\ncrates/b.rs\n")
+            .expect("the fabricated list");
+        std::fs::write(dir.join("crates/a.rs"), "the anchor\n").expect("the fabricated file");
+        let list = read_list(&dir).expect("the list reads");
+        assert_eq!(list.paths, vec!["crates/a.rs".to_string(), "crates/b.rs".to_string()]);
+        assert!(list.problems.is_empty(), "{:?}", list.problems);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A blank line is not a path, and the script refuses it too.
+    #[test]
+    fn a_blank_line_in_the_list_is_reported() {
+        let dir = a_tree("blank");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/a.rs\n\ncrates/b.rs\n")
+            .expect("the fabricated list");
+        let list = read_list(&dir).expect("the list reads");
+        assert_eq!(list.problems.len(), 1, "{:?}", list.problems);
+        assert!(list.problems[0].contains("is blank"), "{}", list.problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The same file twice is not two files.
+    #[test]
+    fn the_same_file_twice_in_the_list_is_reported() {
+        let dir = a_tree("twice");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/a.rs\ncrates/a.rs\n")
+            .expect("the fabricated list");
+        let list = read_list(&dir).expect("the list reads");
+        assert_eq!(list.problems.len(), 1, "{:?}", list.problems);
+        assert!(list.problems[0].contains("lists it too"), "{}", list.problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A path that is not in the tree is a file the script cannot snapshot
+    /// and cannot put back.
+    #[test]
+    fn a_file_in_the_list_that_is_not_in_the_tree_is_reported() {
+        let dir = a_tree("gone");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/a.rs\ncrates/gone.rs\n")
+            .expect("the fabricated list");
+        let list = read_list(&dir).expect("the list reads");
+        assert_eq!(list.problems.len(), 1, "{:?}", list.problems);
+        assert!(list.problems[0].contains("is not in the tree"), "{}", list.problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// And an empty list is not a list.
+    #[test]
+    fn an_empty_list_is_reported() {
+        let dir = a_tree("empty");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "").expect("the fabricated list");
+        let list = read_list(&dir).expect("the list reads");
+        assert_eq!(list.problems.len(), 1, "{:?}", list.problems);
+        assert!(list.problems[0].contains("lists no files at all"), "{}", list.problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ------------------------------------------------------- the gate ----
 
     #[test]
     fn a_tree_where_every_anchor_is_in_the_file_has_no_problems() {
@@ -639,14 +865,10 @@ mod tests {
     #[test]
     fn a_file_the_script_cannot_put_back_is_reported() {
         let dir = a_good_tree();
-        std::fs::write(
-            dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/other.rs\n)\ncargo xtask anchors\nswap crates/a.rs 'the anchor' 'the break'\n",
-        )
-        .expect("the fabricated script");
+        std::fs::write(dir.join("scripts/mutation-files.txt"), "crates/b.rs\n").expect("the fabricated list");
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
         assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(problems[0].contains("FILES list does not have it"), "{}", problems[0]);
+        assert!(problems[0].contains("does not have it"), "{}", problems[0]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -656,13 +878,16 @@ mod tests {
         let dir = a_good_tree();
         std::fs::write(
             dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/a.rs\n)\ncargo xtask anchors\nswap crates/gone.rs 'the anchor' 'the break'\n",
+            format!(
+                "{}check_anchors\nswap crates/gone.rs 'the anchor' 'the break'\n",
+                a_check_that("cargo xtask anchors")
+            ),
         )
         .expect("the fabricated script");
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
         assert_eq!(problems.len(), 2, "{problems:?}");
         assert!(problems.iter().any(|p| p.contains("is not in the tree")), "{problems:?}");
-        assert!(problems.iter().any(|p| p.contains("FILES list does not have it")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("does not have it")), "{problems:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -674,7 +899,7 @@ mod tests {
         let dir = a_good_tree();
         std::fs::write(
             dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/a.rs\n)\nswap crates/a.rs 'the anchor' 'the break'\n",
+            format!("{}swap crates/a.rs 'the anchor' 'the break'\n", a_check_that("cargo xtask anchors")),
         )
         .expect("the fabricated script");
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
@@ -690,12 +915,64 @@ mod tests {
         let dir = a_good_tree();
         std::fs::write(
             dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/a.rs\n)\nswap crates/a.rs 'the anchor' 'the break'\ncargo xtask anchors\n",
+            format!(
+                "{}swap crates/a.rs 'the anchor' 'the break'\ncheck_anchors\n",
+                a_check_that("cargo xtask anchors")
+            ),
         )
         .expect("the fabricated script");
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].contains("twenty-five minutes"), "{}", problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A script that calls a check which checks nothing has not checked its
+    /// anchors. §187.
+    #[test]
+    fn a_script_whose_check_runs_nothing_is_reported() {
+        let dir = a_good_tree();
+        std::fs::write(
+            dir.join("scripts/mutation-test-gates.sh"),
+            format!(
+                "{}check_anchors\nswap crates/a.rs 'the anchor' 'the break'\n",
+                a_check_that("echo nothing")
+            ),
+        )
+        .expect("the fabricated script");
+        let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("does not run"), "{}", problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The gate checks the script it is given, so a **copy** can be broken on
+    /// purpose: the script cannot be edited while it runs. §187.
+    #[test]
+    fn another_script_can_be_checked_against_the_same_tree() {
+        let dir = a_good_tree();
+        std::fs::write(
+            dir.join("scripts/copy.sh"),
+            format!("{}swap crates/a.rs 'the anchor' 'the break'\n", a_check_that("cargo xtask anchors")),
+        )
+        .expect("the copy");
+        let problems =
+            the_anchors_are_in_the_tree_of(&dir, &dir.join("scripts/copy.sh")).expect("the gate runs");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("never calls"), "{}", problems[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's own script, unless another one is named.
+    #[test]
+    fn the_script_to_check_is_the_trees_own_unless_another_is_named() {
+        let dir = a_tree("which");
+        assert_eq!(the_script_to_check(&dir, &[]).expect("the default"), dir.join(SCRIPT));
+        let named = the_script_to_check(&dir, &["--script".to_string(), "scripts/copy.sh".to_string()])
+            .expect("the named script");
+        assert_eq!(named, dir.join("scripts/copy.sh"));
+        assert!(the_script_to_check(&dir, &["--script".to_string()]).is_err());
+        assert!(the_script_to_check(&dir, &["--nope".to_string()]).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -706,7 +983,11 @@ mod tests {
         let dir = a_good_tree();
         std::fs::write(
             dir.join("scripts/mutation-test-gates.sh"),
-            "readonly FILES=(\n    crates/a.rs\n)\ncargo xtask anchors\nswap crates/a.rs 'the anchor' 'the break'\nswap crates/a.rs 'the anchor' 'other'\n",
+            format!(
+                "{}check_anchors\nswap crates/a.rs 'the anchor' 'the break'\n\
+                 swap crates/a.rs 'the anchor' 'other'\n",
+                a_check_that("cargo xtask anchors")
+            ),
         )
         .expect("the fabricated script");
         std::fs::write(dir.join("crates/a.rs"), "the anchor\nthe anchor\n").expect("the file");
@@ -721,7 +1002,7 @@ mod tests {
     #[test]
     fn a_script_with_no_swaps_is_an_error_and_not_a_pass() {
         let dir = a_good_tree();
-        std::fs::write(dir.join("scripts/mutation-test-gates.sh"), "readonly FILES=(\n)\n")
+        std::fs::write(dir.join("scripts/mutation-test-gates.sh"), "check_anchors() {\n}\n")
             .expect("the file");
         let result = the_anchors_are_in_the_tree(&dir);
         assert!(result.is_err(), "a reader that found nothing must not report a pass");

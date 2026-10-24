@@ -22080,6 +22080,145 @@ is the right shape for a property whose *reader* may refuse — the promise is
 whose *input* is the thing under test. The input has to be the one the
 property wrote, and the property has to say so when it is not.
 
+## 187. The instrument's own rules could not be broken, and one of them was not the rule it claimed
+
+### The finding
+
+§184 gave the mutation script's anchors a gate — `cargo xtask anchors` — and
+the gate holds four rules. Two of them are about the script's **own text**:
+
+- every file an anchor names is on the list of files a mutation may write to,
+  so a mutation to that file can be put back; and
+- the script checks its anchors before its first swap, so a moved anchor is
+  found in a second rather than twenty-five minutes into a run.
+
+**Neither could be given a mutation.** The list and the call were both inside
+the script, and the script is not on its own list of files a mutation may
+write to: bash reads a script as it goes, so a case cannot edit the script it
+is running (§102's own reason).
+
+Measured, before the port:
+
+| | |
+|---|---|
+| cases in the script | 432 |
+| cases that swap the script | **0** |
+| cases that swap the list of files | **0** |
+| swap blocks | 426 |
+| files on the list | 84 |
+
+The only evidence that the two rules worked was three unit tests on a
+**fabricated** tree — a script and a list the test wrote itself.
+
+### And one of them was not the rule it claimed
+
+The second rule looked for the string `cargo xtask anchors` before the first
+swap. The script's function **definition** holds that string; its **call** is
+far below it, and the first swap is far below that.
+
+Measured, with a probe that applies the gate's own logic to the real script:
+
+```
+=== the call deleted ===
+  the gate looks for the string: line 273
+  the first swap is on line      502
+  rule 4 says: PASSES (no problem reported)
+
+=== the call moved after the first swap ===
+  the gate looks for the string: line 273
+  the first swap is on line      502
+  rule 4 says: PASSES (no problem reported)
+```
+
+Deleting the pre-flight call — the defect §184 was written to prevent — left
+the gate **passing**. So did moving the call to after the first swap.
+
+And the unit test that claims to cover the late call,
+`a_script_that_checks_its_anchors_too_late_is_reported`, used a fabricated
+script where the string **was** the call. The real script has the string in
+a definition. **The test proved the reader; it did not prove the rule.**
+
+### The port
+
+**The list is a file.** `scripts/mutation-files.txt`: one path per line, and
+a line that starts with `#` is a comment. The script reads it and the gate
+reads it — one list, two doors — and the gate no longer parses bash to find
+it.
+
+**The gate holds the list's rules.** Every path on it is a file in the tree,
+no path is on it twice, the list is not empty, and every file an anchor
+names is on it. Three of those four are new: a list that named a file the
+tree does not have was invisible to every gate, and the script's snapshot
+would have had nothing to copy and the restore nothing to put back.
+
+**The script holds the same rules**, before it does anything, and `--check`
+says whether the list is usable:
+
+```console
+$ scripts/mutation-test-gates.sh --check
+the file list is usable: 85 file(s) in scripts/mutation-files.txt
+```
+
+**The gate looks for the call, not the command.** It finds the line that is
+`check_anchors` on its own, and it reads the function's body to check that
+the call runs `cargo xtask anchors`. A script that calls a check which
+checks nothing has not checked its anchors.
+
+**And `--script PATH` checks another script against the same tree.** The
+only way to break a rule about a script's own text is to break a **copy** of
+it, and this is how.
+
+### The gate's own teeth
+
+Seven new mutations, and every one of them was proved **load-bearing**: the
+rule was removed from the door that holds it, and the case had to go from
+caught to missed.
+
+| The mutation | The door that catches it |
+|---|---|
+| the file list lost a file an anchor names | `cargo xtask anchors` |
+| the file list names a file that is not in the tree | the same |
+| the file list lists the same file twice | the same |
+| the script refuses a list with a blank line | `scripts/mutation-test-gates.sh --check` |
+| the script refuses a list with a file that is not in the tree | the same |
+| the script does not check its anchors before it starts | `cargo xtask anchors --script <copy>` |
+| the script's check does not run the anchors gate | the same |
+
+```
+  load-bearing  the file list lost a file an anchor names
+  load-bearing  the file list names a file that is not in the tree
+  load-bearing  the script refuses a list with a blank line
+  load-bearing  the script refuses a list with a file that is not in the tree
+  load-bearing  the file list lists the same file twice
+  load-bearing  the script does not check its anchors before it starts
+  load-bearing  the script's check does not run the anchors gate
+```
+
+**A case caught for the wrong reason tests nothing**, and the first version
+of the blank-line case was caught by the wrong rule: a blank line is not a
+file either, so the *existence* rule caught it and the blank-line rule was
+never exercised. The two doors now hold one rule — *every path is a file in
+the tree* — with two messages, and the case was proved load-bearing against
+that rule.
+
+One rule has no case of its own: **the list is not empty**. It is a
+refinement of the membership rule — an empty list breaks that one for every
+anchor — so the gate's report would say the same thing either way. The
+script refuses an empty list before the gate does, because an empty list is
+also the one shape that would leave the restore with nothing to put back.
+
+### The lesson
+
+**A rule about a script's own text cannot be tested by mutating the script.**
+Bash reads a script as it goes, so a list or a call inside the script is a
+thing no case can reach. What a case *can* reach is a **file the script
+reads** and a **copy of the script**. The instrument's own rules have to be
+put somewhere a case can reach them.
+
+**And "the string is in the file" is not "the thing is called".** The gate
+looked for a command name and found the definition that held it. A rule
+about a call has to find the call.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -22543,13 +22682,17 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The replay door refuses a report or replays it, and never panics** | the same | the property — §183 |
 | **Every anchor in the mutation script is in the file it names** | `cargo xtask anchors` | 1 mutation — §184 |
 | **Every anchor names exactly one place** | the same | 1 mutation — §184 |
-| **Every file an anchor names can be put back** | the same | the unit test — §184 |
-| **The script checks its anchors before its first swap** | the same | the unit test — §184 |
+| **Every file an anchor names can be put back** | the same | 1 mutation — §187 |
+| **The script checks its anchors before its first swap** | the same | 1 mutation — §187 |
 | **The reader understands the three quoting conventions, and refuses the ones it does not** | `swaps` in `xtask/src/anchors.rs` | the unit tests — §184 |
 | **A crash report is one file, and every door reads it** | `crash::replay_in` in `crates/engine/src/crash.rs` | 1 mutation — §185 |
 | **A folder that is not a report is not offered as one** | `crash::list_in` | the unit test — §185 |
 | **One folder, one answer** | `crates/engine/tests/crash_properties.rs` | the property — §185 |
 | **A property's corpus is its own, and the property says so** | `crates/engine/tests/crash_properties.rs` | 1 mutation — §186 |
+| **The list of files a mutation may write to is a file the script and the gate both read** | `cargo xtask anchors` | the gate's own check — §187 |
+| **Every path on that list is a file in the tree** | the same, and the script's `--check` | 2 mutations — §187 |
+| **No path is on that list twice** | `cargo xtask anchors` | 1 mutation — §187 |
+| **The script's check runs the anchors gate** | `cargo xtask anchors --script` | 1 mutation — §187 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -23585,20 +23728,55 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     limit to measure it on — which is what §103 and §181 did, and why these
     numbers are here and not in a gate.
 
-49. **Make the mutation script's own rules mutation-testable.** §184 gave the
-    script's anchors a gate, and two of the four rules that gate checks are
-    about the script's *own* text: that a file an anchor names is in the
-    script's `FILES` list, and that the script calls the anchors gate before
-    its first swap. Neither can be given a mutation, because the script is not
-    in `FILES` — bash reads a script incrementally, so a mutation to it would
-    leave the shell reading at a byte offset that is not the start of a
-    command (§102's own reason). They are covered by unit tests on a
-    fabricated tree, and a unit test is weaker evidence than a mutation.
+49. ~~**Make the mutation script's own rules mutation-testable.**~~ **Done.**
+    §187 — the list of files a mutation may write to is now
+    `scripts/mutation-files.txt`, which the script reads and the gate reads,
+    so a mutation of it is a mutation of the contract between the script and
+    the restore. The gate looks for the script's **call** rather than for the
+    command the call runs, and `--script PATH` checks a **copy** of the
+    script — the only way to break a rule about a script's own text.
 
-    The way out is to put the script's **data** in a file the script *reads*:
-    the list of files it snapshots, and perhaps the anchors themselves. A file
-    that is read is a file that can be mutated, and a mutation of the `FILES`
-    list is a mutation of the contract between the script and the restore.
-    The cost is a second file to keep in step with the script — which is the
-    trade §182 made for the script format, and the reason it was worth it
-    there.
+    The port also found that the rule about the call was not the rule it
+    claimed to be: the gate looked for the string `cargo xtask anchors`, which
+    the script's *definition* holds, so deleting the call — or moving it
+    after the first swap — left the gate passing. Seven new mutations, each
+    proved load-bearing by removing the rule and watching the case go from
+    caught to missed.
+
+50. **Decide whether the claim that the tree is unchanged covers the files a
+    run creates.** §187 moved the list of files a mutation may *write to* out
+    of the script, so the script and the gate read one list. The other list —
+    the files a mutation may *create*, the four probes the gates leave behind
+    — is still an array inside the script, and no gate holds a rule about it.
+
+    The blind spot is in the code: the closing claim ("Tree unchanged") is a
+    checksum over the list of files that were **edited**. A probe the script
+    creates and does not name is removed by nothing, and the checksum does not
+    see it — so the script can leave a file behind and say the tree is
+    unchanged.
+
+    The two answers are the same shape as item 6. **The claim covers the
+    whole tree**, so a file the run created is part of what "unchanged"
+    means — which means the claim has to know every file a gate may create,
+    and the list grows with the gates. Or **the claim covers the mutable
+    surface only, and says so** — a smaller claim, and the sentence that
+    makes it has to say it. The cheap half is the second: the closing line is
+    one sentence, and it is currently wider than the thing it computes.
+
+51. **The phases of `ci` are written twice, and only one of the two copies
+    is checked.** `xtask/src/ci.rs` holds the `PHASES` constant, and
+    `skills/craftkit-checking/SKILL.md` prints them — once as a line of
+    arrows, and once as a table. `cargo xtask lists` checks the **table**
+    against the constant, so a gate that stops running has to stop being
+    documented there; the line of arrows is not checked at all.
+
+    Measured while §187 was landing: the line of arrows said `fmt --check →
+    assets → lists → …`, and it had been missing **`anchors`** and
+    **`cleanroom`** since §184 and §170 put them in the constant. The table
+    beside it was right, and the gate was green — the same shape as §187's
+    finding one level up: a second copy of a fact, read by nobody.
+
+    The fix is §185's rule applied to a list: **one copy**. The table is
+    checked and ordered, so the line of arrows is redundant; deleting it
+    removes the copy that can drift. The alternative — teaching `lists` to
+    read a line of arrows — is a gate for a sentence nobody needs.
