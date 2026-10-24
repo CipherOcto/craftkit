@@ -108,6 +108,21 @@ named after its id: the door reads the file you were handed, with the tree's
 one reader and the tree's one replay, so it cannot answer differently from
 the folder's door. §195.
 
+And if there is **no** report to find — a headless run that died without
+leaving one, or a report you want to hand to somebody else — the tree can
+write one:
+
+```bash
+craftkit-cli crashes write --out report.json   # a report of the sample session
+```
+
+The report it writes is of the **sample session**: the sample's three
+commands, the empty document they ran on, and the document they produced —
+so it carries a real replay, and `crashes replay --file report.json` on it
+says it reproduced the design. It is written with the tree's own writer, so
+the file holds the same bytes a report in the crash folder holds, and the
+tree's one reader reads either. §200.
+
 A report is **input**, not output — it arrives from somebody else's disk, so
 the reader bounds what it will accept: `report.json` is
 read only up to `MAX_REPORT_BYTES`, a replay runs at most

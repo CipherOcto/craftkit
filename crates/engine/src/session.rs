@@ -262,12 +262,12 @@ impl Session {
     /// guaranteed to be buildable by whatever a user or an agent could do, and
     /// the history it would otherwise leave behind is wiped below, so a sample
     /// session opens clean.
+    ///
+    /// This is [`Session::sample_recorded`] with the record wiped: the sample
+    /// is the *starting state*, and what ran to build it is not something the
+    /// user did.
     pub fn sample() -> Self {
-        let mut s = Self::new("Sample plan");
-        for (command, params) in sample_steps() {
-            let outcome = s.execute(&command, &params);
-            debug_assert!(outcome.is_ok(), "the sample document must build: {outcome:?}");
-        }
+        let mut s = Self::sample_recorded();
         // The sample is the *starting state*, not something the user did: a
         // session that opens with three entries in its log and an undo stack
         // three deep would be a lie that a crash report would then repeat.
@@ -275,6 +275,27 @@ impl Session {
         s.log.clear();
         s.dirty = false;
         s.reset_trace();
+        s
+    }
+
+    /// The sample session, with **what it ran still recorded**.
+    ///
+    /// [`Session::sample`] wipes the trace and the log, because a session
+    /// that opens with three entries in its log is a lie about what the user
+    /// did. A crash report is the opposite: it is **exactly** a record of what
+    /// ran — the commands, the document they ran on, and the document they
+    /// produced. So a report of the sample needs the same session with the
+    /// record still in it.
+    ///
+    /// Without this, the only report the tree could write headlessly was a
+    /// report with an **empty replay** and a base equal to its own design —
+    /// a report that replayed nothing and "reproduced" itself. §200.
+    pub fn sample_recorded() -> Self {
+        let mut s = Self::new("Sample plan");
+        for (command, params) in sample_steps() {
+            let outcome = s.execute(&command, &params);
+            debug_assert!(outcome.is_ok(), "the sample document must build: {outcome:?}");
+        }
         s.recompute();
         s
     }

@@ -183,6 +183,45 @@ fn a_file_that_is_not_a_report_is_refused_by_the_real_binary() {
     assert!(!ok, "a file that is not a report must be refused");
 }
 
+/// The tree can write a crash report without a window.
+///
+/// §200: the tree's four production writers were all in the desktop binary's
+/// panic hook, so a headless program could not produce a report by **any**
+/// path — and the tree could not write a corpus for the report format, which
+/// is the one format that arrives from an untrusted machine.
+///
+/// The door has to produce a report the tree's **one** reader reads and the
+/// tree's **one** replay replays. A file of the wrong shape would be a file,
+/// not a report — and a report with an empty replay would "reproduce" itself
+/// and prove nothing.
+#[test]
+fn the_cli_writes_a_report_the_tree_can_read_and_replay() {
+    let written = CrashDir::new("written");
+    let path = written.path().join("report.json");
+
+    let out = Command::new(BIN)
+        .arg("crashes")
+        .arg("write")
+        .arg("--out")
+        .arg(&path)
+        .output()
+        .expect("the binary that cargo just built");
+    assert!(out.status.success(), "writing a report failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(path.is_file(), "the CLI wrote no report");
+
+    // The tree's one reader reads it — and the report carries a real replay
+    // and the document that replay ran on.
+    let report = craftkit_engine::crash::read_report(&path).expect("the tree reads the report it wrote");
+    assert_eq!(report.replay.len(), 3, "the report carries no replay: {:?}", report.replay);
+    assert!(report.base.nodes.is_empty(), "the report's base is not the document the commands ran on");
+
+    // And the real binary replays it, and says it reproduced.
+    let empty = CrashDir::new("empty-crash-folder-3");
+    let (ok, text) = crashes(&empty, &["replay", "--file", path.to_str().expect("a path")]);
+    assert!(ok, "the replay of the written report failed: {text}");
+    assert!(text.contains("reproduced the design in the report"), "{text:?}");
+}
+
 #[test]
 fn an_empty_folder_says_so_rather_than_printing_nothing() {
     let dir = CrashDir::new("empty");

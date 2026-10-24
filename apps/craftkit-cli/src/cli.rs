@@ -577,7 +577,34 @@ fn crashes(action: &CrashAction) -> Result<(), String> {
             print_replay(&outcome);
             Ok(())
         }
+        // The write side: the tree can write a report without a window. §200.
+        CrashAction::Write { out } => write_report(out),
     }
+}
+
+/// Write a crash report to a file.
+///
+/// The report is of the **sample session**: the sample's three commands, the
+/// empty document they ran on, and the document they produced. So it carries
+/// a **real replay** and a **real base** — a report built from the sample as
+/// the session opens it would have an empty replay and a base equal to its
+/// own design, and would replay nothing and "reproduce" itself, which proves
+/// nothing about the door.
+///
+/// The tree's own writer ([`craftkit_engine::crash::write_report_to`]), so the
+/// file holds the **same bytes** a report in the crash folder holds, and the
+/// tree's one reader reads both without being told which it has. §200.
+fn write_report(out: &Path) -> Result<(), String> {
+    let session = craftkit_engine::Session::sample_recorded();
+    let command = craftkit_engine::crash::last_command(&session);
+    let report = craftkit_engine::crash::build(
+        &session,
+        &command,
+        "no crash happened: this report was written on request",
+    );
+    craftkit_engine::crash::write_report_to(out, &report)?;
+    println!("wrote {}", out.display());
+    Ok(())
 }
 
 // ------------------------------------------------------------------ mcp --

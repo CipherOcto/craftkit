@@ -3137,6 +3137,12 @@ fn is_word_byte(byte: u8) -> bool {
 const SESSION_PUBLIC_METHODS: &[&str] = &[
     "new",
     "sample",
+    // The same session as `sample`, with **what it ran still recorded**. A
+    // crash report is exactly a record of what ran, and `sample` wipes the
+    // record — a session that opens with three entries in its log is a lie
+    // about what the user did. A constructor, like `sample`: it makes a
+    // session, it does not change one. §200.
+    "sample_recorded",
     "document",
     "node",
     "at",

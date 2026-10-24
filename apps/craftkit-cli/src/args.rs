@@ -71,6 +71,16 @@ pub enum CrashAction {
         /// Print the replay as a script instead of running it.
         script: bool,
     },
+    /// Write a crash report to a **file**.
+    ///
+    /// The write side of the crash path. Before this, the only way to get a
+    /// report onto disk was to have a **window** crash: the tree's four
+    /// production writers were all in the desktop binary's panic hook, so a
+    /// headless run left nothing behind and the tree could not write a
+    /// corpus for the report format at all. §200.
+    Write {
+        out: PathBuf,
+    },
 }
 
 /// The subject of a crash door: a report in the crash folder, or a report in a
@@ -156,50 +166,14 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
             // the seed is written by the tree's own writer, through the
             // tree's own program, so the format the fuzzer breaks is the
             // format the program speaks. §180.
-            let (mut seen_out, mut out) = (false, None);
-            let mut i = 1;
-            while i < argv.len() {
-                match argv[i].as_str() {
-                    "--out" => {
-                        let value = argv
-                            .get(i + 1)
-                            .ok_or_else(|| UsageError::MissingValue { flag: "--out".into() })?;
-                        once(&mut seen_out, "--out")?;
-                        out = Some(PathBuf::from(value));
-                        i += 2;
-                    }
-                    other => {
-                        return Err(UsageError::BadValue { flag: "sample".into(), value: other.into() });
-                    }
-                }
-            }
-            let out = out.ok_or(UsageError::MissingValue { flag: "--out".into() })?;
-            Ok(Some(Command::Sample { out }))
+            Ok(Some(Command::Sample { out: out_flag(argv, 1, "sample")? }))
         }
         "script" => {
             // Write a script of commands. The tree had no writer for the
             // script format — the only producer printed a report's replay to
             // stdout — and §180's rule is that a fuzzer's corpus is written
             // by the tree's own program. §182.
-            let (mut seen_out, mut out) = (false, None);
-            let mut i = 1;
-            while i < argv.len() {
-                match argv[i].as_str() {
-                    "--out" => {
-                        let value = argv
-                            .get(i + 1)
-                            .ok_or_else(|| UsageError::MissingValue { flag: "--out".into() })?;
-                        once(&mut seen_out, "--out")?;
-                        out = Some(PathBuf::from(value));
-                        i += 2;
-                    }
-                    other => {
-                        return Err(UsageError::BadValue { flag: "script".into(), value: other.into() });
-                    }
-                }
-            }
-            let out = out.ok_or(UsageError::MissingValue { flag: "--out".into() })?;
-            Ok(Some(Command::Script { out }))
+            Ok(Some(Command::Script { out: out_flag(argv, 1, "script")? }))
         }
         "snapshot" => {
             let script = positional(&argv[1..], "snapshot")?;
@@ -252,6 +226,12 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
                         Subject::File(path) => CrashAction::ReplayFile { path, script },
                     }
                 }
+                Some("write") => {
+                    // Write a report to a file. The tree's own writer, so the
+                    // file is the same bytes a report in the crash folder is,
+                    // and the tree's one reader reads both. §200.
+                    CrashAction::Write { out: out_flag(argv, 2, "crashes write")? }
+                }
                 Some(other) => {
                     return Err(UsageError::BadValue { flag: "crashes".into(), value: other.into() });
                 }
@@ -286,6 +266,32 @@ fn positional(rest: &[String], command: &str) -> Result<PathBuf, UsageError> {
         .find(|a| !a.starts_with('-'))
         .map(PathBuf::from)
         .ok_or_else(|| UsageError::MissingArgument(command.to_string()))
+}
+
+/// The `--out` flag, and the file it names.
+///
+/// One copy of the loop, because three doors take a file to write into and
+/// three copies of a parser are three places for it to be wrong. The fourth
+/// door, `snapshot`, keeps its own loop because it also takes `--sample`.
+/// §200.
+fn out_flag(argv: &[String], from: usize, command: &str) -> Result<PathBuf, UsageError> {
+    let (mut seen_out, mut out) = (false, None);
+    let mut i = from;
+    while i < argv.len() {
+        match argv[i].as_str() {
+            "--out" => {
+                let value =
+                    argv.get(i + 1).ok_or_else(|| UsageError::MissingValue { flag: "--out".into() })?;
+                once(&mut seen_out, "--out")?;
+                out = Some(PathBuf::from(value));
+                i += 2;
+            }
+            other => {
+                return Err(UsageError::BadValue { flag: command.into(), value: other.into() });
+            }
+        }
+    }
+    out.ok_or(UsageError::MissingValue { flag: "--out".into() })
 }
 
 /// Parse the subject of a crash door, and whether the replay is wanted as a
@@ -452,6 +458,29 @@ mod tests {
             parse(&argv(&["crashes", "replay", "abc"])),
             Ok(Some(Command::Crashes { action: CrashAction::Replay { id: "abc".into(), script: false } }))
         );
+    }
+
+    /// The write door needs a file to write to, and takes nothing else.
+    ///
+    /// §200: the tree could read a crash report and could not write one
+    /// without a window — the only writer in the tree was the desktop
+    /// binary's panic hook. This is the door that gives a headless program
+    /// the write side.
+    #[test]
+    fn crashes_write_needs_an_output_and_takes_nothing_else() {
+        assert_eq!(
+            parse(&argv(&["crashes", "write", "--out", "report.json"])),
+            Ok(Some(Command::Crashes { action: CrashAction::Write { out: PathBuf::from("report.json") } }))
+        );
+        assert_eq!(
+            parse(&argv(&["crashes", "write"])),
+            Err(UsageError::MissingValue { flag: "--out".into() })
+        );
+        assert!(parse(&argv(&["crashes", "write", "--out", "r.json", "--wat"])).is_err());
+        assert!(parse(&argv(&["crashes", "write", "--out", "a.json", "--out", "b.json"])).is_err());
+        // A report is written to a file, not looked up by an id: `write` and
+        // the folder door are two different things.
+        assert!(parse(&argv(&["crashes", "write", "some-id", "--out", "r.json"])).is_err());
     }
 
     /// The script flag may come before or after the id.

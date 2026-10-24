@@ -26,6 +26,7 @@
 //! Text rasterises as solid glyph quads in the PNG (egui 0.33 exposes no texture
 //! id per primitive); every other primitive draws as the window draws it.
 //! craftkit-cli crashes list|show|replay <id>  read the crash folder
+//! craftkit-cli crashes write --out <report.json>   write a crash report
 //! craftkit-cli mcp                          speak MCP over stdio
 //! ```
 //!
@@ -48,6 +49,12 @@
 //!
 //! And the tree can **write** one: `craftkit-cli script --out <file>` writes
 //! the sample design's own commands. §182.
+//!
+//! And the tree can write a **crash report** too:
+//! `craftkit-cli crashes write --out <file>` writes one, with the tree's own
+//! writer, so the file holds the same bytes a report in the crash folder
+//! holds. Before this the only way to get a report onto disk was to have a
+//! **window** crash. §200.
 
 #![deny(
     clippy::unwrap_used,
@@ -85,6 +92,8 @@ COMMANDS:
     crashes <list|show|replay> [ID|--file <report.json>]
                              Read the crash folder, or a report in a file —
                              one that arrived from another machine.
+    crashes write --out <report.json>
+                             Write a crash report to a file.
     mcp                      Speak MCP over stdio, for an agent's tool loop.
     help                     Print this message.
 

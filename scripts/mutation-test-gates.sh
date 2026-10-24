@@ -5992,5 +5992,40 @@ swap crates/ui/src/shell.rs \
 expect_catch 'ui: the problems panel shrinks to its content and the wheel dies over the margin' \
     "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_problems_panel_from_across_the_panel"
 
+# ------------------------------------------------ the write side of a report ----
+# Section 200. The tree could read a crash report and could not write one
+# without a window: the only producer anywhere in the tree was the desktop
+# binary's panic hook, so a headless program produced no report at all.
+#
+# The first break writes a report with no replay in it. The sample session
+# wipes its trace -- a session that opens with three entries in its log is a
+# lie about what the user did -- so a report built from it would replay
+# nothing and "reproduce" itself, and the test that holds the report must
+# notice.
+swap apps/craftkit-cli/src/cli.rs \
+    '    let session = craftkit_engine::Session::sample_recorded();' \
+    '    let session = craftkit_engine::Session::sample();'
+expect_catch 'cli: the report the CLI writes carries no replay' \
+    "cargo test -p craftkit-cli --profile ci --test crash_pipeline the_cli_writes_a_report_the_tree_can_read_and_replay"
+
+# The second break writes a file that is not the report the folder holds. One
+# serializer and one atomic writer serve both doors; take the serializer away
+# and the two hold different bytes, and the test that holds them together
+# must notice.
+swap crates/engine/src/crash.rs \
+    '    write_atomic(path, &report_json)' \
+    '    write_atomic(path, "")'
+expect_catch 'crash: the file door and the folder door write different bytes' \
+    "cargo test -p craftkit-engine --profile ci --lib the_file_door_and_the_folder_door_write_the_same_bytes"
+
+# The third break takes the door out of the parser. The tree's write side is
+# a door an agent drives, and a door the parser does not accept does not
+# exist.
+swap apps/craftkit-cli/src/args.rs \
+    '                Some("write") => {' \
+    '                Some("write-disabled") => {'
+expect_catch 'cli: the parser stops accepting the door that writes a report' \
+    "cargo test -p craftkit-cli --profile ci crashes_write_needs_an_output_and_takes_nothing_else"
+
 restore
 finish

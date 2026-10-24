@@ -501,6 +501,19 @@ the tree's one replay, so it cannot answer differently from the folder's door
 (§195). The file does not have to be in the crash folder, and it does not have
 to be named after its id.
 
+And the tree can **write** one — before this, the only way to get a report onto
+disk was to have a *window* crash, so a headless run left nothing behind:
+
+```
+cargo run -q -p craftkit-cli -- crashes write --out report.json
+```
+
+The report is of the **sample session** — the sample's three commands, the
+document they ran on and the document they produced — so it carries a real
+replay, and `crashes replay --file report.json` on it says it reproduced the
+design. It is written with the tree's own writer, so the file holds the same
+bytes a report in the crash folder holds (§200).
+
 `crashes replay` prints what each step did and then **says whether the replay
 reproduced the design the report recorded** — or lists the ways in which it
 did not. Read that line before believing anything else: a replay that quietly

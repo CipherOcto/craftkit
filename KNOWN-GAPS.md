@@ -23540,6 +23540,127 @@ twenty-five points of dead strip; the problems panel's is six hundred and
 forty. The rule was the same in both panels and the *harm* was not — and
 nobody would have known the difference without a number.
 
+## 200. The tree could read a crash report and could not write one
+
+### The finding
+
+§182 listed the three files the tree reads and, for each, **who writes it in
+the tree**:
+
+| The door | The file | Who writes it in the tree |
+|---|---|---|
+| `craftkit-cli eval` | a design | `craftkit-cli sample --out` — §180 |
+| `craftkit-cli run` | a script | `craftkit-cli script --out` — §182 |
+| `craftkit-cli crashes replay` | a crash report | **nobody** |
+
+§182 gave the tree the second writer. The third was left, and it is the one
+that was left for the worst reason: **a report needs a crash**.
+
+**Measured**, by reading every producer in the tree and asking the CLI what
+it can do:
+
+| | |
+|---|---|
+| production writers of a crash report | **4** |
+| where they live | **all four in `apps/craftkit/src/main.rs`** — the desktop binary's panic hook |
+| writers in the engine | **0** |
+| writers in the CLI | **0** |
+| the CLI's crash doors | `list`, `show`, `replay` — and `write`, `record` and `new` are all refused: "`write` is not a value for `crashes`" |
+
+So the tree had a **read** side and no **write** side, and the write side it
+had was in a **window**. Three consequences, all of them measured:
+
+**A headless run left nothing.** A panic outside the engine's `catch_unwind`
+— in the CLI's own glue, in the rasteriser that `snapshot` draws through —
+killed the process and wrote no report. The desktop app has had a hook for
+this since §76; the CLI has nothing.
+
+**The tree could not write a corpus for the report format.** §180's rule is
+that a fuzzer's corpus is written by the tree's own program, so the format
+the fuzzer breaks is the format the program speaks. The fuzzer has **two**
+targets — `Target::ALL` has length 2, and the usage says "design, script, or
+all" — and the tree reads **three** file formats. The report is the one the
+fuzzer does not watch, and it is the one that **arrives from another
+machine**: §195 gave it a door for untrusted input, and that door had never
+been hardened by anything.
+
+**And the tree's own documentation promised a writer that did not exist.**
+The CLI's module documentation said "And the tree can **write** one:
+`craftkit-cli script --out <file>` writes the sample design's own commands",
+in a paragraph whose subject was **a crash report** — the sentence before it
+is "a **crash report** is what you paste back into the CLI". §198's rule —
+*the antecedent decides what the sentence is about* — says the promise was
+about a report, and the door named wrote a **script**.
+
+### The port
+
+**One writer for a report file.** `crash::write_report_to(path, report)` — the
+twin of `write_to`, which files a report into the crash folder. **The same
+bytes in both**: one serializer (`to_json`) and one atomic writer
+(`write_atomic`) serve both, and the tree's one reader (`read_report`) reads
+either without being told which it is holding. The file and the folder are
+the same report.
+
+**One copy of "which command was running".** `crash::last_command(&Session)`
+— the desktop app's hook had its own copy of the question and its own answer
+("none recorded"), and the CLI's writer asks the same question.
+
+**And a door.** `craftkit-cli crashes write --out <report.json>` writes a
+report, with the tree's own writer, to the file the caller names. The CLI's
+crash doors go from three to four: `list`, `show`, `replay` and **`write`**.
+
+**The report it writes has something in it.** The report is of the **sample
+session** — the sample's three `node.add` commands, the empty document they
+ran on, and the document they produced. That needed one more thing: the
+sample session **wipes its trace**, because a session that opens with three
+entries in its log is a lie about what the user did. A report is the
+opposite — it is *exactly* a record of what ran — so the tree grew
+`Session::sample_recorded()`: the same session, with the record still in it.
+
+Without that, the only report the tree could write headlessly was a report
+with an **empty replay** and a base equal to its own design — a report that
+replayed nothing and "reproduced" itself, and proved nothing at all.
+
+### The gate's own teeth
+
+Three new mutations, each proved by hand before the suite was run:
+
+```text
+cli: the report the CLI writes carries no replay
+crash: the file door and the folder door write different bytes
+cli: the parser stops accepting the door that writes a report
+```
+
+The first is the one that matters: it swaps `sample_recorded()` for
+`sample()`, and the report's replay goes from three commands to **none** —
+and the gate says so:
+
+```text
+the report carries no replay: []
+  left: 0
+ right: 3
+```
+
+### The lesson
+
+**A door that reads a file needs a door that writes one.** §195 gave the
+report a reader for a file that arrives from another machine, and made it
+the *one* reader, and the *one* replay. What it could not do was make the
+tree able to **produce** one — so the format had no corpus, and the door
+took untrusted input that nothing had ever broken.
+
+**And the write side of a path is a separate thing from the read side.** The
+tree had a reader for a report and a writer for a report, in two different
+programs, four hundred lines apart, and nobody had put them together — because
+the writer was inside a **panic hook**, where it looked like part of the
+crash handling rather than part of the format.
+
+**And an antecedent is a promise.** The CLI's documentation said the tree
+could write "one", and the sentence before it was about a crash report. The
+named door wrote a script. It was not a lie about the tree — §182 had just
+given the tree a script writer — it was a lie about **which** thing the tree
+could write.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24046,6 +24167,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A description names a tool that exists** | the same | the same — §198 |
 | **The wheel scrolls the problems panel from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §199 |
 | **Every problem the plan found has a name** | `AutomationId::problem` | the same — §199 |
+| **The tree can write a crash report without a window** | `crash::write_report_to` in `crates/engine/src/crash.rs` | 1 mutation — §200 |
+| **The file door and the folder door write the same bytes** | the same | the unit test — §200 |
+| **The report the CLI writes carries a real replay** | `Session::sample_recorded` | 1 mutation — §200 |
+| **The parser accepts the door that writes a report** | `apps/craftkit-cli/src/args.rs` | 1 mutation — §200 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25055,6 +25180,15 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the only part of the tree that cannot be driven from a command line,
     because it needs a crash to happen.
 
+    **§200 gave the tree the writer.** `crash::write_report_to` writes a
+    report to one file, with the tree's own serializer — the same bytes a
+    report in the crash folder holds — and `craftkit-cli crashes write --out
+    <file>` is the door that calls it. Measured before the port: **4**
+    production writers of a report, all four in the desktop binary's panic
+    hook, and **0** in the engine and **0** in the CLI.
+
+    **What is left is the corpus**, and it is item 60 below.
+
 48. **Decide what a script may cost, and what a command may cost.** §181
     bounded the *number* of commands a script or a replay may run, and left
     the *cost* alone, because the cost is a question the tree cannot answer
@@ -25365,3 +25499,33 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     second is a small change to the tree's shape, and the first is a small
     change to where a gate lives. The owner's call, with item 8: a gate that
     checks what prose says is a heuristic.
+
+60. **The fuzzer watches two of the tree's three file doors.** §200 gave the
+    tree a writer for the crash report, so the corpus can now be written by
+    the tree's own program — and the report is the door that **arrives from
+    another machine**, the one §195 opened for untrusted input and nothing has
+    ever broken.
+
+    **Measured**: `Target::ALL` has length **2** — `Target::Design` and
+    `Target::Script` — and the fuzzer's usage says "which file to break:
+    design, script, or all". The tree reads **three** file formats.
+
+    The work is the machinery §182 already built: a target is a name, a child
+    and a way of writing the corpus. The report's child is
+    `crashes replay --file` (§195's door — a report in a file, with no folder
+    and no id), the seed is `craftkit-cli crashes write --out`, and the shape
+    that gets broken is the **report's own**: a design that is not a
+    document, a base that is not a document, a replay that is not a list, a
+    step that is not an object, a command that is not a string, a `dropped`
+    that is not a number.
+
+    The trap is the one §177 already found for commands: `Session::execute`
+    runs every command under a `catch_unwind`, so "no command panics" is
+    structurally true. The property has to be about the **document** — that it
+    is still valid afterwards — and the reader has to **refuse** a broken
+    report with a reason rather than accept it.
+
+    And the seed's own check matters more here than for the other two: §182's
+    rule is that the fuzzer hands the seed to the same child it hands the
+    mutants to, and refuses to go on unless the child **accepts** it. A
+    corpus the tree cannot read is a corpus that tests nothing.

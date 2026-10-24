@@ -341,6 +341,39 @@ pub fn write_to(base: &Path, report: &CrashReport) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Write a report to **one file**, named by the caller.
+///
+/// The twin of [`write_to`]: that one files a report into the crash folder,
+/// where every report gets a folder of its own; this one writes the report
+/// itself, to the path the caller names.
+///
+/// **The same bytes in both.** One serializer ([`to_json`]) and one atomic
+/// writer ([`write_atomic`]) serve both, so a report that arrived in a file
+/// and a report that was filed in the crash folder are the same report, and
+/// the tree's one reader ([`read_report`]) reads both without being told
+/// which it is holding.
+///
+/// The file door is what a headless program needs. Before this, the only way
+/// to get a report onto disk was to have a **window** crash: the tree's four
+/// production writers were all in the desktop binary's panic hook, and a
+/// headless run left nothing behind. §200.
+pub fn write_report_to(path: &Path, report: &CrashReport) -> Result<(), String> {
+    let report_json = to_json(report)?;
+    write_atomic(path, &report_json)
+}
+
+/// The command that was running, for a report that has to name it.
+///
+/// "None recorded" when nothing ran — a session that broke before its first
+/// command has no command to name, and a report that says so is honest.
+///
+/// **One copy.** The desktop app's hook asked its own session for this, and
+/// the CLI's writer asks the same question; two answers would be two
+/// sentences about the same crash. §200.
+pub fn last_command(session: &Session) -> String {
+    session.log().last_command().map(str::to_string).unwrap_or_else(|| "none recorded".to_string())
+}
+
 /// The tree's JSON layout, for one value.
 ///
 /// The same writer the design file uses, so a design is the same bytes in the
@@ -901,6 +934,69 @@ mod tests {
     fn mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+    }
+
+    /// A report written to a **file** is the same report the crash folder
+    /// holds, and the tree's one reader reads it.
+    ///
+    /// §200: the tree could read a report and could not write one without a
+    /// window — the only writer anywhere in the tree was the desktop
+    /// binary's panic hook. So the file door is new, and it has to be the
+    /// **same** report: one serializer, so a file and a folder hold the same
+    /// bytes, and one reader, so the tree does not have two answers about
+    /// one report.
+    #[test]
+    fn the_file_door_and_the_folder_door_write_the_same_bytes() {
+        let dir = temp_dir("file-door");
+        let session = Session::sample_recorded();
+        let report = build(&session, "node.add", "written on request");
+
+        let file = dir.join("report.json");
+        write_report_to(&file, &report).expect("the report is written to a file");
+
+        // The same report, filed in the crash folder.
+        let folder = dir.join("folder");
+        let filed = write_to(&folder, &report).expect("the report is filed");
+        let filed_bytes = std::fs::read(filed.join(REPORT_FILE)).expect("the filed report");
+        let file_bytes = std::fs::read(&file).expect("the written report");
+        assert_eq!(
+            file_bytes.len(),
+            filed_bytes.len(),
+            "the file and the folder hold different bytes: {} against {}",
+            file_bytes.len(),
+            filed_bytes.len()
+        );
+        assert!(file_bytes == filed_bytes, "the file and the folder hold the same bytes and different ones");
+
+        // And the tree's one reader reads the file.
+        let read = read_report(&file).expect("the report is readable");
+        assert_eq!(read.design, report.design, "the design did not survive the round trip");
+        assert_eq!(read.base, report.base, "the base did not survive the round trip");
+        assert_eq!(read.replay, report.replay, "the replay did not survive the round trip");
+        assert_eq!(read.id, report.id, "the id did not survive the round trip");
+    }
+
+    /// The sample session with its record kept has **something to replay**.
+    ///
+    /// §200: the sample session wipes its trace and its log, because a
+    /// session that opens with three entries in its log is a lie about what
+    /// the user did. A crash report is the opposite — it is exactly a record
+    /// of what ran — so the report needs the same session with the record
+    /// still in it. Without it, the only report the tree could write
+    /// headlessly had an **empty replay** and a base equal to its own
+    /// design: a report that replayed nothing and "reproduced" itself.
+    #[test]
+    fn the_sample_session_with_its_record_kept_has_something_to_replay() {
+        let session = Session::sample_recorded();
+        assert_eq!(session.trace().len(), 3, "the sample ran three commands: {:?}", session.trace());
+        assert!(session.trace_base().nodes.is_empty(), "the commands did not run on an empty document");
+        assert_eq!(session.document().nodes.len(), 3, "the sample has three nodes");
+
+        // And the session the sample *opens* has none of it: the two are one
+        // session, kept two ways.
+        let opened = Session::sample();
+        assert!(opened.trace().is_empty(), "the sample session opens with nothing recorded");
+        assert_eq!(opened.document().nodes.len(), 3, "the opened sample has three nodes");
     }
 
     /// A report whose **design** the model refuses is refused, by name.
