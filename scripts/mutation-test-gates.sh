@@ -5924,5 +5924,28 @@ swap apps/craftkit-cli/src/cli.rs \
 expect_catch 'the door for a report that arrives in a file reads some other file' \
     "cargo test -p craftkit-cli --profile ci --test crash_pipeline"
 
+# ------------------------------------------------------ the log of a typo ----
+# Section 196. The log is the record of what an agent asked for, and a
+# mistyped parameter name is the most common thing an agent gets wrong. Every
+# other ending of a command was in the log -- the unknown id, the disabled
+# command, the command's own refusal, the panic, and the parameters too big
+# to trace -- and this one was not: the refusal went back to the caller and
+# the log stayed empty.
+#
+# The break takes the log entry out. The test that holds the entry must
+# notice.
+swap crates/engine/src/session.rs \
+    '        if let Err(source) = p.deny_unknown(&spec.param_names()) {
+            let err = EngineError::Param { id: id.to_string(), source };
+            self.log.record(id, false, &err.to_string());
+            return Err(err);
+        }' \
+    '        if let Err(source) = p.deny_unknown(&spec.param_names()) {
+            let err = EngineError::Param { id: id.to_string(), source };
+            return Err(err);
+        }'
+expect_catch 'engine: a command with a parameter it does not have is not logged' \
+    "cargo test -p craftkit-engine --profile ci a_command_with_a_parameter_it_does_not_have"
+
 restore
 finish

@@ -23201,6 +23201,94 @@ once about a capability the tree did not have. §194's rule — *a doc comment
 that states a contract is a contract* — has a second half: a contract that
 nobody can *do* is a wish.
 
+## 196. The log held every way a command can end badly except the one an agent is most likely to hit
+
+### The finding
+
+The log is the record of what an agent asked for. The code says so where it
+records a refusal (`crates/engine/src/session.rs:482`):
+
+> Logged even though the document was never touched: the log is the record
+> of what an agent asked for, and a refusal is exactly the line someone will
+> be looking for.
+
+Six things can end a command, and five of them were in the log:
+
+| the ending | in the log? |
+|---|---|
+| the id is not in the registry | yes — `crates/engine/src/session.rs:476` |
+| the command is disabled right now | yes — `:485` |
+| **the parameters are not the ones the command takes** | **no** |
+| the parameters are too big to trace | yes — `:532` |
+| the command refused | yes — `:651` |
+| the command panicked | yes — `:659` |
+
+The third is the one an agent is most likely to hit — a mistyped parameter
+name. It went back to the caller as a `bad-parameter` error, loudly, as the
+code asked (`crates/engine/src/session.rs:490`), and the **log stayed empty**.
+
+**Measured**, on the tree's own sample session: the call returns
+`` `bogus` is not a parameter of `node.add` `` and the log's entries are
+`[]`. The failure counter did not move either: `session.stats` says "N
+command(s), M failure(s)", and a typo was neither.
+
+§43 found this shape three sections earlier and fixed two thirds of it:
+
+> Three things can end a command badly — an unknown id, a refusal, a panic —
+> and the log test used the first: an unknown id fails in the *lookup*, before
+> the snapshot, before the rollback, before the log entry.
+
+The three it listed were the wrong three. The tree's own vocabulary says a
+bad parameter **is** a refusal — §92 made it one, and the recipe's table of
+kinds puts `bad-parameter` in the same row as `unknown-command` and
+`disabled` (`docs/recipes/fix-a-crash.md:347`): *the input was wrong; the
+behaviour is correct*. So the rule §43 wrote already covered the typo, and
+the log did not have it.
+
+### The port
+
+**A refusal is in the log, whichever door it comes through.** The parameter
+refusal now records itself, like every other ending:
+
+```rust
+if let Err(source) = p.deny_unknown(&spec.param_names()) {
+    let err = EngineError::Param { id: id.to_string(), source };
+    self.log.record(id, false, &err.to_string());
+    return Err(err);
+}
+```
+
+The log is a bounded ring of 256 entries, so a session full of typos costs a
+ring and no more. And the failure counter moves with it, because the counter
+is the log's own.
+
+### The gate's own teeth
+
+One new mutation: take the log entry out of the parameter path. The test
+must notice.
+
+```text
+thread 'session::tests::a_command_with_a_parameter_it_does_not_have_is_logged_as_a_failure' panicked at
+crates/engine/src/session.rs:1834:9:
+assertion `left == right` failed: the refusal was not logged: []
+  left: 0
+ right: 1
+```
+
+### The lesson
+
+**Count the endings, not the paths you remember.** §43 listed three ways a
+command can end badly and fixed two of them. The third was not missing — it
+was *not in the list*, and the list was in the same file as the code that
+does it. A list of the ways something can fail is worth exactly the ways it
+names.
+
+**And a table of kinds is a promise about behaviour.** The recipe's table
+puts `bad-parameter` with `unknown-command` and `disabled` — three kinds of
+*the input was wrong* — and the log had two of the three. A table that
+groups things is a claim that they are the same, and the claim was only
+half true.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23699,6 +23787,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The file door keeps the promise the folder door keeps** | `checked_document` | the unit test — §195 |
 | **The real binary replays a report that arrived, with an empty crash folder** | `apps/craftkit-cli/tests/crash_pipeline.rs` | 1 mutation — §195 |
 | **A report is not a script, and the tree does not pretend it is** | `crashes replay --file` | the doc and the door — §195 |
+| **A command with a parameter it does not have is logged as a failure** | `Session::execute` in `crates/engine/src/session.rs` | 1 mutation — §196 |
+| **Every ending of a command is in the log** | the same | the same — §196 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24933,3 +25023,29 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     a file door is a change of scope, not a missing feature, and it is the
     owner's call whether an agent holding a report file should be able to
     hand it to the tree over the control channel.
+
+58. **The order of `Session::execute`'s two refusals is a contract that
+    nothing holds.** §196.
+
+    The pattern document states the order in so many words
+    (`docs/patterns/everything-is-a-command.md:139`): *"the id, the enabled
+    check, the parameter check, the snapshot and the single `catch_unwind`
+    all live, in that order"*. The code keeps it.
+
+    **Measured:** moving the **enabled check** after the **parameter check**
+    left the **whole workspace's tests green** — every crate, every test
+    binary. The order is observable only for a command that is *both*
+    disabled and called with a parameter it does not have: with the enabled
+    check first the caller is told "disabled", with the parameter check
+    first the caller is told "unknown parameter".
+
+    §194's rule — *a hook's order is part of its contract, and a contract
+    needs a test* — is about a contract **stated in prose**; this one is
+    stated in a document that quotes the code, and the quote is not checked
+    (the block is not marked `exact`, so it is allowed to drift).
+
+    What is **not** decided here: which order is *right*. The document and
+    the code agree, and no argument was found for either. The cheap fix is
+    a test that holds the order the tree has, and a sentence in the code
+    saying why it is that order; the *decision* — which order an agent
+    should hear first — is the owner's.

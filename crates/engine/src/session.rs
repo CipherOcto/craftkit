@@ -488,8 +488,18 @@ impl Session {
 
         let p = Params::new(params);
         // An agent's typo should be loud, not silently ignored.
-        p.deny_unknown(&spec.param_names())
-            .map_err(|source| EngineError::Param { id: id.to_string(), source })?;
+        //
+        // And it should be in the **log**, like every other ending of a
+        // command: the unknown id, the disabled command, the command's own
+        // refusal, the panic, and the parameters too big to trace. This one
+        // was not, so the log — the record of what an agent asked for — did
+        // not have the most common thing an agent gets wrong in it, and the
+        // failure count did not move. §196.
+        if let Err(source) = p.deny_unknown(&spec.param_names()) {
+            let err = EngineError::Param { id: id.to_string(), source };
+            self.log.record(id, false, &err.to_string());
+            return Err(err);
+        }
 
         // The trace is the reproduction: the command id and the parameters,
         // exactly as they were given. Nothing is compacted away, because a
@@ -1814,6 +1824,25 @@ mod tests {
         assert_eq!(entries.len(), 1, "the refusal was not logged");
         assert!(!entries[0].ok, "the refusal was not logged as a failure");
         assert_eq!(entries[0].seq, 1);
+    }
+
+    /// A parameter the command does not have is logged as a failure.
+    ///
+    /// The log is the record of what an agent asked for, and a mistyped
+    /// parameter name is the most common thing an agent gets wrong. Every
+    /// other ending of a command is in the log — the unknown id, the disabled
+    /// command, the command's own refusal, the panic, and the parameters too
+    /// big to trace — and this one was not.
+    #[test]
+    fn a_command_with_a_parameter_it_does_not_have_is_logged_as_a_failure() {
+        let mut s = sample();
+        let err =
+            s.execute("node.add", &json!({ "name": "A", "kind": "cue", "bogus": 1 })).expect_err("refused");
+        assert_eq!(err.kind(), "bad-parameter", "{err}");
+        let entries: &[LogEntry] = s.log().entries();
+        assert_eq!(entries.len(), 1, "the refusal was not logged: {entries:?}");
+        assert!(!entries[0].ok, "the refusal was not logged as a failure");
+        assert_eq!(entries[0].command, "node.add");
     }
 
     #[test]
