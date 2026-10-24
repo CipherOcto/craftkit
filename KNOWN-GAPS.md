@@ -21971,6 +21971,115 @@ files: one folder, two readers, two answers. The rule is the same both times
 — *one copy, one reader, one answer* — and it is worth looking for it
 wherever a thing is written more than once.
 
+## 186. Five properties shared one corpus file, and a property that read another's corpus asserted nothing
+
+### The finding
+
+The tree's strongest claim is that its promises are **properties**: a rule
+that holds for every hostile input, not for the ones somebody thought of.
+§175, §177 and §183 built them, and `KNOWN-GAPS.md`'s matrix names the
+crash report's property as *the thing that holds* the rule that a report's
+documents must be ones the model accepts.
+
+The crash report's property suite (`crates/engine/tests/crash_properties.rs`)
+had **five** properties, and every one of them wrote its corpus to the
+**same file**:
+
+```rust
+fn the_folder() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join("craftkit-crash-properties").join(format!("{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("probe")).expect("the folder");
+    dir
+}
+
+fn write_report(text: &str) -> std::path::PathBuf {
+    let dir = the_folder();
+    std::fs::write(dir.join("probe").join("report.json"), text).expect("the report is written");
+    dir
+}
+```
+
+The properties run **at the same time** — Rust's test harness runs them in
+parallel threads — and `std::fs::write` **truncates** the file it writes. So
+the corpus of one property was overwritten by another, mid-write.
+
+And here is the part that matters: **the properties do not fail when they
+read nothing.** Each one is written as
+
+```rust
+if let Ok(report) = crash::show_in(&dir, "probe") {
+    prop_assert!(the_promise(&report).is_ok(), "…");
+}
+```
+
+— so a read that fails (a truncated file) skips the assertion, and a read
+that succeeds on *another property's* corpus asserts something about a corpus
+this property never broke.
+
+**Measured.** Adding a sixth property to that file failed:
+
+```
+the report reads: "…/probe/report.json is not a readable report:
+EOF while parsing a value at line 1 column 0"
+```
+
+— an **empty** file, because another property had just truncated it. The
+five existing properties did not fail, because they skip what they cannot
+read: they were quietly asserting less than they claimed.
+
+### The port
+
+**One corpus per property.** The folder is named after the property, and it
+is made empty first, so a corpus from an earlier run cannot be read as this
+one's.
+
+**The corpus is written whole.** The file is taken away before it is
+written, so a reader never sees half of one.
+
+**And a property says which corpus it wrote.** Each property asserts that the
+bytes it reads back are the bytes it wrote:
+
+```rust
+prop_assert!(the_corpus_is_ours(&dir, &text), "the corpus is not the one this property wrote");
+```
+
+That is the guard that turns a shared corpus into a **failure** rather than
+a silent skip. A property that read another's corpus has broken nothing, and
+saying so is the whole point of a property.
+
+**And a deterministic test** that two properties do not share a corpus — the
+two corpora are different folders, and each holds its own bytes. The guard
+inside the properties is racy by nature (it fires only when the race is
+lost); this one is not.
+
+### The gate's own teeth
+
+One new mutation, and one new test:
+
+| The mutation | The gate that catches it |
+|---|---|
+| two properties share one corpus | `two_properties_do_not_share_a_corpus` |
+
+The mutation is in the property suite itself: the corpus folder's name is
+fixed rather than the property's. It is caught **deterministically** — the
+two corpora become one folder, and the second write overwrites the first.
+
+Twenty runs of the suite, after the fix: no failure, and no property reading
+another's corpus.
+
+### The lesson
+
+**A property that cannot fail is not a property.** The tree's rule is that
+"no command panics" is structurally true and proves nothing (§177's trap).
+The same is true of a property whose corpus another test may have replaced:
+it can only assert less than it claims, and it does so **silently**.
+
+**And a test that skips on failure is a test that skips.** `if let Ok(x) = …`
+is the right shape for a property whose *reader* may refuse — the promise is
+"if it was read, it is valid" — but it is the wrong shape for a property
+whose *input* is the thing under test. The input has to be the one the
+property wrote, and the property has to say so when it is not.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -22440,6 +22549,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A crash report is one file, and every door reads it** | `crash::replay_in` in `crates/engine/src/crash.rs` | 1 mutation — §185 |
 | **A folder that is not a report is not offered as one** | `crash::list_in` | the unit test — §185 |
 | **One folder, one answer** | `crates/engine/tests/crash_properties.rs` | the property — §185 |
+| **A property's corpus is its own, and the property says so** | `crates/engine/tests/crash_properties.rs` | 1 mutation — §186 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -23280,7 +23390,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     passed. Nothing in the engine holds global mutable state, its only
     temporary directory is tagged per test, and no leftover process or crash
     folder was found. So the flake is real, rare, and **unexplained** — which
-    is the worst of the three. The choices are: run the workspace tests in a
+    is the worst of the three.
+
+    **§186 found a shared scratch file, in the same shape, and closed it.**
+    The crash report's *properties* wrote to one file and ran at the same
+    time, so one could read another's corpus — but they do not fail when they
+    read nothing, they skip, so that was a silent weakening rather than a
+    flake. And it is in the integration tests, not `--lib`. So the flake is
+    still unexplained. The choices are: run the workspace tests in a
     loop under `ci` until one fails and capture the name (slow, and the cost
     falls on every run), or run the engine's tests under a repetition count
     in the `ci` profile only.

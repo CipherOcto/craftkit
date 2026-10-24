@@ -60,21 +60,46 @@ fn the_text(report: &crash::CrashReport) -> String {
     serde_json::to_string(report).expect("the tree's own report writes")
 }
 
-/// The folder the reader reads from.
+/// The folder a property's corpus lives in.
 ///
-/// One folder, one file, overwritten every time: the cases are scratch, and a
-/// folder per case would be a thousand folders.
-fn the_folder() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join("craftkit-crash-properties").join(format!("{}", std::process::id()));
+/// **One folder per property.** The properties run at the same time, and they
+/// used to share one file — so one property could read another's corpus, or a
+/// half-written one, and then it asserted nothing: the corpus it was
+/// supposed to break was not the one it read. Measured: with six properties
+/// on that file, the sixth read an **empty** file — *"EOF while parsing a
+/// value at line 1 column 0"* — because another property had just truncated
+/// it. §186.
+fn the_folder(property: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir()
+        .join("craftkit-crash-properties")
+        .join(format!("{}", std::process::id()))
+        .join(property);
+    // The folder is made empty first, so a corpus from an earlier run cannot
+    // be read as this one's.
+    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("probe")).expect("the folder");
     dir
 }
 
-/// Write a report's text where the reader will find it.
-fn write_report(text: &str) -> std::path::PathBuf {
-    let dir = the_folder();
-    std::fs::write(dir.join("probe").join("report.json"), text).expect("the report is written");
+/// Write a property's corpus, and return the folder it is in.
+fn write_report(property: &str, text: &str) -> std::path::PathBuf {
+    let dir = the_folder(property);
+    let path = dir.join("probe").join("report.json");
+    // The corpus is written whole: the file is taken away first, so a reader
+    // never sees half of one.
+    let _ = std::fs::remove_file(&path);
+    std::fs::write(&path, text).expect("the report is written");
     dir
+}
+
+/// Whether the corpus in a folder is the one this property wrote.
+///
+/// The guard that turns a shared corpus into a **failure** rather than a
+/// silent skip: a property that read another's corpus has broken nothing,
+/// and saying so is the whole point of a property. §186.
+fn the_corpus_is_ours(dir: &std::path::Path, text: &str) -> bool {
+    let path = dir.join("probe").join("report.json");
+    std::fs::read_to_string(&path).map(|read| read == text).unwrap_or(false)
 }
 
 /// Every value in a tree, and where it is.
@@ -166,7 +191,8 @@ proptest! {
             bytes[at] = byte;
         }
         let text = String::from_utf8_lossy(&bytes).to_string();
-        let dir = write_report(&text);
+        let dir = write_report("byte-changed", &text);
+        prop_assert!(the_corpus_is_ours(&dir, &text), "the corpus is not the one this property wrote");
         if let Ok(report) = crash::show_in(&dir, "probe") {
             prop_assert!(the_promise(&report).is_ok(), "a report that was read holds a document the model refuses");
         }
@@ -181,7 +207,8 @@ proptest! {
         let text = the_text(&a_report());
         let cut = at % text.len().max(1);
         let shortened = &text[..cut];
-        let dir = write_report(shortened);
+        let dir = write_report("truncated", shortened);
+        prop_assert!(the_corpus_is_ours(&dir, shortened), "the corpus is not the one this property wrote");
         if let Ok(report) = crash::show_in(&dir, "probe") {
             prop_assert!(the_promise(&report).is_ok(), "a report that was read holds a document the model refuses");
         }
@@ -207,7 +234,8 @@ proptest! {
         let path = paths[leaf % paths.len()].clone();
         prop_assert!(set_at(&mut tree, &path, a_hostile_value(hostile)), "the path is not there");
         let text = serde_json::to_string(&tree).expect("the tree is written");
-        let dir = write_report(&text);
+        let dir = write_report("hostile-value", &text);
+        prop_assert!(the_corpus_is_ours(&dir, &text), "the corpus is not the one this property wrote");
         if let Ok(report) = crash::show_in(&dir, "probe") {
             prop_assert!(the_promise(&report).is_ok(), "a report that was read holds a document the model refuses");
         }
@@ -240,7 +268,8 @@ proptest! {
         let path = paths[leaf % paths.len()].clone();
         prop_assert!(set_at(&mut tree, &path, a_hostile_value(hostile)), "the path is not there");
         let text = serde_json::to_string(&tree).expect("the tree is written");
-        let dir = write_report(&text);
+        let dir = write_report("replay-door", &text);
+        prop_assert!(the_corpus_is_ours(&dir, &text), "the corpus is not the one this property wrote");
         if let Ok(outcome) = crash::reproduce_in(&dir, "probe") {
             prop_assert_eq!(
                 outcome.results.len(),
@@ -272,13 +301,12 @@ proptest! {
         commands in proptest::collection::vec("[a-z]{1,4}", 0..6),
     ) {
         let report = a_report();
-        let dir = the_folder();
-        // Its own folder: the cases above share one scratch report, and they
-        // run at the same time.
-        let folder = dir.join("one-answer");
-        std::fs::create_dir_all(&folder).expect("the folder");
+        let dir = the_folder("one-answer");
+        let folder = dir.join("probe");
         // The report, written by the tree's own writer.
-        std::fs::write(folder.join("report.json"), the_text(&report)).expect("the report is written");
+        let text = the_text(&report);
+        std::fs::write(folder.join("report.json"), &text).expect("the report is written");
+        prop_assert!(the_corpus_is_ours(&dir, &text), "the corpus is not the one this property wrote");
         // And a second copy of the steps, saying something else.
         let other: Vec<Json> =
             commands.iter().map(|name| json!({ "command": name, "params": {} })).collect();
@@ -288,8 +316,8 @@ proptest! {
         )
         .expect("the copy is written");
 
-        let shown = crash::show_in(&dir, "one-answer").expect("the report reads");
-        let replayed = crash::replay_in(&dir, "one-answer").expect("the steps read");
+        let shown = crash::show_in(&dir, "probe").expect("the report reads");
+        let replayed = crash::replay_in(&dir, "probe").expect("the steps read");
         prop_assert_eq!(
             replayed.len(),
             shown.replay.len(),
@@ -297,6 +325,24 @@ proptest! {
         );
         prop_assert_eq!(replayed, shown.replay, "the doors disagree about which commands");
     }
+}
+
+/// Two properties do not share a corpus.
+///
+/// The properties used to write to one file, and they run at the same time:
+/// one could read another's corpus, or a half-written one, and then it
+/// asserted nothing. This says so **deterministically** — the two corpora
+/// are different folders, and each holds its own bytes. §186.
+#[test]
+fn two_properties_do_not_share_a_corpus() {
+    let first = write_report("shared-check-a", "{\"first\":1}");
+    let second = write_report("shared-check-b", "{\"second\":2}");
+    assert_ne!(first, second, "two properties share a folder");
+    let read = |dir: &std::path::Path| {
+        std::fs::read_to_string(dir.join("probe").join("report.json")).expect("the corpus reads")
+    };
+    assert_eq!(read(&first), "{\"first\":1}", "the first corpus was overwritten");
+    assert_eq!(read(&second), "{\"second\":2}", "the second corpus was overwritten");
 }
 
 /// The report's own shape, as the tree writes it.

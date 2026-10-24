@@ -75,6 +75,7 @@ readonly FILES=(
     crates/core/src/readers.rs
     crates/core/tests/properties.rs
     crates/engine/tests/properties.rs
+    crates/engine/tests/crash_properties.rs
     crates/io/tests/properties.rs
     crates/core/src/value.rs
     crates/core/src/tick.rs
@@ -5553,6 +5554,21 @@ swap crates/engine/src/crash.rs \
     '    std::fs::create_dir_all(&dir).map_err(|e| {'
 expect_catch "crash: the report's folder is created instead of the report being filed in it" \
     "cargo test -p craftkit-engine --profile ci recording_a_crash_writes_one_file"
+
+# ------------------------------------------------ the properties' corpora ----
+# Section 186. The crash report's properties wrote to one file, and they run
+# at the same time: one could read another's corpus, or a half-written one,
+# and then it asserted nothing -- the corpus it was supposed to break was
+# not the one it read. Measured: with six properties on that file, the sixth
+# read an EMPTY file, because another property had just truncated it.
+#
+# The break: the corpora are shared again. The test that says two properties
+# do not share a corpus is the gate.
+swap crates/engine/tests/crash_properties.rs \
+    '        .join(property);' \
+    '        .join("shared");'
+expect_catch "property: two properties share one corpus" \
+    "cargo test -p craftkit-engine --profile ci two_properties_do_not_share_a_corpus"
 
 restore
 finish
