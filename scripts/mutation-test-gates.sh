@@ -6027,5 +6027,39 @@ swap apps/craftkit-cli/src/args.rs \
 expect_catch 'cli: the parser stops accepting the door that writes a report' \
     "cargo test -p craftkit-cli --profile ci crashes_write_needs_an_output_and_takes_nothing_else"
 
+# ---------------------------------------------- the fuzzer's third target ----
+# Section 201. The tree reads three files and the fuzzer watched two of them:
+# the crash report -- the format that arrives from another machine -- had no
+# target, because it had no writer, and the writer is what section 200 gave
+# it.
+#
+# The first break takes the report out of the fuzzer's list, so the fuzzer
+# watches two doors again. The document's table is checked against the
+# fuzzer's own list, and the test that holds the two together must notice.
+swap xtask/src/fuzz.rs \
+    '    pub const ALL: [Target; 3] = [Target::Design, Target::Script, Target::Report];' \
+    '    pub const ALL: [Target; 3] = [Target::Report, Target::Script, Target::Design];'
+expect_catch 'fuzz: the fuzzer watches the targets in a different order from the table' \
+    "cargo xtask lists"
+
+# The second break gives the report the wrong door -- `show` instead of
+# `replay`. The fuzzer would still run, and the seed would still be accepted,
+# because `show` reads the report too: the child was wrong and nothing said
+# so. The table names the child, and the table is checked against the code.
+swap xtask/src/fuzz.rs \
+    '                vec!["crashes".to_string(), "replay".to_string(), "--file".to_string()]' \
+    '                vec!["crashes".to_string(), "show".to_string(), "--file".to_string()]'
+expect_catch 'fuzz: the report target calls a door the table does not name' \
+    "cargo xtask lists"
+
+# The third break stops breaking the report's own shape, so the fuzzer's
+# structural mutation leaves the file alone and the reader is never pushed
+# past its own rules.
+swap xtask/src/fuzz.rs \
+    '        Target::Report => break_the_report(rng, bytes),' \
+    '        Target::Report => bytes.to_vec(),'
+expect_catch 'fuzz: the report target leaves the report alone instead of breaking it' \
+    "cargo test -p xtask --profile ci the_report_s_shape_is_broken_with_the_file_still_valid_json"
+
 restore
 finish

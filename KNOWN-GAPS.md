@@ -23661,6 +23661,115 @@ named door wrote a script. It was not a lie about the tree — §182 had just
 given the tree a script writer — it was a lie about **which** thing the tree
 could write.
 
+## 201. The fuzzer watched two of the tree's three file doors
+
+### The finding
+
+§182 gave the tree a rule about fuzzing: **the corpus is written by the tree's
+own program**, so the format the fuzzer breaks is the format the program
+speaks. And it gave the tree the writer the *script* door was missing.
+
+The *report* door was still unwritten, and §200 gave it its writer. So the
+rule could be applied — and it had not been.
+
+**Measured**, before the port:
+
+| | |
+|---|---|
+| the fuzzer's targets | **2** — `Target::ALL` has length 2: `Target::Design`, `Target::Script` |
+| the fuzzer's own usage | "which file to break: design, script, or all" |
+| the file formats the tree reads | **3** — a design, a script, a crash report |
+| the door that was not watched | `craftkit-cli crashes replay --file` |
+
+And the unwatched one is the worst one to leave unwatched: **the report is
+the format that arrives from another machine**. §195 gave it a door precisely
+because it is input, and §183 gave its reader the tree's promise about what a
+document is — and nothing had ever broken it, because the tree could not write
+one.
+
+The fuzzer's own document said so, in the list of what it does **not** cover:
+
+> **It does not fuzz the crash report.** The third file the tree reads has no
+> headless writer yet… §182.
+
+### The port
+
+**A third target.** `Target::Report`, with the three things a target carries
+(§182's shape): the name its corpus is written under, the words its child is
+called with, and how its corpus is written.
+
+- **The seed** is written by the tree's own program — `craftkit-cli crashes
+  write --out`, §200's door — so the corpus is the report format and not a
+  second copy of it.
+- **The child** is `craftkit-cli crashes replay --file` — §195's door, the one
+  that takes a report with no folder around it and no id to look it up by.
+  And it is the *replay* and not the *show*, because the report **carries
+  commands**: its replay is a list of steps, and a broken report is not only a
+  broken file — it is a broken *instruction* aimed at the engine, exactly as
+  §177 said of the script.
+- **The shape that is broken is the report's own**: a design that is not a
+  document, a base that is not a document, a design the *model* refuses, a
+  replay that is not a list, a step that is not an object, a step whose
+  command is not a string, a step whose parameters are not an object, a count
+  that is not a number, and a playhead that is not a number.
+
+**Measured, after the port** — the report target's own run:
+
+```text
+report: 500 input(s): 97 accepted, 403 refused, 0 crash(es), 0 hang(s)
+```
+
+And the reader's own rules, one breakage at a time, through the tree's own
+binary:
+
+| The breakage | The reader |
+|---|---|
+| the design is not a document | refused |
+| the base is not a document | refused |
+| the design's frame rate is zero | refused — "the report's design is not usable" |
+| the replay is not a list | refused |
+| a step is not an object | refused |
+| a step's command is not a string | refused |
+| a step's parameters are not an object | **read** — and the command ran with no parameters |
+| the count of dropped commands is not a number | refused |
+| the playhead is not a number | refused |
+
+Eight of the nine are refused, with a reason that names what was wrong. The
+ninth is not a defect in the reader — the script's door does the same, and the
+engine's own rule says a non-object parameter object is an empty one. But it
+is where §202 came from, and it is written down below.
+
+### The gate's own teeth
+
+Three new mutations, each proved by hand before the suite was run:
+
+```text
+fuzz: the fuzzer watches the targets in a different order from the table
+fuzz: the report target calls a door the table does not name
+fuzz: the report target leaves the report alone instead of breaking it
+```
+
+The **second** one is the interesting one: with the report's child changed to
+`crashes show --file`, the fuzzer still ran, the seed was still accepted, and
+nothing said so — because `show` reads a report too. Only the table knew the
+child was wrong. That is why the table is a **checked** list and not
+decoration.
+
+### The lesson
+
+**A door that takes untrusted input is the one worth fuzzing, and it is the
+one that is hardest to fuzz.** The report arrives from another machine, so it
+is the widest door the tree has — and it was the only one the fuzzer could
+not reach, because reaching it needed a *writer*, and the writer needed a
+crash. Two arcs, four hundred lines apart, and the second one was waiting for
+the first.
+
+**And the list of targets is a promise, so it is checked.** §189's rule —
+*every list in the prose is checked against the constant, and in order* — had
+never been applied to the fuzzer's own list. The document's table was the
+tree's only statement of which doors are watched, and nothing compared it
+with the code that watches them.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24171,6 +24280,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The file door and the folder door write the same bytes** | the same | the unit test — §200 |
 | **The report the CLI writes carries a real replay** | `Session::sample_recorded` | 1 mutation — §200 |
 | **The parser accepts the door that writes a report** | `apps/craftkit-cli/src/args.rs` | 1 mutation — §200 |
+| **The fuzzer watches the report door** | `Target::Report` in `xtask/src/fuzz.rs` | 1 mutation — §201 |
+| **The report's corpus is written by the tree's own program** | `seed_reports` | the fuzzer's own seed check — §201 |
+| **The report's shape is broken with the file still valid JSON** | `break_the_report` | 1 mutation — §201 |
+| **The fuzzer's targets are the table the document lists, in order** | `cargo xtask lists` | 2 mutations — §201 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25500,11 +25613,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     change to where a gate lives. The owner's call, with item 8: a gate that
     checks what prose says is a heuristic.
 
-60. **The fuzzer watches two of the tree's three file doors.** §200 gave the
-    tree a writer for the crash report, so the corpus can now be written by
-    the tree's own program — and the report is the door that **arrives from
-    another machine**, the one §195 opened for untrusted input and nothing has
-    ever broken.
+60. ~~**The fuzzer watches two of the tree's three file doors.**~~ **Done in
+    §201.** The third target is `Target::Report`, its corpus is written by
+    `craftkit-cli crashes write --out`, its child is `crashes replay
+    --file`, and the shape it breaks is the report's own. The document's
+    table of targets is now checked against the fuzzer's own list, in order.
+    The text of the item is kept below, because it is the measurement the
+    port was made from.
 
     **Measured**: `Target::ALL` has length **2** — `Target::Design` and
     `Target::Script` — and the fuzzer's usage says "which file to break:
@@ -25529,3 +25644,52 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     rule is that the fuzzer hands the seed to the same child it hands the
     mutants to, and refuses to go on unless the child **accepts** it. A
     corpus the tree cannot read is a corpus that tests nothing.
+
+61. **Two of the four doors that run a command refuse a `params` that is not
+    an object, and the other two run the command anyway.** Found while
+    measuring §201's port: the report's reader accepts a step whose
+    parameters are not an object, and so does the script's.
+
+    **Measured, at all four doors:**
+
+    | The door | A `params` that is not an object |
+    |---|---|
+    | the control channel, `engine.execute` | **refused** — "`params` must be an object", kind `bad-parameter` (`crates/control/src/server.rs:513`) |
+    | the MCP server, `craftkit_execute` | **refused** — "`arguments` must be an object" (`crates/mcp/src/server.rs:211`) |
+    | the script door, `craftkit-cli run` | **read** — the command runs with **no parameters at all** |
+    | the report door, `craftkit-cli crashes replay --file` | **read** — the same |
+
+    The script door's own output is the proof, and it is the quiet kind: a
+    step of `{"command": "node.add", "params": [1, 2, 3]}` runs and reports
+
+    ```text
+    1/2 node.add: added filter `filter 1`
+    ```
+
+    — a node named "`filter 1`", which is the command's **default** name and
+    kind, and which the file never mentions. The step named a command and
+    gave it a broken parameter object, and the command ran anyway, with
+    parameters nobody had written.
+
+    **Where the rule comes from.** The engine's parameter reader says so
+    plainly (`crates/core/src/params.rs:55`): "A non-object (a number, a
+    list, `null`) becomes an empty view, so `execute(id, null)` behaves like
+    `execute(id, {})` instead of panicking." So the *engine* is not wrong —
+    the rule is deliberate, and it is the right rule for a call that passes
+    `null`. The gap is that a **file** is not a call: a script and a report
+    are instructions, and an instruction whose parameters are not an object
+    is a broken instruction, not an instruction with no parameters.
+
+    This is §177's trap with a different input, and the fuzzer has been
+    breaking that exact shape since §182 — "a step whose parameters are not
+    an object" is one of the script door's own breakages — and the tree did
+    not notice, because the fuzzer looks for **crashes**, and a command that
+    runs with the wrong parameters is not a crash.
+
+    The cheap half is to refuse it where the other two doors refuse it: the
+    script's reader and the report's reader check that a step's `params` is
+    an object, and say so the way the control channel says so. The expensive
+    half is the property the fuzzer would need to hold it — "a broken
+    instruction is refused, not run" — and that is a property about
+    **silence**, which the fuzzer's verdict cannot see: it has four verdicts
+    and none of them is "the command did the wrong thing".

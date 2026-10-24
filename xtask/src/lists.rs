@@ -6114,6 +6114,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         format!("{p}\n     One bound for both doors, or the tree prints a script it will refuse to run.")
     }));
 
+    // The fuzzer's targets, and the table the document lists them in. §201.
+    problems.extend(the_fuzz_targets_are_the_table(root)?);
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -6155,6 +6158,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              command is documented, every gate runs in `ci`, every command `ci` \
              does not run is run by name in the workflow, every list of the \
              gates in the prose is the whole list in the order `ci` runs them, \
+             the fuzzer's targets are the table the document lists, \
              the tree's walk \
              has one home, and the session offers no way into the design but \
              the registry",
@@ -6163,6 +6167,80 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         return Ok(crate::Outcome::Ran);
     }
     Err(format!("{} shared-list problem(s):\n   • {}", problems.len(), problems.join("\n   • ")))
+}
+
+/// The fuzzer's targets, and the table that lists them.
+///
+/// §189's rule, applied to the fuzzer's list: a document that names a list is
+/// a promise about that list, and the promise is checked against the code —
+/// **and in order**.
+///
+/// §201: the document's table was the tree's only statement of which doors the
+/// fuzzer watches, and nothing checked it against the fuzzer's own list. So a
+/// target could be added to the code and the table would keep saying two, and
+/// a reader of the document would be reading a list that was already wrong.
+pub fn the_fuzz_targets_are_the_table(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("docs/fuzzing.md");
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let rows = targets_in_the_fuzzing_table(&text)?;
+    let names: Vec<String> = crate::fuzz::Target::ALL.iter().map(|t| t.name().to_string()).collect();
+    let children: Vec<String> = crate::fuzz::Target::ALL.iter().map(|t| t.child_args().join(" ")).collect();
+    let mut problems = Vec::new();
+    if rows.len() != names.len() {
+        problems.push(format!(
+            "the fuzzing document lists {} target(s) and the fuzzer has {}: {names:?}",
+            rows.len(),
+            names.len()
+        ));
+    }
+    for (index, row) in rows.iter().enumerate() {
+        let Some(code_name) = names.get(index) else { break };
+        if row.0 != *code_name {
+            problems.push(format!(
+                "the fuzzing document's target {index} is `{}` and the fuzzer's is `{code_name}`",
+                row.0
+            ));
+        }
+        let Some(code_child) = children.get(index) else { break };
+        if row.1 != *code_child {
+            problems.push(format!(
+                "the fuzzing document says the `{}` target's child is `{}` and the fuzzer calls `{}`",
+                row.0, row.1, code_child
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// The targets the fuzzing document's table lists: the name and the child.
+///
+/// The table is the one under **its heading**: the document has a second
+/// table, about verdicts, and reading the first table in the file would read
+/// the wrong one the day somebody moves one.
+fn targets_in_the_fuzzing_table(text: &str) -> Result<Vec<(String, String)>, String> {
+    let after =
+        text.split("## The targets").nth(1).ok_or("the fuzzing document has no `## The targets` heading")?;
+    // The section, not the document: the tables further down belong to other
+    // sections.
+    let section = after.lines().take_while(|line| !line.starts_with("## ")).collect::<Vec<_>>().join("\n");
+    let mut rows = Vec::new();
+    for line in section.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("| `") {
+            continue;
+        }
+        let cells: Vec<&str> = trimmed.split('|').collect();
+        let Some(name) = cells.get(1).and_then(|c| c.split('`').nth(1)) else { continue };
+        let Some(child) = cells.get(3).and_then(|c| c.split('`').nth(1)) else { continue };
+        // The child is written as the command a person types.
+        let child = child.strip_prefix("craftkit-cli ").unwrap_or(child);
+        rows.push((name.to_string(), child.to_string()));
+    }
+    if rows.is_empty() {
+        return Err("the fuzzing document's table of targets is empty".to_string());
+    }
+    Ok(rows)
 }
 
 // --------------------------------------------------------------- §82 -------
@@ -6793,6 +6871,60 @@ mod tests {
     fn a_gate_inside_a_longer_name_is_not_named() {
         let phases = ["web", "tests"];
         assert!(gate_lists("the `craftkit-web` crate and the `test` helper", &phases).is_empty());
+    }
+
+    /// A fuzzing document whose table does not list the fuzzer's targets is
+    /// caught.
+    ///
+    /// §201: the table is the tree's only statement of which doors the fuzzer
+    /// watches, and nothing checked it against the fuzzer's own list.
+    #[test]
+    fn a_target_the_fuzzing_table_does_not_list_is_caught() {
+        let dir = fabricated_tree("fuzztargets");
+        let doc = fabricated_fuzzing_doc();
+        std::fs::write(dir.join("docs/fuzzing.md"), &doc).expect("the fabricated document");
+        assert!(
+            the_fuzz_targets_are_the_table(&dir).expect("the check runs").is_empty(),
+            "the fabricated document disagrees with the fuzzer"
+        );
+
+        // A table that drops a target is caught.
+        let broken = doc.replace("| `report` |", "| `reportt` |");
+        std::fs::write(dir.join("docs/fuzzing.md"), &broken).expect("the fabricated document");
+        let problems = the_fuzz_targets_are_the_table(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("report")), "{problems:#?}");
+
+        // And a table that names the wrong child is caught.
+        let broken = doc.replace("craftkit-cli crashes replay --file", "craftkit-cli crashes show --file");
+        std::fs::write(dir.join("docs/fuzzing.md"), &broken).expect("the fabricated document");
+        let problems = the_fuzz_targets_are_the_table(&dir).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("child")), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A fuzzing document that agrees with the fuzzer.
+    ///
+    /// **Built from the fuzzer's own list**, so the fabricated tree agrees by
+    /// construction and the test above is about the check and not about the
+    /// fixture.
+    fn fabricated_fuzzing_doc() -> String {
+        let rows: Vec<String> = crate::fuzz::Target::ALL
+            .iter()
+            .map(|t| {
+                format!(
+                    "| `{}` | a file | `craftkit-cli {}` | a writer |",
+                    t.name(),
+                    t.child_args().join(" ")
+                )
+            })
+            .collect();
+        format!(
+            "# Fuzzing\n\n## The targets\n\n\
+             | The target | The file | The child | The corpus |\n|---|---|---|---|\n{}\n\n\
+             ## Something else\n\n| `not` | a target | | |\n",
+            rows.join("\n")
+        )
     }
 
     /// A table of gates lists the phases in the order `ci` runs them.

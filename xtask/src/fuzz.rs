@@ -208,6 +208,13 @@ pub const SEED_NAME: &str = "seed.craftkit";
 /// The name the seed file has when the seed is a **script**.
 pub const SCRIPT_SEED_NAME: &str = "seed.json";
 
+/// The name the seed file has when the seed is a **crash report**.
+///
+/// Its own name, and not the script's: the three runs share one working
+/// directory, so two targets that used one file name would overwrite each
+/// other's corpus. §201.
+pub const REPORT_SEED_NAME: &str = "seed-report.json";
+
 /// Which file the fuzzer breaks.
 ///
 /// §182: the fuzzer had one shape — one file, one command — and the tree has
@@ -227,17 +234,26 @@ pub enum Target {
     Design,
     /// A script of commands, read by `craftkit-cli run`.
     Script,
+    /// A crash report, read by `craftkit-cli crashes replay --file`.
+    ///
+    /// §201: the report is the format that **arrives from another machine** —
+    /// the recipe asks for `report.json` from whoever had the crash, and that
+    /// file has no folder around it and no id to look it up by. So it is the one
+    /// format a hostile file arrives in, and the one the fuzzer was not
+    /// watching. §195 gave it a door and §200 gave the tree a writer.
+    Report,
 }
 
 impl Target {
     /// Every target, in the order the runs happen.
-    pub const ALL: [Target; 2] = [Target::Design, Target::Script];
+    pub const ALL: [Target; 3] = [Target::Design, Target::Script, Target::Report];
 
     /// The name the corpus is written under.
     pub fn seed_name(self) -> &'static str {
         match self {
             Target::Design => SEED_NAME,
             Target::Script => SCRIPT_SEED_NAME,
+            Target::Report => REPORT_SEED_NAME,
         }
     }
 
@@ -246,6 +262,7 @@ impl Target {
         match self {
             Target::Design => "input.craftkit",
             Target::Script => "input.json",
+            Target::Report => "input-report.json",
         }
     }
 
@@ -259,6 +276,7 @@ impl Target {
         match self {
             Target::Design => "craftkit",
             Target::Script => "json",
+            Target::Report => "json",
         }
     }
 
@@ -267,6 +285,9 @@ impl Target {
         match self {
             Target::Design => vec!["eval".to_string()],
             Target::Script => vec!["run".to_string()],
+            Target::Report => {
+                vec!["crashes".to_string(), "replay".to_string(), "--file".to_string()]
+            }
         }
     }
 
@@ -275,6 +296,7 @@ impl Target {
         match self {
             Target::Design => "design",
             Target::Script => "script",
+            Target::Report => "report",
         }
     }
 
@@ -283,6 +305,7 @@ impl Target {
         match self {
             Target::Design => seed_designs(cli, dir, options),
             Target::Script => seed_scripts(cli, dir, options),
+            Target::Report => seed_reports(cli, dir, options),
         }
     }
 }
@@ -292,7 +315,10 @@ fn parse_target(raw: &str) -> Result<Target, String> {
     match raw {
         "design" => Ok(Target::Design),
         "script" => Ok(Target::Script),
-        other => Err(format!("`--target` wants `design` or `script`, and `{other}` is neither")),
+        "report" => Ok(Target::Report),
+        other => {
+            Err(format!("`--target` wants `design`, `script` or `report`, and `{other}` is none of them"))
+        }
     }
 }
 
@@ -461,6 +487,41 @@ fn seed_scripts(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, 
     Ok(vec![Seed { name: "the sample script".to_string(), bytes }])
 }
 
+/// The corpus for the report door: one valid report, written by the tree's
+/// own program.
+///
+/// The tree's program is `craftkit-cli crashes write --out` — the door §200
+/// gave the tree, because before it the only producer of a report anywhere in
+/// the tree was the desktop app's panic hook, and a report needs a crash. So
+/// the tree could not write a corpus for the format at all, and the format is
+/// the one that **arrives from another machine**. §180's rule: the corpus is
+/// written by the tree's own program, so the format the fuzzer breaks is the
+/// format the program speaks.
+///
+/// **The seed is checked before it is broken**, like the design's and the
+/// script's: the fuzzer hands the seed to the same child it hands the mutants
+/// to, and refuses to go on unless the child *accepts* it.
+fn seed_reports(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, String> {
+    let path = dir.join(REPORT_SEED_NAME);
+    let args = vec![
+        "crashes".to_string(),
+        "write".to_string(),
+        "--out".to_string(),
+        path.to_string_lossy().into_owned(),
+    ];
+    let outcome = crate::command_timed(cli, &args, dir, options.timeout, &options.child_env)?;
+    if !outcome.timed_out && outcome.code != Some(0) {
+        return Err(format!(
+            "the tree did not write a seed report: `{} crashes write --out {}` said\n{}",
+            cli.display(),
+            path.display(),
+            outcome.all()
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    Ok(vec![Seed { name: "the sample report".to_string(), bytes }])
+}
+
 /// Break one seed, in one way.
 fn mutate(rng: &mut Rng, seeds: &[Seed], target: Target) -> Mutated {
     let seed = &seeds[rng.below(seeds.len())];
@@ -595,6 +656,7 @@ fn structure(rng: &mut Rng, bytes: &[u8], target: Target) -> Vec<u8> {
     match target {
         Target::Design => break_the_document(rng, bytes),
         Target::Script => break_the_script(rng, bytes),
+        Target::Report => break_the_report(rng, bytes),
     }
 }
 
@@ -708,6 +770,72 @@ fn break_the_script(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
         map.insert("commands".to_string(), serde_json::json!(commands));
     }
     serde_json::to_string(&value).unwrap_or_else(|_| text.to_string()).into_bytes()
+}
+
+/// The report's own shape, broken — with the file still valid JSON.
+///
+/// A report is a **design**, a **base**, and the **commands** between them, so
+/// the shape that matters is the report's own: the two documents, the list of
+/// steps, and the numbers around them.
+///
+/// Each breakage is one of the rules the reader states, pushed past it. And
+/// the reader checks **both** of the report's documents, because the design is
+/// the report's **target**: what the replay has to end up with. §183.
+fn break_the_report(rng: &mut Rng, bytes: &[u8]) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(bytes) else { return bytes.to_vec() };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else { return bytes.to_vec() };
+    match rng.below(9) {
+        // The design replaced by something that is not a document.
+        0 => set_in_report(&mut value, "design", serde_json::json!({ "nodes": "not an array" })),
+        // The base replaced by something that is not a document.
+        1 => set_in_report(&mut value, "base", serde_json::json!({ "nodes": "not an array" })),
+        // A design the *model* refuses: a frame rate of zero.
+        2 => zero_the_frame_rate(&mut value, "design"),
+        // The replay not a list at all.
+        3 => set_in_report(&mut value, "replay", serde_json::json!("not a list")),
+        // A step that is not an object.
+        4 => break_first_step(&mut value, serde_json::json!("node.add")),
+        // A step whose command is not a string.
+        5 => break_first_step(&mut value, serde_json::json!({ "command": 7 })),
+        // A step whose parameters are not an object.
+        6 => break_first_step(&mut value, serde_json::json!({ "command": "node.add", "params": [1, 2, 3] })),
+        // The count of dropped commands is not a number.
+        7 => set_in_report(&mut value, "dropped", serde_json::json!("many")),
+        // The playhead is not a number.
+        _ => set_in_report(&mut value, "at", serde_json::json!("now")),
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| text.to_string()).into_bytes()
+}
+
+/// Set one key of a report, if the report is an object.
+///
+/// A report that is not an object has no keys, and the value's own index
+/// would panic on one — so the shape is asked first. The same rule as
+/// [`set_in_step`], one level up.
+fn set_in_report(report: &mut serde_json::Value, key: &str, value: serde_json::Value) {
+    let Some(map) = report.as_object_mut() else { return };
+    map.insert(key.to_string(), value);
+}
+
+/// Replace the first step of a report's replay with something that is not a
+/// step.
+fn break_first_step(report: &mut serde_json::Value, step: serde_json::Value) {
+    let Some(steps) = report.get_mut("replay").and_then(|r| r.as_array_mut()) else { return };
+    if steps.is_empty() {
+        return;
+    }
+    steps[0] = step;
+}
+
+/// A frame rate of zero, in a document inside a report.
+///
+/// The report's **design** is the report's *target*: what the replay has to
+/// end up with. So a design the model refuses is a report the reader
+/// refuses, and the reader says which document it was. §183.
+fn zero_the_frame_rate(report: &mut serde_json::Value, key: &str) {
+    let Some(document) = report.get_mut(key).and_then(|d| d.as_object_mut()) else { return };
+    let Some(meta) = document.get_mut("meta").and_then(|m| m.as_object_mut()) else { return };
+    meta.insert("fps".to_string(), serde_json::json!(0));
 }
 
 /// Set one key of a step, if the step is an object.
@@ -1073,7 +1201,7 @@ pub fn usage() -> String {
         "  --seed N        the seed; the same seed tries the same inputs (default: 0x5eedf0f21a3b5c7d)",
         "  --timeout SECS  how long one input may take (default: 10)",
         "  --out DIR       where the inputs and the findings go (default: fuzz-out)",
-        "  --target WHICH  which file to break: design, script, or all (default: all)",
+        "  --target WHICH  which file to break: design, script, report, or all (default: all)",
         "",
     ]
     .join("\n")
@@ -1219,6 +1347,39 @@ mod tests {
         "muted": false }
     ]
   }
+}
+"#
+            .to_vec(),
+        }
+    }
+
+    /// A report to break, for the tests that do not need the tree's own.
+    ///
+    /// The same shape the tree's own writer writes — `craftkit-cli crashes
+    /// write --out` — and the CLI's own test suite is where the proof that the
+    /// tree reads it lives, because the proof needs the binary. §200. This one
+    /// is here so that the *mutations* can be checked without one. §201.
+    fn a_report() -> Seed {
+        Seed {
+            name: "a hand-written report".to_string(),
+            bytes: br#"{
+  "id": "20250101-000000-0000",
+  "unix": 0,
+  "command": "node.add",
+  "message": "a hand-written report",
+  "design": {
+    "meta": { "name": "a test report", "fps": 24, "start": 0, "end": 1270080000000, "comment": "" },
+    "nodes": []
+  },
+  "base": {
+    "meta": { "name": "a test report", "fps": 24, "start": 0, "end": 1270080000000, "comment": "" },
+    "nodes": []
+  },
+  "replay": [
+    { "command": "node.add", "params": { "name": "In", "kind": "source", "amount": 1 } }
+  ],
+  "dropped": 0,
+  "at": 0
 }
 "#
             .to_vec(),
@@ -1393,6 +1554,59 @@ mod tests {
     fn each_target_s_child_reads_that_kind_of_file() {
         assert_eq!(Target::Design.child_args(), vec!["eval".to_string()]);
         assert_eq!(Target::Script.child_args(), vec!["run".to_string()]);
+        // The report's door is the one that takes a **file**: a report that
+        // arrived from another machine has no folder and no id. §195.
+        assert_eq!(
+            Target::Report.child_args(),
+            vec!["crashes".to_string(), "replay".to_string(), "--file".to_string()]
+        );
+    }
+
+    /// The three targets do not share a file name.
+    ///
+    /// The three runs share one working directory, so two targets that used
+    /// one file name would overwrite each other's corpus: the script's seed
+    /// would be the report's, and the fuzzer would break a report with the
+    /// script's mutations and call it a pass. §201.
+    #[test]
+    fn the_targets_do_not_share_a_file_name() {
+        let seeds: Vec<&str> = Target::ALL.iter().map(|t| t.seed_name()).collect();
+        let mut unique = seeds.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), seeds.len(), "two targets use the same seed file: {seeds:?}");
+        let inputs: Vec<&str> = Target::ALL.iter().map(|t| t.input_name()).collect();
+        let mut unique = inputs.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), inputs.len(), "two targets use the same input file: {inputs:?}");
+    }
+
+    /// The report's shape is broken **with the file still valid JSON**.
+    ///
+    /// That is the whole point of the shape mutation: the other six break the
+    /// file, and the reader turns it away at the first line — the reader
+    /// working, but only its outermost part. This one has to reach the
+    /// reader's own rules about the report's two documents and its steps.
+    #[test]
+    fn the_report_s_shape_is_broken_with_the_file_still_valid_json() {
+        let report = a_report();
+        let mut rng = Rng::new(DEFAULT_SEED);
+        for _ in 0..200 {
+            // **Through the dispatch**, not straight at the function: the
+            // fuzzer reaches the report's shape by asking for the *target*,
+            // and a target whose dispatch does not reach its own breakage
+            // breaks nothing at all.
+            let broken = structure(&mut rng, &report.bytes, Target::Report);
+            assert!(
+                broken != report.bytes,
+                "the mutation left the report alone ({} bytes)",
+                report.bytes.len()
+            );
+            let value: serde_json::Value =
+                serde_json::from_slice(&broken).expect("the broken report is still JSON");
+            assert!(value.get("replay").is_some(), "the report is still a report");
+        }
     }
 
     #[test]

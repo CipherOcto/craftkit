@@ -3,19 +3,28 @@
 `cargo xtask fuzz` breaks the files the tree reads on purpose and hands them to
 the headless CLI. It is a phase of `cargo xtask ci`, so it runs on every push.
 
-There are **two targets**, because the tree reads two kinds of file through a
-door a person can walk through by accident:
+## The targets
+
+There are **three targets**, because the tree reads three kinds of file through
+a door a person can walk through by accident:
 
 | The target | The file | The child | The corpus is written by |
 |---|---|---|---|
 | `design` | a design | `craftkit-cli eval` | `craftkit-cli sample --out` |
 | `script` | a script of commands | `craftkit-cli run` | `craftkit-cli script --out` |
+| `report` | a crash report | `craftkit-cli crashes replay --file` | `craftkit-cli crashes write --out` |
 
-**Both corpora are written by the tree's own program.** That is the rule, and
-it is why a target cannot be added without a writer: a corpus written by hand
-would be a second copy of the format, and it would drift — the fuzzer would be
-breaking a format nothing else in the tree speaks. §182 gave the tree the
-writer the script door was missing.
+**All three corpora are written by the tree's own program.** That is the rule,
+and it is why a target cannot be added without a writer: a corpus written by
+hand would be a second copy of the format, and it would drift — the fuzzer
+would be breaking a format nothing else in the tree speaks. §182 gave the tree
+the writer the script door was missing, and §200 gave it the writer the report
+door was missing.
+
+The report's door is the one that **arrives from another machine**: the recipe
+asks for `report.json` from whoever had the crash, and that file has no folder
+around it and no id to look it up by. §195 gave it the door; §201 gave it the
+fuzzer.
 
 ## Why the reader is the thing to fuzz
 
@@ -32,8 +41,9 @@ fuzzer pushes on.
 ## What a run does
 
 1. It writes a corpus of **valid** files, with the tree's own program: the
-   design's seed comes from `craftkit-cli sample --out`, and the script's from
-   `craftkit-cli script --out`.
+   design's seed comes from `craftkit-cli sample --out`, the script's from
+   `craftkit-cli script --out`, and the report's from
+   `craftkit-cli crashes write --out`.
 2. It **checks** the seed: the same child that gets the mutants has to
    *accept* it. A corpus the reader turns away is a corpus that tests
    nothing, and a fuzzer whose corpus is rubbish is green for the wrong
@@ -53,11 +63,17 @@ replaced by something that is not one. A script's shape is its **list of
 commands** — a step that is not an object, a step whose command is not a
 string, a step whose parameters are not an object, a command the registry does
 not have, a parameter past the tree's own magnitude limit, and a base that is
-not a document.
+not a document. A report's shape is **the report itself** — a design that is
+not a document, a base that is not a document, a design the *model* refuses, a
+replay that is not a list, a step that is not an object, a step whose command
+is not a string, a step whose parameters are not an object, a count that is
+not a number, and a playhead that is not a number.
 
 That last one matters most for the script door: a script **carries
 commands**, so a broken script is not only a broken file — it is a broken
-*instruction*, and the instruction is aimed at the engine.
+*instruction*, and the instruction is aimed at the engine. The report carries
+commands too — its **replay** — and it is aimed at the same engine.
+
 
 ## What is a crash, and what is not
 
@@ -87,8 +103,9 @@ crash on the build machine, and a red CI run can be reproduced by the person
 who has to fix it.
 
 ```bash
-cargo xtask fuzz                      # the same run `ci` does: both doors
+cargo xtask fuzz                      # the same run `ci` does: every door
 cargo xtask fuzz --target script      # one door only
+cargo xtask fuzz --target report      # another door only
 cargo xtask fuzz --iters 5000         # a longer hunt
 cargo xtask fuzz --seed 0x1234        # a different hunt
 cargo xtask fuzz --timeout 60         # more patience for a slow machine
@@ -97,8 +114,8 @@ cargo xtask fuzz --cli ./target/debug/craftkit-cli
 
 ## Reading a finding
 
-A finding is two files, and the **target is in the name** — so the two doors'
-findings cannot collide in one folder:
+A finding is two files, and the **target is in the name** — so the three
+doors' findings cannot collide in one folder:
 
 - `fuzz-out/findings/design-crash-00123.craftkit` — the **minimised** input.
   Small, because a crash in a two-thousand-byte file is a puzzle and a crash
@@ -123,14 +140,15 @@ than it does is worse than no gate.
 - **It does not fuzz the UI, the control channel or the MCP server.** Those
   take JSON over a channel, and the tree has property tests for them
   (§175, §177).
-- **It does not fuzz the crash report.** The third file the tree reads has no
-  headless writer yet: the only producer in the tree is the desktop app's
-  panic hook, and the CLI's crash actions are list, show and replay. A corpus
-  written by hand would be a second copy of the report format, so the door
-  waits for its writer. §182.
 - **It does not fuzz the writer.** The corpus is written by the writer, so the
   writer is exercised on every run — but only on the shapes the writer itself
   produces.
+- **It does not know that it watches every format the tree reads.** The three
+  targets are the tree's three file formats, and the table above is checked
+  against the code — but the *list itself* is written out in three places
+  (this table, the fuzzer's `Target`, and §182's table in `KNOWN-GAPS.md`),
+  and nothing checks that a **fourth** format has not appeared. `KNOWN-GAPS.md`
+  item 61.
 - **A hang is reported like a crash**, and it fails the run. The timeout is
   ten seconds for reading a file of a few kilobytes; the reader is bounded, so
   ten thousand times the work is already a hang.
