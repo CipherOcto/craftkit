@@ -5947,5 +5947,20 @@ swap crates/engine/src/session.rs \
 expect_catch 'engine: a command with a parameter it does not have is not logged' \
     "cargo test -p craftkit-engine --profile ci a_command_with_a_parameter_it_does_not_have"
 
+# ---------------------------------------------------- the kind in the CLI ----
+# Section 197. The tree splits its failures in two -- a refusal is a message
+# someone can act on, and an internal error is worth a crash report and a
+# bug -- and an agent branches on the kind. The control channel's reply has a
+# kind field and the MCP's tool error has one; the CLI is the program an
+# agent drives, and it printed the message alone.
+#
+# The break takes the kind out of the CLI's failure line. The test that
+# holds it must notice.
+swap apps/craftkit-cli/src/cli.rs \
+    '    format!("{}: {e}", e.kind())' \
+    '    format!("{e}")'
+expect_catch 'cli: a failure the CLI prints does not carry the kind' \
+    "cargo test -p craftkit-cli --profile ci --test script a_failure_the_cli_prints_carries_the_kind"
+
 restore
 finish

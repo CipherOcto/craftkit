@@ -40,6 +40,36 @@ fn the_script_is_written_and_read_back_by_the_tree() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A failure the CLI prints carries the kind an agent branches on.
+///
+/// The tree splits its failures in two — a refusal is a message someone can
+/// act on, and an internal error is worth a crash report and a bug — and
+/// *an agent branches on the kind* (`docs/agent-playbook.md`, rule 11). The
+/// control channel's reply has a `kind` field and the MCP's tool error has
+/// one; the CLI is the program an agent drives, and it printed the message
+/// alone, so an agent could not tell a refusal from a bug. §197.
+#[test]
+fn a_failure_the_cli_prints_carries_the_kind() {
+    let dir = std::env::temp_dir().join(format!("craftkit-script-kind-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory to write into");
+    let path = dir.join("bad-parameter.json");
+    std::fs::write(
+        &path,
+        r#"{"name":"t","commands":[{"command":"node.add","params":{"name":"A","kind":"cue","bogus":1}}]}"#,
+    )
+    .expect("the script is written");
+
+    let out = Command::new(BIN).args(["run", path.to_str().expect("a path")]).output().expect("the CLI runs");
+    assert!(!out.status.success(), "a script with a bad parameter must be refused");
+    let text = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(text.contains("bad-parameter"), "the failure did not name its kind: {text:?}");
+    // And the message is still there: the kind says which sort of failure it
+    // is, not what went wrong.
+    assert!(text.contains("bogus"), "the failure did not say what went wrong: {text:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_script_is_the_sample_designs_own_commands() {
     // One copy. The sample design is built through three `node.add`

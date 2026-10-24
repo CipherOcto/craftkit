@@ -144,6 +144,26 @@ fn param_line(param: &Json, group: Option<&[String]>) -> String {
 
 // ------------------------------------------------------------------ run --
 
+/// An engine failure, with the kind the tree says an agent branches on.
+///
+/// The tree splits its failures in two — a **refusal** is a message someone
+/// can act on, and an **internal** error is the kind the tree documents as
+/// worth a crash report and a bug — and *an agent branches on the kind*
+/// (`docs/agent-playbook.md`, rule 11).
+///
+/// The other two doors carry it: the control channel's reply has a `kind`
+/// field (`crates/control/src/server.rs:459`) and the MCP's tool error has
+/// one (`crates/mcp/src/server.rs:385`). The CLI is the program an agent
+/// drives, and it was the only door that dropped it: the failure line said
+/// what went wrong and not *which kind* of wrong, so an agent could not tell
+/// a refusal from a bug. §197.
+///
+/// The kind comes first, then the message, so a reader (or a script) can
+/// match on it without reading the rest.
+fn failed(e: &craftkit_engine::EngineError) -> String {
+    format!("{}: {e}", e.kind())
+}
+
 /// A script: a name, a list of commands, and optionally the document they
 /// start from.
 ///
@@ -251,7 +271,7 @@ fn run_script(path: &Path, sample: bool) -> Result<(), String> {
                 // The engine's own message already names the command, so this
                 // prefix is only the step number — repeating "`key.set` failed:
                 // `key.set` rejected…" helps nobody.
-                return Err(format!("step {}/{steps}: {e}", i + 1));
+                return Err(format!("step {}/{steps}: {}", i + 1, failed(&e)));
             }
         }
     }
@@ -275,9 +295,9 @@ fn eval(file: &Path, at: Option<&str>) -> Result<(), String> {
         Some(text) => session.execute("playback.seek", &json!({ "seconds": text })),
         None => Ok(craftkit_engine::Outcome::new("left where it was")),
     }
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| failed(&e))?;
 
-    let plan = session.execute("plan.evaluate", &json!({})).map_err(|e| e.to_string())?;
+    let plan = session.execute("plan.evaluate", &json!({})).map_err(|e| failed(&e))?;
     let summary = session.execute("diagnostics.list", &json!({})).map(|o| o.data).unwrap_or(Json::Null);
 
     println!("{}", outcome.message);

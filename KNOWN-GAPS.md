@@ -23289,6 +23289,100 @@ puts `bad-parameter` with `unknown-command` and `disabled` — three kinds of
 groups things is a claim that they are the same, and the claim was only
 half true.
 
+## 197. The CLI was the only door that dropped the kind, and the CLI is the door an agent drives
+
+### The finding
+
+The tree has a machine-readable classification for every failure, and its own
+doc says what it is for:
+
+> A stable, machine-readable kind. **An agent should branch on this, never on
+> the message text.**
+> — `crates/engine/src/error.rs:57`
+
+and the playbook says why the split is load-bearing:
+
+> The tree splits its failures in two — a **refusal** is a message someone
+> can act on, and an **internal** error is the kind the tree documents as
+> "worth a crash report and a bug". **An agent branches on the kind.**
+> — `docs/agent-playbook.md:195`
+
+Three doors answer a command, and the kinds are `bad-parameter`,
+`unknown-command`, `disabled`, `invalid-value`, `invalid-document`,
+`cannot-evaluate`, `kernel` and `internal`. Two of the three doors carry the
+kind:
+
+| the door | the failure carries |
+|---|---|
+| the control channel | `{"kind": "bad-parameter", "message": …}` — `crates/control/src/server.rs:459` |
+| the MCP server | `{"kind": …, "command": …, "message": …}` — `crates/mcp/src/server.rs:385` |
+| **the CLI** | **the message alone** |
+
+**Measured**, the same command and the same bad parameter through the CLI:
+
+```text
+$ craftkit-cli run bad.json
+craftkit-cli: step 1/1: `node.add` rejected its parameters: `bogus` unknown parameter (expected one of: name, kind, amount)
+exit 1
+```
+
+No kind. And the exit code is **1 for every failure** — a refusal and a tree
+bug are the same number to a script. So an agent driving the CLI had to read
+the message text and guess, which is the one thing the kind's own doc says
+not to do.
+
+And the CLI is the door the tree says an agent drives, in three places:
+
+> the program an agent drives — so it is the one whose version matters most
+> — `apps/craftkit-cli/src/main.rs:285`
+
+> the program an agent drives, so it is the one whose
+> — `apps/craftkit-cli/src/args.rs:100`
+
+So the door an agent drives hardest was the one door that could not say
+*which kind* of failure it was.
+
+### The port
+
+**The kind comes first, then the message.** The CLI's failure line for an
+engine failure now reads:
+
+```text
+craftkit-cli: step 1/1: bad-parameter: `node.add` rejected its parameters: `bogus` unknown parameter (expected one of: name, kind, amount)
+```
+
+The kind is first so a reader — or a script — can match on it without reading
+the rest, and the message is still there: the kind says *which sort* of
+failure it is, not what went wrong.
+
+The CLI's **own** failures — a file it cannot read, a script it cannot parse
+— are the CLI's own and carry no kind, because the tree has no vocabulary for
+them. The exit code says which of the two it is: **2** for a usage error, **1**
+for a failure at run time.
+
+### The gate's own teeth
+
+One new mutation: take the kind out of the CLI's failure line. The test must
+notice.
+
+```text
+failures:
+    a_failure_the_cli_prints_carries_the_kind
+```
+
+### The lesson
+
+**A classification nobody can reach is a comment.** The kind is the tree's
+own, it is stable, it is machine-readable, and two of the three doors carried
+it. The third dropped it — and the one that dropped it is the door the tree
+names as the agent's. A rule that holds at two of the three doors is not
+"mostly true"; it is a rule with a hole in it, and the hole is where the
+users are.
+
+**And "the agent can read the message" is not the same as "the agent can
+branch on the failure".** The kind's own doc says *never on the message text*
+— and the CLI offered nothing else.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23789,6 +23883,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A report is not a script, and the tree does not pretend it is** | `crashes replay --file` | the doc and the door — §195 |
 | **A command with a parameter it does not have is logged as a failure** | `Session::execute` in `crates/engine/src/session.rs` | 1 mutation — §196 |
 | **Every ending of a command is in the log** | the same | the same — §196 |
+| **A failure the CLI prints carries the kind** | `failed` in `apps/craftkit-cli/src/cli.rs` | 1 mutation — §197 |
+| **The three doors carry the same classification** | the same | the control channel and the MCP carry it already — §197 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25049,3 +25145,36 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     a test that holds the order the tree has, and a sentence in the code
     saying why it is that order; the *decision* — which order an agent
     should hear first — is the owner's.
+
+59. **The tree's own documents name things the tree does not have.** §197.
+
+    **Measured, in the two documents an agent reads first:**
+
+    - `docs/agent-playbook.md:393` — `craftkit-cli run script.json --out
+      part.step`. The CLI refuses it: "`--out` is not a value for `run`".
+      And craftkit has **no STEP export at all** — there is no STEP writer
+      anywhere in the tree; the word "step" in it means a step of a format
+      change.
+    - `crates/mcp/src/tools.rs:88` — the `craftkit_commands` tool's
+      description says "for when **`craftkit_execute`** refuses". The server
+      advertises **26** tools and `craftkit_execute` is not one of them:
+      the commands are advertised one by one (`craftkit_node_add`,
+      `craftkit_prop_set`, …) and there is no `execute` command in the
+      registry. An agent that reads the description, looks for the tool and
+      does not find it, may conclude the server cannot run commands.
+
+    The **second** one has a sound gate waiting for it, and it is cheap:
+    *every tool name a tool's description mentions is a tool this server
+    advertises* — the list is in the same crate, and `tools/list` advertises
+    from it, so the check is mechanical.
+
+    The **first** one needs the CLI's own parser to be checked against the
+    prose, and the CLI is a **binary** crate — the xtask cannot depend on
+    it, so the check has to live in the CLI's own tests (or the CLI has to
+    grow a lib target). That is a shape question, and it is the same shape
+    as item 8: a gate that checks what prose says is a heuristic.
+
+    Neither is measured as *harmful* — the playground's line is one line in
+    one document, and the description's name is one name in one description.
+    Both are measured as **wrong**, which is the thing a tree like this
+    cannot afford to be wrong about in its agent-facing documents.
