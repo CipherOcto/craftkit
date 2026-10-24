@@ -53,16 +53,37 @@ pub enum Command {
     Version,
 }
 
-/// What to do with the crash folder.
+/// What to do with the crash folder — or with a report in a file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CrashAction {
     List,
     Show(String),
+    /// Show the report in a **file** — one that arrived from another machine.
+    ShowFile(PathBuf),
     Replay {
         id: String,
         /// Print the replay as a script instead of running it.
         script: bool,
     },
+    /// Replay the report in a **file** — one that arrived from another machine.
+    ReplayFile {
+        path: PathBuf,
+        /// Print the replay as a script instead of running it.
+        script: bool,
+    },
+}
+
+/// The subject of a crash door: a report in the crash folder, or a report in a
+/// file.
+///
+/// An **id** names a report in *this machine's* crash folder. A **file** is a
+/// report that arrived from somewhere else — the recipe asks for
+/// `report.json` from whoever had the crash, and that file has no folder
+/// around it and no id to look it up by. §195.
+#[derive(Debug, Clone, PartialEq)]
+enum Subject {
+    Id(String),
+    File(PathBuf),
 }
 
 /// Parse `argv` (without the program name).
@@ -211,41 +232,25 @@ pub fn parse(argv: &[String]) -> Result<Option<Command>, UsageError> {
         "crashes" => {
             let action = match argv.get(1).map(String::as_str) {
                 None | Some("list") => CrashAction::List,
-                Some("show") => CrashAction::Show(need_id(argv, 2, "show")?),
-                Some("replay") => {
-                    // The id may come before or after the flag: a person
-                    // types `crashes replay --script ID` as readily as
-                    // `crashes replay ID --script`, and a parser that
-                    // insists on one order is a parser that refuses a
-                    // command that is perfectly clear.
-                    let mut id: Option<String> = None;
-                    let (mut seen_script, mut script) = (false, false);
-                    for arg in &argv[2..] {
-                        match arg.as_str() {
-                            "--script" => {
-                                once(&mut seen_script, "--script")?;
-                                script = true;
-                            }
-                            other if other.starts_with('-') => {
-                                return Err(UsageError::BadValue {
-                                    flag: "crashes replay".into(),
-                                    value: other.into(),
-                                });
-                            }
-                            other => {
-                                if id.is_some() {
-                                    return Err(UsageError::BadValue {
-                                        flag: "crashes replay".into(),
-                                        value: other.into(),
-                                    });
-                                }
-                                id = Some(other.to_string());
-                            }
-                        }
+                Some("show") => {
+                    let (subject, script) = crash_subject(argv, 2, "show")?;
+                    if script {
+                        return Err(UsageError::BadValue {
+                            flag: "crashes show".into(),
+                            value: "--script".into(),
+                        });
                     }
-                    let id =
-                        id.ok_or_else(|| UsageError::MissingArgument("crashes replay <id>".to_string()))?;
-                    CrashAction::Replay { id, script }
+                    match subject {
+                        Subject::Id(id) => CrashAction::Show(id),
+                        Subject::File(path) => CrashAction::ShowFile(path),
+                    }
+                }
+                Some("replay") => {
+                    let (subject, script) = crash_subject(argv, 2, "replay")?;
+                    match subject {
+                        Subject::Id(id) => CrashAction::Replay { id, script },
+                        Subject::File(path) => CrashAction::ReplayFile { path, script },
+                    }
                 }
                 Some(other) => {
                     return Err(UsageError::BadValue { flag: "crashes".into(), value: other.into() });
@@ -283,8 +288,61 @@ fn positional(rest: &[String], command: &str) -> Result<PathBuf, UsageError> {
         .ok_or_else(|| UsageError::MissingArgument(command.to_string()))
 }
 
-fn need_id(argv: &[String], index: usize, command: &str) -> Result<String, UsageError> {
-    argv.get(index).cloned().ok_or_else(|| UsageError::MissingArgument(format!("crashes {command} <id>")))
+/// Parse the subject of a crash door, and whether the replay is wanted as a
+/// script.
+///
+/// The subject is either an **id** — a report in this machine's crash folder —
+/// or a **file**: a report that arrived from another machine. Exactly one of
+/// them, and never both: an id and a file are not two spellings of one thing,
+/// and a door that guesses which one it was handed cannot say what it read.
+/// §195.
+///
+/// The `--script` flag may come before or after the subject: a person types
+/// `crashes replay --script ID` as readily as `crashes replay ID --script`,
+/// and a parser that insists on one order is a parser that refuses a command
+/// that is perfectly clear.
+fn crash_subject(argv: &[String], from: usize, command: &str) -> Result<(Subject, bool), UsageError> {
+    let flag = format!("crashes {command}");
+    let mut id: Option<String> = None;
+    let mut file: Option<PathBuf> = None;
+    let (mut seen_script, mut script) = (false, false);
+    let mut seen_file = false;
+    let mut i = from;
+    while i < argv.len() {
+        match argv[i].as_str() {
+            "--script" => {
+                once(&mut seen_script, "--script")?;
+                script = true;
+                i += 1;
+            }
+            "--file" => {
+                once(&mut seen_file, "--file")?;
+                let value =
+                    argv.get(i + 1).ok_or_else(|| UsageError::MissingValue { flag: "--file".into() })?;
+                file = Some(PathBuf::from(value));
+                i += 2;
+            }
+            other if other.starts_with('-') => {
+                return Err(UsageError::BadValue { flag: flag.clone(), value: other.into() });
+            }
+            other => {
+                if id.is_some() {
+                    return Err(UsageError::BadValue { flag: flag.clone(), value: other.into() });
+                }
+                id = Some(other.to_string());
+                i += 1;
+            }
+        }
+    }
+    match (id, file) {
+        (Some(id), None) => Ok((Subject::Id(id), script)),
+        (None, Some(path)) => Ok((Subject::File(path), script)),
+        (None, None) => Err(UsageError::MissingArgument(format!("crashes {command} <id> or --file <path>"))),
+        (Some(_), Some(_)) => Err(UsageError::BadValue {
+            flag: format!("crashes {command} <id> or --file <path>"),
+            value: "an id and --file together".into(),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -412,6 +470,58 @@ mod tests {
         assert!(parse(&argv(&["crashes", "replay", "abc", "def"])).is_err());
         assert!(parse(&argv(&["crashes", "replay", "abc", "--wat"])).is_err());
         assert!(parse(&argv(&["crashes", "replay", "abc", "--script", "--script"])).is_err());
+    }
+
+    /// A report in a file has its own door, and it is not the id's door.
+    ///
+    /// The recipe asks for `report.json` from whoever had the crash, so the
+    /// file arrives from another machine — with no crash folder around it and
+    /// no id to look it up by. §195.
+    #[test]
+    fn a_report_in_a_file_is_parsed_as_its_own_door() {
+        assert_eq!(
+            parse(&argv(&["crashes", "show", "--file", "report.json"])),
+            Ok(Some(Command::Crashes { action: CrashAction::ShowFile(PathBuf::from("report.json")) }))
+        );
+        assert_eq!(
+            parse(&argv(&["crashes", "replay", "--file", "report.json"])),
+            Ok(Some(Command::Crashes {
+                action: CrashAction::ReplayFile { path: PathBuf::from("report.json"), script: false }
+            }))
+        );
+    }
+
+    /// The file flag may come before or after the script flag, as the script
+    /// flag may come before or after the id.
+    #[test]
+    fn the_file_flag_is_accepted_on_either_side_of_the_script_flag() {
+        let want = |script: bool| {
+            Ok(Some(Command::Crashes {
+                action: CrashAction::ReplayFile { path: PathBuf::from("report.json"), script },
+            }))
+        };
+        assert_eq!(parse(&argv(&["crashes", "replay", "--file", "report.json", "--script"])), want(true));
+        assert_eq!(parse(&argv(&["crashes", "replay", "--script", "--file", "report.json"])), want(true));
+    }
+
+    /// An id and a file at once is refused.
+    ///
+    /// They are not two spellings of one thing — an id names a report in this
+    /// machine's crash folder, and a file is a report that arrived from
+    /// somewhere else — and a door that guesses which one it was handed
+    /// cannot say what it read. §195.
+    #[test]
+    fn a_crash_door_with_both_an_id_and_a_file_is_refused() {
+        assert!(parse(&argv(&["crashes", "replay", "abc", "--file", "report.json"])).is_err());
+        assert!(parse(&argv(&["crashes", "show", "abc", "--file", "report.json"])).is_err());
+    }
+
+    /// The file flag needs a file, and `--script` is not a thing `show` does.
+    #[test]
+    fn a_crash_door_with_a_file_flag_and_no_file_is_refused() {
+        assert!(parse(&argv(&["crashes", "replay", "--file"])).is_err());
+        assert!(parse(&argv(&["crashes", "show", "--script", "abc"])).is_err());
+        assert!(parse(&argv(&["crashes", "show", "--file"])).is_err());
     }
 
     #[test]

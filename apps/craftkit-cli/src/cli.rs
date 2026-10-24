@@ -147,10 +147,19 @@ fn param_line(param: &Json, group: Option<&[String]>) -> String {
 /// A script: a name, a list of commands, and optionally the document they
 /// start from.
 ///
-/// The same shape a crash report's `replay.json` uses, so a report can be run
-/// back through `craftkit-cli run` with nothing in between — and the `base`
-/// field is what makes that true for a report whose commands were relative to
-/// a loaded document. A script without a base starts from an empty document.
+/// A script and a crash report are **not** the same shape, and the tree does
+/// not pretend they are. A report carries the design it recorded — the target
+/// the replay has to reach — beside the steps it recorded, and it is run
+/// through the crash door: `craftkit-cli crashes replay --file <report.json>`
+/// replays the file you were handed and says whether it reproduced that
+/// design. The tree prints a report's replay in the script's shape with
+/// `crashes replay --script`, so the two formats have one door between them
+/// and no second, silent meaning. §195.
+///
+/// The `base` field is what makes a script that came from a report honest: a
+/// report's commands were relative to a loaded document, and a script without
+/// the base would rebuild them on an empty one. A script without a base starts
+/// from an empty document.
 #[derive(Debug, serde::Deserialize)]
 struct Script {
     #[serde(default)]
@@ -432,6 +441,26 @@ fn render(_session: &mut Session, _out: &Path) -> Result<(), String> {
 /// loaded file would then build something else entirely. §47.
 fn replay_as_script(id: &str) -> Result<(), String> {
     let report = craftkit_engine::crash::show(id)?;
+    replay_as_script_of(&report, id)
+}
+
+/// [`replay_as_script`], for a report in a **file**.
+///
+/// A report that arrived from another machine has an id inside it, and the
+/// script is named after it — the same shape the folder door prints, from the
+/// same code, so the two cannot drift into two formats. §195.
+fn replay_as_script_file(path: &Path) -> Result<(), String> {
+    let report = craftkit_engine::crash::read_report(path)?;
+    let id = if report.id.is_empty() {
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("report").to_string()
+    } else {
+        report.id.clone()
+    };
+    replay_as_script_of(&report, &id)
+}
+
+/// Print a report's replay as a script.
+fn replay_as_script_of(report: &craftkit_engine::crash::CrashReport, id: &str) -> Result<(), String> {
     let commands: Vec<Json> =
         report.replay.iter().map(|step| json!({ "command": step.command, "params": step.params })).collect();
     // The same shape the tree's own script writer uses, so the two cannot
@@ -456,6 +485,36 @@ fn replay_as_script(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Print what a replay did, and whether it reproduced the design.
+///
+/// The verdict is the point: a replay that builds a different document and
+/// says nothing about it is worse than no replay, because it looks like a
+/// reproduction. §47.
+fn print_replay(outcome: &craftkit_engine::crash::ReplayOutcome) {
+    for step in &outcome.results {
+        if step.ok {
+            println!("{}: {}", step.command, step.message);
+        } else {
+            println!("{}: FAILED — {}", step.command, step.message);
+        }
+    }
+    println!("\n{} step(s) replayed onto the design the report recorded", outcome.steps);
+    if outcome.dropped > 0 {
+        println!(
+            "the report had to drop {} command(s), so this is the tail of the session and not all of it",
+            outcome.dropped
+        );
+    }
+    if outcome.reproduced {
+        println!("the replay reproduced the design in the report");
+    } else {
+        println!("the replay DIVERGED from the design in the report:");
+        for difference in &outcome.differences {
+            println!("  • {difference}");
+        }
+    }
+}
+
 fn crashes(action: &CrashAction) -> Result<(), String> {
     match action {
         CrashAction::List => {
@@ -473,33 +532,29 @@ fn crashes(action: &CrashAction) -> Result<(), String> {
             println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
             Ok(())
         }
+        // A report in a file — one that arrived from another machine. The
+        // same reader as the folder door, so the two cannot answer
+        // differently about the same report. §195.
+        CrashAction::ShowFile(path) => {
+            let report = craftkit_engine::crash::read_report(path)?;
+            println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
+            Ok(())
+        }
         CrashAction::Replay { id, script } => {
             if *script {
                 return replay_as_script(id);
             }
             let outcome = craftkit_engine::crash::reproduce(id)?;
-            for step in &outcome.results {
-                if step.ok {
-                    println!("{}: {}", step.command, step.message);
-                } else {
-                    println!("{}: FAILED — {}", step.command, step.message);
-                }
+            print_replay(&outcome);
+            Ok(())
+        }
+        // The same door, for the file in your hand. §195.
+        CrashAction::ReplayFile { path, script } => {
+            if *script {
+                return replay_as_script_file(path);
             }
-            println!("\n{} step(s) replayed onto the design the report recorded", outcome.steps);
-            if outcome.dropped > 0 {
-                println!(
-                    "the report had to drop {} command(s), so this is the tail of the session and not all of it",
-                    outcome.dropped
-                );
-            }
-            if outcome.reproduced {
-                println!("the replay reproduced the design in the report");
-            } else {
-                println!("the replay DIVERGED from the design in the report:");
-                for difference in &outcome.differences {
-                    println!("  • {difference}");
-                }
-            }
+            let outcome = craftkit_engine::crash::reproduce_file(path)?;
+            print_replay(&outcome);
             Ok(())
         }
     }
@@ -811,13 +866,16 @@ mod tests {
     }
 
     #[test]
-    fn a_replay_file_and_a_script_are_the_same_shape() {
-        // This is the property that makes a crash report runnable: the report
-        // writes a list of `{command, params}` and this is exactly that shape.
+    fn a_reports_steps_and_a_scripts_steps_are_the_same_shape() {
+        // This is the property that makes a crash report printable as a
+        // script: the report writes a list of `{command, params}` and this is
+        // exactly that shape. The two files are not the same shape — a report
+        // also carries the design it recorded, which is its **target** — and
+        // `crashes replay --script` is the door between them. §195.
         let report = json!([{ "command": "node.add", "params": { "name": "A" } }]);
         let as_script = json!({ "name": "from a report", "commands": report });
         let path = write_script("replayshape", &as_script.to_string());
-        let script = load_script(&path).expect("a replay.json runs as a script");
+        let script = load_script(&path).expect("a report's steps run as a script");
         assert_eq!(script.commands.len(), 1);
         assert_eq!(script.commands[0].command, "node.add");
     }

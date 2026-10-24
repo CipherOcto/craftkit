@@ -94,7 +94,19 @@ Reading the folder by hand still works — the layout is one file and a
 readable rather than something the tool decides for you.
 
 If the report is not on this machine, ask for `report.json`: it carries the
-design, the base and the steps. There is nothing else to ask for.
+design, the base and the steps. There is nothing else to ask for. And give
+that file to the tree with the door that takes a **file**:
+
+```bash
+craftkit-cli crashes show --file report.json      # read it
+craftkit-cli crashes replay --file report.json    # replay it, and say whether
+                                                 # it reproduced the design
+```
+
+The file does not have to be in the crash folder, and it does not have to be
+named after its id: the door reads the file you were handed, with the tree's
+one reader and the tree's one replay, so it cannot answer differently from
+the folder's door. §195.
 
 A report is **input**, not output — it arrives from somebody else's disk, so
 the reader bounds what it will accept: `report.json` is
@@ -165,6 +177,10 @@ with the design the report recorded**, printing either "the replay reproduced
 the design in the report" or the ways in which it differs. That comparison is
 the point: a replay that builds a different document and says nothing about it
 is worse than no replay, because it looks like a reproduction.
+
+The same door takes a report in a file: `craftkit-cli crashes replay --file
+report.json` replays the file you were handed, with the same comparison and
+the same words. §195.
 
 `the_replay_rebuilds_the_document_that_crashed` (in `crates/engine/src/crash.rs`)
 is the loop, and `a_replay_says_whether_it_reproduced_the_document` (in

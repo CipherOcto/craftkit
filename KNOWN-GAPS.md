@@ -23057,6 +23057,150 @@ ordering was deliberate, the comment said so, and the reason it was
 deliberate was a bug that had already happened once. Everything a reader
 needed was in the file; the reader was pointed at the wrong line.
 
+## 195. A crash report that arrived from another machine had no door at all
+
+### The finding
+
+A crash report is **input**. The tree says so in four places, and the recipe
+says it in the words a person would use:
+
+> If the report is not on this machine, ask for `report.json`: it carries the
+> design, the base and the steps. There is nothing else to ask for.
+> — `docs/recipes/fix-a-crash.md:96`
+
+> A report is **input**, not output — it arrives from somebody else's disk.
+> — `docs/recipes/fix-a-crash.md:99`
+
+> `docs/recipes/fix-a-crash.md` asks for `report.json` from whoever had the
+> crash, so the file arrives from another machine.
+> — `crates/engine/src/crash.rs:84`
+
+So the file arrives with **no crash folder around it** and **no id to look it
+up by**. And every reader in the tree read a report **by id, out of a
+folder**: `show_in(dir, id)`, `replay_in(dir, id)`, `reproduce_in(dir, id)`,
+`list_in(dir)`, `action_in(dir, action, id, from)`. There was no reader for a
+**file**.
+
+**Measured**, on a genuine report — written by the tree's own writer, with a
+real session's commands in it — and given to the CLI as a file:
+
+```text
+$ craftkit-cli run report.json
+craftkit-cli: report.json is not a script: missing field `commands` at line 36 column 1
+
+$ craftkit-cli eval report.json
+craftkit-cli: the file is not valid JSON: missing field `document` at line 36 column 1
+
+$ craftkit-cli snapshot report.json --out shot.png
+craftkit-cli: report.json is not a script: missing field `commands` at line 36 column 1
+
+$ craftkit-cli crashes show 20261024-140559-fc92
+craftkit-cli: there is no crash report in …/crashes/20261024-140559-fc92: it has no report.json
+```
+
+**No door accepted the file.** The only route was to copy it into the crash
+folder under its own id, by hand — a step the recipe never mentions, because
+the recipe believes the report is read, and does not say how.
+
+And two doc comments promised the opposite, in the two places a reader of the
+CLI looks:
+
+> The same shape a crash report's `replay.json` uses, so a report can be run
+> back through `craftkit-cli run` with nothing in between
+> — `apps/craftkit-cli/src/cli.rs:150`
+
+> **The same shape as a crash report's `replay.json`**, deliberately: a script
+> you can paste into a bug report, and a report you can paste back into the
+> CLI, with nothing in between.
+> — `apps/craftkit-cli/src/main.rs:44`
+
+Both name `replay.json` — a file the tree stopped writing in §185, when the
+report became **one file**, `report.json`. So the promise was made twice, in
+the past tense, about a file that no longer exists, and the door it promised
+did not exist either.
+
+### The port
+
+**A report in a file is the same report as a report in a folder.** The door
+takes a path, and the report behind it is read and replayed by the tree's
+**one** reader and the tree's **one** replay:
+
+| the door | what it reads |
+|---|---|
+| `craftkit-cli crashes show <id>` | the report in the crash folder |
+| `craftkit-cli crashes show --file <report.json>` | the report in the file |
+| `craftkit-cli crashes replay <id>` | the report in the crash folder |
+| `craftkit-cli crashes replay --file <report.json>` | the report in the file |
+
+In the engine, `read_report(path)` **is** the reader `show_in` uses — the
+folder door is now `read_report(&report_path(dir, id)?)` — and
+`reproduce_report(report)` **is** the replay `reproduce_in` uses. So the two
+doors cannot answer differently about the same report: one reader, one
+answer, and one replay. §185's rule, applied to the file.
+
+The file door keeps the promise the folder door keeps: the report's documents
+are checked the way a design file is, the design as well as the base, because
+the design is the report's **target**. §183. A file that arrived from another
+machine is not a smaller risk than a folder this machine wrote.
+
+**A report is not a script, and the tree does not pretend it is.** The two
+files are different shapes — a report carries the design it recorded, which is
+what the replay has to reach — and the tree says so in the two places the
+promise used to be made wrong. `crashes replay --file` says whether the replay
+**reproduced** the design; a script has no target and cannot.
+
+`crashes replay --file <report.json> --script` prints the report's steps in
+the script's shape, from the same code the folder door uses, so the two
+cannot drift into two formats. §182.
+
+### The gate's own teeth
+
+One new mutation: point the file door at some other file. The test that
+replays an arriving report must notice — it gives the CLI the file and an
+**empty** crash folder, so nothing but the file can answer:
+
+```
+thread 'a_report_that_arrives_in_a_file_is_replayed_by_the_real_binary' panicked at
+apps/craftkit-cli/tests/crash_pipeline.rs:159:5:
+the replay of an arriving report failed:
+```
+
+And three new tests: the file door and the folder door read the same report
+the same way (`crates/engine/src/crash.rs`), the file door refuses a report
+whose design the model refuses, and the real binary replays an arriving
+report with an empty crash folder under it.
+
+**And the anchors gate caught the port's own cost.** Moving the reader out of
+`show_in` moved the anchor of three older mutations, and `cargo xtask anchors`
+said so **before** the run:
+
+```text
+error: 3 problem(s) in scripts/mutation-test-gates.sh:
+   • … the anchor for `crates/engine/src/crash.rs` (line 942) is not in the file any more:
+         let path = report_path(dir, id)?;
+         let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+     The swap would change nothing, and the run would stop with "MUTATION DID NOT APPLY".
+```
+
+§184's rule, doing what it is for: a moved anchor is found at the start of the
+run and not twenty minutes in.
+
+### The lesson
+
+**A report that arrives is input, and input needs a door.** The tree spent
+§47, §48, §72, §113, §142, §183 and §185 on making a report *safe* to
+read — bounded, validated, deserialized into the model's own types, refused
+with the reason. All of that work was about a file that **arrives from
+another machine**, and the one thing nobody built was the door it arrives
+through.
+
+**And a promise in a doc comment is a door that was never built.** "A report
+you can paste back into the CLI, with nothing in between" was written twice,
+and both times it was wrong: once about a file that no longer existed, and
+once about a capability the tree did not have. §194's rule — *a doc comment
+that states a contract is a contract* — has a second half: a contract that
+nobody can *do* is a wish.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23550,6 +23694,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A copy's own anchor is checked before the run starts** | the same | the same — §193 |
 | **The change hook fires before the reply is sent** | `craftkit-control` test | 1 mutation — §194 |
 | **A hook's documented order is the order it fires in** | the same | the same — §194 |
+| **A report that arrives in a file has a door** | `read_report` in `crates/engine/src/crash.rs` | 1 mutation — §195 |
+| **The file door and the folder door read the same report the same way** | the same | the unit test — §195 |
+| **The file door keeps the promise the folder door keeps** | `checked_document` | the unit test — §195 |
+| **The real binary replays a report that arrived, with an empty crash folder** | `apps/craftkit-cli/tests/crash_pipeline.rs` | 1 mutation — §195 |
+| **A report is not a script, and the tree does not pretend it is** | `crashes replay --file` | the doc and the door — §195 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24755,3 +24904,32 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     checked at **96.3% to 99.8%** of a run, and a copy that breaks the
     wrong thing is reported as a **missed gate**, which is a result about
     the gate.
+
+57. **A report that arrives from another machine has no door.** §195.
+
+    The tree says in four places that a report is **input** — it arrives
+    from somebody else's disk — and the recipe says it in the words a
+    person would use: *"If the report is not on this machine, ask for
+    `report.json`"*. Every reader read a report **by id, out of a folder**,
+    and there was no reader for a **file**.
+
+    **Measured:** no door accepted the file. `run` said "not a script:
+    missing field `commands`", `eval` said "missing field `document`",
+    `snapshot` said "not a script", and `crashes show <id>` said "there is
+    no crash report in …: it has no report.json". The only route was to
+    copy the file into the crash folder under its own id, by hand — a step
+    no document mentions.
+
+    **Done in §195.** `crashes show --file <report.json>` and
+    `crashes replay --file <report.json>` (with `--script` as well) are the
+    doors, and the file door is the tree's **one** reader and its **one**
+    replay, so it cannot answer differently from the folder door.
+
+    What is **not** measured, and is the same shape as the rest of this
+    list: the **control channel** and the **MCP server** read the crash
+    folder too (`diagnostics.crash_reports` and the `craftkit_crashes`
+    tool), and neither has a file door. They are scoped to *this machine's*
+    reports, and §113 made them share the engine's answer — so giving them
+    a file door is a change of scope, not a missing feature, and it is the
+    owner's call whether an agent holding a report file should be able to
+    hand it to the tree over the control channel.

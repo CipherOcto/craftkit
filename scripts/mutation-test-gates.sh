@@ -924,8 +924,8 @@ expect_catch "crash: opening a document keeps the undo stack of the previous one
 
 # And the same verdict at the surface a person reads: the CLI.
 swap apps/craftkit-cli/src/cli.rs \
-    '            if outcome.reproduced {' \
-    '            if true {'
+    '    if outcome.reproduced {' \
+    '    if true {'
 expect_catch "crash: the CLI calls a divergence a reproduction" \
     "cargo test -p craftkit-cli --profile ci --test crash_pipeline"
 
@@ -940,10 +940,8 @@ expect_catch "crash: a trace that dropped commands does not say so" \
 # A crash report is *input*: the recipe asks for `report.json` from whoever
 # had the crash, so the file arrives from another machine. §48.
 swap crates/engine/src/crash.rs \
-    '    let path = report_path(dir, id)?;
-    let body = read_bounded(&path, MAX_REPORT_BYTES)?;' \
-    '    let path = report_path(dir, id)?;
-    let body = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;'
+    '    let body = read_bounded(path, MAX_REPORT_BYTES)?;' \
+    '    let body = std::fs::read_to_string(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;'
 expect_catch "crash: a report file of any size is read" \
     "cargo test -p craftkit-engine --profile ci larger_than_the_limit"
 
@@ -974,10 +972,10 @@ expect_catch "crash: a report with a corrupt base is replayed anyway" \
 # the report is read out of the tree. It compiles — the report's own types
 # did not change — so only a *measurement* can catch it.
 swap crates/engine/src/crash.rs \
-    '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+    '    let body = read_bounded(path, MAX_REPORT_BYTES)?;
     let mut report: CrashReport = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;' \
-    '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+    '    let body = read_bounded(path, MAX_REPORT_BYTES)?;
     let tree: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
     let mut report: CrashReport = serde_json::from_value(tree)
@@ -5908,6 +5906,23 @@ swap crates/control/src/server.rs \
         }'
 expect_catch 'the change hook fires after the reply is sent' \
     "cargo test -p craftkit-control --profile ci the_change_hook_fires_before_the_reply_is_sent"
+
+# ------------------------------------------------- the report that arrives ----
+# Section 195. A report is **input**: the recipe asks for `report.json` from
+# whoever had the crash, so the file arrives from another machine -- with no
+# crash folder around it and no id to look it up by. Every door in the tree
+# read a report by id, out of a folder, so an arriving report had no door at
+# all: `run`, `eval` and `snapshot` refused it, and the only way to read one
+# was to copy it into the crash folder under its own id, by hand.
+#
+# The break points the file door at some other file. The test that replays an
+# arriving report must notice: it gives the CLI the file and an EMPTY crash
+# folder, so nothing but the file can answer.
+swap apps/craftkit-cli/src/cli.rs \
+    '            let outcome = craftkit_engine::crash::reproduce_file(path)?;' \
+    '            let outcome = craftkit_engine::crash::reproduce_file(Path::new("no-such-report.json"))?;'
+expect_catch 'the door for a report that arrives in a file reads some other file' \
+    "cargo test -p craftkit-cli --profile ci --test crash_pipeline"
 
 restore
 finish

@@ -131,6 +131,58 @@ fn the_replay_can_be_printed_as_a_script_that_carries_its_base() {
     assert!(script["base"]["nodes"].is_array(), "the script carries the document it starts from: {script}");
 }
 
+/// A report that arrives from another machine has a door.
+///
+/// The report is **input**: the recipe asks for `report.json` from whoever
+/// had the crash, so the file arrives with no crash folder around it and no
+/// id to look it up by. Every door in the tree read a report by id, out of a
+/// folder, so an arriving report had **no door at all** — `run`, `eval` and
+/// `snapshot` refused it, and the only way to read one was to copy it into
+/// the crash folder under its own id, by hand. §195.
+///
+/// So this test points the crash folder at an **empty** folder and gives the
+/// CLI the file. The file is the only copy there is, and the crash folder is
+/// not holding it.
+#[test]
+fn a_report_that_arrives_in_a_file_is_replayed_by_the_real_binary() {
+    let incoming = CrashDir::new("incoming-file");
+    let empty = CrashDir::new("empty-crash-folder");
+    let session = busy_session();
+    let report = craftkit_engine::crash::build(&session, "key.set", "something went wrong");
+
+    // The report in a file, in a folder of its own that is not the crash
+    // folder: the shape of a report that arrived from somewhere else.
+    let path = incoming.path().join("report.json");
+    std::fs::write(&path, serde_json::to_string(&report).expect("the report prints"))
+        .expect("the file is written");
+
+    let (ok, text) = crashes(&empty, &["replay", "--file", path.to_str().expect("a path")]);
+    assert!(ok, "the replay of an arriving report failed: {text}");
+    assert!(text.contains("Before the crash"), "the replay lost the document: {text:?}");
+    assert!(text.contains("reproduced the design in the report"), "{text:?}");
+
+    // And it can be read, without the folder and without the id.
+    let (ok, text) = crashes(&empty, &["show", "--file", path.to_str().expect("a path")]);
+    assert!(ok, "showing an arriving report failed: {text}");
+    let shown: serde_json::Value = serde_json::from_str(&text).expect("show prints one JSON document");
+    assert_eq!(shown["message"], "something went wrong", "{shown}");
+}
+
+/// A file that is not a report is refused, and the reason names the file.
+///
+/// The file door is a door for untrusted input: the path comes from a person
+/// and may point at anything. §195.
+#[test]
+fn a_file_that_is_not_a_report_is_refused_by_the_real_binary() {
+    let incoming = CrashDir::new("not-a-report");
+    let empty = CrashDir::new("empty-crash-folder-2");
+    let path = incoming.path().join("something-else.json");
+    std::fs::write(&path, "{\"hello\": true}").expect("the file is written");
+
+    let (ok, _) = crashes(&empty, &["show", "--file", path.to_str().expect("a path")]);
+    assert!(!ok, "a file that is not a report must be refused");
+}
+
 #[test]
 fn an_empty_folder_says_so_rather_than_printing_nothing() {
     let dir = CrashDir::new("empty");
@@ -139,7 +191,6 @@ fn an_empty_folder_says_so_rather_than_printing_nothing() {
     assert!(text.contains("no crash reports"), "{text:?}");
     // Silence would be indistinguishable from a folder that could not be read.
 }
-
 #[test]
 fn an_unknown_report_is_refused_by_name_rather_than_invented() {
     let dir = CrashDir::new("unknown");

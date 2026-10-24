@@ -41,9 +41,10 @@
 //! }
 //! ```
 //!
-//! **The same shape as a crash report's `replay.json`**, deliberately: a script
-//! you can paste into a bug report, and a report you can paste back into the
-//! CLI, with nothing in between.
+//! A script is what you paste into a bug report, and a **crash report** is
+//! what you paste back into the CLI: `craftkit-cli crashes replay --file
+//! <report.json>` replays the file you were handed and says whether it
+//! reproduced the design the report recorded. §195.
 //!
 //! And the tree can **write** one: `craftkit-cli script --out <file>` writes
 //! the sample design's own commands. §182.
@@ -81,8 +82,9 @@ COMMANDS:
                              Write a script of commands to a file.
     snapshot <script.json> --out <file.png>
                              Run a script and write a rendered frame.
-    crashes <list|show|replay> [ID]
-                             Read the crash folder.
+    crashes <list|show|replay> [ID|--file <report.json>]
+                             Read the crash folder, or a report in a file —
+                             one that arrived from another machine.
     mcp                      Speak MCP over stdio, for an agent's tool loop.
     help                     Print this message.
 
@@ -104,7 +106,9 @@ SCRIPT FORMAT (`run` and `snapshot`):
                     \"params\": {\"name\": \"Box\", \"kind\": \"filter\"}}]}
     `params` may be omitted and means no parameters. `crashes replay <ID>
     --script` prints the replay as this same shape, with the document it
-    starts from, so `snapshot` can render it.
+    starts from, so `snapshot` can render it. A crash report is not a script:
+    run it with `crashes replay --file <report.json>`, which says whether the
+    replay reproduced the design the report recorded.
 ";
 
 fn main() -> ExitCode {

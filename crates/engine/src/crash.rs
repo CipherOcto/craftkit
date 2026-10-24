@@ -32,6 +32,15 @@
 //! The folder is [`report_dir`], which honours `CRAFTKIT_CRASH_DIR` so a test
 //! can point it somewhere temporary and a CI job can collect it.
 //!
+//! # What is read, and from where
+//!
+//! A report is **input**, and it arrives from somewhere else: the recipe asks
+//! for `report.json` from whoever had the crash. So a report is read from a
+//! **file** as well as from a folder — [`read_report`] and [`reproduce_file`]
+//! are the doors for the file in your hand, and they use the same reader and
+//! the same replay the folder doors use, so the two cannot answer differently
+//! about the same report. §195.
+//!
 //! # The rules
 //!
 //! - **Never panic.** This code runs *because* something else went wrong. Every
@@ -477,6 +486,22 @@ pub fn show(id: &str) -> Result<CrashReport, String> {
 
 /// [`show`], in a named folder.
 ///
+/// The report is read by [`read_report`], which is also the door for a report
+/// in a file — one copy of the rules, checked once. §195.
+pub fn show_in(dir: &Path, id: &str) -> Result<CrashReport, String> {
+    read_report(&report_path(dir, id)?)
+}
+
+/// Read one report from a **file** — one that arrived from another machine.
+///
+/// A report is **input**: the recipe asks for `report.json` from whoever had
+/// the crash, so the file arrives with no crash folder around it and no id to
+/// look it up by. Every other door in the tree reads a report by id, out of a
+/// folder; this is the door for the file in your hand. §195.
+///
+/// It is the **same reader** the folder door uses, so the two cannot answer
+/// differently about the same report: one reader, one answer. §185.
+///
 /// The report's **documents** are checked the way a design file is, and the
 /// design is checked as well as the base. §183: the reader checked the base
 /// and not the design, and the design is the report's **target** — what the
@@ -484,13 +509,12 @@ pub fn show(id: &str) -> Result<CrashReport, String> {
 /// and the replay's verdict ("reproduced", or "diverged") is a claim about
 /// it.
 ///
-/// So a report that holds a document the model would refuse is **refused
-/// with the reason**, by the reader, and not shown. The same document in a
-/// design file is refused the same way: the tree has one promise about what
-/// a document is, and it keeps it in every reader.
-pub fn show_in(dir: &Path, id: &str) -> Result<CrashReport, String> {
-    let path = report_path(dir, id)?;
-    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+/// So a report that holds a document the model would refuse is **refused with
+/// the reason**, by the reader, and not shown. The same document in a design
+/// file is refused the same way: the tree has one promise about what a
+/// document is, and it keeps it in every reader.
+pub fn read_report(path: &Path) -> Result<CrashReport, String> {
+    let body = read_bounded(path, MAX_REPORT_BYTES)?;
     let mut report: CrashReport = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
     report.design = checked_document(report.design, "the report's design")?;
@@ -588,7 +612,19 @@ pub fn reproduce(id: &str) -> Result<ReplayOutcome, String> {
 
 /// [`reproduce`], in a named folder.
 pub fn reproduce_in(dir: &Path, id: &str) -> Result<ReplayOutcome, String> {
-    let report = show_in(dir, id)?;
+    reproduce_report(show_in(dir, id)?)
+}
+
+/// Replay a report you already hold.
+///
+/// The same replay the folder door runs: the same bound on the steps, the
+/// same start on the report's **base**, and the same comparison with the
+/// design the report recorded. One replay, one answer. §185.
+///
+/// The report is taken by value because the base is **moved**, not cloned: a
+/// document costs memory, and a second copy of it is a second copy of it.
+/// §64.
+pub fn reproduce_report(report: CrashReport) -> Result<ReplayOutcome, String> {
     // The step count is checked **before** the first step runs. A report with
     // a million steps is not a report this tree wrote, and the cost of
     // running it is quadratic in the document it builds.
@@ -646,6 +682,15 @@ pub fn reproduce_in(dir: &Path, id: &str) -> Result<ReplayOutcome, String> {
         dropped: report.dropped,
         session: session.snapshot_json(),
     })
+}
+
+/// Replay the report in a **file** — one that arrived from another machine.
+///
+/// The door for the file you were handed. It reads the file with the tree's
+/// one report reader and replays it with the tree's one replay, so a report
+/// that arrives and a report that is filed are replayed the same way. §195.
+pub fn reproduce_file(path: &Path) -> Result<ReplayOutcome, String> {
+    reproduce_report(read_report(path)?)
 }
 
 /// What a crash-report action can fail with.
@@ -1220,6 +1265,81 @@ mod tests {
         let steps = replay_in(&dir, &report.id).expect("replay");
         assert_eq!(steps, back.replay);
         assert!(list_in(&dir).contains(&report.id));
+    }
+
+    /// A report in a file is the report the folder holds.
+    ///
+    /// A report is **input**: the recipe asks for `report.json` from whoever
+    /// had the crash, so the file arrives from another machine — with no
+    /// crash folder around it and no id to look it up by. Every door in the
+    /// tree read a report by id, out of a folder, so an arriving report had
+    /// **no door at all**. §195.
+    ///
+    /// The file door is the *same reader* as the folder door, so the two
+    /// cannot answer differently about the same report: one reader, one
+    /// answer. §185.
+    #[test]
+    fn a_report_in_a_file_is_the_report_the_folder_holds() {
+        let dir = temp_dir("arriving");
+        let mut s = Session::sample();
+        s.execute("node.add", &json!({ "name": "Extra", "kind": "filter" })).expect("ok");
+        let report = build(&s, "prop.set", "deliberate");
+        let written = write_to(&dir, &report).expect("written");
+        let file = written.join(REPORT_FILE);
+
+        // The file door reads it, with no folder and no id.
+        let from_file = read_report(&file).expect("the file door reads the report");
+        let from_folder = show_in(&dir, &report.id).expect("the folder door reads the report");
+        assert_eq!(from_file.id, from_folder.id);
+        assert_eq!(from_file.command, from_folder.command);
+        assert_eq!(from_file.replay, from_folder.replay);
+        assert_eq!(from_file.design.nodes.len(), from_folder.design.nodes.len());
+
+        // And the replay door agrees with the folder's replay door.
+        let replayed = reproduce_file(&file).expect("the file door replays the report");
+        let filed = reproduce_in(&dir, &report.id).expect("the folder door replays the report");
+        assert_eq!(replayed.steps, filed.steps);
+        assert_eq!(replayed.reproduced, filed.reproduced);
+        assert!(replayed.reproduced, "the replay did not reproduce the design: {:?}", replayed.differences);
+    }
+
+    /// The file door keeps the promise the folder door keeps.
+    ///
+    /// A report is input, and the reader checks its documents the way a
+    /// design file is checked — the design as well as the base, because the
+    /// design is the report's **target**, what the replay has to end up
+    /// with. §183. A file that arrived from another machine is not a smaller
+    /// risk than a folder this machine wrote.
+    #[test]
+    fn an_arriving_report_whose_design_the_model_refuses_is_refused() {
+        let dir = temp_dir("arriving-bad");
+        let s = Session::sample();
+        let mut report = build(&s, "node.add", "boom");
+        report.design.meta.fps = 0;
+        let written = write_to(&dir, &report).expect("the report is written");
+        let file = written.join(REPORT_FILE);
+
+        let err = read_report(&file).expect_err("a design the model refuses is refused");
+        assert!(err.contains("the report's design is not usable"), "{err}");
+
+        // And the replay door says the same thing, rather than replaying onto
+        // a design nothing can use and reporting a verdict about it.
+        let err = reproduce_file(&file).expect_err("the replay refuses it too");
+        assert!(err.contains("the report's design is not usable"), "{err}");
+    }
+
+    /// A file that is not a report is refused, and the reason names the file.
+    ///
+    /// The file door is a door for **untrusted input**: it is given a path by
+    /// a person, and the path may point at anything at all. §195.
+    #[test]
+    fn a_file_that_is_not_a_report_is_refused_by_name() {
+        let dir = temp_dir("not-a-report");
+        let path = dir.join("something-else.json");
+        std::fs::write(&path, "{\"hello\": true}").expect("the file is written");
+        let err = read_report(&path).expect_err("not a report");
+        assert!(err.contains("is not a readable report"), "{err}");
+        assert!(err.contains("something-else.json"), "{err}");
     }
 
     /// The design is in the report, and there is no second copy of it.

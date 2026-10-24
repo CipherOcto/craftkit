@@ -271,7 +271,8 @@ shell through `craftkit_ui::raster::render` at a fixed size (see `snapshot` in
 quads; everything else draws as the window draws it. **This is how you get
 evidence for a UI or model change.**
 
-Script format — the same shape as a crash report's `replay`:
+Script format — the same shape as a crash report's **steps**, which is what
+`craftkit-cli crashes replay --script` prints:
 
 ```json
 {
@@ -477,6 +478,19 @@ cargo run -q -p craftkit-cli -- crashes show ID
 cargo run -q -p craftkit-cli -- crashes replay ID
 ```
 
+And for a report that **arrived** from another machine — a `report.json` in your
+hand, with no crash folder around it and no id to look it up by:
+
+```
+cargo run -q -p craftkit-cli -- crashes show --file report.json
+cargo run -q -p craftkit-cli -- crashes replay --file report.json
+```
+
+The file door reads the file you were handed, with the tree's one reader and
+the tree's one replay, so it cannot answer differently from the folder's door
+(§195). The file does not have to be in the crash folder, and it does not have
+to be named after its id.
+
 `crashes replay` prints what each step did and then **says whether the replay
 reproduced the design the report recorded** — or lists the ways in which it
 did not. Read that line before believing anything else: a replay that quietly
@@ -485,7 +499,9 @@ builds a different document is worse than no replay.
 `crashes show ID` prints the report as JSON: `design` (the document at the
 crash), `base` (the document the recorded commands start from) and `replay`
 (the steps). A script for `snapshot` is `{ "name": …, "commands": [ … ] }`, and
-the report's `replay` array is that `commands` array.
+the report's `replay` array is that `commands` array — but a report is **not**
+a script: it also carries the design, which is its **target**, and that is what
+`crashes replay --file` compares the result with.
 
 A report is **input** — it arrives from another machine — and the reader
 treats it as one: `design` and `base` are read as **documents**, so a report
