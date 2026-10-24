@@ -22754,6 +22754,101 @@ was made.** The checking skill's list of the script's flags was written in
 `CONTRIBUTING.md`'s list were written earlier, and they were stale from the
 moment §187 landed. Nothing had read them since.
 
+## 192. The gate's reader and the shell disagreed about what a double-quoted string means
+
+### The finding
+
+§190's rule holds the script's **labels** to being literals the shell
+cannot change. The **texts** — the anchor a `swap` looks for, the text an
+`append` writes, the text a `broken_copy` puts into its copy — are
+shell-evaluated too, and the reader that checks them does not.
+
+The reader resolves the **four escapes a double quote has** — a dollar, a
+backtick, a double quote and a backslash — and stops there. It does not
+expand a variable, and it does not run a backtick. The shell does both.
+
+So a `swap` whose anchor was written in double quotes with an **unescaped**
+backtick is, to the gate, a literal backtick in a piece of text — and the
+anchor it looks for *is* in the file. To the shell, the backtick is a
+command substitution, the command is run, and the anchor is something else
+entirely.
+
+**The tree hit this live, twenty minutes into a run.** §191's new case
+had its anchor written in double quotes with two unescaped backticks. The
+gate was green. The shell ran `scripts/mutation-files.txt` and `FILES` as
+commands, found neither, and reduced the anchor to "a mutation's target
+file must also be in .". The run stopped with "MUTATION DID NOT APPLY" —
+and every result before that was void, because a run that is void has
+proved nothing.
+
+The script's own refusal is what caught it, and that is the shape of the
+gap: the tree has a door that says *"the thing I am looking for is not
+there"*, and nothing that says *"the thing I am looking for is not the
+thing you wrote"*.
+
+### The port
+
+**A text is text, and a command is a command.**
+
+The gate now reads the **text arguments** of every mutation call and holds
+them to the same rule the labels are held to: a text written in double
+quotes must hold no `$` and no backtick.
+
+A **command** is different, and deliberately so. The gate command names
+the snapshot directory — `cargo xtask anchors --script $SNAPSHOT/s.sh` —
+and the shell must expand that, or the case would look in the wrong
+place. So the rule is about the arguments that are *written into the
+tree*, not the ones that are *run*.
+
+Measured after the port: the tree's script carries **458 text arguments**
+— 443 in `swap`, 8 in `broken_copy` and 7 in `append` — and **none** of
+them is one the shell would change. Twenty-nine of their pieces are
+written in double quotes, and every one of those twenty-nine is either a
+piece of Rust code with escapes in it or an escaped backtick.
+
+### The reader had to learn a bare chunk
+
+The first version of the reader found **8** text arguments where there are
+**458**, and all eight were `broken_copy`. The file a `swap` names is a
+**bare word** — it is not quoted at all — and the reader stopped at it.
+
+That is the same reader the labels use, and it has the same shape: a bare
+chunk is a piece of a word that is not quoted, and the shell expands the
+variables in it. One reader now reads both, and the rule is one rule.
+
+### The gate's own teeth
+
+One new mutation, and it is a **data** break: a copy of the script with
+one anchor unescaped. The gate must reject the copy, and it must say so
+for the right reason.
+
+```
+error: 1 problem(s) in /tmp/lb192/unescaped.sh:
+   • /tmp/lb192/unescaped.sh:5810: the text of the `swap` call is written in double quotes and
+     the shell would change it: a dollar is a variable and a backtick is a command, so the text
+     the gate reads is not the text the shell writes.
+```
+
+The rule side is carried by the unit tests: a text with a backtick, a
+single-quoted text, and a command that names a variable.
+
+The full mutation suite is **452 of 453** caught, the one `known` case being
+the pre-existing wasm32 limit, and the tree came back unchanged.
+
+### The lesson
+
+**A checker that reads a language must implement that language's rules.**
+The reader and the shell agreed about every single-quoted string and every
+escaped character, and they agreed about the **easy** cases — which is
+why nothing looked wrong. They disagreed about the one case that mattered,
+and the disagreement cost a run.
+
+**And a rule that holds one kind of argument does not hold the next one
+by itself.** §190 held the **labels**; the **texts** were the same kind
+of thing — text the shell writes into the tree — and nobody connected
+them. The connection is the word *writes*: a label is printed, a text is
+written, and a command is run. Three kinds, and the shell treats the
+first two the same way.
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23241,6 +23336,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The functions that take a label are found in the script, not in a list** | the same | the gate's own test — §190 |
 | **The script's header names every way to run the script, and no way that does not exist** | `cargo xtask anchors` | 1 mutation — §191 |
 | **The tree's documents name the list of files a mutation may write to, not the script's array** | the same | 1 mutation — §191 |
+| **Every text a mutation call writes is a literal the shell cannot change** | the same | 1 mutation — §192 |
+| **A command is a command, and the shell may expand it** | the same | the gate's own test — §192 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24386,3 +24483,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     argument of a mutation call must hold no `$` and no backtick, exactly
     as a label must. The extent — how many of the 454 calls are affected,
     and which arguments are allowed to be expanded — is not measured yet.
+
+    **Done in §192.** Measured: the tree's script carries **458 text
+    arguments** — 443 in `swap`, 8 in `broken_copy` and 7 in `append` —
+    and **none** of them is one the shell would change. The rule is about
+    the arguments that are *written into the tree*, not the ones that are
+    *run*: a gate command names the snapshot directory, and the shell must
+    expand that.
+
+    The reader had to learn a bare chunk to find them: the file a `swap`
+    names is not quoted at all, and the first version of the reader found
+    **8** text arguments where there are **458**.

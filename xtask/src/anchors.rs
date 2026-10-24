@@ -515,7 +515,7 @@ pub fn labels(script: &str) -> Result<Vec<Label>, String> {
             let name = &rest[..name_len];
             if commands.iter().any(|command| command == name) {
                 let after = skip_space(script, pos + name_len);
-                if let Some((pieces, next)) = read_label_word(script, after)? {
+                if let Some((pieces, next)) = read_word_pieces(script, after)? {
                     let text = pieces.iter().map(|piece| piece.value.as_str()).collect();
                     out.push(Label { line, pieces, text });
                     at = next;
@@ -534,12 +534,13 @@ pub fn labels(script: &str) -> Result<Vec<Label>, String> {
     Ok(out)
 }
 
-/// Read the word a label is: a run of quoted pieces and bare chunks.
+/// Read one word as the pieces it is made of, bare chunks included.
 ///
 /// A bare chunk is a piece of a word that is not quoted at all, and the
 /// shell expands the variables in it — so `$label` as a label is a label
-/// the shell would change. §190.
-fn read_label_word(script: &str, at: usize) -> Result<Option<(Vec<Piece>, usize)>, String> {
+/// the shell would change, and the file a `swap` names is a bare chunk.
+/// §190, §192.
+fn read_word_pieces(script: &str, at: usize) -> Result<Option<(Vec<Piece>, usize)>, String> {
     let bytes = script.as_bytes();
     let mut pieces = Vec::new();
     let mut pos = at;
@@ -624,6 +625,116 @@ pub fn label_problems(script_path: &Path, script: &str) -> Result<Vec<String>, S
                     script_path.display(),
                     label.line,
                     label.text
+                ));
+            }
+        }
+    }
+    Ok(problems)
+}
+
+/// One text argument of a mutation call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextArgument {
+    /// The line the call is written on.
+    pub line: usize,
+    /// The call it belongs to: `swap`, `append` or `broken_copy`.
+    pub call: String,
+    /// The pieces the text is made of.
+    pub pieces: Vec<Piece>,
+}
+
+/// The text arguments of the script's mutation calls.
+///
+/// A **text** is something the script writes into the tree: the text a
+/// `swap` looks for, the text an `append` writes, the text a
+/// `broken_copy` puts into its copy. A **command** is something the script
+/// runs, and the shell may expand that on purpose — the gate command
+/// names the snapshot directory, and it has to. §192.
+pub fn text_arguments(script: &str) -> Result<Vec<TextArgument>, String> {
+    let mut out = Vec::new();
+    let bytes = script.as_bytes();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        // A comment runs to the end of its line, and the quotes in it are
+        // not quotes.
+        if bytes[at] == b'#' && (at == 0 || bytes[at - 1].is_ascii_whitespace() || bytes[at - 1] == b'\'') {
+            at = match script[at..].find('\n') {
+                Some(n) => at + n + 1,
+                None => bytes.len(),
+            };
+            continue;
+        }
+        // A command is at the start of a line.
+        if at == 0 || bytes[at - 1] == b'\n' {
+            for (call, texts) in [("swap", 1usize), ("append", 1), ("broken_copy", 2)] {
+                if !script[at..].starts_with(&format!("{call} ")) {
+                    continue;
+                }
+                let line = line_of(script, at);
+                let mut pos = at + call.len() + 1;
+                let mut word = 0usize;
+                while word <= texts {
+                    // Between the words there is whitespace, and sometimes a
+                    // line continuation.
+                    while pos < bytes.len() {
+                        if bytes[pos].is_ascii_whitespace() {
+                            pos += 1;
+                            continue;
+                        }
+                        if bytes[pos] == b'\\' && pos + 1 < bytes.len() && bytes[pos + 1] == b'\n' {
+                            pos += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    let Some((pieces, next)) = read_word_pieces(script, pos)? else { break };
+                    // The first word is the file the call writes to, or the
+                    // path the copy is written to; the rest are texts.
+                    if word >= 1 {
+                        out.push(TextArgument { line, call: call.to_string(), pieces });
+                    }
+                    word += 1;
+                    pos = next;
+                }
+                break;
+            }
+        }
+        // A quoted word is skipped whole, so that nothing inside it is read
+        // as a command.
+        if let Some((_, next)) = read_word(script, at)? {
+            at = next;
+            continue;
+        }
+        at += 1;
+    }
+    Ok(out)
+}
+
+/// What is wrong with the script's text arguments.
+///
+/// A text the shell would change is a text that is not the text the
+/// author wrote: the gate reads the anchor and finds it, and the shell
+/// runs a command and does not. §192.
+pub fn text_problems(script_path: &Path, script: &str) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for argument in text_arguments(script)? {
+        for piece in &argument.pieces {
+            let expands = match piece.quoting {
+                Quoting::Single | Quoting::Ansi => false,
+                Quoting::Double | Quoting::Bare => holds_an_expansion(&piece.body),
+            };
+            if expands {
+                let how = match piece.quoting {
+                    Quoting::Double => "double quotes",
+                    _ => "a bare word",
+                };
+                problems.push(format!(
+                    "{}:{}: the text of the `{}` call is written in {how} and the shell would change \
+                     it: a dollar is a variable and a backtick is a command, so the text the gate \
+                     reads is not the text the shell writes.",
+                    script_path.display(),
+                    argument.line,
+                    argument.call
                 ));
             }
         }
@@ -1092,6 +1203,9 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
     // documents name the list of files a mutation may write to. §191.
     problems.extend(header_problems(script_path, &script));
     problems.extend(prose_problems(root));
+
+    // And the texts the script writes are the texts the author wrote. §192.
+    problems.extend(text_problems(script_path, &script)?);
 
     problems.sort();
     Ok(problems)
@@ -1774,5 +1888,48 @@ mod tests {
         let problems = prose_problems(&dir);
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---------------------------------------------------------- the texts ----
+
+    /// The texts a mutation call writes are found: the anchor of a `swap`,
+    /// the text of an `append`, and the two of a `broken_copy`.
+    #[test]
+    fn the_text_arguments_are_found() {
+        let script = "swap crates/a.rs 'the anchor' 'the break'\n\
+                      append ATTRIBUTION.md 'a line'\n\
+                      broken_copy \"$SNAPSHOT/x.sh\" 'from' 'to'\n";
+        let found = text_arguments(script).expect("the script reads");
+        assert_eq!(found.len(), 4, "{found:#?}");
+    }
+
+    /// A text the shell would change is not the text the author wrote: the
+    /// gate reads the anchor and finds it, and the shell runs a command and
+    /// does not. §192.
+    #[test]
+    fn a_double_quoted_text_with_a_backtick_is_reported() {
+        let script = "swap crates/a.rs \"an anchor with `cmd` in it\" 'the break'\n";
+        let problems = text_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("`swap`"), "{problems:#?}");
+    }
+
+    /// And a single-quoted one is literal.
+    #[test]
+    fn a_single_quoted_text_is_a_literal() {
+        let script = "swap crates/a.rs 'an anchor with `cmd` in it' 'the break'\n";
+        let problems = text_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A **command** is meant to be run, and the shell may expand it: the
+    /// gate command names the snapshot directory, and it has to. §192.
+    #[test]
+    fn a_command_may_be_expanded_but_a_text_may_not() {
+        let script = "expect_catch 'a label' \"cargo xtask anchors --script $SNAPSHOT/s.sh\"\n\
+                      swap crates/a.rs \"an anchor with `cmd` in it\" 'the break'\n";
+        let problems = text_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("`swap`"), "{problems:#?}");
     }
 }

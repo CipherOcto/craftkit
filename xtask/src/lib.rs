@@ -20,7 +20,7 @@
 //!
 //! | Command | What it protects |
 //! |---|---|
-//! | [`anchors`] | the mutation script's anchors and its file list are in the tree, its labels are literals the shell cannot change, its header names every way to run it, and it checks itself before it starts |
+//! | [`anchors`] | the mutation script's anchors and its file list are in the tree, its labels and its texts are literals the shell cannot change, its header names every way to run it, and it checks itself before it starts |
 //! | [`layers`] | the dependency layering, and the UI boundary |
 //! | [`assets`] | "every icon is drawn in code; every file is attributed" |
 //! | [`cleanroom`] | "no product's name is in the tree outside prose" |

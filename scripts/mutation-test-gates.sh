@@ -5813,5 +5813,21 @@ swap CONTRIBUTING.md \
 expect_catch 'the gate ignores a document that names the scripts array' \
     "cargo xtask anchors"
 
+# ---------------------------------------------- the texts the shell writes ----
+# Section 192. A text a mutation call writes is text the shell can change: a
+# backtick inside double quotes is a command substitution, and a dollar is a
+# variable. The gate's reader resolves the four escapes a double quote has
+# and stops there, so an anchor the shell would rewrite reads as the text the
+# author wrote -- and the run stops twenty minutes in with "MUTATION DID NOT
+# APPLY".
+#
+# The break is a copy of the script with one anchor unescaped. The copy is
+# what the gate reads, because the script cannot be changed while it runs.
+broken_copy "$SNAPSHOT/unescaped.sh" \
+    'in \`scripts/mutation-files.txt\`.**' \
+    'in `scripts/mutation-files.txt`.**'
+expect_catch 'the gate ignores a text the shell would rewrite' \
+    "cargo xtask anchors --script $SNAPSHOT/unescaped.sh"
+
 restore
 finish
