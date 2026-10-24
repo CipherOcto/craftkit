@@ -393,10 +393,15 @@ first problem the plan found and `problems.item.1` the second, so "what does
 the screen say?" has an answer about the problems and not only about the
 toolbar, the node rows and the property editors. §199.
 
-**`ui.widgets` says where the widgets are.** The reply carries the names, a
-`rects` map from each name to `[x, y, width, height]` in the pixels of the
-frame its `width` and `height` describe, and the size itself. Before §104 it
-carried the names only, so a name could be found but not aimed at.
+**The `widgets` action says where the widgets are.** The reply carries the
+names, a `rects` map from each name to `[x, y, width, height]` in the pixels
+of the frame its `width` and `height` describe, and the size itself. Before
+§104 it carried the names only, so a name could be found but not aimed at.
+
+The action is spelled `{"method": "ui", "params": {"action": "widgets"}}` and
+**not** `ui.widgets`: `widgets` is the one action with no method spelling of
+its own, on purpose — a `ui.widgets` that the parser does not accept would be
+a name that resolves to nothing. §104.
 
 **The screen has a state, and the channel shares the window's.** The shell
 remembers which node is selected, and the properties panel draws that node's
