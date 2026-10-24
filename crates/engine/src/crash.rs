@@ -19,10 +19,15 @@
 //!
 //! ```text
 //! <folder>/<id>/
-//! ├── report.json    what happened, which command, the id and the timestamp
-//! ├── design.json    the document as it was at the moment
-//! └── replay.json    the command trace, ready to feed back through execute()
+//! └── report.json    what happened, which command, the id, the timestamp,
+//!                    the document as it was, and the command trace
 //! ```
+//!
+//! **One file.** The folder used to hold `design.json` and `replay.json` as
+//! well — copies of parts of the report. Nothing read the design's copy, and
+//! the replay's copy was read by a door nothing called, so a report that
+//! arrived with two copies that disagreed had two answers, and the tree did
+//! not notice. §185.
 //!
 //! The folder is [`report_dir`], which honours `CRAFTKIT_CRASH_DIR` so a test
 //! can point it somewhere temporary and a CI job can collect it.
@@ -33,7 +38,9 @@
 //!   fallible step returns `Result`, and a failure to write a report is logged
 //!   and swallowed — losing the report is far better than losing the process.
 //! - **Write atomically.** Into a temporary name, then rename. A crash halfway
-//!   through must not leave a half-written file that looks like a real one.
+//!   through must not leave a half-written file that looks like a real one —
+//!   and the *folder* is written the same way, so a folder in the crash
+//!   directory is a report that is finished. §185.
 //! - **Write privately.** A report holds the user's design. The files are
 //!   created `0600` and the report's own folder is `0700`; a folder that was
 //!   already there keeps the permissions its owner gave it. §57.
@@ -286,24 +293,41 @@ pub fn write_to(base: &Path, report: &CrashReport) -> Result<PathBuf, String> {
     if base_is_ours {
         restrict(base, true);
     }
-    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+
+    // The report is written into a folder **beside** the one it will live in,
+    // and that folder is renamed into place. A folder in the crash directory
+    // is then a report that is finished — the crash report is the only
+    // evidence a crash happened, and half of one says nothing.
+    //
+    // The writer runs in a panic hook, on a process that is on its way out,
+    // so the window between "the folder exists" and "the report is in it"
+    // used to be the whole write: up to forty-four MiB of text, with the
+    // folder already on disk and already listed as a report. §185.
+    let staging = base.join(format!("{}{STAGING_SUFFIX}", sanitize(&report.id)));
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging).map_err(|e| format!("could not create {}: {e}", staging.display()))?;
     // The report's own folder is always ours: it is where the design sits.
-    restrict(&dir, true);
+    restrict(&staging, true);
 
-    // The report's three files are written with **the tree's one writer** —
-    // the same layout the design file is written in. They used to be written
-    // with `serde_json::to_string_pretty`, which is the same layout *without*
-    // the bound on the indentation: a report of a design the model accepts
-    // was 73.5 MiB of text, and the crash reader refuses anything past
-    // 64 MiB, so the app wrote crash reports it could not read back. §142.
+    // The report is written with **the tree's one writer** — the same layout
+    // the design file is written in. It used to be written with
+    // `serde_json::to_string_pretty`, which is the same layout *without* the
+    // bound on the indentation: a report of a design the model accepts was
+    // 73.5 MiB of text, and the crash reader refuses anything past 64 MiB, so
+    // the app wrote crash reports it could not read back. §142.
+    //
+    // And it is the **only** file. The folder used to hold `design.json` and
+    // `replay.json` too — copies of parts of the report. Nothing read the
+    // design's copy, and the replay's copy was read by a door that nothing
+    // called, so a report that arrived with two copies that disagreed had two
+    // answers, and the tree noticed neither. §185.
     let report_json = to_json(&report)?;
-    write_atomic(&dir.join("report.json"), &report_json)?;
+    write_atomic(&staging.join("report.json"), &report_json)?;
 
-    let design = to_json(&report.design)?;
-    write_atomic(&dir.join("design.json"), &design)?;
-
-    let replay = to_json(&report.replay)?;
-    write_atomic(&dir.join("replay.json"), &replay)?;
+    std::fs::rename(&staging, &dir).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&staging);
+        format!("could not file the report in {}: {e}", dir.display())
+    })?;
 
     Ok(dir)
 }
@@ -416,6 +440,12 @@ pub fn list() -> Vec<String> {
 }
 
 /// [`list`], in a named folder.
+///
+/// A folder in the crash directory is a report only if it **holds** one. The
+/// writer renames the folder into place when the report is finished, so a
+/// folder that is there is a report that is there — but a folder can also
+/// arrive from another machine, and a directory is not a report. Listing one
+/// offered the reader a report that could not be read. §185.
 pub fn list_in(dir: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -423,11 +453,22 @@ pub fn list_in(dir: &Path) -> Vec<String> {
     let mut ids: Vec<String> = entries
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().join(REPORT_FILE).is_file())
         .filter_map(|e| e.file_name().into_string().ok())
+        // A folder that is being written into is not a report.
+        .filter(|name| !name.ends_with(STAGING_SUFFIX))
         .collect();
     ids.sort_unstable();
     ids
 }
+
+/// The name of the one file a report is made of.
+const REPORT_FILE: &str = "report.json";
+
+/// The suffix of the folder a report is written into before it is filed.
+///
+/// A folder with this suffix is a report being written, not a report. §185.
+const STAGING_SUFFIX: &str = ".partial";
 
 /// Read one report back.
 pub fn show(id: &str) -> Result<CrashReport, String> {
@@ -448,13 +489,30 @@ pub fn show(id: &str) -> Result<CrashReport, String> {
 /// design file is refused the same way: the tree has one promise about what
 /// a document is, and it keeps it in every reader.
 pub fn show_in(dir: &Path, id: &str) -> Result<CrashReport, String> {
-    let path = dir.join(sanitize(id)).join("report.json");
+    let path = report_path(dir, id)?;
     let body = read_bounded(&path, MAX_REPORT_BYTES)?;
     let mut report: CrashReport = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
     report.design = checked_document(report.design, "the report's design")?;
     report.base = checked_document(report.base, "the report's base design")?;
     Ok(report)
+}
+
+/// The path of a report's one file, or the reason there is not one.
+///
+/// A folder in the crash directory is a report only if it holds one. The
+/// writer renames the folder into place when the report is finished, so a
+/// folder that is there is a report that is there — but a folder can also
+/// arrive from another machine, and a directory is not a report. Saying so is
+/// better than the I/O error the reader used to give, which named a file that
+/// was never there and said nothing about the folder. §185.
+fn report_path(dir: &Path, id: &str) -> Result<PathBuf, String> {
+    let folder = dir.join(sanitize(id));
+    let path = folder.join(REPORT_FILE);
+    if !path.is_file() {
+        return Err(format!("there is no crash report in {}: it has no {REPORT_FILE}", folder.display()));
+    }
+    Ok(path)
 }
 
 /// Read a file, refusing one that is larger than `max`.
@@ -474,10 +532,15 @@ pub fn replay(id: &str) -> Result<Vec<ReplayStep>, String> {
 }
 
 /// [`replay`], in a named folder.
+///
+/// The steps are in the report, not in a file of their own. The folder used to
+/// hold a `replay.json` beside the report, and the two could disagree: one
+/// folder, two answers — `replay_in` said the report held one command and
+/// `show_in` said it held nine — and the tree noticed neither. The steps come
+/// from the report now, and this door reads the same file every other door
+/// does. §185.
 pub fn replay_in(dir: &Path, id: &str) -> Result<Vec<ReplayStep>, String> {
-    let path = dir.join(sanitize(id)).join("replay.json");
-    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
-    serde_json::from_str(&body).map_err(|e| format!("{} is not a readable replay: {e}", path.display()))
+    Ok(show_in(dir, id)?.replay)
 }
 
 /// What one replayed step did.
@@ -894,10 +957,78 @@ mod tests {
         let written = write_to(&dir, &report).expect("written");
 
         assert_eq!(mode(&written), 0o700, "the report's folder is not private");
-        for name in ["report.json", "design.json", "replay.json"] {
-            let m = mode(&written.join(name));
-            assert_eq!(m, 0o600, "{name} is readable by other users: mode was {m:o}");
+        let m = mode(&written.join(REPORT_FILE));
+        assert_eq!(m, 0o600, "the report is readable by other users: mode was {m:o}");
+    }
+
+    /// Every door agrees about a report.
+    ///
+    /// `replay_in` said the report held one command and `show_in` said it
+    /// held nine, because the folder held two copies of the steps and each
+    /// door read one of them. The report is the only copy now, so the doors
+    /// cannot disagree. §185.
+    #[test]
+    fn every_door_agrees_about_how_many_commands_a_report_holds() {
+        let dir = temp_dir("one-answer");
+        let mut s = Session::new("one answer");
+        for name in ["A", "B", "C"] {
+            s.execute("node.add", &json!({ "name": name, "kind": "cue" })).expect("ok");
         }
+        let report = build(&s, "node.add", "boom");
+        let written = write_to(&dir, &report).expect("written");
+        // A second copy of the steps, saying something else. A report arrives
+        // from another machine, and it may carry anything.
+        std::fs::write(written.join("replay.json"), "[]").expect("written");
+
+        let shown = show_in(&dir, &report.id).expect("the report reads");
+        let replayed = replay_in(&dir, &report.id).expect("the steps read");
+        assert_eq!(replayed.len(), shown.replay.len(), "the doors disagree about the number of commands");
+        assert_eq!(replayed, shown.replay, "the doors disagree about which commands");
+    }
+
+    /// A folder that is not a report is not offered as one.
+    ///
+    /// The crash directory held a folder for every report, and the lister
+    /// offered each one — including a folder that was still being written, and
+    /// one that arrived from another machine with nothing in it. The reader
+    /// then said "could not read the line: No such file or directory", which
+    /// names a file that was never there and says nothing about the folder.
+    /// §185.
+    #[test]
+    fn a_folder_that_is_not_a_report_is_not_listed_and_says_so() {
+        let dir = temp_dir("not-a-report");
+        let empty = dir.join("20250101-000000-dead");
+        std::fs::create_dir_all(&empty).expect("dir");
+        assert!(list_in(&dir).is_empty(), "an empty folder was offered as a report");
+
+        let err = show_in(&dir, "20250101-000000-dead").expect_err("there is no report");
+        assert!(err.contains("there is no crash report"), "{err}");
+        assert!(err.contains(REPORT_FILE), "{err}");
+
+        // And a folder that is still being written is not one either.
+        let staging = dir.join("20250101-000001-cafe.partial");
+        std::fs::create_dir_all(&staging).expect("dir");
+        std::fs::write(staging.join(REPORT_FILE), "{}").expect("write");
+        assert!(list_in(&dir).is_empty(), "a folder being written into was offered as a report");
+    }
+
+    /// A report that cannot be written leaves no folder behind.
+    ///
+    /// The report is written into a folder beside the one it will live in, and
+    /// that folder is renamed into place. So a crash — or a full disk —
+    /// leaves the crash directory as it was, rather than a folder that is not
+    /// a report. §185.
+    #[test]
+    fn a_report_that_cannot_be_written_leaves_no_folder_behind() {
+        let dir = temp_dir("cannot-write");
+        let s = Session::sample();
+        let report = build(&s, "prop.set", "boom");
+        // A *file* where the staging folder goes: the write cannot succeed.
+        std::fs::create_dir_all(&dir).expect("dir");
+        std::fs::write(dir.join(format!("{}{STAGING_SUFFIX}", report.id)), b"not a folder")
+            .expect("the blocker");
+        assert!(write_to(&dir, &report).is_err(), "the write should have failed");
+        assert!(!dir.join(&report.id).exists(), "a folder was left behind that is not a report");
     }
 
     /// A folder that was already there belongs to whoever made it.
@@ -918,7 +1049,7 @@ mod tests {
         assert_eq!(mode(&dir), 0o755, "the tool changed a folder it did not create");
         // And the report inside it is still private.
         assert_eq!(mode(&written), 0o700, "the report's folder is not private");
-        assert_eq!(mode(&written.join("design.json")), 0o600, "the design is readable by other users");
+        assert_eq!(mode(&written.join(REPORT_FILE)), 0o600, "the report is readable by other users");
     }
 
     /// A folder the tool creates is made private.
@@ -1077,15 +1208,29 @@ mod tests {
         assert!(list_in(&dir).contains(&report.id));
     }
 
+    /// The design is in the report, and there is no second copy of it.
+    ///
+    /// The folder used to hold `design.json` as well — a copy of the design
+    /// that **nothing read**, and the copy the recipe told a person to open.
+    /// A copy that nothing reads is not evidence: it can disagree with the
+    /// report, and the tree notices neither. §185.
     #[test]
-    fn the_design_survives_separately_from_the_report() {
+    fn the_design_is_in_the_report_and_nowhere_else() {
         let dir = temp_dir("design");
         let s = Session::sample();
         let report = build(&s, "", "boom");
-        write_to(&dir, &report).expect("written");
-        let body = std::fs::read_to_string(dir.join(&report.id).join("design.json")).expect("design");
+        let written = write_to(&dir, &report).expect("written");
+        let body = std::fs::read_to_string(written.join(REPORT_FILE)).expect("the report");
         let parsed: serde_json::Value = serde_json::from_str(&body).expect("json");
-        assert_eq!(parsed["meta"]["name"], json!("Sample plan"));
+        assert_eq!(parsed["design"]["meta"]["name"], json!("Sample plan"));
+        // And the folder holds nothing else.
+        let mut names: Vec<String> = std::fs::read_dir(&written)
+            .expect("dir")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec![REPORT_FILE.to_string()], "the folder holds {names:?}");
     }
 
     #[test]
@@ -1336,9 +1481,9 @@ mod tests {
         let dir = temp_dir("corrupt-replay");
         let id = "20250907-000000-0001";
         std::fs::create_dir_all(dir.join(id)).expect("dir");
-        std::fs::write(dir.join(id).join("replay.json"), b"{not json").expect("write");
+        std::fs::write(dir.join(id).join(REPORT_FILE), b"{not json").expect("write");
         let err = replay_in(&dir, id).expect_err("corrupt");
-        assert!(err.contains("replay.json"), "{err}");
+        assert!(err.contains(REPORT_FILE), "{err}");
     }
 
     /// A hand-edited replay must not panic the reproduction.
@@ -1383,7 +1528,7 @@ mod tests {
     fn reading_an_unknown_report_is_an_error_not_a_panic() {
         let dir = temp_dir("missing");
         let err = show_in(&dir, "no-such-report").unwrap_err();
-        assert!(err.contains("could not read"), "{err}");
+        assert!(err.contains("there is no crash report"), "{err}");
         assert!(list_in(&dir).is_empty());
         assert!(list_in(Path::new("/nonexistent/craftkit")).is_empty());
     }
@@ -1417,20 +1562,32 @@ mod tests {
         assert!(record_in(&blocked, &s, "x", "deliberate").is_none());
     }
 
+    /// A crash report is **one file** in a folder of its own.
+    ///
+    /// The folder used to hold three: the report, a copy of the design and a
+    /// copy of the steps. One copy was read by nothing, the other by a door
+    /// nothing called, and a report that arrived with the copies disagreeing
+    /// had two answers. §185.
     #[test]
-    fn recording_a_crash_writes_three_files() {
-        let dir = temp_dir("three-files");
+    fn recording_a_crash_writes_one_file() {
+        let dir = temp_dir("one-file");
         let s = Session::sample();
         let written = record_in(&dir, &s, "x", "deliberate").expect("written");
-        for name in ["report.json", "design.json", "replay.json"] {
-            assert!(written.join(name).is_file(), "{name} is missing");
-        }
-        // No half-written temporary file survives.
-        let leftovers: Vec<String> = std::fs::read_dir(&written)
+        assert!(written.join(REPORT_FILE).is_file(), "the report is missing");
+        let mut names: Vec<String> = std::fs::read_dir(&written)
             .expect("dir")
             .filter_map(|e| e.ok())
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        names.sort();
+        assert_eq!(names, vec![REPORT_FILE.to_string()], "the folder holds {names:?}");
+        // No half-written temporary file survives, and no staging folder is
+        // left beside the report.
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .expect("dir")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp") || n.ends_with(".partial"))
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
     }

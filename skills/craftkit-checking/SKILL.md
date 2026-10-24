@@ -256,7 +256,7 @@ shell through `craftkit_ui::raster::render` at a fixed size (see `snapshot` in
 quads; everything else draws as the window draws it. **This is how you get
 evidence for a UI or model change.**
 
-Script format — the same shape as a crash report's `replay.json`:
+Script format — the same shape as a crash report's `replay`:
 
 ```json
 {

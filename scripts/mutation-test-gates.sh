@@ -943,9 +943,9 @@ expect_catch "crash: a trace that dropped commands does not say so" \
 # A crash report is *input*: the recipe asks for `report.json` from whoever
 # had the crash, so the file arrives from another machine. §48.
 swap crates/engine/src/crash.rs \
-    '    let path = dir.join(sanitize(id)).join("report.json");
+    '    let path = report_path(dir, id)?;
     let body = read_bounded(&path, MAX_REPORT_BYTES)?;' \
-    '    let path = dir.join(sanitize(id)).join("report.json");
+    '    let path = report_path(dir, id)?;
     let body = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;'
 expect_catch "crash: a report file of any size is read" \
     "cargo test -p craftkit-engine --profile ci larger_than_the_limit"
@@ -1630,8 +1630,8 @@ expect_catch "live-window: the check stops telling one instance from another" \
 # command that was run against it — and it was written world-readable: the
 # folder 0775 and the files 0664, both measured. §57.
 swap crates/engine/src/crash.rs \
-    '    restrict(&dir, true);' \
-    '    let _ = &dir;'
+    '    restrict(&staging, true);' \
+    '    let _ = &staging;'
 expect_catch "engine: the crash report's folder is left readable by other users" \
     "cargo test -p craftkit-engine --profile ci a_crash_report_is_not_readable_by_other_users"
 
@@ -5526,6 +5526,33 @@ swap crates/engine/src/crash.rs \
 pub use crate::session::TraceStep as ReplayStep;'
 expect_catch "anchors: an anchor that names two places is reported" \
     "cargo xtask anchors"
+
+# ------------------------------------------------------ the crash report's folder ----
+# Section 185. The crash report was a folder of three files: the report, a copy
+# of the design and a copy of the steps. Nothing read the design's copy, and
+# the replay's copy was read by a door nothing called -- so a report that
+# arrived with the copies disagreeing had two answers, and the tree noticed
+# neither. Measured: `replay_in` said the report held one command and
+# `show_in` said it held nine.
+#
+# The first break: the replay door reads the second copy again. The tree has
+# one copy of the steps now, and the two doors have to agree about it.
+swap crates/engine/src/crash.rs \
+    '    Ok(show_in(dir, id)?.replay)' \
+    '    let path = dir.join(sanitize(id)).join("replay.json");
+    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
+    serde_json::from_str(&body).map_err(|e| format!("{} is not a readable replay: {e}", path.display()))'
+expect_catch "crash: the replay door reads a second copy of the steps" \
+    "cargo test -p craftkit-engine --profile ci every_door_agrees"
+
+# The second break: the report's folder is created instead of the report
+# being filed in it. The folder is then there and the report is not, and the
+# crash report is the only evidence a crash happened.
+swap crates/engine/src/crash.rs \
+    '    std::fs::rename(&staging, &dir).map_err(|e| {' \
+    '    std::fs::create_dir_all(&dir).map_err(|e| {'
+expect_catch "crash: the report's folder is created instead of the report being filed in it" \
+    "cargo test -p craftkit-engine --profile ci recording_a_crash_writes_one_file"
 
 restore
 finish

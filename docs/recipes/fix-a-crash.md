@@ -24,14 +24,18 @@ lock (§76). A process that is *killed* writes nothing at all: catching a
 signal needs `unsafe` FFI, and this tree forbids `unsafe`. So "the application
 was killed" means "there is no report", and there is nothing to replay.
 
-Three files, one directory, one id:
+One file, one directory, one id:
 
 ```text
 <folder>/<id>/
-├── report.json    what happened, which command, the id and the timestamp
-├── design.json    the document as it was at the moment
-└── replay.json    the command trace, ready to feed back through execute()
+└── report.json    what happened, which command, the id and the timestamp,
+                   the document as it was, and the command trace
 ```
+
+**One file.** The folder used to hold three: the report, a copy of the design
+and a copy of the steps. Nothing read the design's copy, and the replay's copy
+was read by a door nothing called — so a report that arrived with the copies
+disagreeing had **two answers**, and the tree noticed neither. §185.
 
 The folder is `craftkit_engine::crash::report_dir()`:
 
@@ -50,7 +54,7 @@ evidence a crash happened, and it is never destroyed by the next one. §58.
 `sanitize` reduces any input to `[A-Za-z0-9_-]` before it is joined to a
 path, so an id from a command line cannot escape the folder.
 
-The three files are written `0600` and the report's own folder is `0700`: a
+The file is written `0600` and the report's own folder is `0700`: a
 report carries the design, so it is the most private thing this program
 writes. A folder that was **already there** — `CRAFTKIT_CRASH_DIR` can name a
 shared one — keeps the permissions its owner gave it; only what the tool
@@ -85,16 +89,15 @@ The engine names exactly this surface: `EngineError::Unknown` says *"run
 and `crash::reproduce(id)`, each of which has an `_in(dir, …)` variant so a test
 can point at a temporary folder instead of the user's.
 
-Reading the folder by hand still works — the layout is three files and a
+Reading the folder by hand still works — the layout is one file and a
 `report.json` — and it is worth doing once, because it is what makes the format
 readable rather than something the tool decides for you.
 
 If the report is not on this machine, ask for `report.json`: it carries the
-design, the base and the steps, so `design.json` and `replay.json` are copies
-of parts of it.
+design, the base and the steps. There is nothing else to ask for.
 
 A report is **input**, not output — it arrives from somebody else's disk, so
-the reader bounds what it will accept: `report.json` and `replay.json` are
+the reader bounds what it will accept: `report.json` is
 read only up to `MAX_REPORT_BYTES`, a replay runs at most
 `MAX_COMMAND_STEPS` commands, and **both** of the report's documents — the
 base it was replayed onto and the design it recorded — are validated the
@@ -143,8 +146,9 @@ believe the replay is everything that happened.
 
 ### 3. Reproduce it, and check that it reproduced
 
-`replay.json` is `Vec<ReplayStep>`, each `{ "command": …, "params": { … } }`.
-That is exactly `Session::execute`'s signature. The reproduction starts from the
+The report's `replay` is `Vec<ReplayStep>`, each
+`{ "command": …, "params": { … } }`. That is exactly `Session::execute`'s
+signature. The reproduction starts from the
 report's **base**, not from an empty session — the recorded commands are
 relative to the document they ran against:
 
@@ -171,8 +175,8 @@ If a step fails rather than panics, the panic is downstream of that step — rea
 the failure message first. `craftkit-cli crashes replay <id>` lists the
 failures, and says how many commands the report had to drop.
 
-> **`design.json` is the target, not the starting point.** The replay starts
-> from `base` (in `report.json`) and has to arrive at `design`. When the two
+> **The report's `design` is the target, not the starting point.** The replay
+> starts from `base` and has to arrive at `design`. When the two
 > match, the report reproduces the crash; when they do not, the differences the
 > replay lists are where to look. `dropped` says how much of the session the
 > replay could not cover.
@@ -281,7 +285,7 @@ Three reasons, and each one is a real past failure mode:
 
 > **`craftkit-engine` does not depend on `craftkit-io`.** If your test wants to
 > call `craftkit_io::load_text` on a saved `.craftkit` file rather than
-> `serde_json::from_str` on `design.json`, it cannot live in
+> `serde_json::from_str` on the report's `design`, it cannot live in
 > `crates/engine/src/crash.rs` — the dependency does not exist and adding it is
 > a layering decision, not a test change. Use `serde_json::from_str` into
 > `craftkit_model::Document` (the model derives `Deserialize` directly), or put

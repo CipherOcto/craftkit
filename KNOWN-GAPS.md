@@ -21823,6 +21823,154 @@ just ran twenty-five minutes after the thing it was about, in a run where
 everything before it had already been mutated. The fix was not a new check —
 it was the same check, at the front.
 
+## 185. The crash report was three files, and the tree read one of them
+
+### The finding
+
+A crash report is a **folder**:
+
+```text
+<folder>/<id>/
+├── report.json    what happened, which command, the id and the timestamp
+├── design.json    the document as it was at the moment
+└── replay.json    the command trace, ready to feed back through execute()
+```
+
+§142 made all three use the tree's one writer, so the bytes are bounded and
+the folder is the same shape as a design file. What §142 did not ask is
+whether the tree **reads** them.
+
+It reads one.
+
+| the file | holds | who reads it |
+|---|---|---|
+| `report.json` | the metadata, the design, the base and the steps | `show_in`, `reproduce_in` — the CLI, the MCP server and the app |
+| `design.json` | the design, **again** | **nothing that runs** |
+| `replay.json` | the steps, **again** | `replay_in` — and **no production program calls it** |
+
+So the design is written **twice** and the steps are written **twice**, and
+only one copy of each is ever read. The cost, measured on the tree's own
+sample: `design.json` is **3 955 bytes of a 10 425-byte folder** — 37 % — and
+§55's measurement of 198 real reports put it at 5 066 bytes of 16 309, the
+same share.
+
+And because there are two copies, they can disagree. **A crash report is
+input**: §142's own words — *"the recipe asks for `report.json` from whoever
+had the crash, so the file arrives from another machine"*. A folder that
+arrives with two copies that do not match has **two answers**, and the tree
+noticed neither. Measured, on a folder whose `replay.json` was edited to hold
+one step while its `report.json` held nine:
+
+```text
+replay_in  (replay.json):  1 step
+show_in    (report.json):  9 steps
+reproduce_in (report.json): ran 9 steps
+```
+
+The same shape §183 found in the documents: *the same folder, two readers,
+two answers*.
+
+And the recipe pointed a person at the copy nothing read:
+
+> **`design.json` is the target, not the starting point.**
+
+### The other half: a folder is written one file at a time
+
+The writer did this:
+
+```rust
+std::fs::create_dir_all(&dir)?;      // the folder is there now
+write_atomic(&dir.join("report.json"), …)?;
+write_atomic(&dir.join("design.json"), …)?;
+write_atomic(&dir.join("replay.json"), …)?;
+```
+
+Each **file** was written atomically. The **folder** was not: it existed
+before the report was in it, and it stayed if the write failed. The writer
+runs in a **panic hook**, on a process that is on its way out, so the window
+between "the folder exists" and "the report is in it" was the whole write —
+up to forty-four MiB of text, §142's measurement.
+
+And the tree listed the folder as a report anyway, because the lister listed
+every directory it found:
+
+```text
+$ craftkit-cli crashes list
+20250101-000000-dead          ← a folder with nothing in it
+20261024-022512-28c7
+
+$ craftkit-cli crashes show 20250101-000000-dead
+craftkit-cli: could not read …/report.json: could not read the line:
+No such file or directory (os error 2)
+```
+
+A report the tree offered, and an error that named a file that was never
+there and said nothing about the folder.
+
+### The port
+
+**One file.** The writer writes `report.json` and nothing else. The design and
+the steps are in the report, and the report is the only copy — so the doors
+cannot disagree, and a person who opens the report reads what the tree reads.
+
+**The folder is written whole or not at all.** The report is written into a
+folder **beside** the one it will live in, and that folder is renamed into
+place. A folder in the crash directory is then a report that is finished. The
+rename is one operation; the window is gone.
+
+**A folder that is not a report is not offered as one.** The lister lists only
+folders that hold a report, and skips the staging folders. The reader says so
+in plain words:
+
+```text
+$ craftkit-cli crashes show 20250101-000000-dead
+craftkit-cli: there is no crash report in …/20250101-000000-dead:
+it has no report.json
+```
+
+**And every door reads the same file.** `replay_in` reads the steps out of the
+report, the way `show_in` and `reproduce_in` do.
+
+### What it costs
+
+Nothing, and that is the point: the report is the file, the reader already
+read it, and the two extra files were **31–37 % of the folder for nothing**.
+A report of the design the model accepts is now 44.21 MiB in one file rather
+than 44.21 MiB in one file *and* 29 MiB in another.
+
+### The gate's own teeth
+
+Two new mutations, and two new tests:
+
+| The mutation | The gate that catches it |
+|---|---|
+| the replay door reads a second copy of the steps | `every_door_agrees_about_how_many_commands_a_report_holds` |
+| the report's folder is created instead of the report being filed in it | `recording_a_crash_writes_one_file` |
+
+Plus a property — **one folder, one answer** — which writes a *second* copy
+of the steps saying something else and asserts that every door still says the
+same thing. The copy is written by the property itself, so the case that
+matters is not left to luck. §175's lesson.
+
+And the two rules about the tree's own behaviour that a mutation cannot
+reach — the lister skipping a folder that is not a report, and the reader
+saying so — are covered by unit tests, and each of those tests fails if its
+rule is removed.
+
+### The lesson
+
+**A copy that nothing reads is not evidence. It is a liability.** The crash
+folder held two copies of the report's contents, one of them read by nothing
+and the other read by a door nothing called, and the recipe pointed a person
+at the copy the tree never checked.
+
+**And the tree has to be able to say the same thing twice.** §183 found the
+same shape in the documents: a derived `Deserialize` is not a validation, and
+a reader that checks one of two things has not decided. §185 found it in the
+files: one folder, two readers, two answers. The rule is the same both times
+— *one copy, one reader, one answer* — and it is worth looking for it
+wherever a thing is written more than once.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -22289,6 +22437,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every file an anchor names can be put back** | the same | the unit test — §184 |
 | **The script checks its anchors before its first swap** | the same | the unit test — §184 |
 | **The reader understands the three quoting conventions, and refuses the ones it does not** | `swaps` in `xtask/src/anchors.rs` | the unit tests — §184 |
+| **A crash report is one file, and every door reads it** | `crash::replay_in` in `crates/engine/src/crash.rs` | 1 mutation — §185 |
+| **A folder that is not a report is not offered as one** | `crash::list_in` | the unit test — §185 |
+| **One folder, one answer** | `crates/engine/tests/crash_properties.rs` | the property — §185 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -23271,11 +23422,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **carries commands** and a broken script is a broken instruction.
 
     **What is left is the replay door**, and it is the bigger one. A crash
-    report is a **folder** of three files, not a file, and the tree has no
-    headless writer for one: the only producer in the tree is the desktop
-    app's panic hook, and the CLI's crash actions are list, show and replay.
-    So the work is a writer *and* a corpus that is a folder *and* a child
-    that takes an id rather than a path.
+    report is a **folder**, not a file, and the tree has no headless writer
+    for one: the only producer in the tree is the desktop app's panic hook,
+    and the CLI's crash actions are list, show and replay. So the work is a
+    writer *and* a corpus that is a folder *and* a child that takes an id
+    rather than a path.
+
+    **§185 made the folder smaller, and it did not make it a file.** The
+    report is now one file in a folder of its own: the two extra copies were
+    read by nothing and by a door nothing called, and a folder whose copies
+    disagreed had two answers — `replay_in` said one command and `show_in`
+    said nine. So the corpus for the replay door is a folder holding **one**
+    file, and the writer is the one thing still missing. The crash path is
+    the only part of the tree that cannot be driven from a command line,
+    because it needs a crash to happen.
 
 48. **Decide what a script may cost, and what a command may cost.** §181
     bounded the *number* of commands a script or a replay may run, and left

@@ -257,6 +257,46 @@ proptest! {
             );
         }
     }
+    /// One folder, one answer.
+    ///
+    /// The tree's doors must agree about a report. The folder used to hold a
+    /// copy of the steps beside the report, and `replay_in` read that copy
+    /// while `show_in` read the report — so a folder whose two copies
+    /// disagreed had two answers, and the tree noticed neither. §185.
+    ///
+    /// The second copy is written here, saying something else, so the case
+    /// that matters is not left to luck: a report arrives from another
+    /// machine, and it may carry anything.
+    #[test]
+    fn a_folder_with_a_second_copy_of_the_steps_has_one_answer(
+        commands in proptest::collection::vec("[a-z]{1,4}", 0..6),
+    ) {
+        let report = a_report();
+        let dir = the_folder();
+        // Its own folder: the cases above share one scratch report, and they
+        // run at the same time.
+        let folder = dir.join("one-answer");
+        std::fs::create_dir_all(&folder).expect("the folder");
+        // The report, written by the tree's own writer.
+        std::fs::write(folder.join("report.json"), the_text(&report)).expect("the report is written");
+        // And a second copy of the steps, saying something else.
+        let other: Vec<Json> =
+            commands.iter().map(|name| json!({ "command": name, "params": {} })).collect();
+        std::fs::write(
+            folder.join("replay.json"),
+            serde_json::to_string(&other).expect("the copy is written"),
+        )
+        .expect("the copy is written");
+
+        let shown = crash::show_in(&dir, "one-answer").expect("the report reads");
+        let replayed = crash::replay_in(&dir, "one-answer").expect("the steps read");
+        prop_assert_eq!(
+            replayed.len(),
+            shown.replay.len(),
+            "the doors disagree about how many commands the report holds"
+        );
+        prop_assert_eq!(replayed, shown.replay, "the doors disagree about which commands");
+    }
 }
 
 /// The report's own shape, as the tree writes it.
