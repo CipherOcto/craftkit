@@ -22982,6 +22982,81 @@ something.** A `swap` that changes nothing stops the run loudly. A
 the gate reads it, the gate finds nothing, and the report says the gate
 missed. The quiet failure is the one that survives to the next run.
 
+## 194. The API said the change hook fires after the reply, the code fires it before, and nothing held the order
+
+### The finding
+
+`craftkit-control`'s `ServerOptions::with_after` takes a hook a host calls
+when a request may have changed the document — the desktop app uses it to
+ask for a repaint (`apps/craftkit/src/main.rs:303`). Its doc comment said:
+
+> Called outside the session lock, **after the reply is sent**, and only for
+> `engine.execute` and `ui.*` — the methods that can move the document.
+
+The code calls it **before** the reply is sent, and says so in the comment
+above the call (`crates/control/src/server.rs:397`):
+
+```
+// Announced *before* the reply is sent, and that ordering is the whole
+// point. ...
+// Telling the host after the send meant a client that disconnected
+// mid-command left the window showing the frame from before that command,
+// silently and permanently.
+```
+
+So the file held the claim and its refutation **two hundred and sixty lines
+apart**, and the wrong one was on the public method — the one a caller
+reads.
+
+And nothing held the order. The two tests that exercised the hook
+(`crates/control/src/server.rs:655` and `:689`) asserted **how many times**
+it fired, and not **when**.
+
+**Measured:** moving the hook to after the reply — the order the doc comment
+describes — left `cargo test -p craftkit-control` **green**: 60 tests, 0
+failures. The bug the comment warns about is the one the desktop app would
+have shown a user: a client that read the reply before the window had
+redrawn was looking at the frame from before the command, and a client that
+disconnected mid-command never saw the new frame at all.
+
+### The port
+
+**A hook's order is part of its contract, and a contract needs a test.**
+
+The doc comment now says *before* the reply is sent, and says why: a host
+that draws the session asks for a repaint, and the repaint has to be asked
+for first.
+
+The test holds the order. The hook **blocks** until the test releases it, so
+the test can look at the socket while the server is inside the hook and
+cannot have sent the reply yet — the socket read times out, and that is the
+assertion. With the hook after the reply the read finds the reply, and the
+test fails:
+
+```
+thread 'server::tests::the_change_hook_fires_before_the_reply_is_sent' panicked at
+crates/control/src/server.rs:743:9:
+the reply was sent before the hook fired, so a client could read a frame from before the command
+```
+
+The test is not timing-dependent: the hook blocks, so the server cannot
+send, and the socket has nothing to read.
+
+### The gate's own teeth
+
+One new mutation: swap the hook to after the reply. The test must notice.
+
+### The lesson
+
+**A doc comment that states an order is a contract, and a contract nobody
+tests is a comment.** The wrong sentence was not a detail — it was the
+sentence that decided where the call went, and it was the wrong way round.
+
+**And the code can be right while its own documentation is wrong.** The
+ordering was deliberate, the comment said so, and the reason it was
+deliberate was a bug that had already happened once. Everything a reader
+needed was in the file; the reader was pointed at the wrong line.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23473,6 +23548,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A command is a command, and the shell may expand it** | the same | the gate's own test — §192 |
 | **Every copy the script makes breaks the script in one place** | `cargo xtask anchors` | 3 mutations — §193 |
 | **A copy's own anchor is checked before the run starts** | the same | the same — §193 |
+| **The change hook fires before the reply is sent** | `craftkit-control` test | 1 mutation — §194 |
+| **A hook's documented order is the order it fires in** | the same | the same — §194 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

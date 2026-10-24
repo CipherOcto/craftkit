@@ -5875,5 +5875,39 @@ broken_copy "$SNAPSHOT/copy-breaks-the-first-of-two.sh" \
 expect_catch 'the gate ignores a copy whose broken_copy breaks the first of two places' \
     "cargo xtask anchors --script $SNAPSHOT/copy-breaks-the-first-of-two.sh"
 
+# ------------------------------------------------ the change hook's order ----
+# Section 194. The hook fires before the reply is sent, and that order is the
+# whole point of it: a host that draws the session asks for a repaint, and a
+# client that read the reply before the window had redrawn would be looking at
+# the frame from before the command.
+#
+# The API's own doc comment said the hook was called after the reply was sent,
+# and nothing held the order. Moving the hook left every test in the crate
+# green -- the two tests that exercised the hook said how many times it fired
+# and not when.
+#
+# The break swaps the two. The test that holds the order must notice.
+swap crates/control/src/server.rs \
+    '        if matches!(method, Method::Execute | Method::Ui)
+            && let Some(handler) = after
+        {
+            handler();
+        }
+
+        if send(&mut writer, &response).is_err() {
+            break;
+        }' \
+    '        if send(&mut writer, &response).is_err() {
+            break;
+        }
+
+        if matches!(method, Method::Execute | Method::Ui)
+            && let Some(handler) = after
+        {
+            handler();
+        }'
+expect_catch 'the change hook fires after the reply is sent' \
+    "cargo test -p craftkit-control --profile ci the_change_hook_fires_before_the_reply_is_sent"
+
 restore
 finish

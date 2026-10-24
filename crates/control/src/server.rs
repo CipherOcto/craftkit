@@ -133,9 +133,12 @@ impl ServerOptions {
 
     /// Be told when a request may have changed the document.
     ///
-    /// Called outside the session lock, after the reply is sent, and only for
-    /// `engine.execute` and `ui.*` — the methods that can move the document.
-    /// A host that draws the session uses this to ask for a repaint.
+    /// Called outside the session lock and **before** the reply is sent, and
+    /// only for `engine.execute` and `ui.*` — the methods that can move the
+    /// document. A host that draws the session uses this to ask for a
+    /// repaint, and the repaint has to be asked for first: a client that
+    /// read the reply before the window had redrawn would be looking at the
+    /// frame from before the command. §194.
     pub fn with_after(mut self, handler: impl Fn() + Send + Sync + 'static) -> Self {
         self.after = Some(Arc::new(handler));
         self
@@ -680,6 +683,73 @@ mod tests {
         assert!(replies[3].contains("\"ok\":true"), "{}", replies[3]);
         // Two of the four changed the document; neither of the questions did.
         assert_eq!(seen.load(Ordering::SeqCst), 2, "the hook fired {replies:?}");
+        drop(server);
+    }
+
+    /// The hook fires **before** the reply is sent, and that order is the
+    /// whole point of it: a host that draws the session asks for a repaint,
+    /// and a client that read the reply before the window had redrawn would
+    /// be looking at the frame from before the command.
+    ///
+    /// The hook blocks until the test releases it, so the test can look at
+    /// the socket while the server is inside the hook and cannot have sent
+    /// the reply yet. §194.
+    #[test]
+    fn the_change_hook_fires_before_the_reply_is_sent() {
+        use std::io::BufRead as _;
+        use std::sync::mpsc;
+        use std::sync::{Condvar, Mutex};
+        use std::time::Duration;
+
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let hook_gate = Arc::clone(&gate);
+        let (port, server) = serve(
+            session,
+            options(0).with_after(move || {
+                let _ = entered_tx.send(());
+                let (lock, condvar) = &*hook_gate;
+                let mut released = lock.lock().expect("the gate");
+                while !*released {
+                    released = condvar.wait(released).expect("the gate");
+                }
+            }),
+        )
+        .expect("bind");
+
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+        let mut request = r#"{"id":1,"token":"0123456789abcdef0123","method":"engine.execute","params":{"command":"node.add","params":{"name":"Ordered","kind":"filter"}}}"#.to_string();
+        request.push('\n');
+        stream.write_all(request.as_bytes()).expect("write");
+        let _ = stream.flush();
+
+        // The server is inside the hook now, so it has not sent the reply.
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("the hook fired");
+
+        stream.set_read_timeout(Some(Duration::from_millis(200))).expect("a read timeout");
+        let mut early = String::new();
+        let arrived = reader.read_line(&mut early).is_ok() && !early.is_empty();
+
+        // Let the server finish either way, so a failure below does not leave
+        // a thread blocked in the hook.
+        {
+            let (lock, condvar) = &*gate;
+            *lock.lock().expect("the gate") = true;
+            condvar.notify_all();
+        }
+
+        assert!(
+            !arrived,
+            "the reply was sent before the hook fired, so a client could read a frame from before \
+             the command"
+        );
+
+        stream.set_read_timeout(Some(Duration::from_secs(5))).expect("a read timeout");
+        let mut reply = String::new();
+        reader.read_line(&mut reply).expect("the reply arrives");
+        assert!(reply.contains("\"ok\":true"), "{reply}");
         drop(server);
     }
 
