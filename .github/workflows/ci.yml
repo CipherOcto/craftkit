@@ -114,11 +114,20 @@ jobs:
       # the full run below can be believed.
       - name: The mutation script fails when a gate stops catching
         run: |
-          if scripts/mutation-test-gates.sh --self-test; then
+          code=0
+          scripts/mutation-test-gates.sh --self-test || code=$?
+          if [[ $code -eq 0 ]]; then
             echo "::error::scripts/mutation-test-gates.sh exited 0 on a missed mutation"
             exit 1
           fi
-          echo "ok: a missed mutation makes the script exit non-zero"
+          # Two non-zero codes, and they mean different things: 1 is the
+          # self-test's own synthetic cases failing as intended, and 2 is the
+          # self-test finding something wrong with itself. §203.
+          if [[ $code -ne 1 ]]; then
+            echo "::error::the self-test is broken: it exited $code, not 1"
+            exit 1
+          fi
+          echo "ok: a missed mutation makes the script exit non-zero, and the self-test itself is sound"
 
       # Every mutation, one at a time, with the tree restored between them.
       # The script restores the tree itself and compares checksums at the end;

@@ -23889,6 +23889,109 @@ it is a *file*, and the alternative is an instruction that ran with
 parameters nobody wrote. Same value, two meanings, and the door is where the
 meaning is decided.
 
+## 203. The mutation suite said "Tree unchanged" about a tree it had not looked at
+
+### The finding
+
+The mutation suite ends with a claim:
+
+```text
+Tree unchanged.
+```
+
+It is the last line of a run that took twenty-five minutes and broke four
+hundred and seventy-one rules one at a time, and it is the line a reviewer
+reads to decide whether the run can be trusted. §190's rule: *a gate that
+reports a number cannot tell you that its own report is wrong* — so the
+report about the report has to be held too.
+
+**Measured**, by running the script's **own** fingerprint function (extracted
+from the script, not retyped) and asking it a question:
+
+| | |
+|---|---|
+| the files the claim walks | **86** — the list of files a mutation may *write to* |
+| the tree's tracked files | **135** |
+| a file the run created, and the claim | **unchanged** |
+
+So the claim was blind to every file a gate *creates*. The script's own
+comment above the function said so, in a different vocabulary:
+
+> A checksum of the **mutable surface**, so the script can prove it changed
+> nothing.
+
+The **function** was honest and the **claim** was not: the function computed
+the mutable surface, and the line said "Tree unchanged". §163 had already
+fixed the same class of hole for the files a **build** writes — Cargo rewrites
+`Cargo.lock`, and a file the snapshot does not hold is a file the restore
+cannot put back *and the fingerprint never looks at* — and the fix was to put
+the build's own file in the snapshot. The hole that was left is the mirror
+image: a file a gate *creates* is in neither the snapshot nor the claim.
+
+**And the claim was load-bearing for the cleanup.** The script removes the
+four probes its gates leave behind from an array inside itself
+(`EPHEMERAL`), and those four are the only files a run creates. So the
+cleanup was a *list* where the claim was a *computation*, and the list was
+the thing that made the claim true — by removing everything the claim could
+have caught.
+
+### The port
+
+**The claim now covers the tree.** The fingerprint walks
+`git ls-files -co --exclude-standard` — the tracked files and the untracked
+ones, without the ones the build owns (`target/` and the rest of
+`.gitignore`, which the build writes on every gate). The **same** line,
+"Tree unchanged.", is now true of the tree.
+
+**And the self-test holds it.** A fifth case: create a file, compute the
+claim, remove the file, and check that the claim *changed* — because a claim
+that cannot see a file the run created is a claim about nothing.
+
+**And the CI can tell the two failures apart.** The self-test had **one**
+non-zero exit code, and it meant two things: *the synthetic cases failed as
+intended* (1) and *the self-test found something wrong with itself* (2). The
+CI checked only "not zero", so the second was indistinguishable from the
+first — and a self-test broken by a change to the script would have passed.
+The CI now requires exit **1** exactly.
+
+### The gate's own teeth
+
+Proved by hand, by putting the old fingerprint back:
+
+```text
+$ ./scripts/mutation-test-gates.sh --self-test
+-- self-test: the claim must see a file the run created
+self-test FAILED: a file the run created is invisible to the claim
+(exit 2)
+```
+
+and with the new one, the same command exits **1** — the synthetic cases
+failing as intended — and the CI's new check is satisfied.
+
+### The lesson
+
+**A claim is wider than the thing it computes, and the gap is where the
+trust goes.** The suite's last line is what a reviewer reads, and it was
+asserting something about the whole tree while computing something about
+eighty-six files. A number that is right about part of a thing reads like a
+number that is right about all of it.
+
+**And the honest comment and the dishonest line can live in the same
+function.** The fingerprint's own comment said "the mutable surface" — the
+author knew exactly what was being computed — and the line above the
+fingerprint's *result* said "Tree unchanged". Nothing in between connected
+them, and nothing checked that they agreed.
+
+**And a list is not a computation.** The cleanup was a list of four probes,
+and it was the list that made the claim true. A computation that covers
+everything does not need the list to be kept up to date — and the list is
+exactly the thing that drifts.
+
+**And two exit codes that mean different things need two checks.** The
+self-test's "1" and "2" were both "non-zero", and the CI only knew one
+word for both. A check that cannot tell a *failure it wanted* from a
+*failure it did not* is a check that passes on the wrong thing.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24405,6 +24508,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The fuzzer's targets are the table the document lists, in order** | `cargo xtask lists` | 2 mutations — §201 |
 | **A door that reads instructions refuses a broken parameter object** | the script's reader, the report's reader, the channel, the MCP | 4 mutations — §202 |
 | **The two doors that already refused have a test for it** | `crates/control/src/server.rs`, `crates/mcp/src/server.rs` | the same — §202 |
+| **The mutation suite's claim covers the tree, not only the files a mutation writes to** | the script's own fingerprint, and the self-test's fifth case | the self-test — §203 |
+| **The self-test's two failures are two exit codes** | `.github/workflows/ci.yml` | the same — §203 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25469,11 +25574,11 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     proved load-bearing by removing the rule and watching the case go from
     caught to missed.
 
-50. **Decide whether the claim that the tree is unchanged covers the files a
-    run creates.** §187 moved the list of files a mutation may *write to* out
-    of the script, so the script and the gate read one list. The other list —
-    the files a mutation may *create*, the four probes the gates leave behind
-    — is still an array inside the script, and no gate holds a rule about it.
+50. ~~**Decide whether the claim that the tree is unchanged covers the files a
+    run creates.**~~ **Done in §203**, and the answer was the stronger of the
+    two: the claim now covers the whole tree, and the self-test holds it. The
+    text of the item is kept below, because it is the measurement the port
+    was made from.
 
     The blind spot is in the code: the closing claim ("Tree unchanged") is a
     checksum over the list of files that were **edited**. A probe the script

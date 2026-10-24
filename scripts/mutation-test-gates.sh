@@ -55,7 +55,7 @@
 #
 #   scripts/mutation-test-gates.sh
 #   scripts/mutation-test-gates.sh --check       # is the file list usable?
-#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero
+#   scripts/mutation-test-gates.sh --self-test   # exits 1; exits 2 if the self-test is broken
 
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -160,9 +160,20 @@ restore() {
     done
 }
 
-# A checksum of the mutable surface, so the script can prove it changed nothing.
+# A checksum of the **tree**, so the script can prove it changed nothing.
+#
+# **The whole tree**, not only the files a mutation writes to. §203: the old
+# fingerprint walked the FILES list, so a file a gate *created* was invisible
+# to it -- the script could leave something behind and still say the tree was
+# unchanged. The claim was wider than the thing it computed.
+#
+# `git ls-files -co --exclude-standard` is the tree the script is talking
+# about: the tracked files and the untracked ones, without the ones the
+# build owns (target/ and the rest of .gitignore). The build writes into
+# those on every gate, and a checksum that included them would differ every
+# run for a reason that is not the script's.
 fingerprint() {
-    for f in "${FILES[@]}"; do
+    git ls-files -co --exclude-standard | sort | while read -r f; do
         printf '%s ' "$f"
         cksum < "$f" 2>/dev/null || printf 'missing'
     done
@@ -478,6 +489,21 @@ if [[ "${1:-}" == "--self-test" ]]; then
             exit 2
         fi
     done
+    # The fifth half: the claim has to see a file the run **created**. §203:
+    # the fingerprint used to walk the list of files a mutation writes to, so
+    # a file a gate created was invisible to it -- the script could leave
+    # something behind and say the tree was unchanged. The claim was wider
+    # than the thing it computed.
+    echo
+    echo "-- self-test: the claim must see a file the run created"
+    probe="docs/fingerprint-probe.txt"
+    printf 'left behind\n' > "$probe"
+    with_probe="$(fingerprint)"
+    rm -f "$probe"
+    if [[ "$with_probe" == "$(fingerprint)" ]]; then
+        printf '%sself-test FAILED: a file the run created is invisible to the claim%s\n' "$RED" "$RESET"
+        exit 2
+    fi
     finish
 fi
 
@@ -5798,9 +5824,9 @@ expect_catch 'the reader stops saying that the shell would rewrite a label' \
 # changed while it runs.
 broken_copy "$SNAPSHOT/no-check.sh" \
     '#   scripts/mutation-test-gates.sh --check       # is the file list usable?
-#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero' \
+#   scripts/mutation-test-gates.sh --self-test   # exits 1; exits 2 if the self-test is broken' \
     '# The file list is checked with --check.
-#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero'
+#   scripts/mutation-test-gates.sh --self-test   # exits 1; exits 2 if the self-test is broken'
 expect_catch 'the gate ignores a header that misses a way to run the script' \
     "cargo xtask anchors --script $SNAPSHOT/no-check.sh"
 
