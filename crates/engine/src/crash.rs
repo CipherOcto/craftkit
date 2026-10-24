@@ -552,6 +552,18 @@ pub fn read_report(path: &Path) -> Result<CrashReport, String> {
         .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
     report.design = checked_document(report.design, "the report's design")?;
     report.base = checked_document(report.base, "the report's base design")?;
+
+    // A step whose parameters are not an object is a broken instruction, and
+    // a report is **input**: it arrives from another machine. §202.
+    for (index, step) in report.replay.iter().enumerate() {
+        if !step.params.is_object() {
+            return Err(format!(
+                "{} is not a readable report: step {} has a `params` that is not an object",
+                path.display(),
+                index + 1
+            ));
+        }
+    }
     Ok(report)
 }
 
@@ -997,6 +1009,26 @@ mod tests {
         let opened = Session::sample();
         assert!(opened.trace().is_empty(), "the sample session opens with nothing recorded");
         assert_eq!(opened.document().nodes.len(), 3, "the opened sample has three nodes");
+    }
+
+    /// A report whose step has parameters that are not an object is refused.
+    ///
+    /// §202: the report is **input** — it arrives from another machine — and
+    /// its steps are instructions. The engine's parameter reader treats a
+    /// non-object as an empty view, so the step ran with parameters nobody had
+    /// written.
+    #[test]
+    fn a_report_whose_step_has_broken_parameters_is_refused() {
+        let dir = temp_dir("bad-params");
+        let session = Session::sample_recorded();
+        let mut report = build(&session, "node.add", "written on request");
+        report.replay[0].params = json!([1, 2, 3]);
+        let path = dir.join("report.json");
+        write_report_to(&path, &report).expect("the report is written");
+
+        let err = read_report(&path).expect_err("a report with broken parameters is refused");
+        assert!(err.contains("`params` that is not an object"), "{err}");
+        assert!(err.contains("step 1"), "{err}");
     }
 
     /// A report whose **design** the model refuses is refused, by name.
@@ -1717,17 +1749,35 @@ mod tests {
     }
 
     /// A hand-edited replay must not panic the reproduction.
+    ///
+    /// Two kinds of hand-editing, two answers, and neither panics.
+    ///
+    /// A step whose **parameters** are broken is refused by the reader — §202
+    /// — so the report is not reproduced at all. A step whose parameters are
+    /// fine but whose **command** the tree does not have is reproduced, and
+    /// the replay says the step failed. Before §202 the first case was read
+    /// and reproduced, and the reader let a report through that the script
+    /// door would have refused.
     #[test]
     fn a_hand_edited_replay_does_not_panic_the_reproduction() {
-        let dir = temp_dir("hand-edited");
+        // The step with broken parameters: the reader refuses the report.
+        let broken = temp_dir("hand-edited-broken");
         let mut s = Session::new("edited");
         s.execute("node.add", &json!({ "name": "A", "kind": "cue" })).expect("ok");
         let mut report = build(&s, "node.add", "boom");
-        report.replay.push(ReplayStep { command: "node.add".into(), params: json!({ "oops": true }) });
         report.replay.push(ReplayStep { command: "not.a.command".into(), params: json!(null) });
-        write_to(&dir, &report).expect("written");
+        write_to(&broken, &report).expect("written");
+        let err = reproduce_in(&broken, &report.id).expect_err("refused");
+        assert!(err.contains("`params` that is not an object"), "{err}");
 
-        let outcome = reproduce_in(&dir, &report.id).expect("no panic");
+        // And the steps the tree can refuse on its own: the report is read,
+        // and the replay says which steps failed.
+        let unknown = temp_dir("hand-edited-unknown");
+        let mut report = build(&s, "node.add", "boom");
+        report.replay.push(ReplayStep { command: "not.a.command".into(), params: json!({}) });
+        report.replay.push(ReplayStep { command: "node.add".into(), params: json!({ "oops": true }) });
+        write_to(&unknown, &report).expect("written");
+        let outcome = reproduce_in(&unknown, &report.id).expect("no panic");
         assert_eq!(outcome.failures.len(), 2, "{:?}", outcome.failures);
     }
 

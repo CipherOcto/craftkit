@@ -251,6 +251,22 @@ fn load_script(path: &Path) -> Result<Script, String> {
             craftkit_engine::MAX_COMMAND_STEPS
         ));
     }
+
+    // A step whose parameters are not an object is a **broken instruction**,
+    // not an instruction with no parameters.
+    //
+    // §202: the engine's parameter reader treats a non-object as an empty
+    // view -- right for a call, wrong for a file. So a script could name a
+    // command and hand it a broken parameter object, and the command ran with
+    // parameters nobody had written: the script said it had added a node
+    // named `filter 1`, which the file never mentioned. The two doors that
+    // take instructions over JSON-RPC refuse it at their own boundary --
+    // "`params` must be an object" -- and this door does the same.
+    for (index, step) in script.commands.iter().enumerate() {
+        if !step.params.is_object() {
+            return Err(format!("the script's step {} has a `params` that is not an object", index + 1));
+        }
+    }
     Ok(script)
 }
 
@@ -801,6 +817,21 @@ mod tests {
         let path = write_script("noparams", r#"{"commands":[{"command":"plan.evaluate"}]}"#);
         let script = load_script(&path).expect("loads");
         assert_eq!(script.commands[0].params, Json::Object(Default::default()));
+    }
+
+    /// A step whose parameters are not an object is refused.
+    ///
+    /// §202: the engine's parameter reader treats a non-object as an empty
+    /// view, so the command ran with parameters nobody had written — and the
+    /// script said it had added a node the file never mentioned. A script is
+    /// an **instruction**, and an instruction with broken parameters is a
+    /// broken instruction.
+    #[test]
+    fn a_step_whose_parameters_are_not_an_object_is_refused() {
+        let path = write_script("badparams", r#"{"commands":[{"command":"node.add","params":[1,2,3]}]}"#);
+        let err = load_script(&path).expect_err("refused");
+        assert!(err.contains("`params` that is not an object"), "{err}");
+        assert!(err.contains("step 1"), "{err}");
     }
 
     #[test]

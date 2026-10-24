@@ -897,6 +897,29 @@ mod tests {
         drop(server);
     }
 
+    /// A `params` that is not an object is refused.
+    ///
+    /// §202: this door has always refused one — "`params` must be an
+    /// object" — and **nothing tested it**. The rule is the tree's: a door
+    /// that takes instructions refuses an instruction whose parameters are
+    /// not an object, and this door is one of the four that run commands.
+    #[test]
+    fn an_execute_with_params_that_are_not_an_object_is_refused() {
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let opts = ServerOptions::new(0, Token::from_text("0123456789abcdef0123").expect("valid"));
+        let (port, server) = serve(session, opts).expect("bind");
+        let replies = round_trip(
+            port,
+            &[
+                r#"{"id":1,"token":"0123456789abcdef0123","method":"engine.execute","params":{"command":"node.add","params":[1,2,3]}}"#,
+            ],
+        );
+        assert_eq!(replies.len(), 1, "{replies:?}");
+        assert!(replies[0].contains("bad-parameter"), "{}", replies[0]);
+        assert!(replies[0].contains("must be an object"), "{}", replies[0]);
+        drop(server);
+    }
+
     #[test]
     fn the_catalogue_can_be_fetched_over_the_wire() {
         let session = Arc::new(Mutex::new(Session::sample()));

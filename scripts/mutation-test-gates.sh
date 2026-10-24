@@ -6061,5 +6061,39 @@ swap xtask/src/fuzz.rs \
 expect_catch 'fuzz: the report target leaves the report alone instead of breaking it' \
     "cargo test -p xtask --profile ci the_report_s_shape_is_broken_with_the_file_still_valid_json"
 
+# ------------------------------------------------- a command's parameters ----
+# Section 202. Four doors run a command. Two of them -- the control channel
+# and the MCP server -- refused a `params` that is not an object, and the
+# other two -- the script door and the report door -- read it, and the
+# command ran with no parameters at all. The engine's reader treats a
+# non-object as an empty view, which is right for a call and wrong for a
+# file.
+#
+# The break takes each door's check away, one at a time. The test that holds
+# that door must notice.
+swap apps/craftkit-cli/src/cli.rs \
+    '        if !step.params.is_object() {' \
+    '        if false {'
+expect_catch 'cli: the script door runs a step whose parameters are not an object' \
+    "cargo test -p craftkit-cli --profile ci a_step_whose_parameters_are_not_an_object_is_refused"
+
+swap crates/engine/src/crash.rs \
+    '        if !step.params.is_object() {' \
+    '        if false {'
+expect_catch 'crash: the report door runs a step whose parameters are not an object' \
+    "cargo test -p craftkit-engine --profile ci --lib a_report_whose_step_has_broken_parameters_is_refused"
+
+swap crates/control/src/server.rs \
+    '    if !params.is_object() {' \
+    '    if false {'
+expect_catch 'control: the channel runs a command whose parameters are not an object' \
+    "cargo test -p craftkit-control --profile ci an_execute_with_params_that_are_not_an_object_is_refused"
+
+swap crates/mcp/src/server.rs \
+    '    if !arguments.is_object() {' \
+    '    if false {'
+expect_catch 'mcp: the server runs a command whose arguments are not an object' \
+    "cargo test -p craftkit-mcp --profile ci a_tool_call_with_arguments_that_are_not_an_object_is_refused"
+
 restore
 finish

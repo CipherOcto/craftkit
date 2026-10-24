@@ -727,6 +727,23 @@ mod tests {
         assert!(text.contains("From MCP"), "{text}");
     }
 
+    /// A call whose arguments are not an object is refused.
+    ///
+    /// §202: this door has always refused one — "`arguments` must be an
+    /// object" — and **nothing tested it**. The rule is the tree's: a door
+    /// that takes instructions refuses an instruction whose parameters are
+    /// not an object, and this door is one of the four that run commands.
+    #[test]
+    fn a_tool_call_with_arguments_that_are_not_an_object_is_refused() {
+        let r = ask(
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"craftkit_node_add","arguments":[1,2,3]}}"#,
+        );
+        assert!(r.get("error").is_some(), "{r}");
+        assert_eq!(r["error"]["code"], json!(code::INVALID_PARAMS), "{r}");
+        let message = r["error"]["message"].as_str().unwrap_or_default();
+        assert!(message.contains("must be an object"), "{message}");
+    }
+
     #[test]
     fn a_refused_command_is_a_tool_error_not_a_protocol_error() {
         let r = ask(

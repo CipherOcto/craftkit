@@ -73,6 +73,15 @@ Three fields do the load-bearing work:
   it as *"safe to use as a probe"* has to be right: the change would not be
   validated, would not be undoable, and would not mark the project dirty, so
   the design would change and the app would not know that it had. §96.
+- **And a command's parameters are an object.** The registry's reader treats a
+  non-object as an empty view — right for a *call*, where the alternative is a
+  panic, and wrong for a *file*, where the alternative is an instruction that
+  ran with parameters nobody wrote. So **every door that takes instructions
+  refuses one whose `params` is not an object**: the control channel and the
+  MCP server at their JSON-RPC boundary, and the script door and the report
+  door at their readers. A script's step whose `params` is `[1, 2, 3]` used to
+  run `node.add` with no parameters at all, and the script reported a node
+  named `filter 1` that the file never mentioned. §202.
 - **`undoable`** is separate from `mutates` because `history.undo` and
   `history.redo` change the document *by* restoring a snapshot. Pushing that as
   a new step would push an entry pointing at the state just left behind, so a
