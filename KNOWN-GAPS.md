@@ -22526,6 +22526,130 @@ into it. The line was right afterwards and unchecked before and after, and
 the three copies nobody read stayed wrong. A hand repair buys one run; a
 gate buys every run after it.
 
+## 190. The suite reported a case it could not name, and nothing could tell
+
+### The finding
+
+The mutation script prints a **label** for every case it runs: the sentence
+that says what the case is. It is the only place the log says what was
+tested — the rest of the log is a number.
+
+The label is written by the author and read by whoever reads the log, and
+between them sits the shell. A backtick inside a **double-quoted** string
+is a command substitution, and a dollar is a variable.
+
+The tree's own case, written in §173, had a backtick in it:
+
+```bash
+expect_catch "gates: a command that `ci` does not run is treated as one it does" \
+    "cargo xtask lists"
+```
+
+Bash ran `ci`, found no such command, and printed the label as:
+
+```
+caught  gates: a command that  does not run is treated as one it does
+```
+
+The `ci` is **gone**. The log says the case was something else, and it said
+so in every run.
+
+### And it had been in the log of every run since
+
+Measured over the twenty-four mutation logs the tree had kept: **thirteen**
+carry a "command not found" — one from §161, whose label held a `mod` — and
+one from **every** log from §173 onwards. The label was wrong in every run
+for seventeen sections, and every one of those runs said nothing.
+
+The run that landed this section is the **first with none**: twenty-five
+logs, and the newest carries no mangled label at all.
+
+### Why nothing noticed, and why nothing could
+
+The suite's verdict is a number: "N of M caught". A label is not part of
+the verdict, and a mangled label still catches — the case did exactly what
+it was supposed to do. So the suite reported success while its own report
+was wrong in the one place a reader looks to learn what was tested.
+
+This is §189's finding one level down, and the same shape: **a copy nobody
+reads**. The label is a copy of what the case is, and nobody read it — not
+a gate, and not the person running the suite, who was reading the *number*.
+
+### The port
+
+**A label is text, and the shell must not be able to change it.**
+
+The `anchors` gate already owns the script's own rules (§184, §187), and it
+already has a reader that understands the shell's three quoting styles. So
+the gate now reads the script's **labels** and checks them:
+
+- a label in **single quotes** is literal: nothing the shell does changes it;
+- a label in **double quotes** is expanded, so it must hold **no `$` and no
+  backtick**;
+- a label that is **not a quoted string at all** — a bare word — is expanded
+  too, and is refused.
+
+The reader has to see the **body** of the word, not only what the shell
+would produce: `"a \$ b"` is literal and `"a $b"` is not, and a reader with
+only the value could not tell them apart.
+
+**And the tree has no pass-through.** The script had a helper that took a
+label and handed it on — `expect_catch_needs` handed `$label` to
+`expect_catch` — and a label that is only a variable is a label the shell
+would change. So the helper is gone: `expect_catch` takes the tool the case
+needs as an optional fourth argument, and **every label in the tree is now
+written where the case is**.
+
+**And the list of label-taking functions is derived, not written down.** A
+function that takes a label declares one (`local label="$1"`), and the gate
+finds those functions in the script itself. There is no list to forget to
+update: a helper that takes a label cannot be added without the gate
+noticing.
+
+Measured after the port: the script carries **452 labels** — 448 in double
+quotes and 4 in single quotes — and the gate reports **none** of them.
+
+### The reader had to learn to tell code from text
+
+The first version of the function reader found **thirty-seven** functions in
+a script that has **thirteen**. The tree's own anchors hold Rust snippets,
+and a line inside a quoted string that ends in `() {` is not a function
+definition. The reader now blanks the comments and the quoted strings and
+reads what is left — the way the shell reads the script.
+
+A reader that finds thirty-seven functions in a script of thirteen is a
+reader that lies, and a reader that lies is one the tree cannot use.
+
+### The gate's own teeth
+
+Two new mutations, and the two **kinds** of proof again: the data, and the
+rule.
+
+| The proof | What it breaks | What must happen |
+|---|---|---|
+| the data | a copy of the script with a label the shell would rewrite | `cargo xtask anchors --script <copy>` must **reject** it |
+| the rule | the reader, in `xtask/src/anchors.rs` | the test that covers it must **fail** |
+
+The first break is a **copy** of the script, because the script cannot be
+changed while it runs — bash reads a script as it goes. That is §187's
+door, and this arc is the second rule it was built for.
+
+The full mutation suite is **449 of 450** caught, the one `known` case being
+the pre-existing wasm32 limit, and the tree came back unchanged.
+
+### The lesson
+
+**A gate that reports a number cannot tell you that its own report is
+wrong.** The suite's verdict was right — 447 of 448 caught, every case
+caught by the right door — and the log was wrong anyway, in the one place
+that says what the cases were. A number is checked by counting; a sentence
+has to be read, and nothing read it.
+
+**And the shell is a programming language.** Every piece of text the script
+prints passes through it, and the script is the tree's own program. §188's
+rule was that a value has one spelling; this one is that a piece of text
+has one spelling too, and the shell gets to choose the other ones.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23009,6 +23133,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The reader is asked about the parameter under test** | `arguments_with` | 1 mutation — §188 |
 | **Every list of the gates in the prose is the whole list, in the order `ci` runs them** | `cargo xtask lists` | 1 mutation — §189 |
 | **A document's table of gates lists the phases in the order `ci` runs them** | the same | 1 mutation — §189 |
+| **Every label in the mutation script is a literal the shell cannot change** | `cargo xtask anchors` | 1 mutation — §190 |
+| **The functions that take a label are found in the script, not in a list** | the same | the gate's own test — §190 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24092,3 +24218,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     skill got; the other four are checked instead of deleted, because the
     reader of each place wants the list there and a gate that holds it is
     better than a sentence that points elsewhere.
+
+52. ~~**The mutation script's labels can be rewritten by the shell, and the
+    log does not say so.**~~ **Done.** §190 found the case label written in
+    §173 carrying a backtick — which is a command substitution — so bash ran
+    `ci`, found no such command, and printed the label with the `ci` gone.
+    Measured over the tree's twenty-four saved mutation logs: **thirteen**
+    carry a "command not found", one from §161 and one from **every** log
+    from §173 onwards. The label was wrong in every run for seventeen
+    sections.
+
+    Nothing noticed, and nothing could: the suite's verdict is a number, and
+    a label is not part of the verdict. A mangled label still catches.
+
+    The `anchors` gate now reads the script's labels and refuses any the
+    shell would change — a double-quoted label with a `$` or a backtick, or
+    a label that is not a quoted string at all. The pass-through is gone, so
+    every label in the tree is written where the case is, and the list of
+    label-taking functions is derived from the script rather than written
+    down, so a helper that takes a label cannot be added without the gate
+    noticing.

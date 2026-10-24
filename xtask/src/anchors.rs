@@ -18,6 +18,9 @@
 //!   is on it twice, and it is not empty. §187.
 //! - **The script calls its check before its first swap**, and that check runs
 //!   this gate. §187.
+//! - **Every label is a literal the shell cannot change.** A label is the
+//!   sentence that says what a case is, and it is the only place the log says
+//!   what was tested; the shell sits between the author and the reader. §190.
 //!
 //! # Why it is a command of its own
 //!
@@ -170,6 +173,35 @@ fn read_swap(script: &str, at: usize) -> Result<(Swap, usize), String> {
     Ok((swap, pos))
 }
 
+/// How a piece of a word was quoted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Quoting {
+    /// `'text'` — the shell changes nothing inside it.
+    Single,
+    /// `"text"` — the shell expands the variables and the backticks in it.
+    Double,
+    /// `$'text'` — the shell changes the escapes and nothing else.
+    Ansi,
+    /// A bare word: the shell expands the variables in it.
+    Bare,
+}
+
+/// One quoted piece of a word.
+///
+/// The **value** is what the shell produces; the **body** is what was
+/// written between the quotes. A reader that had only the value could not
+/// tell an escaped `\$` — a literal dollar — from an unescaped one, and
+/// the difference is exactly whether the shell expands it. §190.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Piece {
+    /// How the piece was quoted.
+    pub quoting: Quoting,
+    /// The text the shell produces, with the escapes resolved.
+    pub value: String,
+    /// The text between the quotes, exactly as it was written.
+    pub body: String,
+}
+
 /// Read one word: a run of quoted pieces with nothing between them.
 ///
 /// `'it'"'"'s'` is one word, and it is `it's`. The shell closes the first
@@ -177,25 +209,31 @@ fn read_swap(script: &str, at: usize) -> Result<(Swap, usize), String> {
 /// quote again; a reader that only knew about single quotes would see three
 /// words and a string that ends in the wrong place.
 fn read_word(script: &str, at: usize) -> Result<Option<(String, usize)>, String> {
-    let mut value = String::new();
+    let Some((pieces, next)) = read_pieces(script, at)? else { return Ok(None) };
+    let value = pieces.iter().map(|piece| piece.value.as_str()).collect();
+    Ok(Some((value, next)))
+}
+
+/// Read one word as the pieces it is made of.
+fn read_pieces(script: &str, at: usize) -> Result<Option<(Vec<Piece>, usize)>, String> {
+    let mut pieces = Vec::new();
     let mut pos = at;
-    let mut any = false;
     while let Some((piece, next)) = read_piece(script, pos)? {
-        value.push_str(&piece);
+        pieces.push(piece);
         pos = next;
-        any = true;
     }
-    if any { Ok(Some((value, pos))) } else { Ok(None) }
+    if pieces.is_empty() { Ok(None) } else { Ok(Some((pieces, pos))) }
 }
 
 /// Read one quoted piece.
-fn read_piece(script: &str, at: usize) -> Result<Option<(String, usize)>, String> {
+fn read_piece(script: &str, at: usize) -> Result<Option<(Piece, usize)>, String> {
     let bytes = script.as_bytes();
     if at >= bytes.len() {
         return Ok(None);
     }
     if script[at..].starts_with("$'") {
         let mut value = String::new();
+        let mut body = String::new();
         let mut pos = at + 2;
         loop {
             if pos >= bytes.len() {
@@ -204,12 +242,16 @@ fn read_piece(script: &str, at: usize) -> Result<Option<(String, usize)>, String
             match bytes[pos] {
                 b'\\' => {
                     let (ch, next) = ansi_escape(script, pos)?;
+                    body.push_str(&script[pos..next]);
                     value.push(ch);
                     pos = next;
                 }
-                b'\'' => return Ok(Some((value, pos + 1))),
+                b'\'' => {
+                    return Ok(Some((Piece { quoting: Quoting::Ansi, value, body }, pos + 1)));
+                }
                 _ => {
                     let ch = script[pos..].chars().next().unwrap_or('\u{fffd}');
+                    body.push(ch);
                     value.push(ch);
                     pos += ch.len_utf8();
                 }
@@ -223,10 +265,12 @@ fn read_piece(script: &str, at: usize) -> Result<Option<(String, usize)>, String
             Some(n) => at + 1 + n,
             None => return Err(format!("{}: a single quote that is never closed", SCRIPT)),
         };
-        return Ok(Some((script[at + 1..end].to_string(), end + 1)));
+        let body = script[at + 1..end].to_string();
+        return Ok(Some((Piece { quoting: Quoting::Single, value: body.clone(), body }, end + 1)));
     }
     if bytes[at] == b'"' {
         let mut value = String::new();
+        let mut body = String::new();
         let mut pos = at + 1;
         loop {
             if pos >= bytes.len() {
@@ -238,19 +282,29 @@ fn read_piece(script: &str, at: usize) -> Result<Option<(String, usize)>, String
                         // These four are the escapes a double quote has. A
                         // backslash before anything else is a backslash.
                         b'$' | b'`' | b'"' | b'\\' => {
+                            body.push('\\');
+                            body.push(bytes[pos + 1] as char);
                             value.push(bytes[pos + 1] as char);
                             pos += 2;
                         }
-                        b'\n' => pos += 2,
+                        b'\n' => {
+                            body.push('\\');
+                            body.push('\n');
+                            pos += 2;
+                        }
                         _ => {
+                            body.push('\\');
                             value.push('\\');
                             pos += 1;
                         }
                     }
                 }
-                b'"' => return Ok(Some((value, pos + 1))),
+                b'"' => {
+                    return Ok(Some((Piece { quoting: Quoting::Double, value, body }, pos + 1)));
+                }
                 _ => {
                     let ch = script[pos..].chars().next().unwrap_or('\u{fffd}');
+                    body.push(ch);
                     value.push(ch);
                     pos += ch.len_utf8();
                 }
@@ -302,6 +356,277 @@ fn ansi_escape(script: &str, at: usize) -> Result<(char, usize), String> {
         SCRIPT, next as char
     ))
 }
+
+/// One function in the script.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Function {
+    /// The name it is called by.
+    pub name: String,
+    /// The line it is written on.
+    pub line: usize,
+    /// Its body, as it was written.
+    pub body: String,
+}
+
+/// Every function the script defines.
+///
+/// A function is written the way the script writes its functions: a line
+/// that opens it, the lines of its body, and a line that is `}` and nothing
+/// else. The shape is the one `the_body_of_the_check` already reads, and it
+/// reads **all** of them: a rule about one function is a rule about the
+/// script, and the script has thirteen. §190.
+pub fn functions(script: &str) -> Result<Vec<Function>, String> {
+    let view = code_view(script)?;
+    let original: Vec<&str> = script.lines().collect();
+    let mut out = Vec::new();
+    let mut open: Option<(String, usize)> = None;
+    for (index, line) in view.lines().enumerate() {
+        let trimmed = line.trim();
+        if let Some(name) = trimmed.strip_suffix("() {") {
+            if let Some((name, line)) = open.take() {
+                out.push(a_function(&original, name, line, index));
+            }
+            open = Some((name.to_string(), index + 1));
+            continue;
+        }
+        if trimmed == "}" {
+            if let Some((name, line)) = open.take() {
+                out.push(a_function(&original, name, line, index));
+            }
+            continue;
+        }
+    }
+    if let Some((name, line)) = open {
+        out.push(a_function(&original, name, line, original.len()));
+    }
+    Ok(out)
+}
+
+/// One function, with its body as the script wrote it.
+fn a_function(original: &[&str], name: String, line: usize, end: usize) -> Function {
+    // `line` is the line the function is opened on, counting from one; the
+    // body is what follows it, up to the closing brace.
+    let start = line.min(original.len());
+    let stop = end.min(original.len());
+    let body = if start < stop { original[start..stop].join("\n") } else { String::new() };
+    Function { name, line, body }
+}
+
+/// The script with its comments and its quoted strings blanked out, the
+/// length unchanged.
+///
+/// A quoted string can hold a line that looks like a function definition —
+/// the tree's own anchors hold Rust snippets — and a reader that counted
+/// those would find thirty-seven functions in a script that has thirteen.
+/// §190.
+fn code_view(script: &str) -> Result<String, String> {
+    let bytes = script.as_bytes();
+    let mut out = String::with_capacity(script.len());
+    let mut at = 0usize;
+    while at < bytes.len() {
+        // A comment runs to the end of its line, and the quotes in it are
+        // not quotes: the script says "the plan's rate" in a comment, and
+        // an apostrophe there closes a string that was never opened.
+        if bytes[at] == b'#' && (at == 0 || bytes[at - 1].is_ascii_whitespace() || bytes[at - 1] == b'\'') {
+            while at < bytes.len() && bytes[at] != b'\n' {
+                out.push(' ');
+                at += 1;
+            }
+            continue;
+        }
+        // A quoted word is blanked out, so that nothing inside it is read
+        // as code.
+        if let Some((_, next)) = read_piece(script, at)? {
+            for byte in &bytes[at..next] {
+                out.push(if *byte == b'\n' { '\n' } else { ' ' });
+            }
+            at = next;
+            continue;
+        }
+        let ch = script[at..].chars().next().unwrap_or('\u{fffd}');
+        out.push(ch);
+        at += ch.len_utf8();
+    }
+    Ok(out)
+}
+
+/// The functions that take a label.
+///
+/// **Derived, not written down**: a function that takes a label declares one
+/// (`local label="$1"`) and uses it, and every call to it has a label the
+/// shell could rewrite. A helper that takes a label therefore cannot be
+/// added without the gate noticing — there is no list to forget to update.
+/// §190.
+fn label_commands(script: &str) -> Result<Vec<String>, String> {
+    Ok(functions(script)?
+        .into_iter()
+        .filter(|function| function.body.contains("label=") || function.body.contains("$label"))
+        .map(|function| function.name)
+        .collect())
+}
+
+/// One label: the sentence that says what a case is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Label {
+    /// The line the label is written on.
+    pub line: usize,
+    /// The pieces the label is made of.
+    pub pieces: Vec<Piece>,
+    /// The label as the author wrote it.
+    pub text: String,
+}
+
+/// Every label in the script, with the line it is written on.
+///
+/// A label is the first argument of a call to one of the script's
+/// label-taking functions. §190.
+pub fn labels(script: &str) -> Result<Vec<Label>, String> {
+    let commands = label_commands(script)?;
+    if commands.is_empty() {
+        return Err(format!("{SCRIPT}: no function takes a label; the reader is wrong, not the script"));
+    }
+    let mut out = Vec::new();
+    let bytes = script.as_bytes();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        // A comment runs to the end of its line, and the quotes in it are
+        // not quotes: the script says "the plan's rate" in a comment, and
+        // an apostrophe there closes a string that was never opened.
+        if bytes[at] == b'#' && (at == 0 || bytes[at - 1].is_ascii_whitespace() || bytes[at - 1] == b'\'') {
+            at = match script[at..].find('\n') {
+                Some(n) => at + n + 1,
+                None => bytes.len(),
+            };
+            continue;
+        }
+        // A command is at the start of a line.
+        if at == 0 || bytes[at - 1] == b'\n' {
+            let line = line_of(script, at);
+            let mut pos = at;
+            while pos < bytes.len() && (bytes[pos] == b' ' || bytes[pos] == b'\t') {
+                pos += 1;
+            }
+            let rest = &script[pos..];
+            let name_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            let name = &rest[..name_len];
+            if commands.iter().any(|command| command == name) {
+                let after = skip_space(script, pos + name_len);
+                if let Some((pieces, next)) = read_label_word(script, after)? {
+                    let text = pieces.iter().map(|piece| piece.value.as_str()).collect();
+                    out.push(Label { line, pieces, text });
+                    at = next;
+                    continue;
+                }
+            }
+        }
+        // A quoted word is skipped whole, so that nothing inside it is read
+        // as a command.
+        if let Some((_, next)) = read_word(script, at)? {
+            at = next;
+            continue;
+        }
+        at += 1;
+    }
+    Ok(out)
+}
+
+/// Read the word a label is: a run of quoted pieces and bare chunks.
+///
+/// A bare chunk is a piece of a word that is not quoted at all, and the
+/// shell expands the variables in it — so `$label` as a label is a label
+/// the shell would change. §190.
+fn read_label_word(script: &str, at: usize) -> Result<Option<(Vec<Piece>, usize)>, String> {
+    let bytes = script.as_bytes();
+    let mut pieces = Vec::new();
+    let mut pos = at;
+    loop {
+        match read_piece(script, pos)? {
+            Some((piece, next)) => {
+                pieces.push(piece);
+                pos = next;
+            }
+            None => {
+                if pos >= bytes.len() || bytes[pos].is_ascii_whitespace() {
+                    break;
+                }
+                let start = pos;
+                while pos < bytes.len()
+                    && !bytes[pos].is_ascii_whitespace()
+                    && bytes[pos] != b'\''
+                    && bytes[pos] != b'"'
+                {
+                    pos += 1;
+                }
+                let body = script[start..pos].to_string();
+                pieces.push(Piece { quoting: Quoting::Bare, value: body.clone(), body });
+            }
+        }
+    }
+    if pieces.is_empty() { Ok(None) } else { Ok(Some((pieces, pos))) }
+}
+
+/// The first place at or after `at` that is not whitespace.
+fn skip_space(script: &str, at: usize) -> usize {
+    let bytes = script.as_bytes();
+    let mut pos = at;
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    pos
+}
+
+/// Does the shell expand anything in this text?
+///
+/// A backslash before a character means the character is literal, and a
+/// backslash before a backslash is one backslash. §190.
+fn holds_an_expansion(body: &str) -> bool {
+    let mut chars = body.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' => {
+                chars.next();
+            }
+            '$' | '`' => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// What is wrong with the script's labels.
+///
+/// A label is the sentence that says what a case is, and it is the only
+/// place the log says what was tested. The shell sits between the author
+/// and the reader, and inside double quotes it expands a dollar and runs
+/// a backtick — so the label a reader sees is not always the label the
+/// author wrote. §190.
+pub fn label_problems(script_path: &Path, script: &str) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for label in labels(script)? {
+        for piece in &label.pieces {
+            let expands = match piece.quoting {
+                Quoting::Single | Quoting::Ansi => false,
+                Quoting::Double | Quoting::Bare => holds_an_expansion(&piece.body),
+            };
+            if expands {
+                let how = match piece.quoting {
+                    Quoting::Double => "double quotes",
+                    _ => "a bare word",
+                };
+                problems.push(format!(
+                    "{}:{}: the label is written in {how} and the shell would change it: a dollar \
+                     is a variable and a backtick is a command, so the label a reader sees is not \
+                     the label the author wrote.\n     the label: {}",
+                    script_path.display(),
+                    label.line,
+                    label.text
+                ));
+            }
+        }
+    }
+    Ok(problems)
+}
+
 /// The files a mutation may write to, and what is wrong with the list.
 ///
 /// §187. The list is a file, so it is read rather than parsed out of the
@@ -584,6 +909,11 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
         }
     }
 
+    // And the script's labels are the labels the author wrote. A label the
+    // shell would change is a label a reader cannot trust, and the label is
+    // the only place the log says what was tested. §190.
+    problems.extend(label_problems(script_path, &script)?);
+
     problems.sort();
     Ok(problems)
 }
@@ -600,7 +930,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
         }
         return Err(message);
     }
-    println!("   ok: every anchor in {} is in the tree, and each one names a single place", script.display());
+    println!(
+        "   ok: every anchor in {} is in the tree, each one names a single place, and every \
+         label is a literal the shell cannot change",
+        script.display()
+    );
     Ok(Outcome::Ran)
 }
 
@@ -739,13 +1073,35 @@ mod tests {
         dir
     }
 
-    /// The script's own anchor check: the function, and what it runs.
+    /// The lines the script's swap blocks are written on.
+    ///
+    /// Read from the script, never written down: the fabricated script
+    /// grows, and a line number in a test is a number that goes stale.
+    fn the_swap_lines(dir: &std::path::Path) -> Vec<usize> {
+        let script = std::fs::read_to_string(dir.join("scripts/mutation-test-gates.sh")).expect("the script");
+        swaps(&script).expect("the script reads").iter().map(|swap| swap.line).collect()
+    }
+
+    /// The line the script's first swap block is written on.
+    fn the_first_swap_line(dir: &std::path::Path) -> usize {
+        the_swap_lines(dir).first().copied().unwrap_or(0)
+    }
+
+    /// The script's own anchor check, and a function that takes a label.
     ///
     /// §187: the gate looks for the **call**, not for the command the
     /// function runs, so a fabricated script with only the function is a
     /// script that never checks its anchors.
+    ///
+    /// §190: the reader finds the functions that take a label by looking for
+    /// `$label`, and a script with none of them is a script it cannot read —
+    /// it says so rather than reporting nothing. So every fabricated script
+    /// carries one, as the real one does.
     fn a_check_that(body: &str) -> String {
-        format!("check_anchors() {{\n    {body}\n}}\n")
+        format!(
+            "expect_catch() {{\n    local label=\"$1\"\n    printf '  %s\\n' \"$label\"\n}}\n\
+             check_anchors() {{\n    {body}\n}}\n"
+        )
     }
 
     /// A script and a file that agree.
@@ -843,7 +1199,11 @@ mod tests {
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].contains("is not in the file any more"), "{}", problems[0]);
-        assert!(problems[0].contains("line 5"), "{}", problems[0]);
+        // The line the swap is on, read from the script rather than written
+        // down: the fabricated script grows, and a line number in the test
+        // is a number that goes stale.
+        let line = the_first_swap_line(&dir);
+        assert!(problems[0].contains(&format!("line {line}")), "{}", problems[0]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -993,7 +1353,8 @@ mod tests {
         std::fs::write(dir.join("crates/a.rs"), "the anchor\nthe anchor\n").expect("the file");
         let problems = the_anchors_are_in_the_tree(&dir).expect("the gate runs");
         assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(problems[0].contains("lines 5, 6"), "{}", problems[0]);
+        let lines: Vec<usize> = the_swap_lines(&dir);
+        assert!(problems[0].contains(&format!("lines {}, {}", lines[0], lines[1])), "{}", problems[0]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1007,5 +1368,117 @@ mod tests {
         let result = the_anchors_are_in_the_tree(&dir);
         assert!(result.is_err(), "a reader that found nothing must not report a pass");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // --------------------------------------------------------- the labels ----
+
+    /// A script with one case, and the label it carries.
+    fn a_script_with(label: &str) -> String {
+        let mut script = String::new();
+        script.push_str("expect_catch() {\n");
+        script.push_str("    local label=\"$1\"\n");
+        script.push_str("    printf '  %s\\n' \"$label\"\n");
+        script.push_str("}\n");
+        script.push_str("expect_catch ");
+        script.push_str(label);
+        script.push_str(" \"cargo xtask lists\"\n");
+        script
+    }
+
+    /// A label in single quotes is literal, and the shell cannot change it.
+    ///
+    /// This is the defect the tree had: a backtick inside double quotes is a
+    /// command substitution, and the label a reader saw was not the label the
+    /// author wrote. §190.
+    #[test]
+    fn a_label_in_double_quotes_with_a_backtick_is_reported() {
+        let script = a_script_with("\"a case with `ci` in it\"");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("backtick"), "{problems:#?}");
+    }
+
+    /// A dollar is a variable, and the shell expands it just the same.
+    #[test]
+    fn a_label_in_double_quotes_with_a_dollar_is_reported() {
+        let script = a_script_with("\"the count is $n today\"");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+    }
+
+    /// And the same text in single quotes is literal.
+    #[test]
+    fn a_label_in_single_quotes_is_a_literal() {
+        let script = a_script_with("'a case with `ci` in it'");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// An escaped dollar is a dollar, and the shell does not expand it.
+    ///
+    /// The reader has to see the **body** of the word, not only what the
+    /// shell would produce: `"a \$ b"` is literal and `"a $b"` is not.
+    #[test]
+    fn an_escaped_dollar_in_double_quotes_is_a_literal() {
+        let script = a_script_with("\"a case with \\$ in it\"");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A label that is only a variable is not a literal, and the shell
+    /// would change it.
+    ///
+    /// This is the shape a helper takes when it hands a label on, and the
+    /// tree has none: every label is written where the case is. §190.
+    #[test]
+    fn a_label_that_is_only_a_variable_is_reported() {
+        let script = a_script_with("$label");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("bare word"), "{problems:#?}");
+    }
+
+    /// The functions that take a label are **derived**, not written down.
+    ///
+    /// A helper that takes a label cannot be added without the gate
+    /// noticing, because there is no list to forget to update. §190.
+    #[test]
+    fn a_new_helper_that_takes_a_label_is_checked_too() {
+        let mut script = String::new();
+        script.push_str("expect_catch() {\n    local label=\"$1\"\n}\n");
+        script.push_str("expect_other() {\n    local label=\"$1\"\n}\n");
+        script.push_str("expect_other \"a case with `ci` in it\" \"cargo xtask lists\"\n");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+    }
+
+    /// And a function that does not take a label is not one.
+    #[test]
+    fn a_function_that_does_not_take_a_label_is_not_one() {
+        let mut script = String::new();
+        script.push_str("expect_catch() {\n    local label=\"$1\"\n}\n");
+        script.push_str("expect_other() {\n    local gate=\"$1\"\n}\n");
+        script.push_str("expect_other \"a case with `ci` in it\" \"cargo xtask lists\"\n");
+        let found = labels(&script).expect("the script reads");
+        assert!(found.is_empty(), "{found:#?}");
+    }
+
+    /// A label in a comment is not a label: a comment is not code.
+    #[test]
+    fn a_label_in_a_comment_is_not_a_label() {
+        let mut script = String::new();
+        script.push_str("expect_catch() {\n    local label=\"$1\"\n}\n");
+        script.push_str("# expect_catch \"a case with `ci` in it\" \"cargo xtask lists\"\n");
+        let problems = label_problems(Path::new("s.sh"), &script).expect("the script reads");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A script with no function that takes a label means the reader is
+    /// wrong, and it must say so rather than report nothing.
+    #[test]
+    fn a_script_with_no_label_taking_function_is_an_error_and_not_a_pass() {
+        let script = "expect_catch() {\n    local gate=\"$1\"\n}\nexpect_catch \"a\" \"b\"\n";
+        let result = label_problems(Path::new("s.sh"), script);
+        assert!(result.is_err(), "a reader that found nothing must not report a pass");
     }
 }

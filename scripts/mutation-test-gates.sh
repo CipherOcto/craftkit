@@ -309,8 +309,27 @@ did_not_compile() {
 # and so has not tested the rule. The one gate whose *subject* is a
 # compilation says "yes": for it, a build that breaks is the thing it exists
 # to notice. §102.
+#
+# The fourth argument names a **tool** the case needs. Where the tool is not
+# there, the case is reported as **skipped** -- never as caught, and never as
+# missed. A mutation that cannot run has tested nothing, and reporting it as
+# caught would be the one lie this script exists to stop. §173.
+#
+# A skipped case is **not** counted in `CASES`. The closing ratio counts the
+# cases that ran, so "384/384 caught" means every case that ran was caught,
+# and the skipped ones are named underneath it. Counting a case that never ran
+# in the denominator would dress it up as a tested one.
+#
+# The label is the first argument, and it is **always a literal**: a label the
+# shell can rewrite is a label a reader cannot trust. §190.
 expect_catch() {
-    local label="$1" gate="$2" compile_is_catch="${3:-no}"
+    local label="$1" gate="$2" compile_is_catch="${3:-no}" tool="${4:-}"
+    if [[ -n "$tool" ]] && ! command -v "$tool" >/dev/null 2>&1; then
+        SKIPPED+=("$label -- $tool is not installed")
+        printf '  %sskipped%s %s\n' "$YELLOW" "$RESET" "$label"
+        printf '          %s is not installed; the rule was not tested\n' "$tool"
+        return
+    fi
     local out rc
     CASES=$((CASES + 1))
     out="$(eval "$gate" 2>&1)"; rc=$?
@@ -344,31 +363,6 @@ expect_miss() {
         printf '  %schanged%s %s — now caught; update the boundary in xtask/src/wasm.rs\n' \
             "$GREEN" "$RESET" "$label"
     fi
-}
-
-# A case that can only run where a tool is installed.
-#
-# Where the tool is not there, the case is reported as **skipped** — never as
-# caught, and never as missed. A mutation that cannot run has tested nothing,
-# and reporting it as caught would be the one lie this script exists to stop.
-# §173.
-#
-# The tool is a program on the PATH. The case is then run exactly as
-# `expect_catch` runs it, so the tree is restored either way.
-#
-# A skipped case is **not** counted in `CASES`. The closing ratio counts the
-# cases that ran, so "384/384 caught" means every case that ran was caught,
-# and the skipped ones are named underneath it. Counting a case that never ran
-# in the denominator would dress it up as a tested one.
-expect_catch_needs() {
-    local label="$1" gate="$2" tool="$3"
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        SKIPPED+=("$label — $tool is not installed")
-        printf '  %sskipped%s %s\n' "$YELLOW" "$RESET" "$label"
-        printf '          %s is not installed; the rule was not tested\n' "$tool"
-        return
-    fi
-    expect_catch "$label" "$gate"
 }
 
 # Report what happened and exit with the truth.
@@ -603,7 +597,7 @@ swap xtask/src/lib.rs \
     let _ = name;
     true
 }'
-expect_catch "gates: a command that `ci` does not run is treated as one it does" \
+expect_catch 'gates: a command that `ci` does not run is treated as one it does' \
     "cargo xtask lists"
 
 # The fourth: a document's table of gates, read as empty. Every phase of `ci`
@@ -5039,8 +5033,9 @@ swap deny.toml \
     '    "BSL-1.0",
 ' \
     ''
-expect_catch_needs "policy: a licence the tree needs is taken out of the allow list" \
+expect_catch "policy: a licence the tree needs is taken out of the allow list" \
     "cargo xtask deny" \
+    "no" \
     "cargo-deny"
 
 # ------------------------------------------------------- the version flag ----
@@ -5759,6 +5754,34 @@ swap README.md \
 | `lists` | one deny attribute everywhere; the layer table matches the code *and* `cargo metadata`; sorted lists |'
 expect_catch "a document's table of gates lists the gates in the wrong order" \
     "cargo xtask lists"
+
+# ------------------------------------------------------ the script's labels ----
+# Section 190. The label is the sentence that says what a case is, and it is
+# the only place the log says what was tested. The shell sits between the
+# author and the reader, and inside double quotes it expands a dollar and
+# runs a backtick -- so the label a reader saw was not always the label the
+# author wrote.
+#
+# Measured: the label of the section 173 case was rewritten in every run
+# since section 173, and nothing noticed, because the suite's verdict is a
+# number and the label is not part of it.
+#
+# The first break is a copy of the script with a label the shell would
+# rewrite. The copy is what the gate reads, because the script cannot be
+# changed while it runs.
+broken_copy "$SNAPSHOT/bad-label.sh" \
+    "expect_catch 'a document says \`ci\` runs fewer gates than it does' \\" \
+    "expect_catch \"a document says \`ci\` runs fewer gates than it does\" \\"
+expect_catch 'the gate ignores a label the shell would rewrite' \
+    "cargo xtask anchors --script $SNAPSHOT/bad-label.sh"
+
+# The second break is the rule itself: the reader stops saying that the
+# shell would change a label. The test that covers the rule must fail.
+swap xtask/src/anchors.rs \
+    "            '\$' | '\`' => return true," \
+    "            '\$' | '\`' => return false,"
+expect_catch 'the reader stops saying that the shell would rewrite a label' \
+    "cargo test -p xtask --profile ci a_label_in_double_quotes_with_a_backtick_is_reported"
 
 restore
 finish
