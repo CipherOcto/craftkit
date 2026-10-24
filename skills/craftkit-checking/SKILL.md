@@ -72,7 +72,7 @@ Run one on its own while you work; run `ci` when you are done.
 | Gate | What it protects | What it typically catches |
 |---|---|---|
 | `fmt` | formatting is not a reviewer's problem | an unformatted file after an edit |
-| `anchors` | every anchor in `scripts/mutation-test-gates.sh` is in the tree, each names one place, the list of files a mutation may write to holds only files that are in the tree, every label is a literal the shell cannot change, every text a mutation writes is a literal too, the header names every way to run the script, the tree's documents name the list of files and not the script's array, and the script checks its anchors before it starts | an anchor that moved (the mutation would change nothing); an anchor that matches five places, so the swap breaks the wrong one; a file on the list that is not in the tree, so a mutation to it could not be put back; the same file on the list twice; a label the shell would rewrite, so the log says something the author did not write; a text the shell would rewrite, so the anchor the gate reads is not the anchor the shell writes; a header that misses a way to run the script; a document that names the array, so a path added to it is lost |
+| `anchors` | every anchor in `scripts/mutation-test-gates.sh` is in the tree, each names one place, the list of files a mutation may write to holds only files that are in the tree, every label is a literal the shell cannot change, every text a mutation writes is a literal too, the header names every way to run the script, the tree's documents name the list of files and not the script's array, the script checks its anchors before it starts, and every copy the script makes breaks the script in one place | an anchor that moved (the mutation would change nothing); an anchor that matches five places, so the swap breaks the wrong one; a file on the list that is not in the tree, so a mutation to it could not be put back; the same file on the list twice; a label the shell would rewrite, so the log says something the author did not write; a text the shell would rewrite, so the anchor the gate reads is not the anchor the shell writes; a header that misses a way to run the script; a document that names the array, so a path added to it is lost; a copy that breaks nothing, so the case tests nothing; a copy that breaks the wrong one of two places, so the case tests something else |
 | `assets` | every icon is drawn in code; every file asset has a row in `ATTRIBUTION.md`; **nothing in the tree is written in another language** | a checked-in PNG/SVG/font, an `include_bytes!` of an image, an asset with no attribution row, **a `.py`/`.js`/`.sh` that is not one of the five declared exceptions** |
 | `cleanroom` | **no product's name is in the tree outside prose** — the rule and the table of products are in `docs/clean-room.md` | a fixture, a test or a file name that carries another product's name; a product name in a string literal |
 | `lists` | the lines many changes touch: the deny attribute, the layer table in `docs/architecture.md`, sorted `mod` groups, the crate roots, every bound the tree has named in the prose, and every field the model's fingerprint hashes | a new crate missing the deny attribute, a `TABLE` row with no matching doc row, an unsorted `mod` block, **a bound the tree has that no document names** (§181), **a field added to a type the fingerprint walks** (§80) |
@@ -166,6 +166,15 @@ of files a mutation may write to lives in `scripts/mutation-files.txt`, which
 the script and `cargo xtask anchors` both read, and `cargo xtask anchors
 --script PATH` checks a **copy** of the script. A copy is the only thing a
 case can break. §187.
+
+**And a copy's own anchors are checked before the run starts.** A `broken_copy`
+looks its text up in the script and replaces the **first** place it finds, so
+the rule for a copy is §184's rule for a `swap`: the text names **one** place,
+apart from the call's own argument. A text the script does not hold, a text
+whose first place is the call itself, and a text in two places are three ways
+to write a copy that breaks nothing — or that breaks the wrong thing. All
+three are found at the end of a run instead of at the start of one, and the
+run then stops and every result below it is about nothing. §193.
 
 ### The one check that needs a display
 

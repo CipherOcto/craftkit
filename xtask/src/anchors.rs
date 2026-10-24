@@ -742,6 +742,156 @@ pub fn text_problems(script_path: &Path, script: &str) -> Result<Vec<String>, St
     Ok(problems)
 }
 
+/// One `broken_copy` block in the script.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BrokenCopy {
+    /// The path the copy is written to.
+    pub out: String,
+    /// The text it looks for, as the shell makes it.
+    ///
+    /// The copy looks the text up in the script's own text, so this is the
+    /// word the shell hands it and not the text between the quotes. §193.
+    pub text: String,
+    /// The line the call is written on.
+    pub line: usize,
+    /// Where the call is in the script: from its name to the end of its last
+    /// argument.
+    pub span: (usize, usize),
+}
+
+/// Every `broken_copy` block in the script.
+///
+/// A `broken_copy` names an anchor the way a `swap` does — a text it looks
+/// for in a file — and §184 checks every `swap` anchor before the run
+/// starts. These are not checked at all, and they are found when the case
+/// that uses them is reached, which is at the end of the run. §193.
+pub fn broken_copies(script: &str) -> Result<Vec<BrokenCopy>, String> {
+    let mut out = Vec::new();
+    let bytes = script.as_bytes();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        if bytes[at] == b'#' && (at == 0 || bytes[at - 1].is_ascii_whitespace() || bytes[at - 1] == b'\'') {
+            at = match script[at..].find('\n') {
+                Some(n) => at + n + 1,
+                None => bytes.len(),
+            };
+            continue;
+        }
+        if (at == 0 || bytes[at - 1] == b'\n') && script[at..].starts_with("broken_copy ") {
+            let (copy, next) = read_broken_copy(script, at)?;
+            out.push(copy);
+            at = next;
+            continue;
+        }
+        // A word is skipped whole, so that nothing inside it is read as a
+        // command.
+        if let Some((_, next)) = read_word_pieces(script, at)? {
+            at = next;
+            continue;
+        }
+        at += 1;
+    }
+    Ok(out)
+}
+
+/// Read one `broken_copy` block: where the copy is written, the text it
+/// looks for, and where the call is in the script.
+fn read_broken_copy(script: &str, at: usize) -> Result<(BrokenCopy, usize), String> {
+    let bytes = script.as_bytes();
+    let mut pos = at + "broken_copy ".len();
+    let mut words: Vec<(String, usize, usize)> = Vec::new();
+    while words.len() < 3 {
+        // Between the words there is whitespace, and sometimes a line
+        // continuation.
+        while pos < bytes.len() {
+            if bytes[pos].is_ascii_whitespace() {
+                pos += 1;
+                continue;
+            }
+            if bytes[pos] == b'\\' && pos + 1 < bytes.len() && bytes[pos + 1] == b'\n' {
+                pos += 2;
+                continue;
+            }
+            break;
+        }
+        let start = pos;
+        let Some((pieces, next)) = read_word_pieces(script, pos)? else { break };
+        let value = pieces.iter().map(|piece| piece.value.as_str()).collect();
+        words.push((value, start, next));
+        pos = next;
+    }
+    if words.len() < 3 {
+        return Err(format!(
+            "{}:{}: a `broken_copy` with fewer than three arguments",
+            SCRIPT,
+            line_of(script, at)
+        ));
+    }
+    let copy = BrokenCopy {
+        out: words[0].0.clone(),
+        text: words[1].0.clone(),
+        line: line_of(script, at),
+        span: (at, words[2].2),
+    };
+    Ok((copy, pos))
+}
+
+/// What is wrong with the script's `broken_copy` blocks.
+///
+/// A `broken_copy` names an anchor the way a `swap` does, and §184's rule
+/// for a `swap` is that the anchor names **one** place. The copy replaces
+/// the **first** place its text is in, and the call's own argument is a
+/// place its text is in — so the rule for a `broken_copy` is *one place
+/// apart from the call's own*.
+///
+/// Three ways to break it, and each is a copy that tests nothing: a text
+/// the script does not hold makes a copy that changes nothing; a text whose
+/// first place is the call itself makes a copy that breaks the call and not
+/// the script; and a text in two places makes a copy that breaks whichever
+/// comes first, which may not be the place the case meant. §193.
+pub fn broken_copy_problems(script_path: &Path, script: &str) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for copy in broken_copies(script)? {
+        let places = occurrences(script, &copy.text);
+        let Some(first) = places.first().copied() else {
+            problems.push(format!(
+                "{}:{}: the `broken_copy` looks for text that is not in the script, so the copy it \
+                 writes is the script unchanged and the case tests nothing",
+                script_path.display(),
+                copy.line
+            ));
+            continue;
+        };
+        let inside = |offset: usize| copy.span.0 <= offset && offset < copy.span.1;
+        if inside(first) {
+            problems.push(format!(
+                "{}:{}: the first place the `broken_copy` looks for is inside the call itself \
+                 (line {}), so the copy it writes breaks the call and not the script, and the \
+                 case tests nothing",
+                script_path.display(),
+                copy.line,
+                line_of(script, first)
+            ));
+            continue;
+        }
+        let outside: Vec<usize> = places.iter().copied().filter(|offset| !inside(*offset)).collect();
+        if outside.len() > 1 {
+            let lines: Vec<String> =
+                outside.iter().map(|offset| line_of(script, *offset).to_string()).collect();
+            problems.push(format!(
+                "{}:{}: the `broken_copy` looks for text that is in {} places apart from the call \
+                 (lines {}), and the copy replaces the first, so the copy may break a place the \
+                 case did not mean",
+                script_path.display(),
+                copy.line,
+                outside.len(),
+                lines.join(", ")
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The flags the script accepts, read from the script's own code.
 ///
 /// The script tests its first argument against a literal, and those
@@ -1046,8 +1196,12 @@ fn function_at(functions: &[crate::lists::Function], line: usize) -> Option<&str
 }
 
 /// The line an offset is on.
+///
+/// The line is the one the offset is **on**, so the count is of the newlines
+/// before it: the partial line before the offset is the line the offset is
+/// on, and counting the lines of the prefix would count it twice. §193.
 fn line_of(text: &str, offset: usize) -> usize {
-    text[..offset].lines().count() + 1
+    text[..offset].matches('\n').count() + 1
 }
 
 /// Every place an anchor is, in the text it is looked for in.
@@ -1207,6 +1361,9 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
     // And the texts the script writes are the texts the author wrote. §192.
     problems.extend(text_problems(script_path, &script)?);
 
+    // And the copies the script makes break the script. §193.
+    problems.extend(broken_copy_problems(script_path, &script)?);
+
     problems.sort();
     Ok(problems)
 }
@@ -1225,8 +1382,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
     }
     println!(
         "   ok: every anchor in {} is in the tree, each one names a single place, every label is \
-         a literal the shell cannot change, the header names every way to run the script, and \
-         the documents name the list of files",
+         a literal the shell cannot change, the header names every way to run the script, the \
+         documents name the list of files, and every copy the script makes breaks the script in one place",
         script.display()
     );
     Ok(Outcome::Ran)
@@ -1931,5 +2088,80 @@ mod tests {
         let problems = text_problems(Path::new("s.sh"), script).expect("the script reads");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("`swap`"), "{problems:#?}");
+    }
+
+    // -------------------------------------------------- the copies' anchors ----
+
+    /// A `broken_copy` names an anchor the way a `swap` does, and the gate
+    /// checks it before the run starts. §193.
+    #[test]
+    fn the_broken_copies_are_found() {
+        let script = "broken_copy \"$SNAPSHOT/x.sh\" 'from' 'to'\n";
+        let copies = broken_copies(script).expect("the script reads");
+        assert_eq!(copies.len(), 1, "{copies:#?}");
+        assert_eq!(copies[0].text, "from");
+        assert_eq!(copies[0].out, "$SNAPSHOT/x.sh");
+        assert_eq!(copies[0].line, 1);
+    }
+
+    /// The copy looks its text up in the script's own text, so the text is
+    /// the word the shell makes and not the text between the quotes. §193.
+    #[test]
+    fn the_text_of_a_copy_is_the_word_the_shell_makes() {
+        let script = "broken_copy \"$SNAPSHOT/x.sh\" 'a''b' 'to'\n";
+        let copies = broken_copies(script).expect("the script reads");
+        assert_eq!(copies[0].text, "ab", "{copies:#?}");
+    }
+
+    /// A text the script does not hold makes a copy that changes nothing,
+    /// and the run stops when the case is reached — at the end of it. §193.
+    #[test]
+    fn a_broken_copy_whose_text_is_not_in_the_script_is_reported() {
+        let script = "broken_copy out.sh 'a''b' 'to'\n";
+        let problems = broken_copy_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("not in the script"), "{problems:#?}");
+    }
+
+    /// The copy replaces the **first** place its text is in, and the call's
+    /// own argument is a place its text is in. So a call written before the
+    /// text it names makes a copy that breaks the call and not the script.
+    /// §193.
+    #[test]
+    fn a_broken_copy_whose_text_is_its_own_argument_is_reported() {
+        let script = "broken_copy out.sh 'nowhere' 'to'\n";
+        let problems = broken_copy_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("inside the call itself"), "{problems:#?}");
+    }
+
+    /// And a text that comes first is a text the copy breaks.
+    #[test]
+    fn a_broken_copy_whose_text_comes_first_is_a_literal() {
+        let script = "nowhere\nbroken_copy out.sh 'nowhere' 'to'\n";
+        let problems = broken_copy_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A text in two places is a text whose copy breaks whichever comes
+    /// first, and that may not be the place the case meant. §193.
+    #[test]
+    fn a_broken_copy_whose_text_is_in_two_places_is_reported() {
+        let script = "nowhere\nand nowhere again\nbroken_copy out.sh 'nowhere' 'to'\n";
+        let problems = broken_copy_problems(Path::new("s.sh"), script).expect("the script reads");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("2 places"), "{problems:#?}");
+    }
+
+    /// The line an offset is on is the line the offset is on, even when the
+    /// offset is in the middle of it. §193.
+    #[test]
+    fn a_line_is_the_line_the_offset_is_on() {
+        let text = "one\ntwo three\nfour\n";
+        assert_eq!(line_of(text, 0), 1);
+        assert_eq!(line_of(text, 4), 2);
+        // The start of "three", in the middle of the second line.
+        assert_eq!(line_of(text, 8), 2);
+        assert_eq!(line_of(text, 14), 3);
     }
 }

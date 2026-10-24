@@ -22849,6 +22849,139 @@ of thing — text the shell writes into the tree — and nobody connected
 them. The connection is the word *writes*: a label is printed, a text is
 written, and a command is run. Three kinds, and the shell treats the
 first two the same way.
+## 193. The copies' anchors were checked at the end of the run, and one of them could be checked in the wrong place
+
+### The finding
+
+§184's rule is that **every anchor is checked before the run starts**: a
+mutation removes the anchor it names — that is what a mutation is — so an
+anchor that has moved is found when the case that uses it is reached, and
+that is up to twenty-five minutes into a run whose earlier results are then
+about nothing.
+
+The tree honours that rule for the **443** `swap` anchors. The script calls
+`check_anchors` on line 422, before the first case, and the check runs
+`cargo xtask anchors`, which looks at every anchor at once and says where
+each one is.
+
+The **`broken_copy`** blocks name anchors too, and nothing checked them. A
+`broken_copy` looks a text up in the script and writes the script back with
+that text replaced, so its text is an anchor — and the gate's reader reads
+the `swap` blocks and stops.
+
+Measured on the tree as it stood: the script held **455** cases, and its
+five `broken_copy` calls were at lines **5633, 5640, 5773, 5801 and 5826**
+— after **438, 439, 450, 452 and 454** of those cases, or **96.3%**,
+**96.5%**, **98.9%**, **99.3%** and **99.8%** of the run. A `broken_copy`
+whose text has moved is found at the end of the run, not at the start.
+
+And the run does not survive it. The copy's own refusal is the loudest
+thing in the script:
+
+```
+THE BROKEN COPY DID NOT APPLY, SO THE RUN IS VOID.
+  Fix the text, or the case. The results below are about nothing.
+```
+
+Measured on the real function, with a text that was not in the script: exit
+status 1, and **438 cases' results discarded**.
+
+There is a second failure, and it is quieter. The copy replaces the
+**first** place its text is in, and the call's own argument is a place its
+text is in. A call written *before* the text it names therefore replaces
+its own argument:
+
+```
+broken_copy "$SNAPSHOT/x.sh" \
+    'BROKEN' \
+    'BROKEN'
+TARGET
+```
+
+Measured on the real function: the copy above is what it wrote. The text it
+meant to break is still there, the call's two texts are the same, and the
+copy breaks nothing at all. The gate finds nothing in it, the case is
+reported as a **missed gate** — and a missed gate is a result about the
+*gate*, when it is a bug in the script.
+
+### The port
+
+**A copy names an anchor, and the anchor is checked like one.**
+
+§184's rule for a `swap` is that the anchor names **one** place. The rule
+for a `broken_copy` is the same rule with one word changed: the text names
+**one** place *apart from the call's own argument*, because the call's own
+argument is a place its text is in and always will be.
+
+`cargo xtask anchors` now reads the `broken_copy` blocks and reports three
+ways to break that rule, and each of them is a copy that tests nothing:
+
+* the text is not in the script — the copy is the script unchanged;
+* the first place the text is in is the call itself — the copy breaks the
+  call and not the script;
+* the text is in two places — the copy breaks whichever comes first, and
+  that may not be the place the case meant.
+
+Measured on the tree: of the five `broken_copy` calls, **four** named their
+text in exactly one place apart from the call, and **one** named it in
+**two** — the two lines of a `swap`'s two-line text argument. The copy
+replaced the first, which happened to be the place meant. That call's text
+is now unique.
+
+### The line number was wrong by one
+
+The new message names a place, and the first version of it named the wrong
+one. `line_of` counted the lines of the text *before* an offset:
+
+```rust
+text[..offset].lines().count() + 1
+```
+
+That is right when the offset is at the start of a line, and one too many
+when it is not: the partial line before the offset counts as a line of its
+own. The count is of the **newlines** before the offset, and then the line
+the offset is on is the line it is on.
+
+### The gate's own teeth
+
+Three mutations, three different failures, and each copy has **exactly
+one** problem — a copy with two problems does not say which rule fired.
+
+```
+error: 1 problem(s) in .../copy-changes-nothing.sh:
+   • .../copy-changes-nothing.sh:126: the `broken_copy` looks for text that is not in the script, so
+     the copy it writes is the script unchanged and the case tests nothing
+
+error: 1 problem(s) in .../copy-breaks-its-own-call.sh:
+   • .../copy-breaks-its-own-call.sh:128: the first place the `broken_copy` looks for is inside the
+     call itself (line 129), so the copy it writes breaks the call and not the script, and the case
+     tests nothing
+
+error: 1 problem(s) in .../copy-breaks-the-first-of-two.sh:
+   • .../copy-breaks-the-first-of-two.sh:129: the `broken_copy` looks for text that is in 7 places
+     apart from the call (lines 102, 110, 199, 230, 260, 283, 5875), and the copy replaces the
+     first, so the copy may break a place the case did not mean
+```
+
+The rule side is carried by the unit tests: a text the script does not
+hold, a text whose first place is the call itself, a text that comes first,
+a text in two places, and the line an offset is on.
+
+### The lesson
+
+**A rule about one kind of anchor is not a rule about the next kind by
+itself.** §184 said *every anchor* and built the door for `swap`; the
+`broken_copy` blocks were anchors in the same sentence and nobody connected
+them. The word that connects them is *names*: both look a text up in a
+file, both replace the first place they find, and both go wrong in the same
+ways.
+
+**And a copy that breaks nothing is worse than a copy that breaks
+something.** A `swap` that changes nothing stops the run loudly. A
+`broken_copy` that changes the wrong thing does not: the copy is written,
+the gate reads it, the gate finds nothing, and the report says the gate
+missed. The quiet failure is the one that survives to the next run.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23338,6 +23471,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's documents name the list of files a mutation may write to, not the script's array** | the same | 1 mutation — §191 |
 | **Every text a mutation call writes is a literal the shell cannot change** | the same | 1 mutation — §192 |
 | **A command is a command, and the shell may expand it** | the same | the gate's own test — §192 |
+| **Every copy the script makes breaks the script in one place** | `cargo xtask anchors` | 3 mutations — §193 |
+| **A copy's own anchor is checked before the run starts** | the same | the same — §193 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24514,3 +24649,32 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     string, so the measurement has to be done with the gate's own reader.
     The reader that reads the texts for §192 already exists; what is
     missing is the rule that says a `broken_copy`'s text names one place.
+
+56. **The gate reports a line number that can be wrong by one.** §193's new
+    message named a place, and named the wrong one: `line_of` counted the
+    lines of the text *before* an offset, which is right at the start of a
+    line and one too many anywhere else, because the partial line before
+    the offset counts as a line of its own.
+
+    **Done in §193.** The count is of the newlines before the offset now, and
+    a unit test holds the line an offset is on for an offset in the middle
+    of a line. The same helper names the places of an anchor that is in
+    the file more than once, so every line number the gate has ever
+    printed for an anchor that does not start its line was one too many.
+
+    What is **not** measured: how many of the tree's **443** anchors do
+    not start their line, and so how many of the gate's line numbers were
+    wrong before the fix. The gate has never printed one for a real anchor
+    in the tree — the anchors that are in a file twice are the ones the
+    §184 rule reports, and that report names the places.
+
+    **Done in §193.** Measured with the gate's own reader: of the tree's
+    five `broken_copy` calls, **four** named their text in exactly one
+    place apart from the call, and **one** named it in **two**. The rule is
+    now §184's rule with one word changed — *one* place, apart from the
+    call's own argument — and the one ambiguous call was repaired.
+
+    §193 also found what the rule was worth: the copies' anchors were
+    checked at **96.3% to 99.8%** of a run, and a copy that breaks the
+    wrong thing is reported as a **missed gate**, which is a result about
+    the gate.

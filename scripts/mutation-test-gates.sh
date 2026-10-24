@@ -5824,10 +5824,56 @@ expect_catch 'the gate ignores a document that names the scripts array' \
 # The break is a copy of the script with one anchor unescaped. The copy is
 # what the gate reads, because the script cannot be changed while it runs.
 broken_copy "$SNAPSHOT/unescaped.sh" \
-    'in \`scripts/mutation-files.txt\`.**' \
-    'in `scripts/mutation-files.txt`.**'
+    'in \`scripts/mutation-files.txt\`.**" \' \
+    'in `scripts/mutation-files.txt`.**" \'
 expect_catch 'the gate ignores a text the shell would rewrite' \
     "cargo xtask anchors --script $SNAPSHOT/unescaped.sh"
+
+# ------------------------------------------------- the copies' own anchors ----
+# Section 193. A `broken_copy` names an anchor the way a `swap` does: a text
+# it looks for in a file. Section 184 checks every `swap` anchor before the
+# run starts, because an anchor that moved is found when the case that uses
+# it is reached -- which for these is at the very end of the run, and the
+# run then stops with "THE BROKEN COPY DID NOT APPLY" and every result below
+# it is about nothing.
+#
+# The copy replaces the FIRST place its text is in, and the call's own
+# argument is a place its text is in. So the rule for a `broken_copy` is
+# what it is for a `swap`: ONE place, apart from the call's own.
+#
+# The break is a copy of the script with one `broken_copy` call written
+# where a path in the ephemeral list is. The copy is what the gate reads,
+# because the script cannot be changed while it runs. The text the copy
+# looks for is written twice -- once in the call and once in the copy's own
+# call -- so the copy's outer call stays clean and only the copy's own call
+# is broken.
+broken_copy "$SNAPSHOT/copy-changes-nothing.sh" \
+    '    crates/unlisted' \
+    'broken_copy never.sh \
+    "abc""def" \
+    "    crates/unlisted"'
+expect_catch 'the gate ignores a copy whose broken_copy looks for text the script does not hold' \
+    "cargo xtask anchors --script $SNAPSHOT/copy-changes-nothing.sh"
+
+# The second break: the call comes before the text it names, so the copy
+# replaces the call's own argument and breaks the call and not the script.
+broken_copy "$SNAPSHOT/copy-breaks-its-own-call.sh" \
+    '    crates/ui/build-probe.py' \
+    'broken_copy never.sh \
+    "    crates/ui/build-probe.py" \
+    "x"'
+expect_catch 'the gate ignores a copy whose broken_copy breaks its own call' \
+    "cargo xtask anchors --script $SNAPSHOT/copy-breaks-its-own-call.sh"
+
+# The third break: the text is in two places, so the copy breaks whichever
+# comes first, and that may not be the place the case meant.
+broken_copy "$SNAPSHOT/copy-breaks-the-first-of-two.sh" \
+    '    crates/io/src/format/pending/probe.rs' \
+    'broken_copy never.sh \
+    "    exit 1" \
+    "    crates/io/src/format/pending/probe.rs"'
+expect_catch 'the gate ignores a copy whose broken_copy breaks the first of two places' \
+    "cargo xtask anchors --script $SNAPSHOT/copy-breaks-the-first-of-two.sh"
 
 restore
 finish
