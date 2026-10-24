@@ -322,7 +322,7 @@ pub fn write_to(base: &Path, report: &CrashReport) -> Result<PathBuf, String> {
     // called, so a report that arrived with two copies that disagreed had two
     // answers, and the tree noticed neither. §185.
     let report_json = to_json(&report)?;
-    write_atomic(&staging.join("report.json"), &report_json)?;
+    write_atomic(&staging.join(REPORT_FILE), &report_json)?;
 
     std::fs::rename(&staging, &dir).map_err(|e| {
         let _ = std::fs::remove_dir_all(&staging);
@@ -1023,12 +1023,26 @@ mod tests {
         let dir = temp_dir("cannot-write");
         let s = Session::sample();
         let report = build(&s, "prop.set", "boom");
-        // A *file* where the staging folder goes: the write cannot succeed.
+        // A *file* where the staging folder goes: it cannot be made, so the
+        // report cannot be written.
+        let staging = dir.join(format!("{}{STAGING_SUFFIX}", report.id));
         std::fs::create_dir_all(&dir).expect("dir");
-        std::fs::write(dir.join(format!("{}{STAGING_SUFFIX}", report.id)), b"not a folder")
-            .expect("the blocker");
+        std::fs::write(&staging, b"not a folder").expect("the blocker");
         assert!(write_to(&dir, &report).is_err(), "the write should have failed");
+        // And nothing is left behind but the blocker: the report's folder is
+        // not there, so a folder that is not a report is not there either.
         assert!(!dir.join(&report.id).exists(), "a folder was left behind that is not a report");
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .expect("dir")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            vec![format!("{}{STAGING_SUFFIX}", report.id)],
+            "the crash directory holds {left:?}"
+        );
     }
 
     /// A folder that was already there belongs to whoever made it.
