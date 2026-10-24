@@ -23992,6 +23992,13 @@ self-test's "1" and "2" were both "non-zero", and the CI only knew one
 word for both. A check that cannot tell a *failure it wanted* from a
 *failure it did not* is a check that passes on the wrong thing.
 
+**And a claim that covers the tree turns a convention into a rule.** The
+rule "do not edit the tree while the suite runs" was a note in this
+session's own head — and it is now something the suite *checks*. Editing
+`KNOWN-GAPS.md` in the middle of a run now makes the run say the tree
+changed, which is true: somebody changed the tree while the suite was
+measuring it, and the run's numbers were taken over a tree that moved.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25128,9 +25135,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     about a big design; page the reply, which changes the protocol; or accept
     the size and say what it costs, which is item 21's question about a list
     that does not fit, asked of the whole reply rather than of one list.
-28. **Teach the exact-block gate about enums.** The gate that compares a
-    quoted block with the code it names reads **functions**, **structs** and
-    **statics** — §140 added the last — and nothing else. An enum is a fourth
+28. ~~**Teach the exact-block gate about enums.**~~ **Done in §146.** The
+    gate reads an enum's variants, in order, the way it reads a struct's
+    fields, and a block that quotes an enum is compared with the source
+    instead of being called broken. The text of the item is kept below,
+    because it is the measurement the port was made from.
+ An enum is a fourth
     shape, and the control channel's whole vocabulary is one: `Method` is an
     enum, and §143's defect was a variant of it. A block marked `exact` that
     quotes an enum is reported as *"quotes no code"*, so nothing may quote
@@ -25208,8 +25218,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     reader list, which was counting a test-only method as a reader, and
     the limits gate, which was counting a test-only method as the
     enforcement of a limit.
-34. **Teach the test cut to find the end of a top-level item that a string
-    can end early.** `production_of` removes a test item by skipping lines
+34. ~~**Teach the test cut to find the end of a top-level item that a string
+    can end early.**~~ **Done in §160.** The cut finds the item's braces in
+    the **code view**, where a `}` inside a string is not a brace. The text of
+    the item is kept below, because it is the measurement the port was made
+    from.
+ `production_of` removes a test item by skipping lines
     until it reaches a `}` in the first column — the rule that a top-level
     item's body is indented, so the first `}` in the first column ends it.
     A `}` inside a **string** is not the end of the item, and the tree has
@@ -25688,8 +25702,12 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     names is not quoted at all, and the first version of the reader found
     **8** text arguments where there are **458**.
 
-55. **The gate reads the `swap` blocks and not the `append` or `broken_copy`
-    ones.** §184's rule is that every anchor names **one** place, and the
+55. ~~**The gate reads the `swap` blocks and not the `append` or `broken_copy`
+    ones.**~~ **Done in §192 and §193.** The gate reads all three kinds of
+    call, and the rule for a `broken_copy`'s text is §184's with one word
+    changed: one place, apart from the call's own argument. The text of the
+    item is kept below, because it is the measurement the port was made from.
+ §184's rule is that every anchor names **one** place, and the
     gate's reader finds `swap` blocks and stops. Measured: the tree's
     script has **12** mutation calls the gate never reads — 7 `append` and
     5 `broken_copy` — and nothing checks the text they carry.
