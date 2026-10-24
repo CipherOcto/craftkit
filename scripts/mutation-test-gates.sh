@@ -5978,5 +5978,19 @@ swap crates/mcp/src/tools.rs \
 expect_catch 'mcp: a description names a tool the server does not advertise' \
     "cargo test -p craftkit-mcp --profile ci every_tool_name_in_a_description_is_a_tool_the_server_advertises"
 
+# --------------------------------------------- the problems panel's scroll ----
+# Section 199. The properties panel's scroll area was told not to shrink
+# across in section 126, and the node list's in section 128 -- and the
+# problems panel was left shrinking to its content, so the wheel did nothing
+# over most of the panel: the panel is 884 points wide and the content 244 of
+# them.
+#
+# The break puts the shrink back. The test that holds the wheel must notice.
+swap crates/ui/src/shell.rs \
+    '            ScrollArea::vertical().max_height(140.0).auto_shrink([false, true]).show(ui, |ui| {' \
+    '            ScrollArea::vertical().max_height(140.0).show(ui, |ui| {'
+expect_catch 'ui: the problems panel shrinks to its content and the wheel dies over the margin' \
+    "cargo test -p craftkit-ui --profile ci the_wheel_scrolls_the_problems_panel_from_across_the_panel"
+
 restore
 finish

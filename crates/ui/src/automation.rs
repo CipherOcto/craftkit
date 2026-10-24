@@ -97,6 +97,15 @@ impl AutomationId {
         AutomationId("timeline.playhead".to_string())
     }
 
+    /// The name for the `index`th line of the problems panel.
+    ///
+    /// The problems panel's lines are what a person reads when the plan says
+    /// something is wrong, so an agent has to be able to name them the same
+    /// way. §199.
+    pub fn problem(index: usize) -> Self {
+        AutomationId(format!("problems.item.{index}"))
+    }
+
     /// The name for the path field of the "key at the playhead" row.
     pub fn key_path() -> Self {
         AutomationId("properties.key.path".to_string())

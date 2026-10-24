@@ -388,6 +388,11 @@ widget and clicks the middle of it — which is how you find out *where* a widge
 is, since the reply carries the point. `{"x": …, "y": …}` clicks that point.
 Giving both is refused. §104.
 
+**The problems panel publishes a name per problem.** `problems.item.0` is the
+first problem the plan found and `problems.item.1` the second, so "what does
+the screen say?" has an answer about the problems and not only about the
+toolbar, the node rows and the property editors. §199.
+
 **`ui.widgets` says where the widgets are.** The reply carries the names, a
 `rects` map from each name to `[x, y, width, height]` in the pixels of the
 frame its `width` and `height` describe, and the size itself. Before §104 it

@@ -23469,6 +23469,77 @@ the list of names was right there; the playbook's half does not have one yet
 and the check has to live in the CLI's own tests or the CLI has to grow a lib
 target. That is item 59, and it is a shape question, not a finding.
 
+## 199. The problems panel was the third scroll area, and the wheel died over most of it
+
+### The finding
+
+The shell draws three scroll areas. Two of them were told not to shrink
+across:
+
+- the **properties panel** — §126: "egui's scroll area shrinks to the width
+  of its content unless it is told not to".
+- the **node list** — §128: the same defect, found by measuring the wheel.
+
+The third — the **problems panel** — was left shrinking to its content, and
+nothing looked, because the content is a line of text and the strip is most
+of the panel.
+
+**Measured**, in a headless frame, with forty problems in the panel:
+
+| | |
+|---|---|
+| the panel's width | 884 points |
+| the problems' content reaches | x = 244.1 |
+| the wheel at x = 882 — over the panel, over no problem | **the list did not move** (y = 99.0 → 99.0) |
+| the wheel at x = 40 — over the content | the list **scrolled** (y = 99.0 → −34.0) |
+
+Six hundred and forty of the panel's eight hundred and eighty-four points
+were dead to the wheel. §126 measured two hundred and fifty points of dead
+strip in the properties panel and §128 twenty-five in the node list, and both
+said the same thing about it: *a person never finds the strip*.
+
+**And the change has no visible effect.** The two rendered frames — before
+and after — are **byte for byte the same PNG**: the scroll bar is drawn only
+while the area is being scrolled, and the panel's background does not change.
+What changed is the wheel, which is why the evidence here is the measurement
+and not a picture.
+
+### The port
+
+**The scroll area fills the panel's width.** `auto_shrink([false, true])` —
+do not shrink across, shrink down — as the other two panels have said since
+§126.
+
+**And the problems have names.** A problem the plan found is a line a person
+reads, so an agent has to be able to name it the same way:
+`problems.item.0`, `problems.item.1`, … The gate needs the name to measure
+the scroll, and the name is worth having on its own: item 23 measured that
+the problems panel published **nothing**, so an agent asking "what does the
+screen say?" was told about the toolbar, the node rows and the property
+editors, and not about the problems.
+
+### The gate's own teeth
+
+One new mutation: put the shrink back. The test must notice.
+
+```text
+the problems panel did not scroll from the panel's edge: the first problem is still at y=99,
+and the panel gives 884.0 points
+```
+
+### The lesson
+
+**A defect fixed in two places is still in the third.** §126 and §128 found
+the same scroll-area defect twice, in two panels, and each time the fix was
+local to the panel in front of them. The third panel was not looked at — not
+because it is different, but because the second fix was *about* the second
+panel.
+
+**And the size of the strip is a measurement, not a feeling.** §128 measured
+twenty-five points of dead strip; the problems panel's is six hundred and
+forty. The rule was the same in both panels and the *harm* was not — and
+nobody would have known the difference without a number.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23973,6 +24044,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The three doors carry the same classification** | the same | the control channel and the MCP carry it already — §197 |
 | **Every tool name a description mentions is a tool the server advertises** | `crates/mcp/src/tools.rs` | 1 mutation — §198 |
 | **A description names a tool that exists** | the same | the same — §198 |
+| **The wheel scrolls the problems panel from anywhere across the panel** | `craftkit-ui` test | 1 mutation — §199 |
+| **Every problem the plan found has a name** | `AutomationId::problem` | the same — §199 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24528,6 +24601,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     while a list of ten thousand problems sits there, and there is no gate
     for that today. The choice is: publish the rows as a name per diagnostic,
     or leave the panel as the one part of the screen an agent cannot see.
+
+    **Done in §199.** The choice was the first one: the rows are published as
+    a name per diagnostic (`problems.item.0`, `problems.item.1`, …), so the
+    problems panel is no longer the one part of the screen an agent cannot
+    see. And the name made the gate possible: with a name to measure, the
+    scroll area's shrink was measured — 884 points of panel, 244 of content,
+    and six hundred and forty points of the panel dead to the wheel — and it
+    was fixed the way §126 and §128 fixed the other two.
+
+    What is **not** claimed: the change has no visible effect. The frames
+    before and after are byte for byte the same PNG; what changed is the
+    wheel.
 24. **Decide what a node's problems may depend on.** §129 made the cache keep
     the problems of the nodes it reuses. That is only sound while a node's
     problems depend on the node alone, because the fingerprint covers the node

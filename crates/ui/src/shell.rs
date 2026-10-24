@@ -759,14 +759,24 @@ impl<'a> Shell<'a> {
         if !plan.diagnostics.is_empty() {
             ui.separator();
             ui.label(RichText::new("Problems").color(tokens.warning));
-            ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
-                for d in &plan.diagnostics.items {
+            // The scroll area **fills the panel's width** (`auto_shrink` is
+            // off across): a scroll area that shrinks to its content is
+            // narrower than the panel, and the strip between the content and
+            // the panel's edge is dead to the wheel. §126 fixed it in the
+            // properties panel and §128 in the node list; this panel had the
+            // same defect and nobody looked, because the content is a line of
+            // text and the strip is most of the panel. §199.
+            ScrollArea::vertical().max_height(140.0).auto_shrink([false, true]).show(ui, |ui| {
+                for (index, d) in plan.diagnostics.items.iter().enumerate() {
                     let colour = if d.severity == craftkit_eval::Severity::Error {
                         tokens.error
                     } else {
                         tokens.warning
                     };
-                    ui.label(RichText::new(d.render()).color(colour).small());
+                    let response = ui.label(RichText::new(d.render()).color(colour).small());
+                    // A problem the plan found is a line a person reads, so an
+                    // agent has to be able to name it the same way. §199.
+                    self.automation.publish(AutomationId::problem(index), response.rect, true);
                 }
                 if plan.diagnostics.dropped > 0 {
                     ui.label(
@@ -2677,6 +2687,75 @@ mod tests {
             moved < start.top() - 50.0,
             "the list did not scroll from the panel's edge: the first row is still at y={moved:.0}, \
              and the content ends at x={content:.1} while the panel gives {available:.1}"
+        );
+    }
+
+    /// The wheel scrolls the problems panel from anywhere across the panel.
+    ///
+    /// §126 fixed the properties panel's scroll area and §128 the node
+    /// list's: both shrank to their content, and the strip between the
+    /// content and the panel's edge was dead to the wheel. The problems panel
+    /// had the same defect and nothing looked — because the content is a line
+    /// of text and the strip is **most** of the panel.
+    ///
+    /// Measured without the fix, in a headless frame, with forty problems in
+    /// the panel:
+    ///
+    /// | | |
+    /// |---|---|
+    /// | the panel's width | 884 points |
+    /// | the problems' content reaches | x = 244.1 |
+    /// | the wheel at x = 882 — over the panel, over no problem | **the list did not move** (y = 99.0 → 99.0) |
+    /// | the wheel at x = 40 — over the content | the list **scrolled** (y = 99.0 → −34.0) |
+    ///
+    /// So six hundred and forty of the panel's eight hundred and eighty-four
+    /// points were dead to the wheel. §199.
+    #[test]
+    fn the_wheel_scrolls_the_problems_panel_from_across_the_panel() {
+        let mut doc = craftkit_model::Document::empty("probe");
+        for n in 0..40 {
+            doc.add_node(format!("node {n}"), craftkit_model::NodeKind::Source).expect("the node");
+        }
+        let mut session = Session::new("probe");
+        session.load_document(doc);
+        // A node with no `amount` earns a problem, so forty nodes are forty
+        // problems — and the panel's cap is a hundred and forty points, so
+        // the list has to scroll.
+        assert_eq!(session.plan().expect("a plan").diagnostics.items.len(), 40);
+
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+
+        let mut available = 0.0f32;
+        let draw = |shell: &mut Shell, input: egui::RawInput, available: &mut f32| {
+            shell.automation.clear();
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    *available = ui.available_width();
+                    shell.plan_and_timeline(ui, &tokens);
+                });
+            });
+            shell.automation.clone()
+        };
+
+        let plain = egui::RawInput { screen_rect: Some(screen()), ..Default::default() };
+        let before = draw(&mut shell, plain, &mut available);
+        let name = AutomationId::problem(0);
+        let first = before.rect(name.as_str()).expect("the first problem has a rectangle");
+
+        // The pointer is over the panel's right-hand margin: over the panel,
+        // and over no problem at all.
+        let edge = egui::pos2(available - 2.0, first.center().y);
+        let mut after = before.clone();
+        for _ in 0..20 {
+            after = draw(&mut shell, wheel_at(edge), &mut available);
+        }
+        let moved = after.rect(name.as_str()).expect("the first problem still has a rectangle").top();
+        assert!(
+            moved < first.top() - 50.0,
+            "the problems panel did not scroll from the panel's edge: the first problem is still at \
+             y={moved:.0}, and the panel gives {available:.1} points"
         );
     }
 
