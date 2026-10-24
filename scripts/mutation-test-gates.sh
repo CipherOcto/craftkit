@@ -40,7 +40,7 @@
 #    at the same time reads a half-mutated tree. It happened: the `tests`
 #    phase failed while the `lists` phase passed, which is the signature of a
 #    tree that was being changed underneath it rather than a tree that was
-#    wrong. For the same reason, do not edit a file in `FILES` while this
+#    wrong. For the same reason, do not edit a file the list names while this
 #    script runs: the restore at the end puts the file back the way it was
 #    when the run started, and the edit is lost without a word.
 #
@@ -54,6 +54,7 @@
 #    measurement.
 #
 #   scripts/mutation-test-gates.sh
+#   scripts/mutation-test-gates.sh --check       # is the file list usable?
 #   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero
 
 set -uo pipefail
@@ -5782,6 +5783,35 @@ swap xtask/src/anchors.rs \
     "            '\$' | '\`' => return false,"
 expect_catch 'the reader stops saying that the shell would rewrite a label' \
     "cargo test -p xtask --profile ci a_label_in_double_quotes_with_a_backtick_is_reported"
+
+# ------------------------------------------- the script's own interface ----
+# Section 191. The script's header is where a reader learns how to run it, and
+# it is the script's own copy of its interface. It named two of the three
+# ways to run the script, and the one it missed -- `--check` -- is the one
+# that answers a question a contributor asks.
+#
+# And a document in the tree still told a contributor to add their file to
+# the script's `FILES` array. The array is rebuilt from
+# `scripts/mutation-files.txt` on every run, so a path added to the array is
+# lost before the first case runs.
+#
+# The first break is a copy of the script with a header that misses a way to
+# run it. The copy is what the gate reads, because the script cannot be
+# changed while it runs.
+broken_copy "$SNAPSHOT/no-check.sh" \
+    '#   scripts/mutation-test-gates.sh --check       # is the file list usable?
+#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero' \
+    '# The file list is checked with --check.
+#   scripts/mutation-test-gates.sh --self-test   # expected to exit non-zero'
+expect_catch 'the gate ignores a header that misses a way to run the script' \
+    "cargo xtask anchors --script $SNAPSHOT/no-check.sh"
+
+# The second break is the document: the tree names the script's array again.
+swap CONTRIBUTING.md \
+    "**A mutation's target file must also be in \`scripts/mutation-files.txt\`.**" \
+    "**A mutation's target file must also be in \`scripts/mutation-files.txt\`.** The script's \`FILES\` array is the same list, so either is fine."
+expect_catch 'the gate ignores a document that names the scripts array' \
+    "cargo xtask anchors"
 
 restore
 finish

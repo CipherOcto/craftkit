@@ -22650,6 +22650,110 @@ prints passes through it, and the script is the tree's own program. §188's
 rule was that a value has one spelling; this one is that a piece of text
 has one spelling too, and the shell gets to choose the other ones.
 
+## 191. The script's header named two of the three ways to run it, and a document still named the array that was replaced
+
+### The finding
+
+The mutation script has **three** ways to be run: the suite itself,
+`--check` (is the list of files a mutation may write to usable?) and
+`--self-test` (prove the script still fails when a gate stops catching).
+
+Its **own header** — the comment at the top that tells a reader how to run
+it — named **two**. The one it missed is `--check`, which §187 added.
+
+And **CONTRIBUTING.md** still told a contributor to add their file to the
+script's `FILES` array. §187 moved that list out of the script and into
+`scripts/mutation-files.txt`, and the script now **rebuilds the array from
+that file on every run** — so a path added to the array is gone before the
+first case runs. The document was not wrong when it was written; it was
+wrong from §187 onwards, and nobody read it again.
+
+Measured: **three** places in the tree name the script's flags — the
+header, `CONTRIBUTING.md` and the checking skill. Two of the three name
+only **one** of the two flags. The one that is right is the one that was
+**written when the flag was added**.
+
+### The port
+
+**The script's interface is checked against the script's own code.**
+
+The `anchors` gate already reads the script. Now it reads two more things
+from it:
+
+- **the flags it accepts** — the literals the script tests its first
+  argument against. There is **no list to keep**: a flag the script does
+  not test is not a flag it accepts, and a flag it does test is accepted
+  whether or not anybody wrote it down.
+- **the header** — the comment block the script opens with.
+
+And the gate says the header must name **every** way to run the script and
+**no** way that does not exist.
+
+**And the tree's documents must name the list of files.** The list is
+`scripts/mutation-files.txt`, and the array is the script's private copy of
+it, rebuilt on every run. A document that names the array is telling a
+contributor to do something that does not survive the next run, so the gate
+refuses a document that mentions a mutation and names the array.
+
+### The reader had to learn where the array is not
+
+The rule reads the whole word `FILES`, so that the format change's own
+`FILES` constant — a different thing, in a different file, with **fourteen**
+mentions in the tree's documents — is not caught by it.
+
+Measured: the tree's prose has **one** block that names a mutation and the
+array, and it is the wrong one.
+
+### The gate's own teeth
+
+Two new mutations, and both are **data** breaks, because both rules are
+about what the tree says rather than about what the gate does.
+
+| The proof | What it breaks | What must happen |
+|---|---|---|
+| the data | a copy of the script whose header misses a way to run it | `cargo xtask anchors --script <copy>` must **reject** it |
+| the data | a document that names the script's array | `cargo xtask anchors` must **reject** it |
+
+The second swap keeps its anchor, so the case is caught for **one** reason:
+a swap that removed the anchor would have taken the missing-anchor report
+with it, and a case caught for the wrong reason tests nothing.
+
+The rule side is carried by the unit tests: a header that misses a flag, a
+header that names a flag the script does not accept, a header that never
+names the script, a document that names the array, and a document that
+names the file.
+
+The full mutation suite is **451 of 452** caught, the one `known` case being
+the pre-existing wasm32 limit, and the tree came back unchanged.
+
+### And this arc found the next one
+
+The first run of this arc **went void** twenty minutes in, and the reason
+is worth writing down: the new case's own anchor was written in double
+quotes with two **unescaped** backticks. The gate was green — the anchor
+it read was in the file — and the shell ran the two backticked names as
+commands, found neither, and reduced the anchor to "a mutation's target
+file must also be in .".
+
+§190's rule holds the script's **labels** to being literals the shell
+cannot change. The **anchors** are shell-evaluated too, and the reader
+that checks them resolves the four escapes a double quote has and stops
+there: it does not expand a variable, and it does not run a backtick. That
+is item 54.
+
+### The lesson
+
+**A document that names a thing nobody can act on is worse than no
+document.** `CONTRIBUTING.md` named the array for three sections after the
+array stopped being the place. The name was true when it was written, and
+a name that cannot be acted on is a name that is wrong.
+
+**And the copy that is right is the copy that was written when the change
+was made.** The checking skill's list of the script's flags was written in
+§187, when `--check` was added, so it was right. The header's list and
+`CONTRIBUTING.md`'s list were written earlier, and they were stale from the
+moment §187 landed. Nothing had read them since.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -23135,6 +23239,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A document's table of gates lists the phases in the order `ci` runs them** | the same | 1 mutation — §189 |
 | **Every label in the mutation script is a literal the shell cannot change** | `cargo xtask anchors` | 1 mutation — §190 |
 | **The functions that take a label are found in the script, not in a list** | the same | the gate's own test — §190 |
+| **The script's header names every way to run the script, and no way that does not exist** | `cargo xtask anchors` | 1 mutation — §191 |
+| **The tree's documents name the list of files a mutation may write to, not the script's array** | the same | 1 mutation — §191 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -24238,3 +24344,45 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     label-taking functions is derived from the script rather than written
     down, so a helper that takes a label cannot be added without the gate
     noticing.
+
+53. ~~**The mutation script's own interface is described in three places and
+    nothing checks them.**~~ **Done.** §191 found the script's **header**
+    naming two of the three ways to run it — the one it missed is `--check`,
+    which §187 added — and `CONTRIBUTING.md` still telling a contributor to
+    add their file to the script's `FILES` **array**, which §187 replaced
+    with `scripts/mutation-files.txt`. The array is rebuilt from that file
+    on **every run**, so a path added to the array is lost before the first
+    case runs.
+
+    The gate now checks the header against the script's own code — the
+    flags it accepts are the literals the script tests its first argument
+    against, so there is no list to keep — and refuses a document that
+    mentions a mutation and names the array.
+
+54. **The gate's reader and the shell disagree about what a double-quoted
+    string means.** §190's rule holds the script's **labels** to being
+    literals the shell cannot change. The **anchors** — the text a `swap`
+    looks for — are shell-evaluated too, and the reader that checks them
+    resolves the four escapes a double quote has and stops there: it does
+    not expand a variable, and it does not run a backtick.
+
+    Measured while §191 was landing: the new case's own anchor was written
+    in double quotes with two **unescaped** backticks. The gate was green
+    — the anchor it read was in the file — and the shell ran the two
+    backticked names as commands, found neither, and reduced the anchor to
+    "a mutation's target file must also be in .". The run stopped with
+    "MUTATION DID NOT APPLY" twenty minutes in, and every result before
+    that was void.
+
+    The script's own refusal is what caught it, and that is the shape of
+    the gap: the tree has a door that says "the thing I am looking for is
+    not there", and nothing that says "the thing I am looking for is not
+    the thing you wrote". The same reading is used for the anchors of
+    `swap`, `append` and `broken_copy` — **454** mutation calls, and every
+    one of their arguments is read by a reader that does not expand what
+    the shell expands.
+
+    The fix is §190's rule applied to the arguments: a **double-quoted**
+    argument of a mutation call must hold no `$` and no backtick, exactly
+    as a label must. The extent — how many of the 454 calls are affected,
+    and which arguments are allowed to be expanded — is not measured yet.

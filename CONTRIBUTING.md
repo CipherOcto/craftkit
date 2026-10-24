@@ -151,9 +151,12 @@ misses. All three exist because it got all three wrong once. It also counts the
 cases it runs rather than dividing by a hardcoded total, so the ratio it prints
 cannot drift away from the checks it actually did.
 
-**A mutation's target file must also be in that script's `FILES` array.** The
-snapshot, the restore and the checksum all walk that one list, so a mutation
-against a file that is not on it is restored by nothing and checked by nothing:
+**A mutation's target file must also be in `scripts/mutation-files.txt`.** That
+file is the list: the script reads it on every run, and the array it fills is
+rebuilt from it each time, so a path added to the script's own array is lost
+before the first case runs. The snapshot, the restore and the checksum all walk
+that one list, so a mutation against a file that is not on it is restored by
+nothing and checked by nothing:
 the tree keeps the broken source and the run still prints "Tree unchanged" and
 exits 0. That happened once, and the next ordinary `cargo test` was what noticed
 it — not the script that made the mess. `swap` and `append` now refuse a target

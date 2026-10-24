@@ -21,6 +21,10 @@
 //! - **Every label is a literal the shell cannot change.** A label is the
 //!   sentence that says what a case is, and it is the only place the log says
 //!   what was tested; the shell sits between the author and the reader. §190.
+//! - **The header names every way to run the script**, and no way that does
+//!   not exist; the ways are read from the script's own code. §191.
+//! - **The documents name the list of files a mutation may write to.** It is
+//!   a file, and the script reads it on every run. §191.
 //!
 //! # Why it is a command of its own
 //!
@@ -627,6 +631,176 @@ pub fn label_problems(script_path: &Path, script: &str) -> Result<Vec<String>, S
     Ok(problems)
 }
 
+/// The flags the script accepts, read from the script's own code.
+///
+/// The script tests its first argument against a literal, and those
+/// literals are the flags. There is **no list to keep**: a flag the script
+/// does not test is not a flag it accepts, and a flag it does test is
+/// accepted whether or not anybody wrote it down. §191.
+pub fn script_flags(script: &str) -> Vec<String> {
+    let needle = "\"${1:-}\"";
+    let mut out: Vec<String> = Vec::new();
+    let mut at = 0usize;
+    while let Some(found) = script[at..].find(needle) {
+        let mut pos = at + found + needle.len();
+        let bytes = script.as_bytes();
+        while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        let compares = script[pos..].starts_with("==") || script[pos..].starts_with("!=");
+        if compares {
+            pos += 2;
+            while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+                pos += 1;
+            }
+            if script[pos..].starts_with('"') {
+                pos += 1;
+                if let Some(end) = script[pos..].find('"') {
+                    let flag = script[pos..pos + end].to_string();
+                    if !flag.is_empty() && !out.contains(&flag) {
+                        out.push(flag);
+                    }
+                }
+            }
+        }
+        at = at + found + needle.len();
+    }
+    out
+}
+
+/// The script's own header: the comment block it opens with.
+///
+/// The header is where a reader learns how to run the script, and it is the
+/// script's own copy of its interface — a copy nobody reads until something
+/// has gone wrong. §191.
+fn header_of(script: &str) -> String {
+    let mut out = String::new();
+    for line in script.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if out.is_empty() {
+                continue;
+            }
+            break;
+        }
+        if !trimmed.starts_with('#') {
+            break;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// The invocations the header names.
+///
+/// A header line that names the script is an invocation, and the word after
+/// the name is its flag. §191.
+pub fn header_flags(script: &str) -> Vec<String> {
+    let header = header_of(script);
+    let mut out: Vec<String> = Vec::new();
+    for line in header.lines() {
+        let Some(at) = line.find(SCRIPT) else { continue };
+        let rest = &line[at + SCRIPT.len()..];
+        let word = rest.split_whitespace().next().unwrap_or("");
+        if word.starts_with("--") && !out.contains(&word.to_string()) {
+            out.push(word.to_string());
+        }
+    }
+    out
+}
+
+/// What is wrong with the script's header.
+///
+/// The header names the ways to run the script, and the script's own code
+/// says what those ways are. A header that names a flag the script does
+/// not accept sends a reader to an error; a header that misses a flag the
+/// script accepts sends a reader nowhere. §191.
+pub fn header_problems(script_path: &Path, script: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    let flags = script_flags(script);
+    let named = header_flags(script);
+    if !header_of(script).contains(SCRIPT) {
+        problems.push(format!(
+            "{}: the header never names the script, so it says nothing about how to run it",
+            script_path.display()
+        ));
+    }
+    for flag in &flags {
+        if !named.contains(flag) {
+            problems.push(format!(
+                "{}: the script accepts {flag} and the header does not name it: a reader who reads \
+                 the header does not know the flag exists",
+                script_path.display()
+            ));
+        }
+    }
+    for flag in &named {
+        if !flags.contains(flag) {
+            problems.push(format!(
+                "{}: the header names {flag} and the script does not accept it",
+                script_path.display()
+            ));
+        }
+    }
+    problems
+}
+
+/// Does this text name the script's array of files?
+///
+/// The whole word, so that `FILES_FILE` and the format change's own
+/// `FILES` constant are not it. §191.
+fn names_the_array(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let needle = b"FILES";
+    let mut at = 0usize;
+    while let Some(found) = text[at..].find("FILES") {
+        let start = at + found;
+        let end = start + needle.len();
+        let before_ok = start == 0 || !is_word_byte(bytes[start - 1]);
+        let after_ok = end >= bytes.len() || !is_word_byte(bytes[end]);
+        if before_ok && after_ok {
+            return true;
+        }
+        at = start + 1;
+    }
+    false
+}
+
+/// Is this byte part of a name?
+fn is_word_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+/// What is wrong with the tree's documents about the mutation script.
+///
+/// The list of files a mutation may write to is `scripts/mutation-files.txt`,
+/// and the script reads it on **every run**: the array it fills is rebuilt
+/// each time, so a path added to the array is lost before the first case
+/// runs. A document that tells a contributor to add a file to the array is
+/// telling them to do something that does not survive the next run. §191.
+pub fn prose_problems(root: &Path) -> Vec<String> {
+    let mut problems = Vec::new();
+    for doc in crate::lists::prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let relative = doc.strip_prefix(root).unwrap_or(&doc).display().to_string();
+        for (line, block) in crate::lists::blocks(&text) {
+            if !block.to_lowercase().contains("mutation") {
+                continue;
+            }
+            if names_the_array(&block) {
+                problems.push(format!(
+                    "{relative}:{line}: it names the script's `FILES` array as the list of files a \
+                     mutation may write to, and the array is rebuilt from \
+                     `scripts/mutation-files.txt` on every run: a path added to the array is lost \
+                     before the first case runs."
+                ));
+            }
+        }
+    }
+    problems
+}
+
 /// The files a mutation may write to, and what is wrong with the list.
 ///
 /// §187. The list is a file, so it is read rather than parsed out of the
@@ -914,6 +1088,11 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
     // the only place the log says what was tested. §190.
     problems.extend(label_problems(script_path, &script)?);
 
+    // And the header names the ways to run the script, and the tree's
+    // documents name the list of files a mutation may write to. §191.
+    problems.extend(header_problems(script_path, &script));
+    problems.extend(prose_problems(root));
+
     problems.sort();
     Ok(problems)
 }
@@ -931,8 +1110,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
         return Err(message);
     }
     println!(
-        "   ok: every anchor in {} is in the tree, each one names a single place, and every \
-         label is a literal the shell cannot change",
+        "   ok: every anchor in {} is in the tree, each one names a single place, every label is \
+         a literal the shell cannot change, the header names every way to run the script, and \
+         the documents name the list of files",
         script.display()
     );
     Ok(Outcome::Ran)
@@ -1099,7 +1279,8 @@ mod tests {
     /// carries one, as the real one does.
     fn a_check_that(body: &str) -> String {
         format!(
-            "expect_catch() {{\n    local label=\"$1\"\n    printf '  %s\\n' \"$label\"\n}}\n\
+            "#   scripts/mutation-test-gates.sh\n\
+             expect_catch() {{\n    local label=\"$1\"\n    printf '  %s\\n' \"$label\"\n}}\n\
              check_anchors() {{\n    {body}\n}}\n"
         )
     }
@@ -1480,5 +1661,118 @@ mod tests {
         let script = "expect_catch() {\n    local gate=\"$1\"\n}\nexpect_catch \"a\" \"b\"\n";
         let result = label_problems(Path::new("s.sh"), script);
         assert!(result.is_err(), "a reader that found nothing must not report a pass");
+    }
+
+    // ---------------------------------------------------------- the header ----
+
+    /// A script whose header names these invocations, and whose code accepts
+    /// these flags.
+    fn a_script_with_a_header(header: &[&str], accepts: &[&str]) -> String {
+        let mut script = String::new();
+        script.push_str("#!/usr/bin/env bash\n");
+        script.push_str("# The header of the script.\n");
+        for flag in header {
+            script.push_str(&format!("#   scripts/mutation-test-gates.sh {flag}\n"));
+        }
+        script.push_str("set -uo pipefail\n");
+        script.push_str("expect_catch() {\n    local label=\"$1\"\n}\n");
+        for flag in accepts {
+            script.push_str(&format!("if [[ \"${{1:-}}\" == \"{flag}\" ]]; then\n    exit 0\nfi\n"));
+        }
+        script
+    }
+
+    /// The flags are read from the script's own code, so there is no list to
+    /// keep. §191.
+    #[test]
+    fn the_flags_are_read_from_the_scripts_own_code() {
+        let script = a_script_with_a_header(&[], &["--check", "--self-test"]);
+        assert_eq!(script_flags(&script), vec!["--check", "--self-test"]);
+    }
+
+    /// A header that misses a flag the script accepts sends a reader
+    /// nowhere. §191.
+    #[test]
+    fn a_header_that_misses_a_flag_is_reported() {
+        let script = a_script_with_a_header(&["--self-test"], &["--check", "--self-test"]);
+        let problems = header_problems(Path::new("s.sh"), &script);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("--check"), "{problems:#?}");
+    }
+
+    /// And a header that names a flag the script does not accept sends a
+    /// reader to an error.
+    #[test]
+    fn a_header_that_names_a_flag_the_script_does_not_accept_is_reported() {
+        let script = a_script_with_a_header(&["--check", "--self-test"], &["--self-test"]);
+        let problems = header_problems(Path::new("s.sh"), &script);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("--check"), "{problems:#?}");
+    }
+
+    /// A header that names every way to run the script is right.
+    #[test]
+    fn a_header_that_names_every_flag_is_not_reported() {
+        let script = a_script_with_a_header(&["--check", "--self-test"], &["--check", "--self-test"]);
+        let problems = header_problems(Path::new("s.sh"), &script);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// The header is the script's own copy of its interface, and a header
+    /// that never names the script says nothing about how to run it.
+    #[test]
+    fn a_header_that_never_names_the_script_is_reported() {
+        let script = "#!/usr/bin/env bash\n# A header with no name in it.\nset -uo pipefail\n";
+        let problems = header_problems(Path::new("s.sh"), script);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("never names"), "{problems:#?}");
+    }
+
+    // ------------------------------------------------------- the documents ----
+
+    /// A document that tells a contributor to add a file to the script's
+    /// array is telling them to do something that does not survive the next
+    /// run. §191.
+    #[test]
+    fn a_document_that_names_the_scripts_array_is_reported() {
+        let dir = a_tree("array");
+        std::fs::write(
+            dir.join("CONTRIBUTING.md"),
+            "**A mutation's target file must also be in that script's `FILES` array.**\n",
+        )
+        .expect("the fabricated document");
+        let problems = prose_problems(&dir);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("CONTRIBUTING.md"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A document that names the file is right.
+    #[test]
+    fn a_document_that_names_the_file_is_not_reported() {
+        let dir = a_tree("thefile");
+        std::fs::write(
+            dir.join("CONTRIBUTING.md"),
+            "**A mutation's target file must also be in `scripts/mutation-files.txt`.**\n",
+        )
+        .expect("the fabricated document");
+        let problems = prose_problems(&dir);
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The format change's own `FILES` constant is a different thing, and a
+    /// document that is about it is not naming the script's array.
+    #[test]
+    fn the_format_changes_own_files_constant_is_not_the_scripts_array() {
+        let dir = a_tree("format");
+        std::fs::write(
+            dir.join("CONTRIBUTING.md"),
+            "The `FILES` table in `crates/io/src/format/pending.rs` is a different thing.\n",
+        )
+        .expect("the fabricated document");
+        let problems = prose_problems(&dir);
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

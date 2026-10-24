@@ -3489,7 +3489,10 @@ fn read_number(bytes: &[u8], at: &mut usize) -> Option<usize> {
 }
 
 /// The Markdown files the tree points at code from.
-fn prose_files(root: &Path) -> Vec<PathBuf> {
+///
+/// Public because the anchors gate reads them too: the tree's documents
+/// about the mutation script are part of that script's own rules. §191.
+pub fn prose_files(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for entry in PROSE {
         let path = root.join(entry);
@@ -5419,7 +5422,7 @@ pub fn gate_lists(text: &str, phases: &[&str]) -> Vec<(usize, Vec<String>)> {
 /// prose, and a row of a table of gates names one gate. A row that names
 /// most of the gates is a copy of the list, and it is a block of its own so
 /// that it is found. §189.
-fn blocks(text: &str) -> Vec<(usize, String)> {
+pub fn blocks(text: &str) -> Vec<(usize, String)> {
     let mut out: Vec<(usize, String)> = Vec::new();
     let mut start = 0usize;
     let mut current = String::new();

@@ -91,6 +91,7 @@ docs/patterns/everything-is-a-command.md
 docs/patterns/exact-time-not-float-seconds.md
 docs/agent-playbook.md
 AGENTS.md
+CONTRIBUTING.md
 README.md
 apps/craftkit-web/index.html
 xtask/src/wasm.rs
