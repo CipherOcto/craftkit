@@ -24494,3 +24494,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     The reader had to learn a bare chunk to find them: the file a `swap`
     names is not quoted at all, and the first version of the reader found
     **8** text arguments where there are **458**.
+
+55. **The gate reads the `swap` blocks and not the `append` or `broken_copy`
+    ones.** §184's rule is that every anchor names **one** place, and the
+    gate's reader finds `swap` blocks and stops. Measured: the tree's
+    script has **12** mutation calls the gate never reads — 7 `append` and
+    5 `broken_copy` — and nothing checks the text they carry.
+
+    A `broken_copy` that looks for text that is in two places replaces the
+    first, and the case may be caught for the wrong reason or not at all.
+    §187's `broken_copy` cases depend on that: they look for a string the
+    script contains once, and the second occurrence is the case's own
+    argument, so the rule for `broken_copy` is "one place **besides the
+    case's own**" rather than "one place".
+
+    The extent — how many of the twelve are ambiguous — is **not measured**,
+    and a text-only reading gets it wrong: the shell's escapes mean the
+    text in the script and the text the shell sees are not the same
+    string, so the measurement has to be done with the gate's own reader.
+    The reader that reads the texts for §192 already exists; what is
+    missing is the rule that says a `broken_copy`'s text names one place.
