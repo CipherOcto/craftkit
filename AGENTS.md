@@ -170,7 +170,7 @@ This **is** a git repository: branch `main`, a local history and no remote.
 unless the owner asks for one. Before every commit:
 
 ```text
-cargo xtask ci          # fmt, assets, lists, layers, web, clippy, tests, wasm
+cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
 ```
 
 Commit after every feature arc that builds, one topic per commit (see

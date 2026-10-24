@@ -61,13 +61,11 @@ claims to support.
 
 ## 2. The gates
 
-`ci` runs them in this order and **stops at the first failure** (the
-`PHASES` constant in `xtask/src/ci.rs` — cite the symbol, not a line number, the
-file moves):
-
-```
-fmt --check  →  anchors  →  assets  →  cleanroom  →  lists  →  layers  →  web  →  clippy  →  tests  →  fuzz  →  wasm
-```
+`ci` runs the gates in the table below, in that order, and **stops at the
+first failure** (the `PHASES` constant in `xtask/src/ci.rs` — cite the symbol,
+not a line number, the file moves). The table is the only copy of that list
+in this file, and `cargo xtask lists` holds it against the constant — the
+order as well as the names. §189.
 
 Run one on its own while you work; run `ci` when you are done.
 

@@ -22393,6 +22393,139 @@ instant past the real range was silently clamped on the way to a value the
 tree could hold. The bound a spelling keeps has to be a bound the tree can
 keep, or the refusal is theatre.
 
+## 189. The tree printed what `ci` runs in eight places, and three of the four nobody read had drifted
+
+### The finding
+
+Item 51 of the suggested order says: *the phases of `ci` are written twice,
+and only one of the two copies is checked.* It was written when the tree had
+**two** copies, both in the checking skill. Measured, the tree had
+**eight**, and the gate read **four** of them.
+
+| the copy | where | a gate reads it? | what it said |
+|---|---|---|---|
+| the usage text | `cargo xtask --help` | ✓ | all eleven ✓ |
+| the README's line | `README.md` | ✓ | all eleven ✓ |
+| the README's table | `README.md` | ✓ (the names only) | all eleven ✓ |
+| the checking skill's table | `skills/craftkit-checking/SKILL.md` | ✓ (the names only) | all eleven ✓ |
+| **AGENTS.md's line** | `AGENTS.md` | ✗ | **eight** — `anchors` and `cleanroom` missing |
+| **docs/architecture.md's row** | `docs/architecture.md` | ✗ | **eight** — the same two missing |
+| **the editing skill's sentence** | `skills/craftkit-editing/SKILL.md` | ✗ | **six** — five missing |
+| **the checking skill's line of arrows** | `skills/craftkit-checking/SKILL.md` | ✗ | all eleven — but repaired **by hand** in §187 |
+
+Four of the eight were read by nobody, and **three of those four had
+already drifted**: the tree's own agent file and the architecture document
+told a reader that `cargo xtask ci` runs eight gates, and the editing skill
+said six, when it runs eleven.
+The two gates they were missing are the two that were added most recently —
+`cleanroom` in §170 and `anchors` in §184 — which is exactly what a copy
+that nobody reads looks like: it is right up to the day the list changes,
+and then it is right about everything except the newest thing. The editing
+skill's sentence was missing five.
+
+The one copy that was *right* was the one §187 repaired with its own hands.
+A hand repair is not a rule.
+
+### And the order was never checked either
+
+The tables of gates say what each gate protects, and their rows are in the
+order the gates run — the README's, the checking skill's. The gate checked
+**the names** in the rows and never their **order**, so a row could move and
+the table would still be right about every gate in it. Item 51's own claim
+that "the table is checked and ordered" was half true, and the half that was
+not true was the half that matters for a reader.
+
+### The port
+
+**Every list of the gates in the prose is checked, and so is its order.**
+
+The gate gets a reader that finds the lists. A **block** of prose — a run
+of lines, because a list of gates wraps across lines — that names **more
+than half** of the gates is a list of them; a sentence mentions a gate or
+two, and a copy names them all. The threshold is a measurement, and it has
+room on both sides: the tree's prose names at most **five** gates in a block
+(the checking skill's own front matter, its gate table, a paragraph of the
+architecture document), and **no** block names six to ten. The copies name all
+eleven; the three that had drifted named eight, eight and six.
+
+A gate is named by a **whole word**: `craftkit-web` is not the `web` gate,
+and `tests` is not named by `test`.
+
+**The table's order is checked too.** The phases among a table's rows must
+be in the order `ci` runs them.
+
+**And the copies that were wrong are right.** AGENTS.md, the architecture
+document and the editing skill now name all eleven, in order — and the gate
+says so if they ever stop.
+
+**The checking skill's line of arrows is gone.** It was the second copy in
+one document: the table below it says the same thing and more, and its rows
+are in the order the gates run — which is now checked. One copy per
+document, and the copy that is left is the one a gate reads.
+
+### The gate's own teeth
+
+Two new mutations, and two **kinds** of proof that they are load-bearing.
+The kinds are not the same, and the first one alone would have been a
+claim rather than a proof.
+
+| The proof | What it breaks | What must happen |
+|---|---|---|
+| the data | a document that names every gate but one | `cargo xtask lists` must **reject** the tree |
+| the data | a table whose rows are in the wrong order | the same |
+| the rule | the whole-list check, in `xtask/src/lists.rs` | the test that covers it must **fail** |
+| the rule | the order check, in the same file | the same |
+
+The first two are the mutation cases the suite runs: the tree is broken
+the way the tree was broken, and the gate has to say so. The first break is
+the drift itself — a document that names every gate but one.
+
+The last two are the other half. Breaking the **data** shows the gate has
+teeth; it does not show the *rule* is load-bearing, because a gate that
+ignored the broken document would also reject it. So each new rule was
+broken on purpose as well, and the unit test that claims to cover it went
+from passing to failing:
+
+```
+caught  the whole-list rule is removed and the test that covers it fails
+        test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured
+caught  the order rule is removed and the test that covers it fails
+        test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured
+```
+
+The full mutation suite is **447 of 448** caught, the one `known` case being
+the pre-existing wasm32 limit, and the tree came back unchanged.
+
+### And the anchor gate earned its place
+
+The sixth case of §169's group mutated the README's own comparison — the
+code that read the README's line. §189 replaced that comparison with the
+general rule, so the anchor **moved**, and the anchors gate said so before
+the suite ran:
+
+```
+error: 1 problem(s) in scripts/mutation-test-gates.sh:
+   • the anchor for `xtask/src/lists.rs` (line 641) is not in the file any more
+```
+
+That is §184's finding, one level up: a moved anchor is found in a second
+rather than twenty-five minutes in. The case was moved with the rule it
+protects.
+
+### The lesson
+
+**A copy that nobody reads is right until the thing it copies changes.** The
+three drifted copies were not wrong by accident: they were right when they
+were written, and they were never looked at again. The two gates that were
+added most recently are the two they are missing, and that is not a
+coincidence — it is what a stale copy looks like.
+
+**And a copy that is repaired by hand is not a copy that is held.** §187
+fixed the checking skill's line of arrows by typing the two missing gates
+into it. The line was right afterwards and unchecked before and after, and
+the three copies nobody read stayed wrong. A hand repair buys one run; a
+gate buys every run after it.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -22874,6 +23007,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The generator's values come from the tree's own limits** | `an_instant_past_the_range` in `crates/engine/tests/properties.rs` | 1 mutation — §188 |
 | **Every command is fired at every parameter with every value of that kind** | the same | 1 mutation — §188 |
 | **The reader is asked about the parameter under test** | `arguments_with` | 1 mutation — §188 |
+| **Every list of the gates in the prose is the whole list, in the order `ci` runs them** | `cargo xtask lists` | 1 mutation — §189 |
+| **A document's table of gates lists the phases in the order `ci` runs them** | the same | 1 mutation — §189 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -23937,20 +24072,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     makes it has to say it. The cheap half is the second: the closing line is
     one sentence, and it is currently wider than the thing it computes.
 
-51. **The phases of `ci` are written twice, and only one of the two copies
-    is checked.** `xtask/src/ci.rs` holds the `PHASES` constant, and
-    `skills/craftkit-checking/SKILL.md` prints them — once as a line of
-    arrows, and once as a table. `cargo xtask lists` checks the **table**
-    against the constant, so a gate that stops running has to stop being
-    documented there; the line of arrows is not checked at all.
+51. ~~**The phases of `ci` are written twice, and only one of the two copies
+    is checked.**~~ **Done.** §189 found the tree printing what `ci` runs in
+    **eight** places, of which the gate read **four** — and **three of the
+    four it did not read had already drifted**: `AGENTS.md`, the architecture
+    document and the editing skill all said `ci` runs fewer gates than it
+    does — eight, eight and six, when it runs eleven — and each was missing
+    the two gates that were added most recently.
 
-    Measured while §187 was landing: the line of arrows said `fmt --check →
-    assets → lists → …`, and it had been missing **`anchors`** and
-    **`cleanroom`** since §184 and §170 put them in the constant. The table
-    beside it was right, and the gate was green — the same shape as §187's
-    finding one level up: a second copy of a fact, read by nobody.
+    Every list of the gates in the prose is now checked, and so is its
+    order, and the copies are right. The checking skill's second copy — the
+    line of arrows beside the table — is gone: the table says the same thing
+    and more, and its rows are in the order the gates run, which is now
+    checked too.
 
-    The fix is §185's rule applied to a list: **one copy**. The table is
-    checked and ordered, so the line of arrows is redundant; deleting it
-    removes the copy that can drift. The alternative — teaching `lists` to
-    read a line of arrows — is a gate for a sentence nobody needs.
+    The item's own diagnosis was half right and half wrong, and the wrong
+    half is the useful one: it said the tree had two copies, and it had
+    eight. The fix it named — one copy per document — is what the checking
+    skill got; the other four are checked instead of deleted, because the
+    reader of each place wants the list there and a gate that holds it is
+    better than a sentence that points elsewhere.

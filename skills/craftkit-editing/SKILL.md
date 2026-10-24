@@ -342,8 +342,10 @@ cargo fmt --all
 cargo xtask ci
 ```
 
-`ci` runs fmt, assets, lists, layers, web, clippy `-D warnings --all-targets`, the
-tests and the wasm check. It stops at the first failure.
+`ci` runs fmt, anchors, assets, cleanroom, lists, layers, web, clippy
+`-D warnings --all-targets`, tests, fuzz and the wasm check. It stops at the
+first failure. The list is the one in the checking skill's table, and a gate
+holds it there.
 
 - [ ] `cargo xtask ci` is green end to end.
 - [ ] The deny attribute is present in any new or touched crate root, with the

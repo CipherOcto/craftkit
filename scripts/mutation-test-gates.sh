@@ -637,15 +637,15 @@ swap xtask/src/lists.rs \
 expect_catch "gates: the usage text's list of the phases is compared against nothing" \
     "cargo test -p xtask --profile ci the_usage_text_must_name_the_phases_and_only_them"
 
-# The sixth: and the same for the README's own line for `ci`.
+# The sixth: and the same for every list of the phases in the prose. The
+# README's own line is one of them, and since section 189 the rule reads
+# every copy the same way -- so the case moves with the rule.
 swap xtask/src/lists.rs \
-    '            if named != phases {
-                problems.push(format!(
-                    "README.md says `ci` runs {}, and `ci` runs {}",' \
-    '            if named.len() > 100 {
-                problems.push(format!(
-                    "README.md says `ci` runs {}, and `ci` runs {}",'
-expect_catch "gates: the README's list of the phases is compared against nothing" \
+    '            let named: Vec<&str> = named.iter().map(String::as_str).collect();
+            if named != phases {' \
+    '            let named: Vec<&str> = named.iter().map(String::as_str).collect();
+            if named.len() > 100 {'
+expect_catch "gates: a list of the phases in the prose is compared against nothing" \
     "cargo test -p xtask --profile ci the_readme_must_name_the_phases_and_only_them"
 
 # The seventh: the usage text is written from the command table, so it cannot
@@ -5728,6 +5728,37 @@ swap crates/engine/tests/properties.rs \
     '        ;'
 expect_catch "engine: the reader is never asked about the parameter" \
     "cargo test -p craftkit-engine --profile ci a_value_past_the_trees_range_is_refused_at_every_parameter"
+
+# ------------------------------------------------- the lists of the gates ----
+# Section 189. The tree prints what `ci` runs in several places, because the
+# reader of each place wants it there. Four of the copies were read by a gate
+# and four were not -- and three of those four had drifted: each was missing
+# the two gates that were added last, so AGENTS.md, the architecture
+# document and the editing skill all told a reader that `ci` runs eight
+# gates -- or six -- when it runs eleven.
+#
+# The gate now reads every copy, and the copies that are not the whole list
+# are reported. It also checks the order, which was never checked: a table of
+# gates says what each gate protects, and its rows are in the order the gates
+# run.
+
+# The first break is the drift itself: a document that names every gate but
+# one.
+swap AGENTS.md \
+    'cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm' \
+    'cargo xtask ci          # fmt, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm'
+expect_catch 'a document says `ci` runs fewer gates than it does' \
+    "cargo xtask lists"
+
+# The second break is the order: the table's rows are in the order the gates
+# run, and nothing said so.
+swap README.md \
+    '| `lists` | one deny attribute everywhere; the layer table matches the code *and* `cargo metadata`; sorted lists |
+| `layers` | strictly-lower dependencies; no UI toolkit below L6 |' \
+    '| `layers` | strictly-lower dependencies; no UI toolkit below L6 |
+| `lists` | one deny attribute everywhere; the layer table matches the code *and* `cargo metadata`; sorted lists |'
+expect_catch "a document's table of gates lists the gates in the wrong order" \
+    "cargo xtask lists"
 
 restore
 finish

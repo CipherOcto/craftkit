@@ -5384,6 +5384,89 @@ pub fn list_names(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The blocks of a document that list the gates of `ci`.
+///
+/// A **block** is a run of prose lines, because a list of gates wraps across
+/// lines and a copy of the list is the whole block. A block that names
+/// **more than half** of the gates is a list of them: a sentence mentions a
+/// gate or two, and a copy names them all. The names come back **in the
+/// order the block gives them**, so a list in the wrong order is caught too.
+/// §189.
+///
+/// The threshold is a measurement, not a taste: the tree's prose names at
+/// most five gates in a block (the checking skill's own front matter), and
+/// every copy of the list names eight or more.
+pub fn gate_lists(text: &str, phases: &[&str]) -> Vec<(usize, Vec<String>)> {
+    let mut out = Vec::new();
+    for (at, block) in blocks(text) {
+        let mut named: Vec<(usize, &str)> = Vec::new();
+        for phase in phases {
+            if let Some(where_) = gate_at(&block, phase) {
+                named.push((where_, phase));
+            }
+        }
+        if named.len() * 2 > phases.len() {
+            named.sort_by_key(|(where_, _)| *where_);
+            out.push((at, named.into_iter().map(|(_, phase)| phase.to_string()).collect()));
+        }
+    }
+    out
+}
+
+/// The blocks of a document, with the line each one starts on.
+///
+/// A blank line ends a block, and so does a **table row**: a table is not
+/// prose, and a row of a table of gates names one gate. A row that names
+/// most of the gates is a copy of the list, and it is a block of its own so
+/// that it is found. §189.
+fn blocks(text: &str) -> Vec<(usize, String)> {
+    let mut out: Vec<(usize, String)> = Vec::new();
+    let mut start = 0usize;
+    let mut current = String::new();
+    for (n, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('|') {
+            if !current.is_empty() {
+                out.push((start + 1, std::mem::take(&mut current)));
+            }
+            if trimmed.starts_with('|') {
+                out.push((n + 1, trimmed.to_string()));
+            }
+            start = n + 1;
+            continue;
+        }
+        if current.is_empty() {
+            start = n;
+        } else {
+            current.push(' ');
+        }
+        current.push_str(trimmed);
+    }
+    if !current.is_empty() {
+        out.push((start + 1, current));
+    }
+    out
+}
+
+/// Where a line names a gate, as a whole word.
+///
+/// **Not a part of a longer name**: `craftkit-web` is not the `web` gate,
+/// and `tests` is not named by `test`. A gate that is a prefix of another
+/// word is not in that word. §189.
+fn gate_at(line: &str, gate: &str) -> Option<usize> {
+    let is_a_word = |c: Option<char>| c.is_none_or(|c| !c.is_alphanumeric() && c != '-' && c != '_');
+    let mut from = 0usize;
+    while let Some(found) = line[from..].find(gate) {
+        let start = from + found;
+        let end = start + gate.len();
+        if is_a_word(line[..start].chars().next_back()) && is_a_word(line[end..].chars().next()) {
+            return Some(start);
+        }
+        from = start + 1;
+    }
+    None
+}
+
 /// The lines of a document's section with this heading.
 ///
 /// The heading, not the first match in the file: `cargo xtask ci` appears
@@ -5598,6 +5681,44 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
                 ));
             }
         }
+        // The phases among the rows must be in the order `ci` runs them.
+        //
+        // The table says what each gate protects, and its rows are in the
+        // order the gates run. That order was never checked, so a row could
+        // move and the table would still be right about every gate in it.
+        // §189.
+        let listed: Vec<&str> =
+            rows.iter().filter(|row| phases.contains(&row.as_str())).map(String::as_str).collect();
+        let expected: Vec<&str> =
+            phases.iter().copied().filter(|phase| rows.iter().any(|row| row == phase)).collect();
+        if listed != expected {
+            problems.push(format!(
+                "{relative}: its table of gates lists the phases of `ci` in the order {}, and `ci` runs them in the order {}",
+                listed.join(", "),
+                expected.join(", ")
+            ));
+        }
+    }
+
+    // Every list of the gates in the prose must be the whole list, in order.
+    //
+    // The tree prints what `ci` runs in several places, because the reader of
+    // each place wants it there. The two copies a gate read were right, and
+    // the three that **nothing** read were all missing the two gates that
+    // were added last. §189.
+    for doc in prose_files(root) {
+        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let relative = relative_name(root, &doc);
+        for (line, named) in gate_lists(&text, phases) {
+            let named: Vec<&str> = named.iter().map(String::as_str).collect();
+            if named != phases {
+                problems.push(format!(
+                    "{relative}:{line}: it lists the gates of `ci` as {}, and `ci` runs {}",
+                    named.join(", "),
+                    phases.join(", ")
+                ));
+            }
+        }
     }
 
     let readme = std::fs::read_to_string(root.join("README.md"))
@@ -5615,18 +5736,11 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
         }
     }
 
-    // And so must the README's own line for `ci`.
-    match readme_ci_phases(&readme) {
-        Some(named) => {
-            if named != phases {
-                problems.push(format!(
-                    "README.md says `ci` runs {}, and `ci` runs {}",
-                    named.join(", "),
-                    phases.join(", ")
-                ));
-            }
-        }
-        None => problems.push("README.md has no line saying what `cargo xtask ci` runs".to_string()),
+    // And the README must have such a line at all. The line's own names are
+    // checked by the rule above, which reads every prose file the same way:
+    // a second copy of the rule would report one defect twice. §189.
+    if readme_ci_phases(&readme).is_none() {
+        problems.push("README.md has no line saying what `cargo xtask ci` runs".to_string());
     }
 
     Ok(problems)
@@ -6030,7 +6144,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              shell's state holds no evaluated value, every parameter a command \
              reads is declared, every gate the tree names exists, every \
              command is documented, every gate runs in `ci`, every command `ci` \
-             does not run is run by name in the workflow, the tree's walk \
+             does not run is run by name in the workflow, every list of the \
+             gates in the prose is the whole list in the order `ci` runs them, \
+             the tree's walk \
              has one home, and the session offers no way into the design but \
              the registry",
             roots.len()
@@ -6588,6 +6704,106 @@ mod tests {
             gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("README.md"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A list of the gates that is missing one is caught.
+    ///
+    /// The tree prints what `ci` runs in several places, and three of them
+    /// had drifted: each was missing the two gates that were added last.
+    /// The reader finds the list and the gate says what `ci` really runs.
+    /// §189.
+    #[test]
+    fn a_list_of_the_gates_that_is_missing_one_is_caught() {
+        let dir = fabricated_tree("shortlist");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+        std::fs::write(dir.join("AGENTS.md"), "cargo xtask ci          # fmt, assets\n")
+            .expect("the fabricated AGENTS.md");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("AGENTS.md")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// And a list that is in the wrong order is caught too.
+    #[test]
+    fn a_list_of_the_gates_in_the_wrong_order_is_caught() {
+        let dir = fabricated_tree("wrongorder");
+        std::fs::write(dir.join("README.md"), fabricated_readme()).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+        std::fs::write(dir.join("AGENTS.md"), "cargo xtask ci          # assets, fmt, lists\n")
+            .expect("the fabricated AGENTS.md");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("AGENTS.md")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A sentence that mentions a gate or two is not a list of them.
+    ///
+    /// The reader takes a block that names **more than half** of the gates,
+    /// and the tree's prose names at most five in a block. A sentence about
+    /// two gates is not a copy of the list, and it must not be reported as
+    /// one. §189.
+    #[test]
+    fn a_sentence_that_mentions_a_gate_or_two_is_not_a_list() {
+        // The threshold is relative: with three gates, a sentence naming two
+        // of them is a list, and with the tree's eleven it is not. The tree's
+        // own prose is the second case, and this is the list of gates it has.
+        let phases = [
+            "fmt",
+            "anchors",
+            "assets",
+            "cleanroom",
+            "lists",
+            "layers",
+            "web",
+            "clippy",
+            "tests",
+            "fuzz",
+            "wasm",
+        ];
+        assert!(gate_lists("run `cargo xtask fmt` first, then `cargo xtask assets`", &phases).is_empty());
+        assert!(gate_lists("| `fmt` | one formatting |", &phases).is_empty());
+        // And a list that wraps across lines is still a list: the copy in
+        // the editing skill's own prose wraps over three lines.
+        let wrapped = "cargo xtask ci          # fmt, anchors, assets,\ncleanroom, lists, layers, web,\nclippy, tests, fuzz, wasm\n";
+        let found = gate_lists(wrapped, &phases);
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!(found[0].1, phases.to_vec());
+    }
+
+    /// A gate that is a part of a longer name is not named by it.
+    ///
+    /// `craftkit-web` is not the `web` gate, and `tests` is not named by
+    /// `test`. §189.
+    #[test]
+    fn a_gate_inside_a_longer_name_is_not_named() {
+        let phases = ["web", "tests"];
+        assert!(gate_lists("the `craftkit-web` crate and the `test` helper", &phases).is_empty());
+    }
+
+    /// A table of gates lists the phases in the order `ci` runs them.
+    ///
+    /// The table says what each gate protects, and its rows are in the order
+    /// the gates run. That order was never checked, so a row could move and
+    /// the table would still be right about every gate in it. §189.
+    #[test]
+    fn a_table_of_gates_in_the_wrong_order_is_caught() {
+        let dir = fabricated_tree("tabledorder");
+        let readme = fabricated_readme().replace(
+            "| `fmt` | one formatting |\n| `assets` | icons in code |\n| `lists` | sorted lists |\n",
+            "| `assets` | icons in code |\n| `fmt` | one formatting |\n| `lists` | sorted lists |\n",
+        );
+        std::fs::write(dir.join("README.md"), readme).expect("the fabricated README");
+        std::fs::write(dir.join("xtask/src/lib.rs"), fabricated_table()).expect("the fabricated table");
+
+        let problems =
+            gate_problems(&dir, &fabricated_commands(), &fabricated_phases()).expect("the check runs");
+        assert!(problems.iter().any(|p| p.contains("order")), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

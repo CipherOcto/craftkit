@@ -288,7 +288,7 @@ Nothing in a production path panics. This is enforced, not requested:
 | Bounded file reads | `craftkit_io::format::File::from_text` refuses input over 64 MiB before parsing, then `Document::validate`, then `reseat_id_counter` |
 | Bounded kernel walks | `craftkit_kernel::MAX_STEPS` (64), refused up front rather than detected by a counter deep in a loop |
 | The last resort | `Session::execute`'s `catch_unwind`, described above |
-| The gate | `cargo xtask ci` — fmt, assets, lists, layers, web, clippy, tests, wasm |
+| The gate | `cargo xtask ci` — fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm |
 
 `MAX_DEPTH` bounds the **node graph**; the **property tree** is bounded by
 `MAX_PATH_SEGMENTS`, because a property is named by a path and a path is the
