@@ -96,9 +96,10 @@ of parts of it.
 A report is **input**, not output — it arrives from somebody else's disk, so
 the reader bounds what it will accept: `report.json` and `replay.json` are
 read only up to `MAX_REPORT_BYTES`, a replay runs at most
-`MAX_COMMAND_STEPS` commands, and the base document is validated the way a
-design file is. A report that breaks one of those rules is **refused with the
-reason**, not repaired and not half-run.
+`MAX_COMMAND_STEPS` commands, and **both** of the report's documents — the
+base it was replayed onto and the design it recorded — are validated the
+way a design file is. A report that breaks one of those rules is **refused
+with the reason**, not repaired and not half-run.
 
 ### 2. Read the report
 

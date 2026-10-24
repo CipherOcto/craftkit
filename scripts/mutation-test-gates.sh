@@ -858,8 +858,8 @@ expect_catch "crash: a replay that does not reproduce the design is called a rep
 # against, so a replay that starts from an empty session rebuilds a document
 # that never existed — and said nothing about it.
 swap crates/engine/src/crash.rs \
-    '    session.load_document(checked_document(report.base)?);' \
-    '    let _ = checked_document(report.base)?;'
+    '    session.load_document(report.base);' \
+    '    let _ = report.base;'
 expect_catch "crash: the replay starts from an empty session instead of the report's base" \
     "cargo test -p craftkit-engine --profile ci replay"
 
@@ -931,8 +931,8 @@ expect_catch "crash: a replay runs as many steps as the report holds" \
 # And the base has to be a document the model would accept. The design reader
 # refuses a document with two nodes sharing an id; this one did not.
 swap crates/engine/src/crash.rs \
-    '    doc.validate().map_err(|e| format!("the report'"'"'s base design is not usable: {e}"))?;' \
-    ''
+    '    report.base = checked_document(report.base, "the report'"'"'s base design")?;' \
+    '    let _ = &report.base;'
 expect_catch "crash: a report with a corrupt base is replayed anyway" \
     "cargo test -p craftkit-engine --profile ci corrupt_base"
 
@@ -948,11 +948,13 @@ expect_catch "crash: a report with a corrupt base is replayed anyway" \
 # did not change — so only a *measurement* can catch it.
 swap crates/engine/src/crash.rs \
     '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
-    serde_json::from_str(&body).map_err(|e| format!("{} is not a readable report: {e}", path.display()))' \
+    let mut report: CrashReport = serde_json::from_str(&body)
+        .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;' \
     '    let body = read_bounded(&path, MAX_REPORT_BYTES)?;
-    let tree: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
-    serde_json::from_value(tree).map_err(|e| format!("{} is not a readable report: {e}", path.display()))'
+    let tree: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
+    let mut report: CrashReport = serde_json::from_value(tree)
+        .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;'
 expect_catch "crash: the report is read into a JSON tree before it is read as a report" \
     "cargo test -p craftkit-engine --profile ci reading_a_report_costs"
 
@@ -5420,6 +5422,31 @@ swap xtask/src/fuzz.rs \
     '            Selection::All => vec![Target::Design],'
 expect_catch "a run covers one door when it should cover them all" \
     "cargo test -p xtask --profile ci a_run_covers_every_target_unless_one_is_named"
+
+# ---------------------------------------------------- the crash report's door ----
+# Section 183. The tree has three readers, and two of them kept the promise
+# "if a file was read, what it holds must be valid": the design file's and
+# the script's base's. The crash report's reader kept it for the report's
+# BASE and not for its DESIGN -- and the design is the report's target: what
+# the replay has to end up with.
+#
+# So a report whose design the model refuses was read, shown and replayed,
+# while the same document in a design file was refused.
+
+# The first: the reader stops checking the design.
+swap crates/engine/src/crash.rs \
+    '    report.design = checked_document(report.design, "the report'"'"'s design")?;' \
+    '    let _ = &report.design;'
+expect_catch "the crash reader stops checking the report's design" \
+    "cargo test -p craftkit-engine --profile ci a_report_whose_design_the_model_refuses_is_refused"
+
+# The third: the reason does not name the document that is wrong. A report has
+# two documents, and the reason has to say which one is broken.
+swap crates/engine/src/crash.rs \
+    '    doc.validate().map_err(|e| format!("{which} is not usable: {e}"))?;' \
+    '    doc.validate().map_err(|e| format!("a document is not usable: {e}"))?;'
+expect_catch "the reason does not name the document that is wrong" \
+    "cargo test -p craftkit-engine --profile ci a_report_whose_design_the_model_refuses_is_refused"
 
 
 restore

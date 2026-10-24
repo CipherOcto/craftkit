@@ -21537,7 +21537,136 @@ copies of it into one.
 headless writer, so it is not fuzzed — and that is the right order: the
 writer first, then the fuzzer. The report's format is written by the
 desktop app and read by the CLI, and a corpus for it has to be a *folder* of
-three files, not a file. That is §183's work, and it is a bigger one.
+three files, not a file. That is the next arc.
+
+## What enforces what
+## 183. The crash report's reader read a report the model refuses
+
+### The finding
+
+The tree has **three readers**, and each one reads a file that arrives from
+somewhere else:
+
+| The reader | The file | The promise it keeps |
+|---|---|---|
+| `crates/io/src/format.rs` | a design | if it was read, the document it holds is **valid** |
+| `apps/craftkit-cli/src/cli.rs` | a script | if it was read, the base it holds is **valid** |
+| `crates/engine/src/crash.rs` | a crash report | if it was read, the **base** it holds is valid — and its **design** is not checked at all |
+
+The first two keep the promise. The design reader ends with
+`file.document.validate()` (`crates/io/src/format.rs:415`), and a script's
+base goes through `document_from_json` → `checked_document`
+(`apps/craftkit-cli/src/cli.rs:235`).
+
+The third kept it for one of its two documents. A crash report holds a
+**base** — the document the recorded commands were relative to — and a
+**design** — *the target*: what the replay has to end up with
+(`crates/engine/src/crash.rs:127`). The base was checked, by
+`checked_document`, in the replay door. **The design was not checked
+anywhere.**
+
+And it could not have been checked by the format, because `Document`'s
+`Deserialize` is derived (`crates/model/src/document.rs:223`) — a derived
+deserialiser **parses** a document, it does not **validate** one. So the
+report's design was materialised as a document the model would refuse, and
+the reader handed it out.
+
+Measured, by writing a report whose design has a frame rate of zero and
+reading it back:
+
+```
+show_in: READ IT. the design's fps is 0
+  and the model REFUSES that design: bad metadata: frame rate 0 is not usable:
+  it must be between 1 and 1000
+reproduce_in: replayed 1 step(s), reproduced=false
+```
+
+Read, shown — `craftkit-cli crashes show` prints the whole report — and
+**replayed**, with a verdict. The replay's verdict is a claim about the
+report's target, and the target was nonsense.
+
+The sharpest form: **the same document, two readers, two answers.** The same
+bytes in a design file are refused by the design reader; in a report they are
+read, shown and replayed. The tree had one promise about what a document is
+and it kept it in two readers out of three.
+
+### The port
+
+**The reader checks the documents it reads.** `show_in` now checks the
+report's **design** and its **base**, so a report that holds a document the
+model refuses is refused with the reason — by the reader, and not shown. The
+check moved out of the replay door and into the reader, because the reader is
+where the check belongs: **one reader, one rule**, and both doors — `crashes
+show` and `crashes replay` — get it.
+
+**And the reason names the document that is wrong.** A report has two
+documents, so `checked_document` takes the name of the one it is checking:
+*"the report's design is not usable"*, *"the report's base design is not
+usable"*, *"the base design is not usable"* for a script's. Before this,
+the one message said *"the report's base design"* for all three.
+
+**And the reader gets the property the other two have.**
+`crates/engine/tests/crash_properties.rs` is the third reader's property
+test: a report with one byte changed, a report cut short, a report with one
+hostile value in it, and the replay door — each is read or refused, and if
+it was read, the documents it holds are ones the model accepts.
+
+The corpus is written by the tree's own writer — `crash::build`, the same
+call the panic hook makes — so the format being broken is the format the
+tree speaks. §180's rule, and here it costs nothing, because the reader and
+the writer are in the same crate.
+
+**And this reader is not behind the guard.** `Session::execute` runs every
+command under a `catch_unwind`, so *"no command panics"* is a property that
+cannot fail (§175). `crash::show_in` is a plain function: a panic in it
+reaches the test and fails it. **The property can fail here**, which is the
+only reason it is worth having.
+
+### The gate's own teeth
+
+Two new mutations, and three pre-existing ones whose anchors moved because
+the reader changed:
+
+| The mutation | The gate that catches it |
+|---|---|
+| the reader stops checking the report's **design** | `a_report_whose_design_the_model_refuses_is_refused` |
+| the reason does not name the document that is wrong | `a_report_whose_design_the_model_refuses_is_refused` |
+| the replay starts from an empty session | `replay` |
+| a report with a corrupt base is replayed anyway | `corrupt_base` |
+| the report is read into a JSON tree before it is read as a report | `reading_a_report_costs` |
+
+The third, fourth and fifth are the ones that had to be *moved* rather than
+written: the base's check left the replay door and went to the reader, and a
+mutation whose anchor has moved changes nothing — so a stale anchor is a
+mutation that passes for the wrong reason. They were re-anchored and
+re-proved, one at a time, against the gates they name.
+
+### The measured result
+
+The property, in `cargo xtask ci`:
+
+```
+test result: ok. 5 passed; 0 failed
+```
+
+Five properties, 256 cases each, a thousand generated reports — read or
+refused, and never a panic. The reader that had no property now has one, and
+the tree's three readers keep **one** promise.
+
+### The lesson
+
+**A derived `Deserialize` is not a validation.** The model's `Document`
+derives it, so the format parses a document and stops there. Every reader
+that hands a document to the tree has to check it *itself*, and the check is
+one line that is easy to leave out of one door out of three.
+
+**A reader that checks one of two things has not decided.** The report has a
+base and a design, and the reader checked one of them. That is not a rule
+with a hole in it — it is the *absence* of a rule.
+
+**And the readers have to agree.** The same document, refused by one reader
+and read by another, is the tree's promise failing in the place nobody looks:
+not in the reader under test, but in the *other* one.
 
 ## What enforces what
 
@@ -21996,6 +22125,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Each target breaks its own shape** | `structure` in `xtask/src/fuzz.rs` | 1 mutation — §182 |
 | **Each target's child reads that kind of file** | `Target::child_args` | 1 mutation — §182 |
 | **A run covers every door unless one is named** | `Selection::targets` | 1 mutation — §182 |
+| **A report whose design the model refuses is refused, by name** | `show_in` in `crates/engine/src/crash.rs` | 1 mutation — §183 |
+| **The reason names the document that is wrong** | `checked_document` | 1 mutation — §183 |
+| **A report with one byte changed, one hostile value, or cut short is read or refused** | `crates/engine/tests/crash_properties.rs` | the property — §183 |
+| **The replay door refuses a report or replays it, and never panics** | the same | the property — §183 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

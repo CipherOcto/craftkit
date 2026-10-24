@@ -435,10 +435,26 @@ pub fn show(id: &str) -> Result<CrashReport, String> {
 }
 
 /// [`show`], in a named folder.
+///
+/// The report's **documents** are checked the way a design file is, and the
+/// design is checked as well as the base. §183: the reader checked the base
+/// and not the design, and the design is the report's **target** — what the
+/// replay has to end up with. A target the model refuses is not a target,
+/// and the replay's verdict ("reproduced", or "diverged") is a claim about
+/// it.
+///
+/// So a report that holds a document the model would refuse is **refused
+/// with the reason**, by the reader, and not shown. The same document in a
+/// design file is refused the same way: the tree has one promise about what
+/// a document is, and it keeps it in every reader.
 pub fn show_in(dir: &Path, id: &str) -> Result<CrashReport, String> {
     let path = dir.join(sanitize(id)).join("report.json");
     let body = read_bounded(&path, MAX_REPORT_BYTES)?;
-    serde_json::from_str(&body).map_err(|e| format!("{} is not a readable report: {e}", path.display()))
+    let mut report: CrashReport = serde_json::from_str(&body)
+        .map_err(|e| format!("{} is not a readable report: {e}", path.display()))?;
+    report.design = checked_document(report.design, "the report's design")?;
+    report.base = checked_document(report.base, "the report's base design")?;
+    Ok(report)
 }
 
 /// Read a file, refusing one that is larger than `max`.
@@ -527,7 +543,10 @@ pub fn reproduce_in(dir: &Path, id: &str) -> Result<ReplayOutcome, String> {
     let mut session = Session::new("replay");
     // The base is moved, not cloned: it is raw JSON, and raw JSON costs
     // thirty-two times its own size in memory. §64.
-    session.load_document(checked_document(report.base)?);
+    //
+    // It was checked by the reader, which is where the check belongs: one
+    // reader, one rule, and the reason names the report's base. §183.
+    session.load_document(report.base);
     session.seek_to(report.at);
 
     let mut results = Vec::with_capacity(report.replay.len());
@@ -661,7 +680,7 @@ pub fn action_in(dir: &Path, action: &str, id: Option<&str>, from: &str) -> Resu
 pub fn document_from_json(value: serde_json::Value) -> Result<craftkit_model::Document, String> {
     let doc: craftkit_model::Document = serde_json::from_value(value)
         .map_err(|e| format!("the base design is not readable ({e}) — it cannot be used"))?;
-    checked_document(doc)
+    checked_document(doc, "the base design")
 }
 
 /// Check a document that arrived from outside.
@@ -670,9 +689,17 @@ pub fn document_from_json(value: serde_json::Value) -> Result<craftkit_model::Do
 /// edited by hand can hand out an id that is already in use — and a replay
 /// built on it would name the wrong node. So the counter is reseated and the
 /// document is validated before anything is done with it. §48.
-pub fn checked_document(mut doc: craftkit_model::Document) -> Result<craftkit_model::Document, String> {
+///
+/// **The name says which document it is**, because the tree has three readers
+/// and three documents: a report's design, a report's base, and a script's
+/// base. They are checked the same way and they are named differently, so
+/// the reason a reader gives names the thing that is wrong. §183.
+pub fn checked_document(
+    mut doc: craftkit_model::Document,
+    which: &str,
+) -> Result<craftkit_model::Document, String> {
     doc.reseat_id_counter();
-    doc.validate().map_err(|e| format!("the report's base design is not usable: {e}"))?;
+    doc.validate().map_err(|e| format!("{which} is not usable: {e}"))?;
     Ok(doc)
 }
 
@@ -766,6 +793,34 @@ mod tests {
     fn mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+    }
+
+    /// A report whose **design** the model refuses is refused, by name.
+    ///
+    /// §183: the reader checked the report's *base* and not its *design* — and
+    /// the design is the report's **target**: what the replay has to end up
+    /// with. So a report whose design had a frame rate of zero was read,
+    /// shown and replayed, while the same document in a design file was
+    /// refused. The tree has one promise about what a document is, and every
+    /// reader keeps it.
+    ///
+    /// The reason names the design, because the report has two documents and
+    /// the base was already checked.
+    #[test]
+    fn a_report_whose_design_the_model_refuses_is_refused() {
+        let dir = temp_dir("bad-design");
+        let s = Session::sample();
+        let mut report = build(&s, "node.add", "boom");
+        report.design.meta.fps = 0;
+        write_to(&dir, &report).expect("the report is written");
+
+        let err = show_in(&dir, &report.id).expect_err("a design the model refuses is refused");
+        assert!(err.contains("the report's design is not usable"), "{err}");
+
+        // And the replay door says the same thing, rather than replaying onto
+        // a design nothing can use and reporting a verdict about it.
+        let err = reproduce_in(&dir, &report.id).expect_err("the replay refuses it too");
+        assert!(err.contains("the report's design is not usable"), "{err}");
     }
 
     /// A crash report of a design the model accepts can be read back.
@@ -1048,7 +1103,10 @@ mod tests {
         write_to(&dir, &report).expect("written");
 
         let mut fresh = Session::new("replay me");
-        fresh.load_document(checked_document(report.base.clone()).expect("the base is a document"));
+        fresh.load_document(
+            checked_document(report.base.clone(), "the report's base design")
+                .expect("the base is a document"),
+        );
         for step in &report.replay {
             fresh.execute(&step.command, &step.params).expect("replayed");
         }
