@@ -5647,5 +5647,87 @@ broken_copy "$SNAPSHOT/no-gate.sh" \
 expect_catch "the script's check does not run the anchors gate" \
     "cargo xtask anchors --script $SNAPSHOT/no-gate.sh"
 
+# ---------------------------------------------------- the time's range ----
+# Section 188. A time has three spellings -- seconds, a frame and a tick --
+# and the three had three different ranges: the seconds spelling refused an
+# instant past one bound, and the other two took the nearest representable
+# instant and said nothing. So the same hostile value got three different
+# answers depending on how it was written, and a fraction of a frame was
+# silently truncated to a different instant than the one that was asked for.
+#
+# Nothing noticed, because the generator never asked: the trap that makes a
+# range's two ends equal replaced the value under test, so the hostile value
+# never reached the reader. The sweep now fires every value at every
+# parameter, and the values come from the tree's own limits.
+#
+# The gates named here are the **properties**, one by one, because that is the
+# point: a case that ran the whole crate would not say which property caught
+# it.
+
+# The first brings the old frame spelling back: the count is taken and the
+# nearest representable instant is used instead.
+swap crates/core/src/tick.rs \
+    '        let ticks = (frames as i128).saturating_mul(per_frame);' \
+    '        let ticks = (frames as i128).saturating_mul(per_frame).clamp(MIN_INSTANT_TICKS, MAX_INSTANT_TICKS);'
+expect_catch "engine: a frame past the tree's range is taken silently" \
+    "cargo test -p craftkit-engine --profile ci an_instant_past_the_trees_range_is_refused_in_every_spelling"
+
+# The second does the same for the tick spelling.
+swap crates/core/src/tick.rs \
+    '        if !(MIN_INSTANT_TICKS..=MAX_INSTANT_TICKS).contains(&raw) {' \
+    '        if !(i128::MIN..=i128::MAX).contains(&raw) {'
+expect_catch "engine: a tick past the tree's range is taken silently" \
+    "cargo test -p craftkit-engine --profile ci an_instant_past_the_trees_range_is_refused_in_every_spelling"
+
+# The third does the same for the seconds spelling, which is the one that
+# used to refuse a range of its own.
+swap crates/core/src/tick.rs \
+    '        let ticks = Self::ticks_of_seconds(s);' \
+    '        let ticks = Self::ticks_of_seconds(s).clamp(MIN_INSTANT_TICKS, MAX_INSTANT_TICKS);'
+expect_catch "engine: a second past the tree's range is taken silently" \
+    "cargo test -p craftkit-engine --profile ci an_instant_past_the_trees_range_is_refused_in_every_spelling"
+
+# The fourth brings the truncation back: a frame is a count, and a count has
+# to be exact.
+swap crates/engine/src/params.rs \
+    '    if !n.is_finite() || n.fract() != 0.0 {' \
+    '    if !n.is_finite() {'
+expect_catch "engine: a fraction of a count is truncated again" \
+    "cargo test -p craftkit-engine --profile ci a_fraction_of_a_count_is_refused"
+
+# The fifth answers a value past the tree's range in the wrong words, so a
+# caller cannot tell a range that is too big from a spelling that is wrong.
+swap crates/engine/src/params.rs \
+    '            Err(TimeError::Range) => Err(bad(past_the_range(&format!("`{s}`")))),' \
+    '            Err(TimeError::Range) => Err(bad(format!("`{s}` is not a time"))),'
+expect_catch "engine: the refusal of an instant past the range says something else" \
+    "cargo test -p craftkit-engine --profile ci an_instant_past_the_trees_range_is_refused_in_every_spelling"
+
+# The sixth stops the generator from holding the value past the tree's range,
+# so the sweep walks a range that is not the tree's.
+swap crates/engine/tests/properties.rs \
+    '            json!(MAX_MAGNITUDE),
+            json!(MAX_MAGNITUDE + 1.0),' \
+    '            json!(MAX_MAGNITUDE),'
+expect_catch "engine: the generator stops holding the value past the tree's range" \
+    "cargo test -p craftkit-engine --profile ci every_command_at_every_parameter_with_every_hostile_value"
+
+# The seventh stops the sweep firing every value, which is the same defect in
+# the loop rather than in the list.
+swap crates/engine/tests/properties.rs \
+    '            for value in values {' \
+    '            for value in values.iter().take(1) {'
+expect_catch "engine: the sweep stops firing every value" \
+    "cargo test -p craftkit-engine --profile ci every_command_at_every_parameter_with_every_hostile_value"
+
+# And the eighth leaves the alternative of the parameter under test in the
+# call, so the reader takes the other spelling of the pair and never asks
+# about the parameter the property is about.
+swap crates/engine/tests/properties.rs \
+    '        .or_else(|| spec.params.iter().find(|p| p.alternative == Some(under)).map(|p| p.name));' \
+    '        ;'
+expect_catch "engine: the reader is never asked about the parameter" \
+    "cargo test -p craftkit-engine --profile ci a_value_past_the_trees_range_is_refused_at_every_parameter"
+
 restore
 finish

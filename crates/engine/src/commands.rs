@@ -853,7 +853,15 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
         let to = match opt_time(p, "seconds", rate)? {
             Some(t) => t,
             None => match p.int("frame")? {
-                Some(f) => Tick::from_frames_i64(f, rate),
+                // A frame number is a **count of this document's timebase**,
+                // so it is a fourth spelling of an instant and it is checked
+                // against the same range the other three are checked against:
+                // a frame count past the tree's range is refused, not taken
+                // as the nearest representable instant. §188.
+                Some(f) => Tick::try_from_frames_i64("frame", f, rate).map_err(|e| EngineError::Param {
+                    id: PLAYBACK_SEEK.id.to_string(),
+                    source: craftkit_core::ParamError::new("frame", e.to_string()),
+                })?,
                 None => {
                     return Err(EngineError::Param {
                         id: PLAYBACK_SEEK.id.to_string(),

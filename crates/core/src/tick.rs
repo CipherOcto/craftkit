@@ -39,6 +39,27 @@ use std::fmt;
 /// Ticks in one second. See the module docs.
 pub const TICKS_PER_SECOND: i128 = 254_016_000_000;
 
+/// The largest instant the tree holds, in ticks.
+///
+/// An instant is a value the tree stores and a reply reports, and the range
+/// of those is the range a JSON number holds: [`Tick::MIN`] to [`Tick::MAX`].
+/// The model already refuses a document whose range is outside it (§91), and
+/// a **command parameter** outside it is refused here rather than taken as
+/// the nearest representable instant. §188.
+///
+/// The bound is one number of ticks, and every spelling of a time is checked
+/// against it: the seconds spelling in ticks it computed, the frame spelling
+/// in the rate's ticks, and the tick spelling in the count itself. §188.
+pub const MAX_INSTANT_TICKS: i128 = Tick::MAX.raw();
+
+/// The smallest instant the tree holds, in ticks.
+///
+/// **Not the mirror of [`MAX_INSTANT_TICKS`]**, and the reason is the format:
+/// a JSON number is an `i64` or a `u64`, so a reply carries more instants
+/// after zero than before it. The tree's range is the range a reply can
+/// carry, and that range is not symmetric. §60, §188.
+pub const MIN_INSTANT_TICKS: i128 = Tick::MIN.raw();
+
 /// Ticks in one frame at 24 fps — the format's default rate.
 pub const TICKS_PER_FRAME_24: i128 = TICKS_PER_SECOND / 24;
 
@@ -149,6 +170,53 @@ impl Tick {
         })
     }
 
+    /// A tick from a count of ticks, refusing an instant outside the tree's
+    /// range.
+    ///
+    /// The checking form of [`Tick::from_raw`], for the path that takes a
+    /// value from a person: a command parameter. The range is the range a
+    /// reply can carry — the same range the model keeps a document's own
+    /// range inside — so a hostile time is **refused** rather than taken as
+    /// the nearest representable tick. §188.
+    pub fn try_from_raw(what: impl Into<String>, raw: i128) -> Result<Self, crate::CoreError> {
+        let what = what.into();
+        if !(MIN_INSTANT_TICKS..=MAX_INSTANT_TICKS).contains(&raw) {
+            return Err(crate::CoreError::OutOfRange {
+                what,
+                value: raw.to_string(),
+                min: MIN_INSTANT_TICKS.to_string(),
+                max: MAX_INSTANT_TICKS.to_string(),
+            });
+        }
+        Ok(Self::from_raw(raw))
+    }
+
+    /// A tick from a count of frames, refusing an instant outside the tree's
+    /// range.
+    ///
+    /// The checking form of [`Tick::from_frames_i64`], and the same rule as
+    /// [`Tick::try_from_raw`]: the instant has to be inside the range a reply
+    /// can carry, and the bound is in **this rate's** frames, because a frame
+    /// is a count of this document's timebase. §188.
+    pub fn try_from_frames_i64(
+        what: impl Into<String>,
+        frames: i64,
+        rate: FrameRate,
+    ) -> Result<Self, crate::CoreError> {
+        let what = what.into();
+        let per_frame = rate.ticks_per_frame();
+        let ticks = (frames as i128).saturating_mul(per_frame);
+        if !(MIN_INSTANT_TICKS..=MAX_INSTANT_TICKS).contains(&ticks) {
+            return Err(crate::CoreError::OutOfRange {
+                what,
+                value: frames.to_string(),
+                min: (MIN_INSTANT_TICKS / per_frame).to_string(),
+                max: (MAX_INSTANT_TICKS / per_frame).to_string(),
+            });
+        }
+        Ok(Self::from_raw(ticks))
+    }
+
     pub const fn raw(self) -> i128 {
         self.0
     }
@@ -166,7 +234,7 @@ impl Tick {
         }
         // Clamp before scaling, so `f64::MAX * constant` never happens.
         let s = s.clamp(-1e9, 1e9);
-        Self::from_raw((s * TICKS_PER_SECOND as f64) as i128)
+        Self::from_raw(Self::ticks_of_seconds(s))
     }
 
     /// Convert from seconds, reporting an unusable value instead of absorbing it.
@@ -174,9 +242,42 @@ impl Tick {
     /// Prefer this in command parameters, where silently turning `NaN` into
     /// frame 0 would hide a bug. [`Tick::from_seconds_f64`] is for read-only
     /// arithmetic where clamping is the documented behaviour.
+    ///
+    /// **The range is the range a reply can carry**, and it is checked on the
+    /// **tick count** rather than on the seconds: the tree's bound for an
+    /// instant is a number of ticks, so a seconds value is turned into ticks
+    /// first and checked against the same bound the tick spelling is checked
+    /// against. That is what makes the three spellings of a time share one
+    /// range. §188.
     pub fn try_from_seconds_f64(what: impl Into<String>, s: f64) -> Result<Self, crate::CoreError> {
-        crate::finite(what, s)?;
-        Ok(Self::from_seconds_f64(s))
+        let what = what.into();
+        crate::finite(what.clone(), s)?;
+        let ticks = Self::ticks_of_seconds(s);
+        if !(MIN_INSTANT_TICKS..=MAX_INSTANT_TICKS).contains(&ticks) {
+            return Err(crate::CoreError::OutOfRange {
+                what,
+                value: format!("{s}"),
+                min: MIN_INSTANT_TICKS.to_string(),
+                max: MAX_INSTANT_TICKS.to_string(),
+            });
+        }
+        Ok(Self::from_raw(ticks))
+    }
+
+    /// The tick count of a number of seconds.
+    ///
+    /// The whole seconds are turned into ticks with integer arithmetic and
+    /// the fraction is added afterwards, so the count is exact to within a
+    /// thousandth of a tick rather than a float multiply's worth of error.
+    /// The count is what the tree's range is checked against, so the two
+    /// spellings of the same instant cannot disagree about where the range
+    /// ends. §188.
+    fn ticks_of_seconds(s: f64) -> i128 {
+        let whole = s.trunc();
+        let fraction = s - whole;
+        let whole_ticks = (whole as i128) * TICKS_PER_SECOND;
+        let fraction_ticks = (fraction * TICKS_PER_SECOND as f64) as i128;
+        whole_ticks.saturating_add(fraction_ticks)
     }
 
     pub fn seconds_f64(self) -> f64 {
@@ -437,5 +538,97 @@ mod tests {
         let j = serde_json::to_string(&Tick::from_frames_i64(3, RATE)).unwrap();
         let back: Tick = serde_json::from_str(&j).unwrap();
         assert_eq!(back.frames_i64(RATE), 3);
+    }
+
+    /// The tree's range for an instant, in ticks.
+    ///
+    /// **One bound, two doors.** The seconds spelling and the tick spelling
+    /// have to agree on where the tree's range ends, or the same instant is
+    /// inside the range in one spelling and outside it in another. §188.
+    ///
+    /// The agreement is asked about in **whole seconds**, which are exact:
+    /// a seconds value is a float, so a value that sits on the very edge of
+    /// the range is a rounding away from it, and a rule checked at a
+    /// rounding is not a rule.
+    #[test]
+    fn the_instant_bound_is_the_range_a_reply_can_carry() {
+        assert_eq!(MAX_INSTANT_TICKS, Tick::MAX.raw());
+        assert_eq!(MIN_INSTANT_TICKS, Tick::MIN.raw());
+        // The tree's range for an instant is not symmetric, and it is not
+        // meant to be: a JSON number is an `i64` or a `u64`. §60.
+        assert!(MAX_INSTANT_TICKS > MIN_INSTANT_TICKS.unsigned_abs() as i128);
+
+        let last = MAX_INSTANT_TICKS / TICKS_PER_SECOND;
+        let first = MIN_INSTANT_TICKS / TICKS_PER_SECOND;
+        // The last whole second inside the range, and the next one out.
+        assert!(Tick::try_from_seconds_f64("t", last as f64).is_ok());
+        assert!(Tick::try_from_seconds_f64("t", last as f64 + 1.0).is_err());
+        assert!(Tick::try_from_seconds_f64("t", first as f64).is_ok());
+        assert!(Tick::try_from_seconds_f64("t", first as f64 - 1.0).is_err());
+    }
+
+    /// A count of ticks past the tree's range is refused, not clamped.
+    ///
+    /// The old answer was the nearest representable tick, silently: a hostile
+    /// value became a different value and nothing said so. §188.
+    #[test]
+    fn a_count_of_ticks_past_the_range_is_refused() {
+        assert!(Tick::try_from_raw("t", MAX_INSTANT_TICKS).is_ok());
+        assert!(Tick::try_from_raw("t", MAX_INSTANT_TICKS + 1).is_err());
+        assert!(Tick::try_from_raw("t", MIN_INSTANT_TICKS).is_ok());
+        assert!(Tick::try_from_raw("t", MIN_INSTANT_TICKS - 1).is_err());
+        // And the extremes of the tick count are refused too, rather than
+        // clamped into a range a reply could not carry.
+        assert!(Tick::try_from_raw("t", i128::MAX).is_err());
+        assert!(Tick::try_from_raw("t", i128::MIN).is_err());
+    }
+
+    /// A count of frames past the tree's range is refused, not clamped.
+    ///
+    /// The bound is in **this rate's** frames, because a frame is a count of
+    /// this document's timebase: the same number of frames is a different
+    /// number of seconds at another rate. §188.
+    #[test]
+    fn a_count_of_frames_past_the_range_is_refused() {
+        let limit = MAX_INSTANT_TICKS / RATE.ticks_per_frame();
+        assert!(Tick::try_from_frames_i64("f", limit as i64, RATE).is_ok());
+        assert!(Tick::try_from_frames_i64("f", limit as i64 + 1, RATE).is_err());
+        let low = MIN_INSTANT_TICKS / RATE.ticks_per_frame();
+        assert!(Tick::try_from_frames_i64("f", low as i64, RATE).is_ok());
+        assert!(Tick::try_from_frames_i64("f", low as i64 - 1, RATE).is_err());
+        // And the bound moves with the rate: the same count of frames is
+        // another number of seconds, so a count that is past the range at
+        // 24 fps can be inside it at 1 fps.
+        let slow = FrameRate(1);
+        let slow_limit = MAX_INSTANT_TICKS / slow.ticks_per_frame();
+        assert!(Tick::try_from_frames_i64("f", slow_limit as i64, slow).is_ok());
+        assert!(Tick::try_from_frames_i64("f", slow_limit as i64 + 1, slow).is_err());
+        assert!(Tick::try_from_frames_i64("f", i64::MAX, slow).is_err());
+    }
+
+    /// The seconds spelling and the tick spelling refuse the same instants.
+    ///
+    /// The tree's range is one range, and the two spellings are checked
+    /// against it in the same unit — the tick. Before this, the seconds
+    /// spelling refused one range and the tick spelling refused another, so
+    /// the same value got two different answers depending on how it was
+    /// written. §188.
+    #[test]
+    fn the_seconds_spelling_and_the_tick_spelling_refuse_the_same_instants() {
+        let last = MAX_INSTANT_TICKS / TICKS_PER_SECOND;
+        let first = MIN_INSTANT_TICKS / TICKS_PER_SECOND;
+        for seconds in [0.0, 1.5, -1.5, last as f64, first as f64] {
+            let by_seconds = Tick::try_from_seconds_f64("t", seconds);
+            let by_ticks = Tick::try_from_raw("t", (seconds * TICKS_PER_SECOND as f64) as i128);
+            assert_eq!(
+                by_seconds.is_ok(),
+                by_ticks.is_ok(),
+                "the two spellings disagree about {seconds} seconds"
+            );
+        }
+        // And one second past the range is refused by both.
+        let past = last as f64 + 1.0;
+        assert!(Tick::try_from_seconds_f64("t", past).is_err());
+        assert!(Tick::try_from_raw("t", (past * TICKS_PER_SECOND as f64) as i128).is_err());
     }
 }

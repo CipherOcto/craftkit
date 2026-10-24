@@ -22,3 +22,7 @@ craftkit-kernel = { workspace = true }
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }
+# The properties read the tree's own bounds, so that the values they fire are
+# the tree's rules rather than guesses. §188.
+craftkit-core = { workspace = true }
+craftkit-model = { workspace = true }

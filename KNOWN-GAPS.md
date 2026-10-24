@@ -22219,6 +22219,180 @@ put somewhere a case can reach them.
 looked for a command name and found the definition that held it. A rule
 about a call has to find the call.
 
+## 188. A time had three spellings and three ranges, and the generator never asked
+
+### The finding
+
+Item 45 of the suggested order asks for every command to be fired at every
+parameter with **generated** values. §177 did that with a draw, and what was
+left was the *shape* of the generator: which values it holds, and whether
+they reach the reader.
+
+Both were wrong, and they hid each other.
+
+**The values.** A time has three spellings — seconds, a frame (`12f`) and raw
+ticks (`120t`) — and the three had **three different ranges**. Measured, with
+a probe that fired each spelling at `doc.range`:
+
+| the spelling | the value | what the tree did |
+|---|---|---|
+| seconds, as a number | `1e300` | refused |
+| seconds, as text | `"1e300"` | refused |
+| frames | `"1e300f"` | **accepted** — the nearest representable instant, and nothing said so |
+| ticks | `"1e300t"` | **accepted** — the nearest representable instant, and nothing said so |
+| frames | `"1.5f"` | **accepted** — truncated to one frame |
+
+So the same hostile value got three different answers depending on how it was
+spelled, and a fraction of a frame became a *different instant* than the one
+that was asked for. A frame is a count, and the tree's own rule is that counts
+have to be exact.
+
+**The bound itself.** The tree's range for an instant is the range a **reply**
+can carry — `Tick::MIN` to `Tick::MAX`, the integers a JSON number holds
+(§60) — and the model already refuses a document whose range is outside it
+(§91). In seconds that is 72 620 402 s after zero and 36 310 201 s before it.
+
+Every spelling saturated **just past that bound**, silently: the seconds
+spelling at 72 620 s, the frame spelling at the rate's last frame, the tick
+spelling at `u64::MAX` ticks. A hostile value became a different value, and
+nothing said so. The seconds spelling refused at ±1e9 s, which is a range
+the tree **cannot hold at all** — so the "range" it kept was not a range.
+
+**The generator.** §177's generator draws its cases, but the value it fires at
+an instant parameter is not the drawn value: it is **built** — the plausible
+value of another instant parameter, so that a range's two ends can be made
+equal and the empty-range rule can be caught. The trick is right for its
+purpose and it has a cost: **the hostile value never reached the reader.**
+The whole Time kind was never hostile, so none of the above could be noticed.
+
+### The port
+
+**One bound, one name, declared once.** `MAX_INSTANT_TICKS` and
+`MIN_INSTANT_TICKS` in `crates/core/src/tick.rs` are `Tick::MAX.raw()` and
+`Tick::MIN.raw()` — the range a reply can carry, the same range the model
+keeps a document's range inside. There is no second bound for instants, and
+the range is **not symmetric**: a JSON number is an `i64` or a `u64`, so a
+reply carries more instants after zero than before it. §184's rule, applied
+to time.
+
+**Every spelling checks it, in exact integer ticks.** `Tick::try_from_raw`,
+`Tick::try_from_frames_i64` and `Tick::try_from_seconds_f64` are the
+checking forms, and all three compare the **tick count** against the same
+bound. The seconds spelling converts in two steps — the whole seconds in
+integer arithmetic, the fraction afterwards — so the count is exact to within
+a thousandth of a tick and the bound is checked in the same unit the tick
+spelling is checked in. That is what makes the three spellings share one
+range instead of three.
+
+**A fraction of a count is refused.** `"1.5f"` is not a time, and says so. The
+seconds spelling is not in that rule: `1.5` seconds is a perfectly good
+instant, and the tree's own message offers it as the example.
+
+**One phrase for every refusal.** `PAST_THE_RANGE` — *"is past the tree's
+range"* — is what all the spellings say, so the same hostile value gets the
+same answer however it was written, and a caller can tell *why* a value was
+refused without knowing how the instant was spelled. Before this, the seconds
+spelling said *"is out of range"* and the counting spellings said *"is not a
+time; use seconds (1.5), frames (12f) or ticks (120t)"* — advice that cannot
+help, because `1e300f` **is** in the frames spelling.
+
+**And a fourth spelling.** `playback.seek`'s `frame` parameter is a count of
+the document's timebase, so it is an instant in disguise, and it was read with
+the saturating constructor. It is checked now, like the other three.
+
+**The generator walks the tree's range.** The values come from the tree's own
+constants (`MAX_MAGNITUDE`, `MAX_TEXT`, `MAX_NAME`, `MAX_PATH_BYTES`,
+`MAX_INSTANT_TICKS`, `TICKS_PER_SECOND`), so the generator cannot drift away
+from the rules it is testing. The sweep fires **every command, at every
+parameter, with every value of that kind** — not a draw:
+
+```
+23 commands, 56 parameters, 551 cases
+```
+
+### The trap that hid it, and the one that found it
+
+The generator needed two different things, and they cannot be the same call:
+
+- §177's **trap**: the value under test is *built*, so that a range's two
+  ends are equal and the empty-range rule can be caught;
+- §188's **plain** call: the value under test is *exactly the value*, so the
+  reader is asked about it.
+
+The first draft of the plain call **kept** the trap, and the property that
+should have caught the three ranges failed with a message that named the
+wrong reason:
+
+```
+`doc.range` refused 1e+300 for start, but not because it was not a time:
+`end` the end must be after the start
+```
+
+The out-of-range value never reached the reader: the trap had replaced it.
+**A case caught for the wrong reason tests nothing** — here the case was not
+caught at all, and it said so.
+
+### The pair that is named from one side only
+
+A parameter with an alternative is one parameter in two spellings (§116), and
+the `alternative` field is on **one** side of the pair: `node` says its
+alternative is `node_name`, and `node_name` says nothing. A generator that
+left out only the side it was told about left the other side in the call, so
+the reader took the *other* spelling and never asked about the parameter
+under test.
+
+Measured: with only one side left out, **eleven commands accepted** a
+hostile name — the reader resolved the node by its id and never looked at the
+name at all. With both sides left out, **zero** commands accepted an
+out-of-range value.
+
+### The gate's own teeth
+
+Eight new mutations, and every one of them was proved **load-bearing**: the
+rule was removed from the door that holds it, and the case had to go from
+caught to missed.
+
+| The mutation | The door that catches it |
+|---|---|
+| a frame past the tree's range is taken silently | the properties in `crates/engine/tests/properties.rs` |
+| a tick past the tree's range is taken silently | the same |
+| a second past the tree's range is taken silently | the same |
+| a fraction of a count is truncated again | the same |
+| the refusal of an instant past the range says something else | the same |
+| the generator stops holding the value past the tree's range | the same |
+| the sweep stops firing every value | the same |
+| the reader is never asked about the parameter | the same |
+
+The first three are the finding itself: removing the check brings the old
+behaviour back — the value is accepted, and the property that says it must be
+refused fails.
+
+One of the eight was **caught for the wrong reason** on the first attempt, and
+the house's rule caught it: the mutation replaced the wording of the refusal
+and left the format's two arguments behind, so the tree did not compile. A
+mutation that does not compile is not a catch — the script says `BROKE` and
+counts it as a gap, because a tree that does not compile has no property to
+run.
+
+### The lesson
+
+**A generator that draws its values cannot show that it walked the range.**
+The claim "the generator walks the tree's range" is only worth as much as the
+cases that back it, and a draw is a case that might never happen. The sweep
+walks all of it, and it **checks that it did**: the value past the tree's
+range has to be one of the values the generator holds, or the sweep says so.
+
+**And a trap that makes a case reach the reader can make another case not
+reach it.** The equal-ends trick (§177) and the out-of-range value (§188)
+are two different hostile values, and only the second one is the one the
+reader has to be asked about.
+
+**And a bound the tree cannot hold is not a bound.** The seconds spelling
+kept ±1e9 s, a range the tree's own tick type cannot represent; every
+instant past the real range was silently clamped on the way to a value the
+tree could hold. The bound a spelling keeps has to be a bound the tree can
+keep, or the refusal is theatre.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -22693,6 +22867,13 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every path on that list is a file in the tree** | the same, and the script's `--check` | 2 mutations — §187 |
 | **No path is on that list twice** | `cargo xtask anchors` | 1 mutation — §187 |
 | **The script's check runs the anchors gate** | `cargo xtask anchors --script` | 1 mutation — §187 |
+| **An instant in a command parameter is inside the range a reply can carry** | `try_from_raw`, `try_from_frames_i64` and `try_from_seconds_f64` in `crates/core/src/tick.rs` | 3 mutations — §188 |
+| **Every spelling of a time shares that range** | the same | the same |
+| **A fraction of a count is refused** | `whole_count` in `crates/engine/src/params.rs` | 1 mutation — §188 |
+| **The refusal of an instant past the range says the same words** | `PAST_THE_RANGE` in `crates/engine/src/params.rs` | 1 mutation — §188 |
+| **The generator's values come from the tree's own limits** | `an_instant_past_the_range` in `crates/engine/tests/properties.rs` | 1 mutation — §188 |
+| **Every command is fired at every parameter with every value of that kind** | the same | 1 mutation — §188 |
+| **The reader is asked about the parameter under test** | `arguments_with` | 1 mutation — §188 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -23588,33 +23769,26 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     if the exception is still there — and the line can be deleted rather than
     re-justified.
 
-45. **Fire every command at every parameter with *generated* values.** Section
-    175 put the properties on the readers and the parameter readers, which is
-    where a panic would be a real bug, and section 177 put them on the
-    **commands** — every command at every parameter, with generated values.
+45. ~~**Fire every command at every parameter with *generated* values.**~~
+    **Done.** §175 put the properties on the readers and the parameter
+    readers, §177 put them on the **commands** — every command at every
+    parameter, with generated values — and §188 finished the *shape* of the
+    generator: the values come from the tree's own limits, the sweep fires
+    every command at every parameter with every value of that kind (551
+    cases over 23 commands and 56 parameters), and the sweep **checks that
+    it walked the range** rather than trusting that it did.
 
-    What is left of this item is the *shape* of the generator. §177's
-    generator has one hostile value per parameter kind, and the ones it has
-    are the ones the tree's rules are about: an unknown node, a path that
-    names nothing, an instant far outside the range, a frame rate of zero.
-    What it does not have is a generator per kind that walks the *whole*
-    range of that kind — every number magnitude, every time spelling, every
-    path grammar shape.
+    §188 also found what the generator was hiding: the three spellings of a
+    time had three different ranges, a fraction of a frame was truncated, and
+    the trap that makes a range's two ends equal meant the hostile value
+    never reached the reader at all. The three spellings now share one
+    range — the range a reply can carry — and a fraction of a count is
+    refused.
 
-    The trap to avoid is the one section 175 names: `Session::execute` runs
-    every command under a `catch_unwind`, so "no command panics" is already
-    structurally true and a test of it proves nothing. The property has to be
-    about the **document** — that it is still valid, and that the dirty flag
-    and the undo stack are what they were — because that is the part the
-    panic boundary does not restore for you. §177 does the second half of
-    that ("a refused command leaves the document exactly as it was"); the
-    first half is the engine's own check, and the property is what watches
-    it.
-
-    The other trap is the one §177 paid for: **the plausible values are
-    part of the generator.** A generator that gives two ends of a range the
-    same value makes the command refuse before it looks at the hostile one,
-    and the property passes for the wrong reason.
+    The traps the item named are the ones that bit: **the plausible values
+    are part of the generator**, and the trap that makes a range's two ends
+    equal is *also* a trap on the value under test. The two have to be two
+    different calls.
 
 46. ~~**Give the MCP server the other half of the protocol: prompts and
     completion.**~~ **Done.** §178 added the prompts and §179 the completion

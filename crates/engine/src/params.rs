@@ -17,7 +17,7 @@
 //! and the other home is `crates/core/src/params.rs`. `cargo xtask lists`
 //! refuses the tree when a third file calls it. §136.
 
-use craftkit_core::{Color, FrameRate, NodeId, ParamError, Params, Tick, Value};
+use craftkit_core::{Color, CoreError, FrameRate, NodeId, ParamError, Params, Tick, Value};
 use craftkit_model::{Easing, NodeKind};
 use serde_json::Value as Json;
 
@@ -200,6 +200,14 @@ pub fn node_by_id_or_name(doc: &craftkit_model::Document, p: &Params<'_>) -> Res
     }
 }
 
+/// The phrase the tree uses when an instant is past its range.
+///
+/// **One phrase for every spelling of a time.** A caller can tell *why* a
+/// value was refused without knowing how the instant was written, and the
+/// tree's own property can check that the three spellings answer alike.
+/// §188.
+pub const PAST_THE_RANGE: &str = "is past the tree's range";
+
 /// An instant, in the three spellings a time has.
 ///
 /// Seconds, a frame (`12f`) and raw ticks (`120t`). The frame spelling needs
@@ -214,13 +222,56 @@ pub(crate) fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Opt
         None => Ok(None),
         Some(Json::Number(n)) => {
             let secs = n.as_f64().ok_or_else(|| bad(format!("{n} is not a number of seconds")))?;
-            Ok(Some(Tick::try_from_seconds_f64("time", secs).map_err(|e| bad(e.to_string()))?))
+            // A number is the seconds spelling, and it is checked against the
+            // tree's range like the other two — and refused with the same
+            // words, because the same hostile value must not get a different
+            // answer depending on how it was written. §188.
+            Tick::try_from_seconds_f64("time", secs).map(Some).map_err(|e| {
+                bad(match e {
+                    CoreError::NotFinite { .. } => format!("{secs} is not a time"),
+                    _ => past_the_range(&secs.to_string()),
+                })
+            })
         }
-        Some(Json::String(s)) => parse_time_text(s, rate).map(Some).ok_or_else(|| {
-            bad(format!("`{s}` is not a time; use seconds (1.5), frames (12f) or ticks (120t)"))
-        }),
+        Some(Json::String(s)) => match parse_time_text(s, rate) {
+            Ok(t) => Ok(Some(t)),
+            Err(TimeError::Shape) => {
+                Err(bad(format!("`{s}` is not a time; use seconds (1.5), frames (12f) or ticks (120t)")))
+            }
+            Err(TimeError::Range) => Err(bad(past_the_range(&format!("`{s}`")))),
+        },
         Some(other) => Err(bad(format!("a {} is not a time", kind_of(other)))),
     }
+}
+
+/// The message for an instant that is past the tree's range.
+///
+/// The words say **what** is wrong: the shape of `1e300f` is fine — it is a
+/// count of frames — and the *size* is not. A refusal that says "is not a
+/// time" for a value that is plainly a time sends the reader looking for a
+/// spelling that would work, and there is none. §188.
+///
+/// The bound is given in **seconds**, because seconds are what a person
+/// writes, and the tree's range is the range a reply can carry: a little
+/// over twenty hours after zero, and a little over ten hours before it.
+fn past_the_range(value: &str) -> String {
+    format!(
+        "{value} {PAST_THE_RANGE}: an instant is at most {} seconds after zero, or {} seconds before it",
+        craftkit_core::MAX_INSTANT_TICKS / craftkit_core::TICKS_PER_SECOND,
+        -(craftkit_core::MIN_INSTANT_TICKS / craftkit_core::TICKS_PER_SECOND)
+    )
+}
+
+/// Why a time was refused.
+///
+/// Two reasons, and they are different problems: the text is not a time at
+/// all, or it is a time and it is too big. §188.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TimeError {
+    /// The text does not name an instant.
+    Shape,
+    /// The text names an instant past the tree's range.
+    Range,
 }
 
 /// The three spellings of a time, in text.
@@ -230,19 +281,54 @@ pub(crate) fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Opt
 /// belongs to the document, so hard-coding 24 here would silently give a 30
 /// fps plan the wrong instant, which is the sort of bug that only shows up in
 /// someone else's project.
-fn parse_time_text(s: &str, rate: FrameRate) -> Option<Tick> {
+///
+/// **All three spellings answer with an instant inside the tree's range.**
+/// §188: the seconds spelling always refused an instant past
+/// `MAX_MAGNITUDE` seconds, and the frame and tick spellings did not — they
+/// took the nearest representable instant and said nothing, so the same
+/// hostile value got three different answers depending on how it was
+/// spelled. The counting forms also refuse a **fraction**: a frame is a
+/// count, a count has to be exact, and `1.5f` truncated to one frame is a
+/// different instant than the one that was asked for.
+fn parse_time_text(s: &str, rate: FrameRate) -> Result<Tick, TimeError> {
     let t = s.trim();
     let (body, factor) = match t.chars().last() {
         Some('f') | Some('F') => (&t[..t.len() - 1], 'f'),
         Some('t') | Some('T') => (&t[..t.len() - 1], 't'),
         _ => (t, 's'),
     };
-    let n: f64 = body.trim().parse().ok()?;
+    let Ok(n) = body.trim().parse::<f64>() else { return Err(TimeError::Shape) };
     match factor {
-        's' => Tick::try_from_seconds_f64("time", n).ok(),
-        'f' => Some(Tick::from_frames_i64(n as i64, rate)),
-        _ => Some(Tick::from_raw(n as i128)),
+        's' => Tick::try_from_seconds_f64("time", n).map_err(|e| match e {
+            CoreError::NotFinite { .. } => TimeError::Shape,
+            _ => TimeError::Range,
+        }),
+        // The casts are from a float, and a float cast **saturates**: a
+        // count past the representable range becomes the largest one, and the
+        // range check below refuses it. A cast from one integer to a narrower
+        // one truncates instead, and `i128::MAX as i64` is `-1` — which would
+        // turn a hostile count into an instant just before zero. §188.
+        'f' => {
+            let frames = whole_count(n).ok_or(TimeError::Shape)? as i64;
+            Tick::try_from_frames_i64("time", frames, rate).map_err(|_| TimeError::Range)
+        }
+        _ => {
+            let ticks = whole_count(n).ok_or(TimeError::Shape)? as i128;
+            Tick::try_from_raw("time", ticks).map_err(|_| TimeError::Range)
+        }
     }
+}
+
+/// A whole number, and nothing else.
+///
+/// The text is read as a number, and a number may be a fraction. A frame is a
+/// count and a tick is a count, and the tree's rule is that counts have to be
+/// exact — so a fraction is refused rather than truncated. §188.
+fn whole_count(n: f64) -> Option<f64> {
+    if !n.is_finite() || n.fract() != 0.0 {
+        return None;
+    }
+    Some(n)
 }
 
 /// A node kind, by its label.

@@ -57,10 +57,15 @@ own: the file format is wider (a bare integer is read straight into an
 /// Convert from seconds, reporting an unusable value instead of absorbing it.
 ///
 /// Prefer this in command parameters, where silently turning `NaN` into
-/// frame 0 would hide a bug.
+/// frame 0 would hide a bug — and where an instant outside the range a reply
+/// can carry has to be **refused** rather than clamped.
 pub fn try_from_seconds_f64(what: impl Into<String>, s: f64) -> Result<Self, crate::CoreError> {
-    crate::finite(what, s)?;
-    Ok(Self::from_seconds_f64(s))
+    crate::finite(what.clone(), s)?;
+    let ticks = Self::ticks_of_seconds(s);
+    if ticks > MAX_INSTANT_TICKS || ticks < MIN_INSTANT_TICKS {
+        return Err(crate::CoreError::OutOfRange { .. });
+    }
+    Ok(Self::from_raw(ticks))
 }
 ```
 
@@ -75,10 +80,14 @@ A command takes an instant and a rate, never a number of seconds it will store:
 
 ```rust
 // crates/engine/src/commands.rs — playback.seek
-let to = match opt_time(p, "seconds")? {
+let rate = s.document().meta.frame_rate();
+let to = match opt_time(p, "seconds", rate)? {
     Some(t) => t,
     None => match p.int("frame")? {
-        Some(f) => Tick::from_frames_i64(f, s.document().meta.frame_rate()),
+        // A frame number is a count of this document's timebase, so it is an
+        // instant in disguise — and it is checked against the same range the
+        // other three spellings are checked against. §188.
+        Some(f) => Tick::try_from_frames_i64("frame", f, rate)?,
         None => /* the current playhead */,
     },
 };
@@ -88,7 +97,7 @@ let to = match opt_time(p, "seconds")? {
 `"120t"` for raw ticks, and converts through the checked constructor:
 
 ```rust
-fn opt_time(p: &Params<'_>, key: &str) -> Result<Option<Tick>, EngineError> {
+fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Option<Tick>, EngineError> {
     let bad = |detail: String| {
         EngineError::Param { id: String::new(), source: craftkit_core::ParamError::new(key, detail) }
     };
@@ -96,24 +105,51 @@ fn opt_time(p: &Params<'_>, key: &str) -> Result<Option<Tick>, EngineError> {
         None => Ok(None),
         Some(serde_json::Value::Number(n)) => {
             let secs = n.as_f64().ok_or_else(|| bad(format!("{n} is not a number of seconds")))?;
-            Ok(Some(Tick::try_from_seconds_f64("time", secs).map_err(|e| bad(e.to_string()))?))
+            // The number is the seconds spelling, and it is checked against
+            // the tree's range like the other two. §188.
+            Tick::try_from_seconds_f64("time", secs).map(Some).map_err(|e| bad(...))
         }
-        Some(serde_json::Value::String(s)) => parse_time_text(s).map(Some).ok_or_else(|| {
-            bad(format!(
+        Some(serde_json::Value::String(s)) => match parse_time_text(s, rate) {
+            Ok(t) => Ok(Some(t)),
+            // Two reasons, and they are different problems: the text does not
+            // name an instant, or it names one that is too big.
+            Err(TimeError::Shape) => Err(bad(format!(
                 "`{s}` is not a time; use seconds (1.5), frames (12f) or ticks (120t)"
-            ))
-        }),
+            ))),
+            Err(TimeError::Range) => Err(bad(past_the_range(&format!("`{s}`")))),
+        },
         Some(other) => Err(bad(format!("a {} is not a time", params::kind_of(other)))),
     }
 }
 ```
 
 The suffix is parsed, not guessed: `parse_time_text` strips a trailing `f`,
-`F`, `t` or `T` and dispatches to `from_frames_i64` or `from_raw`. Note that the
-`12f` form is read at the format's default rate of 24 fps, while the numeric
-`frame` parameter above is read at `s.document().meta.frame_rate()`. Prefer the
-numeric parameter when the document's rate is not 24 — the string form is the
-one that silently assumes.
+`F`, `t` or `T` and dispatches to `try_from_frames_i64` or `try_from_raw`. The
+rate is a **parameter** of the reader, not something the reader knows: the
+`12f` form is a frame *of this document*, so a 30 fps plan must not read it
+at 24 fps.
+
+**All three spellings answer with an instant inside the tree's range**, and
+that range is the one a reply can carry — `Tick::MIN` to `Tick::MAX`, the
+integers a JSON number holds (§60). The model already refuses a document
+whose range is outside it (§91), so a parameter outside it is refused the
+same way: the reading forms (`try_from_raw`, `try_from_frames_i64`,
+`try_from_seconds_f64`) compare the **tick count** against that bound and
+refuse, instead of taking the nearest representable instant. Before this the
+three spellings had three different ranges, and the seconds spelling kept
+±1e9 s — a range the tick type cannot hold at all, so every instant past the
+real one was silently clamped. §188.
+
+The seconds spelling converts in two steps — the whole seconds in integer
+arithmetic, the fraction afterwards — so the count it is checked against is
+exact to within a thousandth of a tick, and the bound is checked in the same
+unit the tick spelling is checked in.
+
+The counting forms also refuse a **fraction**: a frame is a count, a count
+has to be exact, and `1.5f` truncated to one frame is a different instant than
+the one that was asked for. The seconds spelling is not in that rule: `1.5`
+seconds is a perfectly good instant, and the tree's own message offers it as
+the example. §188.
 
 Frames are the same idea one level up: `Tick::from_frames_i64`,
 `frames_i64`, `round_to_frames` and `FrameRate::frame_of` all take a `FrameRate`
