@@ -26968,6 +26968,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     What is **left** is the choice the item names: the loop, or the
     repetition count. Neither is free, and the cost falls on every run.
 
+    **And a second one-off, in another crate, in the same family.** During
+    §215's work one `cargo xtask ci` failed in `craftkit-ui --lib`; the name
+    of the test was not captured, because the output was cut before the
+    failure's own lines. **Not reproduced in thirteen runs since**: eight of
+    `cargo test -p craftkit-ui --profile ci`, three of
+    `cargo test --workspace --profile ci` and two of `cargo xtask ci`.
+
+    **It is the same shape and a different test**, and no cause is claimed
+    for it. What can be said is what §207 said for the first one: the UI
+    crate's timing-sensitive tests take the **minimum** of several rounds by
+    design — *"the question is how fast the code can go, and a round that was
+    interrupted by the machine is a round that says nothing about the code"* —
+    so the load on the machine is not supposed to decide them. A failure
+    that is not reproduced in thirteen runs is a **candidate** for the same
+    unexplained family, and the same loop would catch it.
+
 43. **Decide whether a gate named in prose without the command in front of it
     counts.** §169's gate reads one phrase out of the prose — `cargo xtask
     <name>` — and checks that the name is a command. That is the phrase the
@@ -27065,6 +27081,35 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     `MPL-2.0`, which *is* copyleft, sits in the allow list with **no crate
     that needs it**. The allow list is one row wider than the rule, and the
     row is not there for anything.
+
+    **And the decision is made: the policy goes as wide as it can.** The
+    owner's answer (2026-10-25): *"the licence decision should be the widest
+    possible and encompass things like clipboard and fonts."* So the licence
+    part of this item is **closed**:
+
+    - the **clipboard** is covered — `BSL-1.0` is in the allow list, for
+      every crate and not for the two that carry it today;
+    - the **fonts** are covered — `OFL-1.1` and `Ubuntu-font-1.0` are in the
+      allow list, **for every crate**, and the per-crate exception for
+      `epaint_default_fonts` is **gone**: a licence that only exists because
+      one dependency happens to carry it is a rule with a name on it;
+    - and the policy's **rule** now says what it does: *only the strong
+      copyleft is refused*. `GPL`, `LGPL` and `AGPL` are the boundary, and
+      every other licence — the permissive ones, `MPL-2.0`'s file-level
+      copyleft, the font licences, `BSL-1.0` — is allowed.
+
+    **What that changes about the version.** Nothing about *whether* to move,
+    and everything about *how far*. The licences are no longer a reason to go
+    past 0.34, so the item's own title stands: **0.34**, where the advisory
+    exception goes on its own and the policy needs no change at all. Going to
+    0.37 would still put the bundled fonts and the clipboard out of the
+    graph, but that is now a choice about the *app* — the text in the
+    operating system's font — and not about the policy.
+
+    **What is left of this item** is the upgrade itself: 0.33 → 0.34, where
+    the text layout and the font handling changed. The exception is the proof
+    that it has not happened; when the tree moves up, the advisory comes back
+    on its own and the line can be deleted rather than re-justified.
 
 45. ~~**Fire every command at every parameter with *generated* values.**~~
     **Done.** §175 put the properties on the readers and the parameter

@@ -11,11 +11,20 @@ not hold the policy is a tree that does not pass.
 
 ## 1. The rule
 
-**Only permissive licences are linked.** Copyleft is never linked into a
-binary this project ships. A copyleft tool may be *run* as an external
-program, the way a reference implementation may be run to produce numbers
-this tree then checks itself against; it is never vendored, linked or
-compiled in.
+**Only the strong copyleft is refused.** Every licence that does not make
+the binary copyleft is allowed: the permissive ones, the file-level copyleft
+(`MPL-2.0`), the font licences, and the licence of the crates that arrive
+with the UI toolkit's clipboard support. The strong copyleft — `GPL`, `LGPL`,
+`AGPL` — is never linked into a binary this project ships. A copyleft tool
+may still be *run* as an external program, the way a reference implementation
+may be run to produce numbers this tree then checks itself against; it is
+never vendored, linked or compiled in.
+
+**The list is wide on purpose.** The owner's decision (§215): the tree would
+rather widen the policy than narrow the work, and a licence that only exists
+because one dependency happens to carry it is a rule with a name on it. So
+there are **no per-crate exceptions** in `deny.toml` — every allowed licence
+is allowed for every crate.
 
 **Every dependency comes from the crates.io registry.** A git dependency has
 to be named in `deny.toml` and say why. An unknown registry or an unknown git
@@ -49,17 +58,16 @@ a list of identifiers is not a rule — a reviewer needs to be able to ask
 | `CC0-1.0` | a dedication to the public domain; permissive |
 | `MPL-2.0` | file-level copyleft, weak enough to link: the modified files stay open, the binary does not become copyleft |
 | `BSL-1.0` | the Boost Software License; permissive, and the licence of `clipboard-win` and `error-code`, which arrive with the UI toolkit's clipboard support |
+| `OFL-1.1` | the SIL Open Font License; permissive, and the licence of the fonts the UI toolkit ships |
+| `Ubuntu-font-1.0` | permissive, and the licence of the Ubuntu font the UI toolkit ships |
 
-Two licences are allowed **for one crate only**, and the crate's own licence
-expression asks for them:
-
-| Crate | Licences | Why |
-|---|---|---|
-| `epaint_default_fonts` | `OFL-1.1`, `Ubuntu-font-1.0` | the UI toolkit ships its default fonts inside this crate, and its licence expression requires the font licences as well as MIT or Apache-2.0. The fonts are inside a dependency, not in this tree, so the tree's own asset rule does not reach them. |
-
-Those two are also what `ATTRIBUTION.md` cannot cover, because the files are
-not in this tree: they are inside a crate from the registry, and the licence
-of that crate says what they are.
+**The fonts are inside a dependency, not in this tree**, so the tree's own
+asset rule does not reach them and `ATTRIBUTION.md` cannot cover them: they
+are inside a crate from the registry, and that crate's licence expression
+says what they are. That expression is `(MIT OR Apache-2.0) AND OFL-1.1 AND
+Ubuntu-font-1.0` — byte-for-byte the same in every version of the toolkit
+from 0.33.0 to 0.37.0 — so the two font licences are allowed for **every**
+crate and not for the one that carries them today. §173, §215.
 
 ---
 

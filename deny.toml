@@ -25,6 +25,10 @@ ignore = [
 
 [licenses]
 version = 2
+# The tree's licence rule, in one list: **everything is allowed except the
+# strong copyleft.** §173 widened this list once, and the owner's decision
+# (§215) is that it stays wide — a licence that does not make the binary
+# copyleft is allowed, whether it arrives with a clipboard or with a font.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -38,16 +42,15 @@ allow = [
     # Boost Software License 1.0. clipboard-win and error-code, which come
     # with egui's clipboard support, are BSL-1.0 and nothing else. §173.
     "BSL-1.0",
+    # The font licences. egui ships its default fonts inside the
+    # epaint_default_fonts crate, and that crate's own licence expression
+    # requires these two as well as MIT or Apache-2.0. They are allowed for
+    # **every** crate and not for that one: a font is a font wherever it comes
+    # from, and a per-crate exception is a rule with a name on it. §173, §215.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.9
-
-# egui's default UI fonts (Ubuntu-Light, Hack, the emoji icon font) are shipped
-# inside the epaint_default_fonts crate, which egui depends on. The crate's own
-# licence expression requires the font licences as well as MIT or Apache-2.0,
-# so they are named here rather than refused. §173.
-[[licenses.exceptions]]
-crate = "epaint_default_fonts"
-allow = ["OFL-1.1", "Ubuntu-font-1.0"]
 
 [bans]
 multiple-versions = "warn"

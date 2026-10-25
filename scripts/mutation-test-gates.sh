@@ -5122,6 +5122,19 @@ expect_catch "policy: a licence the tree needs is taken out of the allow list" \
     "no" \
     "cargo-deny"
 
+# And the font licences. They are in the allow list for **every** crate --
+# the per-crate exception for the one that carries them today is gone, so
+# the list is the only place they are named. Take one out and the fonts the
+# UI toolkit ships are unlicensed.
+swap deny.toml \
+    '    "OFL-1.1",
+' \
+    ''
+expect_catch "policy: a font licence the tree needs is taken out of the allow list" \
+    "cargo xtask deny" \
+    "no" \
+    "cargo-deny"
+
 # ------------------------------------------------------- the version flag ----
 # Section 174. Two of the three programs in the tree printed their version and
 # the headless CLI did not -- and the headless CLI is the one an agent
