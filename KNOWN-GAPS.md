@@ -24888,6 +24888,94 @@ path.
 it was that **the production path had no test at all**, and the residual's
 words had pointed at the wrong place.
 
+## 211. Two tests could share one temporary folder, and a run could inherit the last run's files
+
+### The finding
+
+Item 66 named the rule the tree's crash tests follow for their temporary
+folders, and the two things that are wrong with it.
+
+**Measured**, `crates/engine/src/crash.rs` builds its temporary folder like
+this:
+
+```rust
+std::env::temp_dir().join("craftkit-crash-tests").join(format!("{tag}-{}", std::process::id()))
+```
+
+**The name is the tag and the process id.** The module has **39** call sites
+and **37** distinct tags, and exactly **one** tag was used twice:
+`"not-a-report"`, by `a_folder_that_is_not_a_report_is_not_listed_and_says_so`
+and `a_file_that_is_not_a_report_is_refused_by_name`.
+
+**And the two were robust to each other today — by luck, not by rule.**
+`list_in` keeps only the folders that hold a `report.json`, and the other test
+writes a plain file, so neither can see the other's work.
+
+**And no folder was ever cleaned.** `temp_dir` only created it, so a run that
+reused a process id **inherited the last run's files** — and the tree keeps the
+folder on purpose, *"so a failing run leaves evidence behind rather than
+deleting it"*. The two rules were in tension, and nothing said which wins.
+
+### The port
+
+**Every call gets a folder of its own.** The name carries a **counter** as
+well as the tag and the process id, so two calls never share a folder — even
+when they pass the same tag.
+
+**And a folder that is already there is emptied first.** The process id in
+the name is **ours**, so the folder it names belongs to a process that is
+gone; there is nothing in it worth keeping. That is the answer to "which rule
+wins": **the evidence stays until the next run that reuses the process id**,
+and never before.
+
+```rust
+fn temp_dir(tag: &str) -> PathBuf {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    temp_dir_numbered(tag, n)
+}
+```
+
+### The gate's own teeth
+
+Two mutations, both caught by `cargo test -p craftkit-engine --profile ci
+every_call_gets_a_folder_of_its_own`:
+
+| the break | what it says |
+|---|---|
+| the counter goes away | *"two calls must not share a folder"* |
+| the emptying goes away | *"a folder that is already there must not inherit the files in it"* |
+
+**And the suite.** **485** of **486** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The rule is written once per place, and there are several places.**
+**Measured**: **16** lines in **7** files build a temporary folder whose name
+carries the process id — the io crate's store tests, the control crate's
+token tests, the desktop app's four, the CLI's four. **Only the engine's
+crash tests were fixed here.** The others still share a name when two tests
+pass the same tag, and they still inherit a folder a previous run left
+behind. It is item 68.
+
+**And the folders still accumulate.** One folder per call, left behind on
+purpose — the same count as before, and the same reason.
+
+### The lesson
+
+**A name that is derived from a tag and a process id is not unique.** Two
+callers that pass the same tag get the same folder, and a later run that
+reuses the process id gets the folder the last run left. The counter is what
+makes the name a name.
+
+**And "leave the evidence behind" and "start from a clean folder" are not
+opposites — they are two halves of one rule.** The folder is left behind when
+the run ends, and emptied when the **next** run that owns the name begins.
+Which run owns a name is the process id, and a process id belongs to one
+process at a time.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25417,6 +25505,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A type that starts with `Params` is not the params type, and `&mut Params` is** | `takes_the_params` in `xtask/src/lists.rs` | 1 mutation — §208 |
 | **Every pending change is declared and applied, in code** | `the_pending_changes_are_declared_in_code` | 1 mutation — §209 |
 | **The control channel a user reaches binds loopback** | `the_server_binds_loopback_on_the_path_a_user_reaches` | 1 mutation — §210 |
+| **Every temporary folder is a folder of its own, and never inherited** | `every_call_gets_a_folder_of_its_own` | 2 mutations — §211 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -27074,8 +27163,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     and the **names** come from the io crate's own table, read from the text
     because a name is a string.
 
-66. **One temporary folder name is used by two tests, and no folder is ever
-    cleaned.** §207.
+66. ~~**One temporary folder name is used by two tests, and no folder is ever
+    cleaned.**~~ **Done in §211.**
 
     The tree has **39** temporary-folder names and exactly **one** of them is
     used twice: `"not-a-report"`, by `a_folder_that_is_not_a_report_is_not_
@@ -27093,6 +27182,24 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     tree keeps the folder on purpose, *"so a failing run leaves evidence
     behind rather than deleting it"*. The two rules are in tension, and
     nothing says which wins.
+
+    **§211 measured the item's numbers and kept them: 39 call sites, 37
+    distinct tags**, one of them used twice. The folder was named after the
+    **tag** and the process id, so the name was not unique — two calls with
+    the same tag shared one folder, and a later run that reused the process
+    id inherited the last run's files.
+
+    **The port:** the name carries a **counter** as well, so every call gets a
+    folder of its own; and a folder that is already there is **emptied
+    first**, because the process id in the name is ours and the folder it
+    names belongs to a process that is gone. That is the answer to "which rule
+    wins": the evidence stays until the next run that owns the name, and
+    never before.
+
+    **The teeth:** two mutations, both caught by the new test
+    `every_call_gets_a_folder_of_its_own` — the counter away says *"two calls
+    must not share a folder"*, and the emptying away says *"a folder that is
+    already there must not inherit the files in it"*.
 
 67. ~~**The scan that keeps the control channel local is fooled by a positional
     `true`.**~~ **Done in §210.**
@@ -27144,3 +27251,31 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the production call site binding every interface, the other 62 tests
     still passed and this one said *"the control channel bound 0.0.0.0:37261,
     which is reachable from another machine"*.
+
+68. **The rule for a test's temporary folder is written sixteen times.** §211.
+
+    §211 fixed the engine's crash tests: every call gets a folder of its own,
+    and a folder that is already there is emptied first.
+
+    **Measured, that was one place of several.** **16** lines in **7** files
+    build a temporary folder whose name carries the process id:
+
+    | where | how many |
+    |---|---|
+    | `crates/control/src/token.rs` | 5 |
+    | `apps/craftkit/src/main.rs` | 4 |
+    | `apps/craftkit-cli/tests/script.rs` | 3 |
+    | `crates/io/src/store.rs` | 1 |
+    | `apps/craftkit-cli/src/cli.rs` | 1 |
+    | `apps/craftkit-cli/tests/crash_pipeline.rs` | 1 |
+    | `apps/craftkit-cli/tests/sample.rs` | 1 |
+
+    **The rule is written once per place, and each place is a chance to
+    forget it.** §149's shape: a rule written three times is three chances to
+    forget it, and this one is written sixteen.
+
+    The choices are: put the rule in **one home** the crates can reach — a
+    helper in the core crate, or a small dev-dependency — and have every test
+    call it; or leave the places alone and let each one be right; or a gate
+    that holds every place at once, the way §205 holds every module of the
+    xtask rather than a list of the ones that read a file.

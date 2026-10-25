@@ -5609,6 +5609,28 @@ expect_catch "anchors: an anchor that names two places is reported" \
     "cargo xtask anchors"
 
 # ------------------------------------------------------ the crash report's folder ----
+# Section 211. The temporary folder a test writes into was named after the
+# **tag** and the process id, so two tests that passed the same tag shared one
+# folder, and a later run that reused the process id inherited the last run's
+# files.
+#
+# The first break takes the counter away: two calls share a folder again.
+swap crates/engine/src/crash.rs \
+    '            .join(format!("{tag}-{}-{n}", std::process::id()));' \
+    '            .join(format!("{tag}-{}", std::process::id()));'
+expect_catch "crash: two tests share one temporary folder" \
+    "cargo test -p craftkit-engine --profile ci every_call_gets_a_folder_of_its_own"
+
+# And the second takes the emptying away: a folder that is already there is
+# inherited instead of fresh.
+swap crates/engine/src/crash.rs \
+    '        if dir.exists() {
+            std::fs::remove_dir_all(&dir).expect("remove the folder this run left behind");
+        }' \
+    ''
+expect_catch "crash: a temporary folder inherits the last run's files" \
+    "cargo test -p craftkit-engine --profile ci every_call_gets_a_folder_of_its_own"
+
 # Section 185. The crash report was a folder of three files: the report, a copy
 # of the design and a copy of the steps. Nothing read the design's copy, and
 # the replay's copy was read by a door nothing called -- so a report that
