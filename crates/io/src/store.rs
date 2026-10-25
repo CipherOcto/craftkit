@@ -197,16 +197,18 @@ pub fn save(path: &Path, doc: &Document) -> Result<(), SaveError> {
     }
 
     let text = save_text(doc)?;
-    let tmp = with_suffix(path, "tmp");
-    std::fs::write(&tmp, text).map_err(|source| SaveError::Write { path: tmp.clone(), source })?;
-    match std::fs::rename(&tmp, path) {
-        Ok(()) => Ok(()),
-        Err(source) => {
-            // Do not leave the temporary behind for the next save to trip on.
-            let _ = std::fs::remove_file(&tmp);
-            Err(SaveError::Write { path: path.to_path_buf(), source })
-        }
-    }
+    // The tree's one writer: into a temporary name beside the target, and then
+    // moved into place, so a save that fails leaves the design that was there
+    // alone. §215.
+    //
+    // The mode is the process's own: a document the user saves where they
+    // chose is the user's business, not the program's.
+    craftkit_core::atomic::write_file(path, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
+        .map_err(|e| SaveError::Write {
+            path: e.path().to_path_buf(),
+            source: std::io::Error::other(e.to_string()),
+        })?;
+    Ok(())
 }
 
 /// Read a document from `path`.
@@ -230,13 +232,6 @@ pub fn load(path: &Path) -> Result<Document, SaveError> {
         }
     };
     load_text(&text)
-}
-
-fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    name.push('.');
-    name.push_str(suffix);
-    path.with_file_name(name)
 }
 
 #[cfg(test)]

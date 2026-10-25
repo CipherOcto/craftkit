@@ -49,7 +49,9 @@
 //! - **Write atomically.** Into a temporary name, then rename. A crash halfway
 //!   through must not leave a half-written file that looks like a real one —
 //!   and the *folder* is written the same way, so a folder in the crash
-//!   directory is a report that is finished. §185.
+//!   directory is a report that is finished. §185. The file part of that rule
+//!   is the tree's **one** writer, `craftkit_core::atomic`, since every file
+//!   the tree writes has to obey it and not three of them. §215.
 //! - **Write privately.** A report holds the user's design. The files are
 //!   created `0600` and the report's own folder is `0700`; a folder that was
 //!   already there keeps the permissions its owner gave it. §57.
@@ -384,50 +386,14 @@ fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
     String::from_utf8(out).map_err(|e| format!("could not serialize: {e}"))
 }
 
+/// Write a file, atomically and privately.
+///
+/// The tree's **one** writer (§215): into a temporary name beside the target,
+/// created private from the moment it exists, and then moved into place. A
+/// report that is half written is not a report, and a report that holds the
+/// user's design is not a file the world may read.
 fn write_atomic(path: &Path, body: &str) -> Result<(), String> {
-    use std::io::Write;
-    let tmp = path.with_extension("tmp");
-    // Created private, not created open and locked down afterwards: the
-    // design would be on disk in a world-readable file for the length of the
-    // chmod, and `std::fs::write` creates its file with the process's umask,
-    // which measured 0664 on this account.
-    let mut file = create_private(&tmp)?;
-    if let Err(e) = file.write_all(body.as_bytes()) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("could not write {}: {e}", tmp.display()));
-    }
-    drop(file);
-    match std::fs::rename(&tmp, path) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            let _ = std::fs::remove_file(&tmp);
-            Err(format!("could not finish {}: {e}", path.display()))
-        }
-    }
-}
-
-/// Open a file for writing, private from the moment it exists.
-#[cfg(unix)]
-fn create_private(path: &Path) -> Result<std::fs::File, String> {
-    use std::os::unix::fs::OpenOptionsExt;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        // Masked by the umask, which cannot clear `0600`'s bits: a umask
-        // clears bits it has, and `0600` grants nothing beyond the owner.
-        .mode(0o600)
-        .open(path)
-        .map_err(|e| format!("could not write {}: {e}", path.display()))
-}
-
-#[cfg(not(unix))]
-fn create_private(path: &Path) -> Result<std::fs::File, String> {
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)
+    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::OwnerOnly)
         .map_err(|e| format!("could not write {}: {e}", path.display()))
 }
 

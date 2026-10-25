@@ -219,99 +219,15 @@ pub fn write_token(path: &Path, token: &Token) -> Result<(), String> {
             restrict(parent, true).map_err(|e| format!("could not protect {}: {e}", parent.display()))?;
         }
     }
-    write_private(path, token.as_str())
-}
-
-/// The next name for the temporary file a token is written into.
-///
-/// The same directory as the token, so the move into place is within one
-/// filesystem, and unique enough that two instances cannot collide over it.
-fn temp_path(path: &Path) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let parent = path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
-    parent.join(format!(".{name}.{}.{n}.tmp", std::process::id()))
-}
-
-/// Write the secret into a file that is private from the moment it exists, and
-/// move that file into place.
-///
-/// The file is created with `0600` rather than being created with the umask
-/// and restricted afterwards, so the secret is never written into a file
-/// another user can read — not even for the length of one `chmod`.
-#[cfg(unix)]
-fn write_private(path: &Path, body: &str) -> Result<(), String> {
-    use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-    let temp = temp_path(path);
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        // Only used when this call creates the file, and masked by the umask —
-        // which cannot clear `0600`'s bits, because a umask clears bits it has
-        // and `0600` grants none beyond the owner.
-        .mode(0o600)
-        .open(&temp)
-        .map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    // Checked before the secret goes in, so a file that is not private is a
-    // file we refuse to write rather than one we write and then repair.
-    if let Err(e) = verify_private(&temp) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(e);
-    }
-    if let Err(e) = file.write_all(body.as_bytes()) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(format!("could not write {}: {e}", path.display()));
-    }
-    drop(file);
-    replace(&temp, path)
-}
-
-#[cfg(not(unix))]
-fn write_private(path: &Path, body: &str) -> Result<(), String> {
-    // No POSIX permissions here. The file is created with the process's own
-    // default ACL, which is the best available.
-    std::fs::write(path, body).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    if let Err(e) = restrict(path, false) {
-        log::warn!("could not restrict {}: {e}", path.display());
-    }
-    Ok(())
-}
-
-/// Move the finished file into place.
-fn replace(temp: &Path, path: &Path) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        // Windows refuses to rename onto an existing file, and the token file
-        // outlives the process that wrote it.
-        if path.exists() {
-            std::fs::remove_file(path).map_err(|e| format!("could not replace {}: {e}", path.display()))?;
-        }
-    }
-    std::fs::rename(temp, path).map_err(|e| {
-        let _ = std::fs::remove_file(temp);
-        format!("could not move the token into {}: {e}", path.display())
-    })
-}
-
-/// Whether the file is readable by nobody but its owner.
-#[cfg(unix)]
-fn verify_private(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let mode = mode.permissions().mode() & 0o777;
-    if mode & 0o077 != 0 {
-        return Err(format!("{} is readable by other users (mode {mode:04o})", path.display()));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn verify_private(_path: &Path) -> Result<(), String> {
-    Ok(())
+    // The tree's **one** writer (§215): into a temporary name beside the
+    // token, created private from the moment it exists, and then moved into
+    // place.
+    craftkit_core::atomic::write_file(
+        path,
+        token.as_str().as_bytes(),
+        craftkit_core::atomic::Visibility::OwnerOnly,
+    )
+    .map_err(|e| format!("could not write {}: {e}", path.display()))
 }
 
 #[cfg(unix)]

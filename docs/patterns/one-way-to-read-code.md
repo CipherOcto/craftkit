@@ -858,6 +858,47 @@ copy says where it came from, **in the file**: a copy that forgets where it
 came from is a copy that drifts.
 
 
+## And a file the tree writes goes through one home
+
+**A rule that is written down once is not a rule that is obeyed once.** The
+tree states how a file is written — *into a temporary name, then rename* — in
+the crash report's own header, and it was written **three** times, in three
+crates, with three different temporary names, while **two** of the tree's own
+writers did not follow it at all. §215.
+
+**The home goes where every writer can reach it.** `craftkit_core::atomic` is
+in the **lowest layer**, so the io crate, the engine, the control channel and
+the command line all reach it — the same shape as §212's temporary folder.
+
+**And the home holds the whole rule, not half of it.** A temporary name
+beside the target; the file created with the mode the caller asks for; the
+mode **looked at** before the bytes go in, so a filesystem that does not keep
+permissions is refused rather than trusted; the finished file renamed into
+place; and the temporary removed if anything fails.
+
+**And the caller says which kind of file it is.** `OwnerOnly` makes the file
+`0600` from the moment it exists; `AsCreated` leaves it with the process's
+own default. The design the user saves where they chose is `AsCreated`,
+because a document the user put somewhere is the user's business — so the
+decision is made at the call site, where the knowledge is.
+
+**And a writer is recognised by its shape.** `std::fs::write`, `std::fs::copy`,
+`std::fs::File::create`, `std::fs::OpenOptions::new` — four shapes of "this
+line creates a file", and a gate that asks the shape catches a writer whatever
+it is called. §208's lesson, in a third place.
+
+**And the question is asked of the code the tree ships.** A test writes
+fixtures, and a fixture is not a file the tree writes; so the gate reads the
+**production** view, the tree's own cut, and a mention in a comment or in a
+string is not a call.
+
+**And a promise is proved by being broken.** The home's own test runs a child
+process under a file-size limit and watches the file that was there survive —
+and the child's output goes nowhere, because a limit on a file's size is a
+limit on whatever else writes to that file, and a test that fails at random
+is worse than no test.
+
+
 ## In the code
 
 The reader, `xtask/src/tree.rs`:
@@ -1052,6 +1093,16 @@ let lines: Vec<&str> = text.lines().collect();
 - `every_call_gets_a_folder_of_its_own` in the xtask — the xtask's home is
   proved by its own test, because two trees that cannot see each other cannot
   share a check. §213.
+- `the_tree_writes_its_files_through_one_home` — a file the tree writes goes
+  through one home, and the gate asks the *shape* of the writer. §215.
+- `a_writer_outside_the_one_home_is_caught` — the gate bites, and it is
+  caught for one reason. §215.
+- `a_test_that_writes_a_fixture_is_not_reported` — a test's fixture is not a
+  file the tree writes. §215.
+- `the_tree_writes_its_files_through_the_one_home` — the gate is quiet when
+  the tree is right. §215.
+- `the_file_that_was_there_survives_a_write_that_fails` — the home's promise,
+  proved by a child process that is stopped where the limit is. §215.
 
 ## See also
 

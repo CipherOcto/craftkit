@@ -26,6 +26,11 @@
 //! writes files has a folder of its own and never inherits another run's.
 //! §212.
 //!
+//! And one more after that, for the same reason again: [`atomic::write_file`] —
+//! the tree's one way to write a file, so that a file the tree writes is
+//! written into a temporary name and moved into place, and a write that fails
+//! leaves the file that was there alone. §215.
+//!
 //! # The readers are checked by properties
 //!
 //! The readers and the parameter readers are the code that turns hostile
@@ -44,6 +49,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod atomic;
 pub mod ids;
 pub mod params;
 pub mod readers;

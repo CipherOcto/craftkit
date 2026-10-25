@@ -1676,8 +1676,8 @@ expect_catch "engine: the crash report's folder is left readable by other users"
 # The files are created private rather than created open and locked down
 # afterwards, so the design is never on disk in a file another user can read.
 swap crates/engine/src/crash.rs \
-    '        .mode(0o600)' \
-    '        .mode(0o644)'
+    '    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::OwnerOnly)' \
+    '    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)'
 expect_catch "engine: the crash report's design is written readable by other users" \
     "cargo test -p craftkit-engine --profile ci a_crash_report_is_not_readable_by_other_users"
 
@@ -1774,8 +1774,8 @@ expect_catch "control: a directory the tool did not create is made private anywa
 # user can read — not even for the length of the chmod that used to follow
 # the write.
 swap crates/control/src/token.rs \
-    '        .mode(0o600)' \
-    '        .mode(0o644)'
+    '        craftkit_core::atomic::Visibility::OwnerOnly,' \
+    '        craftkit_core::atomic::Visibility::AsCreated,'
 expect_catch "control: the token file is created readable by other users" \
     "cargo test -p craftkit-control --profile ci the_token_file_is_private_in_a_shared_directory"
 
@@ -1791,13 +1791,13 @@ expect_catch "control: the tool's own directory is left readable by other users"
 # left over from a previous launch is replaced rather than kept. A file that
 # survives its launch names a token the app does not answer to — the same
 # family as §54, where the file held a token and the port did not.
-swap crates/control/src/token.rs \
-    '    std::fs::rename(temp, path).map_err(|e| {' \
+swap crates/core/src/atomic.rs \
+    '    if let Err(e) = std::fs::rename(&temp, path) {' \
     '    if path.exists() {
-        let _ = std::fs::remove_file(temp);
+        let _ = std::fs::remove_file(&temp);
         return Ok(());
     }
-    std::fs::rename(temp, path).map_err(|e| {'
+    if let Err(e) = std::fs::rename(&temp, path) {'
 expect_catch "control: a token file that already exists is not replaced" \
     "cargo test -p craftkit-control --profile ci a_token_file_left_over_from_a_previous_launch_is_replaced"
 
@@ -6402,6 +6402,42 @@ swap xtask/src/lists.rs \
     '        "the code the tree ships",'
 expect_catch 'the tree: a reason that restates the subject is not a reason' \
     "cargo test -p xtask --profile ci every_row_of_the_list_says_why"
+
+# --------------------------------------------------- the one home for writing ----
+# Section 215. The tree has a rule for writing a file -- into a temporary name,
+# then rename, so a write that fails leaves the file that was there alone --
+# and the rule was written three times and missed twice.
+#
+# The first break takes the temporary name away from the one home. The bytes go
+# straight into the target, which is what two of the tree's own writers used to
+# do. Measured: with a one-kibibyte file-size limit, the write is stopped
+# where the limit is, and the target is left holding 1024 bytes of the new
+# content where 11 bytes of the old content had been.
+swap crates/core/src/atomic.rs \
+    '    let temp = temp_path(path)?;
+    if let Err(e) = write_temp(&temp, bytes, visibility) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&temp, path) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(WriteError::Io { path: path.to_path_buf(), message: e.to_string() });
+    }
+    Ok(())' \
+    '    let _ = temp_path(path)?;
+    write_temp(path, bytes, visibility)'
+expect_catch "atomic: the home writes the file without a temporary name" \
+    "cargo test -p craftkit-core --profile ci the_file_that_was_there_survives_a_write_that_fails"
+
+# The second break puts a writer outside the one home: the command line's
+# script writer goes back to writing the file itself. The gate holds up the
+# home, so a writer that is not the home is reported.
+swap apps/craftkit-cli/src/cli.rs \
+    '    craftkit_core::atomic::write_file(out, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
+        .map_err(|e| format!("could not write {}: {e}", out.display()))?;' \
+    '    std::fs::write(out, text).map_err(|e| format!("could not write {}: {e}", out.display()))?;'
+expect_catch "lists: a writer writes a file outside the one home" \
+    "cargo xtask lists"
 
 restore
 finish

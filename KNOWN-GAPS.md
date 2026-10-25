@@ -25312,6 +25312,170 @@ invisible in every case but one, and that one case is where the test has to
 live. A test of the *common* path would have held nothing.
 
 
+## 215. The tree wrote its files by hand, and the rule for how was in three of them
+
+### The finding
+
+The tree has a rule for writing a file, and it states it in the crash report's
+own header: *"**Write atomically.** Into a temporary name, then rename. A crash
+halfway through must not leave a half-written file that looks like a real
+one."* (`crates/engine/src/crash.rs:49`)
+
+**Measured, the tree's production code creates a file in five places**, and
+they are not five copies of one rule:
+
+| the writer | the file it writes | follows the rule |
+|---|---|---|
+| `crates/io/src/store.rs` | the design the user saves | **yes** — `plan.craftkit.tmp`, then a rename |
+| `crates/engine/src/crash.rs` | a crash report | **yes** — `report.tmp`, then a rename |
+| `crates/control/src/token.rs` | the control channel's token | **yes** — `.7777.token.1234.0.tmp`, then a rename |
+| `apps/craftkit-cli/src/cli.rs` | a script | **no** — `std::fs::write`, straight into the file |
+| `apps/craftkit-cli/src/cli.rs` | a snapshot picture | **no** — `std::fs::write`, straight into the file |
+
+So the rule was written **three** times, in three crates, with **three**
+different temporary names — and **two** of the tree's own writers did not
+follow it at all. The two that did not are the two a person runs by hand:
+`craftkit-cli script --out` and `craftkit-cli snapshot --out`.
+
+**And the temporary names are not one name.** The io crate appends `.tmp` to
+the target's name; the crash writer *replaces* the target's extension, so two
+files with the same stem in one folder — `report.json` and `report.txt` —
+share one temporary name; and the control channel's writer hides the name and
+puts the process id and a counter in it.
+
+### The hazard, measured
+
+A write that fails partway is not a rare thing: a disk that fills, a quota that
+is reached, a file-size limit. **Measured** with a one-kibibyte file-size
+limit and a four-mebibyte payload, the write is stopped where the limit is:
+
+```text
+direct:              the target held 1024 bytes of the new content where 11 bytes
+                     of the old content had been — the old file was destroyed and a
+                     partial file was left in its place, looking like a real one.
+through a temporary name:
+                     the target still held its 11 old bytes; the partial content was
+                     in the temporary file, which is a file nobody was reading.
+```
+
+So the rule is not tidiness. It is the difference between losing the file that
+was there and keeping it — and the two writers that did not follow it were the
+two that wrote into a folder the user had chosen.
+
+### And a claim in the code that was not true
+
+The token's writer carried this comment:
+
+```rust
+// Windows refuses to rename onto an existing file, and the token file
+// outlives the process that wrote it.
+```
+
+**It does not.** The standard library's own Windows implementation calls
+`MoveFileExW` with `MOVEFILE_REPLACE_EXISTING`
+(`library/std/src/sys/fs/windows.rs:1272` in the toolchain's own source), so
+`std::fs::rename` replaces a file that is already there. The code had believed
+the comment and worked around it by **removing the token file first** — which
+opens a window in which the token does not exist, for a file that is supposed
+to survive the process that wrote it.
+
+### The port
+
+**One home, in the lowest layer**: `crates/core/src/atomic.rs`, reached as
+`craftkit_core::atomic::write_file(path, bytes, visibility)`. The rule is
+written once, and it is:
+
+- **a temporary name first** — beside the target, so the move is within one
+  filesystem, and named after the target, the process and a counter, so two
+  writers never share one name and a process id that comes round again does
+  not inherit the last run's file;
+- **the file created with the mode the caller asks for** — `OwnerOnly` makes
+  it `0600` from the moment it exists, and `AsCreated` leaves it with the
+  process's own default;
+- **the mode looked at, not assumed** — a filesystem that does not keep
+  permissions is *refused* before the bytes go in, not trusted;
+- **then a rename**, so a reader sees the old file or the new one and never
+  half of the new one;
+- **and the temporary removed** if anything fails.
+
+**Five call sites converted**: the io crate's `save`, the crash report's
+`write_atomic`, the control channel's token, and the CLI's two writers.
+
+**And one decision kept.** The design the user saves where they chose is
+written with `AsCreated`, not `OwnerOnly`: the tenth item of the suggested
+order says a document the user put somewhere is the user's business, not the
+program's. The home has a name for both, so the choice is made at the call
+site and not by accident.
+
+### The gate's own teeth
+
+**A gate**: `the_tree_writes_its_files_through_one_home` walks `crates/` and
+`apps/`, reads the **production** view (a test's fixture is not a file the
+tree writes), and reports any line that creates a file with `fs::write`,
+`fs::copy`, `File::create` or `OpenOptions::new`. A mention in a comment or in
+a string is not a call — the question is asked of the code view.
+
+**And the home's own test**: `the_file_that_was_there_survives_a_write_that_fails`
+runs a child process under a one-kibibyte file-size limit, has it write four
+mebibytes, and asserts that the file that was there is still there. The child
+is killed by the signal the limit raises, so it cannot clean up after itself —
+which is the point: the target must not depend on the writer's good manners.
+
+**And the child's own output goes nowhere.** The limit is on the size of a
+**file**, and the harness's output would go to the file the parent was started
+with — which may already be past the limit, so the child would be killed
+before it reached the write and the test would say nothing. **Measured**: the
+test passed when it was run on its own and failed under `cargo xtask ci`,
+which captures a child's output in a file. That is a test that fails at
+random, and this tree does not have those.
+
+**Five mutations**, each caught by one gate:
+
+| the break | what it says | caught by |
+|---|---|---|
+| the home writes the file without a temporary name | *"a write that fails leaves the file that was there alone"* | the core test |
+| a writer writes a file outside the one home | *"a file the tree writes goes through one home"* | `cargo xtask lists` |
+| the crash report's file is not private | *"a report holds the user's design"* | the engine test |
+| the token file is not private | *"the secret is never on disk in a file another user can read"* | the control test |
+| the home does not replace the file that was there | *"a token file left over from a previous launch is replaced"* | the control test |
+
+**Measured**: the home's test passes on the tree and **fails** when the
+temporary name is taken away — *"a write that failed took the file that was
+there with it"* — and the gate reports the writer that is not the home, by
+file and line.
+
+**And the suite.** **492** of **493** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The xtask is not in the gate, and the reason is §213's.** The xtask depends
+on nothing of the tree's own, so it cannot reach the core's home; and what it
+writes is **scratch** — the fuzzer's working inputs and its findings, in the
+run's own output folder — and not a file of the tree. If the xtask ever
+writes a file of the tree, the rule needs a second home and the gate a second
+arm, exactly as §212 and §213 had to have.
+
+**The privacy of the design the user saves is still the user's business.** The
+home offers `OwnerOnly` and `AsCreated`, and the design uses the second.
+
+**The mode is checked once.** A filesystem that hands out a private mode and
+then opens the file up afterwards is not covered, and cannot be from here.
+
+### The lesson
+
+**A rule that is written down once is not a rule that is obeyed once.** This
+one was in the tree's own header, in the module that holds the user's design,
+and it was in three crates with three names — and two writers had none of it.
+
+**And the shape of a writer is a cheap question.** `fs::write`, `fs::copy`,
+`File::create`, `OpenOptions::new` — four shapes, and a gate that asks the
+shape catches a writer whatever it is called.
+
+**And a passing test is a claim; a failing test is evidence.** The home's
+promise was proved by taking the promise away and watching the test fail.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25845,6 +26009,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test does not choose where its temporary folder lives** | `the_tree_has_one_temporary_folder` | 1 mutation — §212 |
 | **The xtask's tests build their temporary folders through the xtask's home** | `the_tree_has_one_temporary_folder` | 2 mutations — §213 |
 | **The enabled check comes before the parameter check** | `the_disabled_check_comes_before_the_parameter_check` | 1 mutation — §214 |
+| **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
+| **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
+| **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
+| **The file that was there is replaced, not kept** | `a_token_file_left_over_from_a_previous_launch_is_replaced` | 1 mutation — §215 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -27800,3 +27968,38 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     call it; or leave the places alone and let each one be right; or a gate
     that holds every place at once, the way §205 holds every module of the
     xtask rather than a list of the ones that read a file.
+
+70. ~~**The tree writes its files by hand, and the rule for how is in three of
+    them.**~~ **Done in §215.**
+
+    The tree states the rule — *into a temporary name, then rename, so a write
+    that fails leaves the file that was there alone* — in the crash report's
+    own header, and it was written **three** times, in three crates, with
+    **three** different temporary names, while **two** of the tree's own
+    writers did not follow it at all: the command line's script writer and
+    its snapshot writer.
+
+    **Measured**, a write that fails partway — a file-size limit, a full
+    disk — destroys the file that was there and leaves a partial one that
+    looks complete. With a one-kibibyte limit and a four-mebibyte payload,
+    the target was left holding **1024** bytes of the new content where **11**
+    bytes of the old content had been; the same write through a temporary
+    name left the old content alone.
+
+    §215 gave the rule **one home** — `craftkit_core::atomic::write_file` —
+    converted the **five** writers, and added a gate that reports a writer
+    that is not the home.
+
+    **And a claim in the code that was not true.** The token's writer removed
+    the token file before renaming over it, because the comment said Windows
+    refuses to rename onto an existing file. The standard library passes
+    `MOVEFILE_REPLACE_EXISTING`, so it does not — and the removal opened a
+    window in which the token did not exist.
+
+    **And the suite**: **492** of **493** caught, the one `known` being the
+    limit of wasm32 itself, and the tree came back **unchanged**.
+
+    **The residual**: the xtask is not in the gate, because it depends on
+    nothing of the tree's own and writes only scratch files. If it ever
+    writes a file of the tree, the rule needs a second home and the gate a
+    second arm, exactly as §212 and §213 had to have.

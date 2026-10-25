@@ -389,7 +389,11 @@ fn script(out: &Path) -> Result<(), String> {
         .map(|(command, params)| json!({ "command": command, "params": params }))
         .collect();
     let text = script_text(&script_value("the sample design", None, commands))?;
-    std::fs::write(out, text).map_err(|e| format!("could not write {}: {e}", out.display()))?;
+    // The tree's one writer: into a temporary name beside the target, and then
+    // moved into place, so a script that is cut short is not a script that
+    // looks complete. §215.
+    craftkit_core::atomic::write_file(out, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
+        .map_err(|e| format!("could not write {}: {e}", out.display()))?;
     println!("wrote {}", out.display());
     Ok(())
 }
@@ -456,7 +460,11 @@ fn render(session: &mut Session, out: &Path) -> Result<(), String> {
     {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(out, png).map_err(|e| format!("could not write {}: {e}", out.display()))?;
+    // The tree's one writer: into a temporary name beside the target, and then
+    // moved into place, so a picture that is cut short is not a picture that
+    // looks complete. §215.
+    craftkit_core::atomic::write_file(out, &png, craftkit_core::atomic::Visibility::AsCreated)
+        .map_err(|e| format!("could not write {}: {e}", out.display()))?;
     println!("wrote {}x{} to {}", width, height, out.display());
     Ok(())
 }

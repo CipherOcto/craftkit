@@ -3013,6 +3013,85 @@ const TEMPORARY_HOMES: &[(&str, &str, &str)] = &[
     ("xtask", "xtask/src/temp.rs", "crate::temp::dir"),
 ];
 
+/// The tree's files are written through one home.
+///
+/// §215. The tree has a rule for writing a file — *into a temporary name, then
+/// rename, so a write that fails leaves the file that was there alone* — and
+/// the rule was written **three** times, in three crates, with three different
+/// temporary names, while **two** of the tree's own writers did not follow it
+/// at all. The rule now lives in `craftkit_core::atomic`, and this gate holds
+/// it up.
+///
+/// The question this gate asks is about **the code the tree ships**: a test may
+/// write a file by hand — a test writes fixtures, and a fixture is not the
+/// tree's output — so the gate reads the production view, the tree's own cut
+/// (test items removed, the file's line numbering kept). The second question —
+/// *does this line create a file?* — is a question about **code**, so it is
+/// asked of the code view: a mention in a comment or in a string is not a
+/// call.
+///
+/// **The xtask is not in this gate, and the reason is the same as §213's.** The
+/// xtask depends on nothing of the tree's own, so it cannot reach the core's
+/// home; and what it writes is **scratch** — the fuzzer's working inputs and
+/// its findings, in the run's own output folder — and not a file of the tree.
+pub fn the_tree_writes_its_files_through_one_home(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for group in ["crates", "apps"] {
+        let dir = root.join(group);
+        let mut files = Vec::new();
+        collect_rust(&dir, &mut files);
+        for path in files {
+            if path == root.join(FILE_WRITING_HOME) {
+                continue;
+            }
+            let Ok(production) = read_rust(&path, Subject::Production) else { continue };
+            let code = code_lines_kept(&production);
+            for (index, line) in code.lines().enumerate() {
+                let Some(shape) = FILE_WRITING_SHAPES.iter().find(|shape| has_word(line, shape)) else {
+                    continue;
+                };
+                problems.push(format!(
+                    "{}: line {} creates a file with `{shape}`; a file the tree writes goes through \
+                     `craftkit_core::atomic::write_file`, which writes into a temporary name and \
+                     moves the finished file into place, so a write that fails leaves the file that \
+                     was there alone. §215.",
+                    relative_name(root, &path),
+                    index + 1
+                ));
+            }
+        }
+    }
+
+    // And the home is there, with the name the tree calls it by.
+    let home = root.join(FILE_WRITING_HOME);
+    let Ok(production) = read_rust(&home, Subject::Production) else {
+        problems.push(format!(
+            "{FILE_WRITING_HOME}: the tree has no one home for writing a file, so every writer \
+             writes the rule again. §215."
+        ));
+        problems.sort();
+        return Ok(problems);
+    };
+    let code = code_lines_kept(&production);
+    if !has_word(&code, "pub fn write_file") {
+        problems.push(format!(
+            "{FILE_WRITING_HOME}: the home does not declare `pub fn write_file`, and the writers \
+             call it; a home with another name is a home nobody can reach. §215."
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// Where the tree's one home for writing a file lives.
+const FILE_WRITING_HOME: &str = "crates/core/src/atomic.rs";
+
+/// The shapes of a call that creates a file.
+///
+/// A shape, not a name: `std::fs::write` and `fs::write` are the same call, and
+/// a question about a call is a question about the shape of the call. §208.
+const FILE_WRITING_SHAPES: &[&str] = &["fs::write", "fs::copy", "File::create", "OpenOptions::new"];
+
 /// Whether a line of code calls the environment's temporary folder.
 ///
 /// The call takes **no arguments** — `std::env::temp_dir()` — and that is what
@@ -5290,6 +5369,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         Subject::Everything,
         "the question is which lines are tests, and a test is in the file and not in the shipped code",
     ),
+    (
+        "the_tree_writes_its_files_through_one_home",
+        Subject::Production,
+        "the question is which lines the tree ships, and a test's fixture is not a file the tree writes",
+    ),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
@@ -6466,6 +6550,11 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // The tree's tests build their temporary folders through the one home. §212.
     problems.extend(the_tree_has_one_temporary_folder(root)?.into_iter().map(|p| {
         format!("{p}\n     One home for a temporary folder, so no test can inherit the last run's files.")
+    }));
+
+    // The tree's files are written through the one home. §215.
+    problems.extend(the_tree_writes_its_files_through_one_home(root)?.into_iter().map(|p| {
+        format!("{p}\n     One home for writing a file, so a write that fails leaves the file that was there alone.")
     }));
 
     if problems.is_empty() {
@@ -8454,6 +8543,90 @@ mod tests {
         let root = crate::root().expect("the workspace root");
         let problems = the_tree_has_one_temporary_folder(&root).expect("runs");
         assert!(problems.is_empty(), "the tree has one home for a temporary folder: {problems:#?}");
+    }
+
+    /// The one home for writing a file, written into a fabricated tree.
+    ///
+    /// The gate looks for it by its place in the tree, so a fabricated tree
+    /// without it would be reported for a second reason and the case would
+    /// not be caught for one reason. §215.
+    fn the_writing_home_in(dir: &std::path::Path) {
+        let home = dir.join("crates/core/src");
+        std::fs::create_dir_all(&home).expect("the fabricated tree");
+        std::fs::write(
+            home.join("atomic.rs"),
+            "pub fn write_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {\n    \
+             let _ = (path, bytes);\n    Ok(())\n}\n",
+        )
+        .expect("the fabricated home");
+    }
+
+    /// A writer outside the one home is caught.
+    ///
+    /// This is the defect the gate exists for: the rule was written three
+    /// times and missed twice, and a write that misses it destroys the file
+    /// that was there. §215.
+    #[test]
+    fn a_writer_outside_the_one_home_is_caught() {
+        let dir = crate::temp::dir("write-home").expect("a temporary folder");
+        the_writing_home_in(&dir);
+        let demo = dir.join("crates/demo/src");
+        std::fs::create_dir_all(&demo).expect("the fabricated tree");
+        std::fs::write(
+            demo.join("lib.rs"),
+            "pub fn write_it(path: &std::path::Path) {\n    \
+             let _ = std::fs::write(path, b\"x\");\n}\n",
+        )
+        .expect("the fabricated writer");
+
+        let problems = the_tree_writes_its_files_through_one_home(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("crates/demo/src/lib.rs")),
+            "a writer outside the one home is not reported: {problems:#?}"
+        );
+        assert!(problems.len() == 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A **test** that writes a fixture is not a writer of the tree's files.
+    ///
+    /// The gate asks about the code the tree ships: a test writes a file to
+    /// read it back, and that file is a fixture, not the tree's output. §215.
+    #[test]
+    fn a_test_that_writes_a_fixture_is_not_reported() {
+        let dir = crate::temp::dir("write-ok").expect("a temporary folder");
+        the_writing_home_in(&dir);
+        let demo = dir.join("crates/demo/src");
+        std::fs::create_dir_all(&demo).expect("the fabricated tree");
+        std::fs::write(
+            demo.join("lib.rs"),
+            "pub fn write_it(path: &std::path::Path) {\n    \
+             let _ = craftkit_core::atomic::write_file(path, b\"x\", craftkit_core::atomic::Visibility::AsCreated);\n}\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             \x20   #[test]\n\
+             \x20   fn a_test() {\n\
+             \x20       let _ = std::fs::write(\"fixture\", b\"x\");\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated writer");
+
+        let problems = the_tree_writes_its_files_through_one_home(&dir).expect("runs");
+        assert!(problems.is_empty(), "a test's fixture is not a problem: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's own files are written through the one home.
+    ///
+    /// The gate has to be quiet when the tree is right, and it has to run on
+    /// the real tree, not only on a fabricated one. §215.
+    #[test]
+    fn the_tree_writes_its_files_through_the_one_home() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_tree_writes_its_files_through_one_home(&root).expect("runs");
+        assert!(problems.is_empty(), "the tree has one home for writing a file: {problems:#?}");
     }
 
     /// A command that stands only in a comment is not a command.

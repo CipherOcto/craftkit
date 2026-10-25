@@ -32,6 +32,7 @@ crates/core/src/value.rs
 crates/core/src/tick.rs
 crates/core/src/writer.rs
 crates/core/src/temp.rs
+crates/core/src/atomic.rs
 crates/model/Cargo.toml
 crates/model/src/lib.rs
 crates/model/src/property.rs
