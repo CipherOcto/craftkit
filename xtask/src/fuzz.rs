@@ -1787,8 +1787,6 @@ mod tests {
 
     /// A directory of this test's own, so two runs cannot collide.
     fn scratch_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("craftkit-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
+        crate::temp::dir(name).expect("a temporary folder")
     }
 }

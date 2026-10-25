@@ -1521,9 +1521,7 @@ mod tests {
     fn a_tree(name: &str) -> std::path::PathBuf {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("craftkit-anchors-{name}-{}-{count}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir(&format!("anchors-{name}-{count}")).expect("a temporary folder");
         std::fs::create_dir_all(dir.join("scripts")).expect("the fabricated tree");
         std::fs::create_dir_all(dir.join("crates")).expect("the fabricated tree");
         std::fs::write(dir.join("crates/a.rs"), "the anchor\n").expect("the fabricated file");

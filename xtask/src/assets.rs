@@ -412,9 +412,7 @@ mod tests {
 
     impl Temp {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("craftkit-xtask-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).expect("temp dir");
+            let path = crate::temp::dir(&format!("xtask-{name}")).expect("a temporary folder");
             Temp(path)
         }
 
@@ -626,8 +624,7 @@ mod tests {
         // The failure this catches: the whole Rust-only rule. A `.py`, a `.js`
         // and a `.sh` all left `cargo xtask ci` green, because `is_asset` only
         // knows binary and media formats.
-        let dir = std::env::temp_dir().join(format!("craftkit-foreign-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("foreign").expect("a temporary folder");
         std::fs::create_dir_all(dir.join("crates/ui/src")).expect("temp tree");
 
         std::fs::write(dir.join("crates/ui/build.py"), "print('x')").expect("write");

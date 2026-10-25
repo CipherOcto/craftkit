@@ -81,6 +81,7 @@ xtask/src/fuzz.rs
 xtask/src/doctor.rs
 xtask/src/lists.rs
 xtask/src/tree.rs
+xtask/src/temp.rs
 xtask/src/web.rs
 xtask/src/lib.rs
 docs/recipes/add-a-command.md

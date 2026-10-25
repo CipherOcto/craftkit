@@ -844,13 +844,18 @@ which take the tag: `temp_dir(tag)`, `scratch(tag)`. §208's lesson, in a
 second place: a question about a call is a question about the **shape** of the
 call.
 
-**And a tree that cannot see another tree's home keeps writing the rule.**
-The xtask builds **82** folders of its own and cannot reach the core's home,
-because it depends on **nothing of the tree's own** — on purpose, since a
-checker that cannot be built when the tree does not compile is a checker that
-is silent exactly when it is needed. So the honest statement of the rule is
-**one home per tree that can see it**, and the copies that remain are a
-**named** decision rather than an accident.
+**And a tree that cannot see another tree's home gets one of its own.** The
+xtask cannot reach the core's home, because it depends on **nothing of the
+tree's own** — on purpose, since a checker that cannot be built when the tree
+does not compile is a checker that is silent exactly when it is needed. So
+the honest statement of the rule is **one home per tree that can see it**,
+and the second home is a **named** decision rather than an accident: a gate
+holds up both, and says which is which.
+
+**And a copy is proved by its own test.** The two trees cannot share a check
+either, so each home carries its own test and its own mutations — and the
+copy says where it came from, **in the file**: a copy that forgets where it
+came from is a copy that drifts.
 
 
 ## In the code
@@ -1042,6 +1047,11 @@ let lines: Vec<&str> = text.lines().collect();
 - `a_test_that_uses_the_one_home_is_not_reported` — the gate is quiet when
   the tree is right, and a production use of the environment's folder is not
   a test's business. §212.
+- `an_xtask_test_that_builds_its_folder_by_hand_is_caught` — the gate holds
+  up the xtask's home as well as the core's, and names the right one. §213.
+- `every_call_gets_a_folder_of_its_own` in the xtask — the xtask's home is
+  proved by its own test, because two trees that cannot see each other cannot
+  share a check. §213.
 
 ## See also
 

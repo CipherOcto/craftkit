@@ -5646,6 +5646,36 @@ swap crates/io/src/store.rs \
 expect_catch "lists: a test builds its temporary folder by hand" \
     "cargo xtask lists"
 
+# Section 213. The xtask depends on nothing of the tree's own, so it cannot
+# reach the core's home, and it has one of its own -- `xtask/src/temp.rs`.
+# The rule is the same rule, and it is written once.
+#
+# The first break takes the counter away: two calls share a folder again.
+swap xtask/src/temp.rs \
+    '    let name = format!("{tag}-{}-{n}", std::process::id());' \
+    '    let name = format!("{tag}-{}", std::process::id());'
+expect_catch "temp: two calls in the xtask share one temporary folder" \
+    "cargo test -p xtask --profile ci every_call_gets_a_folder_of_its_own"
+
+# And the second takes the emptying away: a folder that is already there is
+# inherited instead of fresh -- and a leftover file in a fabricated tree is
+# one more thing for a gate to find.
+swap xtask/src/temp.rs \
+    '    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| format!("could not clear {}: {e}", dir.display()))?;
+    }' \
+    ''
+expect_catch "temp: an xtask temporary folder inherits the last run's files" \
+    "cargo test -p xtask --profile ci every_call_gets_a_folder_of_its_own"
+
+# And the third puts a hand-built folder back into the xtask's own tests: the
+# gate holds up the xtask's home as well as the core's.
+swap xtask/src/fuzz.rs \
+    '        crate::temp::dir(name).expect("a temporary folder")' \
+    '        std::env::temp_dir().join(format!("craftkit-{name}-{}", std::process::id()))'
+expect_catch "lists: an xtask test builds its temporary folder by hand" \
+    "cargo xtask lists"
+
 # Section 185. The crash report was a folder of three files: the report, a copy
 # of the design and a copy of the steps. Nothing read the design's copy, and
 # the replay's copy was read by a door nothing called -- so a report that

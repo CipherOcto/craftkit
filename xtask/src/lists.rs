@@ -2915,10 +2915,11 @@ pub fn the_pending_changes_are_declared_in_code(root: &Path) -> Result<Vec<Strin
 
 /// The tree's tests build their temporary folders through the one home.
 ///
-/// §212. The rule for a test's temporary folder was written in **sixteen**
-/// places at once, and each place was a chance to get it wrong: a name made of
-/// a tag and a process id is not a name. The rule now lives in
-/// `craftkit_core::temp`, and this gate holds it up.
+/// §212, extended by §213. The rule for a test's temporary folder was written
+/// in **twenty-four** places at once in the tree's crates and apps, and each
+/// place was a chance to get it wrong: a name made of a tag and a process id
+/// is not a name. The rule now lives in `craftkit_core::temp`, and this gate
+/// holds it up.
 ///
 /// The question this gate asks first is **which lines are tests**, and the
 /// tree's own cut answers it: `production_of` blanks a file's test items and
@@ -2928,16 +2929,16 @@ pub fn the_pending_changes_are_declared_in_code(root: &Path) -> Result<Vec<Strin
 /// **code**, so it is asked of the code view: a mention in a comment or in a
 /// string is not a call.
 ///
-/// **The xtask is not in the tree this gate walks**, and that is not an
-/// oversight: the xtask depends on nothing of the tree's own, because a
-/// checker that cannot be built when the tree does not compile is a checker
-/// that is silent exactly when it is needed. It cannot reach the core's home,
-/// so its own folders are a separate finding and this gate does not pretend to
-/// hold them up.
+/// **And there are two homes, because there are two trees.** §213: the xtask
+/// depends on nothing of the tree's own, because a checker that cannot be
+/// built when the tree does not compile is a checker that is silent exactly
+/// when it is needed — so it cannot reach the core's home, and it has one of
+/// its own. The rule is therefore **one home per tree that can see it**, and
+/// this gate holds up both: the group a file belongs to says which home that
+/// group's tests must use.
 pub fn the_tree_has_one_temporary_folder(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
-    let mut home_seen = false;
-    for group in ["crates", "apps"] {
+    for (group, _, call) in TEMPORARY_HOMES {
         let dir = root.join(group);
         let mut files = Vec::new();
         collect_rust(&dir, &mut files);
@@ -2947,19 +2948,6 @@ pub fn the_tree_has_one_temporary_folder(root: &Path) -> Result<Vec<String>, Str
             let code = code_lines_kept(&whole);
             let file_lines: Vec<&str> = whole.lines().collect();
             let production_lines: Vec<&str> = production.lines().collect();
-
-            // The home, and the fact that it is one.
-            if relative_name(root, &path) == "crates/core/src/temp.rs" {
-                home_seen = true;
-                if !has_word(&code, "pub fn dir") {
-                    problems.push(format!(
-                        "{}: the home does not declare `pub fn dir`, and every crate in the tree \
-                         calls `craftkit_core::temp::dir`; a home with another name is a home \
-                         nobody can reach. §212.",
-                        relative_name(root, &path)
-                    ));
-                }
-            }
 
             for (index, line) in code.lines().enumerate() {
                 if !calls_the_environment_folder(line) {
@@ -2975,24 +2963,55 @@ pub fn the_tree_has_one_temporary_folder(root: &Path) -> Result<Vec<String>, Str
                 }
                 problems.push(format!(
                     "{}: line {} chooses where a temporary folder lives; a test's folder comes \
-                     from `craftkit_core::temp::dir`, which gives every call a folder of its own \
-                     and empties one that is already there. §212.",
+                     from `{call}`, which gives every call a folder of its own and empties one \
+                     that is already there. §212.",
                     relative_name(root, &path),
                     index + 1
                 ));
             }
         }
     }
-    if !home_seen {
-        problems.push(
-            "crates/core/src/temp.rs: the tree has no one home for a temporary folder, so every \
-             test that needs one writes the rule again. §212."
-                .to_string(),
-        );
+
+    // And the homes themselves: each one is there, and each one is reachable
+    // under the name its group calls.
+    let mut checked: Vec<&str> = Vec::new();
+    for (_, home, call) in TEMPORARY_HOMES {
+        if checked.contains(home) {
+            continue;
+        }
+        checked.push(home);
+        let path = root.join(home);
+        let Ok(whole) = read_rust(&path, Subject::Everything) else {
+            problems.push(format!(
+                "{home}: the tree has no one home for a temporary folder, so every test that \
+                 needs one writes the rule again. §212."
+            ));
+            continue;
+        };
+        let code = code_lines_kept(&whole);
+        if !has_word(&code, "pub fn dir") {
+            problems.push(format!(
+                "{home}: the home does not declare `pub fn dir`, and the tests call `{call}`; a \
+                 home with another name is a home nobody can reach. §212."
+            ));
+        }
     }
     problems.sort();
     Ok(problems)
 }
+
+/// The group of files, the home they use, and the call that reaches it.
+///
+/// §213. The tree's crates and apps can all reach the core's home, because
+/// the core is the lowest layer. The **xtask** cannot: it depends on nothing
+/// of the tree's own, so it has a home of its own. The rule is one home per
+/// tree that can see it, and this list says which is which — a list of two,
+/// and each row says why the row is there.
+const TEMPORARY_HOMES: &[(&str, &str, &str)] = &[
+    ("crates", "crates/core/src/temp.rs", "craftkit_core::temp::dir"),
+    ("apps", "crates/core/src/temp.rs", "craftkit_core::temp::dir"),
+    ("xtask", "xtask/src/temp.rs", "crate::temp::dir"),
+];
 
 /// Whether a line of code calls the environment's temporary folder.
 ///
@@ -6477,7 +6496,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              the fuzzer's targets are the table the document lists, \
              the tree's walk \
              has one home, every pending change is declared and applied in code, \
-             every test builds its temporary folder through the one home, \
+             every test builds its temporary folder through its tree's one home, \
              and the session offers no way into the design but \
              the registry",
             roots.len()
@@ -6927,8 +6946,7 @@ mod tests {
 
     /// A tree with the three files the gate reads.
     fn fabricated_tree(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("craftkit-gates-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir(&format!("gates-{name}")).expect("a temporary folder");
         std::fs::create_dir_all(dir.join("docs")).expect("the fabricated tree");
         std::fs::create_dir_all(dir.join("xtask/src")).expect("the fabricated tree");
         dir
@@ -7373,7 +7391,7 @@ mod tests {
     /// *made*: a file with a walk of its own, beside the one that is allowed.
     #[test]
     fn a_second_walk_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-walk-{}", std::process::id()));
+        let dir = crate::temp::dir("walk").expect("a temporary folder");
         let src = dir.join("xtask/src");
         std::fs::create_dir_all(&src).expect("the fabricated tree");
         std::fs::write(
@@ -7411,7 +7429,7 @@ mod tests {
     /// directory is testing the walk rather than holding down the rule.
     #[test]
     fn a_walk_in_a_test_is_not_a_second_home() {
-        let dir = std::env::temp_dir().join(format!("craftkit-walk-test-{}", std::process::id()));
+        let dir = crate::temp::dir("walk-test").expect("a temporary folder");
         let src = dir.join("xtask/src");
         std::fs::create_dir_all(&src).expect("the fabricated tree");
         std::fs::write(
@@ -7464,7 +7482,7 @@ mod tests {
     /// the same shape as §26's fabricated command id.
     #[test]
     fn a_limit_nobody_enforces_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-limits-{}", std::process::id()));
+        let dir = crate::temp::dir("limits").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         let table = model.join("lib.rs");
@@ -7495,7 +7513,7 @@ mod tests {
     /// sentence about it, and a sentence is not a bound.
     #[test]
     fn a_limit_only_a_comment_mentions_is_still_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-limits-comment-{}", std::process::id()));
+        let dir = crate::temp::dir("limits-comment").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -7521,7 +7539,7 @@ mod tests {
     /// old one. §147.
     #[test]
     fn a_claimed_expression_the_gate_does_not_know_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-claim-{}", std::process::id()));
+        let dir = crate::temp::dir("claim").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/recipes");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7561,7 +7579,7 @@ mod tests {
     /// operand in it that a constant could have written.
     #[test]
     fn a_path_beside_a_constant_is_not_a_claim() {
-        let dir = std::env::temp_dir().join(format!("craftkit-claim-path-{}", std::process::id()));
+        let dir = crate::temp::dir("claim-path").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/recipes");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7591,7 +7609,7 @@ mod tests {
     /// able to tell the two apart.
     #[test]
     fn an_expression_with_no_operand_in_common_is_not_a_claim() {
-        let dir = std::env::temp_dir().join(format!("craftkit-claim-mention-{}", std::process::id()));
+        let dir = crate::temp::dir("claim-mention").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7622,7 +7640,7 @@ mod tests {
     /// gate accepts a claim that matches *any* value of that name. §148.
     #[test]
     fn a_constant_that_stands_only_in_a_string_is_not_a_constant_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-string-{}", std::process::id()));
+        let dir = crate::temp::dir("string").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let io = dir.join("crates/io/src");
         let docs = dir.join("docs/recipes");
@@ -7666,7 +7684,7 @@ mod tests {
     /// string satisfied them. §148.
     #[test]
     fn a_limit_that_stands_only_in_a_string_is_not_a_limit() {
-        let dir = std::env::temp_dir().join(format!("craftkit-string-cap-{}", std::process::id()));
+        let dir = crate::temp::dir("string-cap").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
@@ -7717,7 +7735,7 @@ mod tests {
     /// string was a bound it then said no document named. §148.
     #[test]
     fn a_bound_that_stands_only_in_a_string_is_not_a_bound_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-string-bound-{}", std::process::id()));
+        let dir = crate::temp::dir("string-bound").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/architecture.md");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -7747,7 +7765,7 @@ mod tests {
     /// when it was nowhere. §149.
     #[test]
     fn a_symbol_that_stands_only_in_a_string_is_not_a_symbol_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-symbol-string-{}", std::process::id()));
+        let dir = crate::temp::dir("symbol-string").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7773,7 +7791,7 @@ mod tests {
     /// about the code, and a sentence is not a test. §149.
     #[test]
     fn a_symbol_that_stands_only_in_a_comment_is_not_a_symbol_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-symbol-comment-{}", std::process::id()));
+        let dir = crate::temp::dir("symbol-comment").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7798,7 +7816,7 @@ mod tests {
     /// inside a string literal satisfied a document's claim about it. §149.
     #[test]
     fn a_module_that_stands_only_in_a_string_is_not_a_module_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-module-string-{}", std::process::id()));
+        let dir = crate::temp::dir("module-string").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -7824,7 +7842,7 @@ mod tests {
     /// counted as enforced. §149.
     #[test]
     fn a_limit_that_stands_only_in_a_string_is_not_enforced() {
-        let dir = std::env::temp_dir().join(format!("craftkit-limit-string-{}", std::process::id()));
+        let dir = crate::temp::dir("limit-string").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -7851,7 +7869,7 @@ mod tests {
     /// those was not a shape but a fact. §149.
     #[test]
     fn a_gate_that_names_a_line_names_the_file_s_own_line() {
-        let dir = std::env::temp_dir().join(format!("craftkit-line-{}", std::process::id()));
+        let dir = crate::temp::dir("line").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
         std::fs::write(
@@ -7966,7 +7984,7 @@ mod tests {
     /// exactly that, inside one of the two homes. §151.
     #[test]
     fn a_test_that_calls_the_raw_reader_is_not_a_third_home() {
-        let dir = std::env::temp_dir().join(format!("craftkit-raw-home-{}", std::process::id()));
+        let dir = crate::temp::dir("raw-home").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         // A third file whose *test* calls the reader.
@@ -8012,7 +8030,7 @@ mod tests {
     /// that adds a helper to the session. §152.
     #[test]
     fn a_test_only_method_is_not_a_second_path_into_the_design() {
-        let dir = std::env::temp_dir().join(format!("craftkit-session-path-{}", std::process::id()));
+        let dir = crate::temp::dir("session-path").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -8059,7 +8077,7 @@ mod tests {
     /// §153.
     #[test]
     fn a_test_that_catches_a_panic_is_not_a_boundary() {
-        let dir = std::env::temp_dir().join(format!("craftkit-boundary-{}", std::process::id()));
+        let dir = crate::temp::dir("boundary").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
@@ -8132,7 +8150,7 @@ mod tests {
     /// invented. §154.
     #[test]
     fn a_test_helper_is_not_a_reader() {
-        let dir = std::env::temp_dir().join(format!("craftkit-readers-{}", std::process::id()));
+        let dir = crate::temp::dir("readers").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         std::fs::write(
@@ -8174,7 +8192,7 @@ mod tests {
     /// invented. §155.
     #[test]
     fn a_reader_that_stands_only_in_a_comment_is_not_a_reader() {
-        let dir = std::env::temp_dir().join(format!("craftkit-comments-{}", std::process::id()));
+        let dir = crate::temp::dir("comments").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         std::fs::write(
@@ -8210,7 +8228,7 @@ mod tests {
     /// question here is the same question, and the answer is the same.
     #[test]
     fn a_type_that_starts_with_params_is_not_the_params_type() {
-        let dir = std::env::temp_dir().join(format!("craftkit-params-extra-{}", std::process::id()));
+        let dir = crate::temp::dir("params-extra").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         std::fs::write(
@@ -8239,7 +8257,7 @@ mod tests {
     /// not code.
     #[test]
     fn a_pending_change_that_stands_only_in_a_comment_is_not_declared() {
-        let dir = std::env::temp_dir().join(format!("craftkit-pending-{}", std::process::id()));
+        let dir = crate::temp::dir("pending").expect("a temporary folder");
         let module = dir.join("crates/io/src/format");
         std::fs::create_dir_all(&module).expect("the fabricated tree");
         std::fs::write(
@@ -8274,7 +8292,7 @@ mod tests {
     /// The gate has to be quiet when the tree is right, or it is noise. §209.
     #[test]
     fn a_pending_change_that_is_declared_and_applied_is_not_reported() {
-        let dir = std::env::temp_dir().join(format!("craftkit-pending-ok-{}", std::process::id()));
+        let dir = crate::temp::dir("pending-ok").expect("a temporary folder");
         let module = dir.join("crates/io/src/format");
         std::fs::create_dir_all(&module).expect("the fabricated tree");
         std::fs::write(
@@ -8310,6 +8328,16 @@ mod tests {
             "pub fn dir(tag: &str) -> std::path::PathBuf {\n    let _ = tag;\n    std::path::PathBuf::new()\n}\n",
         )
         .expect("the fabricated home");
+        // And the xtask's own home, because the tree has **two**: the xtask
+        // depends on nothing of the tree's own, so it cannot reach the core's.
+        // §213.
+        let xtask = dir.join("xtask/src");
+        std::fs::create_dir_all(&xtask).expect("the fabricated tree");
+        std::fs::write(
+            xtask.join("temp.rs"),
+            "pub fn dir(tag: &str) -> std::path::PathBuf {\n    let _ = tag;\n    std::path::PathBuf::new()\n}\n",
+        )
+        .expect("the fabricated home");
     }
 
     /// A test that chooses where its temporary folder lives is caught.
@@ -8319,8 +8347,7 @@ mod tests {
     /// not a name. §212.
     #[test]
     fn a_test_that_builds_its_folder_by_hand_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-temp-home-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("temp-home").expect("a temporary folder");
         the_home_in(&dir);
         let demo = dir.join("crates/demo/src");
         std::fs::create_dir_all(&demo).expect("the fabricated tree");
@@ -8354,8 +8381,7 @@ mod tests {
     /// business, not a test's. §212.
     #[test]
     fn a_test_that_uses_the_one_home_is_not_reported() {
-        let dir = std::env::temp_dir().join(format!("craftkit-temp-ok-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("temp-ok").expect("a temporary folder");
         the_home_in(&dir);
         let demo = dir.join("crates/demo/src");
         std::fs::create_dir_all(&demo).expect("the fabricated tree");
@@ -8381,6 +8407,44 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A test **in the xtask** that builds its folder by hand is caught too.
+    ///
+    /// The xtask has a home of its own, because it depends on nothing of the
+    /// tree's own and cannot reach the core's (§213). The rule is the same
+    /// rule, so the gate is the same gate — and it must name the right home
+    /// for the group the file belongs to.
+    #[test]
+    fn an_xtask_test_that_builds_its_folder_by_hand_is_caught() {
+        let dir = crate::temp::dir("temp-xtask").expect("a temporary folder");
+        the_home_in(&dir);
+        let module = dir.join("xtask/src");
+        std::fs::create_dir_all(&module).expect("the fabricated tree");
+        std::fs::write(
+            module.join("demo.rs"),
+            "#[cfg(test)]\n\
+             mod tests {\n\
+             \x20   #[test]\n\
+             \x20   fn a_test() {\n\
+             \x20       let dir = std::env::temp_dir().join(\"demo\");\n\
+             \x20       let _ = dir;\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated test");
+
+        let problems = the_tree_has_one_temporary_folder(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("xtask/src/demo.rs")),
+            "an xtask test that chooses its own folder is not reported: {problems:#?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("crate::temp::dir")),
+            "the report names the xtask's own home: {problems:#?}"
+        );
+        assert!(problems.len() == 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The tree's own tests build their folders through the one home.
     ///
     /// The gate has to be quiet when the tree is right, and it has to run on
@@ -8401,7 +8465,7 @@ mod tests {
     /// command that does not exist. §155.
     #[test]
     fn a_command_that_stands_only_in_a_comment_is_not_a_command() {
-        let dir = std::env::temp_dir().join(format!("craftkit-cmds-{}", std::process::id()));
+        let dir = crate::temp::dir("cmds").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -8496,7 +8560,7 @@ fn also_production() {}
     /// reported as a boundary the pattern document does not declare. §167.
     #[test]
     fn a_test_file_does_not_catch_a_panic_as_a_boundary() {
-        let dir = std::env::temp_dir().join(format!("craftkit-boundary-test-{}", std::process::id()));
+        let dir = crate::temp::dir("boundary-test").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let tests = dir.join("apps/craftkit-cli/tests");
         let docs = dir.join("docs/patterns");
@@ -8533,7 +8597,7 @@ fn also_production() {}
     /// cannot tell the two apart. §161.
     #[test]
     fn a_deny_attribute_in_a_string_is_not_a_deny_attribute() {
-        let dir = std::env::temp_dir().join(format!("craftkit-deny-string-{}", std::process::id()));
+        let dir = crate::temp::dir("deny-string").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         std::fs::write(
@@ -8581,7 +8645,7 @@ pub fn f() {}
     /// satisfied the claim. §161.
     #[test]
     fn a_claim_satisfied_by_a_string_is_not_satisfied() {
-        let dir = std::env::temp_dir().join(format!("craftkit-claim-string-{}", std::process::id()));
+        let dir = crate::temp::dir("claim-string").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -8606,7 +8670,7 @@ pub fn f() {}
     /// one claim read as two. §161.
     #[test]
     fn a_claim_after_a_clause_boundary_is_not_about_the_file_before_it() {
-        let dir = std::env::temp_dir().join(format!("craftkit-clause-boundary-{}", std::process::id()));
+        let dir = crate::temp::dir("clause-boundary").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -8633,7 +8697,7 @@ pub fn f() {}
     /// that looks like a variant name was counted. §161.
     #[test]
     fn a_variant_in_a_comment_is_not_a_variant() {
-        let dir = std::env::temp_dir().join(format!("craftkit-area-string-{}", std::process::id()));
+        let dir = crate::temp::dir("area-string").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -8654,7 +8718,7 @@ pub fn f() {}
     /// **substring** test: `observe` has `serve` inside it. §162.
     #[test]
     fn a_claim_satisfied_by_a_substring_is_not_satisfied() {
-        let dir = std::env::temp_dir().join(format!("craftkit-claim-substring-{}", std::process::id()));
+        let dir = crate::temp::dir("claim-substring").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -8687,7 +8751,7 @@ pub fn f() {}
     /// `fn <name>`, and the prefix matched `fn <name>_two` as well. §162.
     #[test]
     fn a_test_satisfied_by_a_longer_name_is_not_satisfied() {
-        let dir = std::env::temp_dir().join(format!("craftkit-test-longer-name-{}", std::process::id()));
+        let dir = crate::temp::dir("test-longer-name").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -8711,7 +8775,7 @@ pub fn f() {}
     /// `MAX_UNUSED_PER_NODE` has `MAX_UNUSED` inside it. §164.
     #[test]
     fn a_limit_only_a_longer_name_uses_is_still_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-limits-longer-{}", std::process::id()));
+        let dir = crate::temp::dir("limits-longer").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -8742,7 +8806,7 @@ pub fn f() {}
     /// `MAX_DOCUMENT_BYTES_LIMIT` has `MAX_DOCUMENT_BYTES` inside it. §164.
     #[test]
     fn a_bound_only_a_longer_name_names_in_the_prose_is_not_named() {
-        let dir = std::env::temp_dir().join(format!("craftkit-bound-longer-{}", std::process::id()));
+        let dir = crate::temp::dir("bound-longer").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/architecture.md");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -8770,7 +8834,7 @@ pub fn f() {}
     /// §164.
     #[test]
     fn a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model() {
-        let dir = std::env::temp_dir().join(format!("craftkit-budget-longer-{}", std::process::id()));
+        let dir = crate::temp::dir("budget-longer").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(engine.join("history.rs"), "pub const HISTORY_EXPANSION: usize = 2;\n")
@@ -8799,7 +8863,7 @@ pub fn f() {}
     /// inside it. §164.
     #[test]
     fn the_writer_is_not_a_path_that_starts_the_same_way() {
-        let dir = std::env::temp_dir().join(format!("craftkit-writer-longer-{}", std::process::id()));
+        let dir = crate::temp::dir("writer-longer").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
@@ -8824,7 +8888,7 @@ pub fn f() {}
     /// type the tree does not have. §165.
     #[test]
     fn an_impl_inside_a_string_is_not_an_impl_block() {
-        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-impl-{}", std::process::id()));
+        let dir = crate::temp::dir("fingerprint-impl").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(model.join("document.rs"), "pub struct Node {\n    pub name: String,\n}\n")
@@ -8856,7 +8920,7 @@ pub fn f() {}
     /// the type's fields stopped being checked. §165.
     #[test]
     fn a_brace_inside_a_string_does_not_end_an_impl_block() {
-        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-brace-{}", std::process::id()));
+        let dir = crate::temp::dir("fingerprint-brace").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(model.join("document.rs"), "pub struct Node {\n    pub name: String,\n}\n")
@@ -8893,7 +8957,7 @@ pub fn f() {}
     /// unchecked. §165.
     #[test]
     fn a_struct_inside_a_string_is_not_the_struct() {
-        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-struct-{}", std::process::id()));
+        let dir = crate::temp::dir("fingerprint-struct").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         // The string comes first, and the type it mentions has a field the
@@ -8997,7 +9061,7 @@ pub fn f() {}
     /// were reported as wrong. §159.
     #[test]
     fn a_command_id_in_a_comment_is_not_a_command_id() {
-        let dir = std::env::temp_dir().join(format!("craftkit-ids-{}", std::process::id()));
+        let dir = crate::temp::dir("ids").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -9056,7 +9120,7 @@ fn parse(s: &str) -> Option<Self> {
     fn a_method_in_a_comment_is_not_a_control_method() {
         // A directory of its own: two tests that share one write over each
         // other, and the tests run in parallel.
-        let dir = std::env::temp_dir().join(format!("craftkit-comment-methods-{}", std::process::id()));
+        let dir = crate::temp::dir("comment-methods").expect("a temporary folder");
         let control = dir.join("crates/control/src");
         std::fs::create_dir_all(&control).expect("the fabricated tree");
         std::fs::write(
@@ -9112,7 +9176,7 @@ fn parse(s: &str) -> Option<Self> {
     /// code — and it enforces nothing. §150.
     #[test]
     fn a_limit_only_a_test_mentions_is_still_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-limit-test-{}", std::process::id()));
+        let dir = crate::temp::dir("limit-test").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -9172,7 +9236,7 @@ fn parse(s: &str) -> Option<Self> {
     /// §26's fabricated command id.
     #[test]
     fn a_field_the_fingerprint_does_not_read_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-{}", std::process::id()));
+        let dir = crate::temp::dir("fingerprint").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -9207,7 +9271,7 @@ fn parse(s: &str) -> Option<Self> {
     /// sentence about it, and a sentence is not a hash.
     #[test]
     fn a_field_only_a_comment_mentions_is_still_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-fingerprint-comment-{}", std::process::id()));
+        let dir = crate::temp::dir("fingerprint-comment").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(
@@ -9245,7 +9309,7 @@ fn parse(s: &str) -> Option<Self> {
     /// is not this one, or it is only a fact about today.
     #[test]
     fn a_method_the_prose_forgets_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-methods-{}", std::process::id()));
+        let dir = crate::temp::dir("methods").expect("a temporary folder");
         let control = dir.join("crates/control/src");
         let recipe = dir.join("docs/recipes");
         std::fs::create_dir_all(&control).expect("the fabricated tree");
@@ -9301,7 +9365,7 @@ fn parse(s: &str) -> Option<Self> {
     /// it. The same shape as §26's fabricated command id.
     #[test]
     fn a_quoted_struct_that_drifted_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-{}", std::process::id()));
+        let dir = crate::temp::dir("quote").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/recipes");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -9337,7 +9401,7 @@ fn parse(s: &str) -> Option<Self> {
     /// struct has no field names, and the type is the claim.
     #[test]
     fn a_quoted_tuple_struct_that_drifted_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-tuple-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-tuple").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/recipes");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -9362,7 +9426,7 @@ fn parse(s: &str) -> Option<Self> {
     /// dropped is as wrong as one that quotes a field with the wrong type.
     #[test]
     fn a_quoted_field_the_source_does_not_have_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-field-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-field").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/recipes");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -9389,7 +9453,7 @@ fn parse(s: &str) -> Option<Self> {
     /// §146.
     #[test]
     fn a_quoted_const_that_drifted_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-const-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-const").expect("a temporary folder");
         let core = dir.join("crates/core/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&core).expect("the fabricated tree");
@@ -9420,7 +9484,7 @@ fn parse(s: &str) -> Option<Self> {
     /// is the shape the gate could not see. §146.
     #[test]
     fn a_quoted_enum_that_drifted_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-enum-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-enum").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -9456,7 +9520,7 @@ fn parse(s: &str) -> Option<Self> {
     /// ignore it.
     #[test]
     fn a_block_that_quotes_an_enum_is_not_a_false_alarm() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-enum-only-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-enum-only").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -9481,7 +9545,7 @@ fn parse(s: &str) -> Option<Self> {
     /// the gate says so instead of passing the block as checked.
     #[test]
     fn an_item_the_gate_cannot_compare_is_reported_by_name() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-impl-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-impl").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -9508,7 +9572,7 @@ fn parse(s: &str) -> Option<Self> {
     /// the file says something else does not compile. §146.
     #[test]
     fn a_quoted_use_the_source_does_not_have_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-quote-use-{}", std::process::id()));
+        let dir = crate::temp::dir("quote-use").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -9552,7 +9616,7 @@ fn parse(s: &str) -> Option<Self> {
     /// shape as §26's fabricated command id.
     #[test]
     fn a_count_in_prose_that_is_wrong_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-counts-{}", std::process::id()));
+        let dir = crate::temp::dir("counts").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -9606,7 +9670,7 @@ fn parse(s: &str) -> Option<Self> {
     /// §26's fabricated command id.
     #[test]
     fn an_undeclared_boundary_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-boundaries-{}", std::process::id()));
+        let dir = crate::temp::dir("boundaries").expect("a temporary folder");
         let src = dir.join("crates/engine/src");
         let docs = dir.join("docs/patterns");
         std::fs::create_dir_all(&src).expect("the fabricated tree");
@@ -9740,8 +9804,7 @@ fn parse(s: &str) -> Option<Self> {
 
     #[test]
     fn a_crate_root_without_the_deny_line_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-lists-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("lists").expect("a temporary folder");
         let crate_dir = dir.join("crates/nope");
         std::fs::create_dir_all(&crate_dir).expect("dir");
         let lib = crate_dir.join("src/lib.rs");
@@ -9764,8 +9827,7 @@ fn parse(s: &str) -> Option<Self> {
 
     #[test]
     fn a_crate_root_without_forbid_unsafe_is_caught() {
-        let dir = std::env::temp_dir().join(format!("craftkit-lists-unsafe-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("lists-unsafe").expect("a temporary folder");
         let crate_dir = dir.join("crates/nope");
         std::fs::create_dir_all(crate_dir.join("src")).expect("dir");
         let lib = crate_dir.join("src/lib.rs");
@@ -9804,8 +9866,7 @@ fn parse(s: &str) -> Option<Self> {
     fn a_citation_at_a_blank_line_or_past_the_end_is_drift() {
         // On a temporary tree, because the real one is clean and a test that
         // only ever passes is the defect this whole check exists to find.
-        let dir = std::env::temp_dir().join(format!("craftkit-cites-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::temp::dir("cites").expect("a temporary folder");
         std::fs::create_dir_all(dir.join("docs")).expect("temp tree");
         // Line 3 is blank; the file is six lines long.
         std::fs::write(dir.join("lib.rs"), "one\ntwo\n\nfour\nfive\nsix\n").expect("write");
@@ -10136,7 +10197,7 @@ fn parse(s: &str) -> Option<Self> {
     /// every method after it went unchecked. §166.
     #[test]
     fn a_brace_inside_a_string_does_not_end_the_session_block() {
-        let dir = std::env::temp_dir().join(format!("craftkit-session-brace-{}", std::process::id()));
+        let dir = crate::temp::dir("session-brace").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -10168,7 +10229,7 @@ fn parse(s: &str) -> Option<Self> {
     /// the real methods went unchecked. §166.
     #[test]
     fn an_impl_inside_a_string_is_not_the_session_block() {
-        let dir = std::env::temp_dir().join(format!("craftkit-session-impl-{}", std::process::id()));
+        let dir = crate::temp::dir("session-impl").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         std::fs::write(
@@ -10519,7 +10580,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "the design file's cap is not the design's own budget times the format's expansion"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-file-cap-{}", std::process::id()));
+        let dir = crate::temp::dir("file-cap").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
 
@@ -10568,7 +10629,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "a design is written with a writer of its own"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-one-writer-{}", std::process::id()));
+        let dir = crate::temp::dir("one-writer").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
@@ -10619,7 +10680,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// invisible. §156.
     #[test]
     fn a_writer_after_a_test_item_is_still_a_writer() {
-        let dir = std::env::temp_dir().join(format!("craftkit-after-test-{}", std::process::id()));
+        let dir = crate::temp::dir("after-test").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
@@ -10654,7 +10715,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// was not written with the tree's writer, which it is. §156.
     #[test]
     fn an_indented_test_attribute_does_not_truncate_the_file() {
-        let dir = std::env::temp_dir().join(format!("craftkit-indented-{}", std::process::id()));
+        let dir = crate::temp::dir("indented").expect("a temporary folder");
         let io = dir.join("crates/io/src");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
@@ -10686,7 +10747,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// two.
     #[test]
     fn a_test_outside_a_module_is_not_the_shell() {
-        let dir = std::env::temp_dir().join(format!("craftkit-shell-test-{}", std::process::id()));
+        let dir = crate::temp::dir("shell-test").expect("a temporary folder");
         let ui = dir.join("crates/ui/src");
         std::fs::create_dir_all(&ui).expect("the fabricated tree");
 
@@ -10742,7 +10803,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// test's own module; §158 found it in a test-only method. §157.
     #[test]
     fn a_test_only_method_is_not_a_reader() {
-        let dir = std::env::temp_dir().join(format!("craftkit-method-{}", std::process::id()));
+        let dir = crate::temp::dir("method").expect("a temporary folder");
         let crate_dir = dir.join("crates/thing/src");
         std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
         std::fs::write(
@@ -10770,7 +10831,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// §157.
     #[test]
     fn a_test_only_method_does_not_enforce_a_limit() {
-        let dir = std::env::temp_dir().join(format!("craftkit-method-limit-{}", std::process::id()));
+        let dir = crate::temp::dir("method-limit").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
         std::fs::write(model.join("lib.rs"), "pub mod limits {\n    pub const MAX_THINGS: usize = 10;\n}\n")
@@ -10819,7 +10880,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "the tree's prose names a member a type does not have"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-type-paths-{}", std::process::id()));
+        let dir = crate::temp::dir("type-paths").expect("a temporary folder");
         let docs = dir.join("docs");
         std::fs::create_dir_all(&docs).expect("the fabricated tree");
         std::fs::write(
@@ -10899,7 +10960,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "a memory budget is not derived from the model's budget"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-memory-budgets-{}", std::process::id()));
+        let dir = crate::temp::dir("memory-budgets").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
         let good_history = "pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;\n";
@@ -10952,7 +11013,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "a byte bound the tree has is not named in the prose"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-byte-bounds-{}", std::process::id()));
+        let dir = crate::temp::dir("byte-bounds").expect("a temporary folder");
         let docs = dir.join("docs");
         let src = dir.join("crates/engine/src");
         std::fs::create_dir_all(&docs).expect("the fabricated tree");
@@ -10996,7 +11057,7 @@ printf '%s%d/%d caught.%s\\n' \\
             "a bound the tree has is not named in the prose"
         );
 
-        let dir = std::env::temp_dir().join(format!("craftkit-step-bounds-{}", std::process::id()));
+        let dir = crate::temp::dir("step-bounds").expect("a temporary folder");
         let docs = dir.join("docs");
         let src = dir.join("crates/engine/src");
         std::fs::create_dir_all(&docs).expect("the fabricated tree");
@@ -11054,7 +11115,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// declares was a bound of the tree — and the prose would have to name it.
     #[test]
     fn a_bound_that_only_a_test_declares_is_not_a_bound_of_the_tree() {
-        let dir = std::env::temp_dir().join(format!("craftkit-bound-test-only-{}", std::process::id()));
+        let dir = crate::temp::dir("bound-test-only").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/architecture.md");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -11082,7 +11143,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// as one of the tree's numbers — and the message named the file it was in.
     #[test]
     fn a_constant_that_only_a_test_declares_is_not_the_codes_constant() {
-        let dir = std::env::temp_dir().join(format!("craftkit-constant-test-only-{}", std::process::id()));
+        let dir = crate::temp::dir("constant-test-only").expect("a temporary folder");
         let model = dir.join("crates/model/src");
         let docs = dir.join("docs/architecture.md");
         std::fs::create_dir_all(&model).expect("the fabricated tree");
@@ -11115,7 +11176,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// because the file's **test module** said `execute`.
     #[test]
     fn a_claim_in_one_row_of_a_table_and_a_file_in_the_next_are_not_a_claim() {
-        let dir = std::env::temp_dir().join(format!("craftkit-table-rows-{}", std::process::id()));
+        let dir = crate::temp::dir("table-rows").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs/playbook.md");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -11142,7 +11203,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// the gate from checking the claims that are really there.
     #[test]
     fn a_claim_and_a_file_in_the_same_row_of_a_table_are_a_claim() {
-        let dir = std::env::temp_dir().join(format!("craftkit-table-same-row-{}", std::process::id()));
+        let dir = crate::temp::dir("table-same-row").expect("a temporary folder");
         let engine = dir.join("crates/engine/src");
         let docs = dir.join("docs/playbook.md");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
@@ -11215,8 +11276,7 @@ printf '%s%d/%d caught.%s\\n' \\
     /// among them, and it has to say which view it wants as well.
     #[test]
     fn a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is() {
-        let dir = std::env::temp_dir().join(format!("craftkit-read-subject-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("the fabricated tree");
+        let dir = crate::temp::dir("read-subject").expect("a temporary folder");
         let rust = dir.join("thing.rs");
         let text = dir.join("thing.md");
         std::fs::write(&rust, "pub fn one() {}\n#[cfg(test)]\nmod tests { pub fn two() {} }\n")

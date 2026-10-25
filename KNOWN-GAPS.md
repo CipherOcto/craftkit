@@ -25079,17 +25079,20 @@ fixed.** The xtask depends on **nothing of the tree's own** — a checker that
 cannot be built when the tree does not compile is a checker that is silent
 exactly when it is needed — so it cannot reach the core's home.
 
-**Measured**, the xtask builds a temporary folder in **82** places, in **6**
-modules, and **73** of them do not empty the folder they find. The other
-**9** do, and the one in production (`xtask/src/lib.rs`) is a file, not a
-folder: it is the `Capture` that runs a program and keeps its output, and it
-already carries a counter (§186's shape).
+**Measured**, the xtask builds a temporary folder in **84** places, in **6**
+modules. The one in production (`xtask/src/lib.rs`) is a file, not a folder:
+it is the `Capture` that runs a program and keeps its output, and it already
+carries a counter (§186's shape). So **83** are tests, and **72** of them do
+not empty the folder they find.
 
-So the rule is now written **once** in the tree and **eighty-two** times in
-the xtask, and the xtask's copies are the ones that are wrong. That is the
-next arc, and it needs a decision the tree has not made: **one home per tree
-that can see it**, or **one home, and the xtask loses the ability to make a
-folder of its own**.
+So the rule was now written **once** in the tree and **eighty-three** times
+in the xtask, and the xtask's copies were the ones that were wrong. That was
+the next arc, and it needed a decision the tree had not made: **one home per
+tree that can see it**, or **one home, and the xtask loses the ability to
+make a folder of its own**.
+
+**§213 took the first road.** The xtask has a home of its own now, and the
+gate holds up both.
 
 **And the folders still accumulate.** One folder per call, left behind on
 purpose — the same count as before, and the same reason.
@@ -25109,6 +25112,122 @@ first, because a home in one crate is a home twenty-three crates cannot use.
 xtask cannot reach the core's home, so its eighty-two copies were not
 prevented by anything: the gate that stops the twenty-fourth copy is the one
 that has to exist.
+
+## 213. The xtask wrote the same rule eighty-three times, and a leftover file broke its own tests
+
+### The finding
+
+§212 gave the tree's tests one home — `craftkit_core::temp::dir` — and a gate
+that holds it up. **The gate could not see the xtask**, and that was not an
+oversight: the xtask depends on **nothing of the tree's own**, because a
+checker that cannot be built when the tree does not compile is a checker that
+is silent exactly when it is needed. So it cannot reach the core's home, and
+§212 wrote the rule in the xtask **again**, in every place.
+
+**Measured**, the xtask built a temporary folder in **84** places, in **6**
+modules:
+
+| where | how many |
+|---|---|
+| `xtask/src/lists.rs` | 78 |
+| `xtask/src/assets.rs` | 2 |
+| `xtask/src/anchors.rs` | 1 |
+| `xtask/src/cleanroom.rs` | 1 |
+| `xtask/src/fuzz.rs` | 1 |
+| `xtask/src/lib.rs` | 1 |
+
+The one in `xtask/src/lib.rs` is **production**, and it is not a folder: it is
+the `Capture` that runs a program and keeps its output, and it already carries
+a counter, so two live captures never share a file (§186's shape).
+
+So **83** of the 84 are tests, and **72** of those 83 do not empty the folder
+they find.
+
+### And the hazard is not a shape, it is a failure
+
+**Measured.** The xtask's own gate `the_walk_has_one_home` counts the
+recursive walks in the tree's source, and a fabricated tree is a tree it
+reads. A leftover file in that tree is **one more walk**:
+
+```text
+"xtask/src/leftover.rs:2: `a_leftover_walk` walks the tree, and the tree's walk is `xtask/src/tree.rs`",
+"xtask/src/other.rs:2: `another_walk` walks the tree, and the tree's walk is `xtask/src/tree.rs`",
+  left: 2
+ right: 1
+```
+
+**And the failure is sticky.** The test removes its folder at the end, and a
+test that fails never gets there — so the folder that broke the test is the
+folder the next run finds.
+
+**Measured, the other half.** With the same folder, and the folder **emptied
+first** — which is what the home does — the leftover is gone and the test
+passes.
+
+### The port
+
+**A second home**, in the xtask: `xtask/src/temp.rs`. The same shape as the
+core's — a **counter** in the name, so every call gets a folder of its own,
+and an existing folder **emptied** first, so no call inherits one.
+
+The eighty-three places call it, and the rule is written **once**.
+
+**And the gate holds up both.** The claim is one rule — *a test does not
+choose where its temporary folder lives* — and the tree has **two** homes
+because it has **two** trees that cannot see each other. The gate says which
+home each group of files uses, in a list of two rows, and each row names the
+call that reaches it.
+
+**And a copy that forgets where it came from is a copy that drifts**, so the
+record is in the file: `xtask/src/temp.rs` says that it is the core's home
+restated for the tree that cannot see the core, and why.
+
+### The gate's own teeth
+
+Three mutations, and each is caught for one reason:
+
+| the break | what it says | caught by |
+|---|---|---|
+| the xtask's counter goes away | *"two calls must not share a folder"* | `every_call_gets_a_folder_of_its_own` |
+| the xtask's emptying goes away | *"a folder that is already there must not inherit the files in it"* | `every_call_gets_a_folder_of_its_own` |
+| an xtask test builds its folder by hand | *"a test's folder comes from `crate::temp::dir`"* | `cargo xtask lists` |
+
+**And the gate bites.** Measured: with the xtask's `scratch_dir` put back to
+a hand-built folder, `cargo xtask lists` reported **exactly one** problem, at
+the right line, and named the **xtask's** home:
+
+```
+xtask/src/fuzz.rs: line 1790 chooses where a temporary folder lives; a test's folder comes from
+`crate::temp::dir`, which gives every call a folder of its own and empties one that is already
+there. §212.
+```
+
+**And the suite.** **489** of **490** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**There are two homes, and the tree says so.** The rule is written once in
+each of the two trees that cannot see each other, and each copy is proved by
+its own test and its own mutations. **The two are not compared.** Nothing
+checks that the xtask's home still has the shape the core's home has, and a
+change to one that is not made to the other would not be noticed. That is the
+residual of a house rule that is worth keeping.
+
+**And the folders still accumulate.** One folder per call, left behind on
+purpose — the same count as before, and the same reason.
+
+### The lesson
+
+**When a rule cannot be shared, give each tree its own home and say so.**
+The honest statement of the rule is **one home per tree that can see it**, not
+one home and a list of exceptions. A rule with a named exception is a rule
+with a place the exception can be forgotten.
+
+**And a copy is proved by its own test.** The xtask's home has the same test
+as the core's, and the same mutations. Two trees that cannot see each other
+cannot share a check either, so each one carries its own.
 
 
 ## What enforces what
@@ -25642,6 +25761,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The control channel a user reaches binds loopback** | `the_server_binds_loopback_on_the_path_a_user_reaches` | 1 mutation — §210 |
 | **Every temporary folder is a folder of its own, and never inherited** | `every_call_gets_a_folder_of_its_own` | 2 mutations — §211 |
 | **A test does not choose where its temporary folder lives** | `the_tree_has_one_temporary_folder` | 1 mutation — §212 |
+| **The xtask's tests build their temporary folders through the xtask's home** | `the_tree_has_one_temporary_folder` | 2 mutations — §213 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -27447,8 +27567,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     gate cannot see them, because the xtask depends on nothing of the tree's
     own. That is item 69.
 
-69. **The xtask builds its own temporary folders in eighty-two places, and
-    seventy-three of them never empty the folder they find.** §212.
+69. ~~**The xtask builds its own temporary folders in eighty-three places, and
+    seventy-two of them never empty the folder they find.**~~ **Done in §213.**
 
     §212 gave the tree's tests one home — `craftkit_core::temp::dir` — and a
     gate that holds it up. **The gate cannot see the xtask**, and that is not
@@ -27496,6 +27616,24 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     `crates/` and `apps/`. A second gate — or the same gate with a second
     arm — has to walk the xtask and hold *its* home up, and the tree has to
     say which home is which.
+
+    **§213 took the first road and made the gate one gate with two arms.**
+    The xtask has its own home, `xtask/src/temp.rs`, and the eighty-three
+    places call it. The gate walks the xtask too, and a list of **two** rows
+    says which home each group of files uses.
+
+    **And the rule is the same rule, proved twice.** The xtask's home has
+    the same test as the core's and the same mutations, because two trees
+    that cannot see each other cannot share a check either.
+
+    **Measured, the numbers the item did not have.** The xtask built a
+    folder in **84** places — **83** in tests and **1** in production, and
+    **72** of the tests did not empty the folder they found. And the hazard
+    is a failure, not a shape: a leftover file in a fabricated tree is one
+    more recursive walk, and the xtask's own gate counts them.
+
+    **The residual:** the two homes are **not compared**. Nothing checks
+    that the xtask's home still has the shape the core's home has.
 
     The choices are: put the rule in **one home** the crates can reach — a
     helper in the core crate, or a small dev-dependency — and have every test
