@@ -317,10 +317,83 @@ character is a boundary for free. It works for a **path** as well, because
 asked it. §164 went looking for the rest of them and found four more — the
 limits gate, the byte-bounds gate, the memory-budgets gate and the JSON
 writer's gate — each with its own substring test and each fooled by a
-longer name. All four ask the tree's `has_word` now. A fifth gate asks a
-*different* question the same way (is a signature a reader's?) and is
-written down rather than changed: the two directions of its complaint pull
-against each other, and that is an owner's call.
+longer name. All four ask the tree's `has_word` now. A fifth gate asked a
+*different* question the same way — *is a signature a reader's?* — and was
+**written down rather than changed**, on the grounds that the two directions
+of its complaint pull against each other.
+
+**§208 measured that claim, and it was wrong.** The complaint that was
+supposed to pull the other way needs a tree that **does not compile**, and the
+gate asks the **shape** of the argument now. See below.
+
+## And a question about an argument is a question about its shape
+
+The fifth gate §164 found — the one that derives the tree's parameter
+readers — asked *is this signature a reader's?* with a substring:
+
+```rust
+let takes_params = function.signature.contains(&format!("&{PARAMS_TYPE}"));
+```
+
+`&ParamsExtra` holds `&Params`, so the answer was yes. **Measured**, against
+a fabricated tree, the gate reported a helper taking `&ParamsExtra<'_>` as a
+reader of the params.
+
+**And the substring was wrong in the other direction too.** `&mut Params` does
+**not** hold `&Params`. **Measured**: the old check answered **false** for
+`fn value_for(p: &mut Params, key: &str)`, so a reader that takes the params
+*mutably* was not a reader as far as the gate was concerned.
+
+| the signature | the old check said | the gate says now |
+|---|---|---|
+| `p: &ParamsExtra<'_>` | a reader | not a reader |
+| `p: &mut Params` | **not** a reader | a reader |
+
+A substring check is wrong in **both** directions, and a defect in one of them
+hides the other: the tree has neither `ParamsExtra` nor a `&mut Params`
+reader, so it measured only the first.
+
+**The gate asks the shape now.** A reader takes a **reference** to the params
+type, and the type is named as a whole word. `takes_the_params` splits each
+argument at its colon, requires the type to start with `&` (optionally
+`mut `), and matches `Params` with the tree's own `has_word`:
+
+```rust
+fn takes_the_params(signature: &str) -> bool {
+    arguments_of(signature).iter().any(|argument| {
+        let Some((_, ty)) = argument.split_once(':') else { return false };
+        let ty = ty.trim();
+        let Some(reference) = ty.strip_prefix('&') else { return false };
+        let reference = reference.strip_prefix("mut ").unwrap_or(reference);
+        has_word(reference, PARAMS_TYPE)
+    })
+}
+```
+
+**And the reason the gate was left alone was worth measuring.** The gate also
+reports **parameters a command declares and never reads**, so a command that
+called a function which is not a reader would be reported as declaring a
+parameter it does not read. That complaint looked like the price of fixing
+the substring. **Measured** — on a scratch file outside the tree, compiled
+with `rustc` — the tree that produces it **does not compile**: Rust has no
+implicit conversion from `&Params` to `&ParamsExtra`:
+
+```
+error[E0308]: mismatched types
+   |
+   |     let _ = value_for(&p, "name");
+   |             --------- ^^ expected `&ParamsExtra<'_>`, found `&Params`
+```
+
+A false complaint that needs a tree that does not build is the **compiler's**
+false complaint, not the gate's. §208.
+
+**And the gate that bites is the unit test, not the lists gate.**
+**Measured**: with the substring check back, `cargo xtask lists` still says
+**green** — the tree has no `ParamsExtra`, so the lists gate reads the same
+readers either way. A false negative that only a **fabricated** tree can show
+cannot be caught by a gate that reads the **real** one; it needs a test that
+fabricates one.
 
 ## And the shape of a thing is the code's shape
 
@@ -750,6 +823,9 @@ let lines: Vec<&str> = text.lines().collect();
   §206.
 - `every_row_of_the_list_says_why` — a reason is there, and it is not only
   the subject's own phrase. §206.
+- `a_type_that_starts_with_params_is_not_the_params_type` — the reader gate asks
+  the **shape** of the argument, and `&ParamsExtra` is not the params type.
+  §208.
 - `the_tree_has_one_home_for_reading_a_file` — the readers, the cut and the
   code reader all live in `xtask/src/tree.rs`. §205.
 - `a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is` — `read_text` and

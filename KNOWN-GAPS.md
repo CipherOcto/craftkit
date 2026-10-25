@@ -24497,6 +24497,141 @@ memory budgets had been checked in the code view since §148 and §144. The
 trace budget was the one that was not, and it was the one that was checked by
 a test that read the file.
 
+## 208. The parameter-reader gate asked whether a signature holds a name, and it was wrong in both directions
+
+### The finding
+
+Item 39 asked a question with three answers on the table: *decide what the
+parameter-reader gate asks about a signature.* The gate that derives the tree's
+parameter readers — `parameter_readers` in `xtask/src/lists.rs` — asked it
+with a **substring**:
+
+```rust
+let takes_params = function.signature.contains(&format!("&{PARAMS_TYPE}"));
+```
+
+`&ParamsExtra` holds `&Params`, so the answer was yes.
+
+**Measured**: a fabricated tree whose helper takes `&ParamsExtra<'_>` was
+reported by the gate as a reader. The new test
+`a_type_that_starts_with_params_is_not_the_params_type` failed against the old
+code with
+
+```
+readers: [Reader { line: 6, name: "value_for", key: Some(1), ... }]
+```
+
+**And the substring was wrong in the other direction too.** `&mut Params` does
+not hold `&Params`. **Measured**: the old check answered **false** for the
+signature `fn value_for(p: &mut Params, key: &str)`, so a reader that takes
+the params **mutably** was not a reader as far as the gate was concerned — and
+the gate now finds it:
+
+| the signature | the old check said | the gate says now |
+|---|---|---|
+| `p: &ParamsExtra<'_>` | a reader | not a reader |
+| `p: &mut Params` | **not** a reader | a reader |
+
+**The tree has no `ParamsExtra` and no `&mut Params` today**, which is why the
+defect was latent. It is also the **fifth** gate to ask *is this name in that
+text?* with a substring: §164 found four and fixed them, and this is the one
+that was left.
+
+### The second complaint, and why it was never a real choice
+
+Item 39 also named the reason the defect was left alone, and the reason was
+good: the gate also reports **parameters a command declares and never reads**.
+So a command that called a function which is not a reader would be reported as
+declaring a parameter it does not read — a false complaint, in the other
+direction. The item's three answers were: match the type as a whole name and
+accept the second complaint; keep the substring and accept the first; or ask
+the question by the **shape** of the argument rather than by the name of its
+type.
+
+**Measured**: the fabricated tree produced the second complaint exactly:
+
+> crates/engine/src/commands.rs: line 3 declares the parameter `name`, which
+> `real.cmd` never reads: a caller that passes it is ignored
+
+**And the fabricated tree cannot compile.** Rust has no implicit conversion
+from `&Params` to `&ParamsExtra`. **Measured** on a scratch file outside the
+tree, with `rustc --edition 2024`:
+
+```
+error[E0308]: mismatched types
+   |
+   |     let _ = value_for(&p, "name");
+   |             --------- ^^ expected `&ParamsExtra<'_>`, found `&Params`
+```
+
+So the second complaint is reachable **only in a tree that does not build**,
+and the choice item 39 offered was not a choice at all: the *keep the
+substring* branch protects against a complaint that cannot happen in a tree
+that compiles. **The reader refuses to guess** — it asks the shape of the
+argument, and a shape that does not compile is not a case to guard.
+
+### The port
+
+**The gate asks about the shape of the argument now.** A reader takes a
+**reference** to the params type, and the type is named as a whole word. The
+new helper `takes_the_params` in `xtask/src/lists.rs` splits each argument at
+its colon, requires the type to start with `&` (optionally `mut `), and
+matches `Params` with `has_word` — the tree's own whole-name test.
+
+**The tree's rule is §162's and it was already written down**: *a name is a
+whole name*. §164 fixed four gates that broke it. This is the fifth, and the
+same answer applies.
+
+### The gate's own teeth
+
+One mutation, caught by `cargo test -p xtask --profile ci
+a_type_that_starts_with_params_is_not_the_params_type`:
+
+| the break | what it says |
+|---|---|
+| the substring check goes back | *"a type that starts with `Params` is not the params type: `[Reader { line: 6, name: "value_for", ... }]`"* |
+
+**And `cargo xtask lists` does not catch it — measured.** The tree has no
+`ParamsExtra` today, so the lists gate sees the same readers with either
+check and stays green. The lists gate reads the **real** tree, and this
+defect is a false negative that only a **fabricated** tree can show. The unit
+test is the gate that bites, and the matrix row below says so.
+
+**And the suite.** **481** of **482** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**A reader that takes the params through an alias is still not a reader.** The
+gate matches the **name** `Params` as a whole word, so `type P<'a> = &'a
+Params;` and a function written `fn value_for(p: &P<'_>, …)` are not counted.
+Nothing in the tree writes such an alias, and the fix did not make the gate
+worse; it made it right about `&Params` and `&mut Params`, which is what the
+tree actually has.
+
+**And the second complaint is not gone — it is unreachable.** A tree that
+called a non-reader with a `&Params` would still be reported as declaring a
+parameter it does not read. Rust will not build that tree, so the complaint
+belongs to a compiler and not to this gate.
+
+### The lesson
+
+**A substring check is wrong in both directions, and a defect in one of them
+hides the other.** `&ParamsExtra` was too loose and `&mut Params` was too
+tight, and the tree measured only the first because the tree has neither.
+
+**And a "false complaint" that needs a tree that does not compile is not a
+false complaint.** Item 39 weighed two errors against each other and found
+both plausible. One of them was reachable only in Rust that does not build, and
+the honest way to have found that out was to *write the tree and compile it*,
+not to reason about it.
+
+**And the question was not "which name?" but "which shape?".** The gate did not
+want the type `Params`; it wanted *the argument that carries the params*. A
+name is a whole name — §162 — and a shape is a shape, and the two questions
+have different answers.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25023,6 +25158,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The readers, the cut and the code reader have one home** | `the_tree_has_one_home_for_reading_a_file` | the unit test — §205 |
 | **A row of the list of the gates that read Rust says why** | `RUST_READING_GATES` | 2 mutations — §206 |
 | **The trace's budget is derived, and a derivation in a comment is not a derivation** | `the_trace_budget_is_derived_from_its_memory_budget` | 2 mutations — §207 |
+| **A type that starts with `Params` is not the params type, and `&mut Params` is** | `takes_the_params` in `xtask/src/lists.rs` | 1 mutation — §208 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25836,7 +25972,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     restore puts it back, the fingerprint checksums it, and the script's
     self-test now has a fourth half that fails when a file a build writes
     is not in the snapshot.
-39. **Decide what the parameter-reader gate asks about a signature.** §164
+39. ~~**Decide what the parameter-reader gate asks about a signature.**~~ **Done in §208.**
+    §164
     found four gates that ask *is this name in that text?* with a substring
     test and fixed them, and found a fifth that asks a **different**
     question the same way. The gate that derives the tree's parameter
@@ -25851,6 +25988,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the second complaint, keep the substring and accept the first, or ask
     the reader's question differently — by the *shape* of the argument
     rather than by the name of its type.
+    **The third choice was the one, and the reason the item left it alone was
+    the wrong way round.** §208 measured the second complaint against a
+    fabricated tree and then **compiled** it: Rust has no implicit
+    conversion from `&Params` to `&ParamsExtra`, so the tree that produces
+    the false complaint **does not build** — and the complaint belongs to
+    the compiler, not to the gate. The gate now asks about the **shape** of
+    the argument: a **reference** to the params type, named as a whole
+    word. And the substring was wrong in **both** directions — measured:
+    `&mut Params` did not hold `&Params`, so the old check was not a reader
+    as far as the gate was concerned either.
 40. ~~**Check the twenty rows of §159's audit.**~~ **Done in §205.**
     §159 listed every gate
     that opens a Rust file and said, for each, which view it reads — twenty

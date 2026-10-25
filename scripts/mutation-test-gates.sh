@@ -2224,6 +2224,34 @@ swap crates/engine/src/lib.rs \
 expect_catch "lists: a derivation in a comment is not a derivation" \
     "cargo xtask lists"
 
+# The reader gate asks about the **shape** of an argument, and not about a
+# substring of the name of its type. Section 208: the gate that derives the
+# tree's parameter readers used to ask whether a signature *contains*
+# `&Params`, so `&ParamsExtra` answered for it -- a type the tree does not
+# have, which is why the defect was latent. The tree's rule is section 162's
+# -- a name is a whole name -- and this is the same question.
+#
+# The break puts the substring check back. Measured: `cargo xtask lists` does
+# **not** catch it, because the tree has no `ParamsExtra` today, so the lists
+# gate sees the same readers either way. The unit test is the gate that
+# bites, and it is the one that has to.
+swap xtask/src/lists.rs \
+    $'fn takes_the_params(signature: &str) -> bool {
+    arguments_of(signature).iter().any(|argument| {
+        // The type is what is after the colon.
+        let Some((_, ty)) = argument.split_once(\':\') else { return false };
+        let ty = ty.trim();
+        let Some(reference) = ty.strip_prefix(\'&\') else { return false };
+        let reference = reference.strip_prefix("mut ").unwrap_or(reference);
+        has_word(reference, PARAMS_TYPE)
+    })
+}' \
+    'fn takes_the_params(signature: &str) -> bool {
+    signature.contains(&format!("&{PARAMS_TYPE}"))
+}'
+expect_catch "lists: a type that starts with Params is the params type" \
+    "cargo test -p xtask --profile ci a_type_that_starts_with_params_is_not_the_params_type"
+
 # The fingerprint forgets a field, and the guard that should have noticed
 # drifts with it. §80: the keyframe's easing was in the hash but not in the
 # hash's own test — the test changed a key's time, value and easing together,

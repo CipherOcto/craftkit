@@ -2528,6 +2528,29 @@ fn key_index(signature: &str) -> Option<usize> {
         .position(|arg| arg.starts_with(KEY_ARG) || arg.starts_with("key:&str"))
 }
 
+/// Whether a signature takes the params object.
+///
+/// §208. The gate that derives the tree's parameter readers used to ask
+/// whether the signature **contains** `&Params`, so `&ParamsExtra` answered
+/// for it — a type the tree does not have, which is why the defect was
+/// latent.
+///
+/// The tree's rule is §162's: **a name is a whole name**, and four gates that
+/// asked the same question with a substring were fixed long ago. The question
+/// here is the same question, and it is answered about the **shape** of the
+/// argument: a reader takes a **reference** to the params type, and the type
+/// is named as a whole word.
+fn takes_the_params(signature: &str) -> bool {
+    arguments_of(signature).iter().any(|argument| {
+        // The type is what is after the colon.
+        let Some((_, ty)) = argument.split_once(':') else { return false };
+        let ty = ty.trim();
+        let Some(reference) = ty.strip_prefix('&') else { return false };
+        let reference = reference.strip_prefix("mut ").unwrap_or(reference);
+        has_word(reference, PARAMS_TYPE)
+    })
+}
+
 /// Every reader in the tree.
 ///
 /// A reader is a function whose signature takes a `&Params`, or a method of
@@ -2555,7 +2578,7 @@ fn parameter_readers(root: &Path) -> Vec<Reader> {
         let code = code_lines_kept(&text);
         for function in rust_functions(&relative, &text, &code) {
             let is_method = has_word(&function.block, PARAMS_TYPE);
-            let takes_params = function.signature.contains(&format!("&{PARAMS_TYPE}"));
+            let takes_params = takes_the_params(&function.signature);
             if !is_method && !takes_params {
                 continue;
             }
@@ -7947,6 +7970,39 @@ mod tests {
         assert_eq!(readers[0].name, "value_for", "{readers:?}");
         // And it is the real one, with a name argument of its own.
         assert!(readers[0].key.is_some(), "{readers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A type whose name starts with `Params` is not the params type.
+    ///
+    /// §208. The gate that derives the tree's parameter readers asked whether
+    /// a signature holds `&Params` with a **substring** test, so `&ParamsExtra`
+    /// answered for it — a type the tree does not have, which is why the
+    /// defect was latent.
+    ///
+    /// The tree's rule is §162's: **a name is a whole name**, and four gates
+    /// that asked the same question with a substring were fixed long ago. The
+    /// question here is the same question, and the answer is the same.
+    #[test]
+    fn a_type_that_starts_with_params_is_not_the_params_type() {
+        let dir = std::env::temp_dir().join(format!("craftkit-params-extra-{}", std::process::id()));
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "use craftkit_core::Params;\n\
+             \n\
+             pub struct ParamsExtra<'a>(&'a str);\n\
+             \n\
+             pub fn value_for(p: &ParamsExtra<'_>, key: &str) -> Option<f64> {\n\
+             let _ = (p, key);\n\
+             None\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let readers = parameter_readers(&dir);
+        assert!(readers.is_empty(), "a type that starts with `Params` is not the params type: {readers:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
