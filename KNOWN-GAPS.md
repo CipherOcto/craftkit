@@ -24975,6 +24975,141 @@ opposites — they are two halves of one rule.** The folder is left behind when
 the run ends, and emptied when the **next** run that owns the name begins.
 Which run owns a name is the process id, and a process id belongs to one
 process at a time.
+## 212. The rule for a test's temporary folder was written twenty-four times, and item 68's count of sixteen was an undercount
+
+### The finding
+
+Item 68 named the rule and its shape: the rule for a test's temporary folder
+was written in **sixteen** places at once, and each place was a chance to get
+it wrong. §211 fixed one of them — the engine's crash tests — and left the
+rest, which is what item 68 was for.
+
+**Measured, sixteen was an undercount.** The tree's crates and apps build a
+temporary folder in **twenty-six** places, and **twenty-four** of them are
+tests:
+
+| where | how many |
+|---|---|
+| `crates/control/src/token.rs` | 8 |
+| `apps/craftkit/src/main.rs` | 4 |
+| `apps/craftkit-cli/tests/script.rs` | 3 |
+| `crates/control/src/server.rs` | 2 |
+| `apps/craftkit-cli/src/cli.rs` | 1 |
+| `apps/craftkit-cli/tests/crash_pipeline.rs` | 1 |
+| `apps/craftkit-cli/tests/mcp_stdio.rs` | 1 |
+| `apps/craftkit-cli/tests/sample.rs` | 1 |
+| `crates/engine/src/crash.rs` | 1 |
+| `crates/engine/tests/crash_properties.rs` | 1 |
+| `crates/io/src/store.rs` | 1 |
+
+The other **two** are production — `crates/control/src/token.rs:188` and
+`crates/engine/src/crash.rs:187` — and they are the tree's business: the
+folder a machine with **no home directory and no XDG** keeps its token and
+its crash reports in.
+
+**Item 68's count was sixteen because it counted *lines*.** Eight of the
+twenty-four are the first line of a chain:
+
+```rust
+let dir = std::env::temp_dir()
+    .join("craftkit-token-tests")
+    .join(format!("{tag}-{}", std::process::id()));
+```
+
+and the process id is on the **second** line. §209's lesson, again: **counting
+places is not the same as finding them.** A count has to be of *statements*.
+
+### And the hazard is not a shape, it is a failure
+
+**Measured.** The io crate's `saving_leaves_no_temporary_behind` asserts that
+no `.tmp` file is left in the folder it used. With the pre-§212 behaviour — a
+fixed name, and no emptying — and a leftover in the folder, it **failed**:
+
+```
+["leftover.tmp"]
+```
+
+With the home's emptying in place, the same leftover is gone and the test
+passes. The engine's `a_report_that_cannot_be_written_leaves_no_folder_behind`
+fails the same way with a leftover `report.json`.
+
+### The port
+
+**One home**, in the lowest layer, so that every crate and every app can reach
+it: `craftkit_core::temp::dir(tag)`. It is the tree's **second** shared thing
+in the core — the first is the readers (§149) — and it is in the core for the
+same reason: a rule written twenty-four times is twenty-four chances to
+forget it, and this one was written twenty-four.
+
+The home gives every call a folder of **its own** (a counter in the name),
+and **empties** a folder that is already there (§211's two halves). The
+twenty-four places now call it; the rule is written **once**.
+
+### The gate's own teeth
+
+A new gate, `the_tree_has_one_temporary_folder`, and three mutations:
+
+| the break | what it says | caught by |
+|---|---|---|
+| the counter goes away | *"two calls must not share a folder"* | `every_call_gets_a_folder_of_its_own` |
+| the emptying goes away | *"a folder that is already there must not inherit the files in it"* | `every_call_gets_a_folder_of_its_own` |
+| a test builds its folder by hand | *"a test's folder comes from `craftkit_core::temp::dir`"* | `cargo xtask lists` |
+
+**And the gate bites.** Measured: with the io crate's `scratch` helper put
+back to a hand-built folder, `cargo xtask lists` reported **exactly one**
+problem, at the right line:
+
+```
+crates/io/src/store.rs: line 252 chooses where a temporary folder lives; a test's folder comes
+from `craftkit_core::temp::dir`, which gives every call a folder of its own and empties one
+that is already there. §212.
+```
+
+**And the suite.** **486** of **487** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**. Two of the cases are §211's, moved to the home that now holds
+the rule, and one is §186's, re-anchored: the property suite gets its folder
+from the one home now, so the break that puts the hand-built folder back is
+how the claim *"two properties do not share a corpus"* is broken.
+
+### What is not claimed
+
+**The xtask's own folders are not in the gate's tree, and they are not
+fixed.** The xtask depends on **nothing of the tree's own** — a checker that
+cannot be built when the tree does not compile is a checker that is silent
+exactly when it is needed — so it cannot reach the core's home.
+
+**Measured**, the xtask builds a temporary folder in **82** places, in **6**
+modules, and **73** of them do not empty the folder they find. The other
+**9** do, and the one in production (`xtask/src/lib.rs`) is a file, not a
+folder: it is the `Capture` that runs a program and keeps its output, and it
+already carries a counter (§186's shape).
+
+So the rule is now written **once** in the tree and **eighty-two** times in
+the xtask, and the xtask's copies are the ones that are wrong. That is the
+next arc, and it needs a decision the tree has not made: **one home per tree
+that can see it**, or **one home, and the xtask loses the ability to make a
+folder of its own**.
+
+**And the folders still accumulate.** One folder per call, left behind on
+purpose — the same count as before, and the same reason.
+
+### The lesson
+
+**A count of lines is not a count of places.** Item 68 said sixteen and the
+truth was twenty-four, because eight of the places were a chain and the
+evidence was on the second line of it. The count has to be of the thing the
+rule is about.
+
+**And the rule needs a home that every crate can reach.** The home is in the
+core crate — the lowest layer — not in the crate that happened to need it
+first, because a home in one crate is a home twenty-three crates cannot use.
+
+**And a rule that a gate cannot see is a rule that is written again.** The
+xtask cannot reach the core's home, so its eighty-two copies were not
+prevented by anything: the gate that stops the twenty-fourth copy is the one
+that has to exist.
+
 
 ## What enforces what
 
@@ -25506,6 +25641,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every pending change is declared and applied, in code** | `the_pending_changes_are_declared_in_code` | 1 mutation — §209 |
 | **The control channel a user reaches binds loopback** | `the_server_binds_loopback_on_the_path_a_user_reaches` | 1 mutation — §210 |
 | **Every temporary folder is a folder of its own, and never inherited** | `every_call_gets_a_folder_of_its_own` | 2 mutations — §211 |
+| **A test does not choose where its temporary folder lives** | `the_tree_has_one_temporary_folder` | 1 mutation — §212 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -26441,6 +26577,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **The flake is still unexplained.** §207 closed a hazard; it did not find
     a cause, and it does not claim one.
 
+    **§212 found a candidate cause — and did not claim it.** The engine's
+    crash tests write into a temporary folder that is **never cleaned**, so a
+    run that reuses a process id inherits the last run's files. **Measured**:
+    with a leftover `report.json` in the folder and the pre-§211 behaviour,
+    the engine's `a_report_that_cannot_be_written_leaves_no_folder_behind`
+    **failed** — *"the crash directory holds […, `report.json`]"* — a test
+    failing for a reason that has nothing to do with the code under test,
+    which is exactly the shape of this flake.
+
+    §211 emptied the folder that owns the name, and §212 gave the rule one
+    home for the whole tree, so the hazard is closed for the tree's tests.
+
+    **It is a candidate, not a cause.** The flake has not reproduced in
+    **160** runs, the failure in §167 was never captured, and nothing ties
+    that one failure to a leftover file. What §212 can say is that **a way
+    for that test to fail for the wrong reason existed, and is now closed.**
+
     What is **left** is the choice the item names: the loop, or the
     repetition count. Neither is free, and the cost falls on every run.
 
@@ -27252,7 +27405,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     still passed and this one said *"the control channel bound 0.0.0.0:37261,
     which is reachable from another machine"*.
 
-68. **The rule for a test's temporary folder is written sixteen times.** §211.
+68. ~~**The rule for a test's temporary folder is written sixteen times.**~~ **Done in
+    §212.**
 
     §211 fixed the engine's crash tests: every call gets a folder of its own,
     and a folder that is already there is emptied first.
@@ -27273,6 +27427,75 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **The rule is written once per place, and each place is a chance to
     forget it.** §149's shape: a rule written three times is three chances to
     forget it, and this one is written sixteen.
+
+    **§212 measured the item's numbers and kept them — and found them
+    short.** The count was of **lines**, and eight of the places are a chain
+    whose process id is on the second line. The truth is **24** places in
+    **11** files. §209's lesson again: counting places is not the same as
+    finding them.
+
+    **The port:** the rule has **one home**, `craftkit_core::temp::dir`, in
+    the lowest layer so that every crate and every app can reach it; the
+    twenty-four places call it; and the home gives every call a folder of its
+    own and empties one that is already there.
+
+    **The teeth:** a new gate, `the_tree_has_one_temporary_folder`, and three
+    mutations — the counter away, the emptying away, and a test that builds
+    its folder by hand.
+
+    **And the residual:** the **xtask** has its own **82** places, and the
+    gate cannot see them, because the xtask depends on nothing of the tree's
+    own. That is item 69.
+
+69. **The xtask builds its own temporary folders in eighty-two places, and
+    seventy-three of them never empty the folder they find.** §212.
+
+    §212 gave the tree's tests one home — `craftkit_core::temp::dir` — and a
+    gate that holds it up. **The gate cannot see the xtask**, and that is not
+    an oversight: the xtask depends on **nothing of the tree's own**, because
+    a checker that cannot be built when the tree does not compile is a checker
+    that is silent exactly when it is needed. It cannot reach the core's
+    home.
+
+    **Measured**, the xtask builds a temporary folder in **82** places, in
+    **6** modules:
+
+    | where | how many |
+    |---|---|
+    | `xtask/src/lists.rs` | 76 |
+    | `xtask/src/assets.rs` | 2 |
+    | `xtask/src/anchors.rs` | 1 |
+    | `xtask/src/cleanroom.rs` | 1 |
+    | `xtask/src/fuzz.rs` | 1 |
+    | `xtask/src/lib.rs` | 1 |
+
+    **And 73 of the 82 do not empty the folder they find.** A run that
+    reuses a process id inherits the last run's files — the hazard §211
+    closed for the engine's crash tests and §212 closed for the whole tree.
+
+    **The one in production** (`xtask/src/lib.rs`) is not a folder: it is the
+    `Capture` that runs a program and keeps its output, and it already
+    carries a counter, so two live captures never share a file (§186's
+    shape).
+
+    **The choices.** The xtask may have **its own one home** — `xtask/src/
+    temp.rs`, the same shape as the core's — and the rule is then written
+    once in each of the two trees that cannot see each other; or the xtask
+    may keep its eighty-two copies; or the xtask may lose the ability to
+    make a folder of its own and take the core's, which the house rule
+    forbids.
+
+    **The first is the only one that keeps both rules.** The house rule
+    ("the xtask depends on nothing of the tree's own") is not a habit, and a
+    gate that cannot be built when the tree is broken is a gate that is
+    silent exactly when it is needed. So the answer is a second home, and
+    the honest statement of the rule is **one home per tree that can see
+    it**.
+
+    **The second half of the question is the gate.** §212's gate walks
+    `crates/` and `apps/`. A second gate — or the same gate with a second
+    arm — has to walk the xtask and hold *its* home up, and the tree has to
+    say which home is which.
 
     The choices are: put the rule in **one home** the crates can reach — a
     helper in the core crate, or a small dev-dependency — and have every test

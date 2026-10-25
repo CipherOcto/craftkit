@@ -980,10 +980,7 @@ mod tests {
     /// tell a reproduction from a different document. §47.
     #[test]
     fn the_crash_replay_says_whether_it_reproduced_the_document() {
-        let dir = std::env::temp_dir()
-            .join("craftkit-control-crash-tests")
-            .join(format!("replay-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("a folder");
+        let dir = craftkit_core::temp::dir("replay").expect("a folder");
 
         let mut session = Session::sample();
         session
@@ -1129,10 +1126,7 @@ mod tests {
     /// whose window was right there, working. §54.
     #[test]
     fn a_second_instance_does_not_take_the_first_ones_token_file() {
-        let dir = std::env::temp_dir()
-            .join("craftkit-control-tests")
-            .join(format!("token-takeover-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = craftkit_core::temp::dir("token-takeover").expect("a folder");
 
         let first_token = Token::generate().expect("entropy");
         let (server, path) = serve_published(

@@ -935,34 +935,11 @@ mod tests {
     /// and would make every test in the binary race this one. That is exactly
     /// why [`write_to`] and its siblings take the folder as a parameter.
     ///
-    /// §211. The folder used to be named after the **tag** and the process id
-    /// alone, so two tests that passed the same tag shared one folder — and a
-    /// later run that reused the process id inherited the last run's files.
-    ///
-    /// A **counter** gives every call a folder of its own, and a folder that
-    /// is already there is emptied first: the process id in the name is ours,
-    /// so the folder it names belongs to a process that is gone.
+    /// The rule is the tree's, and it lives in one place: §212 gave the
+    /// temporary folder a home in `craftkit_core::temp`, because the rule had
+    /// been written in sixteen places at once. §211 fixed it here first.
     fn temp_dir(tag: &str) -> PathBuf {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        temp_dir_numbered(tag, n)
-    }
-
-    /// The folder for a given number, so a test can ask for the same one
-    /// twice.
-    ///
-    /// The number is part of the name so that **every** call gets a folder of
-    /// its own, and the folder is emptied first so that a run which reuses a
-    /// process id does not inherit the last run's files. §211.
-    fn temp_dir_numbered(tag: &str, n: u64) -> PathBuf {
-        let dir = std::env::temp_dir()
-            .join("craftkit-crash-tests")
-            .join(format!("{tag}-{}-{n}", std::process::id()));
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir).expect("remove the folder this run left behind");
-        }
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        craftkit_core::temp::dir(tag).expect("a temporary folder")
     }
 
     /// The mode of a path, where the platform has modes.
@@ -1191,29 +1168,6 @@ mod tests {
     /// then said "could not read the line: No such file or directory", which
     /// names a file that was never there and says nothing about the folder.
     /// §185.
-    /// Every call gets a folder of its own, and a folder is never inherited.
-    ///
-    /// §211. The folder was named after the **tag** and the process id, so
-    /// two tests that passed the same tag shared one folder — and a later run
-    /// that reused the process id inherited the last run's files.
-    #[test]
-    fn every_call_gets_a_folder_of_its_own() {
-        let one = temp_dir("same-tag");
-        let two = temp_dir("same-tag");
-        assert_ne!(one, two, "two calls must not share a folder");
-
-        // And a folder that is already there is fresh, not the last run's.
-        // The number is named here, so the test does not depend on how many
-        // other tests ran first.
-        let known = temp_dir_numbered("inherit", 0);
-        std::fs::write(known.join("left-behind.txt"), b"old").expect("write");
-        let again = temp_dir_numbered("inherit", 0);
-        assert!(
-            !again.join("left-behind.txt").exists(),
-            "a folder that is already there must not inherit the files in it"
-        );
-    }
-
     #[test]
     fn a_folder_that_is_not_a_report_is_not_listed_and_says_so() {
         let dir = temp_dir("not-a-report");

@@ -2913,6 +2913,117 @@ pub fn the_pending_changes_are_declared_in_code(root: &Path) -> Result<Vec<Strin
     Ok(problems)
 }
 
+/// The tree's tests build their temporary folders through the one home.
+///
+/// §212. The rule for a test's temporary folder was written in **sixteen**
+/// places at once, and each place was a chance to get it wrong: a name made of
+/// a tag and a process id is not a name. The rule now lives in
+/// `craftkit_core::temp`, and this gate holds it up.
+///
+/// The question this gate asks first is **which lines are tests**, and the
+/// tree's own cut answers it: `production_of` blanks a file's test items and
+/// keeps the file's line numbering, so a line that is blank in the production
+/// view and present in the file belongs to a test. The second question — *does
+/// this line choose where a temporary folder lives?* — is a question about
+/// **code**, so it is asked of the code view: a mention in a comment or in a
+/// string is not a call.
+///
+/// **The xtask is not in the tree this gate walks**, and that is not an
+/// oversight: the xtask depends on nothing of the tree's own, because a
+/// checker that cannot be built when the tree does not compile is a checker
+/// that is silent exactly when it is needed. It cannot reach the core's home,
+/// so its own folders are a separate finding and this gate does not pretend to
+/// hold them up.
+pub fn the_tree_has_one_temporary_folder(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let mut home_seen = false;
+    for group in ["crates", "apps"] {
+        let dir = root.join(group);
+        let mut files = Vec::new();
+        collect_rust(&dir, &mut files);
+        for path in files {
+            let Ok(whole) = read_rust(&path, Subject::Everything) else { continue };
+            let production = production_of(&path, &whole);
+            let code = code_lines_kept(&whole);
+            let file_lines: Vec<&str> = whole.lines().collect();
+            let production_lines: Vec<&str> = production.lines().collect();
+
+            // The home, and the fact that it is one.
+            if relative_name(root, &path) == "crates/core/src/temp.rs" {
+                home_seen = true;
+                if !has_word(&code, "pub fn dir") {
+                    problems.push(format!(
+                        "{}: the home does not declare `pub fn dir`, and every crate in the tree \
+                         calls `craftkit_core::temp::dir`; a home with another name is a home \
+                         nobody can reach. §212.",
+                        relative_name(root, &path)
+                    ));
+                }
+            }
+
+            for (index, line) in code.lines().enumerate() {
+                if !calls_the_environment_folder(line) {
+                    continue;
+                }
+                // A line is a test's line when the production view has it
+                // blank and the file has it: the cut removed the test item the
+                // line belongs to, and the file's line numbering is kept.
+                let belongs_to_a_test = production_lines.get(index).is_some_and(|l| l.trim().is_empty())
+                    && file_lines.get(index).is_some_and(|l| !l.trim().is_empty());
+                if !belongs_to_a_test {
+                    continue;
+                }
+                problems.push(format!(
+                    "{}: line {} chooses where a temporary folder lives; a test's folder comes \
+                     from `craftkit_core::temp::dir`, which gives every call a folder of its own \
+                     and empties one that is already there. §212.",
+                    relative_name(root, &path),
+                    index + 1
+                ));
+            }
+        }
+    }
+    if !home_seen {
+        problems.push(
+            "crates/core/src/temp.rs: the tree has no one home for a temporary folder, so every \
+             test that needs one writes the rule again. §212."
+                .to_string(),
+        );
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// Whether a line of code calls the environment's temporary folder.
+///
+/// The call takes **no arguments** — `std::env::temp_dir()` — and that is what
+/// tells it apart from the tree's own wrappers, which take the tag:
+/// `temp_dir(tag)`, `scratch(tag)`. §208 taught the shape: a question about a
+/// call is a question about the shape of the call, and a substring is wrong in
+/// both directions.
+fn calls_the_environment_folder(code: &str) -> bool {
+    let bytes = code.as_bytes();
+    let mut at = 0usize;
+    while let Some(found) = code[at..].find("temp_dir") {
+        let start = at + found;
+        let end = start + "temp_dir".len();
+        let before = start == 0 || !is_word_byte(bytes[start - 1]);
+        let after = end >= bytes.len() || !is_word_byte(bytes[end]);
+        if before && after {
+            // The call, and the shape of it: no arguments.
+            let mut cursor = end;
+            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                cursor += 1;
+            }
+            if cursor + 1 < bytes.len() && bytes[cursor] == b'(' && bytes[cursor + 1] == b')' {
+                return true;
+            }
+        }
+        at = end;
+    }
+    false
+}
+
 /// The names in the io crate's `FILES` table.
 ///
 /// The table is found in the **code**, so a `FILES` that stands only inside a
@@ -5155,6 +5266,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         Subject::Everything,
         "the question is which methods the shipped session has, and a test-only method is in the file and not in the build",
     ),
+    (
+        "the_tree_has_one_temporary_folder",
+        Subject::Everything,
+        "the question is which lines are tests, and a test is in the file and not in the shipped code",
+    ),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
@@ -6328,6 +6444,11 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // Every pending format change is declared and applied, in code. §209.
     problems.extend(the_pending_changes_are_declared_in_code(root)?);
 
+    // The tree's tests build their temporary folders through the one home. §212.
+    problems.extend(the_tree_has_one_temporary_folder(root)?.into_iter().map(|p| {
+        format!("{p}\n     One home for a temporary folder, so no test can inherit the last run's files.")
+    }));
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -6356,6 +6477,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              the fuzzer's targets are the table the document lists, \
              the tree's walk \
              has one home, every pending change is declared and applied in code, \
+             every test builds its temporary folder through the one home, \
              and the session offers no way into the design but \
              the registry",
             roots.len()
@@ -8173,6 +8295,101 @@ mod tests {
         let problems = the_pending_changes_are_declared_in_code(&dir).expect("runs");
         assert!(problems.is_empty(), "a declared and applied pending change is not a problem: {problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The one home, written into a fabricated tree.
+    ///
+    /// The gate looks for it by its place in the tree, so a fabricated tree
+    /// without it would be reported for a second reason and the case would
+    /// not be caught for one reason. §212.
+    fn the_home_in(dir: &std::path::Path) {
+        let home = dir.join("crates/core/src");
+        std::fs::create_dir_all(&home).expect("the fabricated tree");
+        std::fs::write(
+            home.join("temp.rs"),
+            "pub fn dir(tag: &str) -> std::path::PathBuf {\n    let _ = tag;\n    std::path::PathBuf::new()\n}\n",
+        )
+        .expect("the fabricated home");
+    }
+
+    /// A test that chooses where its temporary folder lives is caught.
+    ///
+    /// This is the defect the gate exists for: the rule was written in
+    /// sixteen places at once, and a name made of a tag and a process id is
+    /// not a name. §212.
+    #[test]
+    fn a_test_that_builds_its_folder_by_hand_is_caught() {
+        let dir = std::env::temp_dir().join(format!("craftkit-temp-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        the_home_in(&dir);
+        let demo = dir.join("crates/demo/src");
+        std::fs::create_dir_all(&demo).expect("the fabricated tree");
+        std::fs::write(
+            demo.join("lib.rs"),
+            "#[cfg(test)]\n\
+             mod tests {\n\
+             \x20   #[test]\n\
+             \x20   fn a_test() {\n\
+             \x20       let dir = std::env::temp_dir().join(\"demo\");\n\
+             \x20       let _ = dir;\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated test");
+
+        let problems = the_tree_has_one_temporary_folder(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("crates/demo/src/lib.rs")),
+            "a test that chooses its own folder is not reported: {problems:#?}"
+        );
+        assert!(problems.len() == 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test that uses the one home is not reported, and neither is a
+    /// production use of the environment's folder.
+    ///
+    /// The production uses are the two doors a machine with no home directory
+    /// opens — the token's and the crash report's — and they are the tree's
+    /// business, not a test's. §212.
+    #[test]
+    fn a_test_that_uses_the_one_home_is_not_reported() {
+        let dir = std::env::temp_dir().join(format!("craftkit-temp-ok-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        the_home_in(&dir);
+        let demo = dir.join("crates/demo/src");
+        std::fs::create_dir_all(&demo).expect("the fabricated tree");
+        std::fs::write(
+            demo.join("lib.rs"),
+            "pub fn where_the_reports_go() -> std::path::PathBuf {\n\
+             \x20   std::env::temp_dir().join(\"craftkit\")\n\
+             }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             \x20   #[test]\n\
+             \x20   fn a_test() {\n\
+             \x20       let dir = craftkit_core::temp::dir(\"demo\");\n\
+             \x20       let _ = dir;\n\
+             \x20   }\n\
+             }\n",
+        )
+        .expect("the fabricated test");
+
+        let problems = the_tree_has_one_temporary_folder(&dir).expect("runs");
+        assert!(problems.is_empty(), "the one home is not a problem: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's own tests build their folders through the one home.
+    ///
+    /// The gate has to be quiet when the tree is right, and it has to run on
+    /// the real tree, not only on a fabricated one. §212.
+    #[test]
+    fn the_tree_builds_its_temporary_folders_through_the_one_home() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_tree_has_one_temporary_folder(&root).expect("runs");
+        assert!(problems.is_empty(), "the tree has one home for a temporary folder: {problems:#?}");
     }
 
     /// A command that stands only in a comment is not a command.

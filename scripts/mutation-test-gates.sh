@@ -5609,27 +5609,42 @@ expect_catch "anchors: an anchor that names two places is reported" \
     "cargo xtask anchors"
 
 # ------------------------------------------------------ the crash report's folder ----
-# Section 211. The temporary folder a test writes into was named after the
-# **tag** and the process id, so two tests that passed the same tag shared one
-# folder, and a later run that reused the process id inherited the last run's
-# files.
+# Section 211, and section 212 after it. The temporary folder a test writes
+# into was named after the **tag** and the process id, so two tests that passed
+# the same tag shared one folder, and a later run that reused the process id
+# inherited the last run's files.
+#
+# Section 212 gave the rule one home -- `crates/core/src/temp.rs` -- because
+# the rule had been written in sixteen places at once, and each place was a
+# chance to get it wrong. The two cases below are the home's, and they are
+# where the rule lives now.
 #
 # The first break takes the counter away: two calls share a folder again.
-swap crates/engine/src/crash.rs \
-    '            .join(format!("{tag}-{}-{n}", std::process::id()));' \
-    '            .join(format!("{tag}-{}", std::process::id()));'
-expect_catch "crash: two tests share one temporary folder" \
-    "cargo test -p craftkit-engine --profile ci every_call_gets_a_folder_of_its_own"
+swap crates/core/src/temp.rs \
+    '    let name = format!("{tag}-{}-{n}", std::process::id());' \
+    '    let name = format!("{tag}-{}", std::process::id());'
+expect_catch "temp: two calls share one temporary folder" \
+    "cargo test -p craftkit-core --profile ci every_call_gets_a_folder_of_its_own"
 
 # And the second takes the emptying away: a folder that is already there is
 # inherited instead of fresh.
-swap crates/engine/src/crash.rs \
-    '        if dir.exists() {
-            std::fs::remove_dir_all(&dir).expect("remove the folder this run left behind");
-        }' \
+swap crates/core/src/temp.rs \
+    '    if dir.exists() {
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| CoreError::BadPath(format!("could not clear {}: {e}", dir.display())))?;
+    }' \
     ''
-expect_catch "crash: a temporary folder inherits the last run's files" \
-    "cargo test -p craftkit-engine --profile ci every_call_gets_a_folder_of_its_own"
+expect_catch "temp: a temporary folder inherits the last run's files" \
+    "cargo test -p craftkit-core --profile ci every_call_gets_a_folder_of_its_own"
+
+# Section 212. The rule has one home now, and a test that writes it again is
+# a test that can inherit the last run's files -- which is what the home was
+# made to stop.
+swap crates/io/src/store.rs \
+    '        craftkit_core::temp::dir(tag).expect("a temporary folder")' \
+    '        std::env::temp_dir().join(format!("io-{tag}-{}", std::process::id()))'
+expect_catch "lists: a test builds its temporary folder by hand" \
+    "cargo xtask lists"
 
 # Section 185. The crash report was a folder of three files: the report, a copy
 # of the design and a copy of the steps. Nothing read the design's copy, and
@@ -5666,9 +5681,15 @@ expect_catch "crash: the report's folder is created instead of the report being 
 #
 # The break: the corpora are shared again. The test that says two properties
 # do not share a corpus is the gate.
+#
+# Section 212 gave the property suite its folder through the tree's one home,
+# so the break is the one that puts the hand-built folder back: every property
+# then writes its corpus into one folder, and the second write overwrites the
+# first. The claim is the property suite's own — "two properties do not share
+# a corpus" — and the home is only how the suite keeps it.
 swap crates/engine/tests/crash_properties.rs \
-    '        .join(property);' \
-    '        .join("shared");'
+    '    let dir = craftkit_core::temp::dir(property).expect("the folder");' \
+    '    let dir = std::env::temp_dir().join("craftkit-crash-properties").join(format!("{}", std::process::id()));'
 expect_catch "property: two properties share one corpus" \
     "cargo test -p craftkit-engine --profile ci two_properties_do_not_share_a_corpus"
 

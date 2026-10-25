@@ -773,11 +773,12 @@ mod tests {
         assert!(pairs >= 13, "only {pairs} pair(s) in the catalogue");
     }
 
+    /// A temporary folder of its own.
+    ///
+    /// The rule is the tree's, and it lives in one place: §212 gave the
+    /// temporary folder a home in `craftkit_core::temp`.
     fn temp(tag: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join("craftkit-cli-tests").join(format!("{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        craftkit_core::temp::dir(tag).expect("a temporary folder")
     }
 
     fn write_script(tag: &str, body: &str) -> PathBuf {

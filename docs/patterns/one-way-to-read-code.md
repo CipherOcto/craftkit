@@ -817,6 +817,41 @@ The rule and the copy live in the same file. `xtask/src/tree.rs` says where
 the walk came from, which copies it replaced and what each of them skipped.
 **A copy that forgets where it came from is a copy that drifts**, so the
 record is in the file and not only in the history.
+## And a rule that every caller needs has one home they can all reach
+
+**A rule written once per place is not one rule.** It is N rules that happen
+to agree today, and the place that needs it N+1st has no memory of the N
+before it. §149's shape — a rule written three times is three chances to
+forget it — and the tree's temporary folders were written **twenty-four**
+times.
+
+**The home goes where the callers can reach it.** §212 put the home for a
+test's temporary folder in the **lowest layer**, `craftkit_core::temp`, and
+not in the crate that happened to need it first. A home in one crate is a
+home twenty-three crates cannot use, and a rule in a crate that cannot be
+reached is a rule that is written again.
+
+**And the gate says which lines are the callers.** The claim is *"a test does
+not choose where its temporary folder lives"*, and the tree's own cut already
+knows which lines are tests: `production_of` blanks a file's test items and
+keeps the file's line numbering, so a line that is blank in the production
+view and present in the file belongs to a test. **No list of test files, no
+list of call sites** — the tree's one cut answers it.
+
+**And a call is recognised by its shape.** `std::env::temp_dir()` takes **no
+arguments**, and that is what tells it apart from the tree's own wrappers,
+which take the tag: `temp_dir(tag)`, `scratch(tag)`. §208's lesson, in a
+second place: a question about a call is a question about the **shape** of the
+call.
+
+**And a tree that cannot see another tree's home keeps writing the rule.**
+The xtask builds **82** folders of its own and cannot reach the core's home,
+because it depends on **nothing of the tree's own** — on purpose, since a
+checker that cannot be built when the tree does not compile is a checker that
+is silent exactly when it is needed. So the honest statement of the rule is
+**one home per tree that can see it**, and the copies that remain are a
+**named** decision rather than an accident.
+
 
 ## In the code
 
@@ -999,6 +1034,14 @@ let lines: Vec<&str> = text.lines().collect();
   directory is a test file from its first line to its last.
 - `a_test_file_does_not_catch_a_panic_as_a_boundary` — a test that catches a
   panic is not a boundary.
+- `the_tree_has_one_temporary_folder` — a test does not choose where its
+  temporary folder lives; the tree's one home does, and the tree's own cut
+  says which lines are tests. §212.
+- `a_test_that_builds_its_folder_by_hand_is_caught` — the gate bites, and it
+  is caught for one reason. §212.
+- `a_test_that_uses_the_one_home_is_not_reported` — the gate is quiet when
+  the tree is right, and a production use of the environment's folder is not
+  a test's business. §212.
 
 ## See also
 

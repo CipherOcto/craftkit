@@ -244,11 +244,12 @@ mod tests {
     use super::*;
     use craftkit_model::NodeKind;
 
+    /// A temporary folder of its own.
+    ///
+    /// The rule is the tree's, and it lives in one place: §212 gave the
+    /// temporary folder a home in `craftkit_core::temp`.
     fn scratch(tag: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join("craftkit-io-tests").join(format!("{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        craftkit_core::temp::dir(tag).expect("a temporary folder")
     }
 
     fn sample() -> Document {

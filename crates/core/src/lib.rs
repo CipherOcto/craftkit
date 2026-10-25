@@ -21,6 +21,11 @@
 //! places at once: [`read_line_bounded`] — a reader that applies its limit
 //! *before* the allocation, rather than after it.
 //!
+//! And one more after that, for the same reason and with the same shape:
+//! [`temp::dir`] — the tree's one temporary folder, so that a test which
+//! writes files has a folder of its own and never inherits another run's.
+//! §212.
+//!
 //! # The readers are checked by properties
 //!
 //! The readers and the parameter readers are the code that turns hostile
@@ -42,6 +47,7 @@
 pub mod ids;
 pub mod params;
 pub mod readers;
+pub mod temp;
 pub mod tick;
 pub mod value;
 pub mod writer;

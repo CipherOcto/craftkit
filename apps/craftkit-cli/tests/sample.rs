@@ -16,8 +16,7 @@ const BIN: &str = env!("CARGO_BIN_EXE_craftkit-cli");
 
 #[test]
 fn the_sample_design_is_written_and_read_back_by_the_tree() {
-    let dir = std::env::temp_dir().join(format!("craftkit-sample-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("a directory to write into");
+    let dir = craftkit_core::temp::dir("sample").expect("a directory to write into");
     let out = dir.join("sample.craftkit");
 
     let written = Command::new(BIN)

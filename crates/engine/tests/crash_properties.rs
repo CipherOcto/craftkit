@@ -70,13 +70,9 @@ fn the_text(report: &crash::CrashReport) -> String {
 /// value at line 1 column 0"* — because another property had just truncated
 /// it. §186.
 fn the_folder(property: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir()
-        .join("craftkit-crash-properties")
-        .join(format!("{}", std::process::id()))
-        .join(property);
-    // The folder is made empty first, so a corpus from an earlier run cannot
-    // be read as this one's.
-    let _ = std::fs::remove_dir_all(&dir);
+    // The tree's one temporary folder: §212 gave the rule a home, so every
+    // call gets a folder of its own and none inherits another run's.
+    let dir = craftkit_core::temp::dir(property).expect("the folder");
     std::fs::create_dir_all(dir.join("probe")).expect("the folder");
     dir
 }

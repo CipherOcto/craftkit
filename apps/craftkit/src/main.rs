@@ -1092,9 +1092,7 @@ mod tests {
 
         // A directory of its own, so the test does not write into the
         // user's own control folder.
-        let dir = std::env::temp_dir().join(format!("craftkit-control-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a directory for the token");
+        let dir = craftkit_core::temp::dir("control").expect("a directory for the token");
 
         let token = craftkit_control::Token::from_text("0123456789abcdef0123").expect("a valid token");
         let (server, _path) =
@@ -1180,8 +1178,7 @@ mod tests {
         // The whole point of the hook. A crash report that nobody can read is
         // worse than none, because it displaces the crash you would otherwise
         // have noticed.
-        let dir = std::env::temp_dir().join(format!("craftkit-crash-probe-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = craftkit_core::temp::dir("crash-probe").expect("a directory for the probe");
 
         let _lock = hook_lock();
 
@@ -1249,8 +1246,7 @@ mod tests {
     /// while the session was locked wrote **no report at all**. §76.
     #[test]
     fn a_panic_in_the_drawing_code_writes_a_report() {
-        let dir = std::env::temp_dir().join(format!("craftkit-crash-draw-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = craftkit_core::temp::dir("crash-draw").expect("a directory for the crash");
 
         let _lock = hook_lock();
 
@@ -1276,8 +1272,7 @@ mod tests {
     /// A frame that does not panic writes no report and says nothing.
     #[test]
     fn a_frame_that_does_not_panic_writes_no_report() {
-        let dir = std::env::temp_dir().join(format!("craftkit-crash-draw-ok-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = craftkit_core::temp::dir("crash-draw-ok").expect("a directory for the crash");
 
         let mut session = Session::sample();
         let outcome = draw_guarded(&mut session, Some(dir.as_path()), |_session| {});

@@ -406,12 +406,17 @@ mod tests {
         assert_eq!(t.as_str(), "0123456789abcdef0123");
     }
 
+    /// A temporary folder of its own.
+    ///
+    /// The rule is the tree's, and it lives in one place: §212 gave the
+    /// temporary folder a home in `craftkit_core::temp`.
+    fn temp_dir(tag: &str) -> PathBuf {
+        craftkit_core::temp::dir(tag).expect("a temporary folder")
+    }
+
     #[test]
     fn a_token_round_trips_through_a_file() {
-        let dir = std::env::temp_dir()
-            .join("craftkit-token-tests")
-            .join(format!("roundtrip-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("roundtrip");
         let path = dir.join("1234.token");
         let t = Token::from_text("0123456789abcdef0123").expect("valid");
         write_token(&path, &t).expect("write");
@@ -422,9 +427,7 @@ mod tests {
     #[test]
     fn the_token_file_is_not_world_readable() {
         use std::os::unix::fs::PermissionsExt;
-        let dir =
-            std::env::temp_dir().join("craftkit-token-tests").join(format!("perms-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("perms");
         let path = dir.join("1234.token");
         let t = Token::from_text("0123456789abcdef0123").expect("valid");
         write_token(&path, &t).expect("write");
@@ -443,10 +446,7 @@ mod tests {
     #[test]
     fn a_directory_that_was_already_there_keeps_its_permissions() {
         use std::os::unix::fs::PermissionsExt;
-        let dir =
-            std::env::temp_dir().join("craftkit-token-tests").join(format!("shared-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("shared");
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("chmod");
 
         let path = dir.join("1234.token");
@@ -465,11 +465,7 @@ mod tests {
     #[test]
     fn the_token_file_is_private_in_a_shared_directory() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir()
-            .join("craftkit-token-tests")
-            .join(format!("shared-file-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("shared-file");
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o777)).expect("chmod");
 
         let path = dir.join("1234.token");
@@ -488,11 +484,7 @@ mod tests {
     #[test]
     fn a_directory_the_tool_creates_is_private() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir()
-            .join("craftkit-token-tests")
-            .join(format!("made-{}", std::process::id()))
-            .join("control");
-        let _ = std::fs::remove_dir_all(dir.parent().expect("parent"));
+        let dir = temp_dir("made").join("control");
         let path = dir.join("1234.token");
         let t = Token::from_text("0123456789abcdef0123").expect("valid");
         write_token(&path, &t).expect("write");
@@ -507,10 +499,7 @@ mod tests {
     /// having the new token written after the old one.
     #[test]
     fn a_token_file_left_over_from_a_previous_launch_is_replaced() {
-        let dir =
-            std::env::temp_dir().join("craftkit-token-tests").join(format!("replace-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("replace");
         let path = dir.join("1234.token");
         std::fs::write(&path, "x".repeat(4096)).expect("write");
         let t = Token::from_text("0123456789abcdef0123").expect("valid");
@@ -521,10 +510,7 @@ mod tests {
     /// No temporary file is left behind.
     #[test]
     fn writing_a_token_leaves_no_temporary_file_behind() {
-        let dir =
-            std::env::temp_dir().join("craftkit-token-tests").join(format!("tidy-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("tidy");
         let path = dir.join("1234.token");
         let t = Token::from_text("0123456789abcdef0123").expect("valid");
         write_token(&path, &t).expect("write");
@@ -540,9 +526,7 @@ mod tests {
 
     #[test]
     fn reading_a_file_that_holds_nothing_useful_is_an_error() {
-        let dir =
-            std::env::temp_dir().join("craftkit-token-tests").join(format!("bad-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = temp_dir("bad");
         let path = dir.join("short.token");
         std::fs::write(&path, "nope").expect("write");
         let err = read_token(&path).unwrap_err();
