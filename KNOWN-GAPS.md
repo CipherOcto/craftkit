@@ -24171,6 +24171,128 @@ the file as it is — and with the cut, the gate could not see the very thing it
 was supposed to exclude. A list is a promise, and a promise needs two checks:
 one that it is consistent, and one that it is true.
 
+## 205. A gate said "the tree reads a file one way" and checked one module of fourteen, in one spelling of the read
+
+### The finding
+
+Item 63 asked for the rule §204 wrote — *a Rust file is read with a subject* —
+to be **module wide**. §204 had given it to the lists gate and no other, and
+the list of the gates that read Rust was checked against the code of that one
+module.
+
+**Measured**, against the xtask at §204 (production code only, the tree's own
+cut):
+
+| | |
+|---|---|
+| modules in `xtask/src` | **14** |
+| modules with a raw read | **8** — `anchors`, `assets`, `cleanroom`, `doctor`, `fuzz`, `lib`, `lists`, `web` |
+| raw reads in all | **17** — **13** spelled `std::fs::read_to_string`, **4** spelled `std::fs::read` |
+| modules that read a **Rust** file without saying which view they wanted | **4** — `anchors`, `assets`, `cleanroom`, `lists` |
+| what the clean-room gate read | **every file in the tree** — **135** files, **77** of them Rust — as bytes |
+
+And §204's gate that held the promise up:
+
+| | |
+|---|---|
+| the modules it looked at | **1** of **14** — `xtask/src/lists.rs` |
+| the spellings of a raw read it counted | **1** of **2** — `std::fs::read_to_string`, never `std::fs::read` |
+| the reads it expected to find there | **2** — the two readers it had defined beside itself |
+
+The promise was *"the tree has two ways to read a file and no third"*. It was
+true of the module it was measured in and said nothing about the other
+**thirteen**. The four `std::fs::read` calls it could not see at all were the
+fuzzer's seeds and the clean-room gate's bytes, and the clean-room gate was
+reading **all seventy-seven** Rust files in the tree — outside the rule
+entirely, and in bytes, where a subject does not exist.
+
+**And the test that said "the tree reads code one way" named eight files.**
+`the_tree_has_one_code_reader` read `lib.rs`, `assets.rs`, `ci.rs`,
+`doctor.rs`, `layers.rs`, `lists.rs`, `wasm.rs` and `web.rs` — **8** of the
+xtask's **14** — and never looked at `anchors.rs`, `cleanroom.rs`, `deny.rs`,
+`fuzz.rs`, `main.rs` or `tree.rs`. A list of files is a list that goes stale:
+a module added later is not in it, and the list is not a gate.
+
+### The port
+
+**The readers came home.** `read_text`, `read_rust`, the cut
+(`production_of`) and the code reader (`code_lines_kept`) moved out of the
+gates module and into `xtask/src/tree.rs`, beside the walk. A reader is a way
+of seeing the tree and not a gate, and the walk was already there for the same
+reason — §170's shape, applied to the readers. **Fourteen** read sites across
+**eight** modules became calls through the home, and the home's own three raw
+reads are the only ones left in the xtask.
+
+**And the readers grew a third.** `read_bytes` reads a file that is not text —
+the fuzzer's seeds, the clean-room gate's look at every byte of every file —
+and it **refuses** a Rust file, the way `read_text` does. A Rust file is read
+with a subject, so a gate cannot open one by accident, whichever reader it
+reaches for.
+
+**The gate walked the xtask.** `the_gates_that_read_rust_say_what_they_read`
+now reads **every** module under `xtask/src` — by the tree's own walk, not by
+a list of names — and it checks **both** spellings of a raw read. A raw read
+outside `xtask/src/tree.rs` is reported with the module and the line.
+
+**And the test walked the xtask too.** `the_tree_has_one_code_reader` no
+longer names eight files; it walks them.
+
+**The list grew by three.** `RUST_READING_GATES` holds **38** gates now —
+`find_embedded`, `inspect` and `the_anchors_are_in_the_tree_of` joined it,
+because §205 turned their raw reads into reads with a subject. **28** read the
+code the tree ships and **10** read the file as it is.
+
+**And the claim is about the xtask, and it says so.** The tree's own product
+crates read designs, tokens and crash reports with the standard library, and
+they are not gates; a rule that forbade it would be a false claim. The
+message says *"the xtask reads a file through `xtask/src/tree.rs` and nowhere
+else."* §204's own lesson — a claim is wider than the thing it computes —
+applies to the fix as well as to the defect.
+
+### The gate's own teeth
+
+Three mutations, all caught:
+
+| the break | what it says |
+|---|---|
+| a module grows a reader of its own | *"xtask/src/lists.rs: line 4968 reads a file with the standard library; the xtask reads a file through `xtask/src/tree.rs` and nowhere else. §205."* |
+| a reader call becomes a raw read | *"xtask/src/web.rs: line 340 reads a file with the standard library; the xtask reads a file through `xtask/src/tree.rs` and nowhere else. §205."* |
+| the refusal is taken away | *"a Rust file is read with a subject"* — the unit test fails |
+
+And two unit tests, each proved to fail when its fix was put back: the
+readers live in one home, and a Rust file is read with a subject while
+everything else is read as it is.
+
+**And the suite.** **477** of **478** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+**And a bug the port found.** `Path::ends_with(".rs")` compares *components*,
+not text: `.rs` is not a path component, so the clean-room gate's extension
+check was **always false** and the gate silently read **nothing**. It was
+caught by two of the clean-room gate's own tests, and the check is now a
+string comparison.
+
+### The lesson
+
+**A claim about the tree is a claim about all of it.** The rule said *the
+tree*; the gate measured one module of fourteen. A scope narrower than the
+sentence is the same defect as a scope wider than it.
+
+**And a list of files is a list that goes stale.** The test named eight
+files, and a module added later was not in it. The tree already had the
+answer for this shape of thing — **one walk** — and §170 put every gate's
+directory walk through it. The same answer fits the modules: walk
+`xtask/src` and read what the walk finds.
+
+**And a rule with two spellings needs both counted.** `std::fs::read` and
+`std::fs::read_to_string` are both ways to open a file, and a gate that
+counts one of them can be walked around with the other.
+
+**And the fix has to be scoped as carefully as the defect.** "The tree reads
+a file" is false of the product crates, and a gate that forbade it would be a
+false claim of its own.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24689,6 +24811,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The two doors that already refused have a test for it** | `crates/control/src/server.rs`, `crates/mcp/src/server.rs` | the same — §202 |
 | **The mutation suite's claim covers the tree, not only the files a mutation writes to** | the script's own fingerprint, and the self-test's fifth case | the self-test — §203 |
 | **The self-test's two failures are two exit codes** | `.github/workflows/ci.yml` | the same — §203 |
+| **A gate that opens a Rust file says which view it reads** | `RUST_READING_GATES` | 2 mutations — §204 |
+| **A Rust file is read with a subject, and a file that is not Rust is not** | `read_text` and `read_rust` in `xtask/src/tree.rs` | 1 mutation — §204 |
+| **A claim and a file are in the same breath** | `attributed_code_is_in_the_file` | 1 mutation — §204 |
+| **The xtask reads a file through `xtask/src/tree.rs` and nowhere else** | `cargo xtask lists` | 2 mutations — §205 |
+| **A Rust file is read with a subject; everything else is read as it is** | `read_text`, `read_bytes` and `read_rust` in `xtask/src/tree.rs` | 1 mutation — §205 |
+| **The readers, the cut and the code reader have one home** | `the_tree_has_one_home_for_reading_a_file` | the unit test — §205 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -26200,13 +26328,31 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     whole xtask, and the list of the gates that read Rust grows past the lists
     gate.
 
+    **Done in §205**, and the measurement above was too small. §205 measured
+    the xtask at §204 with the tree's own cut: **fourteen** modules, not
+    twelve; **eight** of them with a raw read, not six; **seventeen** raw
+    reads in all, **thirteen** spelled `std::fs::read_to_string` and **four**
+    spelled `std::fs::read`; and **four** modules — `anchors`, `assets`,
+    `cleanroom` and `lists` — reading a Rust file in production code without
+    saying which view they wanted. The clean-room gate read **every file in
+    the tree**, all **seventy-seven** Rust files among the **hundred and
+    thirty-five**, as bytes.
+
+    §204's gate held the promise by counting `std::fs::read_to_string` in
+    `xtask/src/lists.rs` and expecting **two**: **one** module of **fourteen**,
+    and **one** spelling of the read. The readers moved to
+    `xtask/src/tree.rs` beside the walk, the gate now walks every module and
+    checks **both** spellings, the list grew to **38** gates, and the test that
+    said "the tree reads code one way" stopped naming eight files and started
+    walking them. §205.
+
 64. **The list of the gates that read Rust says what each one reads, and not
     why.** §204.
 
-    `RUST_READING_GATES` names **35** gates and the subject each one reads
-    for. A reader who comes to `("citation_drift", Subject::Everything)` sees
+    `RUST_READING_GATES` names the gates that read Rust and the subject each
+    one reads for. A reader who comes to `("citation_drift", Subject::Everything)` sees
     a decision and cannot tell whether it was a decision or an accident — and
-    §204's own measurement is that **seven** of the thirty-five are `Everything`
+    §205's own measurement is that **ten** of the **thirty-eight** are `Everything`
     and **twenty-eight** are `Production`, so the split is most of the list and
     the *reason* is most of what a reader wants.
 

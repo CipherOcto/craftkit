@@ -79,6 +79,8 @@ xtask/src/deny.rs
 xtask/src/fuzz.rs
 xtask/src/doctor.rs
 xtask/src/lists.rs
+xtask/src/tree.rs
+xtask/src/web.rs
 xtask/src/lib.rs
 docs/recipes/add-a-command.md
 docs/recipes/add-a-control-channel-method.md

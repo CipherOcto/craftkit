@@ -458,7 +458,7 @@ impl Capture {
     }
 
     fn read(&self, path: &std::path::Path) -> Result<String, String> {
-        std::fs::read_to_string(path).map_err(|e| format!("could not read {}: {e}", path.display()))
+        crate::tree::read_text(path).map_err(|e| format!("could not read {}: {e}", path.display()))
     }
 
     fn cleanup(&self) -> std::io::Result<()> {

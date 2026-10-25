@@ -39,6 +39,7 @@ use std::path::{Path, PathBuf};
 
 use crate::layers::{self, TABLE};
 use crate::step;
+use crate::tree::{Subject, code_lines_kept, is_word_byte, matching, production_of, read_rust, read_text};
 
 /// The deny list, in house order.
 ///
@@ -2274,41 +2275,6 @@ struct CommandSource {
     code_body: String,
 }
 
-/// The offset of the delimiter that closes the one at `open`.
-///
-/// Strings are stepped over, so a parenthesis inside one does not count, and
-/// the depth never goes below one, so a stray closer cannot underflow.
-fn matching(source: &str, open: usize, left: u8, right: u8) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let mut depth = 0usize;
-    let mut at = open;
-    let mut in_string = false;
-    let mut escaped = false;
-    while at < bytes.len() {
-        let c = bytes[at];
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if c == b'\\' {
-                escaped = true;
-            } else if c == b'"' {
-                in_string = false;
-            }
-        } else if c == b'"' {
-            in_string = true;
-        } else if c == left {
-            depth += 1;
-        } else if c == right {
-            depth = depth.saturating_sub(1);
-            if depth == 0 {
-                return Some(at);
-            }
-        }
-        at += 1;
-    }
-    None
-}
-
 /// The `impl` blocks in a source, as (header, first byte, last byte).
 ///
 /// The header is what an `impl` says before its brace — `impl Params<'_>` —
@@ -2823,258 +2789,6 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
-/// The source with its comments, its string contents and its char literals
-/// blanked out, and every line kept.
-///
-/// This is the tree's **one** way to read code out of a file, and there is
-/// one because §149 measured what happens when there are three: the rule that
-/// a mention in a string is not code was written three times — as
-/// `code_only`, as `without_comments` and as `strip_code` — and the gates
-/// that read a *symbol* or a *module* used none of them, so a test that
-/// stood only inside a string satisfied a document's claim about it. A rule
-/// written three times is three chances to forget it.
-///
-/// Every line is kept, because a check that names a line has to name the
-/// **file's** line: dropping a block comment's newlines moved the line of
-/// every constant after it, and the gate that reported the line was wrong by
-/// the size of the comment.
-///
-/// A **char literal** is blanked too, because a brace inside one is not a
-/// brace: the scanner that reads a type's members counts braces, and a
-/// `'{'` in the source would open a body that is not there. A **lifetime**
-/// is not a char literal: `fn f<'a>(x: &'a str)` has one, and treating it as
-/// a literal would swallow the rest of the file.
-///
-/// The view is the **same length** as the file, byte for byte, so a position
-/// in one is a position in the other. That is what lets a gate read the
-/// *shape* of a thing from the code and its *contents* from the text: a
-/// command's id is a string, and a string is the subject there, but a `pub
-/// static` in a comment is not a command. §155.
-///
-/// It is **public** because it is the tree's one reader and another gate
-/// needs it: a rule written twice is two chances to forget it, and the
-/// assets gate had a copy of the idea in it — a shape read out of the text.
-/// §166.
-pub fn code_lines_kept(source: &str) -> String {
-    let mut out = String::with_capacity(source.len());
-    let mut chars = source.chars().peekable();
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut in_block = false;
-    let mut in_line = false;
-    while let Some(c) = chars.next() {
-        if in_line {
-            if c == '\n' {
-                in_line = false;
-                out.push('\n');
-            } else {
-                blank(&mut out, c);
-            }
-            continue;
-        }
-        if in_block {
-            if c == '*' && chars.peek() == Some(&'/') {
-                chars.next();
-                in_block = false;
-                // Two bytes for two bytes: the view keeps the file's length.
-                out.push(' ');
-                out.push(' ');
-            } else if c == '\n' {
-                out.push('\n');
-            } else {
-                blank(&mut out, c);
-            }
-            continue;
-        }
-        if in_string {
-            if escaped {
-                // A **continuation**: a backslash at the end of a line inside
-                // a string. The line it ends is still a line of the file, and
-                // a check that names a line has to name the file's line —
-                // the tree's own `crates/io/src/format.rs` has three of them.
-                blank(&mut out, c);
-                escaped = false;
-                continue;
-            }
-            match c {
-                '\\' => {
-                    escaped = true;
-                    out.push(' ');
-                }
-                '"' => {
-                    in_string = false;
-                    out.push(' ');
-                }
-                '\n' => out.push('\n'),
-                _ => blank(&mut out, c),
-            }
-            continue;
-        }
-        match c {
-            'r' if !ends_with_word_byte(&out) => {
-                // A raw string: `r"…"`, `r#"…"#`. The scanner that blanks the
-                // contents of an ordinary string would end a raw one at the
-                // first quote inside it and read the rest of the file as
-                // code. §158.
-                let mut ahead = chars.clone();
-                let mut hashes = 0usize;
-                while ahead.peek() == Some(&'#') {
-                    ahead.next();
-                    hashes += 1;
-                }
-                if ahead.peek() != Some(&'"') {
-                    // Not a raw string: an identifier that starts with `r`.
-                    out.push(c);
-                    continue;
-                }
-                out.push(c);
-                blank_a_raw_string(&mut out, &mut chars, hashes);
-            }
-            'b' if !ends_with_word_byte(&out) => {
-                // A byte string. `b"…"` is an ordinary string to the
-                // scanner; `br"…"` is a raw one.
-                let mut ahead = chars.clone();
-                let mut hashes = 0usize;
-                let raw = ahead.peek() == Some(&'r');
-                if raw {
-                    ahead.next();
-                    while ahead.peek() == Some(&'#') {
-                        ahead.next();
-                        hashes += 1;
-                    }
-                }
-                if raw && ahead.peek() == Some(&'"') {
-                    out.push(c);
-                    // The `r` of `br` is code, and it keeps its place.
-                    chars.next();
-                    out.push('r');
-                    blank_a_raw_string(&mut out, &mut chars, hashes);
-                    continue;
-                }
-                out.push(c);
-            }
-            '"' => {
-                in_string = true;
-                out.push(' ');
-            }
-            '/' if chars.peek() == Some(&'/') => {
-                chars.next();
-                in_line = true;
-                out.push(' ');
-                out.push(' ');
-            }
-            '/' if chars.peek() == Some(&'*') => {
-                chars.next();
-                in_block = true;
-                out.push(' ');
-                out.push(' ');
-            }
-            '\'' => {
-                // A char literal, or a lifetime.
-                if !opens_a_char_literal(&chars) {
-                    out.push('\'');
-                    continue;
-                }
-                out.push(' ');
-                while let Some(c) = chars.next() {
-                    if c == '\\' {
-                        out.push(' ');
-                        if let Some(next) = chars.next() {
-                            blank(&mut out, next);
-                        }
-                        continue;
-                    }
-                    if c == '\'' {
-                        out.push(' ');
-                        break;
-                    }
-                    blank(&mut out, c);
-                }
-            }
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
-/// Whether the output so far ends with a word byte.
-///
-/// A raw string starts with an `r` that is not part of an identifier:
-/// `r#"…"#` is a raw string and `result` is not.
-fn ends_with_word_byte(out: &str) -> bool {
-    out.as_bytes().last().is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
-}
-
-/// Blank the contents of a raw string.
-///
-/// A raw string — `r"…"`, `r#"…"#` — has a quote in it, and the scanner that
-/// blanks an ordinary string's contents would end it at the first quote
-/// inside and read the rest of the file as code. The hashes and the quotes
-/// are code; the contents are not. The closing delimiter is a quote followed
-/// by as many hashes as the opening one had. §158.
-fn blank_a_raw_string(out: &mut String, chars: &mut std::iter::Peekable<std::str::Chars<'_>>, hashes: usize) {
-    // The **opening** delimiter: as many hashes as the closing one has, and a
-    // quote. They are code, and they are *consumed* here — the loop below must
-    // see the contents and not the delimiter again, or every position after it
-    // is off by one byte.
-    for _ in 0..hashes {
-        chars.next();
-        out.push('#');
-    }
-    chars.next();
-    out.push('"');
-    while let Some(next) = chars.next() {
-        if next == '"' {
-            let mut probe = chars.clone();
-            let mut seen = 0usize;
-            while seen < hashes && probe.peek() == Some(&'#') {
-                probe.next();
-                seen += 1;
-            }
-            if seen == hashes {
-                out.push('"');
-                for _ in 0..hashes {
-                    out.push('#');
-                    chars.next();
-                }
-                break;
-            }
-        }
-        blank(out, next);
-    }
-}
-
-/// Blank a character, keeping the file's byte count.
-///
-/// A character can be more than one byte, and the code view has to be the
-/// same length as the file: a position in one is a position in the other.
-/// §155.
-fn blank(out: &mut String, c: char) {
-    if c == '\n' {
-        out.push('\n');
-        return;
-    }
-    for _ in 0..c.len_utf8() {
-        out.push(' ');
-    }
-}
-
-/// Whether the quote just read opens a char literal rather than a lifetime.
-///
-/// `'a'` is a literal and `'a` is a lifetime. The difference is the quote that
-/// closes it: a literal is one character — or an escape — between two quotes,
-/// and a lifetime is a name with no closing quote. The escape counts because
-/// `'\''` is three characters and `'a'` is one, and the two have to be told
-/// apart the same way.
-fn opens_a_char_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
-    let mut ahead = chars.clone();
-    match ahead.next() {
-        Some('\\') => true,
-        Some(_) => ahead.next() == Some('\''),
-        None => false,
-    }
-}
-
 /// Whether `code` contains `name` as a whole word.
 ///
 /// A whole word, because `Evaluator` is not `Evaluators` and `evaluate_once`
@@ -3099,11 +2813,6 @@ fn has_word(code: &str, name: &str) -> bool {
         at = end;
     }
     false
-}
-
-/// Whether a byte is part of an identifier.
-fn is_word_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 /// The public methods a session may have.
@@ -5046,55 +4755,6 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Which view of a Rust file a gate's subject is about.
-///
-/// §204. A gate that reads the tree's Rust source has to say whether it is
-/// asking about **the code the tree ships** or about **the file as it is**.
-/// The difference is a test: a constant that only a test declares is not a
-/// bound of the tree, a struct that only a test declares is not a type of it,
-/// and a line that only a test owns is not a line of the tree.
-///
-/// The subject is an **argument**, so it cannot be forgotten: the rule is not
-/// "remember to cut the tests", it is "say which view you want".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Subject {
-    /// The code the tree ships: the file without its tests.
-    Production,
-    /// The file as it is, tests included.
-    Everything,
-}
-
-/// A file that is not Rust: a document, a manifest, a workflow.
-///
-/// §204. The tree's one way to read everything that is not a Rust file, and it
-/// **refuses** a Rust file: a Rust file is read with a subject, and a gate that
-/// reads one without saying which view it wants has forgotten something.
-pub fn read_text(path: impl AsRef<Path>) -> Result<String, std::io::Error> {
-    let path = path.as_ref();
-    if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "a Rust file is read with a subject",
-        ));
-    }
-    std::fs::read_to_string(path)
-}
-
-/// A Rust file, read for a subject.
-///
-/// §204. The tree's one way to open a Rust file. `Subject::Production` cuts
-/// the file's tests — the cut §150 through §154 gave the tree, applied here
-/// once — and `Subject::Everything` keeps them, for the gates whose question
-/// is about the file as it is.
-pub fn read_rust(path: impl AsRef<Path>, subject: Subject) -> Result<String, std::io::Error> {
-    let path = path.as_ref();
-    let text = std::fs::read_to_string(path)?;
-    Ok(match subject {
-        Subject::Production => production_of(path, &text),
-        Subject::Everything => text,
-    })
-}
-
 /// Every gate that opens a Rust file, and the subject it reads it for.
 ///
 /// §204. This is the list items 31 and 32 asked for: **every** gate that
@@ -5118,6 +4778,7 @@ const RUST_READING_GATES: &[(&str, Subject)] = &[
     ("check_roots", Subject::Production),
     ("control_methods", Subject::Production),
     ("directory_walks", Subject::Production),
+    ("find_embedded", Subject::Production),
     ("fingerprint_sees_every_field", Subject::Production),
     ("gate_problems", Subject::Production),
     ("limits_are_enforced", Subject::Production),
@@ -5126,10 +4787,9 @@ const RUST_READING_GATES: &[(&str, Subject)] = &[
     ("quoted_code_matches_the_source", Subject::Production),
     ("run", Subject::Production),
     ("shape_of", Subject::Production),
-    ("symbol_file_claims", Subject::Everything),
     ("the_bounds_are_named_in_the_prose", Subject::Production),
     ("the_file_cap_is_derived_from_the_designs_budget", Subject::Production),
-    ("the_gates_that_read_rust_say_what_they_read", Subject::Production),
+    ("the_gates_that_read_rust_say_what_they_read", Subject::Everything),
     ("the_memory_budgets_are_derived_from_the_models", Subject::Production),
     ("the_raw_parameter_reader_has_two_homes", Subject::Production),
     ("the_session_offers_no_second_path", Subject::Everything),
@@ -5146,18 +4806,25 @@ const RUST_READING_GATES: &[(&str, Subject)] = &[
     // The file as it is.
     ("citation_drift", Subject::Everything),
     ("citations_of_tests_point_at_the_test", Subject::Everything),
+    ("inspect", Subject::Everything),
     ("prose_line_counts_match_the_files", Subject::Everything),
     ("registry_command_ids", Subject::Everything),
     ("registry_commands", Subject::Everything),
+    ("symbol_file_claims", Subject::Everything),
+    ("the_anchors_are_in_the_tree_of", Subject::Everything),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
 ///
-/// §204. Two promises, both about the tree's own source:
+/// §204, extended by §205. Three promises, all about the xtask's own source:
 ///
-/// - the tree has **two** ways to read a file and no third — `read_text` for
-///   everything that is not Rust, and `read_rust` for a Rust file, and each
-///   subject is an argument, so a gate cannot read a Rust file by accident;
+/// - the xtask reads a file through **one** home — `xtask/src/tree.rs` — and
+///   nowhere else; a raw read with the standard library outside that home is
+///   a third way to read a file, and there is none;
+/// - the home has **three** readers — `read_text` for everything that is not
+///   Rust, `read_bytes` for a file that is not text, and `read_rust` for a Rust
+///   file — and each subject is an argument, so a gate cannot read a Rust file
+///   by accident;
 /// - every gate that opens a Rust file is in `RUST_READING_GATES`, and the
 ///   subject at its call site is the one the list names.
 ///
@@ -5166,52 +4833,76 @@ const RUST_READING_GATES: &[(&str, Subject)] = &[
 /// call site says something else has changed its mind, and the list is now
 /// wrong.
 pub fn the_gates_that_read_rust_say_what_they_read(root: &Path) -> Result<Vec<String>, String> {
-    let path = root.join("xtask/src/lists.rs");
-    let source = read_rust(&path, Subject::Production)
-        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let code = code_lines_kept(&source);
     let mut problems = Vec::new();
 
-    // Two ways to read a file, and no third.
-    let reads = code.matches("std::fs::read_to_string(").count();
-    if reads != 2 {
-        problems.push(format!(
-            "xtask/src/lists.rs: the tree reads a file {} time(s) with `std::fs::read_to_string`; \
-             it has two ways to read a file — `read_text` and `read_rust` — and no third. §204.",
-            reads
-        ));
-    }
-
-    // Every call of `read_rust`, and the gate it is in.
+    // Every raw read of a file in the xtask is in the tree's one home.
+    //
+    // §205. §204's version of this gate counted `std::fs::read_to_string` in
+    // `xtask/src/lists.rs` and expected two: the claim was about *the xtask*,
+    // and it was about one module of the fourteen and one spelling of the
+    // read. Measured, the xtask's production code had **thirteen** reads
+    // spelled `std::fs::read_to_string` and **four** spelled `std::fs::read`,
+    // in **eight** modules — and the clean-room gate read **every file in the
+    // tree**, all seventy-seven Rust files among the hundred and thirty-five,
+    // as bytes.
+    let source_dir = root.join("xtask/src");
+    let mut modules = Vec::new();
+    crate::tree::walk(&source_dir, &source_dir, &mut modules, &|path| {
+        path.extension().and_then(|e| e.to_str()) == Some("rs")
+    });
     let mut calls: Vec<(String, Subject)> = Vec::new();
-    let mut current = String::new();
-    for line in code.lines() {
-        if let Some(name) = top_level_fn_name(line) {
-            current = name.to_string();
-            // The line that defines `read_rust` names it, but does not call it.
-            continue;
+    for relative in &modules {
+        let path = source_dir.join(relative);
+        // The whole module, tests included: a test that reads a file is the
+        // tree reading a file too.
+        let Ok(whole) = read_rust(&path, Subject::Everything) else { continue };
+        let code = code_lines_kept(&whole);
+        for (number, line) in code.lines().enumerate() {
+            // The readers in the tree's one home are the ones that read.
+            if *relative == Path::new("tree.rs") {
+                continue;
+            }
+            if line.contains("std::fs::read_to_string(") || line.contains("std::fs::read(") {
+                problems.push(format!(
+                    "xtask/src/{}: line {} reads a file with the standard library; the xtask reads \
+                     a file through `xtask/src/tree.rs` and nowhere else. §205.",
+                    relative.display(),
+                    number + 1
+                ));
+            }
         }
-        let Some(at) = line.find("read_rust(") else { continue };
-        let Some(subject) = subject_in(&line[at..]) else {
-            problems.push(format!(
-                "xtask/src/lists.rs: the call of `read_rust` in `{current}` does not say which view \
-                 it reads; a Rust file is read for a subject. §204."
-            ));
-            continue;
-        };
-        calls.push((current.clone(), subject));
+        // The production code, where the gates are. The cut is the tree's
+        // own, applied to the text the module was read as.
+        let production = production_of(&path, &whole);
+        let code = code_lines_kept(&production);
+        for (line, subject) in read_rust_calls(&code) {
+            let gate = enclosing_function(&code, line);
+            if gate == "read_rust" {
+                // The reader's own definition names it; it does not call it.
+                continue;
+            }
+            let Some(subject) = subject else {
+                problems.push(format!(
+                    "xtask/src/{}: line {} calls `read_rust` without saying which view it reads; a \
+                     Rust file is read for a subject. §204.",
+                    relative.display(),
+                    line + 1
+                ));
+                continue;
+            };
+            calls.push((gate, subject));
+        }
     }
 
     for (gate, subject) in &calls {
         match RUST_READING_GATES.iter().find(|(name, _)| name == gate) {
             None => problems.push(format!(
-                "xtask/src/lists.rs: the gate `{gate}` opens a Rust file and is not in the list of \
-                 the gates that do; a gate that reads the tree's source says which view it reads. \
-                 §204."
+                "xtask/src: the gate `{gate}` opens a Rust file and is not in the list of the gates \
+                 that do; a gate that reads the tree's source says which view it reads. §204."
             )),
             Some((_, wanted)) if wanted != subject => problems.push(format!(
-                "xtask/src/lists.rs: the gate `{gate}` reads a Rust file for `{}`, and the list says \
-                 `{}`; the list is a promise about the code, and it is wrong. §204.",
+                "xtask/src: the gate `{gate}` reads a Rust file for `{}`, and the list says `{}`; \
+                 the list is a promise about the code, and it is wrong. §204.",
                 say_the_subject(*subject),
                 say_the_subject(*wanted),
             )),
@@ -5221,13 +4912,47 @@ pub fn the_gates_that_read_rust_say_what_they_read(root: &Path) -> Result<Vec<St
     for (gate, _) in RUST_READING_GATES {
         if !calls.iter().any(|(name, _)| name == gate) {
             problems.push(format!(
-                "xtask/src/lists.rs: the list says the gate `{gate}` opens a Rust file, and it does \
-                 not; the list is a promise about the code, and it is wrong. §204."
+                "xtask/src: the list says the gate `{gate}` opens a Rust file, and it does not; the \
+                 list is a promise about the code, and it is wrong. §204."
             ));
         }
     }
     problems.sort();
     Ok(problems)
+}
+
+/// Every call of `read_rust` in a source, with the subject it reads for.
+///
+/// The subject can be on the next line — a call written over several lines is
+/// still a call — so the search looks inside the call, not just at the line.
+fn read_rust_calls(code: &str) -> Vec<(usize, Option<Subject>)> {
+    let mut calls = Vec::new();
+    let mut at = 0usize;
+    while let Some(found) = code[at..].find("read_rust(") {
+        let start = at + found;
+        let open = start + "read_rust".len();
+        let close = matching(code, open, b'(', b')').unwrap_or(code.len());
+        let subject = subject_in(&code[start..close.min(code.len())]);
+        calls.push((code[..start].matches('\n').count(), subject));
+        at = start + "read_rust(".len();
+    }
+    calls
+}
+
+/// The name of the function a line of code is in.
+///
+/// The nearest top-level `fn` above the line.
+fn enclosing_function(code: &str, line: usize) -> String {
+    let mut name = String::new();
+    for (index, text) in code.lines().enumerate() {
+        if index > line {
+            break;
+        }
+        if let Some(found) = top_level_fn_name(text) {
+            name = found.to_string();
+        }
+    }
+    name
 }
 
 /// The name of the top-level function a line opens, if it opens one.
@@ -5310,175 +5035,6 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(problems)
-}
-
-/// The production code of a file: everything except its test items and its
-/// test-only methods.
-///
-/// The tests are not the production code, and a gate whose subject is a
-/// *production* property has to say so: a test may name the thing to prove
-/// that the production code does not do it. §150.
-///
-/// A **test item** is a `mod tests { … }` block, or a top-level item marked
-/// `#[cfg(test)]`. Both are removed **whole**, line by line, so that
-/// production code *after* a test item is still production code: a cut that
-/// truncated the file at the first test item would hide a limit used further
-/// down, and would hide a panic boundary caught further down. §153.
-///
-/// An **indented** `#[cfg(test)]` marks a **method** inside an impl block,
-/// and the method is removed whole as well — the methods around it are
-/// production code, and they stay visible, because the method is removed
-/// line by line and not by truncating the file at it. §157.
-///
-/// A file under a **tests directory** is a test file from its first line to
-/// its last: Rust's convention puts a crate's integration tests there, and
-/// each file in it is a crate of its own. Everything in such a file is a
-/// test, so the cut removes the whole of it — and the tree's fourteen
-/// `#[test]` functions in `apps/craftkit-cli/tests/` stop being read as
-/// production code. §167.
-///
-/// The line count is the file's, whatever is removed: a gate that names a
-/// line has to name the file's line.
-fn production_of(path: &Path, text: &str) -> String {
-    let code = code_lines_kept(text);
-    let lines: Vec<&str> = text.lines().collect();
-    // The byte offset of each line's first byte.
-    let mut starts = Vec::with_capacity(lines.len());
-    let mut at = 0usize;
-    for line in &lines {
-        starts.push(at);
-        at += line.len() + 1;
-    }
-
-    let mut out = String::with_capacity(text.len());
-    let mut index = 0usize;
-    while index < lines.len() {
-        let line = lines[index];
-        if is_a_test_file(path) {
-            // The whole file is a test: every line goes, and the lines stay.
-            out.push('\n');
-            index += 1;
-            continue;
-        }
-        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
-            // The item ends where its **braces** say, and the braces are
-            // found in the code view: a `}` inside a string is not a brace.
-            // §160.
-            let last = top_level_item_last_line(&code, &starts, &lines, index);
-            for _ in index..=last {
-                out.push('\n');
-            }
-            index = last + 1;
-            continue;
-        }
-        if is_indented_test_attribute(line)
-            && let Some(last) = test_method_last_line(&code, &starts, &lines, index)
-        {
-            for _ in index..=last {
-                out.push('\n');
-            }
-            index = last + 1;
-            continue;
-        }
-        out.push_str(line);
-        out.push('\n');
-        index += 1;
-    }
-    out
-}
-
-/// Whether a file is a test file: a file under a `tests` directory.
-///
-/// Rust's convention: a crate's `tests` directory holds its integration
-/// tests, and each file in it is a crate of its own. Nothing in such a file
-/// is production code, and the cut that removes a file's test items has to
-/// know that. §167.
-fn is_a_test_file(path: &Path) -> bool {
-    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))
-}
-
-/// The last line of the top-level item a test marker starts.
-///
-/// The item ends where its **braces** say: the `}` that matches its `{`, or
-/// its `;` when it has no braces. The braces are found in the **code view**,
-/// because it has no strings in it — a `}` inside a string is not a brace.
-///
-/// The tree's own `xtask/src/web.rs` has one: a raw string with a `}` at the
-/// start of a line. The cut that ended at the first `}` in the first column
-/// ended there, and the **eighteen test functions** after it were read as
-/// production code. §160.
-///
-/// The search is bounded by the file, so a malformed file cannot make the
-/// cut swallow the rest of the file.
-fn top_level_item_last_line(code: &str, starts: &[usize], lines: &[&str], index: usize) -> usize {
-    let from = starts[index];
-    let Some(rest) = code.get(from..) else { return index };
-    let brace = rest.find('{');
-    let semi = rest.find(';');
-    // The first of the two is the item's own: an item with braces ends at
-    // the `}` that matches its `{`, and an item without any ends at its `;`.
-    let open = match (brace, semi) {
-        (Some(b), Some(s)) if s < b => return line_of(code, from + s, lines),
-        (Some(b), _) => from + b,
-        (None, Some(s)) => return line_of(code, from + s, lines),
-        (None, None) => return index,
-    };
-    let Some(close) = matching(code, open, b'{', b'}') else {
-        return lines.len().saturating_sub(1);
-    };
-    line_of(code, close, lines)
-}
-
-/// The line a byte of the file is on.
-///
-/// The file's lines are the file's lines, and the code view keeps every one
-/// of them, so a position in one is a position in the other. §155.
-fn line_of(code: &str, byte: usize, lines: &[&str]) -> usize {
-    code[..byte].matches('\n').count().min(lines.len().saturating_sub(1))
-}
-
-/// Whether a line is an **indented** `#[cfg(test)]` attribute.
-///
-/// An indented attribute marks a method inside an impl block; an unindented
-/// one marks a test item, and the cut already has those.
-fn is_indented_test_attribute(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    trimmed == "#[cfg(test)]" && trimmed.len() != line.len()
-}
-
-/// The last line of the method an indented test attribute marks.
-///
-/// The method ends at the brace that closes it. The **code view** is used to
-/// find that brace, because it has no strings in it: a brace inside a string
-/// is not a brace, and the text's own strings would have to be stepped over
-/// to find it. The two views are the same length, so a position in one is a
-/// position in the other. §155.
-///
-/// The search stops at the end of the block the attribute is in, so a
-/// malformed file cannot make the cut swallow the rest of the file.
-fn test_method_last_line(code: &str, starts: &[usize], lines: &[&str], index: usize) -> Option<usize> {
-    let indent = lines[index].len() - lines[index].trim_start().len();
-    // The end of the enclosing block: the first following line that is not
-    // blank and is indented **less** than the attribute. The method's own
-    // signature and its closing brace are indented like the attribute, so
-    // they are part of it.
-    let mut end = lines.len();
-    for (at, line) in lines.iter().enumerate().skip(index + 1) {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let here = line.len() - line.trim_start().len();
-        if here < indent {
-            end = at;
-            break;
-        }
-    }
-    let from = starts[index] + lines[index].len();
-    let to = if end < lines.len() { starts[end] } else { code.len() };
-    let open = code.get(from..to)?.find('{')? + from;
-    let close = matching(code, open, b'{', b'}')?;
-    // The line the closing brace is on.
-    Some(code[..close].matches('\n').count())
 }
 
 /// The limits the model's table declares, and the rest of the file.
@@ -6876,6 +6432,7 @@ fn reads_field(body: &str, receiver: &str, field: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::read_bytes;
 
     // ------------------------------------------------------- §169 ----------
 
@@ -7847,18 +7404,19 @@ mod tests {
     fn the_tree_has_one_code_reader() {
         let root = crate::root().expect("the workspace root");
         let mut readers = Vec::new();
-        for name in
-            ["lib.rs", "assets.rs", "ci.rs", "doctor.rs", "layers.rs", "lists.rs", "wasm.rs", "web.rs"]
-        {
-            let path = root.join("xtask/src").join(name);
-            let Ok(text) = std::fs::read_to_string(&path) else { continue };
-            // The tests are not the production code, and this test's own
-            // marker is the very word it looks for.
-            let production = match text.find("\nmod tests {") {
-                Some(at) => &text[..at],
-                None => &text[..],
-            };
-            readers.extend(code_readers_in(production));
+        // The tree's one walk, not a list of files: the list named eight of
+        // the xtask's fourteen, and a module it did not name could have had
+        // a reader of its own. §205.
+        let source_dir = root.join("xtask/src");
+        let mut modules = Vec::new();
+        crate::tree::walk(&source_dir, &source_dir, &mut modules, &|path| {
+            path.extension().and_then(|e| e.to_str()) == Some("rs")
+        });
+        assert!(!modules.is_empty(), "the xtask has no source files");
+        for relative in &modules {
+            let path = source_dir.join(relative);
+            let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+            readers.extend(code_readers_in(&text));
         }
         assert_eq!(readers, vec!["code_lines_kept".to_string()], "the tree reads code one way");
     }
@@ -9411,7 +8969,7 @@ fn parse(s: &str) -> Option<Self> {
     #[test]
     fn the_real_architecture_table_matches_the_code_table() {
         let root = crate::root().expect("root");
-        let markdown = std::fs::read_to_string(root.join(ARCHITECTURE)).expect("architecture.md");
+        let markdown = read_text(root.join(ARCHITECTURE)).expect("architecture.md");
         let rows = parse_table(&markdown);
         assert!(!rows.is_empty(), "{ARCHITECTURE} has no parseable layering table");
 
@@ -9599,7 +9157,7 @@ fn parse(s: &str) -> Option<Self> {
     #[test]
     fn the_xtask_mod_groups_are_sorted() {
         let root = crate::root().expect("root");
-        let source = std::fs::read_to_string(root.join("xtask/src/lib.rs")).expect("lib.rs");
+        let source = read_rust(root.join("xtask/src/lib.rs"), Subject::Production).expect("lib.rs");
         let groups = mod_groups(&source);
         assert!(!groups.is_empty(), "no mod lines found in xtask/src/lib.rs");
         for group in groups {
@@ -9610,7 +9168,7 @@ fn parse(s: &str) -> Option<Self> {
     #[test]
     fn the_workspace_member_list_is_sorted() {
         let root = crate::root().expect("root");
-        let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
+        let manifest = read_text(root.join("Cargo.toml")).expect("Cargo.toml");
         let members = workspace_members(&manifest);
         assert!(members.len() >= 3, "found {members:?}");
         assert!(is_sorted(&members), "workspace members are not sorted: {members:?}");
@@ -9738,7 +9296,7 @@ fn parse(s: &str) -> Option<Self> {
         let root = crate::root().expect("root");
         let mut seen = 0;
         for doc in prose_files(&root) {
-            let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+            let Ok(text) = read_text(&doc) else { continue };
             seen += document_links(&text).len();
         }
         assert!(seen >= 20, "the walk found only {seen} references; it is probably looking at nothing");
@@ -9774,7 +9332,7 @@ fn parse(s: &str) -> Option<Self> {
         assert!(readme_layers(&root).expect("runs").is_empty(), "the README and the code disagree");
 
         // The rows are found, or the comparison above is comparing nothing.
-        let text = std::fs::read_to_string(root.join("README.md")).expect("README.md");
+        let text = read_text(root.join("README.md")).expect("README.md");
         let rows = readme_layer_rows(&text);
         assert_eq!(rows.len(), 9, "the README's table should list nine crates: {rows:?}");
         assert!(rows.contains(&("crates/core".to_string(), 0)), "{rows:?}");
@@ -10116,7 +9674,7 @@ See `crates/ui/src/icons.rs`."
         let root = crate::root().expect("root");
         let mut seen = 0;
         for doc in prose_files(&root) {
-            let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+            let Ok(text) = read_text(&doc) else { continue };
             seen += bare_citations(&text).len();
         }
         assert_eq!(seen, 0, "the tree has {seen} bare citation(s) left");
@@ -10134,7 +9692,7 @@ See `crates/ui/src/icons.rs`."
         // examples the gate actually looked at.
         let mut seen = 0;
         for doc in prose_files(&root) {
-            let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+            let Ok(text) = read_text(&doc) else { continue };
             seen += text.lines().filter(|l| request_shaped(l).is_some()).count();
         }
         assert!(seen >= 5, "the gate only found {seen} example(s); it is probably looking at nothing");
@@ -10144,8 +9702,7 @@ See `crates/ui/src/icons.rs`."
     #[test]
     fn the_mutation_script_computes_its_own_closing_ratio() {
         let root = crate::root().expect("root");
-        let script =
-            std::fs::read_to_string(root.join("scripts/mutation-test-gates.sh")).expect("the script");
+        let script = read_text(root.join("scripts/mutation-test-gates.sh")).expect("the script");
         let problems = mutation_ratio_is_computed(&script);
         assert!(problems.is_empty(), "{problems:#?}");
     }
@@ -10950,7 +10507,9 @@ printf '%s%d/%d caught.%s\\n' \\
     ///
     /// §204. `read_text` refuses a Rust file, so a gate cannot read one by
     /// accident: the subject is an argument, and a gate that has not made one
-    /// has not said what it reads.
+    /// has not said what it reads. §205 added `read_bytes`, and it refuses one
+    /// too: the clean-room gate reads every file in the tree, every Rust file
+    /// among them, and it has to say which view it wants as well.
     #[test]
     fn a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is() {
         let dir = std::env::temp_dir().join(format!("craftkit-read-subject-{}", std::process::id()));
@@ -10969,8 +10528,26 @@ printf '%s%d/%d caught.%s\\n' \\
 
         // A document is read as it is.
         assert_eq!(read_text(&text).expect("the document is read"), "a document\n");
+        assert_eq!(read_bytes(&text).expect("the document is read"), b"a document\n".to_vec());
         // And a Rust file is not.
         assert!(read_text(&rust).is_err(), "a Rust file is read with a subject");
+        assert!(read_bytes(&rust).is_err(), "a Rust file is read with a subject");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's readers live in the tree's one home.
+    ///
+    /// §205. The readers, the cut and the code reader moved out of the gates
+    /// module and into `xtask/src/tree.rs`, because a reader is a way of seeing
+    /// the tree and not a gate — the same shape as the walk, which §170 folded
+    /// into the same file.
+    #[test]
+    fn the_tree_has_one_home_for_reading_a_file() {
+        let root = crate::root().expect("root");
+        let home = root.join("xtask/src/tree.rs");
+        let source = read_rust(&home, Subject::Everything).expect("the home is read");
+        for reader in ["read_rust", "read_text", "read_bytes", "production_of", "code_lines_kept"] {
+            assert!(source.contains(&format!("fn {reader}(")), "the home has no `{reader}`");
+        }
     }
 }

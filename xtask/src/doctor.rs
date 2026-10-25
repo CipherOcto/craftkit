@@ -45,7 +45,7 @@ pub const MSRV: &str = "1.93";
 
 /// The `rust-version` declared in the workspace manifest.
 pub fn declared_msrv(root: &Path) -> Option<String> {
-    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).ok()?;
+    let manifest = crate::tree::read_text(root.join("Cargo.toml")).ok()?;
     manifest.lines().find_map(|line| {
         let line = line.trim();
         line.strip_prefix("rust-version")
@@ -151,7 +151,7 @@ impl std::fmt::Display for Finding {
 
 /// The `wasm-bindgen` crate version the workspace resolves to, if it does.
 pub fn wasm_bindgen_crate_version(root: &Path) -> Option<String> {
-    let lock = std::fs::read_to_string(root.join("Cargo.lock")).ok()?;
+    let lock = crate::tree::read_text(root.join("Cargo.lock")).ok()?;
     let mut lines = lock.lines();
     while let Some(line) = lines.next() {
         if line.trim() != "name = \"wasm-bindgen\"" {

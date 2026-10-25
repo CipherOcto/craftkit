@@ -1043,7 +1043,7 @@ fn is_word_byte(byte: u8) -> bool {
 pub fn prose_problems(root: &Path) -> Vec<String> {
     let mut problems = Vec::new();
     for doc in crate::lists::prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = crate::tree::read_text(&doc) else { continue };
         let relative = doc.strip_prefix(root).unwrap_or(&doc).display().to_string();
         for (line, block) in crate::lists::blocks(&text) {
             if !block.to_lowercase().contains("mutation") {
@@ -1088,7 +1088,7 @@ pub struct List {
 /// space in it is a path that is not in the tree.
 pub fn read_list(root: &Path) -> Result<List, String> {
     let path = root.join(FILES_FILE);
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("could not read {FILES_FILE}: {e}"))?;
+    let text = crate::tree::read_text(&path).map_err(|e| format!("could not read {FILES_FILE}: {e}"))?;
     let mut list = List::default();
     let mut first_seen: std::collections::BTreeMap<&str, usize> = Default::default();
     for (index, line) in text.lines().enumerate() {
@@ -1173,7 +1173,7 @@ fn the_body_of_the_check(script: &str) -> Option<String> {
 /// The line it starts on, and the function it is in when the file has one.
 fn where_it_is(file: &str, text: &str, offset: usize) -> String {
     let line = line_of(text, offset);
-    let code = crate::lists::code_lines_kept(text);
+    let code = crate::tree::code_lines_kept(text);
     let functions = crate::lists::rust_functions(file, text, &code);
     match function_at(&functions, line) {
         Some(name) => format!("{file}:{line} (in `{name}`)"),
@@ -1238,7 +1238,7 @@ pub fn the_anchors_are_in_the_tree(root: &Path) -> Result<Vec<String>, String> {
 /// only way to break one of them is to break a **copy**. The tree it is
 /// checked against is still the tree.
 pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result<Vec<String>, String> {
-    let script = std::fs::read_to_string(script_path)
+    let script = crate::tree::read_text(script_path)
         .map_err(|e| format!("could not read {}: {e}", script_path.display()))?;
     let swaps = swaps(&script)?;
     if swaps.is_empty() {
@@ -1261,7 +1261,14 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
     // Every file an anchor names is in the tree, and can be put back.
     let mut texts: std::collections::BTreeMap<String, Option<String>> = Default::default();
     for (file, lines) in &by_file {
-        let text = std::fs::read_to_string(root.join(file)).ok();
+        let path = root.join(file);
+        // The file an anchor names may be Rust, and the anchor has to be in
+        // the file wherever it is: the file is read as it is. §205.
+        let text = if file.ends_with(".rs") {
+            crate::tree::read_rust(&path, crate::tree::Subject::Everything).ok()
+        } else {
+            crate::tree::read_text(&path).ok()
+        };
         if text.is_none() {
             problems.push(format!(
                 "{}: the anchor names `{}` (line{} {}), and that file is not in the tree",
@@ -1529,7 +1536,7 @@ mod tests {
     /// Read from the script, never written down: the fabricated script
     /// grows, and a line number in a test is a number that goes stale.
     fn the_swap_lines(dir: &std::path::Path) -> Vec<usize> {
-        let script = std::fs::read_to_string(dir.join("scripts/mutation-test-gates.sh")).expect("the script");
+        let script = crate::tree::read_text(dir.join("scripts/mutation-test-gates.sh")).expect("the script");
         swaps(&script).expect("the script reads").iter().map(|swap| swap.line).collect()
     }
 

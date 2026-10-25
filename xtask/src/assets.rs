@@ -190,7 +190,7 @@ pub fn find_embedded(root: &Path, sources: &[PathBuf]) -> Result<Vec<String>, St
     let mut hits = Vec::new();
     for source in sources {
         let path = root.join(source);
-        let text = match std::fs::read_to_string(&path) {
+        let text = match crate::tree::read_rust(&path, crate::tree::Subject::Production) {
             Ok(text) => text,
             Err(e) => return Err(format!("could not read {}: {e}", path.display())),
         };
@@ -203,7 +203,7 @@ pub fn find_embedded(root: &Path, sources: &[PathBuf]) -> Result<Vec<String>, St
         //
         // The two views are the same length, byte for byte, so the offset of
         // the call in one is the offset of the call in the other.
-        let code = crate::lists::code_lines_kept(&text);
+        let code = crate::tree::code_lines_kept(&text);
         for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
             for call in EMBED_CALLS {
                 let Some(at) = code_line.find(call) else { continue };
@@ -300,7 +300,7 @@ pub fn attributed_files(text: &str) -> BTreeSet<String> {
 /// Run the checks against `root`.
 pub fn inspect(root: &Path) -> Result<Findings, String> {
     let attribution = root.join("ATTRIBUTION.md");
-    let (have_attribution, text) = match std::fs::read_to_string(&attribution) {
+    let (have_attribution, text) = match crate::tree::read_text(&attribution) {
         Ok(text) => (true, text),
         Err(_) => (false, String::new()),
     };

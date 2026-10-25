@@ -456,7 +456,8 @@ pub fn seed_designs(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<See
             outcome.all()
         ));
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let bytes =
+        crate::tree::read_bytes(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     Ok(vec![Seed { name: "the sample design".to_string(), bytes }])
 }
 
@@ -483,7 +484,8 @@ fn seed_scripts(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, 
             outcome.all()
         ));
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let bytes =
+        crate::tree::read_bytes(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     Ok(vec![Seed { name: "the sample script".to_string(), bytes }])
 }
 
@@ -518,7 +520,8 @@ fn seed_reports(cli: &Path, dir: &Path, options: &Options) -> Result<Vec<Seed>, 
             outcome.all()
         ));
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let bytes =
+        crate::tree::read_bytes(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     Ok(vec![Seed { name: "the sample report".to_string(), bytes }])
 }
 
@@ -1771,11 +1774,11 @@ mod tests {
 
         for finding in &report.findings {
             assert!(finding.is_file(), "{} was not written", finding.display());
-            let bytes = std::fs::read(finding).expect("reads");
+            let bytes = crate::tree::read_bytes(finding).expect("reads");
             assert!(!bytes.is_empty(), "{} is empty", finding.display());
             let note = finding.with_extension("note.json");
             assert!(note.is_file(), "{} was not written", note.display());
-            let text = std::fs::read_to_string(&note).expect("reads");
+            let text = crate::tree::read_text(&note).expect("reads");
             assert!(text.contains("\"verdict\": \"crash\""), "{text}");
         }
 

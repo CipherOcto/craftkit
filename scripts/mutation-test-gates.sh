@@ -4184,7 +4184,7 @@ expect_catch "gate: the symbol gate reads the tree's source as text" \
 
 # The second takes the other half of the rule out of the one reader, so a
 # comment is code again.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "            '/' if chars.peek() == Some(&'/') => {
                 chars.next();
                 in_line = true;
@@ -4220,7 +4220,7 @@ expect_catch "gate: the limits gate reads the tree's strings as code" \
 # The fifth takes the newline out of a string continuation. A string written
 # across two lines is two lines of the file, and the tree's own
 # crates/io/src/format.rs has three of them.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "                blank(&mut out, c);
                 escaped = false;" \
     "                out.push(' ');
@@ -4230,7 +4230,7 @@ expect_catch "gate: a string continuation loses the line it ends" \
 
 # The sixth takes the newlines out of a block comment, which moves every
 # line after it.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "            } else if c == '\n' {
                 out.push('\n');
             } else {
@@ -4250,7 +4250,7 @@ expect_catch "gate: a block comment loses the lines it covers" \
 
 # And the seventh grows the tree a second reader, which is the thing the
 # one-reader check exists to stop.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     'pub fn code_lines_kept(source: &str) -> String {' \
     'pub fn a_second_code_reader(source: &str) -> String {
     let mut in_string = false;
@@ -4352,7 +4352,7 @@ expect_catch "gate: the boundary gate counts a test's catch as a boundary" \
 
 # And the second makes the cut truncate the file again, which hides
 # production code that comes after a test item.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     '        if line.starts_with("mod tests {") || line.starts_with("#[cfg(test)]") {
             // The item ends where its **braces** say, and the braces are
             // found in the code view: a `}` inside a string is not a brace.
@@ -4433,7 +4433,7 @@ expect_catch "gate: the command list reads a comment as a command" \
 # the shape of a thing from the code and its contents from the text, and it
 # takes one from the other by position. A block comment's end used to lose a
 # byte, and every position after it was off by one.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "                // Two bytes for two bytes: the view keeps the file's length.
                 out.push(' ');
                 out.push(' ');" \
@@ -4453,7 +4453,7 @@ expect_catch "gate: the code view loses a byte" \
 # say the shell never evaluates the document and never writes it. The
 # controls, with the same code where the gate was looking, were red. Section
 # 156.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     '            let last = top_level_item_last_line(&code, &starts, &lines, index);' \
     '            let last = lines.len() - 1;'
 expect_catch "gate: the JSON writer's cut truncates the file" \
@@ -4487,7 +4487,7 @@ expect_catch "gate: the shell's cut truncates the file" \
 # commands that they read a parameter the test invented; and the limit's one
 # production use replaced by a literal, with a test-only method using the
 # limit instead, was reported as enforced. Section 157.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     '    let trimmed = line.trim_start();
     trimmed == "#[cfg(test)]" && trimmed.len() != line.len()' \
     '    let _trimmed = line.trim_start();
@@ -4516,19 +4516,19 @@ expect_catch "gate: the cut keeps a test-only method" \
 # The tree's own raw strings are all in test code, which is why no gate had
 # noticed: the defect was latent, and it is measured here rather than
 # asserted. Section 158.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "            'r' if !ends_with_word_byte(&out) => {" \
     "            'r' if ends_with_word_byte(&out) => {"
 expect_catch "gate: the reader does not recognise a raw string" \
     "cargo test -p xtask --profile ci a_raw_string_is_a_string"
 
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "            if seen == hashes {" \
     "            if seen == hashes && hashes == 0 {"
 expect_catch "gate: the reader ends a raw string at the first quote in it" \
     "cargo test -p xtask --profile ci a_raw_string_ends_at_its_own_delimiter"
 
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "    for _ in 0..hashes {
         chars.next();
         out.push('#');
@@ -4542,7 +4542,7 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the reader does not consume the raw string's own delimiter" \
     "cargo test -p xtask --profile ci a_raw_string_without_hashes_is_a_raw_string"
 
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     "                let raw = ahead.peek() == Some(&'r');" \
     "                let raw = ahead.peek() == Some(&'R');"
 expect_catch "gate: the reader does not recognise a byte string" \
@@ -4654,7 +4654,7 @@ expect_catch "gate: the control methods read an arm out of a comment" \
 # The end of an item is found by matching its braces in the code view, the
 # way the end of a test-only method has been found since section 157. Section
 # 160.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     $'    let Some(close) = matching(code, open, b\'{\', b\'}\') else {
         return lines.len().saturating_sub(1);
     };
@@ -4943,7 +4943,7 @@ expect_catch "gate: an impl inside a string is not the session's block" \
     "cargo test -p xtask --profile ci an_impl_inside_a_string_is_not_the_session_block"
 
 swap xtask/src/assets.rs \
-    '        let code = crate::lists::code_lines_kept(&text);
+    '        let code = crate::tree::code_lines_kept(&text);
         for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
             for call in EMBED_CALLS {
                 let Some(at) = code_line.find(call) else { continue };
@@ -4957,7 +4957,7 @@ expect_catch "gate: an embed call in a block comment is not an embed" \
     "cargo test -p xtask --profile ci an_embed_call_in_a_block_comment_is_not_an_embed"
 
 swap xtask/src/assets.rs \
-    '        let code = crate::lists::code_lines_kept(&text);
+    '        let code = crate::tree::code_lines_kept(&text);
         for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
             for call in EMBED_CALLS {
                 let Some(at) = code_line.find(call) else { continue };
@@ -4988,13 +4988,13 @@ expect_catch "gate: an embed call in a string is not an embed" \
 #     file, was reported by both.
 #
 # Section 167.
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))' \
     '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("test"))'
 expect_catch "gate: a file under a tests directory is a test file" \
     "cargo test -p xtask --profile ci a_file_under_a_tests_directory_is_a_test_file"
 
-swap xtask/src/lists.rs \
+swap xtask/src/tree.rs \
     '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("tests"))' \
     '    path.components().any(|part| part.as_os_str() == std::ffi::OsStr::new("test"))'
 expect_catch "gate: a test file does not catch a panic as a boundary" \
@@ -6132,9 +6132,14 @@ swap xtask/src/lists.rs \
 expect_catch 'lists: the list of the gates that read Rust does not match the code' \
     "cargo xtask lists"
 
-# The third break gives the tree a third way to read a file. The tree has
-# two -- `read_text` and `read_rust` -- and a Rust file is read with a
-# subject, so a gate cannot read one by accident.
+# The third break gives the tree a third way to read a file. The tree reads
+# a file through `xtask/src/tree.rs` and nowhere else, and a Rust file is
+# read with a subject, so a gate cannot read one by accident.
+#
+# Section 205 kept this case and gave it its own shape: at section 204 the
+# gate caught it by counting two reads in one module, and the count is now
+# made over the whole xtask and both spellings of the read. The break is
+# still a raw read outside the tree's one home.
 swap xtask/src/lists.rs \
     '/// The name of the top-level function a line opens, if it opens one.
 fn top_level_fn_name(line: &str) -> Option<&str> {' \
@@ -6165,6 +6170,47 @@ swap xtask/src/lists.rs \
                 }'
 expect_catch 'lists: a claim in one row of a table is paired with a file in the next' \
     "cargo xtask lists"
+
+# ------------------------------------------- the tree's one way to read ----
+# Section 205. The readers, the cut and the code reader moved into
+# `xtask/src/tree.rs` -- the tree's one home for seeing the tree -- and every
+# module in the xtask reads through them. The gate that says so used to count
+# one spelling in one module.
+#
+# The first break gives a module a way to read a file of its own. The xtask
+# reads a file through `xtask/src/tree.rs` and nowhere else, and a Rust file
+# is read with a subject.
+#
+# The break is in a module that is not the home, and the home is the only
+# place a raw read may stand. The claim is about the xtask and not about the
+# tree: the tree's own product crates read designs, tokens and crash
+# reports, and they are not gates.
+swap xtask/src/web.rs \
+    '    crate::tree::read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))' \
+    '    std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))'
+expect_catch 'lists: a module reads a file with the standard library' \
+    "cargo xtask lists"
+
+# The second break takes the refusal away. `read_text` refuses a Rust file, so
+# that a gate cannot read one without saying which view it wants; a reader
+# that reads one is a reader that forgets.
+swap xtask/src/tree.rs \
+    '    if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a Rust file is read with a subject",
+        ));
+    }
+    std::fs::read_to_string(path)' \
+    '    if false {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a Rust file is read with a subject",
+        ));
+    }
+    std::fs::read_to_string(path)'
+expect_catch 'the tree: a reader reads a Rust file without a subject' \
+    "cargo test -p xtask --profile ci a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is"
 
 restore
 finish

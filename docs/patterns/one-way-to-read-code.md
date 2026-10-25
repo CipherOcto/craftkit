@@ -43,7 +43,7 @@ reports a line reported the wrong one.
 ## The rule
 
 **A gate that reads the tree's source reads the code, and there is one way to
-do it.** The one way is `code_lines_kept`, in `xtask/src/lists.rs`. It takes a
+do it.** The one way is `code_lines_kept`, in `xtask/src/tree.rs`. It takes a
 file's source and gives back the same source with the comments, the string
 contents and the char literals blanked out — and with **every line kept**.
 
@@ -416,7 +416,7 @@ And the assets gate reads both halves, because a **path** is a string and a
 string is the subject there:
 
 ```rust
-let code = crate::lists::code_lines_kept(&text);
+let code = crate::tree::code_lines_kept(&text);
 for (number, (code_line, text_line)) in code.lines().zip(text.lines()).enumerate() {
     // "there is a call here" is code; "the path it names" is the text
 }
@@ -457,11 +457,13 @@ pub fn read_text(path: impl AsRef<Path>) -> Result<String, std::io::Error>
 So a gate cannot read a Rust file by accident: the reader says so, and a file
 that is not Rust is read as it is.
 
-**Measured**, over the production part of the lists gate: **69** file reads,
-**36** of them of a Rust file, made by **35** gates; **11** already cut at the
-test module and **25** took the file as it is. The list is
-`RUST_READING_GATES`, and it says which of the thirty-five read the code the
-tree ships (**28**) and which read the file as it is (**7**).
+**Measured at §204**, over the production part of the lists gate: **69** file
+reads, **36** of them of a Rust file, made by **35** gates; **11** already cut at
+the test module and **25** took the file as it is. The list is
+`RUST_READING_GATES`, and it says which of the gates read the code the tree
+ships (**28**) and which read the file as it is (**7**). §205 added three gates
+to it — `find_embedded`, `inspect` and `the_anchors_are_in_the_tree_of`, all of
+which read the file as it is — so it now holds **38**: **28** and **10**.
 
 **The list is a promise, so it is checked.**
 `the_gates_that_read_rust_say_what_they_read` reads the lists gate's own
@@ -483,6 +485,76 @@ once in a doc comment, which the code view blanks. §204.
 **And a table's columns are different things.** A table row is a breath of its
 own: a claim in one row and a file in the next are not about each other, and
 the columns of a table are not one sentence.
+
+## And a claim about the tree is a claim about all of it
+
+**A rule that says "the tree reads a file this way" is a claim about every
+module of the tree, and a gate that checks it in one module has checked one
+module.**
+
+§204's gate said the tree had two ways to read a file and no third, and it
+held the promise by counting `std::fs::read_to_string` in `xtask/src/lists.rs`
+and expecting **two**. The claim was about *the tree*. The count was about one
+module of the xtask's **fourteen**, and about **one spelling** of the read.
+
+Measured at §205, against the xtask at §204:
+
+| What was measured | What was found |
+|---|---|
+| raw reads in the xtask's production code | **17** — **13** spelled `std::fs::read_to_string`, **4** spelled `std::fs::read` |
+| modules they stood in | **8** of the xtask's **14** |
+| the clean-room gate's reads | **every file in the tree** — **135** files, **77** of them Rust — as bytes |
+| the gate that checked the claim | **one** module, **one** spelling |
+| the test that said "the tree reads code one way" | named **8** of the **14** modules |
+
+So the promise was true for the module it was measured in and said nothing
+about the other seven. `anchors.rs`, `cleanroom.rs`, `deny.rs`, `fuzz.rs`,
+`main.rs` and `tree.rs` were never looked at by the test that named eight
+files, and the four `std::fs::read` calls the gate could not see at all were
+the fuzzer's seeds and the clean-room gate's bytes.
+
+**A list of files is a list that goes stale.** The test named eight files
+because someone wrote eight names down; a module added later was not in the
+list, and the list is not a gate. The tree already had the answer for this
+kind of thing: **one walk** — `tree::walk`, in `xtask/src/tree.rs` — and §170
+put every gate's directory walk through it. The same shape fits the modules:
+walk `xtask/src` and read every module the walk finds, rather than name them.
+
+**A claim is wider than the thing it computes.** The gate was not wrong about
+the module it read. It was wrong about the scope of the sentence it was
+holding up, and a scope that is narrower than the sentence is the same defect
+as a scope that is wider.
+
+**And the raw read has two spellings.** `std::fs::read_to_string` and
+`std::fs::read` are both ways to open a file, and a gate that counts one of
+them is a gate that can be walked around with the other.
+
+So the port did three things:
+
+- **The readers came home.** `read_text`, `read_rust`, the cut
+  (`production_of`) and the code reader (`code_lines_kept`) moved out of the
+  gates module and into `xtask/src/tree.rs`, beside the walk. A reader is a
+  way of seeing the tree and not a gate, and the walk was already there for
+  the same reason. §170's shape, applied to the readers.
+- **The gate walked the xtask.** It now reads **every** module under
+  `xtask/src`, and it checks **both** spellings of a raw read. A raw read
+  outside `xtask/src/tree.rs` is reported, with the module and the line.
+- **The test walked the xtask too.** `the_tree_has_one_code_reader` no longer
+  names eight files; it walks them, and it reads each one as the tree's own
+  reader reads it.
+
+**And the readers grew a third.** `read_bytes` reads a file that is not text —
+the fuzzer's seeds, the clean-room gate's look at every byte of every file —
+and it **refuses** a Rust file, the way `read_text` does. A Rust file is read
+with a subject, so a gate cannot open one by accident, whichever reader it
+reaches for.
+
+**The claim is about the xtask, and it says so.** The tree's own product
+crates read designs, tokens and crash reports with the standard library, and
+they are not gates; a rule that forbade it would be a false claim. The
+message names the xtask: *"the xtask reads a file through
+`xtask/src/tree.rs` and nowhere else."* §204's lesson — a claim is wider than
+the thing it computes — applies to the fix as well as to the defect.
 
 ## And there is one way to find the files
 
@@ -511,7 +583,7 @@ record is in the file and not only in the history.
 
 ## In the code
 
-The reader, `xtask/src/lists.rs`:
+The reader, `xtask/src/tree.rs`:
 
 ```rust
 pub fn code_lines_kept(source: &str) -> String {
@@ -592,7 +664,13 @@ let lines: Vec<&str> = text.lines().collect();
   comment is not a function.
 - `the_gates_that_read_rust_say_what_they_read` — every gate that opens a
   Rust file is in the list, the subject at its call site is the one the list
-  names, and the tree has two ways to read a file and no third. §204.
+  names, and the xtask reads a file through `xtask/src/tree.rs` and nowhere
+  else. §204, extended by §205.
+- `the_tree_has_one_home_for_reading_a_file` — the readers, the cut and the
+  code reader all live in `xtask/src/tree.rs`. §205.
+- `a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is` — `read_text` and
+  `read_bytes` refuse a Rust file, and `read_rust` asks which view it wants.
+  §204, extended by §205.
 - `a_bound_that_only_a_test_declares_is_not_a_bound_of_the_tree` — a constant
   in a test is not a bound of the tree.
 - `a_constant_that_only_a_test_declares_is_not_the_codes_constant` — a test's

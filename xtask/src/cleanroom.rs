@@ -118,7 +118,7 @@ pub fn is_prose(path: &Path) -> bool {
 /// Each hit is a file, a line and the name it found.
 pub fn inspect(root: &Path) -> Result<Vec<String>, String> {
     let rule = root.join("docs/clean-room.md");
-    let text = std::fs::read_to_string(&rule)
+    let text = crate::tree::read_text(&rule)
         .map_err(|e| format!("could not read the clean-room rule at {}: {e}", rule.display()))?;
     let products = prohibited(&text)?;
     if products.is_empty() {
@@ -141,8 +141,19 @@ pub fn inspect(root: &Path) -> Result<Vec<String>, String> {
                 ));
             }
         }
-        let Ok(bytes) = std::fs::read(root.join(&relative)) else { continue };
-        let text = String::from_utf8_lossy(&bytes);
+        let path = root.join(&relative);
+        // Every file in the tree, and every byte of it: a Rust file is read
+        // with a subject, and the rest are read as bytes. §205.
+        //
+        // The extension is compared as a **string**: `Path::ends_with` asks
+        // whether the path ends with a *component*, and `.rs` is not one.
+        let is_rust = relative.to_string_lossy().ends_with(".rs");
+        let text = if is_rust {
+            crate::tree::read_rust(&path, crate::tree::Subject::Everything).ok()
+        } else {
+            crate::tree::read_bytes(&path).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        };
+        let Some(text) = text else { continue };
         for (number, line) in text.lines().enumerate() {
             for product in &products {
                 if mentions(line, &product.name) {

@@ -337,7 +337,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
 fn read(root: &Path, relative: &str) -> Result<String, String> {
     let path = root.join(relative);
-    std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))
+    crate::tree::read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))
 }
 
 #[cfg(test)]
@@ -381,8 +381,8 @@ if (response && response.status === 200) { await cache.put(request, response.clo
         // §11's falsehood, one file later: the authoring instructions said
         // `bundle` and the error box a broken page shows still said `wasm`.
         let root = crate::root().expect("root");
-        let index = std::fs::read_to_string(root.join(INDEX)).expect("the page is readable");
-        let worker = std::fs::read_to_string(root.join(SERVICE_WORKER)).expect("worker");
+        let index = crate::tree::read_text(root.join(INDEX)).expect("the page is readable");
+        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("worker");
         let problems = check(&index, &worker);
         assert!(problems.is_empty(), "the page in the tree has a problem: {problems:#?}");
         assert!(index.contains("cargo xtask bundle"), "no run-this instruction at all");
@@ -489,7 +489,7 @@ if (response && response.status === 200) { await cache.put(request, response.clo
     #[test]
     fn the_worker_in_the_tree_precaches_the_bundle_the_page_imports() {
         let root = crate::root().expect("root");
-        let worker = std::fs::read_to_string(root.join(SERVICE_WORKER)).expect("sw.js");
+        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("sw.js");
         assert!(worker_caches_the_bundle(&worker), "sw.js does not precache the bundle");
     }
 
@@ -531,8 +531,8 @@ if (response && response.status === 200) { await cache.put(request, response.clo
     #[test]
     fn the_repository_web_files_pass() {
         let root = crate::root().expect("root");
-        let index = std::fs::read_to_string(root.join(INDEX)).expect("index.html");
-        let worker = std::fs::read_to_string(root.join(SERVICE_WORKER)).expect("sw.js");
+        let index = crate::tree::read_text(root.join(INDEX)).expect("index.html");
+        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("sw.js");
         let problems = check(&index, &worker);
         assert!(problems.is_empty(), "{problems:?}");
     }
@@ -541,7 +541,11 @@ if (response && response.status === 200) { await cache.put(request, response.clo
     fn the_canvas_id_matches_the_rust_constant() {
         // Two copies of one string; this is the test that keeps them together.
         let root = crate::root().expect("root");
-        let stash = std::fs::read_to_string(root.join("apps/craftkit-web/src/stash.rs")).expect("stash.rs");
+        let stash = crate::tree::read_rust(
+            root.join("apps/craftkit-web/src/stash.rs"),
+            crate::tree::Subject::Production,
+        )
+        .expect("stash.rs");
         assert!(
             stash.contains(&format!("\"{CANVAS_ID}\"")),
             "stash.rs does not use {CANVAS_ID}; update both"
