@@ -26843,6 +26843,61 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     if the exception is still there — and the line can be deleted rather than
     re-justified.
 
+    **And the version in the item's title is the wrong question.** Measured,
+    from the crates.io manifests and by resolving the graph outside the tree:
+
+    | | 0.33 | 0.34 | 0.37 |
+    |---|---|---|---|
+    | the font parser | `ab_glyph` → `ttf-parser` | `skrifa` | `skrifa` |
+    | the advisory exception | needed | **not needed** | **not needed** |
+    | the font licence expression | `(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0` | **the same** | **the same** |
+    | the clipboard | eframe asks for it unconditionally | **the same** | behind a default-on feature |
+    | the `BSL-1.0` crates | in the graph | **in the graph** | **out of the graph** |
+
+    So **0.34 removes the advisory exception and neither licence row.** The
+    font expression is byte-for-byte the same in every version from 0.33.0 to
+    0.37.0, and `eframe` 0.33 and 0.34 both ask their windowing layer for
+    the clipboard feature unconditionally — which is what brings `arboard`,
+    and with it `clipboard-win` and `error-code`, both `BSL-1.0`.
+
+    **And the tree never uses the clipboard.** Measured: no `copy_to_clipboard`,
+    no paste, nothing in the UI crate or the desktop app. The two `BSL-1.0`
+    crates are dead weight in the binary that the policy has to widen itself
+    for.
+
+    **0.37 is different, and the difference is in the features.** Measured by
+    resolving the graph: `eframe` 0.37 puts the clipboard behind its own
+    `clipboard` feature, which is one of its **default** features — and this
+    tree already builds `eframe` with `default-features = false`, so the
+    clipboard never arrives. And `eframe` 0.37 gained a `system_fonts`
+    feature, which is an **alternative** to `default_fonts`: with it, the
+    bundled font crate leaves the graph, and the two crates it adds
+    (`egui_system_font_provider` and `skrifa`) are `MIT OR Apache-2.0`,
+    which the policy already allows.
+
+    **So on 0.37 with the system fonts, the policy needs no widening at
+    all** — no `BSL-1.0`, no font exception, and no advisory exception. The
+    cost is the app's text rendering in the **operating system's** font
+    instead of the toolkit's bundled one, and the 0.33 → 0.37 jump being
+    larger than the 0.33 → 0.34 one.
+
+    **And the item is not blocked.** The upgrade can happen at any version;
+    what the licence decision changes is *which* version is worth moving to.
+    The three answers are: accept the widening as it stands (both licences
+    are permissive, and the policy's own rule is about copyleft, which is not
+    in the graph at all); or take 0.34 and keep the two licence rows for the
+    clipboard and the bundled fonts; or take 0.37 with the system fonts and
+    **revert the policy to the shape §173 found**.
+
+    **One thing the policy says that the graph does not need.** Measured over
+    the whole graph, the only licences present are `Unicode-3.0` (nineteen
+    crates), `BSL-1.0` (two), `Zlib`, `ISC` and the font expression, beside
+    `MIT` and `Apache-2.0`. **There is no copyleft in the graph at all**, so
+    the rule that copyleft is never linked holds by accident — and
+    `MPL-2.0`, which *is* copyleft, sits in the allow list with **no crate
+    that needs it**. The allow list is one row wider than the rule, and the
+    row is not there for anything.
+
 45. ~~**Fire every command at every parameter with *generated* values.**~~
     **Done.** §175 put the properties on the readers and the parameter
     readers, §177 put them on the **commands** — every command at every
