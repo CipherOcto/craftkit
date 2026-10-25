@@ -25444,7 +25444,7 @@ temporary name is taken away — *"a write that failed took the file that was
 there with it"* — and the gate reports the writer that is not the home, by
 file and line.
 
-**And the suite.** **492** of **493** cases caught, and the one `known` is the
+**And the suite.** **493** of **494** cases caught, and the one `known` is the
 limit of wasm32 itself and not a gate that passed. The tree came back
 **unchanged**.
 
@@ -28041,7 +28041,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     `MOVEFILE_REPLACE_EXISTING`, so it does not — and the removal opened a
     window in which the token did not exist.
 
-    **And the suite**: **492** of **493** caught, the one `known` being the
+    **And the suite**: **493** of **494** caught, the one `known` being the
     limit of wasm32 itself, and the tree came back **unchanged**.
 
     **The residual**: the xtask is not in the gate, because it depends on
