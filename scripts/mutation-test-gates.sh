@@ -4212,8 +4212,8 @@ expect_catch "gate: the module gate reads the tree's source as text" \
 # The fourth out of the gate that says every limit in the model's table is
 # enforced somewhere in the tree.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };' \
-    '        let body = if path == table { rest.clone() } else { production_of(&path, &text) };'
+    '        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };' \
+    '        let body = if path == table { rest.clone() } else { text.clone() };'
 expect_catch "gate: the limits gate reads the tree's strings as code" \
     "cargo test -p xtask --profile ci a_limit_that_stands_only_in_a_string_is_not_enforced"
 
@@ -4278,15 +4278,21 @@ expect_catch "gate: the tree grows a second code reader" \
 #
 # The first takes the cut out of the other files.
 swap xtask/src/lists.rs \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };' \
-    '        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };'
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };'
 expect_catch "gate: the limits gate reads the tree's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
 # And the second out of the file the limits table itself lives in.
 swap xtask/src/lists.rs \
-    '    let code = code_lines_kept(&production_of(&table, &source));' \
-    '    let code = code_lines_kept(&source);'
+    '    let source = read_rust(&table, Subject::Production)
+        .map_err(|e| format!("could not read the limits table: {e}"))?;
+    let code = code_lines_kept(&source);' \
+    '    let source = read_rust(&table, Subject::Everything)
+        .map_err(|e| format!("could not read the limits table: {e}"))?;
+    let code = code_lines_kept(&source);'
 expect_catch "gate: the limits gate reads the table file's tests as enforcement" \
     "cargo test -p xtask --profile ci a_limit_only_a_test_mentions_is_still_caught"
 
@@ -4303,10 +4309,10 @@ expect_catch "gate: the limits gate reads the table file's tests as enforcement"
 # happened to be the right one -- the raw reader's gate is the first of the
 # three -- and that is luck, not a rule. §184.
 swap xtask/src/lists.rs \
-    '        let code = code_lines_kept(&production_of(&path, &text));
-        if !code.contains("raw_json(") {' \
-    '        let code = code_lines_kept(&text);
-        if !code.contains("raw_json(") {'
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        // Strings and comments do not count: this file names the reader, and' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        // Strings and comments do not count: this file names the reader, and'
 expect_catch "gate: the raw reader gate counts a test's call as a third home" \
     "cargo test -p xtask --profile ci a_test_that_calls_the_raw_reader_is_not_a_third_home"
 
@@ -4337,13 +4343,10 @@ expect_catch "gate: the session gate counts a test's method as a second path" \
 #
 # The first takes the wider cut out of the boundary gate.
 swap xtask/src/lists.rs \
-    '        let production = production_of(&path, &text);
-        if !code_lines_kept(&production).contains("catch_unwind(") {' \
-    '        let production = match text.find("\nmod tests {") {
-            Some(at) => text[..at].to_string(),
-            None => text.to_string(),
-        };
-        if !code_lines_kept(&production).contains("catch_unwind(") {'
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        // The tests are not the production code: a test may catch a panic to' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        // The tests are not the production code: a test may catch a panic to'
 expect_catch "gate: the boundary gate counts a test's catch as a boundary" \
     "cargo test -p xtask --profile ci a_test_that_catches_a_panic_is_not_a_boundary"
 
@@ -4391,16 +4394,10 @@ expect_catch "gate: the production cut hides the code after a test item" \
 # is in no other function. The probe that reports an anchor in a file twice is
 # how it was found, and it is the same rule §167 learned.
 swap xtask/src/lists.rs \
-    '        let relative = relative_name(root, &path);
-        let production = production_of(&path, &text);
-        let code = code_lines_kept(&production);
-        for function in rust_functions(&relative, &production, &code) {
-            let is_method = has_word(&function.block, PARAMS_TYPE);' \
-    '        let relative = relative_name(root, &path);
-        let production = text.clone();
-        let code = code_lines_kept(&production);
-        for function in rust_functions(&relative, &production, &code) {
-            let is_method = has_word(&function.block, PARAMS_TYPE);'
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        let relative = relative_name(root, &path);' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        let relative = relative_name(root, &path);'
 expect_catch "gate: the reader list counts a test's helper as a reader" \
     "cargo test -p xtask --profile ci a_test_helper_is_not_a_reader"
 
@@ -4415,9 +4412,9 @@ expect_catch "gate: the reader list counts a test's helper as a reader" \
 # report a command that does not exist. The controls, with the same prose
 # and no signature, were green. Section 155.
 swap xtask/src/lists.rs \
-    '        for function in rust_functions(&relative, &production, &code) {
+    '        for function in rust_functions(&relative, &text, &code) {
             let is_method = has_word(&function.block, PARAMS_TYPE);' \
-    '        for function in rust_functions(&relative, &production, &production) {
+    '        for function in rust_functions(&relative, &text, &text) {
             let is_method = has_word(&function.block, PARAMS_TYPE);'
 expect_catch "gate: the reader list reads a comment as a reader" \
     "cargo test -p xtask --profile ci a_reader_that_stands_only_in_a_comment_is_not_a_reader"
@@ -4457,13 +4454,8 @@ expect_catch "gate: the code view loses a byte" \
 # controls, with the same code where the gate was looking, were red. Section
 # 156.
 swap xtask/src/lists.rs \
-    '        let production = production_of(&path, &text);
-        // Strings and comments do not count: this file names the writer, and' \
-    '        let production = match text.find("#[cfg(test)]") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
-        // Strings and comments do not count: this file names the writer, and'
+    '            let last = top_level_item_last_line(&code, &starts, &lines, index);' \
+    '            let last = lines.len() - 1;'
 expect_catch "gate: the JSON writer's cut truncates the file" \
     "cargo test -p xtask --profile ci a_writer_after_a_test_item_is_still_a_writer"
 
@@ -4478,17 +4470,10 @@ expect_catch "gate: the JSON writer's cut truncates the file" \
 # above, which still bites.
 
 swap xtask/src/lists.rs \
-    '        let production = production_of(&path, &text);
-        let code = code_lines_kept(&production);
-        let relative = relative_name(root, &path);
-        for name in EVALUATOR_NAMES {' \
-    '        let production = match text.find("\nmod tests {") {
-            Some(at) => &text[..at],
-            None => &text[..],
-        };
-        let code = code_lines_kept(&production);
-        let relative = relative_name(root, &path);
-        for name in EVALUATOR_NAMES {'
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        // The tests are not the panels: a test may name the evaluator to' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        // The tests are not the panels: a test may name the evaluator to'
 expect_catch "gate: the shell's cut truncates the file" \
     "cargo test -p xtask --profile ci a_test_outside_a_module_is_not_the_shell"
 
@@ -6120,6 +6105,66 @@ swap crates/mcp/src/server.rs \
     '    if false {'
 expect_catch 'mcp: the server runs a command whose arguments are not an object' \
     "cargo test -p craftkit-mcp --profile ci a_tool_call_with_arguments_that_are_not_an_object_is_refused"
+
+# ------------------------------------- the view a gate reads the tree in ----
+# Section 204. The gates that read the tree's Rust source had no way to say
+# whether they were asking about the code the tree ships or about the file as
+# it is. The tree now has one way to open a Rust file -- `read_rust(path,
+# subject)` -- and a list of the gates that do, with the subject each one
+# reads for. The list is a promise about the code, and a gate holds it up.
+#
+# The first break changes a gate's mind: it reads the file as it is now, and
+# the list still says it reads the code the tree ships.
+swap xtask/src/lists.rs \
+    '        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        for name in the_tree_s_bounds(&code_lines_kept(&text)) {' \
+    '        let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+        for name in the_tree_s_bounds(&code_lines_kept(&text)) {'
+expect_catch 'lists: a gate reads the tree'"'"'s Rust source for a view the list does not name' \
+    "cargo xtask lists"
+
+# The second break takes a gate out of the list -- or puts a name in it that
+# opens no Rust file at all. Either way the list and the code have parted
+# company, and the gate that holds the list up must notice.
+swap xtask/src/lists.rs \
+    '    ("ui_structs", Subject::Production),' \
+    '    ("ui_structs_renamed", Subject::Production),'
+expect_catch 'lists: the list of the gates that read Rust does not match the code' \
+    "cargo xtask lists"
+
+# The third break gives the tree a third way to read a file. The tree has
+# two -- `read_text` and `read_rust` -- and a Rust file is read with a
+# subject, so a gate cannot read one by accident.
+swap xtask/src/lists.rs \
+    '/// The name of the top-level function a line opens, if it opens one.
+fn top_level_fn_name(line: &str) -> Option<&str> {' \
+    '/// A third way to read a file.
+fn a_third_reader(path: &Path) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
+/// The name of the top-level function a line opens, if it opens one.
+fn top_level_fn_name(line: &str) -> Option<&str> {'
+expect_catch 'lists: the tree has a third way to read a file' \
+    "cargo xtask lists"
+
+# The fourth break puts the rows of a table back together. The columns of a
+# table are different things, so a claim in one row and a file in the next
+# are not about each other -- and the tree'"'"'s own playbook says
+# "`Session::execute` does the rest" in the third column of one row while the
+# next row names a file. The claim was false, and it was true only because
+# the file'"'"'s test module said `execute`.
+swap xtask/src/lists.rs \
+    '                if let (Some(a), Some(b)) = (rows.row_of(left.0), rows.row_of(right.0))
+                    && a != b
+                {
+                    continue;
+                }' \
+    '                if false {
+                    continue;
+                }'
+expect_catch 'lists: a claim in one row of a table is paired with a file in the next' \
+    "cargo xtask lists"
 
 restore
 finish

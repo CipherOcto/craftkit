@@ -426,6 +426,64 @@ That is why the reader had to become **public**: it was a private `fn` in
 `lists.rs`, and the alternative was a second copy of the rule in
 `assets.rs` — the thing the tree's one-reader test exists to stop.
 
+## And a gate says which view of the file it reads
+
+**A gate that opens a Rust file says whether it is asking about the code the
+tree ships or about the file as it is.** The two are different questions, and
+the tree's answer is an **argument**, so it cannot be forgotten.
+
+```rust
+pub enum Subject {
+    /// The code the tree ships: the file without its tests.
+    Production,
+    /// The file as it is, tests included.
+    Everything,
+}
+```
+
+`Subject::Production` cuts the file's tests — the cut `production_of` makes —
+and `Subject::Everything` keeps them. A gate whose question is about the
+**file** (how many lines it has, which lines a citation names, which test it
+holds) reads it as it is; a gate whose question is about the **code** reads the
+production view.
+
+And there is **one way to open a Rust file**, and **one way to read anything
+else**, and the second one **refuses** a Rust file:
+
+```rust
+pub fn read_text(path: impl AsRef<Path>) -> Result<String, std::io::Error>
+```
+
+So a gate cannot read a Rust file by accident: the reader says so, and a file
+that is not Rust is read as it is.
+
+**Measured**, over the production part of the lists gate: **69** file reads,
+**36** of them of a Rust file, made by **35** gates; **11** already cut at the
+test module and **25** took the file as it is. The list is
+`RUST_READING_GATES`, and it says which of the thirty-five read the code the
+tree ships (**28**) and which read the file as it is (**7**).
+
+**The list is a promise, so it is checked.**
+`the_gates_that_read_rust_say_what_they_read` reads the lists gate's own
+source and holds three things: that the tree has two ways to read a file and
+no third; that every gate that opens a Rust file is in the list; and that the
+subject at its call site is the one the list names.
+
+**And the cut found a false claim.** The tree's own playbook says
+"`Session::execute` does the rest" in the third column of one row of a table,
+and the next row's second column names the file `crates/engine/src/commands.rs`
+— a file that does not hold it.
+
+The gate that checks a document's claims paired the two anyway, and reported
+the method as living in `crates/engine/src/commands.rs`. It lives in
+`crates/engine/src/session.rs`. The claim was **false**, and it was true only
+because the file's **test module** said `execute` — fifty-four times, against
+once in a doc comment, which the code view blanks. §204.
+
+**And a table's columns are different things.** A table row is a breath of its
+own: a claim in one row and a file in the next are not about each other, and
+the columns of a table are not one sentence.
+
 ## And there is one way to find the files
 
 **A gate that walks the tree walks it one way.** The one way is `walk`, in
@@ -471,16 +529,24 @@ pub fn code_lines_kept(source: &str) -> String {
 And the call sites. A gate that reads a source file does this and nothing else:
 
 ```rust
-let Ok(text) = std::fs::read_to_string(&path) else { continue };
-let code = code_lines_kept(production_of(&text));
+let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+let code = code_lines_kept(&text);
 ```
 
 And a gate that needs both the shape and the contents reads both views:
 
 ```rust
-let Ok(text) = std::fs::read_to_string(&path) else { continue };
+let Ok(text) = read_rust(&path, Subject::Production) else { continue };
 let code = code_lines_kept(&text);
 // the shape from `code`, the contents from `text`, one position in both
+```
+
+And a gate whose question is about the **file** rather than the code reads it
+as it is:
+
+```rust
+let Ok(text) = read_rust(&path, Subject::Everything) else { continue };
+let lines: Vec<&str> = text.lines().collect();
 ```
 
 ## When NOT to use it
@@ -524,6 +590,15 @@ let code = code_lines_kept(&text);
   function, and it is not a reader the commands use.
 - `a_reader_that_stands_only_in_a_comment_is_not_a_reader` — a `fn` in a
   comment is not a function.
+- `the_gates_that_read_rust_say_what_they_read` — every gate that opens a
+  Rust file is in the list, the subject at its call site is the one the list
+  names, and the tree has two ways to read a file and no third. §204.
+- `a_bound_that_only_a_test_declares_is_not_a_bound_of_the_tree` — a constant
+  in a test is not a bound of the tree.
+- `a_constant_that_only_a_test_declares_is_not_the_codes_constant` — a test's
+  own constant is not one of the tree's numbers.
+- `a_claim_in_one_row_of_a_table_and_a_file_in_the_next_are_not_a_claim` — a
+  table row is a breath of its own.
 - `a_command_that_stands_only_in_a_comment_is_not_a_command` — a `pub static`
   in a comment is not a command.
 - `the_code_view_is_the_same_length_as_the_file` — the two views are the

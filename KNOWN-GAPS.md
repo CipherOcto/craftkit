@@ -23999,6 +23999,178 @@ session's own head — and it is now something the suite *checks*. Editing
 changed, which is true: somebody changed the tree while the suite was
 measuring it, and the run's numbers were taken over a tree that moved.
 
+## 204. A gate read the tree's tests as the code the tree ships, and a test was holding up a false claim
+
+### The finding
+
+Items 31 and 32 asked for a **list**: every gate that opens a Rust file, and a
+decision for each — is its subject the code the tree ships, or the file as it
+is? §150 through §154 had found the same defect in five gates in a row (a gate
+whose subject is a *production* property asked its question without saying what
+production code is), and the work that was left open was the enumeration
+itself.
+
+**Measured**, over the production part of the tree's gate file
+(`xtask/src/lists.rs`):
+
+| | |
+|---|---|
+| the file reads in the lists gate | **69** |
+| of those, reads of a **Rust** file | **36** |
+| the gates that make them | **35** |
+| reads that already cut at the test module | **11** |
+| reads that took the file **as it is** | **25** |
+
+So **three quarters** of the gates that open a Rust file had no way to say that
+they were reading the tests too — and the decision was recorded nowhere, so
+nobody could check it. The tree's own rule, in §150's words, is *"the tests are
+not the production code, and a gate whose subject is a **production** property
+has to say so"*, and twenty-five gates were saying nothing.
+
+Then the cut was applied, and it found something.
+
+### The false claim
+
+`docs/agent-playbook.md` has a table of "where each piece goes":
+
+| Piece | File | What |
+| --- | --- | --- |
+| the behaviour | `run` in `commands.rs` | `Session::execute` does the rest |
+| the test | `crates/engine/src/commands.rs`, `mod tests` | calls the command with its own parameters |
+
+The gate `attributed_code_is_in_the_file` pairs a backticked claim with the
+backticked `*.rs` path that follows it and checks that the file has the claim.
+A table is one paragraph, so the claim in the **third column of one row** was
+paired with the **second column of the next row**:
+
+```text
+docs/agent-playbook.md: line 464 says `Session::execute` is in `crates/engine/src/commands.rs`, and it is not
+```
+
+That claim is **false**. `Session::execute` is in `crates/engine/src/session.rs`
+(`crates/engine/src/session.rs:492`). The document never said it was in
+`commands.rs` — the gate invented the claim by crossing a row boundary.
+**And the claim was true by accident.** The gate reduces `Type::method` to the
+method's name (§162: the name is a whole name) and looks for `execute` in the
+file. `crates/engine/src/commands.rs` does say `execute`:
+
+| | occurrences of `execute` |
+|---|---|
+| in the **production** code | **1** — a `//!` doc comment, which the code view blanks |
+| in the **test module** | **54** — `s.execute(id, &params)` |
+
+So the file's own **tests** were what satisfied the claim. The gate was reading
+the tree's tests as the code the tree ships, and it was doing it for a claim
+that is about the code the tree ships.
+
+**Measured over the tree's prose:** **18** code-to-file claims, **1** of them
+crossed a table row boundary, and it was the one that was false.
+
+### The port
+
+**One way to open a Rust file, and the subject is an argument.**
+
+`read_rust(path, subject)` and `read_text(path)`. `read_text` **refuses** a
+Rust file: a Rust file is read with a subject, and a gate that reads one
+without saying which view it wants has forgotten something. The lists gate now
+has exactly **two** ways to read a file, and a gate checks that it has no
+third.
+
+**The list.** `RUST_READING_GATES` names all **35** gates that open a Rust
+file, and the subject each one reads for:
+
+| the subject | the gates | why |
+|---|---|---|
+| `Production` — the code the tree ships | **28** | the question is about what the tree ships |
+| `Everything` — the file as it is | **7** | the question is about the file: how many lines it has, which test it holds, which methods are shipped |
+
+The `Everything` row is not a second class, and one of the six said so out
+loud. `symbol_file_claims` checks that a **test name** a document names is in
+the file it names — its own message is *"Name the test that is actually
+there."* — and the cut broke **fifteen** true claims before the list recorded
+it. A gate whose subject is the tree's *tests* asks about the file as it is,
+and the list says which is which.
+
+**And the list is a promise, so it is checked.**
+`the_gates_that_read_rust_say_what_they_read` reads the lists gate's own source
+and holds three things: that the tree has two ways to read a file and no third;
+that every gate that opens a Rust file is in the list; and that the subject at
+its call site is the one the list names.
+
+**And the cut happens in one place.** Every gate that reads the code the tree
+ships used to decide for itself whether to cut; §150 through §154 gave six of
+them a cut and left the rest to chance. The cut is in `read_rust` now, and the
+subject says who gets it — so the cut cannot be forgotten and cannot be
+applied twice.
+
+**And the false claim is gone.** A table row is a breath of its own: the
+columns of a table are different things, so a claim in one row and a file in
+the next are not about each other. The gate pairs within a row — and the claims
+that *are* in a row are still checked, which has a test of its own.
+
+### The gate's own teeth
+
+Four mutations, all caught by `cargo xtask lists`:
+
+| the break | what it says |
+|---|---|
+| a gate reads its file as it is now, and the list still says otherwise | *"the gate `the_bounds_are_named_in_the_prose` reads a Rust file for `the file as it is`, and the list says `the code the tree ships`; the list is a promise about the code, and it is wrong."* |
+| the list names a gate that opens no Rust file | *"the gate `ui_structs` opens a Rust file and is not in the list of the gates that do"* |
+| the tree grows a third way to read a file | *"the tree reads a file 3 time(s) with `std::fs::read_to_string`; it has two ways to read a file — `read_text` and `read_rust` — and no third."* |
+| the rows of a table are put back together | *"docs/agent-playbook.md: line 464 says `Session::execute` is in `crates/engine/src/commands.rs`, and it is not"* |
+
+And three unit tests, each of which was proved to fail when its fix was put
+back: a bound only a test declares is not a bound of the tree, a constant only
+a test declares is not the code's constant, and a claim in one row of a table
+and a file in the next are not a claim.
+
+**And the mutation suite caught the list being wrong.** The first run missed
+one case: *"the session gate counts a test's method as a second path"*. The
+list said `the_session_offers_no_second_path` reads the code the tree ships —
+and the cut **removes** the test's methods before the gate can look at them,
+so the gate's own `#[cfg(test)]` handling never ran, and the mutation that
+broke it changed nothing at all. The gate's question is *which methods are in
+the shipped build*, and answering it needs to see the test's methods and
+exclude them itself: the file as it is. The list says so now, the count moved
+from twenty-nine and six to **twenty-eight and seven**, and the mutation is
+caught.
+
+### The lesson
+
+**A test can be what holds up a false claim.** The gate was reading the tree's
+tests as the code the tree ships, and the file it was checking had exactly
+**one** mention of the name in its production code — a doc comment, which the
+code view blanks — and **fifty-four** in its tests. The claim was false and
+the tests were the reason nobody noticed.
+
+**And the subject is a decision, and the decision is not always the same
+answer.** Twenty-nine gates want the code the tree ships and six want the file
+as it is, and the *same* file is wanted both ways by different gates. A rule
+that says "always cut" would have been wrong for six of them, and the gate
+that told me so was the one whose own message says *"Name the test that is
+actually there."* — a gate that knows its subject is better than a rule that
+guesses it.
+
+**And a list of gates is worth more than a rule about gates.** The rule was
+written down in §150 and the twenty-five gates that did not follow it were not
+found by reading the rule; they were found by making the decision *argument* —
+so that a gate could not read a Rust file without making it — and then by
+listing the gates that make it, so that the list could be checked against the
+code.
+
+**And a table's columns are different things.** The gate paired a claim with a
+file across a row boundary and invented a claim the document never made. The
+rule it broke was §161's: *a claim and a file have to be in the same breath*.
+A table row is the breath; the columns are not.
+
+**And a list that is checked against the code can still be wrong.** The gate
+that holds the list up proves the list and the code agree. Only a **mutation**
+proves the list is *right*: the first run of the mutation suite missed a case,
+because the list said a gate read the code the tree ships when it had to read
+the file as it is — and with the cut, the gate could not see the very thing it
+was supposed to exclude. A list is a promise, and a promise needs two checks:
+one that it is consistent, and one that it is true.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25183,8 +25355,21 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     qualifier but not a changed constant), write the claim in a form the gate
     can read — the value in parentheses, as the limit-in-prose gate already
     reads a number — or accept that a re-export is stated and not checked.
-31. **Audit the gates that read the tree's source for the production/test
-    distinction.** §150 through §154 found the same defect in five gates in
+31. ~~**Audit the gates that read the tree's source for the production/test
+    distinction.**~~ **Done in §204.** The list of every gate that opens a
+    Rust file exists now — **35** of them — and each one says which view it
+    reads: **28** read the code the tree ships and **7** read the file as it
+    is. The subject is an **argument** (`read_rust(path, subject)`), so a gate
+    cannot read a Rust file without making the decision, and the list is
+    checked against the code by a gate of its own. The cut found a false claim
+    in the tree's own playbook that a test's own call was holding up.
+
+    **Measured**: the lists gate reads **69** files; **36** of those reads are
+    of a Rust file, made by **35** gates; **11** of the reads already cut at
+    the test module and **25** took the file as it is. The text of the item is
+    kept below, because it is the measurement the port was made from.
+
+    §150 through §154 found the same defect in five gates in
     a row: a gate whose subject is a *production* property opened a Rust file
     and asked its question without saying what production code is. Five are
     fixed — the limits gate, the raw reader's gate, the session's gate, the
@@ -25194,8 +25379,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     opens a Rust file, and a decision for each: is its subject production
     code, and does it say so? §154 closed the last gate the audit had
     *reached*; it did not enumerate the rest.
-32. **Audit the gates that read the tree's source for the code/text
-    distinction.** §149 made the rule that a mention in a string is not
+32. ~~**Audit the gates that read the tree's source for the code/text
+    distinction.**~~ **Done in §204**, in the same list. The question items 31
+    and 32 both asked for was *which gates open a Rust file*, and the list now
+    exists and is checked against the code. The code/text half was already held
+    by §149's rule — the tree reads its code one way, through
+    `code_lines_kept`, and the unit test `the_tree_has_one_code_reader` says
+    so — so a gate does not choose a reader; it chooses a **subject**, and
+    that is what the list records.
+
+    **Measured**: of the **35** gates, **32** ask "what does the code say" and
+    build the code view (in the gate, or in the helper it calls), and **3** ask
+    a question about the file's **shape** — how many lines it has, which lines
+    a citation names — and read the text on purpose. The text of the item is
+    kept below, because it is the measurement the port was made from.
+
+    §149 made the rule that a mention in a string is not
     code, and listed the three gates that read the tree's source as text.
     That list came from the question *which gates read a symbol or a
     module?*, and the gate that says every parameter a command reads is
@@ -25972,3 +26171,50 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     one — and the tree's own registry knows the parameters of every command,
     so the comparison has a source. It is a design question, not a missing
     line.
+63. **The rule that a Rust file is read with a subject is one module wide.**
+    §204.
+
+    §204 gave the lists gate one way to open a Rust file — `read_rust(path,
+    subject)` — and a list of the **35** gates that do, with the subject each
+    one reads for. The list is checked against the code, and the tree has two
+    ways to read a file and no third.
+
+    **The rule lives in `xtask/src/lists.rs`, and the rest of the xtask does
+    not have it.** The xtask has **twelve** modules; **six** of them read
+    files, and **two** of those reads are of a Rust file:
+
+    - `xtask/src/anchors.rs` reads the files the mutation script's anchors
+      name — to check that they are **in the tree**, so the content is not the
+      subject, and the file as it is is right;
+    - `xtask/src/web.rs` reads `apps/craftkit-web/src/stash.rs` in the test
+      `the_canvas_id_matches_the_rust_constant`, and looks for the canvas id
+      as a **string in the file's text**. That file has **three** test
+      modules, so a test that mentioned the id would satisfy the test that
+      exists to prove the two copies agree. **Latent**: the production
+      constant in `stash.rs` is what satisfies it today.
+
+    The port is small and it is §170's shape: `Subject`, `read_text` and
+    `read_rust` move down to `xtask/src/tree.rs` — the tree's one home for
+    walking — and every gate in the xtask reads through them. The gate that
+    says the tree has two ways to read a file and no third then covers the
+    whole xtask, and the list of the gates that read Rust grows past the lists
+    gate.
+
+64. **The list of the gates that read Rust says what each one reads, and not
+    why.** §204.
+
+    `RUST_READING_GATES` names **35** gates and the subject each one reads
+    for. A reader who comes to `("citation_drift", Subject::Everything)` sees
+    a decision and cannot tell whether it was a decision or an accident — and
+    §204's own measurement is that **seven** of the thirty-five are `Everything`
+    and **twenty-eight** are `Production`, so the split is most of the list and
+    the *reason* is most of what a reader wants.
+
+    The tree's house style already has the thing this needs: the gates that
+    are **not** gates carry their reason (`NOT_GATES` says of `bundle` *"it
+    writes files into the tree"*), and `SESSION_PUBLIC_METHODS` gained
+    `sample_recorded` **with its reason** when §200 added it. The list should
+    be the same shape: a third column that says why the subject is what it is.
+
+    This is a small change and it is the difference between a list that records
+    a decision and a list that records an accident.

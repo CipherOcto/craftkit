@@ -190,13 +190,12 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
 
     let mut problems = Vec::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // The tests are not the production code: a test may catch a panic to
         // assert that it was caught, and that is not a boundary. The cut has
         // to reach a **top-level** test item as well as a test module, or a
         // test written outside a module is counted as a boundary. §153.
-        let production = production_of(&path, &text);
-        if !code_lines_kept(&production).contains("catch_unwind(") {
+        if !code_lines_kept(&text).contains("catch_unwind(") {
             continue;
         }
         let relative = relative_name(root, &path);
@@ -206,8 +205,7 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
             ));
         }
     }
-    let document = std::fs::read_to_string(root.join(DOCUMENT))
-        .map_err(|e| format!("could not read {DOCUMENT}: {e}"))?;
+    let document = read_text(root.join(DOCUMENT)).map_err(|e| format!("could not read {DOCUMENT}: {e}"))?;
     for file in DECLARED {
         if !document.contains(file) {
             problems.push(format!("{DOCUMENT}: does not mention {file}, which catches a panic"));
@@ -231,8 +229,8 @@ pub fn registry_command_ids(root: &Path) -> Result<std::collections::BTreeSet<St
     let mut ids = std::collections::BTreeSet::new();
     for rel in ["crates/engine/src/commands.rs", "crates/engine/src/command.rs"] {
         let path = root.join(rel);
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+        let text = read_rust(&path, Subject::Everything)
+            .map_err(|e| format!("could not read {}: {e}", path.display()))?;
         // The **shape** of the registry is read from the code: an `id:` in a
         // comment or in a string is not a field. The id itself is read from
         // the text, because there a string *is* the subject. The two views
@@ -274,7 +272,7 @@ pub fn counts_in_prose_match_the_code(root: &Path) -> Result<Vec<String>, String
     let areas = area_variants(root)?;
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (at, claimed, noun) in counts_in(&text) {
             let actual = match noun {
@@ -300,8 +298,8 @@ pub fn counts_in_prose_match_the_code(root: &Path) -> Result<Vec<String>, String
 /// tool should not have to be the thing it builds.
 fn area_variants(root: &Path) -> Result<usize, String> {
     let path = root.join("crates/engine/src/command.rs");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     // The variants are **code**: a variant name inside a string is not a
     // variant, and a `}` inside a string does not end the enum. §161.
     let code = code_lines_kept(&text);
@@ -369,7 +367,7 @@ pub fn unknown_command_ids(root: &Path) -> Result<Vec<String>, String> {
     let known = registry_command_ids(root)?;
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for id in command_ids_in(&text) {
             let proposed_here = PROPOSED_IN.iter().any(|(n, file)| *n == id && *file == relative);
@@ -405,7 +403,7 @@ pub fn prose_examples_in_docs_resolve_to_real_methods(root: &Path) -> Result<Vec
     let (methods, actions) = wire_names(root)?;
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for problem in request_example_problems(&text, &methods, &actions) {
             problems.push(format!("{relative}: {problem}"));
@@ -430,8 +428,8 @@ pub fn prose_examples_in_docs_resolve_to_real_methods(root: &Path) -> Result<Vec
 /// is the defect this repository keeps writing down.
 pub fn wire_names(root: &Path) -> Result<(Vec<String>, Vec<String>), String> {
     let path = root.join("crates/control/src/protocol.rs");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
 
     let methods = arms_named(&text, "Method::");
     let actions = arms_named(&text, "UiAction::");
@@ -627,7 +625,7 @@ const PROSE: &[&str] = &["docs", "skills", "AGENTS.md", "README.md", "CONTRIBUTI
 pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, target) in document_links(&text) {
             let beside = doc.parent().map(|d| d.join(&target));
@@ -702,7 +700,7 @@ pub fn document_links(text: &str) -> Vec<(usize, String)> {
 pub fn symbol_file_claims(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, symbol, file) in symbol_claims(&text) {
             let path = root.join(&file);
@@ -710,7 +708,12 @@ pub fn symbol_file_claims(root: &Path) -> Result<Vec<String>, String> {
                 // A file that is not there is the document-links gate's business.
                 continue;
             }
-            let Ok(source) = std::fs::read_to_string(&path) else { continue };
+            // The file is whatever the prose names, so its kind is only known
+            // here: a Rust file is read for a subject, and anything else is
+            // read as it is. §204.
+            let source =
+                if file.ends_with(".rs") { read_rust(&path, Subject::Everything) } else { read_text(&path) };
+            let Ok(source) = source else { continue };
             if defines(&source, &symbol) {
                 continue;
             }
@@ -858,7 +861,7 @@ pub fn unknown_module_paths(root: &Path) -> Result<Vec<String>, String> {
     let crates = known_crate_roots(root);
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (start, _, token) in backticked(&text) {
             let Some(head) = module_path_head(&token) else { continue };
@@ -927,7 +930,7 @@ fn is_known_module_root(
 fn tree_modules(root: &Path) -> std::collections::BTreeSet<String> {
     let mut modules = std::collections::BTreeSet::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         let code = code_lines_kept(&text);
         for line in code.lines() {
             let trimmed = line.trim();
@@ -954,7 +957,7 @@ fn known_crate_roots(root: &Path) -> std::collections::BTreeSet<String> {
     let mut manifests = Vec::new();
     collect_manifests(root, &mut manifests);
     for manifest in manifests {
-        let Ok(text) = std::fs::read_to_string(&manifest) else { continue };
+        let Ok(text) = read_text(&manifest) else { continue };
         let mut section = String::new();
         for line in text.lines() {
             let trimmed = line.trim();
@@ -1032,7 +1035,7 @@ pub fn unknown_type_paths(root: &Path) -> Result<Vec<String>, String> {
     let own: BTreeSet<String> = TABLE.iter().map(|(name, _)| (*name).to_string()).collect();
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (line, ty, member, qualifier) in type_paths(&text) {
             // A path into somebody else's crate is not this tree's business:
@@ -1071,7 +1074,7 @@ fn path_root(path: &str) -> String {
 fn tree_types(root: &Path) -> std::collections::BTreeMap<String, BTreeSet<String>> {
     let mut types: std::collections::BTreeMap<String, BTreeSet<String>> = std::collections::BTreeMap::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         collect_types_in(&code_lines_kept(&text), &mut types);
     }
     types
@@ -1084,7 +1087,7 @@ fn tree_types(root: &Path) -> std::collections::BTreeMap<String, BTreeSet<String
 fn type_paths_in_code(root: &Path) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // The strings and the comments do not count: a doc comment that says
         // `Method::Render` is describing something that is not there.
         let code = code_lines_kept(&text);
@@ -1405,7 +1408,7 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
     collect_rust(root, &mut sources);
     let mut problems = Vec::new();
     for path in sources {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // Strings and comments do not count: this file names the reader, and
         // a doc comment that says `raw_json` is saying the opposite.
         //
@@ -1413,7 +1416,7 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
         // reads a parameter, and a test that calls the reader to prove the
         // reader works is not a third place where the shape of a parameter is
         // decided. §151.
-        let code = code_lines_kept(&production_of(&path, &text));
+        let code = code_lines_kept(&text);
         if !code.contains("raw_json(") {
             continue;
         }
@@ -1466,8 +1469,8 @@ pub fn the_step_bound_is_one_number_and_both_doors_name_it(root: &Path) -> Resul
     // two agree today.
     let mut declarations = Vec::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let code = code_lines_kept(&production_of(&path, &text));
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        let code = code_lines_kept(&text);
         for (n, line) in code.lines().enumerate() {
             let trimmed = line.trim_start();
             let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
@@ -1492,11 +1495,11 @@ pub fn the_step_bound_is_one_number_and_both_doors_name_it(root: &Path) -> Resul
     // comparison that refuses.
     for door in STEP_BOUND_DOORS {
         let path = root.join(door);
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = read_rust(&path, Subject::Production) else {
             problems.push(format!("{door}: the file this gate reads is not there"));
             continue;
         };
-        let code = code_lines_kept(&production_of(&path, &text));
+        let code = code_lines_kept(&text);
         if !compares_against_the_bound(&code, STEP_BOUND) {
             problems.push(format!(
                 "{door}: this door does not compare against `{STEP_BOUND}`; a script and a replay \
@@ -1557,11 +1560,10 @@ fn directory_walks(root: &Path) -> Vec<(String, usize, String)> {
     let mut sources = Vec::new();
     collect_rust(&root.join("xtask/src"), &mut sources);
     for path in sources {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let production = production_of(&path, &text);
-        let code = code_lines_kept(&production);
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        let code = code_lines_kept(&text);
         let relative = relative_name(root, &path);
-        for function in rust_functions(&relative, &production, &code) {
+        for function in rust_functions(&relative, &text, &code) {
             if !function.code_body.contains("read_dir") {
                 continue;
             }
@@ -1623,8 +1625,7 @@ const TEST_ONLY_LINTS: &[(&str, &str)] = &[
 /// §136.
 pub fn every_test_only_setting_names_a_denied_lint(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("clippy.toml");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let mut problems = Vec::new();
     for (number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -1664,8 +1665,8 @@ pub fn every_test_only_setting_names_a_denied_lint(root: &Path) -> Result<Vec<St
 /// the derivation have the same value today. That is what a gate is for.
 pub fn the_file_cap_is_derived_from_the_designs_budget(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("crates/io/src/format.rs");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let mut problems = Vec::new();
     // The code, not the text: a cap that stands only inside a string literal
     // is not a cap. §148.
@@ -1750,7 +1751,7 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
     let mut problems = Vec::new();
     for (relative, constant, names, what) in wanted {
         let path = root.join(relative);
-        let text = match std::fs::read_to_string(&path) {
+        let text = match read_rust(&path, Subject::Production) {
             Ok(t) => t,
             Err(e) => return Err(format!("could not read {}: {e}", path.display())),
         };
@@ -1816,13 +1817,13 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
 pub fn the_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, String> {
     let mut prose = String::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         prose.push_str(&text);
         prose.push('\n');
     }
     let mut problems = Vec::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         for name in the_tree_s_bounds(&code_lines_kept(&text)) {
             if has_word(&prose, &name) {
                 continue;
@@ -1892,8 +1893,8 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
     let mut problems = Vec::new();
     for (relative, what) in files {
         let path = root.join(relative);
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+        let text = read_rust(&path, Subject::Production)
+            .map_err(|e| format!("could not read {}: {e}", path.display()))?;
         // The tests are not the writer: a test may compare two shapes of the
         // same report with serde_json's own printer, and that is not the tree
         // writing anything. The cut **removes** the test items rather than
@@ -1901,10 +1902,9 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
         // item is still production code, and an *indented* test attribute
         // marks a method inside an impl block, not the end of the file.
         // §156.
-        let production = production_of(&path, &text);
         // Strings and comments do not count: this file names the writer, and
         // a doc comment that says `to_string_pretty` is saying the opposite.
-        let code = code_lines_kept(&production);
+        let code = code_lines_kept(&text);
         for (needle, because) in [
             (
                 "to_string_pretty(",
@@ -2076,7 +2076,7 @@ struct UiStruct {
 fn ui_structs(root: &Path) -> Vec<UiStruct> {
     let mut out = Vec::new();
     for path in rust_files(&root.join("crates/ui/src")) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         let code = code_lines_kept(&text);
         let relative = relative_name(root, &path);
         let lines: Vec<&str> = code.lines().collect();
@@ -2531,11 +2531,10 @@ fn key_index(signature: &str) -> Option<usize> {
 fn parameter_readers(root: &Path) -> Vec<Reader> {
     let mut out = Vec::new();
     for path in rust_files(&root.join("crates")) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         let relative = relative_name(root, &path);
-        let production = production_of(&path, &text);
-        let code = code_lines_kept(&production);
-        for function in rust_functions(&relative, &production, &code) {
+        let code = code_lines_kept(&text);
+        for function in rust_functions(&relative, &text, &code) {
             let is_method = has_word(&function.block, PARAMS_TYPE);
             let takes_params = function.signature.contains(&format!("&{PARAMS_TYPE}"));
             if !is_method && !takes_params {
@@ -2622,7 +2621,7 @@ fn names_read(
 /// The commands in the registry, read from the source.
 fn registry_commands(root: &Path) -> Vec<CommandSource> {
     let path = root.join("crates/engine/src/commands.rs");
-    let Ok(text) = std::fs::read_to_string(&path) else { return Vec::new() };
+    let Ok(text) = read_rust(&path, Subject::Everything) else { return Vec::new() };
     // The **shape** of the registry is read from the code: a `pub static` in a
     // comment or in a string is not a command. The **contents** — the id, the
     // parameter names — are read from the text, because there a string *is*
@@ -2801,14 +2800,13 @@ const EVALUATOR_NAMES: &[&str] = &["evaluate_once", "Evaluator"];
 pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for path in rust_files(&root.join("crates/ui/src")) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // The tests are not the panels: a test may name the evaluator to
         // prove that the shell does not call it. The cut **removes** the test
         // items rather than truncating the file at the test module: a test
         // written outside a module is a test too, and production code after
         // a test item is still production code. §156.
-        let production = production_of(&path, &text);
-        let code = code_lines_kept(&production);
+        let code = code_lines_kept(&text);
         let relative = relative_name(root, &path);
         for name in EVALUATOR_NAMES {
             if !has_word(&code, name) {
@@ -3175,8 +3173,11 @@ const SESSION_PUBLIC_METHODS: &[&str] = &[
 /// why it is not a second path. That is the only direction that fails safe.
 pub fn the_session_offers_no_second_path(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("crates/engine/src/session.rs");
-    let source =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    // The file **as it is**: the gate's question is which methods are in the
+    // shipped build, and answering it needs to see the test's methods and
+    // exclude them itself. §204.
+    let source = read_rust(&path, Subject::Everything)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let Some((block, first_line)) = impl_block(&source, "impl Session {") else {
         return Err(format!("{} has no `impl Session` block to read", path.display()));
     };
@@ -3271,15 +3272,14 @@ const DOCUMENT_WRITERS: &[&str] = &["load_document", "replace_document"];
 pub fn the_shell_does_not_write_the_document(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for path in rust_files(&root.join("crates/ui/src")) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // The tests are not the panels: a test may open a design to have
         // something to draw. The cut **removes** the test items rather than
         // truncating the file at the test module: a test written outside a
         // module is a test too, and production code after a test item is
         // still production code. §156.
-        let production = production_of(&path, &text);
         // The cut keeps the lines, so the line numbers are the file's.
-        let code = code_lines_kept(&production);
+        let code = code_lines_kept(&text);
         let relative = relative_name(root, &path);
         for name in DOCUMENT_WRITERS {
             if !has_word(&code, name) {
@@ -3321,7 +3321,7 @@ pub fn citation_drift(root: &Path) -> Result<Vec<String>, String> {
 
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let text = match std::fs::read_to_string(&doc) {
+        let text = match read_text(&doc) {
             Ok(t) => t,
             Err(e) => return Err(format!("could not read {}: {e}", doc.display())),
         };
@@ -3331,7 +3331,7 @@ pub fn citation_drift(root: &Path) -> Result<Vec<String>, String> {
                 problems.push(format!("{relative}: cites `{name}`, which is not in the tree"));
                 continue;
             };
-            let lines = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let lines = read_rust(&path, Subject::Everything).map_err(|e| e.to_string())?;
             let total = lines.lines().count();
             if from == 0 || to < from || to > total {
                 problems.push(format!("{relative}: cites `{name}:{from}`, outside a {total}-line file"));
@@ -3375,7 +3375,7 @@ pub fn citation_drift(root: &Path) -> Result<Vec<String>, String> {
 pub fn bare_line_citations(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, cited) in bare_citations(&text) {
             problems.push(format!(
@@ -3592,7 +3592,7 @@ pub fn crate_roots(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
 pub fn check_roots(roots: &[std::path::PathBuf]) -> Vec<String> {
     let mut problems = Vec::new();
     for path in roots {
-        let body = match std::fs::read_to_string(path) {
+        let body = match read_rust(path, Subject::Production) {
             Ok(body) => body,
             // A root that cannot be read is reported rather than skipped: a gate
             // that quietly ignores files it cannot see is not a gate.
@@ -3791,8 +3791,7 @@ pub fn workspace_members(manifest: &str) -> Vec<String> {
 /// directory's `Cargo.toml` is what joins them.
 pub fn readme_layers(root: &Path) -> Result<Vec<String>, String> {
     let readme = root.join("README.md");
-    let text =
-        std::fs::read_to_string(&readme).map_err(|e| format!("could not read {}: {e}", readme.display()))?;
+    let text = read_text(&readme).map_err(|e| format!("could not read {}: {e}", readme.display()))?;
 
     let documented = readme_layer_rows(&text);
     if documented.is_empty() {
@@ -3814,8 +3813,8 @@ pub fn readme_layers(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for (directory, level) in &documented {
         let manifest = root.join(directory).join("Cargo.toml");
-        let manifest_text = std::fs::read_to_string(&manifest)
-            .map_err(|e| format!("could not read {}: {e}", manifest.display()))?;
+        let manifest_text =
+            read_text(&manifest).map_err(|e| format!("could not read {}: {e}", manifest.display()))?;
         let package = package_name(&manifest_text);
         match code.iter().find(|(name, _)| *name == package) {
             Some((_, code_level)) if code_level == level => {}
@@ -3832,7 +3831,7 @@ pub fn readme_layers(root: &Path) -> Result<Vec<String>, String> {
     for (package, level) in &code {
         let documented_here = documented.iter().any(|(directory, _)| {
             root.join(directory).join("Cargo.toml").is_file()
-                && std::fs::read_to_string(root.join(directory).join("Cargo.toml"))
+                && read_text(root.join(directory).join("Cargo.toml"))
                     .map(|t| package_name(&t) == *package)
                     .unwrap_or(false)
         });
@@ -3944,7 +3943,7 @@ pub fn mod_groups(source: &str) -> Vec<Vec<String>> {
 pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in quoting_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, block) in exact_blocks(&text) {
             let Some(source) = source_named_by(&block) else {
@@ -3954,7 +3953,7 @@ pub fn quoted_code_matches_the_source(root: &Path) -> Result<Vec<String>, String
                 continue;
             };
             let path = root.join(&source);
-            let Ok(code) = std::fs::read_to_string(&path) else {
+            let Ok(code) = read_rust(&path, Subject::Production) else {
                 problems.push(format!(
                     "{relative}: the block at line {number} is marked exact but {source} is not in the tree"
                 ));
@@ -4420,14 +4419,14 @@ fn indent(lines: &[String]) -> String {
 pub fn prose_line_counts_match_the_files(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, paragraph) in paragraphs(&text) {
             for (at, count) in line_counts(&paragraph) {
                 let number = number + paragraph[..at].bytes().filter(|b| *b == b'\n').count();
                 let Some(file) = nearest_rust_path_before(&paragraph, at) else { continue };
                 let path = root.join(&file);
-                let Ok(body) = std::fs::read_to_string(&path) else { continue };
+                let Ok(body) = read_rust(&path, Subject::Everything) else { continue };
                 let lines: Vec<&str> = body.lines().collect();
                 if count > lines.len() {
                     problems.push(format!(
@@ -4448,7 +4447,7 @@ pub fn prose_line_counts_match_the_files(root: &Path) -> Result<Vec<String>, Str
                 let number = number + paragraph[..at].bytes().filter(|b| *b == b'\n').count();
                 let Some(file) = nearest_rust_path_before(&paragraph, at) else { continue };
                 let path = root.join(&file);
-                let Ok(body) = std::fs::read_to_string(&path) else { continue };
+                let Ok(body) = read_rust(&path, Subject::Everything) else { continue };
                 let actual = body.lines().count();
                 if actual != count {
                     problems.push(format!(
@@ -4564,6 +4563,58 @@ fn nearest_rust_path_before(paragraph: &str, at: usize) -> Option<String> {
     found
 }
 
+/// The table rows of a paragraph, and the row a place in it is in.
+///
+/// §204. A table row is a **breath of its own**: the columns of a table are
+/// different things, so a claim in one row and a file in the next are not
+/// about each other. The tree's own playbook says "`Session::execute` does
+/// the rest" in the third column of one row, and the next row's second column
+/// names `crates/engine/src/commands.rs` — and the gate read those two as one
+/// claim, which is false: `Session::execute` is in `session.rs`.
+///
+/// The gate did not notice, because the claim was reduced to the bare name
+/// `execute` and the file's **test module** said `execute` — the code the tree
+/// ships never says it. §204.
+struct TableRows {
+    /// The row each line of the paragraph is in. `None` for a line that is not
+    /// a table row.
+    lines: Vec<Option<usize>>,
+    /// The byte offset each line starts at.
+    starts: Vec<usize>,
+}
+
+impl TableRows {
+    /// The rows of a paragraph.
+    fn new(paragraph: &str) -> Self {
+        let mut lines = Vec::new();
+        let mut starts = Vec::new();
+        let mut next = 0usize;
+        let mut row = 0usize;
+        for line in paragraph.lines() {
+            starts.push(next);
+            let trimmed = line.trim();
+            if trimmed.starts_with('|') && trimmed.ends_with('|') {
+                lines.push(Some(row));
+                row += 1;
+            } else {
+                lines.push(None);
+            }
+            next += line.len() + 1;
+        }
+        TableRows { lines, starts }
+    }
+
+    /// The row the place at `at` is in, if it is in a table row.
+    fn row_of(&self, at: usize) -> Option<usize> {
+        let index = match self.starts.binary_search(&at) {
+            Ok(index) => index,
+            Err(0) => return None,
+            Err(index) => index - 1,
+        };
+        self.lines.get(index).copied().flatten()
+    }
+}
+
 /// Code that prose attributes to a file, and the file it is attributed to.
 ///
 /// §42: the rollback is described in five places in this tree, and three of
@@ -4592,12 +4643,20 @@ fn nearest_rust_path_before(paragraph: &str, at: usize) -> Option<String> {
 pub fn attributed_code_is_in_the_file(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, paragraph) in paragraphs(&text) {
+            let rows = TableRows::new(&paragraph);
             let spans = backticked_spans(&paragraph);
             for pair in spans.windows(2) {
                 let (left, right) = (&pair[0], &pair[1]);
+                // A table row is a breath of its own: the columns of a table
+                // are different things. §204.
+                if let (Some(a), Some(b)) = (rows.row_of(left.0), rows.row_of(right.0))
+                    && a != b
+                {
+                    continue;
+                }
                 let gap = right.0.saturating_sub(left.2);
                 if gap > 40 {
                     continue;
@@ -4615,7 +4674,7 @@ pub fn attributed_code_is_in_the_file(root: &Path) -> Result<Vec<String>, String
                 }
                 let Some(claim) = code_claim(code) else { continue };
                 let path = root.join(file);
-                let Ok(body) = std::fs::read_to_string(&path) else { continue };
+                let Ok(body) = read_rust(&path, Subject::Production) else { continue };
                 // The claim is about **code**: a mention inside a string or a
                 // comment is a sentence about the code, not the code. §161.
                 //
@@ -4709,7 +4768,7 @@ fn code_claim(code: &str) -> Option<Claim> {
 pub fn prose_constants_match_the_code(root: &Path) -> Result<Vec<String>, String> {
     let mut constants: Vec<(String, String, String)> = Vec::new();
     for path in rust_files(root) {
-        let Ok(source) = std::fs::read_to_string(&path) else { continue };
+        let Ok(source) = read_rust(&path, Subject::Production) else { continue };
         let where_ = relative_name(root, &path);
         for (name, value) in constants_in(&source) {
             constants.push((name, value, where_.clone()));
@@ -4717,7 +4776,7 @@ pub fn prose_constants_match_the_code(root: &Path) -> Result<Vec<String>, String
     }
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, line) in text.lines().enumerate() {
             // A table row: one cell holds the constant and another holds the
@@ -4987,6 +5046,219 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
     found
 }
 
+/// Which view of a Rust file a gate's subject is about.
+///
+/// §204. A gate that reads the tree's Rust source has to say whether it is
+/// asking about **the code the tree ships** or about **the file as it is**.
+/// The difference is a test: a constant that only a test declares is not a
+/// bound of the tree, a struct that only a test declares is not a type of it,
+/// and a line that only a test owns is not a line of the tree.
+///
+/// The subject is an **argument**, so it cannot be forgotten: the rule is not
+/// "remember to cut the tests", it is "say which view you want".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subject {
+    /// The code the tree ships: the file without its tests.
+    Production,
+    /// The file as it is, tests included.
+    Everything,
+}
+
+/// A file that is not Rust: a document, a manifest, a workflow.
+///
+/// §204. The tree's one way to read everything that is not a Rust file, and it
+/// **refuses** a Rust file: a Rust file is read with a subject, and a gate that
+/// reads one without saying which view it wants has forgotten something.
+pub fn read_text(path: impl AsRef<Path>) -> Result<String, std::io::Error> {
+    let path = path.as_ref();
+    if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a Rust file is read with a subject",
+        ));
+    }
+    std::fs::read_to_string(path)
+}
+
+/// A Rust file, read for a subject.
+///
+/// §204. The tree's one way to open a Rust file. `Subject::Production` cuts
+/// the file's tests — the cut §150 through §154 gave the tree, applied here
+/// once — and `Subject::Everything` keeps them, for the gates whose question
+/// is about the file as it is.
+pub fn read_rust(path: impl AsRef<Path>, subject: Subject) -> Result<String, std::io::Error> {
+    let path = path.as_ref();
+    let text = std::fs::read_to_string(path)?;
+    Ok(match subject {
+        Subject::Production => production_of(path, &text),
+        Subject::Everything => text,
+    })
+}
+
+/// Every gate that opens a Rust file, and the subject it reads it for.
+///
+/// §204. This is the list items 31 and 32 asked for: **every** gate that
+/// opens a Rust file, and a decision for each — is its subject the code the
+/// tree ships, or the file as it is?
+///
+/// The list is not a copy of what the code does: it is a **promise** about it,
+/// and the gate `the_gates_that_read_rust_say_what_they_read` holds it up.
+/// A gate that opens a Rust file and is not in this list has not said what it
+/// reads, and a gate in this list whose call site says something else has
+/// changed its mind without saying so.
+///
+/// The `Everything` rows are not a second class. A gate whose question is
+/// about the **file** — how many lines it has, which test it holds — is
+/// asking about the file as it is, and cutting the tests would answer a
+/// different question.
+const RUST_READING_GATES: &[(&str, Subject)] = &[
+    // The code the tree ships.
+    ("area_variants", Subject::Production),
+    ("attributed_code_is_in_the_file", Subject::Production),
+    ("check_roots", Subject::Production),
+    ("control_methods", Subject::Production),
+    ("directory_walks", Subject::Production),
+    ("fingerprint_sees_every_field", Subject::Production),
+    ("gate_problems", Subject::Production),
+    ("limits_are_enforced", Subject::Production),
+    ("parameter_readers", Subject::Production),
+    ("prose_constants_match_the_code", Subject::Production),
+    ("quoted_code_matches_the_source", Subject::Production),
+    ("run", Subject::Production),
+    ("shape_of", Subject::Production),
+    ("symbol_file_claims", Subject::Everything),
+    ("the_bounds_are_named_in_the_prose", Subject::Production),
+    ("the_file_cap_is_derived_from_the_designs_budget", Subject::Production),
+    ("the_gates_that_read_rust_say_what_they_read", Subject::Production),
+    ("the_memory_budgets_are_derived_from_the_models", Subject::Production),
+    ("the_raw_parameter_reader_has_two_homes", Subject::Production),
+    ("the_session_offers_no_second_path", Subject::Everything),
+    ("the_shell_does_not_evaluate", Subject::Production),
+    ("the_shell_does_not_write_the_document", Subject::Production),
+    ("the_step_bound_is_one_number_and_both_doors_name_it", Subject::Production),
+    ("the_tree_writes_its_json_with_one_writer", Subject::Production),
+    ("tree_modules", Subject::Production),
+    ("tree_types", Subject::Production),
+    ("type_paths_in_code", Subject::Production),
+    ("ui_structs", Subject::Production),
+    ("wire_names", Subject::Production),
+    ("panic_boundaries_are_declared", Subject::Production),
+    // The file as it is.
+    ("citation_drift", Subject::Everything),
+    ("citations_of_tests_point_at_the_test", Subject::Everything),
+    ("prose_line_counts_match_the_files", Subject::Everything),
+    ("registry_command_ids", Subject::Everything),
+    ("registry_commands", Subject::Everything),
+];
+
+/// The gates that read the tree's Rust source say which view they read.
+///
+/// §204. Two promises, both about the tree's own source:
+///
+/// - the tree has **two** ways to read a file and no third — `read_text` for
+///   everything that is not Rust, and `read_rust` for a Rust file, and each
+///   subject is an argument, so a gate cannot read a Rust file by accident;
+/// - every gate that opens a Rust file is in `RUST_READING_GATES`, and the
+///   subject at its call site is the one the list names.
+///
+/// The second is what keeps the first honest. A gate that opens a Rust file
+/// and is not in the list has not said what it reads; a gate in the list whose
+/// call site says something else has changed its mind, and the list is now
+/// wrong.
+pub fn the_gates_that_read_rust_say_what_they_read(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("xtask/src/lists.rs");
+    let source = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let code = code_lines_kept(&source);
+    let mut problems = Vec::new();
+
+    // Two ways to read a file, and no third.
+    let reads = code.matches("std::fs::read_to_string(").count();
+    if reads != 2 {
+        problems.push(format!(
+            "xtask/src/lists.rs: the tree reads a file {} time(s) with `std::fs::read_to_string`; \
+             it has two ways to read a file — `read_text` and `read_rust` — and no third. §204.",
+            reads
+        ));
+    }
+
+    // Every call of `read_rust`, and the gate it is in.
+    let mut calls: Vec<(String, Subject)> = Vec::new();
+    let mut current = String::new();
+    for line in code.lines() {
+        if let Some(name) = top_level_fn_name(line) {
+            current = name.to_string();
+            // The line that defines `read_rust` names it, but does not call it.
+            continue;
+        }
+        let Some(at) = line.find("read_rust(") else { continue };
+        let Some(subject) = subject_in(&line[at..]) else {
+            problems.push(format!(
+                "xtask/src/lists.rs: the call of `read_rust` in `{current}` does not say which view \
+                 it reads; a Rust file is read for a subject. §204."
+            ));
+            continue;
+        };
+        calls.push((current.clone(), subject));
+    }
+
+    for (gate, subject) in &calls {
+        match RUST_READING_GATES.iter().find(|(name, _)| name == gate) {
+            None => problems.push(format!(
+                "xtask/src/lists.rs: the gate `{gate}` opens a Rust file and is not in the list of \
+                 the gates that do; a gate that reads the tree's source says which view it reads. \
+                 §204."
+            )),
+            Some((_, wanted)) if wanted != subject => problems.push(format!(
+                "xtask/src/lists.rs: the gate `{gate}` reads a Rust file for `{}`, and the list says \
+                 `{}`; the list is a promise about the code, and it is wrong. §204.",
+                say_the_subject(*subject),
+                say_the_subject(*wanted),
+            )),
+            Some(_) => {}
+        }
+    }
+    for (gate, _) in RUST_READING_GATES {
+        if !calls.iter().any(|(name, _)| name == gate) {
+            problems.push(format!(
+                "xtask/src/lists.rs: the list says the gate `{gate}` opens a Rust file, and it does \
+                 not; the list is a promise about the code, and it is wrong. §204."
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The name of the top-level function a line opens, if it opens one.
+fn top_level_fn_name(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("pub fn ").or_else(|| line.strip_prefix("fn "))?;
+    let name: &str = rest.split(['(', ' ']).next()?;
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    Some(name)
+}
+
+/// The subject a call of `read_rust` reads for.
+fn subject_in(call: &str) -> Option<Subject> {
+    if call.contains("Subject::Production") {
+        Some(Subject::Production)
+    } else if call.contains("Subject::Everything") {
+        Some(Subject::Everything)
+    } else {
+        None
+    }
+}
+
+/// What a subject is called, in a message.
+fn say_the_subject(subject: Subject) -> &'static str {
+    match subject {
+        Subject::Production => "the code the tree ships",
+        Subject::Everything => "the file as it is",
+    }
+}
+
 /// Every limit in the model's table is enforced somewhere in the tree.
 ///
 /// The table in `crates/model/src/lib.rs` is the tree's list of safety limits,
@@ -5009,9 +5281,9 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
 /// perfectly good code — and it enforces nothing. §150.
 pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     let table = root.join("crates/model/src/lib.rs");
-    let source =
-        std::fs::read_to_string(&table).map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = code_lines_kept(&production_of(&table, &source));
+    let source = read_rust(&table, Subject::Production)
+        .map_err(|e| format!("could not read the limits table: {e}"))?;
+    let code = code_lines_kept(&source);
     let Some((declared, rest)) = limits_table(&code) else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
@@ -5020,8 +5292,8 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
     }
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let body = if path == table { rest.clone() } else { code_lines_kept(&production_of(&path, &text)) };
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        let body = if path == table { rest.clone() } else { code_lines_kept(&text) };
         for name in &declared {
             if has_word(&body, name) && !used.contains(name) {
                 used.push(name.clone());
@@ -5254,7 +5526,7 @@ fn limits_table(code: &str) -> Option<(Vec<String>, String)> {
 pub fn citations_of_tests_point_at_the_test(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, paragraph) in paragraphs(&text) {
             let spans = backticked_spans(&paragraph);
@@ -5269,7 +5541,7 @@ pub fn citations_of_tests_point_at_the_test(root: &Path) -> Result<Vec<String>, 
                         continue;
                     }
                     let path = root.join(&file);
-                    let Ok(body) = std::fs::read_to_string(&path) else { continue };
+                    let Ok(body) = read_rust(&path, Subject::Everything) else { continue };
                     let lines: Vec<&str> = body.lines().collect();
                     if line == 0 || line > lines.len() {
                         continue;
@@ -5631,7 +5903,7 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
 
     // Every command the prose names must be a command.
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (line, name) in named_commands(&text) {
             if !commands.iter().any(|command| command.name == name) {
@@ -5643,7 +5915,7 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
     }
 
     // Every command must be in this crate's own table of commands.
-    let source = std::fs::read_to_string(root.join("xtask/src/lib.rs"))
+    let source = read_rust(root.join("xtask/src/lib.rs"), Subject::Production)
         .map_err(|e| format!("could not read xtask/src/lib.rs: {e}"))?;
     for command in commands {
         let row = format!("//! | [`{name}`]", name = command.name);
@@ -5668,7 +5940,7 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
     // checking skill's. A gate that stops running must stop being documented
     // in both, and a documented gate that does not exist is caught here.
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let rows = gate_rows(&text);
         if rows.is_empty() {
             continue;
@@ -5716,7 +5988,7 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
     // the three that **nothing** read were all missing the two gates that
     // were added last. §189.
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (line, named) in gate_lists(&text, phases) {
             let named: Vec<&str> = named.iter().map(String::as_str).collect();
@@ -5730,8 +6002,7 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
         }
     }
 
-    let readme = std::fs::read_to_string(root.join("README.md"))
-        .map_err(|e| format!("could not read README.md: {e}"))?;
+    let readme = read_text(root.join("README.md")).map_err(|e| format!("could not read README.md: {e}"))?;
 
     // The usage text's line for `ci` must name the phases, and only them.
     if let Some(ci) = commands.iter().find(|command| command.name == "ci") {
@@ -5774,8 +6045,7 @@ const WORKFLOW: &str = ".github/workflows/ci.yml";
 /// `cargo xtask`, not in this file") was false of the one gate that had no
 /// name.
 pub fn workflow_problems(root: &Path, commands: &[GateCommand]) -> Result<Vec<String>, String> {
-    let text = std::fs::read_to_string(root.join(WORKFLOW))
-        .map_err(|e| format!("could not read {WORKFLOW}: {e}"))?;
+    let text = read_text(root.join(WORKFLOW)).map_err(|e| format!("could not read {WORKFLOW}: {e}"))?;
     let mut problems = Vec::new();
     for command in commands.iter().filter(|command| !command.gate) {
         if !runs_by_name(&text, command.name) {
@@ -5838,7 +6108,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The layering table, in the code and in the documentation.
     let architecture = root.join(ARCHITECTURE);
-    let markdown = match std::fs::read_to_string(&architecture) {
+    let markdown = match read_text(&architecture) {
         Ok(text) => text,
         Err(e) => return Err(format!("could not read {ARCHITECTURE}: {e}")),
     };
@@ -5857,8 +6127,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // which meant `cargo xtask lists` said "lists are sorted" while the list a
     // change actually collides on was not among them. Found by
     // `scripts/mutation-test-gates.sh`.
-    let manifest = std::fs::read_to_string(root.join("Cargo.toml"))
-        .map_err(|e| format!("could not read Cargo.toml: {e}"))?;
+    let manifest =
+        read_text(root.join("Cargo.toml")).map_err(|e| format!("could not read Cargo.toml: {e}"))?;
     let members = workspace_members(&manifest);
     if members.is_empty() {
         problems.push("Cargo.toml has no members list to check".to_string());
@@ -5876,7 +6146,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The `mod` groups of this crate.
     for path in [root.join("xtask/src/lib.rs"), root.join("apps/craftkit-web/src/main.rs")] {
-        let Ok(source) = std::fs::read_to_string(&path) else { continue };
+        let Ok(source) = read_rust(&path, Subject::Production) else { continue };
         for group in mod_groups(&source) {
             if !is_sorted(&group) {
                 problems.push(format!(
@@ -5962,7 +6232,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     );
 
     // The instrument's own closing ratio: computed, or written by hand. §71.
-    if let Ok(script) = std::fs::read_to_string(root.join("scripts/mutation-test-gates.sh")) {
+    if let Ok(script) = read_text(root.join("scripts/mutation-test-gates.sh")) {
         problems.extend(
             mutation_ratio_is_computed(&script)
                 .into_iter()
@@ -6117,6 +6387,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // The fuzzer's targets, and the table the document lists them in. §201.
     problems.extend(the_fuzz_targets_are_the_table(root)?);
 
+    // The gates that read the tree's Rust source, and the view each one reads. §204.
+    problems.extend(the_gates_that_read_rust_say_what_they_read(root)?);
+
     // The shell's state, and the values it may not hold. §138.
     problems.extend(
         the_shell_caches_no_evaluated_value(root)?
@@ -6181,8 +6454,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// a reader of the document would be reading a list that was already wrong.
 pub fn the_fuzz_targets_are_the_table(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("docs/fuzzing.md");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let rows = targets_in_the_fuzzing_table(&text)?;
     let names: Vec<String> = crate::fuzz::Target::ALL.iter().map(|t| t.name().to_string()).collect();
     let children: Vec<String> = crate::fuzz::Target::ALL.iter().map(|t| t.child_args().join(" ")).collect();
@@ -6251,8 +6523,8 @@ fn targets_in_the_fuzzing_table(text: &str) -> Result<Vec<(String, String)>, Str
 /// wire name is written down.
 fn control_methods(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("crates/control/src/protocol.rs");
-    let source =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let source = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let lines: Vec<String> = source.lines().map(|l| l.to_string()).collect();
     // The **shape** of the arms is read from the code: the value of an arm is
     // a string literal, and in the code view a literal is blanked, so what
@@ -6297,8 +6569,7 @@ fn control_methods(root: &Path) -> Result<Vec<String>, String> {
 /// written as a list, and the one an agent is sent to.
 fn methods_in_the_recipe_table(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("docs/recipes/add-a-control-channel-method.md");
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let text = read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let mut names = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
@@ -6354,7 +6625,7 @@ pub fn control_methods_are_listed(root: &Path) -> Result<Vec<String>, String> {
 
     let half = methods.len() / 2;
     for doc in prose_files(root) {
-        let Ok(text) = std::fs::read_to_string(&doc) else { continue };
+        let Ok(text) = read_text(&doc) else { continue };
         let relative = relative_name(root, &doc);
         for (number, paragraph) in paragraphs(&text) {
             let named: Vec<&str> = methods
@@ -6411,8 +6682,8 @@ pub fn control_methods_are_listed(root: &Path) -> Result<Vec<String>, String> {
 ///   it holds is checked through `Key`.
 pub fn fingerprint_sees_every_field(root: &Path) -> Result<Vec<String>, String> {
     let path = root.join("crates/model/src/fingerprint.rs");
-    let source =
-        std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let source = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     // The **shape** comes from the code: an impl block or a hash method
     // inside a string is a sentence about one, not one. §165.
     let code = code_lines_kept(&source);
@@ -6458,7 +6729,7 @@ enum Shape {
 /// The shape of `name`, and the file that declares it.
 fn shape_of(sources: &[PathBuf], name: &str) -> Option<(PathBuf, Shape)> {
     for path in sources {
-        let Ok(text) = std::fs::read_to_string(path) else { continue };
+        let Ok(text) = read_rust(path, Subject::Production) else { continue };
         // The code, not the text: a `struct` inside a string is a sentence
         // about a struct, and a `}` inside one does not end it. §165.
         let code = code_lines_kept(&text);
@@ -10532,5 +10803,174 @@ printf '%s%d/%d caught.%s\\n' \\
         assert!(!code_lines_kept(commented).contains(STEP_BOUND), "a comment is not a call");
         let named = "fn f() { let _ = crate::MAX_COMMAND_STEPS; }\n";
         assert!(code_lines_kept(named).contains(STEP_BOUND), "a name is a name");
+    }
+
+    // ------------------------------------------------------- §204 ----------
+
+    /// A bound that only a test declares is not a bound of the tree.
+    ///
+    /// §204. The gate that says every bound the tree has is named in the
+    /// tree's prose read the whole file, so a constant that only a test
+    /// declares was a bound of the tree — and the prose would have to name it.
+    #[test]
+    fn a_bound_that_only_a_test_declares_is_not_a_bound_of_the_tree() {
+        let dir = std::env::temp_dir().join(format!("craftkit-bound-test-only-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        let docs = dir.join("docs/architecture.md");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub const MAX_DOCUMENT_BYTES: usize = 32 * 1024 * 1024;\n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             pub const MAX_TEST_ONLY_BYTES: usize = 7;\n\
+             }\n",
+        )
+        .expect("the fabricated source");
+        std::fs::write(&docs, "The design's budget is `MAX_DOCUMENT_BYTES`.\n").expect("the prose");
+
+        let problems = the_bounds_are_named_in_the_prose(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A constant that only a test declares is not the code's constant.
+    ///
+    /// §204. The gate that says every number in prose is the constant's value
+    /// read the whole file, so a test's own constant was offered to the reader
+    /// as one of the tree's numbers — and the message named the file it was in.
+    #[test]
+    fn a_constant_that_only_a_test_declares_is_not_the_codes_constant() {
+        let dir = std::env::temp_dir().join(format!("craftkit-constant-test-only-{}", std::process::id()));
+        let model = dir.join("crates/model/src");
+        let docs = dir.join("docs/architecture.md");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub const MAX_NODES: usize = 10_000;\n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             pub const MAX_NODES: usize = 1234;\n\
+             }\n",
+        )
+        .expect("the fabricated source");
+        // The prose is wrong on purpose: the code says 10 000.
+        std::fs::write(&docs, "The model holds `MAX_NODES` 12.\n").expect("the prose");
+
+        let problems = prose_constants_match_the_code(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("10_000"), "{problems:#?}");
+        assert!(!problems[0].contains("1234"), "a test's constant is not the code's: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A claim in one row of a table and a file in the next are not a claim.
+    ///
+    /// §204. The columns of a table are different things, and the tree's own
+    /// playbook says "`Session::execute` does the rest" in the third column of
+    /// one row while the next row's second column names a file — and the gate
+    /// read those two as one claim. It was false, and it was true only
+    /// because the file's **test module** said `execute`.
+    #[test]
+    fn a_claim_in_one_row_of_a_table_and_a_file_in_the_next_are_not_a_claim() {
+        let dir = std::env::temp_dir().join(format!("craftkit-table-rows-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        let docs = dir.join("docs/playbook.md");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        // The production code never says `execute`.
+        std::fs::write(engine.join("commands.rs"), "pub fn run() {}\n").expect("the fabricated source");
+        std::fs::write(
+            &docs,
+            "| Piece | File | What |\n\
+             | --- | --- | --- |\n\
+             | the behaviour | `run` in `commands.rs` | `Session::execute` does the rest |\n\
+             | the test | `crates/engine/src/commands.rs`, `mod tests` | calls the command |\n",
+        )
+        .expect("the fabricated prose");
+
+        let problems = attributed_code_is_in_the_file(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A claim and a file in the same row of a table are a claim.
+    ///
+    /// §204. The rule that a table row is a breath of its own must not stop
+    /// the gate from checking the claims that are really there.
+    #[test]
+    fn a_claim_and_a_file_in_the_same_row_of_a_table_are_a_claim() {
+        let dir = std::env::temp_dir().join(format!("craftkit-table-same-row-{}", std::process::id()));
+        let engine = dir.join("crates/engine/src");
+        let docs = dir.join("docs/playbook.md");
+        std::fs::create_dir_all(&engine).expect("the fabricated tree");
+        std::fs::create_dir_all(docs.parent().expect("the documents")).expect("the fabricated tree");
+        std::fs::write(engine.join("commands.rs"), "pub fn run() {}\n").expect("the fabricated source");
+        std::fs::write(
+            &docs,
+            "| Piece | File | What |\n\
+             | --- | --- | --- |\n\
+             | the behaviour | `Session::execute` in `crates/engine/src/commands.rs` | does the rest |\n",
+        )
+        .expect("the fabricated prose");
+
+        let problems = attributed_code_is_in_the_file(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("Session::execute"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every gate that opens a Rust file says which view it reads.
+    ///
+    /// §204. The list is a promise about the code, and this is the check that
+    /// holds it up: a gate that opens a Rust file and is not in the list has
+    /// not said what it reads, and a gate in the list whose call site says
+    /// something else has changed its mind.
+    #[test]
+    fn every_gate_that_opens_a_rust_file_says_which_view_it_reads() {
+        let root = crate::root().expect("root");
+        let problems = the_gates_that_read_rust_say_what_they_read(&root).expect("runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // The list is not empty, and it says both things.
+        assert!(!RUST_READING_GATES.is_empty(), "the list of the gates that read Rust is empty");
+        assert!(
+            RUST_READING_GATES.iter().any(|(_, subject)| *subject == Subject::Production),
+            "no gate says it reads the code the tree ships"
+        );
+        assert!(
+            RUST_READING_GATES.iter().any(|(_, subject)| *subject == Subject::Everything),
+            "no gate says it reads the file as it is"
+        );
+    }
+
+    /// A Rust file is read with a subject, and everything else is read as it is.
+    ///
+    /// §204. `read_text` refuses a Rust file, so a gate cannot read one by
+    /// accident: the subject is an argument, and a gate that has not made one
+    /// has not said what it reads.
+    #[test]
+    fn a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is() {
+        let dir = std::env::temp_dir().join(format!("craftkit-read-subject-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the fabricated tree");
+        let rust = dir.join("thing.rs");
+        let text = dir.join("thing.md");
+        std::fs::write(&rust, "pub fn one() {}\n#[cfg(test)]\nmod tests { pub fn two() {} }\n")
+            .expect("the fabricated source");
+        std::fs::write(&text, "a document\n").expect("the fabricated document");
+
+        // The production view has no test in it; the whole file has.
+        let production = read_rust(&rust, Subject::Production).expect("the file is read");
+        assert!(!production.contains("two"), "a test is not the code the tree ships");
+        let everything = read_rust(&rust, Subject::Everything).expect("the file is read");
+        assert!(everything.contains("two"), "the file as it is has the test in it");
+
+        // A document is read as it is.
+        assert_eq!(read_text(&text).expect("the document is read"), "a document\n");
+        // And a Rust file is not.
+        assert!(read_text(&rust).is_err(), "a Rust file is read with a subject");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
