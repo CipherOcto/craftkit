@@ -2869,6 +2869,99 @@ pub fn the_shell_does_not_evaluate(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
+/// The pending format changes are declared and applied **in code**.
+///
+/// §209. The io crate's own check read **its own file's text** to ask whether
+/// a pending change was declared and applied, and a `mod` inside a **comment**
+/// satisfied it — measured. A claim about code is held where the code is read,
+/// and the code is read here.
+///
+/// The **names** are string literals, so they are read from the **text**; the
+/// table they are in is found in the **code**, so a `FILES` that stands only
+/// inside a comment is not a table. The two views are the same length, byte
+/// for byte, so a name in one is a name in the other.
+///
+/// The claim is also held, indirectly, by the compiler and by the io crate's
+/// own runtime test: a missing `mod` does not compile, and a missing step is
+/// not found. **The compiler cannot be mutation-tested** — a mutation that
+/// breaks the build is reported as a build that did not compile, and not as a
+/// caught gate — so this gate is the one a mutation can bite.
+pub fn the_pending_changes_are_declared_in_code(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates/io/src/format/pending.rs");
+    let text = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let code = code_lines_kept(&text);
+    let mut problems = Vec::new();
+    for name in pending_names(&code, &text) {
+        if !has_word(&code, &format!("mod {name};")) {
+            problems.push(format!(
+                "{}: the pending change `{name}` is in `FILES` but no `mod {name};` declares \
+                 it, so Rust never compiles the file and the migration never runs. A `mod` in a \
+                 comment is not a declaration. §209.",
+                path.display()
+            ));
+        }
+        if !has_word(&code, &format!("{name}::step")) {
+            problems.push(format!(
+                "{}: the pending change `{name}` is in `FILES` but no `{name}::step` calls \
+                 it, so the migration does not run and an older design loads without its rewrite. \
+                 A mention in a comment is not a call. §209.",
+                path.display()
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// The names in the io crate's `FILES` table.
+///
+/// The table is found in the **code**, so a `FILES` that stands only inside a
+/// comment is not a table; the names are read from the **text**, because a
+/// name is a string and a string is the subject there. §209.
+fn pending_names(code: &str, text: &str) -> Vec<String> {
+    let Some(start) = code.find("const FILES") else { return Vec::new() };
+    // The **value's** brackets, not the type's: the declaration is
+    // `const FILES: &[&str] = &[…]`, and the first `[` belongs to the type.
+    let Some(equals) = code[start..].find('=').map(|at| start + at) else { return Vec::new() };
+    let Some(open) = code[equals..].find('[').map(|at| equals + at) else { return Vec::new() };
+    let Some(close) = bracket_closes_at(code, open) else { return Vec::new() };
+    strings_in(&text[open..=close])
+}
+
+/// The offset of the `]` that closes the `[` at `open`.
+///
+/// The brackets are read out of the **code**, where a bracket inside a string
+/// is blanked and a bracket inside a comment is blanked. §209.
+fn bracket_closes_at(code: &str, open: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    for (at, byte) in code.as_bytes().iter().enumerate().skip(open) {
+        match byte {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(at);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The strings in a piece of text, without their quotes.
+fn strings_in(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('"') {
+        let after = &rest[open + 1..];
+        let Some(end) = after.find('"') else { break };
+        out.push(after[..end].to_string());
+        rest = &after[end + 1..];
+    }
+    out
+}
+
 /// Whether `code` contains `name` as a whole word.
 ///
 /// A whole word, because `Evaluator` is not `Evaluators` and `evaluate_once`
@@ -5052,6 +5145,12 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "a gate in a test is still a gate the xtask has, and a raw read in a test is still a raw read",
     ),
     (
+        "the_pending_changes_are_declared_in_code",
+        Subject::Production,
+        "the pending change is declared and applied in the module the tree ships, and a `mod` in a \
+         test declares nothing",
+    ),
+    (
         "the_session_offers_no_second_path",
         Subject::Everything,
         "the question is which methods the shipped session has, and a test-only method is in the file and not in the build",
@@ -6226,6 +6325,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         )
     }));
 
+    // Every pending format change is declared and applied, in code. §209.
+    problems.extend(the_pending_changes_are_declared_in_code(root)?);
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -6253,7 +6355,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              gates in the prose is the whole list in the order `ci` runs them, \
              the fuzzer's targets are the table the document lists, \
              the tree's walk \
-             has one home, and the session offers no way into the design but \
+             has one home, every pending change is declared and applied in code, \
+             and the session offers no way into the design but \
              the registry",
             roots.len()
         );
@@ -8003,6 +8106,72 @@ mod tests {
 
         let readers = parameter_readers(&dir);
         assert!(readers.is_empty(), "a type that starts with `Params` is not the params type: {readers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A pending change that stands only in a comment is not declared.
+    ///
+    /// §209. The io crate's own check read **its own file's text** and asked
+    /// whether a pending change was declared and applied, so a `mod` inside a
+    /// **comment** satisfied it. The gate reads the **code**, and a comment is
+    /// not code.
+    #[test]
+    fn a_pending_change_that_stands_only_in_a_comment_is_not_declared() {
+        let dir = std::env::temp_dir().join(format!("craftkit-pending-{}", std::process::id()));
+        let module = dir.join("crates/io/src/format");
+        std::fs::create_dir_all(&module).expect("the fabricated tree");
+        std::fs::write(
+            module.join("pending.rs"),
+            "const FILES: &[&str] = &[\"probe\"];\n\
+             \n\
+             // mod probe;\n\
+             // probe::step\n\
+             \n\
+             fn step_for(name: &str) -> Option<fn(&mut craftkit_model::Document)> {\n\
+             let _ = name;\n\
+             None\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let problems = the_pending_changes_are_declared_in_code(&dir).expect("runs");
+        assert_eq!(problems.len(), 2, "a comment declares nothing and calls nothing: {problems:#?}");
+        assert!(
+            problems.iter().any(|p| p.contains("no `mod probe;` declares it")),
+            "the declaration in a comment is not a declaration: {problems:#?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("no `probe::step` calls it")),
+            "the call in a comment is not a call: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A pending change that is declared and applied is not reported.
+    ///
+    /// The gate has to be quiet when the tree is right, or it is noise. §209.
+    #[test]
+    fn a_pending_change_that_is_declared_and_applied_is_not_reported() {
+        let dir = std::env::temp_dir().join(format!("craftkit-pending-ok-{}", std::process::id()));
+        let module = dir.join("crates/io/src/format");
+        std::fs::create_dir_all(&module).expect("the fabricated tree");
+        std::fs::write(
+            module.join("pending.rs"),
+            "const FILES: &[&str] = &[\"probe\"];\n\
+             \n\
+             mod probe;\n\
+             \n\
+             fn step_for(name: &str) -> Option<fn(&mut craftkit_model::Document)> {\n\
+             match name {\n\
+             \"probe\" => Some(probe::step),\n\
+             _ => None,\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+
+        let problems = the_pending_changes_are_declared_in_code(&dir).expect("runs");
+        assert!(problems.is_empty(), "a declared and applied pending change is not a problem: {problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

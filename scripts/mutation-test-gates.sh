@@ -1547,6 +1547,23 @@ swap crates/io/src/format/pending.rs \
 expect_catch "io: the pending steps do not run in order" \
     "cargo test -p craftkit-io --profile ci steps_run"
 
+# And the other half of the wiring, read in the **code**. Section 209: the io
+# crate's own check read its own file's TEXT to ask whether a pending change
+# was declared and applied, so a `mod` inside a **comment** satisfied it --
+# measured, the check passed with the whole wiring in comments.
+#
+# The break puts the wiring in a comment. The gate reads the code, and a
+# comment declares nothing and calls nothing.
+#
+# One swap, one gate: the swap keeps the file the same number of lines, and
+# measured against the gate the tree reported exactly these two problems and
+# nothing else.
+swap crates/io/src/format/pending.rs \
+    'const FILES: &[&str] = &[];' \
+    'const FILES: &[&str] = &["probe"]; // mod probe; and probe::step'
+expect_catch "lists: a pending change wired only in a comment" \
+    "cargo xtask lists"
+
 # A citation that names a test, and the line it points at. Four of them
 # pointed 9, 52, 100 and 147 lines away from the test they name.
 swap docs/recipes/change-the-file-format.md \

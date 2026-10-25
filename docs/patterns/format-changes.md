@@ -98,10 +98,13 @@ best-effort is how a design gets quietly rewritten.
    format as released; the pending list describes everything after it.
 5. Run the tests. `the_pending_list_is_sorted` and
    `every_pending_name_is_a_plausible_file_name` fail on a mistake in steps 1–3;
-   `every_listed_change_is_declared_and_applied` fails if the file is not
-   declared or its `step` is never called; and
-   `every_pending_file_is_wired_into_apply` asks the same question the other
-   way round. All four of them used to fail **on correct work** — §81.
+   `every_pending_file_is_wired_into_apply` fails if a listed change has no
+   `step`; and the **build** fails if step 2's `mod` is missing, because the
+   match arm in step 3 names the module. All four of them used to fail **on
+   correct work** — §81.
+6. Run `cargo xtask ci`. Its `lists` gate holds the same claim in the **code**:
+   every change in `FILES` must have a `mod <name>;` and a `<name>::step` in the
+   module the tree ships. A `mod` in a comment is not a declaration. §209.
 
 At a release, everything in `pending/` is folded into a `v<N>/` folder, the
 numbering advances, and the directory empties. `pending::apply` running an empty

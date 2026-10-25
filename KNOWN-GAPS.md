@@ -24632,6 +24632,146 @@ want the type `Params`; it wanted *the argument that carries the params*. A
 name is a whole name — §162 — and a shape is a shape, and the two questions
 have different answers.
 
+## 209. The io crate's pending check read its own file's text, and it was fooled by a comment
+
+### The finding
+
+Item 65 named the io crate's pending-format check and said it reads **its own
+file's text**. **Measured, the item named the wrong test**: the test that
+reads a file is `every_listed_change_is_declared_and_applied`; the test item
+65 named, `every_pending_file_is_wired_into_apply`, reads **no file** — it
+asks `step_for(name).is_some()`, which is a fact about the compiled code.
+
+The test that reads the file did this:
+
+```rust
+let source = std::fs::read_to_string(
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/format/pending.rs"),
+).expect("read pending.rs");
+
+for name in names() {
+    assert!(source.contains(&format!("mod {name};")));
+    assert!(source.contains(&format!("{name}::step")));
+}
+```
+
+**And it was fooled by a comment.** **Measured**: with the table holding
+`"probe"` and the whole wiring — `mod probe;` and `probe::step` — inside a
+**comment**, the check **passed**:
+
+```
+test format::pending::tests::every_listed_change_is_declared_and_applied ... ok
+```
+
+The claim was false. The file was not declared, so Rust never compiled it, and
+the migration never ran — and the check said the change was declared and
+applied. §149's rule, §207's second half: *a mention in a string is not code*,
+and *a mention in a comment is not code either*.
+
+### What the crate already held
+
+**The crate's own runtime test caught the same tree.** **Measured**, with the
+same fabricated tree:
+
+```
+pending/probe.rs is listed but `apply` never calls its `step`, so the migration
+does not run and an older design loads without its rewrite
+```
+
+`every_pending_file_is_wired_into_apply` asks `step_for(name).is_some()`, and
+that is a fact about the compiled code. It cannot be fooled by a comment.
+
+**And the compiler holds the other half.** A missing `mod` does not compile,
+because the `step_for` arm names the module as a path. **Measured** with
+`rustc --edition 2024`:
+
+```
+error[E0433]: cannot find module or crate `probe` in this scope
+  --> scratch-mod.rs:12:25
+   |
+12 |         "probe" => Some(probe::step),
+   |                         ^^^^^ use of unresolved module or unlinked crate `probe`
+```
+
+So the text check was **redundant**: both of its claims were already held, by
+the crate's own runtime test and by the build — and it held them in the one
+way that can be fooled.
+
+### The port
+
+**The crate does not read its own source any more.**
+`every_listed_change_is_declared_and_applied` is gone. The crate keeps the
+half it *can* hold — the runtime test, the directory test
+(`the_files_on_disk_and_the_table_agree`) and the name test — and the **build**
+holds the declaration.
+
+**And the claim about the code moved to the build tool, where the tree's one
+code reader lives.** The new gate `the_pending_changes_are_declared_in_code`
+in `xtask/src/lists.rs` reads `crates/io/src/format/pending.rs` in the **code
+view** and holds that every change in `FILES` has a `mod <name>;` and a
+`<name>::step` **in the code**.
+
+**The names come from the text, the table from the code.** A name is a string
+literal, and a string is the subject there; the table it is in is found in the
+code, so a `FILES` that stands only inside a comment is not a table. The two
+views are the same length, byte for byte, so a name in one is a name in the
+other.
+
+**And the gate is the holder a mutation can bite.** The compiler holds the
+same claim, but a mutation that breaks the build is reported by the mutation
+script as *a build that did not compile* — not as a caught gate. The gate is
+what turns the claim into a check.
+
+### The gate's own teeth
+
+One mutation, caught by `cargo xtask lists`:
+
+| the break | what it says |
+|---|---|
+| the wiring moves into a **comment** | *"the pending change `probe` is in `FILES` but no `mod probe;` declares it … A `mod` in a comment is not a declaration."* and *"… no `probe::step` calls it … A mention in a comment is not a call."* |
+
+**Measured, the tree reported exactly those two problems and nothing else** —
+one swap, one gate — and **the io crate's old check passed on that same tree**.
+
+**And the suite.** **482** of **483** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The gate is vacuous today, exactly as the check it replaces was.** `FILES` is
+empty between releases, so there is nothing to declare. The claim is true, and
+it is true vacuously; the mutation case above is what says the gate is not
+vacuous *in general*.
+
+**And the tree's crates still read the tree's own source in one place.** The
+control crate's `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one`
+walks `crates`, `apps` and `xtask` and reads every `src/*.rs` file as **text**.
+§207's table did not list it — it listed the control crate's manifest read and
+nothing else — so **§207's survey of the tree's own source reads was
+incomplete**. And that scan has a measured false negative of its own: it looks
+for the **name** `allow_remote` beside the value `true`, so a **positional**
+`true` is invisible to it. **Measured**: with the production call site changed
+to `bind(options.port, true)?` — the control channel bound to **every**
+interface — **all 62 of the control crate's tests passed**. It is item 67.
+
+### The lesson
+
+**A test that reads its own crate's source measures the file, and the file can
+be fooled by a comment.** §207 moved the engine's trace budget to the build
+tool for the same reason, and this was the same defect in a second crate.
+
+**And a check that is redundant in the right way is still a check in the wrong
+way.** The runtime test and the compiler already held both claims — so the
+text check was not *missing* a check, it was holding one in the one view that
+can be fooled. The fix was not to add a second holder; it was to drop the
+foolable one.
+
+**And the survey was incomplete.** §207 measured four places in the tree that
+read the tree's own source and listed them. One of the four — the control
+crate's scan — was listed for the *wrong read* and not for the read that
+mattered. Counting places is not the same as finding them.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25159,6 +25299,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A row of the list of the gates that read Rust says why** | `RUST_READING_GATES` | 2 mutations — §206 |
 | **The trace's budget is derived, and a derivation in a comment is not a derivation** | `the_trace_budget_is_derived_from_its_memory_budget` | 2 mutations — §207 |
 | **A type that starts with `Params` is not the params type, and `&mut Params` is** | `takes_the_params` in `xtask/src/lists.rs` | 1 mutation — §208 |
+| **Every pending change is declared and applied, in code** | `the_pending_changes_are_declared_in_code` | 1 mutation — §209 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -26773,8 +26914,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     no mutation can prove it. The gate holds that every row says why, and the
     unit test holds that a reason is not only the subject's own phrase.
 
-65. **The io crate's pending-format check reads its own file's text, and the
-    list it walks is empty.** §207.
+65. ~~**The io crate's pending-format check reads its own file's text, and the
+    list it walks is empty.**~~ **Done in §209.**
 
     `crates/io/src/format/pending.rs` holds a test that reads **its own
     file** and looks for `mod {name};` and `{name}::step` for every name in
@@ -26795,6 +26936,27 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     §207 moved the trace budget's. The names come from the io crate's own
     table, so the gate would have to derive them the way the io crate does.
 
+    **§209 measured the item's own words and corrected them.** The test that
+    reads a file is `every_listed_change_is_declared_and_applied`; the test
+    this item named, `every_pending_file_is_wired_into_apply`, reads **no
+    file** — it asks `step_for(name).is_some()`, which is a fact about the
+    compiled code.
+
+    **And it was fooled by a comment — measured**: with the table holding
+    `"probe"` and the whole wiring inside a **comment**, the check **passed**.
+
+    **And it was redundant.** The crate's own runtime test caught that same
+    tree, and the **compiler** holds the other half: a missing `mod` does not
+    resolve, so the crate does not build. So the text check was holding two
+    claims that were already held, in the one view that can be fooled.
+
+    **The port:** the check is **gone** — the crate does not read its own
+    source — and the claim about the code moved to the build tool, where the
+    tree's one code reader lives. The new gate
+    `the_pending_changes_are_declared_in_code` holds it in the **code** view,
+    and the **names** come from the io crate's own table, read from the text
+    because a name is a string.
+
 66. **One temporary folder name is used by two tests, and no folder is ever
     cleaned.** §207.
 
@@ -26814,3 +26976,43 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     tree keeps the folder on purpose, *"so a failing run leaves evidence
     behind rather than deleting it"*. The two rules are in tension, and
     nothing says which wins.
+
+67. **The scan that keeps the control channel local is fooled by a positional
+    `true`.** §209.
+
+    `crates/control/src/server.rs` holds
+    `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one`. It
+    walks `crates`, `apps` and `xtask`, reads every `src/*.rs` file as
+    **text**, and refuses the two spellings `allow_remote: true` and
+    `allow_remote = true`.
+
+    **Measured, a positional `true` walks straight past it.** The production
+    call site is `bind(options.port, options.allow_remote)?`, and `bind` is
+    `fn bind(port: u16, allow_remote: bool)`. Change the call site to
+    `bind(options.port, true)?` and the control channel binds to `0.0.0.0` —
+    **every** interface, with a JSON syntax — and the scan says nothing:
+
+    ```
+    test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+    ```
+
+    The scan looks for the **name** beside the value. A value with no name
+    beside it is invisible to it, and the value is the dangerous half.
+
+    **And the spellings it does look for are not the only ways to set the
+    field.** A struct literal sets it with a colon and an assignment sets it
+    with an equals, and the scan covers both — but the *call* that actually
+    opens the channel takes the flag as a **plain `bool`**, so nothing forces
+    the name to appear at all.
+
+    **And §207's survey of the tree's own source reads was incomplete.** §207
+    measured four places in the tree that read the tree's own source and
+    listed them; it listed the control crate's **manifest** read and not this
+    **Rust** read. The lesson is not "count again" — it is that a list of
+    places is only as good as the question asked of each one.
+
+    The choices are: make the unsafe thing **inexpressible** — have `bind`
+    take the options rather than a free `bool`, so the only way to bind
+    remotely is to set the named field, which the scan covers; or have the
+    scan read the **code** and ask about the **shape** of every call to
+    `bind`; or both.

@@ -305,40 +305,6 @@ mod tests {
     }
 
     #[test]
-    fn every_listed_change_is_declared_and_applied() {
-        // The last hole in the loop: a file that is listed but never declared
-        // with `mod` is not compiled at all, so a mistake in it cannot even
-        // fail to build. And a file that is declared but never called from
-        // `apply` compiles perfectly and does nothing.
-        //
-        // Vacuous while the list is empty, which is the normal state between
-        // releases. It is a tripwire for the first real change, which is the
-        // moment it is worth having.
-        //
-        // §81: the second assertion used to look for `{name}::step(doc)`, a
-        // spelling no documented pattern produces — the recipe's `Some(name::step)`
-        // and the pattern document's `name => name::step(doc)` disagree with it
-        // and with each other. It looks for `{name}::step` now, which every
-        // shape of the wiring contains.
-        let source = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/format/pending.rs"),
-        )
-        .expect("read pending.rs");
-
-        for name in names() {
-            assert!(
-                source.contains(&format!("mod {name};")),
-                "pending/{name}.rs is listed but never declared, so Rust never compiles it"
-            );
-            assert!(
-                source.contains(&format!("{name}::step")),
-                "pending/{name}.rs is declared but `apply` never calls its `step`, so the \
-                 migration does not run and an older design loads without its rewrite"
-            );
-        }
-    }
-
-    #[test]
     fn the_files_on_disk_and_the_table_agree() {
         // The failure this catches: someone writes the migration and does not
         // register it. `every_pending_file_is_wired_into_apply` cannot see that

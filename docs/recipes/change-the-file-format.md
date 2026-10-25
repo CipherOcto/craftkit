@@ -332,13 +332,15 @@ the table rotting:
   `crates/io/src/format/pending.rs`) — this is the one that says the name is a
   Rust module name, and it is what refused every name that could work before
   §81.
-- `every_listed_change_is_declared_and_applied` and
-  `every_pending_file_is_wired_into_apply` (in
-  `crates/io/src/format/pending.rs`) — these two are the tripwires for the
-  wiring. Both used to fail **on correct work**: the first asked for a
-  `{name}::step(doc)` spelling no documented pattern produces, and the second
-  asserted that the table was empty, so it fired the moment a change was
+- `every_pending_file_is_wired_into_apply` (in
+  `crates/io/src/format/pending.rs`) — the tripwire for the wiring: a listed
+  change with no `step` is not applied. It used to fail **on correct work**:
+  it asserted that the table was empty, so it fired the moment a change was
   pending. §81.
+- `cargo xtask ci` — its `lists` gate holds the other half of the wiring in the
+  **code**: every change in `FILES` must have a `mod <name>;` and a
+  `<name>::step` in the module the tree ships, and a `mod` in a comment is not
+  a declaration. §209.
 
 The end-to-end test also has a companion worth writing: a file this build
 wrote must read back **unchanged**. The reader applies only the changes a file

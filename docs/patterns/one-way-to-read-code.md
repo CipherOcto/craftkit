@@ -395,6 +395,51 @@ readers either way. A false negative that only a **fabricated** tree can show
 cannot be caught by a gate that reads the **real** one; it needs a test that
 fabricates one.
 
+## And a crate does not read its own source
+
+**A check that reads the tree's own source measures the file, and the file can
+be fooled.** §209 found the second of the four places §207 measured. The io
+crate's pending-format check read **its own file's text** and asked whether a
+pending change was declared and applied:
+
+```rust
+let source = std::fs::read_to_string(
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/format/pending.rs"),
+).expect("read pending.rs");
+assert!(source.contains(&format!("mod {name};")));
+assert!(source.contains(&format!("{name}::step")));
+```
+
+**Measured**, with the table holding `"probe"` and the whole wiring inside a
+**comment**, the check **passed**. The file was not declared, so Rust never
+compiled it and the migration never ran.
+
+**And the crate already held both claims.** The crate's own runtime test asks
+`step_for(name).is_some()` — a fact about the compiled code, and it caught the
+same tree. And the **compiler** holds the other half: a missing `mod` does not
+resolve, so the crate does not build.
+
+So the text check was **redundant**: it held two claims that were already
+held, in the one view that can be fooled. The fix was not to add a second
+holder. It was to **drop the foolable one** and let the claim live where the
+code is read:
+
+```rust
+let text = read_rust(&path, Subject::Production)?;
+let code = code_lines_kept(&text);
+```
+
+**The names come from the text and the table from the code.** A name is a
+string literal, and a string is the subject there; the table it is in is
+found in the code, so a `FILES` that stands only inside a comment is not a
+table. The two views are the same length, byte for byte, so a name in one is a
+name in the other.
+
+**And a claim the compiler holds is still a claim a mutation cannot bite.** A
+mutation that breaks the build is reported as *a build that did not compile*,
+not as a caught gate. The gate in the build tool is what turns the claim into
+a check.
+
 ## And the shape of a thing is the code's shape
 
 §159 audited every gate that opens a Rust file and wrote down, for each,
@@ -826,6 +871,9 @@ let lines: Vec<&str> = text.lines().collect();
 - `a_type_that_starts_with_params_is_not_the_params_type` — the reader gate asks
   the **shape** of the argument, and `&ParamsExtra` is not the params type.
   §208.
+- `a_pending_change_that_stands_only_in_a_comment_is_not_declared` — a pending
+  change is declared and applied in the **code**, and a `mod` in a comment is
+  not a declaration. §209.
 - `the_tree_has_one_home_for_reading_a_file` — the readers, the cut and the
   code reader all live in `xtask/src/tree.rs`. §205.
 - `a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is` — `read_text` and
