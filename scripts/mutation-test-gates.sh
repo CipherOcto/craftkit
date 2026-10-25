@@ -2077,6 +2077,19 @@ swap crates/control/src/token.rs \
 expect_catch "control: the token comparison loses a length difference of 256" \
     "cargo test -p craftkit-control --profile ci a_token_with_trailing_nuls_is_not_a_token"
 
+# The control channel on every interface. Section 210: the tree-wide scan
+# looks for the NAME allow_remote beside the value true, so a POSITIONAL true
+# walked past it -- measured, the channel bound 0.0.0.0 and all 62 of the
+# crate's tests passed.
+#
+# The break is the production call site. The test that holds it starts the
+# server the way a user reaches it and looks at the address it bound.
+swap crates/control/src/server.rs \
+    '    let listener = bind(options.port, options.allow_remote)?;' \
+    '    let listener = bind(options.port, true)?;'
+expect_catch "control: the control channel binds every interface" \
+    "cargo test -p craftkit-control --profile ci the_server_binds_loopback_on_the_path_a_user_reaches"
+
 # The other half of the same mistake: the length is not folded in at all, so
 # the comparison only ever looks at the bytes and never at how many there are.
 swap crates/control/src/token.rs \

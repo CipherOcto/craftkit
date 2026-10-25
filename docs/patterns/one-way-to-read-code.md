@@ -440,6 +440,44 @@ mutation that breaks the build is reported as *a build that did not compile*,
 not as a caught gate. The gate in the build tool is what turns the claim into
 a check.
 
+## And a claim about a running thing is held by the running thing
+
+**A check on the spelling of a danger is not a check on the danger.** The
+control channel is a JSON endpoint that runs engine commands. The tree's
+check that keeps it local read every Rust file in the tree as **text** and
+refused two spellings: `allow_remote: true` and `allow_remote = true`.
+
+**Measured, a positional `true` walks straight past it.** The production call
+site was `bind(options.port, options.allow_remote)?`, and `bind` took a plain
+`bool`. Change the call site to `bind(options.port, true)?` and the channel
+binds `0.0.0.0` — every interface — and **all 62** of the crate's tests
+passed. A value with no name beside it is invisible to a check that looks for
+a name.
+
+**And the test was asking the wrong thing.** The crate's loopback test bound
+with its **own** call, not the production one. So the path a user reaches had
+no test at all.
+
+The claim that matters is not *"nothing writes the flag"* — it is *"the
+channel a user reaches is local"*, and that is a fact about the **running
+server**. So the server now reports the **address** it bound, and a test
+starts it the way a user reaches it:
+
+```rust
+let (port, server) = serve(session, options(0)).expect("binds");
+let addr = server.addr();
+assert!(addr.ip().is_loopback(), "the control channel bound {addr}, which is reachable from another machine");
+```
+
+**The port said nothing about the address.** A control channel on `0.0.0.0` is
+reachable from another machine, and `port()` cannot tell the two apart.
+
+**And a residual that is stated is still a gap.** The audit that fixed the
+default wrote down that the `true` branch of `bind()` was never executed by a
+test, and moved on. The gap was not that branch — it was that the production
+path had **no test at all**, and the residual's words had pointed at the wrong
+place.
+
 ## And the shape of a thing is the code's shape
 
 §159 audited every gate that opens a Rust file and wrote down, for each,
@@ -874,6 +912,8 @@ let lines: Vec<&str> = text.lines().collect();
 - `a_pending_change_that_stands_only_in_a_comment_is_not_declared` — a pending
   change is declared and applied in the **code**, and a `mod` in a comment is
   not a declaration. §209.
+- `the_server_binds_loopback_on_the_path_a_user_reaches` — the control channel
+  a user reaches binds loopback, and the port alone does not say so. §210.
 - `the_tree_has_one_home_for_reading_a_file` — the readers, the cut and the
   code reader all live in `xtask/src/tree.rs`. §205.
 - `a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is` — `read_text` and

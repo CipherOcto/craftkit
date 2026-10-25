@@ -180,6 +180,14 @@ it is to bind a routable interface and look at the result. That is the one branc
 this audit chose to document instead of fix. The flag is off by default, nothing
 in the tree sets it, and the tree-wide test now fails the build if that changes.
 
+**§210 closed the other half of this, and the residual was pointing at the
+wrong place.** The tree-wide test looks for the **name** `allow_remote` beside
+the value `true`, so a **positional** `true` walked past it — and the crate's
+loopback test bound with its **own** call, not the production one, so the path
+a user reaches had **no test at all**. **Measured**: with the production call
+site binding every interface, all 62 of the crate's tests passed. The server's
+bound address is observable now, and a test holds it.
+
 ## 5. A format migration nobody ran — fixed
 
 The design file format is the one thing in this project that, going wrong,
@@ -24772,6 +24780,114 @@ read the tree's own source and listed them. One of the four — the control
 crate's scan — was listed for the *wrong read* and not for the read that
 mattered. Counting places is not the same as finding them.
 
+## 210. The check that keeps the control channel local was fooled by a positional `true`
+
+### The finding
+
+§4 fixed the control channel's default: `allow_remote` off, `bind` to
+loopback, and a test that says so. It also left a residual, stated rather
+than hidden:
+
+> the `allow_remote == true` branch of `bind()` is still never executed by a
+> test, because the only honest way to test it is to bind a routable interface
+> and look at the result.
+
+And it relied on a tree-wide check for the other half — *"nothing in the tree
+turns the control channel into a remote one"*. That check reads every
+`src/*.rs` file in the tree as **text** and refuses two spellings:
+`allow_remote: true` and `allow_remote = true`.
+
+**It looks for the name beside the value.** So a **positional** `true` — a
+value with no name beside it — is invisible to it.
+
+**Measured**: the production call site is
+
+```rust
+let listener = bind(options.port, options.allow_remote)?;
+```
+
+and `bind` is `fn bind(port: u16, allow_remote: bool)`. Change the call site
+to
+
+```rust
+let listener = bind(options.port, true)?;
+```
+
+and the control channel binds `0.0.0.0` — **every** interface on the machine,
+with a JSON syntax — and **all 62 of the crate's tests passed**:
+
+```
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+**And the reason no test caught it is the shape of the test.** The crate's
+loopback test binds with its **own** call — `bind(0, options.allow_remote)` —
+not the production one. So the production call site could bind anywhere it
+liked and every test would still be green. **The path a user reaches was
+untested.**
+
+### The port
+
+**The address the server bound is now observable, and a test holds it.**
+`Server` carries the `SocketAddr` it bound, and `Server::addr()` gives it back.
+The new test `the_server_binds_loopback_on_the_path_a_user_reaches` starts
+the server **the way a user reaches it** — through `serve` — and asserts that
+the address it bound is loopback.
+
+**The claim is a fact about the running server, so it is held there.** The
+port said nothing about the address; the address says everything.
+
+**And the tree-wide scan keeps its own claim.** It holds that *nobody turns
+the flag on*; the new test holds that *the channel a user reaches is local*.
+Two claims, two holders, and neither one is a spelling.
+
+### The gate's own teeth
+
+One mutation, caught by `cargo test -p craftkit-control --profile ci
+the_server_binds_loopback_on_the_path_a_user_reaches`:
+
+| the break | what it says |
+|---|---|
+| the production call site binds every interface | *"the control channel bound 0.0.0.0:37261, which is reachable from another machine"* |
+
+**Measured, the other 62 tests still passed** — the tree-wide scan did not
+see it, and it was the only thing that did.
+
+**And the suite.** **483** of **484** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The tree-wide scan is still a scan of spellings, and it still reads the
+tree's own Rust as text.** It holds that nothing writes `allow_remote` with
+the value `true` in one of two spellings; a write from a variable
+(`options.allow_remote = flag;`) is not one of them. **The scan's claim is
+about the flag being turned on, and the new test's claim is about the channel
+a user reaches** — and the second is the one that matters.
+
+**And the `allow_remote == true` branch of `bind()` is still never executed by
+a test.** That part of §4's residual stands, and it is the right way round: a
+test that bound a routable interface to prove the branch works would be a
+test that opened the door it is checking.
+
+### The lesson
+
+**A check on the spelling of a danger is not a check on the danger.** The scan
+looked for a name beside a value, and a positional value has no name beside
+it. The dangerous thing was not `allow_remote: true`; it was *a server
+listening on every interface*.
+
+**And the claim was held in the wrong place.** The truth about a server is
+what it did when it started, and the tree's test asked the `bind` function
+instead. A test that exercises its **own** call proves the function, not the
+path.
+
+**And a residual that is stated is still a gap.** §4 wrote down that the
+`true` branch was never executed and moved on. The gap was not that branch —
+it was that **the production path had no test at all**, and the residual's
+words had pointed at the wrong place.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -25300,6 +25416,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The trace's budget is derived, and a derivation in a comment is not a derivation** | `the_trace_budget_is_derived_from_its_memory_budget` | 2 mutations — §207 |
 | **A type that starts with `Params` is not the params type, and `&mut Params` is** | `takes_the_params` in `xtask/src/lists.rs` | 1 mutation — §208 |
 | **Every pending change is declared and applied, in code** | `the_pending_changes_are_declared_in_code` | 1 mutation — §209 |
+| **The control channel a user reaches binds loopback** | `the_server_binds_loopback_on_the_path_a_user_reaches` | 1 mutation — §210 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -26977,8 +27094,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     behind rather than deleting it"*. The two rules are in tension, and
     nothing says which wins.
 
-67. **The scan that keeps the control channel local is fooled by a positional
-    `true`.** §209.
+67. ~~**The scan that keeps the control channel local is fooled by a positional
+    `true`.**~~ **Done in §210.**
 
     `crates/control/src/server.rs` holds
     `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one`. It
@@ -27016,3 +27133,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     remotely is to set the named field, which the scan covers; or have the
     scan read the **code** and ask about the **shape** of every call to
     `bind`; or both.
+
+    **§210 took the third road, and it was the one the item did not name.**
+    The claim that matters is not *"nothing writes the flag"* — it is *"the
+    channel a user reaches is local"*, and that is a fact about the **running
+    server**. So the server now reports the **address** it bound
+    (`Server::addr()`), and the new test
+    `the_server_binds_loopback_on_the_path_a_user_reaches` starts the server
+    **the way a user reaches it** and holds the address. **Measured**: with
+    the production call site binding every interface, the other 62 tests
+    still passed and this one said *"the control channel bound 0.0.0.0:37261,
+    which is reachable from another machine"*.

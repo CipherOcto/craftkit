@@ -149,6 +149,7 @@ impl ServerOptions {
 #[derive(Debug)]
 pub struct Server {
     port: u16,
+    addr: SocketAddr,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -158,6 +159,17 @@ impl Server {
     /// asked for.
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// The address actually bound.
+    ///
+    /// The **address**, not just the port: a control channel on `0.0.0.0` is
+    /// reachable from another machine, and the port says nothing about that.
+    /// §210 made it observable so that a test can hold the claim that the
+    /// server binds loopback — through the **production** path, which is the
+    /// only path a user can reach.
+    pub fn addr(&self) -> SocketAddr {
+        self.addr
     }
 
     /// Ask the server to stop and wait for it.
@@ -212,7 +224,8 @@ pub fn serve(session: Arc<Mutex<Session>>, options: ServerOptions) -> Result<(u1
     let listener = bind(options.port, options.allow_remote)?;
     let ui = options.ui.clone();
     let after = options.after.clone();
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let addr = listener.local_addr().map_err(|e| e.to_string())?;
+    let port = addr.port();
 
     let stop = Arc::new(AtomicBool::new(false));
     let open = Arc::new(AtomicU64::new(0));
@@ -225,7 +238,7 @@ pub fn serve(session: Arc<Mutex<Session>>, options: ServerOptions) -> Result<(u1
         accept_loop(listener, worker_stop, worker_session, worker_token, open, ui, after);
     });
 
-    Ok((port, Server { port, stop, worker: Some(worker) }))
+    Ok((port, Server { port, addr, stop, worker: Some(worker) }))
 }
 
 /// Bind and serve, for a caller that only wants a running server.
@@ -1170,6 +1183,31 @@ mod tests {
         let listener = bind(0, options.allow_remote).expect("bind");
         let addr = listener.local_addr().expect("addr");
         assert!(addr.ip().is_loopback(), "bound to {addr}, which is reachable from another machine");
+    }
+
+    #[test]
+    fn the_server_binds_loopback_on_the_path_a_user_reaches() {
+        // The test above binds with its **own** call. The path a user reaches
+        // is `serve`, and that path had no test at all — so the production
+        // call site could bind anywhere it liked.
+        //
+        // §210 measured it: with the production call site changed to
+        // `bind(options.port, true)?` — the channel on every interface — all
+        // 62 of this crate's tests passed, because the scan below looks for
+        // the **name** `allow_remote` beside the value `true`, and a
+        // positional `true` has no name beside it.
+        //
+        // The claim is a fact about the **running server**, so it is held
+        // there: the address the server actually bound.
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let (port, server) = serve(session, options(0)).expect("binds");
+        let addr = server.addr();
+        assert!(
+            addr.ip().is_loopback(),
+            "the control channel bound {addr}, which is reachable from another machine"
+        );
+        assert_eq!(addr.port(), port, "the address and the port must be the same socket");
+        server.stop();
     }
 
     #[test]
