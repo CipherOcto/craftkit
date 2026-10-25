@@ -463,7 +463,9 @@ the test module and **25** took the file as it is. The list is
 `RUST_READING_GATES`, and it says which of the gates read the code the tree
 ships (**28**) and which read the file as it is (**7**). §205 added three gates
 to it — `find_embedded`, `inspect` and `the_anchors_are_in_the_tree_of`, all of
-which read the file as it is — so it now holds **38**: **28** and **10**.
+which read the file as it is — so it held **38**: **28** and **10**. §206 moved
+the two registry gates to the code the tree ships, and it holds **38** now:
+**30** and **8**.
 
 **The list is a promise, so it is checked.**
 `the_gates_that_read_rust_say_what_they_read` reads the lists gate's own
@@ -555,6 +557,48 @@ they are not gates; a rule that forbade it would be a false claim. The
 message names the xtask: *"the xtask reads a file through
 `xtask/src/tree.rs` and nowhere else."* §204's lesson — a claim is wider than
 the thing it computes — applies to the fix as well as to the defect.
+
+## And a decision says why
+
+**A list that says what a thing does, and not why, records an accident.**
+
+`RUST_READING_GATES` names every gate that opens a Rust file and the subject
+each one reads for. At §205 that was the whole of it: **38** gates, **28**
+reading the code the tree ships and **10** reading the file as it is. A reader
+who came to `("citation_drift", Subject::Everything)` saw a decision and could
+not tell whether it was a decision or a leftover.
+
+**And the subject does not imply the reason.** Two gates can read the same
+view for opposite reasons, and the list cannot tell them apart.
+
+So the list grew a third column — the reason — and writing the reasons down
+found something the subject had been hiding:
+
+| Gate | The subject said | What the reason says | Measured |
+|---|---|---|---|
+| `registry_command_ids` | the file as it is | the ids are the **shipped** registry's, and a command only a test declares is not one of them | the two views of the file are the same today — **23** ids and **23** `pub static` under either subject |
+| `registry_commands` | the file as it is | the commands are the **shipped** registry's, and a command only a test declares is not one of them | the same |
+
+Both gates now read the code the tree ships, and both say why. Their own
+doc comments already said it — *"Every command id the **shipped registry**
+defines"* — and the subject in the list disagreed with the gate's own words.
+
+**And the filter that was supposed to tell the test commands apart never
+fired.** `registry_command_ids` skipped every id that begins with `test.`,
+and there are **none**: **23** ids before the filter and **23** after it, under
+either subject. The filter was the residue of a rule that had nothing to do,
+and a filter that cannot fire is not a decision — it is a habit.
+
+**And the reasons are held up.** The gate checks that every row says why, and
+the unit test checks that a reason is not *only* the subject's own phrase: a
+reason may use it as one of its clauses, because that is how it explains the
+choice, but it has to add something.
+
+**And the tree's house style already had the shape.** `NOT_GATES` says of
+`bundle` *"it writes files into the tree"*, and `SESSION_PUBLIC_METHODS`
+gained `sample_recorded` **with its reason** when §200 added it. The list of
+the gates that read Rust was the one list in the tree that recorded a
+decision without it.
 
 ## And there is one way to find the files
 
@@ -664,8 +708,11 @@ let lines: Vec<&str> = text.lines().collect();
   comment is not a function.
 - `the_gates_that_read_rust_say_what_they_read` — every gate that opens a
   Rust file is in the list, the subject at its call site is the one the list
-  names, and the xtask reads a file through `xtask/src/tree.rs` and nowhere
-  else. §204, extended by §205.
+  names, every row says **why** it reads that view, and the xtask reads a file
+  through `xtask/src/tree.rs` and nowhere else. §204, extended by §205 and
+  §206.
+- `every_row_of_the_list_says_why` — a reason is there, and it is not only
+  the subject's own phrase. §206.
 - `the_tree_has_one_home_for_reading_a_file` — the readers, the cut and the
   code reader all live in `xtask/src/tree.rs`. §205.
 - `a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is` — `read_text` and

@@ -24293,6 +24293,92 @@ counts one of them can be walked around with the other.
 a file" is false of the product crates, and a gate that forbade it would be a
 false claim of its own.
 
+## 206. The list of the gates that read Rust said what each one read, and not why
+
+### The finding
+
+Item 64 asked for the third column. `RUST_READING_GATES` named every gate that
+opens a Rust file and the subject each one reads for, and it was the one list
+in the tree that recorded a decision without saying why.
+
+The tree's house style already had the shape. `NOT_GATES` says of `bundle`
+*"it writes files into the tree"*, and `SESSION_PUBLIC_METHODS` gained
+`sample_recorded` **with its reason** when §200 added it. The list of the
+gates that read Rust was the one that did not.
+
+And the subject does not imply the reason: two gates can read the same view
+for opposite reasons, and a list with two columns cannot tell them apart.
+
+### The port
+
+**The list grew a third column** — the reason — and writing the reasons down
+found something the subject had been hiding.
+
+| Gate | The subject said | The reason says | Measured |
+|---|---|---|---|
+| `registry_command_ids` | the file as it is | the ids are the **shipped** registry's, and a command only a test declares is not one of them | **23** ids and **23** `pub static` under **either** subject |
+| `registry_commands` | the file as it is | the commands are the **shipped** registry's, and a command only a test declares is not one of them | the same |
+
+Both gates read the code the tree ships now. Their own doc comments already
+said it — *"Every command id the **shipped registry** defines"* — and the
+subject in the list disagreed with the gate's own words.
+
+**And the filter that was supposed to tell the test commands apart never
+fired.** `registry_command_ids` skipped every id beginning with `test.`, and
+there are **none**: **23** ids before the filter and **23** after it, under
+either subject. The filter was the residue of a rule with nothing to do, and a
+filter that cannot fire is not a decision — it is a habit.
+
+The list holds **38** gates: **30** read the code the tree ships and **8** read
+the file as it is. The other **36** reasons are the tree's own questions,
+written down: *"the areas are the variants of `Area`, and a variant in a
+comment is not an area"*, *"a citation names a line of a file, and the file's
+lines are the file's, tests and all"*, *"the clean-room rule forbids a
+product's name anywhere, and a comment is somewhere"*.
+
+**And the reasons are held up.** The gate
+`the_gates_that_read_rust_say_what_they_read` holds that every row says why.
+The unit test `every_row_of_the_list_says_why` holds that a reason is not
+*only* the subject's own phrase — a reason may use the phrase as one of its
+clauses, because that is how it explains the choice, but it has to add
+something.
+
+### The gate's own teeth
+
+Two mutations, each caught for one reason:
+
+| the break | what it says |
+|---|---|
+| a row's reason is taken away | *"xtask/src: the list says the gate `limits_are_enforced` reads a Rust file, and does not say why; the reason is the decision the list is for. §206."* — caught by `cargo xtask lists` |
+| a row's reason restates its subject | *"the gate `limits_are_enforced` restates its subject instead of saying why: the code the tree ships"* — caught by the unit test, and by nothing else |
+
+And a unit test, proved to fail when its fix was put back.
+
+**And the suite.** **479** of **480** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### The lesson
+
+**A list that says what a thing does, and not why, records an accident.** The
+subject was there and the reason was not, and a reader could not tell a
+decision from a leftover.
+
+**And writing the reason down is what found the wrong subject.** The two
+registry gates said *the file as it is*, and nothing about the list could say
+whether that was chosen or inherited. The reasons made the question askable:
+*which* ids? The **shipped** registry's. The subject was wrong, and it was
+wrong **quietly** — the two views of the file are the same today, so every
+gate that reads the registry was right and the list was not.
+
+**And a filter that cannot fire is not a decision.** The `test.` filter never
+matched anything, and it was the only trace of the rule that had once
+distinguished a test command from a shipped one.
+
+**And a reason that restates its subject is not a reason.** The gate cannot
+hold a reason *true* — it is prose, and no mutation can prove it — but it can
+hold it **present**, and hold it to be more than the subject.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24817,6 +24903,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The xtask reads a file through `xtask/src/tree.rs` and nowhere else** | `cargo xtask lists` | 2 mutations — §205 |
 | **A Rust file is read with a subject; everything else is read as it is** | `read_text`, `read_bytes` and `read_rust` in `xtask/src/tree.rs` | 1 mutation — §205 |
 | **The readers, the cut and the code reader have one home** | `the_tree_has_one_home_for_reading_a_file` | the unit test — §205 |
+| **A row of the list of the gates that read Rust says why** | `RUST_READING_GATES` | 2 mutations — §206 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25869,6 +25956,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     **What is left is the corpus**, and it is item 60 below.
 
+    **Done in §201.** The corpus arrived with the third target: the fuzzer
+    watches **three** doors now — the design file, the script and the crash
+    report — and the report's corpus is written by the tree's own program
+    (`seed_reports`). The replay door's corpus is a folder holding **one**
+    file, §185 having made the report one file in a folder of its own. The
+    writer was §200's half and the corpus is §201's, and the two are what
+    this item asked for.
+
 48. **Decide what a script may cost, and what a command may cost.** §181
     bounded the *number* of commands a script or a replay may run, and left
     the *cost* alone, because the cost is a question the tree cannot answer
@@ -26364,3 +26459,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     This is a small change and it is the difference between a list that records
     a decision and a list that records an accident.
+
+    **Done in §206.** The list grew the third column, and writing the reasons
+    down found that **two** of the **38** subjects were wrong: the two
+    registry gates said *the file as it is*, and their own doc comments say
+    *"the **shipped** registry"*. Measured, the two views of the file are the
+    same today — **23** ids and **23** `pub static` under either subject — so
+    the subject was wrong **quietly**: every gate that reads the registry was
+    right and the list was not. Both read the code the tree ships now, and the
+    list holds **30** and **8**.
+
+    The `test.` filter in `registry_command_ids` never fired — **23** ids
+    before it and **23** after it — and it was the only trace of the rule that
+    once told a test command from a shipped one.
+
+    What is **not** claimed: a reason cannot be held *true*. It is prose, and
+    no mutation can prove it. The gate holds that every row says why, and the
+    unit test holds that a reason is not only the subject's own phrase.

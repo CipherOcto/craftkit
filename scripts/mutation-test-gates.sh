@@ -6126,9 +6126,12 @@ expect_catch 'lists: a gate reads the tree'"'"'s Rust source for a view the list
 # The second break takes a gate out of the list -- or puts a name in it that
 # opens no Rust file at all. Either way the list and the code have parted
 # company, and the gate that holds the list up must notice.
+#
+# The anchor is the name alone, because the row grew a third column in
+# section 206 and the name is the part that has to change.
 swap xtask/src/lists.rs \
-    '    ("ui_structs", Subject::Production),' \
-    '    ("ui_structs_renamed", Subject::Production),'
+    '        "ui_structs",' \
+    '        "ui_structs_renamed",'
 expect_catch 'lists: the list of the gates that read Rust does not match the code' \
     "cargo xtask lists"
 
@@ -6211,6 +6214,28 @@ swap xtask/src/tree.rs \
     std::fs::read_to_string(path)'
 expect_catch 'the tree: a reader reads a Rust file without a subject' \
     "cargo test -p xtask --profile ci a_rust_file_is_read_with_a_subject_and_the_rest_as_it_is"
+
+# ------------------------------------- the list says why, and not only what ----
+# Section 206. The list of the gates that read Rust has a third column: the
+# reason. A subject says which view and a reason says why that one, and a
+# reader who has only the subject cannot tell a decision from an accident.
+#
+# The first break takes the reason away. The gate holds the column up: a row
+# that says what a gate reads and not why is a row that forgot the decision.
+swap xtask/src/lists.rs \
+    '        "a limit is enforced by code the tree ships, and a use in a test enforces nothing",' \
+    '        "",'
+expect_catch 'lists: a row of the list says what a gate reads and not why' \
+    "cargo xtask lists"
+
+# The second break makes the reason say only what the subject already said. A
+# reason that restates the subject is not a reason, and the check for that is
+# the unit test -- the gate only holds that a reason is there.
+swap xtask/src/lists.rs \
+    '        "a limit is enforced by code the tree ships, and a use in a test enforces nothing",' \
+    '        "the code the tree ships",'
+expect_catch 'the tree: a reason that restates the subject is not a reason' \
+    "cargo test -p xtask --profile ci every_row_of_the_list_says_why"
 
 restore
 finish

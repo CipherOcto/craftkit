@@ -230,7 +230,7 @@ pub fn registry_command_ids(root: &Path) -> Result<std::collections::BTreeSet<St
     let mut ids = std::collections::BTreeSet::new();
     for rel in ["crates/engine/src/commands.rs", "crates/engine/src/command.rs"] {
         let path = root.join(rel);
-        let text = read_rust(&path, Subject::Everything)
+        let text = read_rust(&path, Subject::Production)
             .map_err(|e| format!("could not read {}: {e}", path.display()))?;
         // The **shape** of the registry is read from the code: an `id:` in a
         // comment or in a string is not a field. The id itself is read from
@@ -2587,7 +2587,11 @@ fn names_read(
 /// The commands in the registry, read from the source.
 fn registry_commands(root: &Path) -> Vec<CommandSource> {
     let path = root.join("crates/engine/src/commands.rs");
-    let Ok(text) = read_rust(&path, Subject::Everything) else { return Vec::new() };
+    // The shipped registry: a command only a test declares is not one of them.
+    // §206 measured that the two views of this file are the same today — 23
+    // ids and 23 `pub static` under either subject — and the reason the
+    // subject is `Production` is the question the gate asks.
+    let Ok(text) = read_rust(&path, Subject::Production) else { return Vec::new() };
     // The **shape** of the registry is read from the code: a `pub static` in a
     // comment or in a string is not a command. The **contents** — the id, the
     // parameter names — are read from the text, because there a string *is*
@@ -4755,11 +4759,18 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Every gate that opens a Rust file, and the subject it reads it for.
+/// Every gate that opens a Rust file, the subject it reads it for, and why.
 ///
-/// §204. This is the list items 31 and 32 asked for: **every** gate that
-/// opens a Rust file, and a decision for each — is its subject the code the
-/// tree ships, or the file as it is?
+/// §204, extended by §206. This is the list items 31 and 32 asked for:
+/// **every** gate that opens a Rust file, and a decision for each — is its
+/// subject the code the tree ships, or the file as it is?
+///
+/// §206 added the **third column**: the reason. A subject says *which* view; a
+/// reason says *why that one*, and a reader who has only the subject cannot
+/// tell a decision from an accident. The tree's house style already had the
+/// shape — `NOT_GATES` says of `bundle` *"it writes files into the tree"*, and
+/// `SESSION_PUBLIC_METHODS` gained `sample_recorded` **with its reason** when
+/// §200 added it.
 ///
 /// The list is not a copy of what the code does: it is a **promise** about it,
 /// and the gate `the_gates_that_read_rust_say_what_they_read` holds it up.
@@ -4771,52 +4782,205 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
 /// about the **file** — how many lines it has, which test it holds — is
 /// asking about the file as it is, and cutting the tests would answer a
 /// different question.
-const RUST_READING_GATES: &[(&str, Subject)] = &[
+const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
     // The code the tree ships.
-    ("area_variants", Subject::Production),
-    ("attributed_code_is_in_the_file", Subject::Production),
-    ("check_roots", Subject::Production),
-    ("control_methods", Subject::Production),
-    ("directory_walks", Subject::Production),
-    ("find_embedded", Subject::Production),
-    ("fingerprint_sees_every_field", Subject::Production),
-    ("gate_problems", Subject::Production),
-    ("limits_are_enforced", Subject::Production),
-    ("parameter_readers", Subject::Production),
-    ("prose_constants_match_the_code", Subject::Production),
-    ("quoted_code_matches_the_source", Subject::Production),
-    ("run", Subject::Production),
-    ("shape_of", Subject::Production),
-    ("the_bounds_are_named_in_the_prose", Subject::Production),
-    ("the_file_cap_is_derived_from_the_designs_budget", Subject::Production),
-    ("the_gates_that_read_rust_say_what_they_read", Subject::Everything),
-    ("the_memory_budgets_are_derived_from_the_models", Subject::Production),
-    ("the_raw_parameter_reader_has_two_homes", Subject::Production),
-    ("the_session_offers_no_second_path", Subject::Everything),
-    ("the_shell_does_not_evaluate", Subject::Production),
-    ("the_shell_does_not_write_the_document", Subject::Production),
-    ("the_step_bound_is_one_number_and_both_doors_name_it", Subject::Production),
-    ("the_tree_writes_its_json_with_one_writer", Subject::Production),
-    ("tree_modules", Subject::Production),
-    ("tree_types", Subject::Production),
-    ("type_paths_in_code", Subject::Production),
-    ("ui_structs", Subject::Production),
-    ("wire_names", Subject::Production),
-    ("panic_boundaries_are_declared", Subject::Production),
+    (
+        "area_variants",
+        Subject::Production,
+        "the areas are the variants of `Area`, and a variant in a comment is not an area",
+    ),
+    (
+        "attributed_code_is_in_the_file",
+        Subject::Production,
+        "the claim is about code, and a mention in a comment is not the code",
+    ),
+    (
+        "check_roots",
+        Subject::Production,
+        "the deny attribute is code, and the same line inside a string is not the crate root's",
+    ),
+    (
+        "control_methods",
+        Subject::Production,
+        "the wire names live in `Method::as_str`, and an arm in a comment answers nothing",
+    ),
+    (
+        "directory_walks",
+        Subject::Production,
+        "a walk is a function that calls itself, and one written in a comment is not one the xtask does",
+    ),
+    (
+        "find_embedded",
+        Subject::Production,
+        "an embed call is code, and a call inside a comment embeds nothing",
+    ),
+    (
+        "fingerprint_sees_every_field",
+        Subject::Production,
+        "the hash is the code the tree ships, and a field only a test declares is not hashed",
+    ),
+    (
+        "gate_problems",
+        Subject::Production,
+        "the table of commands is in the crate's own module doc, and a table in a test is not it",
+    ),
+    (
+        "limits_are_enforced",
+        Subject::Production,
+        "a limit is enforced by code the tree ships, and a use in a test enforces nothing",
+    ),
+    (
+        "parameter_readers",
+        Subject::Production,
+        "the readers are the functions the commands call, and a helper in a test is not one of them",
+    ),
+    (
+        "prose_constants_match_the_code",
+        Subject::Production,
+        "the constant is code, and a number in a comment is not its value",
+    ),
+    (
+        "quoted_code_matches_the_source",
+        Subject::Production,
+        "the quoted code is code, and a block in a comment is not the function",
+    ),
+    (
+        "run",
+        Subject::Production,
+        "the `mod` groups are the crate's own, and a `mod` line in a test is not a module of it",
+    ),
+    (
+        "shape_of",
+        Subject::Production,
+        "the shape of a name is its code, and a shape in a comment is not the shape",
+    ),
+    (
+        "the_bounds_are_named_in_the_prose",
+        Subject::Production,
+        "a bound is enforced by code the tree ships, and a use in a test enforces nothing",
+    ),
+    (
+        "the_file_cap_is_derived_from_the_designs_budget",
+        Subject::Production,
+        "the cap is a constant the tree ships, and a literal in a comment is not it",
+    ),
+    (
+        "the_memory_budgets_are_derived_from_the_models",
+        Subject::Production,
+        "the budgets are constants the tree ships, and a literal in a comment is not one",
+    ),
+    (
+        "the_raw_parameter_reader_has_two_homes",
+        Subject::Production,
+        "the reader is a function the commands call, and a helper in a test is not a third home",
+    ),
+    (
+        "the_shell_does_not_evaluate",
+        Subject::Production,
+        "the shell's code is the code that runs, and a call in a comment evaluates nothing",
+    ),
+    (
+        "the_shell_does_not_write_the_document",
+        Subject::Production,
+        "the shell's code is the code that runs, and a call in a comment writes nothing",
+    ),
+    (
+        "the_step_bound_is_one_number_and_both_doors_name_it",
+        Subject::Production,
+        "the bound is a constant the tree ships, and a literal in a comment is not it",
+    ),
+    (
+        "the_tree_writes_its_json_with_one_writer",
+        Subject::Production,
+        "the writer is code the tree ships, and a call in a comment writes nothing",
+    ),
+    (
+        "tree_modules",
+        Subject::Production,
+        "a module is a `mod` the tree declares, and a `mod` in a comment is not one",
+    ),
+    (
+        "tree_types",
+        Subject::Production,
+        "a type is one the tree defines, and a `struct` in a comment is not a type of it",
+    ),
+    (
+        "type_paths_in_code",
+        Subject::Production,
+        "the paths are the ones the code writes, and a path in a comment is not written",
+    ),
+    (
+        "ui_structs",
+        Subject::Production,
+        "the structs are the ones the ui crate declares, and one in a comment is not a struct of it",
+    ),
+    (
+        "wire_names",
+        Subject::Production,
+        "the wire names live in `Method::parse`, and a name in a comment is not one the channel accepts",
+    ),
+    (
+        "panic_boundaries_are_declared",
+        Subject::Production,
+        "a boundary is a `catch_unwind` the tree runs, and one in a test is not a boundary of the tree",
+    ),
     // The file as it is.
-    ("citation_drift", Subject::Everything),
-    ("citations_of_tests_point_at_the_test", Subject::Everything),
-    ("inspect", Subject::Everything),
-    ("prose_line_counts_match_the_files", Subject::Everything),
-    ("registry_command_ids", Subject::Everything),
-    ("registry_commands", Subject::Everything),
-    ("symbol_file_claims", Subject::Everything),
-    ("the_anchors_are_in_the_tree_of", Subject::Everything),
+    (
+        "citation_drift",
+        Subject::Everything,
+        "a citation names a line of a file, and the file's lines are the file's, tests and all",
+    ),
+    (
+        "citations_of_tests_point_at_the_test",
+        Subject::Everything,
+        "the citation names a test, and a test is in the file and not in the shipped code",
+    ),
+    (
+        "inspect",
+        Subject::Everything,
+        "the clean-room rule forbids a product's name anywhere, and a comment is somewhere",
+    ),
+    (
+        "prose_line_counts_match_the_files",
+        Subject::Everything,
+        "the claim is a line count, and the file's line count is the file's, tests and all",
+    ),
+    (
+        "registry_command_ids",
+        Subject::Production,
+        "the ids are the shipped registry's, and a command only a test declares is not one of them",
+    ),
+    (
+        "registry_commands",
+        Subject::Production,
+        "the commands are the shipped registry's, and a command only a test declares is not one of them",
+    ),
+    (
+        "symbol_file_claims",
+        Subject::Everything,
+        "the claim may name a test, and a test is in the file and not in the shipped code",
+    ),
+    (
+        "the_anchors_are_in_the_tree_of",
+        Subject::Everything,
+        "the anchor's text must be found wherever it is, and a comment is a place it can be",
+    ),
+    (
+        "the_gates_that_read_rust_say_what_they_read",
+        Subject::Everything,
+        "a gate in a test is still a gate the xtask has, and a raw read in a test is still a raw read",
+    ),
+    (
+        "the_session_offers_no_second_path",
+        Subject::Everything,
+        "the question is which methods the shipped session has, and a test-only method is in the file and not in the build",
+    ),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
 ///
-/// §204, extended by §205. Three promises, all about the xtask's own source:
+/// §204, extended by §205 and §206. Four promises, all about the xtask's own
+/// source:
 ///
 /// - the xtask reads a file through **one** home — `xtask/src/tree.rs` — and
 ///   nowhere else; a raw read with the standard library outside that home is
@@ -4826,7 +4990,9 @@ const RUST_READING_GATES: &[(&str, Subject)] = &[
 ///   file — and each subject is an argument, so a gate cannot read a Rust file
 ///   by accident;
 /// - every gate that opens a Rust file is in `RUST_READING_GATES`, and the
-///   subject at its call site is the one the list names.
+///   subject at its call site is the one the list names;
+/// - and every row of that list says **why** it reads the view it reads, so
+///   the list records a decision and not an accident. §206.
 ///
 /// The second is what keeps the first honest. A gate that opens a Rust file
 /// and is not in the list has not said what it reads; a gate in the list whose
@@ -4895,12 +5061,12 @@ pub fn the_gates_that_read_rust_say_what_they_read(root: &Path) -> Result<Vec<St
     }
 
     for (gate, subject) in &calls {
-        match RUST_READING_GATES.iter().find(|(name, _)| name == gate) {
+        match RUST_READING_GATES.iter().find(|(name, _, _)| name == gate) {
             None => problems.push(format!(
                 "xtask/src: the gate `{gate}` opens a Rust file and is not in the list of the gates \
                  that do; a gate that reads the tree's source says which view it reads. §204."
             )),
-            Some((_, wanted)) if wanted != subject => problems.push(format!(
+            Some((_, wanted, _)) if wanted != subject => problems.push(format!(
                 "xtask/src: the gate `{gate}` reads a Rust file for `{}`, and the list says `{}`; \
                  the list is a promise about the code, and it is wrong. §204.",
                 say_the_subject(*subject),
@@ -4909,11 +5075,21 @@ pub fn the_gates_that_read_rust_say_what_they_read(root: &Path) -> Result<Vec<St
             Some(_) => {}
         }
     }
-    for (gate, _) in RUST_READING_GATES {
+    for (gate, _, reason) in RUST_READING_GATES {
         if !calls.iter().any(|(name, _)| name == gate) {
             problems.push(format!(
                 "xtask/src: the list says the gate `{gate}` opens a Rust file, and it does not; the \
                  list is a promise about the code, and it is wrong. §204."
+            ));
+        }
+        // §206. The reason is the third column, and it has to be there: a
+        // subject says *which* view and a reason says *why that one*, and a
+        // reader who has only the subject cannot tell a decision from an
+        // accident.
+        if reason.trim().is_empty() {
+            problems.push(format!(
+                "xtask/src: the list says the gate `{gate}` reads a Rust file, and does not say \
+                 why; the reason is the decision the list is for. §206."
             ));
         }
     }
@@ -10479,12 +10655,12 @@ printf '%s%d/%d caught.%s\\n' \\
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Every gate that opens a Rust file says which view it reads.
+    /// Every gate that opens a Rust file says which view it reads, and why.
     ///
-    /// §204. The list is a promise about the code, and this is the check that
-    /// holds it up: a gate that opens a Rust file and is not in the list has
-    /// not said what it reads, and a gate in the list whose call site says
-    /// something else has changed its mind.
+    /// §204, extended by §206. The list is a promise about the code, and this
+    /// is the check that holds it up: a gate that opens a Rust file and is not
+    /// in the list has not said what it reads, and a gate in the list whose
+    /// call site says something else has changed its mind.
     #[test]
     fn every_gate_that_opens_a_rust_file_says_which_view_it_reads() {
         let root = crate::root().expect("root");
@@ -10494,13 +10670,33 @@ printf '%s%d/%d caught.%s\\n' \\
         // The list is not empty, and it says both things.
         assert!(!RUST_READING_GATES.is_empty(), "the list of the gates that read Rust is empty");
         assert!(
-            RUST_READING_GATES.iter().any(|(_, subject)| *subject == Subject::Production),
+            RUST_READING_GATES.iter().any(|(_, subject, _)| *subject == Subject::Production),
             "no gate says it reads the code the tree ships"
         );
         assert!(
-            RUST_READING_GATES.iter().any(|(_, subject)| *subject == Subject::Everything),
+            RUST_READING_GATES.iter().any(|(_, subject, _)| *subject == Subject::Everything),
             "no gate says it reads the file as it is"
         );
+    }
+
+    /// Every row of the list says why the gate reads the view it reads.
+    ///
+    /// §206. The subject says *which* view and the reason says *why that one*.
+    /// A list with a subject and no reason records an accident, and a reader
+    /// who comes to the list cannot tell the two apart.
+    #[test]
+    fn every_row_of_the_list_says_why() {
+        for (gate, subject, reason) in RUST_READING_GATES {
+            assert!(!reason.trim().is_empty(), "the gate `{gate}` says what it reads and not why");
+            // A reason that is only the subject says nothing the subject did
+            // not already say. A reason may *use* the subject's phrase as one
+            // of its clauses — that is how it explains the choice — but it
+            // has to add something.
+            assert!(
+                reason.trim() != say_the_subject(*subject),
+                "the gate `{gate}` restates its subject instead of saying why: {reason}"
+            );
+        }
     }
 
     /// A Rust file is read with a subject, and everything else is read as it is.
