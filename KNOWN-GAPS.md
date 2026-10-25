@@ -25229,6 +25229,88 @@ with a place the exception can be forgotten.
 as the core's, and the same mutations. Two trees that cannot see each other
 cannot share a check either, so each one carries its own.
 
+## 214. The order of the two refusals was a contract that nothing held
+
+### The finding
+
+Item 58 named it: the pattern document states the order in so many words —
+*"the id, the enabled check, the parameter check, the snapshot and the single
+`catch_unwind` all live, in that order"* — and the code keeps it. **§196
+measured that moving the enabled check after the parameter check left the
+whole workspace's tests green.**
+
+**The order is observable in exactly one case**, and it is worth saying which:
+a command that is **both** disabled **and** called with a parameter it does
+not have. With the enabled check first the caller is told *"disabled"*; with
+the parameter check first it is told *"unknown parameter"*.
+
+**And the other two boundaries are not choices.** The id check has to come
+first: `command::lookup` is what hands the enabled check its `spec`, so a
+command that does not exist cannot be asked whether it is enabled. And the
+snapshot and the `catch_unwind` are not refusals the caller sees — they are
+what runs a command that has already been let through. So the order among the
+**refusals** is one boundary, and it was the one boundary nobody held.
+
+**Measured, again, on this tree.** With the two checks swapped, the whole
+workspace's tests were green — **231** in the engine and every crate besides
+it — and the only failure was the one test that holds the order.
+
+### The port
+
+**A test that holds the order.** `the_disabled_check_comes_before_the_parameter_check`
+calls `history.undo` on a fresh session — there is nothing to undo, so it is
+disabled, and it declares no parameters, so an unknown one is refused — and
+asserts that the answer is **disabled**.
+
+**And a sentence in the code saying why the order is that order.** The reason
+the tree has: the parameter check only has meaning for a command that would
+run. A disabled command's parameters are never read — its body never sees them
+— so telling the caller about an unknown parameter in a command that was not
+going to run at all is answering a question about a path that was never taken.
+
+**And the document names the test**, so a reader knows what holds the order
+instead of taking the document's word for it.
+
+### The gate's own teeth
+
+One mutation, caught by the new test:
+
+| the break | what it says |
+|---|---|
+| the enabled check yields to an unknown parameter | *"a disabled command says disabled, whatever the parameters were"* |
+
+**Measured**: the whole workspace is green except that one test. The break is
+three lines, where swapping the two blocks is thirty — and it breaks **only**
+the order: a disabled command called with a *valid* parameter still says
+disabled.
+
+**And the suite.** **490** of **491** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The decision is still the owner's.** Which order an agent should hear first
+is not decided here, and the code says so. What the tree has is a reason for
+the order it has, and a test that holds it — which makes a change a **choice**
+rather than an accident, and that is what the item asked for.
+
+**The document's quote of the code is still a sketch.** It is not marked
+`exact`, so it can still drift from `Session::execute` — and the prose's list
+of the five things is not compared with the code either. The **order** is
+held; the **quotation** is not.
+
+### The lesson
+
+**A contract stated in prose needs a test, even when the code agrees with the
+prose.** The order was in the document *and* in the code, and the two agreed,
+and nothing held either — because agreement between a document and the code
+is not a check, it is a coincidence that lasts until the next change.
+
+**And a contract is only observable where two rules meet.** The order was
+invisible in every case but one, and that one case is where the test has to
+live. A test of the *common* path would have held nothing.
+
 
 ## What enforces what
 
@@ -25762,6 +25844,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every temporary folder is a folder of its own, and never inherited** | `every_call_gets_a_folder_of_its_own` | 2 mutations — §211 |
 | **A test does not choose where its temporary folder lives** | `the_tree_has_one_temporary_folder` | 1 mutation — §212 |
 | **The xtask's tests build their temporary folders through the xtask's home** | `the_tree_has_one_temporary_folder` | 2 mutations — §213 |
+| **The enabled check comes before the parameter check** | `the_disabled_check_comes_before_the_parameter_check` | 1 mutation — §214 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -27123,7 +27206,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     hand it to the tree over the control channel.
 
 58. **The order of `Session::execute`'s two refusals is a contract that
-    nothing holds.** §196.
+    nothing held.** §196, and the cheap fix is done in §214.
 
     The pattern document states the order in so many words
     (`docs/patterns/everything-is-a-command.md:139`): *"the id, the enabled
@@ -27147,6 +27230,28 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     a test that holds the order the tree has, and a sentence in the code
     saying why it is that order; the *decision* — which order an agent
     should hear first — is the owner's.
+
+    **§214 took the cheap fix, and the decision is still open.** The test
+    `the_disabled_check_comes_before_the_parameter_check` holds the order,
+    the code says why the tree has it, and the document names the test.
+
+    **Measured, on this tree:** with the two checks swapped, the whole
+    workspace's tests were green — **231** in the engine and every crate
+    besides it — and the only failure was the one test that holds the
+    order.
+
+    **And a reason was found for the order the tree has**, which the item
+    said there was none of: the parameter check only has meaning for a
+    command that would run, and a disabled command's parameters are never
+    read. The reason makes the order a **choice** rather than an accident.
+    The *decision* — whether an agent should hear the other order first —
+    is still the owner's, and the code says so.
+
+    **And the claim is narrower than the document's list.** The id check has
+    to come first — `command::lookup` is what hands the enabled check its
+    `spec` — and the snapshot and the `catch_unwind` are not refusals the
+    caller sees. So there is **one** boundary among the refusals, and it is
+    the one that is held.
 
 59. **The tree's own documents name things the tree does not have.** §197.
 

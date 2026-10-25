@@ -167,6 +167,21 @@ pub fn execute(&mut self, id: &str, params: &Json) -> Result<Outcome, EngineErro
 }
 ```
 
+**And the order is held.** It is observable in exactly one case: a command
+that is **both** disabled and called with a parameter it does not have. With
+the enabled check first the caller is told *"disabled"*; with the parameter
+check first it is told *"unknown parameter"*.
+
+`the_disabled_check_comes_before_the_parameter_check` is the test that says
+which one it is. §58 measured that swapping the two checks left the **whole
+workspace's** tests green — the order was in this document and in the code,
+and nothing held either. Now one test holds it, and the swap fails it.
+
+The reason the tree has for the order it has: the parameter check only has
+meaning for a command that would run, and a disabled command's parameters are
+never read. Whether an agent should hear the other order first is a decision
+this tree has not made.
+
 Everything the front ends share is above that line; everything they cannot skip
 is below it.
 

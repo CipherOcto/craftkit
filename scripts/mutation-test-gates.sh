@@ -5646,6 +5646,25 @@ swap crates/io/src/store.rs \
 expect_catch "lists: a test builds its temporary folder by hand" \
     "cargo xtask lists"
 
+# ------------------------------------------------------- the refusals' order ----
+# Section 214. The order of the two refusals is a contract, and it is
+# observable in exactly one case: a command that is **both** disabled and
+# called with a parameter it does not have. With the enabled check first the
+# caller is told "disabled"; with the parameter check first it is told
+# "unknown parameter".
+#
+# The break: the enabled check yields to a parameter the command does not
+# have. That is the *effect* of putting the parameter check first, and it is
+# three lines, where swapping the two blocks is thirty. Measured: the whole
+# workspace is green except the one test that holds the order.
+swap crates/engine/src/session.rs \
+    '        if !(spec.enabled)(self) {' \
+    '        if !(spec.enabled)(self)
+            && Params::new(params).deny_unknown(&spec.param_names()).is_ok()
+        {'
+expect_catch "engine: the parameter check comes before the disabled check" \
+    "cargo test -p craftkit-engine --profile ci the_disabled_check_comes_before_the_parameter_check"
+
 # Section 213. The xtask depends on nothing of the tree's own, so it cannot
 # reach the core's home, and it has one of its own -- `xtask/src/temp.rs`.
 # The rule is the same rule, and it is written once.

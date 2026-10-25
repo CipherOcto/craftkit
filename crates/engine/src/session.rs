@@ -1226,6 +1226,31 @@ mod tests {
         assert!(s.document().validate().is_ok(), "the document is in a state the file reader refuses");
     }
 
+    /// The enabled check comes before the parameter check.
+    ///
+    /// The order of the refusals is a contract, and it is observable in
+    /// exactly one case: a command that is **both** disabled and called with
+    /// a parameter it does not have. With the enabled check first the caller
+    /// is told *"disabled"*; with the parameter check first it is told
+    /// *"unknown parameter"*.
+    ///
+    /// §58 measured that swapping the two left the **whole workspace's**
+    /// tests green — the order was in the document and in the code, and
+    /// nothing held either. This test is what holds it.
+    ///
+    /// The command is `history.undo` on a fresh session: there is nothing to
+    /// undo, so it is disabled, and it declares no parameters, so an unknown
+    /// one is refused.
+    #[test]
+    fn the_disabled_check_comes_before_the_parameter_check() {
+        let mut s = sample();
+        let err = s.execute("history.undo", &json!({ "nope": 1 })).expect_err("refused");
+        assert!(
+            matches!(err, EngineError::Disabled { .. }),
+            "a disabled command says disabled, whatever the parameters were: {err}"
+        );
+    }
+
     /// The table and the registry are the same list.
     ///
     /// Without this half, the test above would keep passing while a new
