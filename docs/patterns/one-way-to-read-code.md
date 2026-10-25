@@ -600,6 +600,43 @@ gained `sample_recorded` **with its reason** when §200 added it. The list of
 the gates that read Rust was the one list in the tree that recorded a
 decision without it.
 
+## And a question about code asked of text is answered by a sentence
+
+**A check that asks what the code *is* reads the code.** The rule has a second
+half that is easy to forget, and §207 found it: *a mention in a string is not
+code* — and **a mention in a comment is not code either**, and a check that
+reads the file's **text** cannot tell the difference.
+
+The engine's test `the_trace_budget_is_derived_from_the_memory_budget` held
+that the trace's byte budget is **derived** from the memory budget and not
+written out. A derived number and a literal have the same value, so the test
+could not see it from the value — it read the engine's own source and looked
+for the names of the derivation on the constant's line.
+
+**Measured**, the check was fooled by a sentence:
+
+```rust
+pub const MAX_TRACE_BYTES: usize = 256 * 1024; // MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION
+```
+
+The number was a literal, the derivation was a comment, and the test
+**passed**. The tree's own gates for the file cap and the memory budgets have
+read the **code** since §148 and §144, and say so: *"a cap that stands only
+inside a string literal is not a cap."*
+
+**And the check belongs where the reader is.** The tree has **one** code
+reader and it lives in the build tool. A crate that cannot have it without
+breaking the one-reader rule cannot ask a question about code — so the
+question goes to the tool, and the crate keeps the half it *can* hold: the
+**value**. §207 moved the trace budget's derivation to
+`the_trace_budget_is_derived_from_its_memory_budget` in `xtask/src/lists.rs`,
+and the engine's test now holds only that the two numbers agree.
+
+**And a test that reads the tree's source measures the file, not the code.**
+The tree has **four** places that read the tree's own source at run time, and
+**every** file they read is a file the mutation suite rewrites. The file and
+the code are the same file until something rewrites one of them.
+
 ## And there is one way to find the files
 
 **A gate that walks the tree walks it one way.** The one way is `walk`, in

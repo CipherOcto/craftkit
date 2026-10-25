@@ -1794,6 +1794,59 @@ pub fn the_memory_budgets_are_derived_from_the_models(root: &Path) -> Result<Vec
     Ok(problems)
 }
 
+/// The trace's byte budget is derived, and not written down.
+///
+/// §207. The engine's runtime test could not see this — a literal and the
+/// derivation have the same value today — so the test read the engine's own
+/// **source** and looked for the names on the constant's line. That is a
+/// question about **code** asked of **text**, and a derivation mentioned in a
+/// comment beside a literal answered it: measured, the constant could be
+/// `256 * 1024` with the derivation in a comment and the test said the budget
+/// was derived.
+///
+/// The check belongs here, where the tree's one code reader lives: a
+/// derivation is code, and a comment is a sentence about code. §148.
+pub fn the_trace_budget_is_derived_from_its_memory_budget(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates/engine/src/lib.rs");
+    let text = read_rust(&path, Subject::Production)
+        .map_err(|e| format!("could not read crates/engine/src/lib.rs: {e}"))?;
+    // The code, not the text: a derivation that stands only inside a comment
+    // is not a derivation. §148.
+    let code = code_lines_kept(&text);
+    let lines: Vec<&str> = code.lines().collect();
+    let Some(index) = lines.iter().position(|l| l.trim_start().starts_with("pub const MAX_TRACE_BYTES"))
+    else {
+        return Ok(vec![
+            "crates/engine/src/lib.rs: there is no `MAX_TRACE_BYTES`: the trace's budget is the \
+             memory it may hold, and it has to be that budget divided by what a byte of text \
+             costs"
+                .to_string(),
+        ]);
+    };
+    // The statement may be wrapped over several lines, and the names it has to
+    // name are on one of them.
+    let mut statement = lines[index].to_string();
+    let mut last = index;
+    while !statement.contains(';') && last + 1 < lines.len() {
+        last += 1;
+        statement.push(' ');
+        statement.push_str(lines[last].trim());
+    }
+    let mut problems = Vec::new();
+    for name in ["MAX_TRACE_MEMORY_BYTES", "JSON_EXPANSION"] {
+        if has_word(&statement, name) {
+            continue;
+        }
+        problems.push(format!(
+            "crates/engine/src/lib.rs: line {} writes `MAX_TRACE_BYTES` without `{name}` in it; \
+             the trace's budget is the memory it may hold, and what a byte of text costs is what \
+             turns one into the other. §70.",
+            index + 1
+        ));
+    }
+    Ok(problems)
+}
+
 /// Every bound the tree has, and the ones its prose names.
 ///
 /// §145. `docs/patterns/clone-before-edit.md` keeps a table of what undoing
@@ -4890,6 +4943,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the bound is a constant the tree ships, and a literal in a comment is not it",
     ),
     (
+        "the_trace_budget_is_derived_from_its_memory_budget",
+        Subject::Production,
+        "the derivation is code the tree ships, and a derivation mentioned in a comment is not one",
+    ),
+    (
         "the_tree_writes_its_json_with_one_writer",
         Subject::Production,
         "the writer is code the tree ships, and a call in a comment writes nothing",
@@ -6100,6 +6158,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // The memory budgets, and the budget they have to come from. §144.
     problems.extend(
         the_memory_budgets_are_derived_from_the_models(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
+    );
+
+    // The trace's byte budget, and the memory budget it comes from. §207.
+    problems.extend(
+        the_trace_budget_is_derived_from_its_memory_budget(root)?
             .into_iter()
             .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
     );

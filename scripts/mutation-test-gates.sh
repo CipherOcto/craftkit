@@ -2202,11 +2202,27 @@ expect_catch "engine: a command too big for the trace is not refused" \
 
 # And the budget itself: the same number, but written out on its own instead
 # of derived from the memory it is supposed to bound.
+#
+# Section 207 moved the check to the build tool, where the tree's one code
+# reader lives. The engine's runtime test could not see this -- a literal and
+# the derivation have the same value today -- so it read the engine's own
+# source as text, and a derivation mentioned in a comment beside a literal
+# satisfied it. The gate is the one that holds it now.
 swap crates/engine/src/lib.rs \
     'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;' \
     'pub const MAX_TRACE_BYTES: usize = 256 * 1024;'
 expect_catch "engine: the trace budget is a number of its own again" \
-    "cargo test -p craftkit-engine --profile ci the_trace_budget_is_derived_from_the_memory_budget"
+    "cargo xtask lists"
+
+# And the same number, with the derivation kept -- in a **comment**. The
+# engine's own test read the file as text and said the budget was derived;
+# the gate reads the code, and a derivation that stands only in a sentence
+# about code is not a derivation. Section 207.
+swap crates/engine/src/lib.rs \
+    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;' \
+    'pub const MAX_TRACE_BYTES: usize = 256 * 1024; // MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION'
+expect_catch "lists: a derivation in a comment is not a derivation" \
+    "cargo xtask lists"
 
 # The fingerprint forgets a field, and the guard that should have noticed
 # drifts with it. §80: the keyframe's easing was in the hash but not in the

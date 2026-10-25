@@ -24379,6 +24379,124 @@ distinguished a test command from a shipped one.
 hold a reason *true* — it is prose, and no mutation can prove it — but it can
 hold it **present**, and hold it to be more than the subject.
 
+## 207. A test read the tree's own source as text to ask a question about code, and it was fooled
+
+### The finding
+
+Item 42 asked for the cause of a flake that was never reproduced: one
+`craftkit-engine --lib` failure during §167's validation, and **ten** clean
+runs after it.
+
+**Measured**: **150** more runs of `cargo test -p craftkit-engine --lib` at
+§207 — **0** failures. The flake did not reproduce in **160** runs in all, and
+the tree still cannot say what it was.
+
+So the question turned into a different one: *what in the tree could make a
+test fail for a reason that has nothing to do with the code under test?*
+
+**And the tree has four places that read the tree's own source at run time**,
+in **six** spots:
+
+| The test | Reads |
+|---|---|
+| `crates/engine/src/session.rs` | `crates/engine/src/lib.rs` — **the crate's own source** |
+| `crates/io/src/format/pending.rs` | `crates/io/src/format/pending.rs` — **its own file** |
+| `crates/io/src/format/pending.rs` | the `crates/io/src/format/pending/` directory |
+| `crates/control/src/server.rs` | the workspace `Cargo.toml` |
+| `apps/craftkit-cli/tests/command_effects_survive_the_file.rs` | `docs/design/file-format.md` |
+
+**And every file they read is a file the mutation suite rewrites** — all four
+of them are in `scripts/mutation-files.txt`. A test that reads a file the
+suite has open measures the **file**, not the code it was compiled from, and
+the only thing that keeps it honest is the restore.
+
+### The false negative
+
+The engine's test `the_trace_budget_is_derived_from_the_memory_budget` held
+two things: that `MAX_TRACE_BYTES` and
+`MAX_TRACE_MEMORY_BYTES / JSON_EXPANSION` have the same **value**, and that
+the constant's **line** names both. The second half was a question about
+**code** — *is this number derived or written out?* — asked of the file's
+**text**.
+
+**Measured**: with the constant written as
+
+```rust
+pub const MAX_TRACE_BYTES: usize = 256 * 1024; // MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION
+```
+
+the test **passed**. The number was a literal and the derivation was a
+sentence about it, and the tree's own check said the budget was derived. The
+tree's rule is the opposite — §148's gates for the file cap and the memory
+budgets read the **code**, and say so: *"a cap that stands only inside a
+string literal is not a cap."*
+
+### The port
+
+**The check moved to the build tool, where the tree's one code reader lives.**
+`the_trace_budget_is_derived_from_its_memory_budget` in `xtask/src/lists.rs`
+reads `crates/engine/src/lib.rs` through the tree's reader, takes the **code
+view**, and holds that the statement naming `MAX_TRACE_BYTES` names
+`MAX_TRACE_MEMORY_BYTES` and `JSON_EXPANSION` as whole words.
+
+**And the engine's test keeps the half it can hold.** The value relationship
+is a fact about the compiled code: the two numbers have to agree. The
+*derivation* is a fact about the source, and the source is not the engine's
+to read — §144 already said this: *"The runtime test in the engine cannot see
+this, because the literal and the derivation have the same value today. That
+is what a gate is for."* The engine's test no longer opens a file.
+
+### The gate's own teeth
+
+Two mutations, both caught by `cargo xtask lists`:
+
+| the break | what it says |
+|---|---|
+| the constant is written out | *"crates/engine/src/lib.rs: line 76 writes `MAX_TRACE_BYTES` without `MAX_TRACE_MEMORY_BYTES` in it; the trace's budget is the memory it may hold, and what a byte of text costs is what turns one into the other. §70."* |
+| the derivation moves into a **comment** | the same, and **the engine's own test still passed** — which is the measurement that says the new gate has teeth the old one did not |
+
+**And the suite.** **480** of **481** cases caught, and the one `known` is the
+limit of wasm32 itself and not a gate that passed. The tree came back
+**unchanged**.
+
+### What is not claimed
+
+**The flake is still unexplained.** §207 did not reproduce it in **150**
+runs, and did not find a cause; it found a hazard and closed one of them.
+
+**And one more of the same shape is left, and it is measured.** The io crate's
+`every_pending_file_is_wired_into_apply` reads **its own file's text** and
+looks for `mod {name};` and `{name}::step`. The pending list is
+`const FILES: &[&str] = &[];` — **empty** — so the check is **vacuous**
+today, and the io crate cannot have the tree's one code reader without
+breaking the one-reader rule. It is item 65.
+
+**And the one duplicated temporary folder is measured too.** The tree has
+**39** temporary-folder names and exactly **one** of them is used twice:
+`"not-a-report"`, by two tests in `crates/engine/src/crash.rs`. The two are
+robust to each other today — `list_in` keeps only the folders that hold a
+`report.json`, and the other test writes a plain file — but the folders are
+**never cleaned**, so a run that reuses a process id inherits the last run's
+files. It is item 66.
+
+### The lesson
+
+**A test that reads the tree's source measures the file, not the code.** The
+two are the same file until something rewrites one of them, and the thing that
+rewrites it is the tree's own mutation suite.
+
+**And a question about code asked of text is answered by a sentence.** The
+engine's test looked for the names of the derivation on the constant's line,
+and a **comment** on that line had them. §149's rule — *a mention in a string
+is not code* — has a second half that is easy to forget: *a mention in a
+comment is not code either*, and a check that reads the text cannot tell the
+difference.
+
+**And the gate that could answer it was already there.** The file cap and the
+memory budgets had been checked in the code view since §148 and §144. The
+trace budget was the one that was not, and it was the one that was checked by
+a test that read the file.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -24904,6 +25022,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A Rust file is read with a subject; everything else is read as it is** | `read_text`, `read_bytes` and `read_rust` in `xtask/src/tree.rs` | 1 mutation — §205 |
 | **The readers, the cut and the code reader have one home** | `the_tree_has_one_home_for_reading_a_file` | the unit test — §205 |
 | **A row of the list of the gates that read Rust says why** | `RUST_READING_GATES` | 2 mutations — §206 |
+| **The trace's budget is derived, and a derivation in a comment is not a derivation** | `the_trace_budget_is_derived_from_its_memory_budget` | 2 mutations — §207 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
@@ -25446,7 +25565,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     first. Which one is right depends on how often the plan is rebuilt and
     how often it is asked, and nobody has measured the second against the
     first.
-23. **Decide what an agent may read off the screen.** §128 measured that the
+23. ~~**Decide what an agent may read off the screen.**~~ **Done in §199.** §128 measured that the
     problems panel publishes **nothing**: its rows are drawn and no name
     carries them, so an agent that asks "what does the screen say?" is told
     about the toolbar, the node rows and the property editors, and not about
@@ -25460,7 +25579,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     for that today. The choice is: publish the rows as a name per diagnostic,
     or leave the panel as the one part of the screen an agent cannot see.
 
-    **Done in §199.** The choice was the first one: the rows are published as
+    The choice was the first one: the rows are published as
     a name per diagnostic (`problems.item.0`, `problems.item.1`, …), so the
     problems panel is no longer the one part of the screen an agent cannot
     see. And the name made the gate possible: with a name to measure, the
@@ -25732,7 +25851,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the second complaint, keep the substring and accept the first, or ask
     the reader's question differently — by the *shape* of the argument
     rather than by the name of its type.
-40. **Check the twenty rows of §159's audit.** §159 listed every gate
+40. ~~**Check the twenty rows of §159's audit.**~~ **Done in §205.**
+    §159 listed every gate
     that opens a Rust file and said, for each, which view it reads — twenty
     rows, "derived by walking the tree's own build tool rather than by
     memory". **§165** found that one of those rows was **wrong**: the gate
@@ -25756,6 +25876,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     check — every place a Rust file is opened without the tree's one reader,
     which would catch the next one without a human asking — and a line above
     the table saying that it is a claim rather than a fact.
+
+    **Done in §205**, and it took the **static check**: the gate
+    `the_gates_that_read_rust_say_what_they_read` now walks **every** module
+    of the xtask and reports every place a Rust file is opened with the
+    standard library outside the tree's one home — and it checks **both**
+    spellings of the read, which §204's version did not. The gate that says
+    "the tree reads code one way" stopped naming eight files and started
+    walking them. The next one is caught without a human asking.
 41. **Make a mutation's anchor name the gate it breaks.** The script's rule is
     "one swap, one gate", and it has a second half that §167 learned the hard
     way: **one swap, *the* gate.** An anchor that is present, unique and in
@@ -25801,6 +25929,26 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     loop under `ci` until one fails and capture the name (slow, and the cost
     falls on every run), or run the engine's tests under a repetition count
     in the `ci` profile only.
+
+    **§207 ran the loop, and found the hazard instead of the flake.**
+    **150** more runs of `cargo test -p craftkit-engine --lib`: **0**
+    failures. The flake has now not reproduced in **160** runs in all.
+
+    What §207 did find is a way for a test in that crate to fail for a reason
+    that has nothing to do with the code under test: the tree has **four**
+    places that read the tree's own source at run time, and **every** file
+    they read is a file the mutation suite rewrites. One of them — the
+    engine's own `the_trace_budget_is_derived_from_the_memory_budget` — was
+    asking a question about **code** of the file's **text**, and a derivation
+    mentioned in a **comment** satisfied it. That check moved to the build
+    tool, where the tree's one code reader lives, and the engine's test no
+    longer opens a file. §207.
+
+    **The flake is still unexplained.** §207 closed a hazard; it did not find
+    a cause, and it does not claim one.
+
+    What is **left** is the choice the item names: the loop, or the
+    repetition count. Neither is free, and the cost falls on every run.
 
 43. **Decide whether a gate named in prose without the command in front of it
     counts.** §169's gate reads one phrase out of the prose — `cargo xtask
@@ -25885,7 +26033,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     their arguments filled in. A prompt that *ran* several commands would
     need the tree to have a sequence, and it does not.
 
-47. **Fuzz the other two files the tree reads.** §180 fuzzes the design file,
+47. ~~**Fuzz the other two files the tree reads.**~~ **Done in §201.** §180 fuzzes the design file,
     and the design file is the widest door — but it is not the only one.
 
     The tree reads two more files from disk, and both are read the same way:
@@ -25956,7 +26104,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     **What is left is the corpus**, and it is item 60 below.
 
-    **Done in §201.** The corpus arrived with the third target: the fuzzer
+    The corpus arrived with the third target: the fuzzer
     watches **three** doors now — the design file, the script and the crash
     report — and the report's corpus is written by the tree's own program
     (`seed_reports`). The replay door's corpus is a folder holding **one**
@@ -26085,8 +26233,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     against, so there is no list to keep — and refuses a document that
     mentions a mutation and names the array.
 
-54. **The gate's reader and the shell disagree about what a double-quoted
-    string means.** §190's rule holds the script's **labels** to being
+54. ~~**The gate's reader and the shell disagree about what a double-quoted
+    string means.**~~ **Done in §192.** §190's rule holds the script's **labels** to being
     literals the shell cannot change. The **anchors** — the text a `swap`
     looks for — are shell-evaluated too, and the reader that checks them
     resolves the four escapes a double quote has and stops there: it does
@@ -26113,7 +26261,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     as a label must. The extent — how many of the 454 calls are affected,
     and which arguments are allowed to be expanded — is not measured yet.
 
-    **Done in §192.** Measured: the tree's script carries **458 text
+    Measured: the tree's script carries **458 text
     arguments** — 443 in `swap`, 8 in `broken_copy` and 7 in `append` —
     and **none** of them is one the shell would change. The rule is about
     the arguments that are *written into the tree*, not the ones that are
@@ -26148,13 +26296,13 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     The reader that reads the texts for §192 already exists; what is
     missing is the rule that says a `broken_copy`'s text names one place.
 
-56. **The gate reports a line number that can be wrong by one.** §193's new
+56. ~~**The gate reports a line number that can be wrong by one.**~~ **Done in §193.** §193's new
     message named a place, and named the wrong one: `line_of` counted the
     lines of the text *before* an offset, which is right at the start of a
     line and one too many anywhere else, because the partial line before
     the offset counts as a line of its own.
 
-    **Done in §193.** The count is of the newlines before the offset now, and
+    The count is of the newlines before the offset now, and
     a unit test holds the line an offset is on for an offset in the middle
     of a line. The same helper names the places of an anchor that is in
     the file more than once, so every line number the gate has ever
@@ -26166,7 +26314,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     in the tree — the anchors that are in a file twice are the ones the
     §184 rule reports, and that report names the places.
 
-    **Done in §193.** Measured with the gate's own reader: of the tree's
+    Measured with the gate's own reader: of the tree's
     five `broken_copy` calls, **four** named their text in exactly one
     place apart from the call, and **one** named it in **two**. The rule is
     now §184's rule with one word changed — *one* place, apart from the
@@ -26177,7 +26325,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     wrong thing is reported as a **missed gate**, which is a result about
     the gate.
 
-57. **A report that arrives from another machine has no door.** §195.
+57. ~~**A report that arrives from another machine has no door.**~~ **Done in
+    §195.**
 
     The tree says in four places that a report is **input** — it arrives
     from somebody else's disk — and the recipe says it in the words a
@@ -26192,7 +26341,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     copy the file into the crash folder under its own id, by hand — a step
     no document mentions.
 
-    **Done in §195.** `crashes show --file <report.json>` and
+    `crashes show --file <report.json>` and
     `crashes replay --file <report.json>` (with `--script` as well) are the
     doors, and the file door is the tree's **one** reader and its **one**
     replay, so it cannot answer differently from the folder door.
@@ -26394,8 +26543,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     one — and the tree's own registry knows the parameters of every command,
     so the comparison has a source. It is a design question, not a missing
     line.
-63. **The rule that a Rust file is read with a subject is one module wide.**
-    §204.
+63. ~~**The rule that a Rust file is read with a subject is one module wide.**~~
+    **Done in §205.**
 
     §204 gave the lists gate one way to open a Rust file — `read_rust(path,
     subject)` — and a list of the **35** gates that do, with the subject each
@@ -26423,7 +26572,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     whole xtask, and the list of the gates that read Rust grows past the lists
     gate.
 
-    **Done in §205**, and the measurement above was too small. §205 measured
+    The measurement above was too small. §205 measured
     the xtask at §204 with the tree's own cut: **fourteen** modules, not
     twelve; **eight** of them with a raw read, not six; **seventeen** raw
     reads in all, **thirteen** spelled `std::fs::read_to_string` and **four**
@@ -26441,8 +26590,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     said "the tree reads code one way" stopped naming eight files and started
     walking them. §205.
 
-64. **The list of the gates that read Rust says what each one reads, and not
-    why.** §204.
+64. ~~**The list of the gates that read Rust says what each one reads, and not
+    why.**~~ **Done in §206.**
 
     `RUST_READING_GATES` names the gates that read Rust and the subject each
     one reads for. A reader who comes to `("citation_drift", Subject::Everything)` sees
@@ -26460,7 +26609,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     This is a small change and it is the difference between a list that records
     a decision and a list that records an accident.
 
-    **Done in §206.** The list grew the third column, and writing the reasons
+    The list grew the third column, and writing the reasons
     down found that **two** of the **38** subjects were wrong: the two
     registry gates said *the file as it is*, and their own doc comments say
     *"the **shipped** registry"*. Measured, the two views of the file are the
@@ -26476,3 +26625,45 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     What is **not** claimed: a reason cannot be held *true*. It is prose, and
     no mutation can prove it. The gate holds that every row says why, and the
     unit test holds that a reason is not only the subject's own phrase.
+
+65. **The io crate's pending-format check reads its own file's text, and the
+    list it walks is empty.** §207.
+
+    `crates/io/src/format/pending.rs` holds a test that reads **its own
+    file** and looks for `mod {name};` and `{name}::step` for every name in
+    the pending list. Two things are wrong with it.
+
+    **It is vacuous.** The list is `const FILES: &[&str] = &[];` — **empty** —
+    so the loop never runs and the check says nothing. The test's own comment
+    says so: *"Vacuous while the list is empty, which is the normal state
+    between releases."*
+
+    **And it reads text where it wants code.** A `mod foo;` inside a
+    **comment** would satisfy it, the same way a derivation in a comment
+    satisfied the engine's trace-budget test (§207's measured false
+    negative).
+
+    The io crate cannot have the tree's one code reader without breaking the
+    one-reader rule (§149), so the check belongs in the build tool — the way
+    §207 moved the trace budget's. The names come from the io crate's own
+    table, so the gate would have to derive them the way the io crate does.
+
+66. **One temporary folder name is used by two tests, and no folder is ever
+    cleaned.** §207.
+
+    The tree has **39** temporary-folder names and exactly **one** of them is
+    used twice: `"not-a-report"`, by `a_folder_that_is_not_a_report_is_not_
+    listed_and_says_so` and `a_file_that_is_not_a_report_is_refused_by_name`,
+    both in `crates/engine/src/crash.rs`.
+
+    **Measured, the two are robust to each other today**: `list_in` keeps only
+    the folders that hold a `report.json`, and the other test writes a plain
+    file, so neither can see the other's work. That is luck, not a rule — the
+    shape is §159's, where two tests wrote over each other because they used
+    the same name and the pid is the same for both.
+
+    **And no folder is ever cleaned.** `temp_dir` only creates the folder, so
+    a run that reuses a process id inherits the last run's files — and the
+    tree keeps the folder on purpose, *"so a failing run leaves evidence
+    behind rather than deleting it"*. The two rules are in tension, and
+    nothing says which wins.

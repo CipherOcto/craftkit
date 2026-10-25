@@ -1950,20 +1950,22 @@ mod tests {
     /// [`craftkit_core::JSON_EXPANSION`] times its text, so a limit written in
     /// bytes of text has to be read as a limit in bytes of memory that many
     /// times larger. §70.
+    ///
+    /// This test holds the **value**: the two numbers have to agree. It does
+    /// **not** hold the derivation, because a literal and the derivation have
+    /// the same value today — §144's words — and holding it meant reading the
+    /// engine's own source as **text**, which a derivation in a comment beside
+    /// a literal satisfied. Measured: the constant could be `256 * 1024` with
+    /// the derivation in a comment, and this test said the budget was
+    /// derived.
+    ///
+    /// The derivation is a question about **code**, and the tree's one code
+    /// reader lives in the build tool:
+    /// `the_trace_budget_is_derived_from_its_memory_budget` in
+    /// `xtask/src/lists.rs` holds it. §207.
     #[test]
     fn the_trace_budget_is_derived_from_the_memory_budget() {
         assert_eq!(crate::MAX_TRACE_BYTES, crate::MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION);
-        // The **source** is checked, and not only the value: 8 MiB divided by
-        // 32 is 262 144, which is also 256 × 1024, and a number that happens
-        // to be the same is not a derived number.
-        let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"))
-            .expect("the engine's own source is readable");
-        let line =
-            source.lines().find(|l| l.contains("MAX_TRACE_BYTES: usize =")).expect("the constant is defined");
-        assert!(
-            line.contains("MAX_TRACE_MEMORY_BYTES") && line.contains("JSON_EXPANSION"),
-            "the trace budget is not derived from the memory budget: {line}"
-        );
     }
 
     /// A document of a given size, for the tests that need a big one.
