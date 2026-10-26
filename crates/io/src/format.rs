@@ -260,8 +260,20 @@ impl Default for Format {
 /// The writer's indentation now stops growing
 /// ([`craftkit_core::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
 /// format rather than a function of the design. Measured over the same
-/// shapes, the worst case is **1.51** bytes of text per byte of memory.
-pub const FILE_EXPANSION: usize = 2;
+/// shapes, the worst case is **1.51** bytes of text per byte of memory — on a
+/// 64-bit machine.
+///
+/// **And the estimate is a fact about the machine**, so the factor is the worst
+/// case over the **machines**, not over one of them. On a 32-bit target the same
+/// design is estimated a third smaller — the estimate counts the tree's own
+/// structs, and a pointer is four bytes there — while its file is the same file,
+/// and the ratio there measured **2.247**. §231.
+///
+/// So the number is **3**: a constant, not a measurement, and the worst case over
+/// every platform the tree runs on. A cap that is the worst case over one
+/// machine is a cap that is wrong on another, and the tree holds a design it
+/// cannot save when that happens.
+pub const FILE_EXPANSION: usize = 3;
 
 /// How many bytes a design file may be.
 ///
@@ -270,11 +282,16 @@ pub const FILE_EXPANSION: usize = 2;
 /// [`craftkit_model::limits::MAX_DOCUMENT_BYTES`] of memory, and its file may
 /// be at most [`FILE_EXPANSION`] times that.
 ///
-/// 64 MiB — the number this cap has always been — but now it is a
-/// consequence rather than a choice, and it cannot drift away from the budget
+/// **96 MiB** — 32 MiB of design and three times that in text. The number this
+/// cap has always been was 64 MiB, and it was a consequence rather than a
+/// choice; it is a consequence now too, and it cannot drift away from the budget
 /// it protects. The other half of the derivation is what makes the two agree:
 /// every document the model accepts has a file inside this cap, so the tree
 /// can hold a design and save it. §141.
+///
+/// **The cost of the wider factor is the reader's bound**, because the same
+/// number is applied while reading: a file of up to 96 MiB may cost up to
+/// 96 MiB to read, where it was 64 MiB before. §231.
 ///
 /// It is applied **while reading**, in [`crate::store::load`], so that a file
 /// of any size costs at most this much memory — a cap checked after the read
@@ -499,6 +516,11 @@ mod tests {
     /// values, keyframes, and keyframes inside the deepest property tree the
     /// model allows — and the worst of them measured 1.51 before the writer's
     /// indentation was bounded. It was 9.9.
+    ///
+    /// **And it is a property of the machine it runs on.** The estimate counts
+    /// the tree's own structs, so on a 32-bit target it is a third smaller while
+    /// the file is the same file, and this test is what says so there: it failed
+    /// on the device with the cap at 2, and the ratio there is 2.247. §231.
     #[test]
     fn a_designs_file_is_bounded_by_the_design_it_holds() {
         for (name, doc) in shapes() {
@@ -510,6 +532,32 @@ mod tests {
                 text.len()
             );
         }
+    }
+
+    /// The expansion covers the worst case over the platforms the tree runs on.
+    ///
+    /// The property above is checked **per platform**, and the platforms do not
+    /// agree: the same design is estimated 1.498 times its file on a 64-bit
+    /// host and 2.247 times its file on a 32-bit ARM target, measured. A cap
+    /// that is the worst case over one machine is wrong on another, and the
+    /// tree holds a design it cannot save when that happens. §231.
+    ///
+    /// **The number is written down**, because a constant cannot be a
+    /// measurement: the ratio is measured, and the constant has to be a number
+    /// the tree can hold still.
+    #[test]
+    fn the_expansion_covers_the_worst_case_over_the_platforms() {
+        // The measured worst case, in ten-thousandths: 2.2466 bytes of file
+        // for every byte of estimate, on a 32-bit ARM target.
+        const MEASURED_WORST_X_10_000: usize = 22_467;
+        // Asserted with locals so clippy does not fold them into a constant
+        // comparison — the same way `crates/model/src/lib.rs` asserts its own.
+        let (expansion, worst) = (FILE_EXPANSION, MEASURED_WORST_X_10_000);
+        assert!(
+            expansion * 10_000 >= worst,
+            "the expansion is {expansion}, and the worst case measured over the platforms the \
+             tree runs on is 2.2466 — a 64-bit host measures 1.498 and a 32-bit ARM target 2.247"
+        );
     }
 
     /// The shapes a design can take, each big enough that the file's own head
@@ -595,15 +643,15 @@ mod tests {
 
     /// A design whose file is bigger than the cap.
     ///
-    /// Fifty-six properties with 10 000 keyframes on each: 53.6 MiB of memory
-    /// and 74 MiB of text, past the cap. The model's own budget would refuse
-    /// it too, but the writer is asked on its own here — `File::to_text` does
-    /// not validate the design, and the cap is what the writer has.
+    /// Eighty properties with 10 000 keyframes on each: 73.3 MiB of memory and
+    /// 105.1 MiB of text, past the 96 MiB cap. The model's own budget would
+    /// refuse it too, but the writer is asked on its own here — `File::to_text`
+    /// does not validate the design, and the cap is what the writer has.
     fn a_design_bigger_than_a_file() -> Document {
         let mut doc = Document::empty("Big");
         let id = doc.add_node("n", NodeKind::Source).expect("node");
         let mut group = PropGroup::new("props", "Properties");
-        for p in 0..56u64 {
+        for p in 0..80u64 {
             let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
             for t in 0..10_000i128 {
                 let Ok(key) = craftkit_model::Key::new(
@@ -911,7 +959,9 @@ mod tests {
 
     #[test]
     fn an_oversized_file_is_refused_before_it_is_parsed() {
-        let big = "x".repeat(65 * 1024 * 1024);
+        // One byte past the cap, which is the cap and not a number somebody
+        // chose: the cap moved in §231 and this test moved with it.
+        let big = "x".repeat(MAX_FILE_BYTES + 1);
         let err = File::from_text(&big).expect_err("refused");
         assert!(err.to_string().contains("limit"), "{err}");
     }

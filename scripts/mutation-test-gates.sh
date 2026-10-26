@@ -4155,11 +4155,27 @@ expect_catch "io: the writer indents as deep as the design goes" \
 # byte of design takes, and the file's cap is the design's budget times it.
 # Understate the expansion and the cap is too small for a design the model
 # accepts: the tree holds a design it cannot save.
+#
+# §231: the expansion is the worst case over the **platforms**, not over one of
+# them — 1.498 on a 64-bit host and 2.247 on a 32-bit ARM target for the same
+# design — so understating it fails on the device even when it passes here.
 swap crates/io/src/format.rs \
-    'pub const FILE_EXPANSION: usize = 2;' \
+    'pub const FILE_EXPANSION: usize = 3;' \
     'pub const FILE_EXPANSION: usize = 1;'
 expect_catch "io: the format's expansion is understated" \
     "cargo test -p craftkit-io --profile ci a_document_the_model_accepts_can_be_written_and_read_back"
+
+# And the expansion has to stay above the worst case measured over the
+# platforms. Lowering it by one is invisible on this machine — the host's own
+# ratio is 1.498, so a cap of 2 still holds it — and it is the device that says
+# so: on a 32-bit target the same design's file is 2.247 times its estimate, so
+# a cap of 2 is a design the model accepts and the writer refuses. The floor is
+# the measurement, written down, and this case is what keeps it written down.
+swap crates/io/src/format.rs \
+    'pub const FILE_EXPANSION: usize = 3;' \
+    'pub const FILE_EXPANSION: usize = 2;'
+expect_catch "io: the expansion falls below the worst case over the platforms" \
+    "cargo test -p craftkit-io --profile ci the_expansion_covers_the_worst_case_over_the_platforms"
 
 # And the cap itself has to be *derived*. A literal that happens to be the
 # right number today is a number that can be wrong tomorrow, and the test in

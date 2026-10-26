@@ -17,7 +17,7 @@
 //! inside it is written nine levels down. So the text was not a constant
 //! multiple of the design's memory. Measured over the shapes a document can
 //! take, the text was **2.5 times** the design for a flat one and **9.9
-//! times** it for a deep one — and the tree's file cap (64 MiB) was smaller
+//! times** it for a deep one — and the tree's file cap (64 MiB then) was smaller
 //! than the file that some designs *inside the model's own budget* needed:
 //! 311 MiB of file for a 31 MiB design. The tree could hold designs it could
 //! not save. §141.
