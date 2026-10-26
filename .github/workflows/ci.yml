@@ -59,6 +59,31 @@ jobs:
       - name: The gate
         run: cargo xtask ci
 
+      # The instrument runs here too.
+      #
+      # The mutation script is the tree's own proof that its gates can fail,
+      # and until now it had only ever run on Linux -- so "the gates can fail"
+      # was a fact about one platform. The self-test is cheap (measured: under
+      # two seconds, no cargo) and it is the negative of the whole exercise:
+      # the script must fail when a gate stops catching. It also has to leave
+      # the tree exactly as it found it, which is asserted here rather than
+      # assumed. Section 227.
+      - name: The instrument runs here too
+        shell: bash
+        run: |
+          code=0
+          scripts/mutation-test-gates.sh --self-test || code=$?
+          if [[ $code -ne 1 ]]; then
+            echo "::error::the mutation self-test exited $code, not 1"
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "::error::the mutation self-test left the tree changed"
+            git status --porcelain
+            exit 1
+          fi
+          echo "ok: the mutation script's self-test works on this platform"
+
       # The browser build, not just the wasm check: install a wasm-bindgen CLI
       # whose version matches the crate, and prove the bundle is actually
       # produced. `cargo xtask wasm` only compiles; it writes nothing, which is

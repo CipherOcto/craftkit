@@ -110,6 +110,22 @@ if [ "$FILE_COUNT" -eq 0 ]; then
     exit 1
 fi
 
+# The Python that does the file surgery.
+#
+# `python3` is the name on most systems; a Windows runner's Git Bash has
+# `python` and may not have `python3`. The script needs one, and a machine
+# with neither cannot run the instrument -- which has to be **said**, not
+# discovered halfway through a run. The code is 2, which is the script's own
+# "something is wrong with me" and not "a gate missed its mutation" (section
+# 203). §227.
+PYTHON="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+if [[ -z "$PYTHON" ]]; then
+    printf '%sNO PYTHON%s\n' "$RED" "$RESET" >&2
+    printf '  The mutation script needs python3 (or python) to swap the text it mutates.\n' >&2
+    printf '  On a Windows runner that is python in the Git Bash shell.\n' >&2
+    exit 2
+fi
+
 # `--check` says whether the list is usable, and nothing else.
 #
 # The list's rules are the gate's rules, and the gate is the authority. This
@@ -202,10 +218,15 @@ swap() {
     # and the case is reported as a MISSED result — which is a result about
     # the gate, when it is a bug in this file. The header has said so since
     # the guard was added; §46 is the run where it did not.
-    if ! python3 - "$1" "$2" "$3" <<'PYSWAP'
+    if ! "$PYTHON" - "$1" "$2" "$3" <<'PYSWAP'
 import sys
 path, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
-text = open(path).read()
+# `newline=""` on both sides: the bytes of the file are read and written as
+# they are. Without it a Windows Python turns every line ending it writes
+# into CRLF, so a mutation would rewrite the whole file and the tree would
+# not be the tree the gate was given. §227.
+with open(path, "r", newline="") as handle:
+    text = handle.read()
 if old not in text:
     sys.exit(
         "MUTATION DID NOT APPLY\n"
@@ -214,7 +235,8 @@ if old not in text:
         "  This is a bug in scripts/mutation-test-gates.sh: the anchor moved.\n"
         "  A mutation that changes nothing makes every result below meaningless."
     )
-open(path, "w").write(text.replace(old, new, 1))
+with open(path, "w", newline="") as handle:
+    handle.write(text.replace(old, new, 1))
 PYSWAP
     then
         printf '\n%sTHE MUTATION DID NOT APPLY, SO THE RUN IS VOID.%s\n' "$RED" "$RESET" >&2
@@ -264,10 +286,12 @@ guarded() {
 # a copy that changes nothing is a copy that tests nothing. §187.
 broken_copy() {
     local out="$1" from="$2" to="$3"
-    if ! python3 - "$out" "$from" "$to" <<'PYCOPY'
+    if ! "$PYTHON" - "$out" "$from" "$to" <<'PYCOPY'
 import sys
 out, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
-text = open("scripts/mutation-test-gates.sh").read()
+# The bytes, as they are: see the note in `swap`. §227.
+with open("scripts/mutation-test-gates.sh", "r", newline="") as handle:
+    text = handle.read()
 if old not in text:
     sys.exit(
         "BROKEN COPY DID NOT APPLY\n"
@@ -275,7 +299,8 @@ if old not in text:
         "  This is a bug in scripts/mutation-test-gates.sh: the anchor moved.\n"
         "  A copy that changes nothing tests nothing."
     )
-open(out, "w").write(text.replace(old, new, 1))
+with open(out, "w", newline="") as handle:
+    handle.write(text.replace(old, new, 1))
 PYCOPY
     then
         printf '\n%sTHE BROKEN COPY DID NOT APPLY, SO THE RUN IS VOID.%s\n' "$RED" "$RESET" >&2
