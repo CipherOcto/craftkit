@@ -1454,12 +1454,27 @@ mod tests {
     /// The earlier version asked the root for its parent and was given the
     /// root back, so it never came back — and on a device, where the tree is
     /// not present, it never came back either.
+    ///
+    /// **The wait has a bound** (§224): the walk runs on its own thread and
+    /// the test says so when the answer does not arrive. A test that hangs is
+    /// a test that catches nothing — the whole binary goes with it, which is
+    /// what the phone showed.
     #[test]
     fn a_walk_that_finds_nothing_comes_back_empty() {
         let root = temp_dir("control-workspace-absent");
         let dir = root.join("crates/control/src");
         std::fs::create_dir_all(&dir).expect("the tree");
-        assert_eq!(find_workspace_root(&dir), None);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let start = dir.clone();
+        std::thread::spawn(move || {
+            let _ = sender.send(find_workspace_root(&start));
+        });
+        let answer = receiver.recv_timeout(std::time::Duration::from_secs(10));
+        assert!(
+            answer.is_ok(),
+            "the walk never came back: at the filesystem root the parent is the root again"
+        );
+        assert_eq!(answer.ok().flatten(), None, "the walk found a workspace where there is none");
     }
 
     /// A directory of this test's own, from the tree's one home for it. §212.

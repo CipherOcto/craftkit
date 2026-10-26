@@ -932,6 +932,23 @@ swap crates/control/src/server.rs \
 expect_catch "control: a command stops telling the window the document changed" \
     "cargo test -p craftkit-control --profile ci"
 
+# §230. A walk that finds nothing must come back.
+#
+# The control channel's test binary walked up for the workspace with
+# `parent().unwrap_or(dir)`, which at the filesystem root is the root again. On
+# this machine the walk finds the tree in one step, so the loop is invisible;
+# on a device — where the tree is not — it never came back, and the whole test
+# binary hung with it, taking the other 67 results with it.
+#
+# The catch is the walk coming back, and the test waits with a bound, so the
+# mutation is a failure and not a hang: a case that hangs is a case nobody has
+# read.
+swap crates/control/src/server.rs \
+    '            dir = current.parent();' \
+    '            dir = current.parent().or(Some(current));'
+expect_catch "control: a walk that finds nothing comes back" \
+    "cargo test -p craftkit-control --profile ci a_walk_that_finds_nothing_comes_back_empty"
+
 # A document naming a command the registry has never heard of. The nearest real
 # command to the one `docs/recipes/add-a-command.md` used to list is `node.mute`.
 #
