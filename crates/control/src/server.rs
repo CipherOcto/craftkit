@@ -668,6 +668,60 @@ mod tests {
     /// hang. §224.
     const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+    /// The replies of a connection, as they arrive.
+    ///
+    /// **A thread reads the socket; the test waits on a channel.** A socket
+    /// read waits for data, and "has the reply arrived?" is a question a
+    /// waiting read cannot answer. The tree's own answer used to be the
+    /// socket's read timeout — and **measured** on the Windows runner, that
+    /// answer did not come: the timeout was set on one handle and the read
+    /// happened on another, the read waited forever, and the test hung with
+    /// the harness saying only *"has been running for over 60 seconds"*.
+    /// §224.
+    ///
+    /// The bound is the **program's**, not the operating system's: the channel
+    /// has a timeout that is the same on every platform, and it says three
+    /// different things — a reply arrived, nothing arrived yet, the
+    /// connection ended.
+    type Replies = std::sync::mpsc::Receiver<String>;
+
+    /// Read a connection in a thread, and hand the replies over a channel.
+    fn replies(stream: TcpStream) -> Replies {
+        use std::io::BufRead as _;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut reader = BufReader::new(stream);
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                let said = std::mem::take(&mut line);
+                if sender.send(said).is_err() {
+                    return;
+                }
+            }
+            // The channel closes with the thread: a connection that ended is a
+            // channel with nothing left in it.
+        });
+        receiver
+    }
+
+    /// Wait for a reply, and say what happened if none comes.
+    ///
+    /// A timeout is a **failure** and an ended connection is the answer: the
+    /// tests below are that a peer with a bad token is closed with *no
+    /// reply*, and a read that gave up at the timeout would look exactly like
+    /// that, so the test would pass for the wrong reason.
+    fn next_reply(replies: &Replies, within: std::time::Duration) -> Option<String> {
+        match replies.recv_timeout(within) {
+            Ok(line) => Some(line.trim().to_string()),
+            // The connection ended: the peer closed it, and that is the
+            // answer.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                panic!("the server neither answered nor closed the connection within {within:?}")
+            }
+        }
+    }
+
     /// Ask for a port, connect, send, read one line.
     ///
     /// **The read is bounded, and the bound is not the same as "no reply".**
@@ -675,17 +729,9 @@ mod tests {
     /// A test that waits without a bound cannot catch a hang: it *is* the
     /// hang — and on the Windows runner this crate's tests ran for **66
     /// minutes** and never finished, with nothing to read. §224.
-    ///
-    /// And the bound must not be confused with the answer. Three of the tests
-    /// below are that a peer with a bad token is closed with **no reply**; a
-    /// read that gave up at the timeout would look exactly like that, and the
-    /// test would pass for the wrong reason. So a timeout is a **failure**
-    /// and only an ended connection is "no reply".
     fn round_trip(port: u16, lines: &[&str]) -> Vec<String> {
-        use std::io::BufRead as _;
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
-        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
-        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+        let replies = replies(stream.try_clone().expect("clone"));
         let mut out = Vec::new();
         for line in lines {
             let mut framed = line.to_string();
@@ -694,31 +740,12 @@ mod tests {
                 break;
             }
             let _ = stream.flush();
-            let mut reply = String::new();
-            match reader.read_line(&mut reply) {
-                // The connection ended: the peer closed it, and that is the
-                // answer.
-                Ok(0) => break,
-                Ok(_) => out.push(reply.trim().to_string()),
-                Err(e) if is_a_timeout(e.kind()) => {
-                    panic!(
-                        "the server neither answered nor closed the connection within \
-                         {READ_TIMEOUT:?}: {e}"
-                    );
-                }
-                // Any other error is the connection ending, which is a close.
-                Err(_) => break,
-            }
+            let Some(reply) = next_reply(&replies, READ_TIMEOUT) else {
+                break;
+            };
+            out.push(reply);
         }
         out
-    }
-
-    /// Whether an error is a wait that gave up, rather than an end.
-    ///
-    /// The two platforms spell a socket timeout differently: Unix gives
-    /// `WouldBlock` and Windows gives `TimedOut`. §224.
-    fn is_a_timeout(kind: std::io::ErrorKind) -> bool {
-        matches!(kind, std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)
     }
 
     /// Whether a socket **waits** for data, or gives up at once.
@@ -770,9 +797,9 @@ mod tests {
         let (port, server) = serve(session, options(0)).expect("bind");
 
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
-        // The read is bounded: a test that waits without a bound cannot
-        // catch a hang. §224.
-        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+        // The replies come through a channel, so the wait has a bound the
+        // program provides. §224.
+        let replies = replies(stream.try_clone().expect("clone"));
         // The request is late: the connection thread's first read happens
         // before there is anything to read.
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -782,10 +809,7 @@ mod tests {
         stream.write_all(framed.as_bytes()).expect("sends");
         let _ = stream.flush();
 
-        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-        let mut reply = String::new();
-        use std::io::BufRead as _;
-        reader.read_line(&mut reply).expect("a reply");
+        let reply = next_reply(&replies, READ_TIMEOUT).expect("a reply");
         assert!(reply.contains("pong"), "the late request was not answered: {reply:?}");
         drop(server);
     }
@@ -845,10 +869,16 @@ mod tests {
     /// the reply yet. §194.
     #[test]
     fn the_change_hook_fires_before_the_reply_is_sent() {
-        use std::io::BufRead as _;
         use std::sync::mpsc;
         use std::sync::{Condvar, Mutex};
         use std::time::Duration;
+
+        /// How long the test waits to see that **nothing** has arrived.
+        const NOTHING_YET: Duration = Duration::from_millis(200);
+        /// How long the test waits for the reply, once the hook is released.
+        const THE_REPLY: Duration = Duration::from_secs(5);
+        /// How long the hook waits for the test to release it.
+        const RELEASED: Duration = Duration::from_secs(30);
 
         let session = Arc::new(Mutex::new(Session::sample()));
         let (entered_tx, entered_rx) = mpsc::channel();
@@ -861,25 +891,33 @@ mod tests {
                 let (lock, condvar) = &*hook_gate;
                 let mut released = lock.lock().expect("the gate");
                 while !*released {
-                    released = condvar.wait(released).expect("the gate");
+                    // **The wait is bounded too.** A hook that waits forever
+                    // is a thread that never ends, and a test that hangs in
+                    // it says nothing about what it was waiting for. §224.
+                    let (guard, timeout) = condvar.wait_timeout(released, RELEASED).expect("the gate");
+                    released = guard;
+                    if timeout.timed_out() && !*released {
+                        return;
+                    }
                 }
             }),
         )
         .expect("bind");
 
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
-        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
         let mut request = r#"{"id":1,"token":"0123456789abcdef0123","method":"engine.execute","params":{"command":"node.add","params":{"name":"Ordered","kind":"filter"}}}"#.to_string();
         request.push('\n');
         stream.write_all(request.as_bytes()).expect("write");
         let _ = stream.flush();
 
+        // The replies come through a channel, so "nothing yet" is an answer
+        // the program gives and not a socket's promise. §224.
+        let replies = replies(stream.try_clone().expect("clone"));
+
         // The server is inside the hook now, so it has not sent the reply.
         entered_rx.recv_timeout(Duration::from_secs(5)).expect("the hook fired");
 
-        stream.set_read_timeout(Some(Duration::from_millis(200))).expect("a read timeout");
-        let mut early = String::new();
-        let arrived = reader.read_line(&mut early).is_ok() && !early.is_empty();
+        let early = replies.recv_timeout(NOTHING_YET);
 
         // Let the server finish either way, so a failure below does not leave
         // a thread blocked in the hook.
@@ -889,15 +927,18 @@ mod tests {
             condvar.notify_all();
         }
 
-        assert!(
-            !arrived,
-            "the reply was sent before the hook fired, so a client could read a frame from before \
-             the command"
-        );
+        match early {
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Ok(line) => panic!(
+                "the reply was sent before the hook fired, so a client could read a frame from \
+                 before the command: {line}"
+            ),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                panic!("the connection ended before the hook was released")
+            }
+        }
 
-        stream.set_read_timeout(Some(Duration::from_secs(5))).expect("a read timeout");
-        let mut reply = String::new();
-        reader.read_line(&mut reply).expect("the reply arrives");
+        let reply = next_reply(&replies, THE_REPLY).expect("the reply arrives");
         assert!(reply.contains("\"ok\":true"), "{reply}");
         drop(server);
     }
