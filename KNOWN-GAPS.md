@@ -26388,6 +26388,54 @@ them in that form.
 runner had never run the tool's own tests, because the hang was always
 earlier in the list.
 
+## 226. The workflow's steps were written in bash, and the Windows runner ran them in PowerShell
+
+### The finding
+
+**Measured** (run `40303282581`): with §224's hang gone and §225's path form
+fixed, the Windows job's **gate** is green — and the job fails in the **next**
+step:
+
+```text
+version=$(grep -A 1 '^name = "wasm-bindgen"$' Cargo.lock | ...)
+The term 'version=$(grep -A 1 ...' is not recognized as a name of a cmdlet
+```
+
+**The default shell of a Windows runner is PowerShell**, and the workflow's
+steps are written in bash: a command substitution, a pipeline, `[[ ]]`, `sed`,
+`grep -A`. On Linux and on macOS the default shell is bash, so the steps
+worked; on Windows the very first line was read as the name of a command.
+
+**And nobody had seen it, because the job never got that far.** The control
+crate's hang was earlier in the job, so the Windows runner had **never run
+the workflow's own steps** — not once. Three failures were queued behind one
+hang: a test that waited forever, a path written in the platform's form, and
+a workflow step written in the wrong shell.
+
+### The port
+
+**The two steps that are written in bash now say so.** `shell: bash` on the
+step that installs the matching `wasm-bindgen-cli`, and on the step that
+checks the page imports the bundle the job produced. The shell is part of
+what the step is, and the workflow should say it rather than let the runner
+decide.
+
+### What is not claimed
+
+**Nothing here is about PowerShell.** The steps are bash because the tree's
+scripts are bash and the gate is written in Rust; the point is that a step
+that says nothing about its shell is a step whose meaning depends on the
+machine.
+
+### The lesson
+
+**A step that does not name its shell is a step whose meaning is the
+runner's.**
+
+**And a fix that unblocks a run uncovers the failures that were queued behind
+it.** Three of them were waiting behind one hang, and each was a real failure
+on the one platform nobody had run.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26935,6 +26983,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A bound the operating system offers is not a bound the program has** | `replies` in `crates/control/src/server.rs` | the runner's own job — §224 |
 | **A run that hangs says which test is hanging** | `test_package` in `xtask/src/ci.rs` | the runner's own job — §224 |
 | **A path is quoted in one form on every platform** | `relative_name` in `xtask/src/tree.rs` | the Windows runner — §225 |
+| **A workflow step names the shell it is written in** | `shell: bash` in `.github/workflows/ci.yml` | the Windows runner — §226 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29155,3 +29204,17 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     One home now: `xtask/src/tree.rs::relative_name(root, path)`, relative to
     the root and `/`-separated, on every platform.
+
+79. ~~**The workflow's steps were written in bash, and the Windows runner ran
+    them in PowerShell.**~~ **Done in §226.**
+
+    With the hang gone, the Windows job's gate is green — and the next step
+    fails, because the default shell of a Windows runner is PowerShell and
+    the step reads `version=$(grep -A 1 ...)`. On Linux and macOS the default
+    shell is bash, so the steps worked there.
+
+    **Nobody had seen it, because the job never got that far**: the control
+    crate's hang was earlier in the job, so the Windows runner had never run
+    the workflow's own steps. Three failures were queued behind one hang.
+
+    The steps that are written in bash now say `shell: bash`.

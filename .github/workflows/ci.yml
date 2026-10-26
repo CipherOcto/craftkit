@@ -64,6 +64,10 @@ jobs:
       # produced. `cargo xtask wasm` only compiles; it writes nothing, which is
       # how a page that 404s on every load sat behind four green checks.
       - name: Install a matching wasm-bindgen-cli
+        # **bash, on every platform.** The default shell of a Windows runner is
+        # PowerShell, and this step is written in bash: it read `version=$(...)`
+        # as the name of a command and failed. §226.
+        shell: bash
         run: |
           version=$(grep -A 1 '^name = "wasm-bindgen"$' Cargo.lock | awk '/^version/ {print $3; exit}' | tr -d '"')
           echo "installing wasm-bindgen-cli $version"
@@ -73,6 +77,8 @@ jobs:
         run: cargo xtask bundle
 
       - name: The page imports the bundle this job just produced
+        # bash for the same reason as the step above. §226.
+        shell: bash
         run: |
           # Read the one constant the page and the bundler both come from, and
           # require the file to exist. A version of this step that only ran
