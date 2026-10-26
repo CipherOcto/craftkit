@@ -26307,6 +26307,11 @@ application is not a test.
 arrived.** It is still used where it is the OS's own promise — the test that
 *measures* whether a socket waits (§218) and the server's own idle timeout.
 
+**And it is measured fixed.** On the Windows runner the tests phase now takes
+**4 minutes and 30 seconds** (run `40305090536`), and the whole gate takes
+**326 seconds** — against **91 minutes and 58 seconds** and a job that was
+cancelled with nothing to read.
+
 ### What is not claimed
 
 **The tree cannot tell you why the Windows runner hung.** What it can do now
@@ -26411,6 +26416,11 @@ crate's hang was earlier in the job, so the Windows runner had **never run
 the workflow's own steps** — not once. Three failures were queued behind one
 hang: a test that waited forever, a path written in the platform's form, and
 a workflow step written in the wrong shell.
+
+**And the job is green now** (run `40305090536`): the gate in **326 seconds**,
+the matching `wasm-bindgen-cli` installed, the bundle produced, and the page
+importing the bundle the job produced. It is the **first fully green Windows
+run in the tree's history**.
 
 ### The port
 
@@ -29217,4 +29227,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     crate's hang was earlier in the job, so the Windows runner had never run
     the workflow's own steps. Three failures were queued behind one hang.
 
-    The steps that are written in bash now say `shell: bash`.
+    The steps that are written in bash now say `shell: bash`, and the job is
+    green: the gate in **326 seconds**, the bundle produced, and the page
+    importing it. The **first fully green Windows run in the tree's
+    history**.
