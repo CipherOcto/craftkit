@@ -182,9 +182,9 @@ run a long or repeated suite without saying so first.
 
 ## Before you commit
 
-This **is** a git repository: branch `main`, a local history and no remote.
-`git push` therefore has nowhere to go — do not try, and do not add a remote
-unless the owner asks for one. Before every commit:
+This **is** a git repository: branch `main`, a local history, and the remote
+`git@github.com:CipherOcto/craftkit.git` (the owner's decision, 2026-10-25).
+`git push` goes there — and only there. Before every commit:
 
 ```text
 cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
