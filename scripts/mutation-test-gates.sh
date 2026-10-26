@@ -651,6 +651,13 @@ expect_catch "lists: the control channel's secret comes from the clock" "cargo x
 swap docs/recipes/fix-a-crash.md 'platform has POSIX permissions, and created with the default of the process' 'platform does not always have permissions, and created with the default of the process'
 expect_catch "lists: a promise of a file's mode does not say where it holds" "cargo xtask lists"
 
+# §222. The mutation job's timeout and the suite's budget are two numbers, and
+# the gate says the job's timeout leaves room for the suite. The timeout was
+# once forty-five minutes -- a number measured on another machine -- and the
+# suite needs about sixty-one on the runner it runs on.
+swap .github/workflows/ci.yml 'timeout-minutes: 90' 'timeout-minutes: 45'
+expect_catch "lists: the mutation job's timeout does not fit the suite" "cargo xtask lists"
+
 # Prose points at code by line number, and line numbers rot the moment anything
 # above them moves. The tree carried ninety such citations and nothing looked at
 # any of them; five pointed at blank lines or braces and two more pointed at the

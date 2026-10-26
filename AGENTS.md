@@ -182,8 +182,9 @@ other REMOTE ONLY processing."*)
 - **A test or suite that takes all the CPU for more than five minutes needs
   the owner's explicit approval first.** Ask, do not assume.
 - **Do not repeat a long suite to look for a rare failure without asking.**
-  One run of the mutation suite is twenty-odd minutes; twenty of them is not
-  a measurement, it is a way of occupying a machine that other people are
+  One run of the mutation suite is twenty-five minutes on this machine and
+  about **sixty-one** on the runner CI uses (§222); twenty of them is not a
+  measurement, it is a way of occupying a machine that other people are
   using. **One run of it is already a CI job**, so it needs no approval
   here — it needs a push.
 - **Prefer a bounded measurement to a brute-force loop.** A hundred cheap

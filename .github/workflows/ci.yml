@@ -97,7 +97,20 @@ jobs:
   mutation:
     name: mutation (gates must be able to fail)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The budget for one run of the suite.
+    #
+    # §222: this was forty-five minutes, and the number came from the machine
+    # the suite was written on — where a run takes twenty-five. On the runner
+    # it actually runs on, the suite is **more than twice as slow**: measured,
+    # **344** of the suite's **495** cases had run when the forty-five minutes
+    # were up, at about nine seconds a case, so the whole run needs about
+    # **sixty-one** minutes. The job was therefore cancelled on every run, and
+    # nobody had seen it, because the job had never finished.
+    #
+    # Ninety minutes fits the measured sixty-one with room for a slower
+    # runner, and the script's own budget says ninety too — a gate holds the
+    # two numbers together, so lowering one without the other is reported.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust

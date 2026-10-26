@@ -6402,6 +6402,103 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
 /// The workflow that decides where the gates run.
 const WORKFLOW: &str = ".github/workflows/ci.yml";
 
+/// The mutation job's timeout fits the suite's budget. §222.
+///
+/// The workflow gave the mutation job **forty-five** minutes, and the number
+/// came from the machine the suite was written on — where a run takes
+/// twenty-five. On the runner it actually runs on, the suite needs about
+/// **sixty-one**: measured, **344** of the suite's **495** cases had run
+/// when the forty-five minutes were up, at about nine seconds a case. The job
+/// was therefore cancelled on every run, and nobody had seen it, because the
+/// job had never finished.
+///
+/// So there are **two** numbers — the workflow's timeout and the script's own
+/// budget — and one of them has to be checked against the other. The script
+/// says how long its run took; this gate says the job's timeout leaves room
+/// for it.
+pub fn the_mutation_job_fits_the_suites_budget(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    let script = read_text(root.join(crate::anchors::SCRIPT))
+        .map_err(|e| format!("could not read the mutation script: {e}"))?;
+    let Some(budget) = script_budget_minutes(&script) else {
+        problems.push(format!(
+            "{}: the script does not say what one run of it may cost, so the job's timeout is \
+             compared against nothing. §222.",
+            crate::anchors::SCRIPT
+        ));
+        return Ok(problems);
+    };
+
+    let workflow = read_text(root.join(WORKFLOW)).map_err(|e| format!("could not read {WORKFLOW}: {e}"))?;
+    let Some(timeout) = workflow_timeout_minutes(&workflow) else {
+        problems.push(format!(
+            "{WORKFLOW}: the mutation job does not say how long it may take, so a run that is \
+             cancelled at the limit looks like a run that failed. §222."
+        ));
+        return Ok(problems);
+    };
+
+    if timeout < budget {
+        problems.push(format!(
+            "{WORKFLOW}: the mutation job is given {timeout} minute(s) and the suite's budget is \
+             {budget}; a run that fits the budget is cancelled before it finishes. §222."
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The budget the mutation script declares, in minutes.
+///
+/// The declaration is `BUDGET_MINUTES=90`, and it is read from the **text**:
+/// a number in a shell script is a number in a text.
+fn script_budget_minutes(script: &str) -> Option<u64> {
+    for line in script.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("BUDGET_MINUTES=") else { continue };
+        let value = rest.trim().trim_matches('"').trim_matches('\'');
+        if let Ok(minutes) = value.parse::<u64>() {
+            return Some(minutes);
+        }
+    }
+    None
+}
+
+/// The timeout the mutation job is given, in minutes.
+///
+/// The job is found by its name and the timeout is the line under it: the
+/// workflow's other jobs have timeouts of their own, and this one is about
+/// the suite.
+fn workflow_timeout_minutes(workflow: &str) -> Option<u64> {
+    let mut in_mutation = false;
+    for line in workflow.lines() {
+        let code = match line.find('#') {
+            Some(at) => &line[..at],
+            None => line,
+        };
+        let trimmed = code.trim();
+        if trimmed.starts_with("mutation:") {
+            in_mutation = true;
+            continue;
+        }
+        if !in_mutation {
+            continue;
+        }
+        if !trimmed.starts_with("timeout-minutes:") {
+            // The job's own lines are indented further than its name; the next
+            // job at the same level ends this one.
+            if !trimmed.is_empty() && !line.starts_with(char::is_whitespace) {
+                return None;
+            }
+            continue;
+        }
+        let value = trimmed.trim_start_matches("timeout-minutes:").trim();
+        return value.parse::<u64>().ok();
+    }
+    None
+}
+
 /// A command `ci` does not run must be run by name in the workflow.
 ///
 /// §173. The list of commands `ci` does not run exists so that a command can
@@ -6818,6 +6915,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         a_promise_of_a_file_mode_says_where_it_holds(root)?
             .into_iter()
             .map(|p| format!("{p}\n     A mode is a promise about a platform, so the platform is named.")),
+    );
+
+    // The mutation job's timeout fits the suite's budget. §222.
+    problems.extend(
+        the_mutation_job_fits_the_suites_budget(root)?.into_iter().map(|p| {
+            format!("{p}\n     A budget that fits what it runs, so a run is not cancelled halfway.")
+        }),
     );
 
     if problems.is_empty() {
@@ -9000,6 +9104,67 @@ mod tests {
 
         let problems = a_promise_of_a_file_mode_says_where_it_holds(&dir).expect("runs");
         assert!(problems.is_empty(), "a qualified promise is not reported: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The mutation job's timeout leaves room for the suite.
+    #[test]
+    fn the_mutation_job_leaves_room_for_the_suite() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_mutation_job_fits_the_suites_budget(&root).expect("runs");
+        assert!(problems.is_empty(), "the job's timeout fits the suite: {problems:#?}");
+    }
+
+    /// A timeout that is smaller than the suite's budget is caught.
+    ///
+    /// The defect this gate exists for: the job was given forty-five minutes,
+    /// a number measured on the machine the suite was written on, and on the
+    /// runner it runs on the suite needs about sixty-one. Every run was
+    /// cancelled, and nobody had seen it, because the job had never finished.
+    /// §222.
+    #[test]
+    fn a_mutation_job_that_cannot_finish_is_caught() {
+        let dir = crate::temp::dir("budget").expect("a temporary folder");
+        let script = dir.join("scripts");
+        std::fs::create_dir_all(&script).expect("the fabricated tree");
+        std::fs::write(script.join("mutation-test-gates.sh"), "BUDGET_MINUTES=90\n").expect("the budget");
+        let workflow = dir.join(".github/workflows");
+        std::fs::create_dir_all(&workflow).expect("the fabricated tree");
+        std::fs::write(
+            workflow.join("ci.yml"),
+            "jobs:\n  mutation:\n    name: mutation\n    timeout-minutes: 45\n    steps:\n      - run: x\n",
+        )
+        .expect("the timeout");
+
+        let problems = the_mutation_job_fits_the_suites_budget(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("cancelled before it finishes")),
+            "a job that cannot finish is not reported: {problems:#?}"
+        );
+        assert_eq!(problems.len(), 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A script that does not say what it may cost is caught.
+    #[test]
+    fn a_suite_without_a_budget_is_caught() {
+        let dir = crate::temp::dir("budget-missing").expect("a temporary folder");
+        let script = dir.join("scripts");
+        std::fs::create_dir_all(&script).expect("the fabricated tree");
+        std::fs::write(script.join("mutation-test-gates.sh"), "# no budget here\n").expect("the script");
+        let workflow = dir.join(".github/workflows");
+        std::fs::create_dir_all(&workflow).expect("the fabricated tree");
+        std::fs::write(
+            workflow.join("ci.yml"),
+            "jobs:\n  mutation:\n    name: mutation\n    timeout-minutes: 45\n    steps:\n      - run: x\n",
+        )
+        .expect("the timeout");
+
+        let problems = the_mutation_job_fits_the_suites_budget(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("does not say what one run of it may cost")),
+            "a suite without a budget is not reported: {problems:#?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

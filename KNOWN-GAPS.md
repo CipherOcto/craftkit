@@ -26051,6 +26051,70 @@ chances to say it wrongly.** The rule here was *"write it private, and where
 the platform cannot say private, say what you did instead"* — and the seven
 restatements said half of it.
 
+## 222. The mutation job was cancelled on every run, and nobody had seen it
+
+### The finding
+
+§217's first CI run was red, and the mutation job was the one that had never
+finished. Its log says:
+
+```text
+##[error]The operation was canceled.
+```
+
+**Measured**: the job was cancelled at **45 minutes and 17 seconds** — which
+is exactly the `timeout-minutes: 45` the workflow gives it — with **344** of
+the suite's **495** cases reported as caught. The cases run at about nine
+seconds each, so the whole suite needs about **sixty-one** minutes on the
+runner.
+
+**And the number in the workflow came from another machine.** The tree's own
+prose says the suite takes *"twenty-odd minutes"* and *"twenty-five
+minutes"* — which is what it takes on the machine it was written on. The
+runner is **more than twice as slow**.
+
+So the job was cancelled on **every** run, and nobody had seen it, because
+the job had never finished. **A gate that cannot run is not a gate that
+works** — §217's lesson, in the shape of a timeout.
+
+### The port
+
+- The workflow's `timeout-minutes` is now **90**, with the measurement in the
+  comment beside it.
+- The script declares its own budget — `BUDGET_MINUTES=90` — and **reports
+  what the run actually took**, so the number in the tree's prose is a
+  measurement and not an estimate.
+
+### The gate's own teeth
+
+`the_mutation_job_fits_the_suites_budget`, in `cargo xtask lists`, holds the
+**two** numbers together: the workflow's timeout and the script's budget.
+
+- Lower the workflow's timeout below the budget → the gate says the job
+  would be cancelled before it finishes.
+- Remove the script's budget → the gate says the timeout is compared against
+  nothing.
+
+**And the mutation bites**: the case puts the timeout back to forty-five and
+the gate catches it — **verified by running it**.
+
+### What is not claimed
+
+**The budget is not a promise that a run takes ninety minutes.** It is the
+number the job's timeout has to leave room for, and the run says what it
+really took — so a suite that grows past the budget says so rather than
+being cancelled halfway.
+
+### The lesson
+
+**A budget measured on one machine is a guess on another.** The workflow's
+timeout was right for the author's laptop and wrong by a third of the suite's
+length on the runner.
+
+**And a job that is cancelled is a job that never reports.** The suite's
+result — every gate proved it can still fail — was one timeout away from
+existing, and it did not exist because the budget was short.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26592,6 +26656,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's files are checked out with the same endings everywhere** | `the_tree_says_how_its_files_are_checked_out` | 1 mutation — §219 |
 | **The control channel's secret does not come from the clock** | `the_control_channel_secret_is_not_the_clock` | 1 mutation — §220 |
 | **A promise of a file's mode says where it holds** | `a_promise_of_a_file_mode_says_where_it_holds` | 1 mutation — §221 |
+| **The mutation job's timeout leaves room for the suite** | `the_mutation_job_fits_the_suites_budget` | 1 mutation — §222 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28731,3 +28796,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     Every promise now names the platform, and the gate
     `a_promise_of_a_file_mode_says_where_it_holds` asks every paragraph that
     promises a mode whether it says where it holds.
+
+75. ~~**The mutation job was cancelled on every run, and nobody had seen
+    it.**~~ **Done in §222.**
+
+    The workflow gave the mutation job **forty-five** minutes, a number
+    measured on the machine the suite was written on. **Measured** on the
+    runner it actually runs on: **344** of the suite's **495** cases had run
+    when the forty-five minutes were up, at about nine seconds a case — so
+    the suite needs about **sixty-one** minutes. The job was cancelled on
+    every run, and nobody had seen it, because the job had never finished.
+
+    The timeout is now ninety, the script declares its own budget and
+    reports what the run actually took, and the gate
+    `the_mutation_job_fits_the_suites_budget` holds the two numbers
+    together: a timeout below the budget, or a script without a budget, is
+    reported.
