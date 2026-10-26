@@ -662,7 +662,9 @@ mod tests {
         let mut shapes = triangle_mesh();
         shapes[0].clip_rect = egui::Rect::from_min_size(egui::pos2(20.0, 20.0), egui::vec2(20.0, 20.0));
         let image = render_pixels(20, 20, &shapes, &BTreeMap::new());
-        assert!(image.pixels.chunks_exact(4).all(|p| p[3] == 0), "everything was clipped away");
+        // `as_chunks` rather than `chunks_exact`: the newest clippy refuses a
+        // constant chunk size, and the two agree on the remainder. §217.
+        assert!(image.pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0), "everything was clipped away");
     }
 
     #[test]
@@ -672,7 +674,7 @@ mod tests {
             m.vertices[2].pos = m.vertices[0].pos;
         }
         let image = render_pixels(20, 20, &shapes, &BTreeMap::new());
-        assert!(image.pixels.chunks_exact(4).all(|p| p[3] == 0));
+        assert!(image.pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0));
     }
 
     #[test]
