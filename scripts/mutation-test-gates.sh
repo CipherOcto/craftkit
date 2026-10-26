@@ -6452,5 +6452,26 @@ swap apps/craftkit-cli/src/cli.rs \
 expect_catch "lists: a writer writes a file outside the one home" \
     "cargo xtask lists"
 
+# ----------------------------------------------- a failure keeps its evidence ----
+# Section 216. A gate's capture files are the only copy of what the child
+# said, and a report that a reader cut short -- `tail`, a pipe, a scroll-back
+# that has gone -- is a report that is gone. A failure that happened once was
+# lost exactly that way: the tree printed the failing test's name and the
+# reader cut it.
+#
+# The break takes the keeping away: the files are deleted whether the gate
+# passed or failed, and the failure has nothing to point at.
+swap xtask/src/lib.rs \
+    '    let mut kept: Vec<PathBuf> = Vec::new();
+    if code == 0 {
+        let _ = capture.cleanup();
+    } else {
+        kept = capture.paths.to_vec();
+    }' \
+    '    let mut kept: Vec<PathBuf> = Vec::new();
+    let _ = capture.cleanup();'
+expect_catch "gate: a failing gate throws away the evidence of its failure" \
+    "cargo test -p xtask --profile ci a_failing_command_leaves_its_output_behind"
+
 restore
 finish

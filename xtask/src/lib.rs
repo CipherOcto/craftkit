@@ -283,6 +283,12 @@ pub struct Output {
     pub code: i32,
     pub stdout: String,
     pub stderr: String,
+    /// The files the output was captured in, when they were **kept**.
+    ///
+    /// §216. A gate that fails keeps its capture files and names them, so
+    /// that the evidence survives a reader who cut the report short — which is
+    /// how a failure that happened once was lost once already.
+    pub kept: Vec<PathBuf>,
 }
 
 impl Output {
@@ -302,7 +308,17 @@ impl Output {
             }
             s.push_str(self.stderr.trim());
         }
-        if s.is_empty() { format!("(exit code {}) with no output", self.code) } else { s }
+        if s.is_empty() {
+            s = format!("(exit code {}) with no output", self.code);
+        }
+        if !self.kept.is_empty() {
+            let files: Vec<String> = self.kept.iter().map(|p| p.display().to_string()).collect();
+            s.push_str(&format!(
+                "\n\nThe output is also in {} — it was kept, because the gate failed.",
+                files.join(" and ")
+            ));
+        }
+        s
     }
 }
 
@@ -338,9 +354,19 @@ pub fn command(program: &str, args: &[&str], dir: &Path) -> Result<Output, Strin
 
     let stdout = capture.read(&capture.paths[0])?;
     let stderr = capture.read(&capture.paths[1])?;
-    let _ = capture.cleanup();
+    // **A failure keeps its evidence.** §216: the capture files are the only
+    // copy of what the child said, and a report that a reader cut short —
+    // `tail`, a pipe, a scroll-back that has gone — is a report that is
+    // gone. So the files stay, and the failure names them.
+    let code = status.code().unwrap_or(-1);
+    let mut kept: Vec<PathBuf> = Vec::new();
+    if code == 0 {
+        let _ = capture.cleanup();
+    } else {
+        kept = capture.paths.to_vec();
+    }
 
-    Ok(Output { code: status.code().unwrap_or(-1), stdout, stderr })
+    Ok(Output { code, stdout, stderr, kept })
 }
 
 /// What a child did, when it was run with a time limit.
@@ -534,6 +560,34 @@ mod tests {
         let all = out.all();
         assert!(all.contains("out"), "{all}");
         assert!(all.contains("err"), "{all}");
+    }
+
+    /// A failing command leaves its output where a person can find it.
+    ///
+    /// §216. The capture files are the only copy of what the child said, and
+    /// a report that a reader cut short — `tail`, a pipe, a scroll-back that
+    /// has gone — is a report that is gone. A failure that happened **once**
+    /// was lost exactly that way: the tree printed the failing test's name
+    /// and the reader cut it.
+    ///
+    /// So a failure keeps its files, names them, and a success does not.
+    #[test]
+    fn a_failing_command_leaves_its_output_behind() {
+        let out = command("sh", &["-c", "echo the evidence; exit 4"], Path::new(".")).expect("sh runs");
+        assert!(!out.ok());
+        assert!(!out.kept.is_empty(), "a failure kept nothing: {:?}", out.kept);
+        for path in &out.kept {
+            assert!(path.is_file(), "{} is not there", path.display());
+        }
+        let all = out.all();
+        assert!(all.contains("the evidence"), "{all}");
+        assert!(all.contains("kept"), "the report does not say the output was kept: {all}");
+
+        // And a success keeps nothing: a gate that runs forty times a day
+        // must not leave forty folders behind.
+        let ok = command("sh", &["-c", "exit 0"], Path::new(".")).expect("sh runs");
+        assert!(ok.ok());
+        assert!(ok.kept.is_empty(), "a success kept files: {:?}", ok.kept);
     }
 
     #[test]

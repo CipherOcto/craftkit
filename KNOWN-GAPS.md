@@ -25476,6 +25476,92 @@ shape catches a writer whatever it is called.
 **And a passing test is a claim; a failing test is evidence.** The home's
 promise was proved by taking the promise away and watching the test fail.
 
+## 216. A failing gate threw away the only copy of what it had said
+
+### The finding
+
+§211's rule is *"leave the evidence behind"*, and the tree follows it for
+crash reports, for the fuzz corpus and for the mutation suite's logs. It did
+not follow it in the **gate runner**: `xtask/src/lib.rs`'s `command()` captures
+each child's output into two temporary files, reads them, and **deletes them**
+— whether the child passed or failed.
+
+So the only copy of what a failing gate said is the text it prints. And a
+report that a reader cuts short — `tail`, a pipe, a scroll-back that has gone
+— is a report that is gone.
+
+**Measured, and it cost a failure.** The UI-crate failure of §215's work was
+lost exactly this way. The ci printed the failing test's name; the report was
+piped through `tail -6`, and the name was in the lines **above** the cut. The
+tree was right and the reader threw the evidence away — and there was no
+second copy, because the capture files had already been deleted.
+
+### The port
+
+**A failing command keeps its capture files and names them.** A successful one
+still deletes them, because a gate that runs forty times a day must not leave
+forty folders behind.
+
+**And a test holds it**: `a_failing_command_leaves_its_output_behind` runs a
+`sh` that fails, and asserts that the files are there, that they exist on
+disk, and that the report names them — and that a *successful* command keeps
+nothing.
+
+**And a mutation bites it**: take the keeping away and the files are deleted
+whether the gate passed or failed.
+
+### The recheck, measured
+
+The failure was looked for in four configurations, and **not found**:
+
+| the configuration | how many | failures |
+|---|---|---|
+| the whole `cargo xtask ci` — the exact configuration that failed | 25 | **0** |
+| the UI crate's tests with a **freshly linked** binary each time | 20 | **0** |
+| the UI test binary on its own | 120 | **0** |
+| the leak test's parent, under 16-way CPU load | 150 | **0** |
+
+And the two measurements in the UI crate that could decide a test on their
+own were **measured**, not assumed:
+
+- **the memory probe** — the resident-size growth of a child that builds
+  200 000 widget names — was **0 bytes** in **120** runs, against a limit of
+  **1 MiB**. It is nowhere near its threshold.
+- **the two ratio tests** — the properties panel's cost with ten thousand
+  keyframes against its cost with one — had a maximum ratio of **1.36** over
+  **200** runs under 24-way CPU load, against a limit of **8.0**. A sixfold
+  margin.
+
+So the UI crate has **no** measurement near its threshold, and the failure is
+still unexplained.
+
+### What is not claimed
+
+**No cause is claimed.** The flake has not reproduced in about **250** runs
+across four configurations, and the tree says so rather than pretending the
+search found something.
+
+**And the choice item 42 names now has a price.** The loop — *"run the
+workspace tests in a loop until one fails and capture the name"* — is what
+would find it, and it is exactly what the owner has ruled out on a shared
+machine: a test that takes all the CPU for more than five minutes needs
+approval first. The other half of the item — a repetition count in the `ci`
+profile — is cheap, and the choice between them is still the owner's.
+
+### The lesson
+
+**A report that a reader can lose is not evidence.** The tree printed the
+failing test's name, and the name was gone, because the only copy of it was
+printed and the print was cut. Evidence has to be left *behind*, in a file
+that survives the reader.
+
+**And a measurement is not a repetition.** Two hundred runs of one test
+binary, and one hundred and twenty of a probe, answered questions that twenty
+runs of the whole `ci` could not: how close the ratio test's number comes to
+its limit, and whether the memory probe's number is anywhere near its own.
+The bounded measurement answered the question; the brute-force loop would
+only have taken the machine.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26009,6 +26095,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test does not choose where its temporary folder lives** | `the_tree_has_one_temporary_folder` | 1 mutation — §212 |
 | **The xtask's tests build their temporary folders through the xtask's home** | `the_tree_has_one_temporary_folder` | 2 mutations — §213 |
 | **The enabled check comes before the parameter check** | `the_disabled_check_comes_before_the_parameter_check` | 1 mutation — §214 |
+| **A failing gate keeps the evidence of its failure** | `a_failing_command_leaves_its_output_behind` | 1 mutation — §216 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -26970,19 +27057,35 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     **And a second one-off, in another crate, in the same family.** During
     §215's work one `cargo xtask ci` failed in `craftkit-ui --lib`; the name
-    of the test was not captured, because the output was cut before the
-    failure's own lines. **Not reproduced in thirteen runs since**: eight of
-    `cargo test -p craftkit-ui --profile ci`, three of
-    `cargo test --workspace --profile ci` and two of `cargo xtask ci`.
+    of the test was **not captured**, because the output was cut before the
+    failure's own lines — and §216 says why it is gone for good: the gate
+    runner deleted the only other copy of what the failing test had said.
+
+    **§216 went looking for it, in four configurations, and did not find
+    it.** **25** runs of the whole `cargo xtask ci` — the exact configuration
+    that failed — **20** runs of the UI crate's tests with a **freshly
+    linked** binary each time, **120** runs of the UI test binary on its own,
+    and **150** runs of the leak test's parent under 16-way CPU load: **0**
+    failures in all of them.
+
+    **And the measurements that could decide a UI test on their own were
+    measured, not assumed**: the memory probe's growth was **0 bytes** in
+    **120** runs against a limit of 1 MiB, and the two ratio tests' ratio
+    topped out at **1.36** over **200** runs under 24-way load against a
+    limit of **8.0**. So the UI crate has no measurement near its threshold.
 
     **It is the same shape and a different test**, and no cause is claimed
     for it. What can be said is what §207 said for the first one: the UI
     crate's timing-sensitive tests take the **minimum** of several rounds by
     design — *"the question is how fast the code can go, and a round that was
     interrupted by the machine is a round that says nothing about the code"* —
-    so the load on the machine is not supposed to decide them. A failure
-    that is not reproduced in thirteen runs is a **candidate** for the same
-    unexplained family, and the same loop would catch it.
+    so the load on the machine is not supposed to decide them.
+
+    **And the choice this item names has a price now.** The loop is what
+    would find it, and the owner has ruled it out on a shared machine: a test
+    that takes all the CPU for more than five minutes needs approval first.
+    The other half — a repetition count in the `ci` profile — is cheap, and
+    the choice between them is still the owner's.
 
 43. **Decide whether a gate named in prose without the command in front of it
     counts.** §169's gate reads one phrase out of the prose — `cargo xtask

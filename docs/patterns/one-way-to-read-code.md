@@ -899,6 +899,28 @@ limit on whatever else writes to that file, and a test that fails at random
 is worse than no test.
 
 
+## And a failure keeps its evidence
+
+**A report that a reader can lose is not evidence.** The tree prints what a
+failing gate said, and it used to delete the files that held the same words
+— so the only copy was the print, and a print that a reader cut short
+(`tail`, a pipe, a scroll-back that has gone) was a failure with no evidence
+at all. §216.
+
+**So a failing command keeps its files and names them**, and a successful one
+deletes them: a gate that runs forty times a day must not leave forty
+folders behind.
+
+**And the lesson is about the reader too.** A failure that happened once was
+lost in exactly this way — the tree printed the failing test's name and the
+name was gone. The evidence has to be left *behind*, in a file that survives
+the reader.
+
+**And a measurement is not a repetition.** Two hundred runs of one test
+binary answered a question that twenty runs of the whole `ci` could not: how
+close the number comes to its limit. The bounded measurement answered it; the
+brute-force loop would only have taken the machine.
+
 ## In the code
 
 The reader, `xtask/src/tree.rs`:
