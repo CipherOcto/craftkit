@@ -1099,6 +1099,9 @@ mod tests {
             start_control(0, &session, &ctx_slot, &state, token.clone(), Some(&dir)).expect("binds");
 
         let mut stream = std::net::TcpStream::connect(("127.0.0.1", server.port())).expect("connects");
+        // The read is bounded: a test that waits without a bound cannot catch
+        // a hang — it *is* the hang. §224.
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
         let request = serde_json::json!({
             "id": 1,
             "token": "0123456789abcdef0123",

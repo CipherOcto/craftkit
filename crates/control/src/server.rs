@@ -662,10 +662,29 @@ mod tests {
         ServerOptions::new(port, Token::from_text("0123456789abcdef0123").expect("valid"))
     }
 
+    /// How long a test waits for a reply before it gives up.
+    ///
+    /// A test that waits without a bound cannot catch a hang — it *is* the
+    /// hang. §224.
+    const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
     /// Ask for a port, connect, send, read one line.
+    ///
+    /// **The read is bounded, and the bound is not the same as "no reply".**
+    ///
+    /// A test that waits without a bound cannot catch a hang: it *is* the
+    /// hang — and on the Windows runner this crate's tests ran for **66
+    /// minutes** and never finished, with nothing to read. §224.
+    ///
+    /// And the bound must not be confused with the answer. Three of the tests
+    /// below are that a peer with a bad token is closed with **no reply**; a
+    /// read that gave up at the timeout would look exactly like that, and the
+    /// test would pass for the wrong reason. So a timeout is a **failure**
+    /// and only an ended connection is "no reply".
     fn round_trip(port: u16, lines: &[&str]) -> Vec<String> {
         use std::io::BufRead as _;
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
         let mut reader = BufReader::new(stream.try_clone().expect("clone"));
         let mut out = Vec::new();
         for line in lines {
@@ -676,12 +695,30 @@ mod tests {
             }
             let _ = stream.flush();
             let mut reply = String::new();
-            if reader.read_line(&mut reply).is_err() || reply.is_empty() {
-                break;
+            match reader.read_line(&mut reply) {
+                // The connection ended: the peer closed it, and that is the
+                // answer.
+                Ok(0) => break,
+                Ok(_) => out.push(reply.trim().to_string()),
+                Err(e) if is_a_timeout(e.kind()) => {
+                    panic!(
+                        "the server neither answered nor closed the connection within \
+                         {READ_TIMEOUT:?}: {e}"
+                    );
+                }
+                // Any other error is the connection ending, which is a close.
+                Err(_) => break,
             }
-            out.push(reply.trim().to_string());
         }
         out
+    }
+
+    /// Whether an error is a wait that gave up, rather than an end.
+    ///
+    /// The two platforms spell a socket timeout differently: Unix gives
+    /// `WouldBlock` and Windows gives `TimedOut`. §224.
+    fn is_a_timeout(kind: std::io::ErrorKind) -> bool {
+        matches!(kind, std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)
     }
 
     /// Whether a socket **waits** for data, or gives up at once.
@@ -733,6 +770,9 @@ mod tests {
         let (port, server) = serve(session, options(0)).expect("bind");
 
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        // The read is bounded: a test that waits without a bound cannot
+        // catch a hang. §224.
+        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
         // The request is late: the connection thread's first read happens
         // before there is anything to read.
         std::thread::sleep(std::time::Duration::from_millis(50));

@@ -11,7 +11,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 
 const BIN: &str = env!("CARGO_BIN_EXE_craftkit-cli");
 
@@ -19,7 +19,13 @@ const BIN: &str = env!("CARGO_BIN_EXE_craftkit-cli");
 struct Server {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    /// The server's replies, as they arrive.
+    ///
+    /// A **channel**, not the pipe itself: a pipe has no timeout, so a read
+    /// on one waits forever, and a test that waits forever cannot catch a
+    /// hang — it *is* the hang. The reader thread does the waiting and the
+    /// test waits for the answer with a bound. §224.
+    replies: std::sync::mpsc::Receiver<String>,
     /// Where the server's own words go.
     ///
     /// They used to go to `/dev/null`, and a server that died said nothing
@@ -27,6 +33,9 @@ struct Server {
     /// person reading it had nothing to go on. §87.
     log: PathBuf,
 }
+
+/// How long the test waits for a reply before it gives up.
+const REPLY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl Server {
     fn start() -> Self {
@@ -46,8 +55,21 @@ impl Server {
             .spawn()
             .expect("the binary that cargo just built");
         let stdin = child.stdin.take().expect("stdin is piped");
-        let stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
-        let mut s = Server { child, stdin, stdout, log };
+        let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
+        // The reader thread. It ends when the pipe ends, and the channel is
+        // closed with it, so a server that stops talking is a server whose
+        // channel has nothing left in it.
+        let (sender, replies) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            while stdout.read_line(&mut line).unwrap_or(0) > 0 {
+                let said = std::mem::take(&mut line);
+                if sender.send(said).is_err() {
+                    return;
+                }
+            }
+        });
+        let mut s = Server { child, stdin, replies, log };
         // The handshake every real client sends first, so the rest of the test
         // reads like a session rather than a protocol probe.
         s.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"craftkit-test","version":"1"}}}"#);
@@ -66,12 +88,20 @@ impl Server {
     }
 
     /// The next reply, or `None` if the server has stopped talking.
+    ///
+    /// The wait is **bounded**: a server that never answers is a failure with
+    /// a message, not a test that never ends. §224.
     fn reply(&mut self) -> Option<serde_json::Value> {
-        let mut line = String::new();
-        let n = self.stdout.read_line(&mut line).ok()?;
-        if n == 0 {
-            return None;
-        }
+        let line = match self.replies.recv_timeout(REPLY_TIMEOUT) {
+            Ok(line) => line,
+            // The channel is closed: the server stopped talking, and that is
+            // not a timeout — it is the answer.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return None,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                let complaint = self.complaint();
+                panic!("the server did not answer within {REPLY_TIMEOUT:?} — {complaint}");
+            }
+        };
         Some(serde_json::from_str(&line).unwrap_or_else(|e| panic!("not JSON: {line:?} ({e})")))
     }
 
