@@ -151,6 +151,9 @@ pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 struct Package {
     /// The package name, as cargo calls it.
     name: String,
+    /// Cargo's own id for the package, which is how a build message says which
+    /// package it is about.
+    id: String,
     /// The directory the package lives in. Cargo runs a package's test
     /// binaries with that directory as the working directory, and a test that
     /// opens a file by a relative path depends on it.
@@ -177,6 +180,11 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
         .ok_or_else(|| "cargo metadata has no packages".to_string())?;
     let mut found: Vec<Package> = Vec::new();
     for entry in packages {
+        let id = entry
+            .get("id")
+            .and_then(|i| i.as_str())
+            .ok_or_else(|| "a package in cargo metadata has no id".to_string())?
+            .to_string();
         let name = entry
             .get("name")
             .and_then(|n| n.as_str())
@@ -202,7 +210,7 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
                 })
             })
             .unwrap_or(false);
-        found.push(Package { name, dir, has_lib });
+        found.push(Package { name, id, dir, has_lib });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(found)
@@ -220,14 +228,15 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
 /// Doc tests still go through cargo: they are compiled by cargo and there is
 /// no binary to run ourselves.
 fn test_package(root: &Path, package: &Package) -> Result<(), String> {
-    let built =
-        crate::command("cargo", &["test", "--profile", "ci", "--package", &package.name, "--no-run"], root)?;
+    let built = crate::command(
+        "cargo",
+        &["test", "--profile", "ci", "--package", &package.name, "--no-run", "--message-format", "json"],
+        root,
+    )?;
     if !built.ok() {
         return Err(format!("building the tests of {} failed\n\n{}", package.name, built.all()));
     }
-    // Cargo prints the "Executable ..." lines on its error stream, so both
-    // streams are read.
-    let binaries = test_binaries(&built.all());
+    let binaries = test_binaries(&built.stdout, &package.id);
     if binaries.is_empty() {
         return Err(format!(
             "cargo built no test binary for {} — the tree's tests would not have run",
@@ -260,17 +269,44 @@ fn test_package(root: &Path, package: &Package) -> Result<(), String> {
 
 /// The test binaries cargo built, from what it printed.
 ///
-/// Cargo prints one line per binary: `Executable unittests src/lib.rs
-/// (target/ci/deps/name-hash)`. The path is in the brackets, and the path is
-/// what is run.
-fn test_binaries(stdout: &str) -> Vec<std::path::PathBuf> {
-    stdout
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("Executable "))
-        .filter_map(|rest| rest.rsplit_once('('))
-        .filter_map(|(_, tail)| tail.strip_suffix(')'))
-        .map(|path| std::path::PathBuf::from(path.trim()))
-        .collect()
+/// **From cargo's JSON, not from its wording.** Cargo's human output prints an
+/// `Executable ...` line per test binary, and that line is not a contract: the
+/// tree's own CI read those lines, and on the Windows runner cargo printed
+/// **none of them** — the phase said "no test binary" on a build that had
+/// produced one. §224.
+///
+/// The JSON is a contract: every build produces one `compiler-artifact`
+/// message per artifact, and a test artifact says where its executable is.
+/// Only artifacts of **this** package are taken, and only those built with the
+/// **test profile** on — a package's *binary* is also an artifact with an
+/// executable, and running the application itself is not a test.
+fn test_binaries(stdout: &str, package_id: &str) -> Vec<std::path::PathBuf> {
+    let mut found: Vec<std::path::PathBuf> = Vec::new();
+    for line in stdout.lines() {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if value.get("reason").and_then(|r| r.as_str()) != Some("compiler-artifact") {
+            continue;
+        }
+        if value.get("package_id").and_then(|p| p.as_str()) != Some(package_id) {
+            continue;
+        }
+        // A **test** artifact is one built with the test profile switched on:
+        // that is the harness, not the library or the program itself.
+        let is_test =
+            value.get("profile").and_then(|p| p.get("test")).and_then(|t| t.as_bool()).unwrap_or(false);
+        if !is_test {
+            continue;
+        }
+        let Some(executable) = value.get("executable").and_then(|e| e.as_str()) else {
+            continue;
+        };
+        found.push(std::path::PathBuf::from(executable));
+    }
+    found.sort();
+    found.dedup();
+    found
 }
 
 /// The closing line of `ci`.
