@@ -1070,6 +1070,26 @@ mod tests {
         let limit = u64::try_from(MAX_REPORT_BYTES).expect("the limit fits in a u64");
         assert!(size <= limit, "the report is {size} bytes, and the reader stops at {MAX_REPORT_BYTES}");
 
+        // **And the report is the design's bytes**, and not the design's bytes
+        // written by a writer of its own. The tree's writer bounds the
+        // indentation, so the design in the crash folder is the design on disk;
+        // serde_json's pretty printer is the tree's layout without the bound,
+        // and it made this report 73.5 MiB where it is 42.1 MiB. §142.
+        //
+        // Measured here: the report is 44 101 054 bytes and the design's own
+        // text is 44 096 823 — the difference is the report's own fields and
+        // the indentation. So the room the report has over the design is a
+        // measured 4 231 bytes, and the margin here is four times that.
+        let mut design_text = Vec::new();
+        craftkit_core::writer::write_json(&mut design_text, &report.design).expect("the design is written");
+        let room = u64::try_from(design_text.len()).expect("the length fits in a u64") + 4 * 4_231;
+        assert!(
+            size <= room,
+            "the report is {size} bytes and the design's own text is {} — the report is not the \
+             design: the writer that made it does not bound the indentation",
+            design_text.len()
+        );
+
         // And it reads back as the report it was.
         //
         // The id counter is not part of the comparison: it is derived from
