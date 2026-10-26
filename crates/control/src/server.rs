@@ -1387,7 +1387,14 @@ mod tests {
         // developer adding the flag where the server is built. This reads the
         // whole workspace, so the flag set to a true value anywhere fails the
         // build.
-        let root = workspace_root();
+        let Some(root) = workspace_root() else {
+            // The tree is not on this machine. A device runs these binaries with
+            // the build machine's path compiled in, and there is nothing there
+            // to scan. The check cannot run, so it says so — it does not pass
+            // by having looked at nothing.
+            eprintln!("skipped: the workspace is not on this machine, so nothing was scanned");
+            return;
+        };
         // Assembled at run time so this file's own source does not contain the
         // literals it is looking for. A test that matches itself is a test that
         // always fails, which is the same species of problem as one that always
@@ -1427,22 +1434,72 @@ mod tests {
         assert!(checked >= 10, "only read {checked} files; the scan is wrong, not the tree");
     }
 
+    /// The walk finds the tree it is in.
+    ///
+    /// A tree made for this test: the manifest names `crates/*`, which is one
+    /// of the two spellings the walk looks for.
+    #[test]
+    fn the_walk_finds_a_workspace_manifest() {
+        let root = temp_dir("control-workspace-found");
+        let dir = root.join("crates/control/src");
+        std::fs::create_dir_all(&dir).expect("the tree");
+        std::fs::write(root.join("Cargo.toml"), b"[workspace]\nmembers = [\"crates/*\"]\n")
+            .expect("the manifest");
+        assert_eq!(find_workspace_root(&dir), Some(root));
+    }
+
+    /// The walk stops at the filesystem root.
+    ///
+    /// This is the hang: a walk that finds nothing must come back, not loop.
+    /// The earlier version asked the root for its parent and was given the
+    /// root back, so it never came back — and on a device, where the tree is
+    /// not present, it never came back either.
+    #[test]
+    fn a_walk_that_finds_nothing_comes_back_empty() {
+        let root = temp_dir("control-workspace-absent");
+        let dir = root.join("crates/control/src");
+        std::fs::create_dir_all(&dir).expect("the tree");
+        assert_eq!(find_workspace_root(&dir), None);
+    }
+
+    /// A directory of this test's own, from the tree's one home for it. §212.
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        craftkit_core::temp::dir(name).expect("a folder")
+    }
+
     /// The workspace root: the directory holding this crate's parent's manifest.
     ///
     /// Found by walking up for the `Cargo.toml` that lists `crates/control`,
     /// rather than assuming a fixed depth.
-    fn workspace_root() -> std::path::PathBuf {
-        let mut dir: &std::path::Path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        loop {
-            let manifest = dir.join("Cargo.toml");
+    ///
+    /// The walk is bounded by the filesystem. `Path::parent` returns `None` at
+    /// the root, and the walk stops there. An earlier version asked for
+    /// `parent().unwrap_or(dir)`, which at the root returned the root itself
+    /// and looped forever — a hang nobody could read past. A device showed it:
+    /// the manifest directory is compiled into the binary and names a path on
+    /// the **build** machine, which is not on the device, so the walk ran to
+    /// the root and never came back.
+    fn find_workspace_root(start: &std::path::Path) -> Option<std::path::PathBuf> {
+        let mut dir = Some(start);
+        while let Some(current) = dir {
+            let manifest = current.join("Cargo.toml");
             if manifest.is_file()
                 && std::fs::read_to_string(&manifest)
                     .map(|t| t.contains("crates/control") || t.contains("crates/*"))
                     .unwrap_or(false)
             {
-                return dir.to_path_buf();
+                return Some(current.to_path_buf());
             }
-            dir = dir.parent().unwrap_or(dir);
+            dir = current.parent();
         }
+        None
+    }
+
+    /// This crate's workspace root, or nothing when the tree is not here.
+    ///
+    /// The tree is not here on a device: the path compiled in names the build
+    /// machine. The callers say so rather than looking at nothing.
+    fn workspace_root() -> Option<std::path::PathBuf> {
+        find_workspace_root(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
     }
 }
