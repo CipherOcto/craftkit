@@ -179,6 +179,15 @@ run a long or repeated suite without saying so first.
 - **Prefer a bounded measurement to a brute-force loop.** A hundred cheap
   runs of one test binary beat a hundred runs of the whole `ci`, and a
   measurement of the *number* beats a repetition of the *suite*.
+- **A measurement you wrote yourself is a test, and the rule above covers it.**
+  A scratch program is not a free exception: before running one, say how long
+  it runs and how much memory it holds, and keep both **bounded** — a fixed
+  iteration count, a fixed buffer, no read that can grow without limit. If
+  the bounds are not obvious, ask first. (2026-10-26: a scratch program that
+  collected a million entries in a `HashSet` and then read `/dev/urandom` with
+  `read_to_end` — an endless file — ran unapproved and was killed by the OOM
+  killer. The tree's own code says why, two lines above the same call site:
+  *"Read only what is asked for: `/dev/urandom` is endless."*)
 
 ## Before you commit
 
