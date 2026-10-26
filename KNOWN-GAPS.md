@@ -26610,14 +26610,19 @@ fails at random is a job people learn to ignore.
 
 ### Measured
 
-| what | how long |
-|---|---|
-| one repetition of the engine's library tests | **0.79 s** |
-| one repetition of the UI's library tests | **1.16 s** |
-| **30 repetitions of each** | **50 s**, and **no failure in 60 runs** |
+| what | where | how long |
+|---|---|---|
+| one repetition of the engine's library tests | this machine | **0.79 s** |
+| one repetition of the UI's library tests | this machine | **1.16 s** |
+| **30 repetitions of each** | this machine | **50 s**, no failure in 60 runs |
+| **30 repetitions of each** | **the runner** | **105 s**, no failure in 60 runs |
+| **the whole job** — checkout, toolchain, build, repetitions | **the runner** | **2 m 08 s** |
 
-So the job costs one build and about a minute of test time, on a machine
-that belongs to nobody.
+So the job costs a build and about two minutes, on a machine that belongs to
+nobody. **And the runner is twice as slow as this machine**, which is §222's
+lesson again: a number measured on one machine is a guess on another. The
+fifty seconds above was measured here; the hundred and five is what it costs
+where the job actually runs.
 
 ### What is not claimed
 
@@ -29480,8 +29485,8 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     to take.
 
     `cargo xtask flake` runs the two suites that failed once each **30 times
-    each** under the `ci` profile (**50 s**), names any failing test and
-    keeps its output. The job **fails only when a test fails twice** — one
+    each** under the `ci` profile (**105 s** on the runner, **50 s** on this
+    machine), names any failing test and keeps its output. The job **fails only when a test fails twice** — one
     failure is the flake, and CI must never fail at random.
 
     **What it does not do**: find the flake. Sixty runs against the 160 that
