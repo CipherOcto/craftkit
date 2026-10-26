@@ -11,8 +11,9 @@
 //! # Where it comes from
 //!
 //! Either `CRAFTKIT_CONTROL_TOKEN` — which is how a test or a script pins it —
-//! or 32 bytes from the operating system, written to a `0600` file so the
-//! launching user can read it and nobody else can.
+//! or 32 bytes from the operating system, written to a `0600` file — where the
+//! platform has POSIX permissions, and with the process's own default where it
+//! does not — so the launching user can read it and nobody else can.
 //!
 //! **"From the operating system" is a claim about every platform**, and it
 //! used to be true on only one of them: on Windows and on wasm the bytes came
@@ -218,8 +219,9 @@ fn base_dir() -> PathBuf {
 /// # Two promises, and how each is kept
 ///
 /// **The file is private.** The secret is written into a file that was created
-/// private — `0600` from the moment it existed — and is moved into place
-/// afterwards. It is never written into a file that another user could read and
+/// private — `0600` from the moment it existed, where the platform has POSIX
+/// permissions, and with the process's own default where it does not — and is
+/// moved into place afterwards. It is never written into a file that another user could read and
 /// is only afterwards locked down: `std::fs::write` creates its file with the
 /// process's umask, which measured `0664` on this account, so writing first and
 /// restricting second leaves the secret on disk in a world-readable file for as

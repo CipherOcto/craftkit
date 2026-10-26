@@ -54,9 +54,10 @@ evidence a crash happened, and it is never destroyed by the next one. §58.
 `sanitize` reduces any input to `[A-Za-z0-9_-]` before it is joined to a
 path, so an id from a command line cannot escape the folder.
 
-The file is written `0600` and the report's own folder is `0700`: a
-report carries the design, so it is the most private thing this program
-writes. A folder that was **already there** — `CRAFTKIT_CRASH_DIR` can name a
+The file is written `0600` and the report's own folder is `0700` — where the
+platform has POSIX permissions, and created with the default of the process
+where it does not. A report carries the design, so it is the most private
+thing this program writes. A folder that was **already there** — `CRAFTKIT_CRASH_DIR` can name a
 shared one — keeps the permissions its owner gave it; only what the tool
 creates is the tool's to protect. §57. Sharing a report never needed the
 file to be world-readable: `craftkit-cli crashes show` prints it.

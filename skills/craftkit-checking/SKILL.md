@@ -309,7 +309,9 @@ cat ~/.local/share/craftkit/control/4711.token
 ```
 
 The token comes from `CRAFTKIT_CONTROL_TOKEN` when set, otherwise 32 bytes from the
-OS written `0600` (`write_token` in `crates/control/src/token.rs`). `CRAFTKIT_CONTROL_DIR`
+OS written `0600` — where the platform has POSIX permissions, and with the
+process's own default where it does not (`write_token` in `crates/control/src/token.rs`).
+`CRAFTKIT_CONTROL_DIR`
 relocates the folder — useful for a launch script; it moves the token *file*, and a
 directory that was already there keeps the permissions its owner gave it (§55). One JSON
 object per line; the **first** request on a connection carries `"token"`; **request** lines

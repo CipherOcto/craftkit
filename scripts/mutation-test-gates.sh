@@ -121,6 +121,20 @@ if [[ "${1:-}" == "--check" ]]; then
     exit 0
 fi
 
+# The budget for one run of this suite, in minutes.
+#
+# §222: the workflow gave this job forty-five minutes, and the number came
+# from the machine the suite was written on -- where a run takes twenty-five.
+# On the runner it actually runs on the suite is more than twice as slow:
+# measured, 344 of the suite's 495 cases had run when the forty-five minutes
+# were up, at about nine seconds a case, so the whole run needs about
+# sixty-one minutes. The job was cancelled on every run, and nobody had seen
+# it, because the job had never finished.
+#
+# The workflow's timeout is above this number, and a gate holds the two
+# together: lowering the workflow's timeout below this budget is reported.
+BUDGET_MINUTES=90
+
 # Created rather than edited, so restoring means removing them.
 readonly EPHEMERAL=(
     crates/unlisted
@@ -386,6 +400,18 @@ expect_miss() {
 finish() {
     local status=0
     echo
+    # What the run cost, in the one place a reader looks for the run's result.
+    #
+    # The number in the tree's prose is a measurement, and a measurement goes
+    # stale; the run says what it actually took. §222.
+    local elapsed=$(( $(date +%s) - STARTED ))
+    printf 'the run took %d minute(s); the budget is %d\n' \
+        "$(( elapsed / 60 ))" "$BUDGET_MINUTES"
+    if [[ $elapsed -gt $(( BUDGET_MINUTES * 60 )) ]]; then
+        printf '%sthe run took longer than its budget.%s The job would be cancelled before it \
+finished, so the number in the workflow needs to move with it.\n' "$RED" "$RESET" >&2
+        status=1
+    fi
     if [[ $CASES -eq 0 ]]; then
         # Every case was skipped, so nothing was tested. A run that tested
         # nothing must not print a ratio: "0/0 caught" is a green light for a
@@ -435,6 +461,7 @@ fi
 
 snapshot
 readonly BEFORE="$(fingerprint)"
+readonly STARTED="$(date +%s)"
 
 # ------------------------------------------------------------- self-test ----
 # Prove the script fails when a gate stops catching, without running any cargo.
@@ -615,6 +642,14 @@ swap crates/control/src/token.rs '    use std::collections::hash_map::RandomStat
     }
     Ok(())'
 expect_catch "lists: the control channel's secret comes from the clock" "cargo xtask lists"
+
+# §221. A promise of a file's mode is a promise about a platform: the tree
+# sets `0600` where the platform has POSIX permissions, and the file is
+# created with the process's own default where it does not. This promise
+# stops naming the platform, which is what it looked like before the promise
+# was fixed.
+swap docs/recipes/fix-a-crash.md 'platform has POSIX permissions, and created with the default of the process' 'platform does not always have permissions, and created with the default of the process'
+expect_catch "lists: a promise of a file's mode does not say where it holds" "cargo xtask lists"
 
 # Prose points at code by line number, and line numbers rot the moment anything
 # above them moves. The tree carried ninety such citations and nothing looked at

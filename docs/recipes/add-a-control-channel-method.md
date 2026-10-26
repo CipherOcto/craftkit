@@ -53,14 +53,16 @@ is green, and you have checked `Method::parse` in
    `the_listener_is_loopback_only_by_default` asserts it. A control channel that accepts a remote connection is
    remote code execution wearing a friendly name.
 3. **A token per launch.** Written `0600` to
-   `~/.local/share/craftkit/control/PORT.token`, or supplied in
-   `CRAFTKIT_CONTROL_TOKEN`. Only the *first* request on a connection carries
+   `~/.local/share/craftkit/control/PORT.token` — `0600` where the platform has
+   POSIX permissions, and the folder's own ACL where it does not — or supplied
+   in `CRAFTKIT_CONTROL_TOKEN`. Only the *first* request on a connection carries
    it (`Request::token`, in `crates/control/src/protocol.rs`); a connection
    that does not present it is closed without a reply, so a port scanner learns
    nothing. `CRAFTKIT_CONTROL_DIR` relocates the token file — and only the
    token *file*: a directory that was already there keeps the permissions its
-   owner gave it, because the file's own `0600` is what keeps the secret
-   (`write_token`, `crates/control/src/token.rs`). §55.
+   owner gave it, because the file's own mode is what keeps the secret on a
+   platform with POSIX permissions (`write_token`, `crates/control/src/token.rs`).
+   §55.
    `the_token_is_only_needed_on_the_first_request` and
    `a_connection_without_the_token_is_closed_with_no_reply`, both in
    `crates/control/src/server.rs`, assert it.

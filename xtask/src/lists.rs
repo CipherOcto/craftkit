@@ -3148,6 +3148,98 @@ pub fn the_control_channel_secret_is_not_the_clock(root: &Path) -> Result<Vec<St
 /// The module in which the control channel's secret is made.
 const SECRET_HOME: &str = "crates/control/src/token.rs";
 
+/// A promise of a file's mode says where it holds. §221.
+///
+/// The tree promises `0600` and `0700` files in eight places, and sets the
+/// mode in three — all of them `#[cfg(unix)]`. On a platform without POSIX
+/// permissions the file is created with the process's own default, and the
+/// tree does not check it: the code says so, and the prose did not.
+///
+/// So a promise of a mode is a promise about a platform, and the paragraph
+/// that makes it has to name the platform.
+///
+/// The subject is the tree's **prose**: the documents an agent reads, and the
+/// doc comments the tree's own **shipped** code carries. A mode in a test is
+/// not a promise — it is a value the test checks — so the code is read for
+/// the production view, and the comments are read as comments and not as
+/// code.
+pub fn a_promise_of_a_file_mode_says_where_it_holds(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    // The documents.
+    for doc in prose_files(root) {
+        let Ok(text) = read_text(&doc) else { continue };
+        let relative = relative_name(root, &doc);
+        for (number, paragraph) in paragraphs(&text) {
+            check_mode_promise(&relative, number, &paragraph, &mut problems);
+        }
+    }
+
+    // The code's own doc comments.
+    for group in ["crates", "apps", "xtask"] {
+        let dir = root.join(group);
+        let mut files = Vec::new();
+        collect_rust(&dir, &mut files);
+        for path in files {
+            let Ok(text) = crate::tree::read_rust(&path, Subject::Production) else { continue };
+            let relative = relative_name(root, &path);
+            for (number, paragraph) in doc_paragraphs(&text) {
+                check_mode_promise(&relative, number, &paragraph, &mut problems);
+            }
+        }
+    }
+
+    problems.sort();
+    Ok(problems)
+}
+
+/// Whether a paragraph promises a file's mode without saying where it holds.
+fn check_mode_promise(where_: &str, number: usize, paragraph: &str, problems: &mut Vec<String>) {
+    if !paragraph.contains("`0600`") && !paragraph.contains("`0700`") {
+        return;
+    }
+    if paragraph.contains("Unix") || paragraph.contains("POSIX") {
+        return;
+    }
+    problems.push(format!(
+        "{where_}: line {number} promises a file's mode (`0600` or `0700`) without saying where it \
+         holds; the mode is set where the platform has POSIX permissions, and elsewhere the file is \
+         created with the process's own default, which is the best that platform offers. §221."
+    ));
+}
+
+/// The doc comments of a Rust file, as paragraphs.
+///
+/// The comments are read **as comments**: a mode in a test is a value the
+/// test checks, and a promise is a sentence. §207.
+fn doc_paragraphs(text: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut current: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        let comment = trimmed.strip_prefix("///").or_else(|| trimmed.strip_prefix("//!"));
+        match comment {
+            Some(rest) => {
+                if current.is_empty() {
+                    start = number + 1;
+                }
+                current.push(rest.trim());
+            }
+            None => {
+                if !current.is_empty() {
+                    out.push((start, current.join(" ")));
+                    current.clear();
+                }
+            }
+        }
+    }
+    if !current.is_empty() {
+        out.push((start, current.join(" ")));
+    }
+    out
+}
+
 /// The tree's files are written through one home.
 ///
 /// §215. The tree has a rule for writing a file — *into a temporary name, then
@@ -5484,6 +5576,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the anchor's text must be found wherever it is, and a comment is a place it can be",
     ),
     (
+        "a_promise_of_a_file_mode_says_where_it_holds",
+        Subject::Production,
+        "the question is what the tree's shipped prose promises, and a test's doc comment is not a promise",
+    ),
+    (
         "the_control_channel_secret_is_not_the_clock",
         Subject::Production,
         "the question is which lines the tree ships, and a test's fixture is not the secret",
@@ -6714,6 +6811,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         the_control_channel_secret_is_not_the_clock(root)?
             .into_iter()
             .map(|p| format!("{p}\n     A secret from a source, not from a reading somebody can look up.")),
+    );
+
+    // A promise of a file's mode says where it holds. §221.
+    problems.extend(
+        a_promise_of_a_file_mode_says_where_it_holds(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A mode is a promise about a platform, so the platform is named.")),
     );
 
     if problems.is_empty() {
@@ -8846,6 +8950,56 @@ mod tests {
 
         let problems = the_control_channel_secret_is_not_the_clock(&dir).expect("runs");
         assert!(problems.is_empty(), "a comment is not a reading: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every promise of a file's mode says where it holds.
+    #[test]
+    fn a_promise_of_a_files_mode_says_where_it_holds() {
+        let root = crate::root().expect("the workspace root");
+        let problems = a_promise_of_a_file_mode_says_where_it_holds(&root).expect("runs");
+        assert!(problems.is_empty(), "every mode promise names its platform: {problems:#?}");
+    }
+
+    /// A promise of a file's mode without the platform is caught.
+    ///
+    /// The tree promises `0600` files and sets the mode only where the
+    /// platform has POSIX permissions; a promise that does not say where it
+    /// holds is a promise on every platform. §221.
+    #[test]
+    fn a_promise_of_a_files_mode_without_the_platform_is_caught() {
+        let dir = crate::temp::dir("mode-promise").expect("a temporary folder");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            docs.join("promise.md"),
+            "# A document\n\nThe file is written `0600` so nobody else can read it.\n",
+        )
+        .expect("the fabricated promise");
+
+        let problems = a_promise_of_a_file_mode_says_where_it_holds(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("without saying where it holds")),
+            "a promise without the platform is not reported: {problems:#?}"
+        );
+        assert_eq!(problems.len(), 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A promise that names the platform is not reported.
+    #[test]
+    fn a_promise_of_a_files_mode_with_the_platform_is_not_reported() {
+        let dir = crate::temp::dir("mode-qualified").expect("a temporary folder");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            docs.join("promise.md"),
+            "# A document\n\nThe file is written `0600`, where the platform has POSIX permissions.\n",
+        )
+        .expect("the fabricated promise");
+
+        let problems = a_promise_of_a_file_mode_says_where_it_holds(&dir).expect("runs");
+        assert!(problems.is_empty(), "a qualified promise is not reported: {problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

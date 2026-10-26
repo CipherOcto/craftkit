@@ -53,8 +53,10 @@
 //!   is the tree's **one** writer, `craftkit_core::atomic`, since every file
 //!   the tree writes has to obey it and not three of them. §215.
 //! - **Write privately.** A report holds the user's design. The files are
-//!   created `0600` and the report's own folder is `0700`; a folder that was
-//!   already there keeps the permissions its owner gave it. §57.
+//!   created `0600` and the report's own folder is `0700`, where the platform
+//!   has POSIX permissions, and with the process's own default where it does
+//!   not; a folder that was already there keeps the permissions its owner gave
+//!   it. §57.
 //! - **Read it as a document.** A report is **input** — it arrives from
 //!   another machine — so it is deserialized into the model's own types, not
 //!   into a JSON tree. A tree costs thirty-two times the text it was parsed

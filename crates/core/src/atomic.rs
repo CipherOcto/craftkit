@@ -57,7 +57,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
     /// Only its owner may read it: the file is created `0600`, from the moment
-    /// it exists.
+    /// it exists — where the platform has POSIX permissions, and with the
+    /// process's own default where it does not.
     ///
     /// Not created and restricted afterwards: `std::fs::write` creates its file
     /// with the process's umask, which measured `0664` on this account, so

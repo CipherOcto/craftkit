@@ -877,7 +877,9 @@ permissions is refused rather than trusted; the finished file renamed into
 place; and the temporary removed if anything fails.
 
 **And the caller says which kind of file it is.** `OwnerOnly` makes the file
-`0600` from the moment it exists; `AsCreated` leaves it with the process's
+`0600` from the moment it exists, where the platform has POSIX permissions;
+elsewhere the file is created with the process's own default, which is the
+best that platform offers. `AsCreated` leaves it with the process's
 own default. The design the user saves where they chose is `AsCreated`,
 because a document the user put somewhere is the user's business — so the
 decision is made at the call site, where the knowledge is.

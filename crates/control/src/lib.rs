@@ -28,7 +28,9 @@
 //! 1. **Loopback only.** The listener binds `127.0.0.1`. A control channel that
 //!    accepts a remote connection is a remote code execution surface wearing a
 //!    friendly name.
-//! 2. **A token per launch.** Written to a `0600` file, or supplied in
+//! 2. **A token per launch.** Written to a `0600` file — where the platform
+//!    has POSIX permissions, and with the process's own default where it does
+//!    not — or supplied in
 //!    `CRAFTKIT_CONTROL_TOKEN`. A connection that does not present it is
 //!    closed without a reply, so a port scanner learns nothing.
 //! 3. **Nothing reaches past the engine.** Every method maps onto something the

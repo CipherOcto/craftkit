@@ -25985,6 +25985,72 @@ says.** The comment said "there is no entropy source to reach for", and the
 standard library's source says there is one on Windows and none on wasm. The
 tree had one platform's answer written down as if it were all of them's.
 
+## 221. The tree promised `0600` files on a platform that has no `0600`
+
+### The finding
+
+The tree says, in eight places, that a file it writes is written `0600` — the
+token, the crash report, the report's folder:
+
+> The file is written `0600` and the report's own folder is `0700`: a report
+> carries the design, so it is the most private thing this program writes.
+
+**And the tree sets that mode in three places, all of them `#[cfg(unix)]`.**
+On a platform without POSIX permissions the file is created with the process's
+own default, and the tree does not check it — `check_private` returns `Ok(())`
+there, and the tests that check a mode are `#[cfg(unix)]` as well.
+
+So the promise is true on Unix and **unverified** everywhere else, and
+nothing in the prose said so.
+
+### The measurement
+
+**Measured**: eight places promise a POSIX mode, in four documents and four
+code comments; three places set it, all Unix-only; and the tree's own home —
+`craftkit_core::atomic` — says the honest thing in its own words: *"Everywhere
+else the file is created with the process's own default, which is the best
+available."*
+
+**The code was honest and the prose was not.** That is the shape of the
+finding: the rule was written once, correctly, and then restated eight times
+without the part that depends on the machine.
+
+### The port
+
+Every promise now names the platform it holds on — "where the platform has
+POSIX permissions, and with the process's own default where it does not" — in
+the documents, in the skills, in the crate headers, and in the home itself.
+
+### The gate's own teeth
+
+`a_promise_of_a_file_mode_says_where_it_holds`, in `cargo xtask lists`, asks
+one question of every paragraph that promises a mode: **does the paragraph
+name the platform?**
+
+The subject is the tree's **prose**: the documents an agent reads, and the
+doc comments the tree's *shipped* code carries. A mode in a test is not a
+promise — it is a value the test checks — so the code is read for the
+production view.
+
+**And the mutation bites**: the case takes the platform out of one promise
+and the gate catches it — **verified by running it**.
+
+### What is not claimed
+
+**The gate does not make the promise true on Windows.** It makes the promise
+*say what it is*. On a platform with an ACL, the file inherits the folder's
+permissions, and the tree cannot check them with what it has.
+
+### The lesson
+
+**A promise about a file's permissions is a promise about a platform.** The
+tree's own home said so and the other seven places did not.
+
+**And a rule written once correctly and then restated seven times is seven
+chances to say it wrongly.** The rule here was *"write it private, and where
+the platform cannot say private, say what you did instead"* — and the seven
+restatements said half of it.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26525,6 +26591,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A request that arrives late is still answered** | `a_request_that_arrives_after_the_connection_is_still_answered` | — §218 (macOS job) |
 | **The tree's files are checked out with the same endings everywhere** | `the_tree_says_how_its_files_are_checked_out` | 1 mutation — §219 |
 | **The control channel's secret does not come from the clock** | `the_control_channel_secret_is_not_the_clock` | 1 mutation — §220 |
+| **A promise of a file's mode says where it holds** | `a_promise_of_a_file_mode_says_where_it_holds` | 1 mutation — §221 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28648,3 +28715,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     behaviour. If a future standard library filled its random keys from
     something weaker, the gate would stay green; the evidence is the standard
     library's source, read at the version the tree builds with.
+
+74. ~~**The tree promised `0600` files on a platform that has no `0600`.~~
+    **Done in §221.**
+
+    Eight places promise a POSIX mode — the token, the crash report, the
+    report's folder — and the tree sets that mode in three, all
+    `#[cfg(unix)]`. On a platform without POSIX permissions the file is
+    created with the process's own default and the tree does not check it.
+
+    The code was honest and the prose was not: the tree's own home says
+    *"everywhere else the file is created with the process's own default"*,
+    and the seven other restatements said half of it.
+
+    Every promise now names the platform, and the gate
+    `a_promise_of_a_file_mode_says_where_it_holds` asks every paragraph that
+    promises a mode whether it says where it holds.
