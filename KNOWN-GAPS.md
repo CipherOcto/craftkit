@@ -26446,6 +26446,73 @@ runner's.**
 it.** Three of them were waiting behind one hang, and each was a real failure
 on the one platform nobody had run.
 
+## 227. The tree's own instrument had only ever run on one platform
+
+### The finding
+
+The mutation script is the tree's proof that its **gates can fail** — the one
+job that can catch a gate that has quietly stopped working, and the argument
+`KNOWN-GAPS.md` §1 makes for the whole audit. Its job is `runs-on:
+ubuntu-latest`, and the reason the workflow gives is that *what it tests is
+OS-independent*.
+
+**But the script is not OS-independent.** It calls `python3` — a name a
+Windows runner's Git Bash may not have — and it does its file surgery in
+Python's **text mode**, so a platform's line-ending rules rewrite the file
+the gate is given.
+
+So *"the gates can fail"* was a fact about one platform, and the instrument
+that proved it had never run on the two platforms the tree ships to.
+
+**Measured now** (run `40309190135`): the script's **self-test** — the
+negative of the whole exercise, cheap, and no cargo — runs on **all three**
+platforms of the matrix, and the tree is byte-identical afterwards.
+
+| platform | the self-test | the tree afterwards |
+|---|---|---|
+| Linux (measured locally) | **1.7 s**, exits **1** | unchanged |
+| macOS runner | **6 s**, exits **1** | unchanged |
+| Windows runner | **27 s**, exits **1** | unchanged |
+
+### The port
+
+**The script finds its python.** `python3`, or `python` where there is no
+`python3`, and it **says which one** it is using. A machine with neither
+gets a message and the exit code **2** — the script's own *"something is
+wrong with me"*, not *"a gate missed its mutation"* (§203).
+
+**And the file surgery keeps the bytes.** Both swaps read and write with
+Python's `newline=""`, so the bytes of the file are the bytes that are read
+and the bytes that are written, and the answer cannot depend on the
+platform's line-ending rules. §219's shape, one layer down.
+
+**And the workflow runs the instrument on every platform**, and asserts two
+things about it: that it exits **1** — its synthetic cases fail as intended —
+and that it leaves the tree **exactly as it found it** (`git status
+--porcelain` is empty). The second assertion is the one that would catch a
+platform whose checkout or whose file surgery rewrote a file.
+
+### What is not claimed
+
+**The full suite still runs on Ubuntu only.** It takes seventy minutes on
+one platform, and running it on three would be three times the cost for a
+script whose *self-test* now proves the instrument works everywhere. What is
+claimed is the narrower thing: **the instrument runs on every platform the
+tree runs on, and says so.**
+
+**And nothing here says the gates behave the same on the other platforms.**
+A gate that passes on Linux and fails on Windows is still a question, and it
+is still open.
+
+### The lesson
+
+**An instrument that only runs on one platform is a fact about one platform.**
+
+**And an instrument that changes what it measures is not an instrument.** The
+byte-exact surgery is the difference between a mutation and a rewrite of the
+file, and on a platform with different line-ending rules those are different
+things.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26994,6 +27061,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A run that hangs says which test is hanging** | `test_package` in `xtask/src/ci.rs` | the runner's own job — §224 |
 | **A path is quoted in one form on every platform** | `relative_name` in `xtask/src/tree.rs` | the Windows runner — §225 |
 | **A workflow step names the shell it is written in** | `shell: bash` in `.github/workflows/ci.yml` | the Windows runner — §226 |
+| **The instrument runs on every platform the tree runs on** | `scripts/mutation-test-gates.sh --self-test` | the macOS and Windows runners — §227 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29231,3 +29299,24 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     green: the gate in **326 seconds**, the bundle produced, and the page
     importing it. The **first fully green Windows run in the tree's
     history**.
+
+80. ~~**The tree's own instrument had only ever run on one platform.**~~
+    **Done in §227.**
+
+    The mutation script is the tree's proof that its gates can fail, and it
+    had only ever run on Linux — so *"the gates can fail"* was a fact about
+    one platform, and the instrument had never been run on the two the tree
+    ships to. It called `python3`, which a Windows runner's Git Bash may not
+    have, and did its file surgery in Python's text mode, so a platform's
+    line-ending rules could rewrite the file the gate was given.
+
+    **Measured now**: the script's self-test runs on **all three** platforms
+    of the matrix — **1.7 s** on Linux, **6 s** on macOS, **27 s** on
+    Windows — and the tree is byte-identical afterwards on every one.
+
+    The script finds its python and says which one it is using, its surgery
+    keeps the bytes, and the workflow asserts that the instrument fails as it
+    should **and** leaves the tree as it found it.
+
+    **The residual**: the full suite still runs on Ubuntu only, and nothing
+    here says the gates behave the same on the other two platforms.

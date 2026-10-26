@@ -125,6 +125,7 @@ if [[ -z "$PYTHON" ]]; then
     printf '  On a Windows runner that is python in the Git Bash shell.\n' >&2
     exit 2
 fi
+printf 'the file surgery uses %s\n' "$PYTHON"
 
 # `--check` says whether the list is usable, and nothing else.
 #
