@@ -3193,6 +3193,225 @@ pub fn a_promise_of_a_file_mode_says_where_it_holds(root: &Path) -> Result<Vec<S
     Ok(problems)
 }
 
+/// The tree's own index of enforcement names enforcement that is not there. §223.
+///
+/// `KNOWN-GAPS.md` carries a table with one row per rule: the rule, the thing
+/// that enforces it, and what catches the enforcement being wrong. It is the
+/// tree's own account of what holds each rule up, and **nothing read it**.
+///
+/// **Measured**: of the table's 515 rows, six name a thing the tree does not
+/// have — a test that was renamed, a reader that was deleted, a gate that
+/// changed its name. Every one of the six was a name the tree once had, so the
+/// table was not wrong when it was written; it was wrong later, and the table
+/// is where a reader looks to find out what the tree believes.
+///
+/// So a row that names an enforcement must name one the tree has.
+///
+/// The question is asked of the table's **middle column**, because that is the
+/// column that names the enforcement. The names there are resolved against
+/// the tree itself: a definition in the tree's Rust, a file in the tree, a
+/// crate in the workspace, or a command the xtask accepts. A name that
+/// resolves to none of those is a name the tree has forgotten.
+///
+/// The subject is the **code view** of the tree's Rust: a name that appears
+/// only in a comment is not a thing the tree has, and §148's lesson is that
+/// the tree's own readers were deleted once and the tree kept naming them.
+pub fn the_tree_names_the_enforcement_it_has(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let path = root.join(GAPS_FILE);
+    let text = read_text(&path).map_err(|e| format!("could not read {GAPS_FILE}: {e}"))?;
+    let rows = enforcement_rows(&text);
+    if rows.is_empty() {
+        problems.push(format!(
+            "{GAPS_FILE}: it has no table of what enforces what, so the tree has no account of \
+             what holds its rules up. §223."
+        ));
+        return Ok(problems);
+    }
+    let mut names = std::collections::HashSet::new();
+
+    // The tree's definitions, read for the code view: a name that survives
+    // only in a comment is a name the tree has forgotten. §148 deleted the
+    // tree's other readers and the tree kept naming them, so the question is
+    // asked of the code and not of the text.
+    let mut rust = Vec::new();
+    for group in ["crates", "apps", "xtask"] {
+        let dir = root.join(group);
+        collect_rust(&dir, &mut rust);
+    }
+    for path in &rust {
+        let Ok(text) = crate::tree::read_rust(path, Subject::Everything) else { continue };
+        for word in words_of_kept_code(&text) {
+            names.insert(word);
+        }
+    }
+
+    // The tree's files, by their name.
+    let mut files = Vec::new();
+    crate::tree::walk(root, root, &mut files, &|path| path.is_file());
+    for path in &files {
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            names.insert(name.to_string());
+        }
+        let Some(stem) = path.file_stem().and_then(|n| n.to_str()) else { continue };
+        names.insert(stem.to_string());
+    }
+
+    // The tree's crates, by the name in their manifest.
+    for source in crate_roots(root)? {
+        let Some(dir) = source.parent() else { continue };
+        let dir = if dir.ends_with("src") { dir.parent() } else { Some(dir) };
+        let Some(dir) = dir else { continue };
+        let Ok(text) = read_text(dir.join("Cargo.toml")) else { continue };
+        for line in text.lines() {
+            let Some(rest) = line.trim().strip_prefix("name") else { continue };
+            let Some(rest) = rest.trim().strip_prefix('=') else { continue };
+            let name = rest.trim().trim_matches('"');
+            if !name.is_empty() {
+                names.insert(name.to_string());
+            }
+        }
+    }
+
+    // The tree's commands the xtask accepts.
+    for command in crate::COMMANDS {
+        names.insert(command.name.to_string());
+    }
+
+    // The tree's shell functions. The mutation script is a shell program, and
+    // a row of the table may name the function that does the enforcing
+    // (`expect_catch` in the mutation script). A shell function is a name the
+    // tree has, exactly as a Rust function is.
+    let mut scripts = Vec::new();
+    crate::tree::walk(root, root, &mut scripts, &|path| {
+        path.extension().and_then(|e| e.to_str()) == Some("sh")
+    });
+    for path in &scripts {
+        // The walk gives paths relative to the root, so they are joined with
+        // it: a relative path would be resolved against whatever directory
+        // the reader happens to be in.
+        let Ok(text) = read_text(root.join(path)) else { continue };
+        for line in text.lines() {
+            let trimmed = line.trim_start();
+            let name: String =
+                trimmed.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+            if name.is_empty() {
+                continue;
+            }
+            // A shell function is `name()` or `name () {` at the start of a
+            // line; a word that is not followed by a parenthesis is a word.
+            let after = &trimmed[name.len()..];
+            if !after.trim_start().starts_with('(') {
+                continue;
+            }
+            names.insert(name);
+        }
+    }
+
+    for (number, cell) in rows {
+        for name in named_things(&cell) {
+            if names.contains(&name) {
+                continue;
+            }
+            problems.push(format!(
+                "{GAPS_FILE}: line {number} names `{name}` as the thing that enforces a rule, and \
+                 the tree has no such thing; a row of the table that names a gate or a test the \
+                 tree has forgotten is a rule with nothing behind it. §223."
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The tree's own record of the gaps it found.
+const GAPS_FILE: &str = "KNOWN-GAPS.md";
+
+/// The rows of the table that says what enforces what.
+///
+/// The table is found by its heading and its header row, so a file that grows
+/// another table is not read as this one, and a table that loses its header is
+/// not read as an empty one.
+fn enforcement_rows(text: &str) -> Vec<(usize, String)> {
+    let mut rows = Vec::new();
+    let mut inside = false;
+    let mut header_seen = false;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            inside = trimmed.trim_start_matches("## ").trim() == "What enforces what";
+            header_seen = false;
+            continue;
+        }
+        if !inside || !trimmed.starts_with('|') {
+            continue;
+        }
+        let cells: Vec<&str> = trimmed.trim_matches('|').split('|').map(str::trim).collect();
+        if !header_seen {
+            // The header row names the columns; the row after it is the
+            // separator.
+            if cells.contains(&"Enforced by") {
+                header_seen = true;
+            }
+            continue;
+        }
+        if cells.iter().all(|cell| cell.starts_with('-') && cell.contains(':')) {
+            continue;
+        }
+        if cells.len() < 2 {
+            continue;
+        }
+        rows.push((index + 1, cells[1].to_string()));
+    }
+    rows
+}
+
+/// The names a cell of the enforcement column claims for the tree.
+///
+/// Only a **backticked** name is a claim: the column also holds prose ("the
+/// same", "the code view in `production_of`"), and a word in prose is not a
+/// name the tree must have. The name is the part after the last `::`, because
+/// a cell may qualify it (`resources::RESOURCES`), and the qualified part is
+/// a path, not a name.
+fn named_things(cell: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for (_, span, _) in backticked_spans(cell) {
+        let span = span.trim();
+        // A command line is not a name: `cargo xtask lists` names a command,
+        // and the command is checked by the gate that lists the commands.
+        if span.contains(' ') {
+            continue;
+        }
+        // A flag, a macro, an attribute and a path are not names either.
+        if span.starts_with("--") || span.contains(['(', ')', '[', ']', '!', '"', '\'']) || span.contains('/')
+        {
+            continue;
+        }
+        let name = span.rsplit("::").next().unwrap_or(span);
+        if name.is_empty() {
+            continue;
+        }
+        names.push(name.to_string());
+    }
+    names
+}
+
+/// The words of a file's **code**: the identifiers the code uses, with the
+/// comments and the strings blanked out.
+///
+/// The tree's own reader for this is `code_lines_kept`, and it is the only
+/// one: §148 deleted the other two, and the tree kept naming them.
+fn words_of_kept_code(text: &str) -> std::collections::HashSet<String> {
+    let mut names = std::collections::HashSet::new();
+    let kept = crate::tree::code_lines_kept(text);
+    for word in kept.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+        if !word.is_empty() {
+            names.insert(word.to_string());
+        }
+    }
+    names
+}
+
 /// Whether a paragraph promises a file's mode without saying where it holds.
 fn check_mode_promise(where_: &str, number: usize, paragraph: &str, problems: &mut Vec<String>) {
     if !paragraph.contains("`0600`") && !paragraph.contains("`0700`") {
@@ -5616,6 +5835,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         Subject::Production,
         "the question is which lines the tree ships, and a test's fixture is not a file the tree writes",
     ),
+    (
+        "the_tree_names_the_enforcement_it_has",
+        Subject::Everything,
+        "the question is what names the tree has, and a name a test carries is a name the tree has",
+    ),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
@@ -6924,6 +7148,11 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         }),
     );
 
+    // The tree's own index of enforcement names enforcement it has. §223.
+    problems.extend(the_tree_names_the_enforcement_it_has(root)?.into_iter().map(|p| {
+        format!("{p}\n     A row that names a gate the tree has forgotten is a rule with nothing behind it.")
+    }));
+
     if problems.is_empty() {
         println!(
             "   ok: {} crate roots share one deny line, the layer table matches the docs, \
@@ -6953,6 +7182,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              the tree's walk \
              has one home, every pending change is declared and applied in code, \
              every test builds its temporary folder through its tree's one home, \
+             the tree's own index of enforcement names enforcement it has, \
              and the session offers no way into the design but \
              the registry",
             roots.len()
@@ -9182,6 +9412,69 @@ mod tests {
              let _ = (path, bytes);\n    Ok(())\n}\n",
         )
         .expect("the fabricated home");
+    }
+
+    /// The tree's index of enforcement names enforcement the tree has.
+    #[test]
+    fn the_tree_names_only_the_enforcement_it_has() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_tree_names_the_enforcement_it_has(&root).expect("runs");
+        assert!(problems.is_empty(), "the tree names only enforcement it has: {problems:#?}");
+    }
+
+    /// A row that names an enforcement the tree does not have is caught.
+    ///
+    /// This is the defect the gate exists for: the tree's own table of what
+    /// holds each rule up named six gates and tests the tree had renamed or
+    /// deleted, and nothing read the table. §223.
+    #[test]
+    fn a_row_naming_enforcement_the_tree_lacks_is_caught() {
+        let dir = crate::temp::dir("enforcement-gone").expect("a temporary folder");
+        let table = "| Rule | Enforced by | Caught by |\n\
+                     |---|---|---|\n\
+                     | **A rule the tree has** | `a_gate_the_tree_deleted` | 1 mutation |\n";
+        std::fs::write(dir.join(GAPS_FILE), format!("## What enforces what\n\n{table}"))
+            .expect("the fabricated table");
+
+        let problems = the_tree_names_the_enforcement_it_has(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("a_gate_the_tree_deleted")),
+            "a name the tree has forgotten is not reported: {problems:#?}"
+        );
+        assert_eq!(problems.len(), 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A row that names enforcement the tree **has** is not reported.
+    #[test]
+    fn a_row_naming_enforcement_the_tree_has_is_not_reported() {
+        let dir = crate::temp::dir("enforcement-ok").expect("a temporary folder");
+        let table = "| Rule | Enforced by | Caught by |\n\
+                     |---|---|---|\n\
+                     | **A rule the tree has** | `a_gate_the_tree_has` | 1 mutation |\n";
+        std::fs::write(dir.join(GAPS_FILE), format!("## What enforces what\n\n{table}"))
+            .expect("the fabricated table");
+        std::fs::create_dir_all(dir.join("crates/demo/src")).expect("the fabricated tree");
+        std::fs::write(dir.join("crates/demo/src/lib.rs"), "fn a_gate_the_tree_has() {}\n")
+            .expect("the fabricated gate");
+
+        let problems = the_tree_names_the_enforcement_it_has(&dir).expect("runs");
+        assert!(problems.is_empty(), "a name the tree has is not a problem: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A tree with no table of what enforces what is caught.
+    #[test]
+    fn a_tree_with_no_enforcement_table_is_caught() {
+        let dir = crate::temp::dir("enforcement-missing").expect("a temporary folder");
+        std::fs::write(dir.join(GAPS_FILE), "# the tree's own record\n").expect("the record");
+
+        let problems = the_tree_names_the_enforcement_it_has(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("no table of what enforces what")),
+            "a tree with no such table is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A writer outside the one home is caught.

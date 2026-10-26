@@ -16,6 +16,7 @@ Cargo.lock
 .gitattributes
 Cargo.toml
 ATTRIBUTION.md
+KNOWN-GAPS.md
 clippy.toml
 deny.toml
 .github/workflows/ci.yml

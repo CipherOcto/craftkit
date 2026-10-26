@@ -26115,6 +26115,105 @@ length on the runner.
 result — every gate proved it can still fail — was one timeout away from
 existing, and it did not exist because the budget was short.
 
+## 223. The tree's own index of what enforces what named six things the tree does not have
+
+### The finding
+
+`KNOWN-GAPS.md` carries a table with one row per rule: the rule, the thing
+that **enforces** it, and what catches the enforcement being wrong. It is the
+tree's own account of what holds each rule up, and it is where a reader goes
+to find out what the tree believes.
+
+**And nothing read it.** The tree has gates for its prose (`citation_drift`,
+`broken_document_links`, `citations_of_tests_point_at_the_test`), for its
+lists (`the_pending_list_is_sorted`, `the_fuzz_targets_are_the_table`) and for
+its own source — but the file that indexes the whole tree's enforcement was
+read by no gate at all. `cargo xtask lists` checks `KNOWN-GAPS.md` for
+**nothing**; the file's own name is not in the tree's list of prose, and the
+table is not a section any gate opens.
+
+**Measured**: the table has **538** rows. **Six** of them name an enforcement
+the tree does not have:
+
+| the row | what it names | what the tree has |
+|---|---|---|
+| §148 | `code_only` | `code_lines_kept` — §148 **deleted** the other three readers, and the tree kept naming one of them |
+| §50 | `leaves_a_document_the_file_would_refuse` | `no_command_leaves_a_document_the_file_would_refuse` |
+| §51 | `a_document_too_large_to_read_back_is_not_written` | `the_writer_refuses_a_document_the_reader_would_refuse` |
+| §164 | `the_byte_bounds_are_named_in_the_prose` | `the_bounds_are_named_in_the_prose` |
+| §173 | `expect_catch_needs` | `expect_catch` — the shell function the script has |
+| §215 | `command_effects_survive_the_file` | the file `apps/craftkit-cli/tests/command_effects_survive_the_file.rs` — the row named a *test*, and the tree's test is a *file* |
+
+**Every one of the six was a name the tree once had.** So the table was not
+wrong when it was written: it was wrong *later*, when a gate was renamed and a
+reader was deleted, and the table — which is where a reader looks to find out
+what the tree believes — kept saying the old name. That is the shape §1 is
+about: the tree's own account of itself was stale, and nothing could say so.
+
+**And this is the second time.** §148 deleted `code_only`, `without_comments`
+and `strip_code` and **the tree kept naming `code_only`** — in the very table
+that says what enforces the rules. §148 fixed the code and left the index.
+
+### The port
+
+**Six rows corrected** to name what the tree has, each checked against the
+tree rather than remembered.
+
+**And a gate that holds the table to the tree**: `the_tree_names_the_enforcement_it_has`,
+in `cargo xtask lists`. It reads the table's **middle column** — the column
+that names the enforcement — and resolves each **backticked** name against the
+tree itself:
+
+- a **definition** in the tree's Rust, read for the **code view**, so a name
+  that survives only in a comment is a name the tree has forgotten;
+- a **file** in the tree, by its name or its stem;
+- a **crate** in the workspace, by the name in its manifest;
+- a **command** the xtask accepts;
+- a **shell function** in the tree's scripts — the mutation script is a shell
+  program, and `expect_catch` is a name the tree has.
+
+A name that resolves to none of those is reported.
+
+### The gate's own teeth
+
+**The subject is a table, not prose.** §29 declined to gate every backticked
+name in prose, because the rule that separates `the_pending_list_is_sorted`
+from `catch_unwind` is a heuristic that would eventually flag something real.
+A table cell is different: the column has a grammar, the name is backticked,
+and the question is not *"is this a name?"* but *"does the tree have it?"* —
+which is decided by the tree and not by a rule about names.
+
+**Only backticked names are claims.** The column also holds prose ("the same",
+"the code view in `production_of`"), and a word in prose is not a name the
+tree must have.
+
+**And the mutation bites**: the case renames one row's enforcement to a gate
+the tree does not have, and the gate catches it — **verified by running it**.
+The case needs `KNOWN-GAPS.md` in the list of files a mutation may write to,
+because a mutation of a file that is not snapshotted could not be put back.
+
+### What is not claimed
+
+**The gate does not say the table is right.** It says every name in it is a
+name the tree has. Whether the enforcement named is the *right* enforcement
+for the rule is a question about the rule, and the tree has no machine for it.
+
+**A row that says *nothing* is not reported.** Three rows say the honest word
+*nothing*, and a row that names no gate names no gate that is not there.
+
+### The lesson
+
+**An index that nothing reads is a list that drifts.** The tree's table of
+what enforces what was accurate when it was written and wrong six times over,
+and the six were all names the tree had once — the drift was invisible because
+the table was read by nobody, and a reader who consulted it would have been
+reading a list that was already wrong.
+
+**And the tree's own record needs a reader too.** The file that documents the
+tree's gaps was itself unexamined, and §148's deletion reached into it. A
+document about the tree is not the tree's own source code, and it does not get
+the tree's checks for free.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26162,7 +26261,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A line count in prose is the file's length** | `prose_line_counts_match_the_files` | 2 mutations — §41 |
 | **A limit in prose is the constant's value** | `prose_constants_match_the_code` | 2 mutations — §41 |
 | **A limit in prose is the constant's value, whatever expression it is written as** | `prose_constants_match_the_code` | 2 mutations — §147 |
-| **The tree's limits are read from its code, not from its text** | `code_only` in the four gates that read them | 4 mutations — §148 |
+| **The tree's limits are read from its code, not from its text** | `code_lines_kept` in the four gates that read them | 4 mutations — §148 |
 | **The tree's symbols are read from its code, not from its text** | `code_lines_kept` in `defines` | 1 mutation — §149 |
 | **The tree's modules are read from its code, not from its text** | `code_lines_kept` in `tree_modules` | 1 mutation — §149 |
 | **A limit in a string is not enforcement** | `code_lines_kept` in `limits_are_enforced` | 1 mutation — §149 |
@@ -26209,11 +26308,11 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A limit is applied before the allocation** | `a_bounded_read_never_asks_for_more_than_the_limit` | 1 mutation — §49 |
 | **The bytes a reader keeps never exceed the limit** | `the_bytes_kept_never_exceed_the_limit` | 1 mutation — §49 |
 | **The writer refuses a document the reader would refuse** | `the_writer_refuses_a_document_the_reader_would_refuse` | 1 mutation — §50 |
-| **A command may not leave a document the file format refuses** | `leaves_a_document_the_file_would_refuse` | 1 mutation — §50 |
+| **A command may not leave a document the file format refuses** | `no_command_leaves_a_document_the_file_would_refuse` | 1 mutation — §50 |
 | **A group id may repeat at a different depth** | `a_group_id_may_repeat_at_a_different_depth` | 1 mutation — §50 |
 | **Two groups with one id among siblings are refused** | `two_siblings_with_the_same_id_are_refused` | 1 mutation — §50 |
 | **A command's effect survives the file, at two depths** | `a_group_name_at_two_depths_survives_the_file` | 1 mutation — §50 |
-| **The writer never writes a file the reader would refuse** | `a_document_too_large_to_read_back_is_not_written` | 1 mutation — §51 |
+| **The writer never writes a file the reader would refuse** | `the_writer_refuses_a_document_the_reader_would_refuse` | 1 mutation — §51 |
 | **The writer's limit stops the text while it is written** | `the_writer_keeps_no_more_than_the_limit` | 1 mutation — §51 |
 | **A document over the byte limit is refused** | `a_document_over_the_byte_limit_is_refused` | 1 mutation — §52 |
 | **The size estimate counts the content** | `the_history_keeps_its_memory_within_a_budget` | 1 mutation — §52 |
@@ -26501,7 +26600,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An empty name is not a word** | the guard in `has_word` | 1 mutation — §162 |
 | **The mutation script's snapshot covers what a build writes** | `Cargo.lock` in `FILES` | 1 self-test — §163 |
 | **A limit only a longer name uses is not enforcement** | `has_word` in `limits_are_enforced` | 1 mutation — §164 |
-| **A bound only a longer name names in the prose is not named** | `has_word` in `the_byte_bounds_are_named_in_the_prose` | 1 mutation — §164 |
+| **A bound only a longer name names in the prose is not named** | `has_word` in `the_bounds_are_named_in_the_prose` | 1 mutation — §164 |
 | **A budget that names only a longer name is not the model's** | `has_word` in `the_memory_budgets_are_derived_from_the_models` | 1 mutation — §164 |
 | **The tree's writer is not a path that starts the same way** | `has_word` in `the_tree_writes_its_json_with_one_writer` | 1 mutation — §164 |
 | **An impl block inside a string is not an impl block** | the code view in `fingerprint_sees_every_field` | 1 mutation — §165 |
@@ -26526,7 +26625,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A tool that is not installed is not a pass** | `deny::conclude` | 1 mutation — §173 |
 | **A command `ci` does not run is run by name in the workflow** | `cargo xtask lists` | 1 mutation — §173 |
 | **Only licences the tree's own dependencies need are linked** | `cargo xtask deny` | 1 mutation — §173 |
-| **A mutation that cannot run is skipped, not passed** | `expect_catch_needs` in the mutation script | the skipped line — §173 |
+| **A mutation that cannot run is skipped, not passed** | `expect_catch` in the mutation script | the skipped line — §173 |
 | **The CLI answers what version it is** | `cli::version_line` | 1 mutation — §174 |
 | **The version the CLI prints is the crate's own** | `env!("CARGO_PKG_VERSION")` | 1 mutation — §174 |
 | **A reader keeps at most its limit** | the properties in `crates/core/tests/properties.rs` | 1 mutation — §175 |
@@ -26657,6 +26756,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The control channel's secret does not come from the clock** | `the_control_channel_secret_is_not_the_clock` | 1 mutation — §220 |
 | **A promise of a file's mode says where it holds** | `a_promise_of_a_file_mode_says_where_it_holds` | 1 mutation — §221 |
 | **The mutation job's timeout leaves room for the suite** | `the_mutation_job_fits_the_suites_budget` | 1 mutation — §222 |
+| **The tree's index of enforcement names enforcement it has** | `the_tree_names_the_enforcement_it_has` | 1 mutation — §223 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28812,3 +28912,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     `the_mutation_job_fits_the_suites_budget` holds the two numbers
     together: a timeout below the budget, or a script without a budget, is
     reported.
+
+76. ~~**The tree's own index of what enforces what named six things the tree
+    does not have.**~~ **Done in §223.**
+
+    The table that says, for each rule, what enforces it and what catches the
+    enforcement being wrong — the tree's own account of what holds its rules
+    up — was read by **no gate**. **Measured**: of its **538** rows, **six**
+    named a gate or a test the tree had renamed or deleted. Every one of them
+    was a name the tree **once** had, so the table was not wrong when it was
+    written; it was wrong later, when §148 deleted `code_only` and the tree
+    kept naming it in the very table that says what enforces the rules.
+
+    Six rows corrected, and the gate `the_tree_names_the_enforcement_it_has`
+    now holds the table to the tree: every backticked name in the
+    enforcement column must be a definition in the tree's code, a file in the
+    tree, a crate in the workspace, a command the xtask accepts, or a shell
+    function in the tree's scripts.

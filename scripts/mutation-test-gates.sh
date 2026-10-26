@@ -658,6 +658,17 @@ expect_catch "lists: a promise of a file's mode does not say where it holds" "ca
 swap .github/workflows/ci.yml 'timeout-minutes: 90' 'timeout-minutes: 45'
 expect_catch "lists: the mutation job's timeout does not fit the suite" "cargo xtask lists"
 
+# §223. The tree's own table of what enforces what is where a reader looks to
+# find out what holds each rule up, and nothing read it. Six of its rows named
+# a gate or a test the tree had renamed or deleted -- every one of them a name
+# the tree once had, so the table was not wrong when it was written, it was
+# wrong later. This row names a gate the tree does not have, which is the
+# shape the table had drifted into.
+swap KNOWN-GAPS.md \
+    '| **The file that was there is replaced, not kept** | `a_token_file_left_over_from_a_previous_launch_is_replaced` |' \
+    '| **The file that was there is replaced, not kept** | `a_gate_the_tree_deleted` |'
+expect_catch "lists: the tree's index of enforcement names enforcement it has not" "cargo xtask lists"
+
 # Prose points at code by line number, and line numbers rot the moment anything
 # above them moves. The tree carried ninety such citations and nothing looked at
 # any of them; five pointed at blank lines or braces and two more pointed at the
