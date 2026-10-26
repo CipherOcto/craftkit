@@ -163,6 +163,23 @@ needs and then runs it. §118.
 
 ---
 
+## The machine is shared
+
+This is a **shared build machine**. Do not take all of its CPU, and do not
+run a long or repeated suite without saying so first.
+
+- **Check the load before a big build** (`cut -d' ' -f1 /proc/loadavg`) and
+  build with `nice -n 15`.
+- **A test or suite that takes all the CPU for more than five minutes needs
+  the owner's explicit approval first.** Ask, do not assume.
+- **Do not repeat a long suite to look for a rare failure without asking.**
+  One run of the mutation suite is twenty-odd minutes; twenty of them is not
+  a measurement, it is a way of occupying a machine that other people are
+  using.
+- **Prefer a bounded measurement to a brute-force loop.** A hundred cheap
+  runs of one test binary beat a hundred runs of the whole `ci`, and a
+  measurement of the *number* beats a repetition of the *suite*.
+
 ## Before you commit
 
 This **is** a git repository: branch `main`, a local history and no remote.
