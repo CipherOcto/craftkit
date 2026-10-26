@@ -26079,6 +26079,10 @@ prose says the suite takes *"twenty-odd minutes"* and *"twenty-five
 minutes"* — which is what it takes on the machine it was written on. The
 runner is **more than twice as slow**.
 
+**And the number has moved again since.** §224–§227 made the gate faster and
+the suite now takes **fifty-one** minutes on the runner; the sixty-seven
+above is what it took when it was measured. §228.
+
 So the job was cancelled on **every** run, and nobody had seen it, because
 the job had never finished. **A gate that cannot run is not a gate that
 works** — §217's lesson, in the shape of a timeout.
@@ -26512,6 +26516,55 @@ is still open.
 byte-exact surgery is the difference between a mutation and a rewrite of the
 file, and on a platform with different line-ending rules those are different
 things.
+
+## 228. A duration measured on yesterday's tree is a claim about today's tree
+
+### The finding
+
+The tree's own recorded number for the mutation suite was **sixty-seven
+minutes** — §222b's measurement, on the first run that ever finished.
+
+**The next run took fifty-one minutes** (run `40310385656`: *497 of 498*
+caught, *2* skipped, *51 minutes* against the *90-minute* budget).
+
+**And nothing was wrong with the sixty-seven.** It was a true measurement of a
+tree that no longer exists: §224–§227 made the **gate itself** faster — the
+test phase now builds each package's test binaries once and runs them
+directly, instead of asking cargo to run them package by package — so every
+one of the suite's ~498 cases got cheaper.
+
+**A number in prose is a claim about the tree, and the tree moves.** The tree
+already has a rule for this in another form — *every limit in prose is the
+constant's value* — and this is the same thing for a measurement: the prose
+said sixty-seven because that was true when it was written, and nothing
+re-measured it afterwards.
+
+### The port
+
+- **`AGENTS.md` says fifty-one**, and says that it was sixty-seven before
+  §224–§227 made the gate faster.
+- **The script's own comment** about the timeout case says fifty-one, and the
+  header keeps the sixty-one of §222 as the historical number.
+- **§222's section keeps its sixty-seven**, because that section is the
+  record of what was measured then; it points forward to here.
+
+### What is not claimed
+
+**The budget stays at ninety.** §222's own lesson: *a budget measured on one
+machine is a guess on another*. Fifty-one on this runner with a ninety-minute
+budget leaves room for a slower one, and lowering the budget would be a
+promise the tree cannot keep. The budget is a limit; the duration is a
+measurement, and only the measurement is corrected.
+
+**And fifty-one is not a promise about the next run.** It is what the runner
+did on one run of one tree.
+
+### The lesson
+
+**A measured duration is a claim about a tree, and the tree changes under
+it.** The number was right when it was written and wrong sixteen minutes
+later, and nothing said so — because the thing that moved was the tree, and
+the tree does not check its own prose about itself.
 
 ## What enforces what
 
@@ -27062,6 +27115,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A path is quoted in one form on every platform** | `relative_name` in `xtask/src/tree.rs` | the Windows runner — §225 |
 | **A workflow step names the shell it is written in** | `shell: bash` in `.github/workflows/ci.yml` | the Windows runner — §226 |
 | **The instrument runs on every platform the tree runs on** | `scripts/mutation-test-gates.sh --self-test` | the macOS and Windows runners — §227 |
+| **A duration in prose is re-measured when the tree it measured changes** | the mutation suite's own report of its duration | the runner — §228 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29320,3 +29374,19 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     **The residual**: the full suite still runs on Ubuntu only, and nothing
     here says the gates behave the same on the other two platforms.
+
+81. ~~**A duration measured on yesterday's tree is a claim about today's
+    tree.**~~ **Done in §228.**
+
+    The tree's recorded number for the mutation suite was **sixty-seven
+    minutes**. The next run took **fifty-one** — and nothing was wrong with
+    the sixty-seven: it was a true measurement of a tree that no longer
+    exists, because §224–§227 made the gate faster and every one of the
+    suite's ~498 cases got cheaper.
+
+    The live claims now say fifty-one and say where the sixty-seven came
+    from; §222's section keeps its own measurement, because that section is
+    the record of what was measured then.
+
+    **The budget stays at ninety**: a budget measured on one machine is a
+    guess on another, and only the measurement is corrected.
