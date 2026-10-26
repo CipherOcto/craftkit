@@ -26653,6 +26653,233 @@ on: *a job that is cancelled is a job that never reports*. A job that is
 disabled is the same thing, and the tree's own rule about a name that is not
 a run says it more sharply than a comment ever could.
 
+## 230. The tree was written for the machine it was written on, and a phone said so
+
+### The finding
+
+**The owner attached a phone.** *"Explore the use of the craftkit on Android
+Target, I will attach a smartphone on adb for tests."* The tree had never been
+built for Android, so every claim below is a measurement — on the device or on
+this machine — and not an argument.
+
+**The device**: Android 11 (SDK 30), 32-bit ARM (`armeabi-v7a`, `armv8l`),
+serial `UWOZXWCMZ5IJCUPF`. Its shell runs as uid 2000, it has **no `/tmp`**, and
+its temporary directory is `/data/local/tmp`. The NDK on this machine is 25.2,
+and the Rust targets for `aarch64-linux-android`, `armv7-linux-androideabi`,
+`i686-linux-android` and `x86_64-linux-android` are installed.
+
+### What cross-compiles
+
+| what | target | measured |
+|---|---|---|
+| `craftkit-cli` | `aarch64-linux-android` | **green in 15.8 s** |
+| `craftkit-cli` | `armv7-linux-androideabi` | **green in 13.9 s** |
+| every test binary except the eframe app | `aarch64-linux-android` | **green in 16.6 s**, 20 binaries |
+| `craftkit` — the GUI app | `aarch64-linux-android` | **fails**, inside a third-party crate |
+
+The CLI's binary is an ordinary ELF: 64-bit aarch64 with the interpreter
+`/system/bin/linker64`, and 32-bit ARM EABI5 with `/system/bin/linker`. Both
+want nothing but `libdl`, `libm` and `libc`.
+
+**The GUI is a different question.** `cargo build -p craftkit --target
+aarch64-linux-android` fails inside `android-activity 0.6.1` — *"Either
+game-activity or native-activity must be enabled as features"*, plus
+missing-module errors. **Not the tree's code**: it is a feature gate in a
+dependency, and the tree's application is an eframe program, which wants
+winit. And an Android program is an Activity, a manifest and an APK — a
+separate arc, not a linker flag.
+
+### What runs on the phone
+
+- `craftkit-cli --version` → `craftkit-cli 0.1.0`
+- `script --out s.json`, then `run s.json` → three steps, the sample design
+- `sample --out d.craftkit`, then `eval d.craftkit` → ok
+- `snapshot s.json --out shot.png` → a **1180×720 PNG**, pulled and looked at:
+  the whole egui interface draws — toolbar, node list, properties, timeline,
+  status bar
+- **MCP over stdio**: `initialize`, `tools/list` (25 tools), a mutating
+  `craftkit_node_add` → id 4, and `craftkit_status` → the session's state
+
+**And the whole test suite, on the phone**:
+
+| package | on the phone |
+|---|---|
+| core | 68 passed, **1 failed** |
+| model | 107 passed |
+| eval | 30 passed |
+| kernel | 27 passed |
+| io | 46 passed, **1 failed** |
+| engine | 230 passed |
+| mcp | 74 passed |
+| ui | 119 passed, 13.06 s |
+| control | **hung** — killed at 60 s |
+
+**Two of those three are the tree's own defects, and both are fixed.** The third
+is §231.
+
+### The hang: the control channel's test binary never finished
+
+`crates/control/src/server.rs` walks up from the crate's directory to find the
+workspace root. It asked for the parent with `dir.parent().unwrap_or(dir)`, and
+**at the filesystem root that returns the root again** — so a walk that finds
+nothing loops forever.
+
+On this machine the walk finds the tree in one step, so the loop is invisible.
+On the phone it finds nothing, always: `env!("CARGO_MANIFEST_DIR")` is compiled
+into the binary and names a path on the **build machine**, and the tree is not
+there. The walk ran to the root of the phone's filesystem and never came back —
+so **the control test binary's other 67 results were swallowed too**, which is
+§224's lesson exactly: *a failure behind a hang is a failure nobody has read*.
+
+Fixed at `e733a92`: the walk stops where `Path::parent` stops, and the caller
+says **skipped** when the tree is not here rather than passing by having looked
+at nothing. Two tests came with it — one finds a workspace manifest above a
+directory, the other comes back empty when there is none. **On the phone now:
+67 passed, 0 failed**, and the skipped line says so.
+
+### The failure: a test that asked for a shell Android does not have
+
+`crates/core/src/atomic.rs` proves that a write which fails leaves the file
+that was there alone. It makes the write fail with a file-size limit, and it
+asked for **bash** to set that limit.
+
+**Android has no bash.** The child could not be started, so the test failed for
+a reason that says nothing about the code under test — the tree's own rule is
+that *a check that cannot run says skipped, never a pass*, and here it said
+failed.
+
+**POSIX `sh` is there, and its `ulimit -f` stops the write the same way** —
+measured on the device: the child is stopped at the limit (*"File size
+limit exceeded"*) and the target keeps its contents. Fixed at `007eb74`:
+**core is 69 passed, 0 failed on the phone**.
+
+### The recipe
+
+```bash
+export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/25.2.9519653
+export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=armv7a-linux-androideabi21-clang
+export CC_armv7_linux_androideabi=armv7a-linux-androideabi21-clang
+export AR_armv7_linux_androideabi=llvm-ar
+cargo build -p craftkit-cli --target armv7-linux-androideabi --profile ci
+adb push target/armv7-linux-androideabi/ci/craftkit-cli /data/local/tmp/
+adb shell 'chmod 755 /data/local/tmp/craftkit-cli && cd /data/local/tmp && ./craftkit-cli --version'
+```
+
+### What is not claimed
+
+- **The integration tests were not measured on the phone.** They need the CLI
+  binary at the compiled-in host path, which is not on the device.
+- **The GUI is not an Android program.** It compiles nowhere for Android, and
+  the work to make it one — Activity, manifest, APK, touch input — is not
+  started.
+- **Nothing here is in CI.** There is no Android job, so none of this is
+  checked on every push; a recipe in a document is not a recipe that runs.
+- **One phone, one shape**: 32-bit ARM, Android 11. The 64-bit targets
+  cross-compile but were not run on the device.
+
+### The lesson
+
+**A cross-compile is a compile.** The CLI built for Android in sixteen seconds
+and then ran the sample design, drew the interface and spoke MCP — the tree is
+portable in the way that matters.
+
+**But the tree's assumptions were written on one machine, and only a different
+machine could say so.** The manifest directory that names the build machine;
+the shell that is bash; the size of a pointer. All three were invisible here
+and obvious there. **A defect that only one machine can see is still a defect**,
+and the machine that can see it is the one the tree has never run on.
+
+## 231. The model's estimate counted the shape of the machine, and the file cap did not
+
+### The finding
+
+`crates/model/src/document.rs:413` estimates what a document costs in memory by
+adding up the sizes of the tree's **own structs**: `Node::estimated_bytes` at
+`crates/model/src/document.rs:162` and `Property::estimated_bytes` at
+`crates/model/src/property.rs:165`, which counts `size_of::<Key>()` for every
+keyframe.
+
+**A pointer is eight bytes on this machine and four on the phone.** So the same
+design has two different estimates — while the file it writes is the same file
+in both places.
+
+Measured with a throwaway probe outside the tree:
+
+| | 64-bit host | 32-bit phone |
+|---|---|---|
+| `size_of::<Node>()` | 112 | 64 |
+| `size_of::<Key>()` | 64 | 48 |
+| `size_of::<Value>()` | 32 | 16 |
+| the model's estimate | 1,539,107 | 1,026,023 |
+| the file on disk | 2,265,924 | 2,265,924 |
+| **estimate ÷ file** | **1.472** | **2.208** |
+
+`FILE_EXPANSION` is **2** (`crates/io/src/format.rs:264`), and
+`MAX_FILE_BYTES = MAX_DOCUMENT_BYTES * FILE_EXPANSION`
+(`crates/io/src/format.rs:282`) with `MAX_DOCUMENT_BYTES` at 32 MiB
+(`crates/model/src/lib.rs:119`).
+
+**So the phone's estimate of the same design is over the cap the writer
+enforces**: 2.208 > 2.
+
+### What that means in use
+
+At **261 properties** on the same design:
+
+- **the 64-bit host**: estimate 50,222,111 → the model refuses the document;
+- **the 32-bit phone**: estimate 33,482,699 → **the model holds it, and the
+  writer refuses it**: *"the file would be more than 67108865 bytes, and the
+  limit is 67108864"*.
+
+**The tree holds a design it cannot save** — on a 32-bit target. The error
+comes, and it is an error rather than a crash; but it comes **after** the model
+has accepted the work, and the design that the desktop refuses outright is
+accepted on the phone and then cannot be written.
+
+That breaks a promise the tree wrote down about itself, at
+`crates/io/src/format.rs:266`: *"every document the model accepts has a file
+inside this cap, so the tree can hold a design and save it. §141."* The
+estimate that makes the promise true was measured on one machine.
+
+### The question for the owner
+
+**Not decided**, because it changes what the constant means:
+
+- **(a) Count content, not layout.** The estimate counts what the design
+  *holds* — names, numbers, text — so it is the same number on every machine.
+  It stops being a memory estimate, and becomes a size estimate; then
+  `MAX_DOCUMENT_BYTES` means something else.
+- **(b) Keep the per-platform estimate, and make the cap the worst case over
+  platforms.** `FILE_EXPANSION` 2 → 3 (2.208 is the measured worst case for
+  these shapes, and the worst case over platforms has to be a constant, not a
+  measurement). The model's budget stays a memory budget; the file cap becomes
+  a little larger than it needs to be on 64-bit machines.
+- **(c) Something else** — for instance, the model estimating the **file** it
+  would write, which is the thing the cap is actually about.
+
+Each of these is one line of code and one change of meaning; the tree does not
+get to choose which meaning it wants.
+
+### What is not claimed
+
+- **The 2.208 is a measurement of one design shape**, measured with a probe
+  outside the tree, not a bound over every shape a document can take.
+- **Nothing in CI checks this.** The ratio was found by running on a second
+  machine; no gate compares an estimate with a file on a 32-bit target.
+
+### The lesson
+
+**An estimate of a machine's memory is a fact about the machine.** The tree's
+caps are derived from one another — a design may hold 32 MiB, its file may be
+twice that — and a derivation only holds while the first term means the same
+thing everywhere. **Counting the layout counted the pointer width**, so the
+budget became a property of the target rather than of the design.
+
+**And the second machine is where the derivation is checked.** The tree had one
+machine's arithmetic in both the estimate and the cap, so the two agreed — by
+accident, and only there.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -27204,6 +27431,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The instrument runs on every platform the tree runs on** | `scripts/mutation-test-gates.sh --self-test` | the macOS and Windows runners — §227 |
 | **A duration in prose is re-measured when the tree it measured changes** | the mutation suite's own report of its duration | the runner — §228 |
 | **The hunt for a rare failure is not running** | nothing | the owner turned the job off — §229 |
+| **A walk that finds nothing comes back** | `a_walk_that_finds_nothing_comes_back_empty` in `crates/control/src/server.rs` | 1 mutation — §230 |
+| **A check that cannot run on this machine says skipped, never passed** | `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one` in `crates/control/src/server.rs` | nothing — §230 |
+| **The model's memory estimate does not depend on the width of a pointer** | `FILE_EXPANSION` in `crates/io/src/format.rs` | nothing — §231 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29499,3 +29729,37 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **What it did not do**: find the flake. Sixty runs against the 160 that
     have already failed to reproduce it; it was a detector with a memory, and
     it saw nothing. Item 42 stays open: the hunt is *off*, not *answered*.
+
+83. ~~**The tree builds and runs on a phone.**~~ **Done in §230.**
+
+    The CLI cross-compiles for `aarch64-linux-android` and
+    `armv7-linux-androideabi` in fourteen to sixteen seconds, runs on the
+    attached phone, draws the whole egui interface, speaks MCP over stdio, and
+    **the whole non-eframe test suite runs on the device**.
+
+    **Two defects came out of the device and are fixed**: a walk that never
+    came back — the control test binary hung, taking its other 67 results with
+    it — and a test that asked for bash, which Android does not have.
+
+    **The GUI is not part of it.** The eframe app does not compile for Android:
+    the failure is inside `android-activity`, and an Android app is an
+    Activity, a manifest and an APK. That is an arc of its own.
+
+84. **The model's memory estimate must not depend on the machine.** §231.
+
+    The estimate counts the tree's own struct sizes, so the **same design** is
+    estimated a third smaller on a 32-bit target than on a 64-bit one — while
+    the file it writes is the same file. The file cap is twice the estimate, so
+    on the phone the cap is smaller than the file the design needs, and the
+    tree holds a design it cannot save.
+
+    **The owner's call**, because it changes what the constant means:
+    count content instead of layout, or make the cap the worst case over
+    platforms.
+
+85. **An Android job in CI.** §230's recipe is a document, not a job.
+
+    Nothing checks that the tree still cross-compiles for a phone, and nothing
+    checks that the model's estimate still matches the file it writes. A job
+    needs a runner with the NDK; running the **suite** on a device needs
+    somebody with a phone.
