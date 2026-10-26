@@ -306,6 +306,21 @@ fn accept_loop(
     }
 }
 
+/// Put a connection's socket into the mode the connection thread needs.
+///
+/// §218. The socket must **wait**: this thread reads with a timeout, and a
+/// timeout on a socket that gives up at once is no timeout at all. The
+/// listener is non-blocking so that `accept` can poll the stop flag, and on
+/// the BSD-derived systems the accepted socket inherits that mode — Linux's
+/// `accept` clears it, macOS's does not.
+///
+/// Measured on the two systems, on a socket with nothing to read: Linux
+/// waited 66 ms for a 60 ms timeout, a socket put into non-blocking mode
+/// returned in 1.4 microseconds. That difference is the whole bug.
+fn blocking(stream: &TcpStream) {
+    let _ = stream.set_nonblocking(false);
+}
+
 /// Serve one connection.
 #[allow(clippy::too_many_arguments)]
 fn handle(
@@ -316,6 +331,21 @@ fn handle(
     ui: Option<&UiHandler>,
     after: Option<&ChangeHandler>,
 ) {
+    // The connection's socket must be in **blocking** mode before anything
+    // reads it. §218.
+    //
+    // The listener is non-blocking so that `accept` can poll the stop flag,
+    // and on the BSD-derived systems — macOS among them — the accepted socket
+    // **inherits** that mode. Linux's `accept` clears it; macOS's does not.
+    //
+    // The consequence there was measured: the connection thread's first read
+    // found no data yet, gave up at once instead of waiting for the timeout,
+    // and closed the connection before the request that was on its way had
+    // been read. The peer was told nothing; it saw the connection reset.
+    //
+    // A read timeout only means something on a socket that waits, so the mode
+    // is set here, once, for every connection — whatever the listener was in.
+    blocking(&stream);
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(IDLE_TIMEOUT_SECS)));
     let peer = stream.try_clone().map_err(|e| e.to_string());
     let mut writer = match peer {
@@ -652,6 +682,72 @@ mod tests {
             out.push(reply.trim().to_string());
         }
         out
+    }
+
+    /// Whether a socket **waits** for data, or gives up at once.
+    ///
+    /// The difference is measured, not guessed: a socket with a 60 ms read
+    /// timeout and nothing to read comes back at the timeout when it waits,
+    /// and in microseconds when it does not. The kernel does not fire a
+    /// timeout early, so the gap is wide enough to be a fact rather than a
+    /// race.
+    fn waits_for_data(stream: &mut TcpStream) -> bool {
+        use std::io::Read as _;
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(60)));
+        let mut buf = [0u8; 1];
+        let start = std::time::Instant::now();
+        let _ = stream.read(&mut buf);
+        start.elapsed() >= std::time::Duration::from_millis(40)
+    }
+
+    /// The connection's socket is put into blocking mode, whatever the
+    /// listener was in. §218.
+    ///
+    /// On macOS the accepted socket inherits the listener's non-blocking mode,
+    /// and the connection thread's first read then gives up at once — so the
+    /// connection closes before the request that is on its way has been read,
+    /// and the peer is told nothing.
+    #[test]
+    fn a_connection_that_arrives_non_blocking_is_put_into_blocking_mode() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("binds");
+        let addr = listener.local_addr().expect("an address");
+        let _client = TcpStream::connect(addr).expect("connects");
+        let (mut stream, _peer) = listener.accept().expect("accepts");
+        // What macOS hands the connection thread.
+        stream.set_nonblocking(true).expect("non-blocking");
+        assert!(!waits_for_data(&mut stream), "the socket did not give up at once");
+
+        blocking(&stream);
+
+        assert!(waits_for_data(&mut stream), "the socket still gave up at once");
+    }
+
+    /// A request that arrives a moment after the connection is still answered.
+    ///
+    /// §218. This is the failure macOS showed: the connection thread reads
+    /// before the request has arrived, and a socket that gives up at once
+    /// turns that into a closed connection and no reply.
+    #[test]
+    fn a_request_that_arrives_after_the_connection_is_still_answered() {
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let (port, server) = serve(session, options(0)).expect("bind");
+
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        // The request is late: the connection thread's first read happens
+        // before there is anything to read.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let request = "{\"id\":1,\"token\":\"0123456789abcdef0123\",\"method\":\"ping\"}";
+        let mut framed = request.to_string();
+        framed.push('\n');
+        stream.write_all(framed.as_bytes()).expect("sends");
+        let _ = stream.flush();
+
+        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+        let mut reply = String::new();
+        use std::io::BufRead as _;
+        reader.read_line(&mut reply).expect("a reply");
+        assert!(reply.contains("pong"), "the late request was not answered: {reply:?}");
+        drop(server);
     }
 
     #[test]

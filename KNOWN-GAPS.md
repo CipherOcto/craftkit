@@ -25681,6 +25681,106 @@ call in the kernel was one rename away from an error on every platform.
 construction: the code that compiles on the machine is not the code that
 compiles in CI. Two floors, two jobs, one tree.
 
+## 218. The control channel's socket was in the wrong mode on macOS
+
+### The finding
+
+§217 pushed the tree's first CI run, and the `gates (macos-latest)` job was
+red with **one** test:
+
+```text
+test tests::the_channel_reports_the_windows_screen_over_the_socket ... FAILED
+thread 'tests::the_channel_reports_the_windows_screen_over_the_socket' panicked at apps/craftkit/src/main.rs:1112:37:
+a reply: Os { code: 54, kind: ConnectionReset, message: "Connection reset by peer" }
+```
+
+The test asks the control channel, over a socket, for the widgets that are on
+screen. The connection was **reset** — not closed cleanly — before any reply
+arrived.
+
+**And the server's side said nothing.** There was no panic on the server's
+thread in the log, and there should not have been one: the `ui` handler runs
+inside a `catch_unwind`, so a panic there would have been **answered** with an
+error, not swallowed.
+
+### The cause
+
+The control channel's listener is **non-blocking**, so that `accept` can poll
+the stop flag:
+
+```rust
+let _ = listener.set_nonblocking(true);
+```
+
+and the connection thread set a **read timeout** on the socket it was given:
+
+```rust
+let _ = stream.set_read_timeout(Some(Duration::from_secs(IDLE_TIMEOUT_SECS)));
+```
+
+Those two are only compatible if the accepted socket is in **blocking** mode. A
+read timeout on a socket that gives up at once is no timeout at all.
+
+**And the accepted socket's mode is the platform's business, not ours.**
+POSIX leaves it to the system: on the BSD-derived systems — macOS among them —
+the accepted socket **inherits** the listener's non-blocking flag. Linux's
+`accept` clears it.
+
+**Measured**, on the machine the tree was built on, with a socket that had
+nothing to read and a 60 ms read timeout:
+
+| Socket | Time to give up |
+|---|---|
+| accepted from a non-blocking listener (Linux) | **66 ms** — it waited |
+| put into non-blocking mode by hand | **1.4 µs** — it gave up at once |
+
+So on macOS the connection thread's **first** read found no data yet — the
+request was still on its way — gave up at once, and closed the connection.
+The peer's bytes were still unread in the socket, so the close was a **reset**
+rather than a clean end of file, and the peer was told nothing at all.
+
+### The port
+
+One line, in one home: `blocking()` in `crates/control/src/server.rs`, called
+by the connection handler before anything reads the socket. The socket's mode
+is put where the thread needs it, whatever the listener was in.
+
+### The gate's own teeth
+
+Two tests in `crates/control/src/server.rs`:
+
+- **the mode is put right** — a socket that arrives non-blocking (which is
+  what macOS hands over) is measured before and after the server's own
+  preparation: it gives up at once before, and waits after. **Measured**, the
+  gap is 1.4 µs against 66 ms, so the test is not a race.
+- **a late request is still answered** — the request is sent a moment *after*
+  the connection, which is the case that failed; the reply must arrive.
+
+**And the mutation bites**: removing the one line that puts the mode back
+makes the first test fail — **verified by running it**.
+
+### What is not claimed
+
+**The second test does not fail on Linux**, before or after the fix: Linux's
+`accept` clears the flag, so the bug cannot happen there. It is the macOS job
+that holds it, and the fix is what makes that job green. The first test is
+the portable one, and it is the one the mutation holds.
+
+**And this is not a claim that macOS is the only platform with the
+inheritance.** The BSD-derived systems share it; the tree's CI runs on one of
+them.
+
+### The lesson
+
+**A timeout is a promise about a socket that waits.** The connection thread
+had a read timeout, and the socket it was given did not honour it — and
+nothing in the tree said which mode the socket was in, because nothing had
+ever had to.
+
+**And the mode of a socket you did not create is not yours to assume.** The
+listener's mode was the tree's own choice; the accepted socket's mode was the
+platform's.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26217,6 +26317,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A failing gate keeps the evidence of its failure** | `a_failing_command_leaves_its_output_behind` | 1 mutation — §216 |
 | **The counter is process-wide, and the code builds on the newest stable** | `a_recovery_on_one_thread_is_counted_on_another` | 1 mutation — §217 |
 | **The policy's tool is installed where the gate can find it** | `cargo xtask deny` in CI | — §217 |
+| **A connection's socket waits for the request that is on its way** | `blocking()` in `crates/control/src/server.rs` | 1 mutation — §218 |
+| **A request that arrives late is still answered** | `a_request_that_arrives_after_the_connection_is_still_answered` | — §218 (macOS job) |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28272,3 +28374,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     nothing of the tree's own and writes only scratch files. If it ever
     writes a file of the tree, the rule needs a second home and the gate a
     second arm, exactly as §212 and §213 had to have.
+
+71. ~~**The control channel's socket was in the wrong mode on macOS.**~~ **Done
+    in §218.**
+
+    The listener is non-blocking so that `accept` can poll the stop flag, and
+    the connection thread set a read timeout on the socket it was given. On
+    the BSD-derived systems the accepted socket **inherits** the listener's
+    non-blocking mode — Linux's `accept` clears it — so on macOS the first
+    read gave up at once instead of waiting, and closed the connection before
+    the request on its way had been read.
+
+    **Measured**: a socket accepted from a non-blocking listener waited **66
+    ms** for a 60 ms timeout on Linux; a socket put into non-blocking mode by
+    hand gave up in **1.4 µs**.
+
+    The port is one line in one home — `blocking()` in the control crate — and
+    the teeth are two tests, one of which is portable (the mode is measured
+    before and after) and one of which is the macOS job's (a late request is
+    still answered).
