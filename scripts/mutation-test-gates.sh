@@ -2018,7 +2018,23 @@ swap crates/kernel/src/lib.rs \
 /// number that silently went back to zero would be read as "nothing has ever
 /// gone wrong".
 fn note_recovered() {
-    let _ = RECOVERED.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some(v.saturating_add(1)));
+    // A compare-and-exchange loop, and not `fetch_update`.
+    //
+    // `fetch_update` was **deprecated** in the newest Rust — *"renamed to
+    // `try_update` for consistency"*, since 1.99 — and the workflow builds
+    // with `RUSTFLAGS: -D warnings`, so a deprecation is an **error** there.
+    // And `try_update` does not exist on the floor this tree supports: it
+    // arrived with the rename. So the one call that works on both is the one
+    // that was always there. §217.
+    let mut current = RECOVERED.load(Ordering::Relaxed);
+    loop {
+        let next = current.saturating_add(1);
+        match RECOVERED.compare_exchange_weak(current, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            // Another thread counted first: take its number and try again.
+            Err(actual) => current = actual,
+        }
+    }
 }
 
 /// How many panics this boundary has recovered since the process started.

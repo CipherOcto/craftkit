@@ -25562,6 +25562,103 @@ its limit, and whether the memory probe's number is anywhere near its own.
 The bounded measurement answered the question; the brute-force loop would
 only have taken the machine.
 
+## 217. The tree's CI had never run, and its first run was red
+
+### The finding
+
+The tree has a full workflow — three platforms, a mutation job, a portability
+job and a policy job — and it had **never run**, because the repository had no
+remote: `AGENTS.md` said *"a local history and no remote… do not add a remote
+unless the owner asks for one"*.
+
+The owner asked (2026-10-25): the repository was created under the CipherOcto
+organisation, public, and the whole **143-commit** history was pushed. The
+first run of the tree's CI was red on **four** of its five jobs.
+
+**Two causes, both read out of the logs.**
+
+**1. A deprecated call is an error under the workflow's warnings-as-errors.**
+The workflow sets `RUSTFLAGS: -D warnings`, so a deprecation is not a warning
+in CI, it is an **error**. And the tree called `AtomicU64::fetch_update`,
+which the newest Rust **deprecated** — *"renamed to `try_update` for
+consistency"*, since 1.99 — so the kernel crate did not compile on **any**
+platform:
+
+```text
+= note: `-D deprecated` implied by `-D warnings`
+88 - let _ = RECOVERED.fetch_update(…);
+88 + let _ = RECOVERED.try_update(…);
+```
+
+**And the obvious fix does not work.** `try_update` arrived *with* the
+rename, so it does **not** exist on the floor this tree supports — the
+`portability` job builds with exactly `rust-version = 1.93`, where the only
+correct call is the deprecated one. The call that works on both floors is the
+one that was always there: a compare-and-exchange loop.
+
+**2. The policy job installed the tool where the gate could not find it.** The
+workflow used `EmbarkStudios/cargo-deny-action@v2` with `command: fetch`; the
+action runs its **own** copy of the tool inside its own container, and the
+next step — the tree's own `cargo xtask deny` — found no `cargo-deny` at all:
+
+```text
+error: cargo-deny is required here and is not installed (cargo install cargo-deny --locked)
+```
+
+**The gate was right and the workflow was wrong.** The tree's rule is that a
+tool which is not installed is **not a pass**, and in CI it is an error rather
+than a skip — so the job failed exactly as it should. The fix is the way the
+tree's own documentation says: `cargo install cargo-deny --locked`, into
+`$CARGO_HOME/bin`, which is on the PATH of every later step.
+
+**And the tree's own §216 rule proved itself in that very log:**
+
+```text
+The output is also in /tmp/craftkit-xtask-nice-2795-8.out and
+/tmp/craftkit-xtask-nice-2795-8.err — it was kept, because the gate failed.
+```
+
+### The port
+
+**The counter is a compare-and-exchange loop**, with the reason in the code:
+`fetch_update` is deprecated in the newest Rust and `try_update` does not
+exist on the floor, so the call that works on both is the one that was always
+there.
+
+**The workflow installs the tool where the gate can find it**, and says why it
+does it that way — so the next reader does not put the action back.
+
+**And the mutation that turns the counter back into a thread-local is
+re-anchored** on the new text. Measured: it still bites — the kernel's
+`a_recovery_on_one_thread_is_counted_on_another` fails with the swap and
+passes without it.
+
+### What is not claimed
+
+**Nothing that changed today broke the CI.** It had never run, so this is the
+first evidence about it rather than a regression — and the tree says so rather
+than pretending the push found something that a push broke.
+
+**A channel that moves is only ever seen in CI.** The tree pins
+`channel = "stable"`, and the developer whose machine has an *old* stable
+cannot see what the newest one says. That is the tree's deliberate choice
+(*"a channel that goes stale in three months is worse than no pin"*), and it
+has one consequence: **the newest stable is checked where the newest stable
+runs**, and nowhere else. The floor is checked by the `portability` job, and
+the ceiling by the `gates` job, and a tree needs both.
+
+### The lesson
+
+**A gate that has never run is not a gate that works.** The tree's workflow
+was careful, complete and correct-looking, and it had never been executed —
+so nobody knew that the tool was installed in the wrong place, or that a
+call in the kernel was one rename away from an error on every platform.
+
+**And the newest version is the one nobody has.** The local toolchain is the
+**floor** (1.93), so a deprecation in the newest Rust is invisible here by
+construction: the code that compiles on the machine is not the code that
+compiles in CI. Two floors, two jobs, one tree.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26096,6 +26193,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The xtask's tests build their temporary folders through the xtask's home** | `the_tree_has_one_temporary_folder` | 2 mutations — §213 |
 | **The enabled check comes before the parameter check** | `the_disabled_check_comes_before_the_parameter_check` | 1 mutation — §214 |
 | **A failing gate keeps the evidence of its failure** | `a_failing_command_leaves_its_output_behind` | 1 mutation — §216 |
+| **The counter is process-wide, and the code builds on the newest stable** | `a_recovery_on_one_thread_is_counted_on_another` | 1 mutation — §217 |
+| **The policy's tool is installed where the gate can find it** | `cargo xtask deny` in CI | — §217 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

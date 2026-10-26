@@ -176,13 +176,23 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
+      # The tool the tree's own gate needs, installed where the gate can find
+      # it.
+      #
+      # The action this used was `EmbarkStudios/cargo-deny-action@v2` with
+      # `command: fetch`, and it **did not put `cargo-deny` on the PATH**: the
+      # action runs its own copy inside its own container, and the next step
+      # — the tree's gate — found no tool. The tree's rule is that a tool
+      # which is not installed is **not a pass**, and in CI it is an error
+      # rather than a skip, so the job failed with *"cargo-deny is required
+      # here and is not installed"*. The gate was right and the workflow was
+      # wrong. §217.
+      #
+      # So the tool is installed the way the tree's own documentation says:
+      # `cargo install cargo-deny --locked`, into `$CARGO_HOME/bin`, which is
+      # on the PATH of every later step.
       - name: Install cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          # `fetch` installs the tool and its advisory database without
-          # checking anything: the check is the tree's own gate, below, so
-          # there is one place that decides and not two.
-          command: fetch
+        run: cargo install cargo-deny --locked
 
       # Licences, bans, sources and advisories. `deny.toml` is in the
       # repository; `cargo xtask deny` reads it. The rule, and the table of

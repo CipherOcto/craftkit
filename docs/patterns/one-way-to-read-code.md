@@ -921,6 +921,30 @@ binary answered a question that twenty runs of the whole `ci` could not: how
 close the number comes to its limit. The bounded measurement answered it; the
 brute-force loop would only have taken the machine.
 
+## And the newest version is the one nobody has
+
+**A gate that has never run is not a gate that works.** The tree's workflow
+was careful, complete and correct-looking, and it had never been executed —
+so nobody knew that the policy's tool was installed where the gate could not
+find it, or that one call in the kernel was one rename away from an error on
+every platform. §217.
+
+**And the local toolchain is the floor.** A deprecation in the newest Rust is
+invisible on a machine whose stable is the floor, *by construction*: the code
+that compiles here is not the code that compiles in CI. The tree answers it
+with two jobs — the floor in `portability`, the ceiling in `gates` — and the
+answer is only whole when both are run.
+
+**And a deprecation is an error where warnings are errors.** The workflow sets
+`RUSTFLAGS: -D warnings`, which is what turns "the newest Rust renamed this"
+from a note into a failure. A gate that only fails on the newest version is
+still a gate, and it is the one that runs where that version runs.
+
+**And the obvious fix is not always the fix.** The deprecated call had a
+replacement — and the replacement **did not exist on the floor the tree
+supports**. The call that works on both floors is the one that was always
+there, and the reason belongs in the code beside it.
+
 ## In the code
 
 The reader, `xtask/src/tree.rs`:
