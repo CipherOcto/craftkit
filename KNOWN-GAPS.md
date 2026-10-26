@@ -26708,7 +26708,7 @@ separate arc, not a linker flag.
 | model | 107 passed | 107 passed |
 | eval | 30 passed | 30 passed |
 | kernel | 27 passed | 27 passed |
-| io | 46 passed, **1 failed** | 46 passed, **1 failed** — §231 |
+| io | 46 passed, **1 failed** | **48 passed, 0 failed** — §231 |
 | engine | 230 passed | 230 passed |
 | mcp | 74 passed | 74 passed |
 | ui | 119 passed, 13.06 s | 119 passed, 11.26 s |
@@ -26846,30 +26846,53 @@ That breaks a promise the tree wrote down about itself, at
 inside this cap, so the tree can hold a design and save it. §141."* The
 estimate that makes the promise true was measured on one machine.
 
-### The question for the owner
+### The owner's decision
 
-**Not decided**, because it changes what the constant means:
+**The owner chose (b): keep the per-platform estimate, and make the cap the
+worst case over platforms.** The expansion is **2 → 3** and the file's cap is
+**96 MiB** instead of 64 MiB.
 
-- **(a) Count content, not layout.** The estimate counts what the design
-  *holds* — names, numbers, text — so it is the same number on every machine.
-  It stops being a memory estimate, and becomes a size estimate; then
-  `MAX_DOCUMENT_BYTES` means something else.
-- **(b) Keep the per-platform estimate, and make the cap the worst case over
-  platforms.** `FILE_EXPANSION` 2 → 3 (2.247 is the measured worst case for
-  these shapes, and the worst case over platforms has to be a constant, not a
-  measurement). The model's budget stays a memory budget; the file cap becomes
-  a little larger than it needs to be on 64-bit machines.
-- **(c) Something else** — for instance, the model estimating the **file** it
-  would write, which is the thing the cap is actually about.
+The other two were on the table and were not chosen: (a) count content rather
+than layout, which stops the estimate being a memory estimate at all; and (c)
+have the model estimate the **file** it would write, which is the thing the cap
+is actually about. Both change what `MAX_DOCUMENT_BYTES` means, and (b) does
+not: **the model's budget stays a memory budget**, measured on the machine the
+model is on.
 
-Each of these is one line of code and one change of meaning; the tree does not
-get to choose which meaning it wants.
+**What (b) costs, stated plainly**: the reader's bound rises with it. A design
+file of up to 96 MiB may cost up to 96 MiB to read, where it was 64 MiB
+before — and §49's rule is that this number is applied *while* reading, so that
+a file of any size costs at most this much memory. The tree accepts a wider
+file because it has to: the tree's own promise is that **every document the
+model accepts has a file inside this cap**, and on a 32-bit target the promise
+was false.
+
+### What landed
+
+- **`FILE_EXPANSION` is 3** (`crates/io/src/format.rs`), with the measurement it
+  is a measurement of in its own words: 1.498 on a 64-bit host, 2.247 on a
+  32-bit ARM target.
+- **A test holds the floor.** The measurement is written down — 2.2466, in
+  ten-thousandths — and a test says the expansion is not below it. So lowering
+  the expansion by one is caught on the machine where it is invisible to the
+  shapes: with the cap at 2 the 64-bit host's own tests still pass.
+- **The mutation suite has the case.** The case that understated the expansion
+  now anchors on 3, and a new one lowers it by one and is caught by the floor.
+- **Two tests of the cap moved with it.** The design whose file is past the cap
+  is 80 properties now (measured: 73.3 MiB of memory, 105.1 MiB of text), and
+  the oversized file is one byte past the cap rather than a written-out 65 MiB.
+
+**Measured on the device**: the io suite is **48 passed, 0 failed** — the test
+that failed there before now passes.
 
 ### What is not claimed
 
 - **The 2.247 is a measurement of one design shape** — the tree's own
   *keyframes* shape — measured with the tree's test and with a probe outside
   the tree, not a bound over every shape a document can take.
+- **The estimate is still a fact about the machine.** (b) accepts that; the
+  model's budget is now honest about it, and the cap no longer depends on it
+  being the same everywhere.
 - **Nothing in CI checks this.** The ratio was found by running on a second
   machine; no gate compares an estimate with a file on a 32-bit target.
 
@@ -26884,6 +26907,69 @@ budget became a property of the target rather than of the design.
 **And the second machine is where the derivation is checked.** The tree had one
 machine's arithmetic in both the estimate and the cap, so the two agreed — by
 accident, and only there.
+
+**And a cap that is the worst case over one machine is a cap that is wrong on
+another.** The fix is not to make every machine agree; it is to make the cap
+hold the worst of them.
+
+## 232. The crash report's cap did not hold the reports the tree writes itself
+
+### The finding
+
+The design file's cap was the first door §231's measurement opened. The
+**crash report** is the second, and it was already open before that change:
+a crash report **carries the design it was made from**, so a report's size is
+the design's file plus the report's own fields.
+
+The report's reader stopped at **64 MiB** (`MAX_REPORT_BYTES`,
+`crates/engine/src/crash.rs`), and the report the tree writes of a design the
+model accepts is:
+
+| | the design | the report | the reader's cap | reads back? |
+|---|---|---|---|---|
+| 64-bit host | 31.7 MiB estimate | **43.4 MiB** | 64 MiB | **yes** |
+| 32-bit device | 32.0 MiB estimate | **65.7 MiB** | 64 MiB | **no** |
+
+Measured end to end, on the device, with the tree's own doors: the report was
+written, and then
+
+> could not read .../report.json: the input is longer than the limit of
+> 67108864 bytes
+
+**So on a 32-bit target the app wrote crash reports it could not read back.**
+That is §142's bug — the one where the crash report was written with an
+unbounded writer — alive again, in a different shape: the writer is bounded
+now, but the *bound* is one machine's.
+
+### The fix
+
+**The owner's principle, applied to the second cap**: a cap is the worst case
+over the platforms. `MAX_REPORT_BYTES` is now
+`MAX_DOCUMENT_BYTES * REPORT_EXPANSION` with the expansion at **3**, so the
+report's cap is **96 MiB** — and a test holds the floor the way the io crate's
+does, against the measured 2.1524 (a 64-bit host measures 1.435).
+
+**Measured on the device**: the same report, 65.7 MiB, **reads back**.
+
+**The cost is the same one the owner accepted for the design file**: a report
+arriving from another machine may now be 96 MiB of text where it was 64 MiB.
+
+### What is not claimed
+
+- **The report's cap is not derived from the io crate's expansion.** The engine
+  does not depend on `craftkit_io`, and a report is its own format: the two
+  numbers happen to be the same because the two texts are the same text.
+- **The crash writer still does not check its own size.** The cap is above the
+  biggest report a model-accepted design can produce, so the two agree — but
+  the writer does not enforce it, and a report that arrives over the cap is
+  refused by the reader, not by the writer.
+
+### The lesson
+
+**A cap that guards a door the tree opens itself has to hold what the tree
+puts through it.** The design file's cap and the crash report's cap were two
+numbers for the same quantity — text for one design — and only one of them
+was checked against a machine that was not this one.
 
 ## What enforces what
 
@@ -27438,7 +27524,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The hunt for a rare failure is not running** | nothing | the owner turned the job off — §229 |
 | **A walk that finds nothing comes back** | `a_walk_that_finds_nothing_comes_back_empty` in `crates/control/src/server.rs` | 1 mutation — §230 |
 | **A check that cannot run on this machine says skipped, never passed** | `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one` in `crates/control/src/server.rs` | nothing — §230 |
-| **The model's memory estimate does not depend on the width of a pointer** | `FILE_EXPANSION` in `crates/io/src/format.rs` | nothing — §231 |
+| **The file's cap is the worst case over the platforms the tree runs on** | `the_expansion_covers_the_worst_case_over_the_platforms` in `crates/io/src/format.rs` | 1 mutation — §231 |
+| **The report's cap holds the reports the tree writes itself** | `the_reports_cap_covers_the_worst_case_over_the_platforms` in `crates/engine/src/crash.rs` | 1 mutation — §232 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29750,17 +29837,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the failure is inside `android-activity`, and an Android app is an
     Activity, a manifest and an APK. That is an arc of its own.
 
-84. **The model's memory estimate must not depend on the machine.** §231.
+84. ~~**The model's memory estimate must not depend on the machine.**~~ **Decided
+    in §231, and the decision was the owner's.**
 
     The estimate counts the tree's own struct sizes, so the **same design** is
     estimated a third smaller on a 32-bit target than on a 64-bit one — while
     the file it writes is the same file. The file cap is twice the estimate, so
-    on the phone the cap is smaller than the file the design needs, and the
+    on the phone the cap was smaller than the file the design needs, and the
     tree holds a design it cannot save.
 
-    **The owner's call**, because it changes what the constant means:
-    count content instead of layout, or make the cap the worst case over
-    platforms.
+    **The owner chose (b): keep the per-platform estimate, and make the cap the
+    worst case over platforms.** The expansion is 3, the file's cap is 96 MiB,
+    and a test holds the floor against the measurement the number is a
+    measurement of.
+
+    **And the same measurement opened a second door**: the crash report carries
+    the design it was made from, and its cap was one machine's too — §232.
 
 85. **An Android job in CI.** §230's recipe is a document, not a job.
 
