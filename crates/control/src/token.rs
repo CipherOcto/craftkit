@@ -11,8 +11,13 @@
 //! # Where it comes from
 //!
 //! Either `CRAFTKIT_CONTROL_TOKEN` — which is how a test or a script pins it —
-//! or 32 bytes from the OS, written to a `0600` file so the launching user can
-//! read it and nobody else can.
+//! or 32 bytes from the operating system, written to a `0600` file so the
+//! launching user can read it and nobody else can.
+//!
+//! **"From the operating system" is a claim about every platform**, and it
+//! used to be true on only one of them: on Windows and on wasm the bytes came
+//! from the **clock** and a stack address, which is a reading rather than a
+//! source and can be looked up. §220.
 //!
 //! # Comparison
 //!
@@ -120,16 +125,26 @@ impl PartialEq for Token {
 
 impl Eq for Token {}
 
-/// Fill `bytes` from the OS.
+/// Fill `bytes` from the operating system.
 ///
 /// On a Unix target this is `/dev/urandom`, which is what every other program
 /// on the machine uses.
 ///
-/// Elsewhere — Windows, and wasm, which `cargo xtask wasm` still has to compile
-/// — the fallback mixes the clock with the address of a fresh allocation. It is
-/// **not** cryptographically strong and is documented as such: there is no
-/// entropy source to reach for, and refusing to start would be a worse outcome
-/// than a weak token on a socket that is bound to loopback.
+/// Everywhere else it is the standard library's own random keys, and those
+/// come from the operating system too: **measured** in the standard library's
+/// source, on Windows its `fill_bytes` calls `ProcessPrng` — the system's own
+/// generator, documented as always succeeding — and its random keys are
+/// filled from it.
+///
+/// The clock is **not** a source of randomness, and it used to be one here.
+/// It is a *reading*, and a reading can be looked up: a secret made of the
+/// clock and a stack address has the clock's window as its search space, not
+/// the system's generator. §220.
+///
+/// On `wasm32-unknown-unknown` the standard library has no generator of its
+/// own — its `fill_bytes` there panics, and its random keys are the addresses
+/// of two allocations — and the browser page does not use this crate anyway,
+/// so the secret is whatever the standard library can offer. It says so.
 #[cfg(unix)]
 fn fill_random(bytes: &mut [u8]) -> Result<(), String> {
     use std::io::Read;
@@ -139,18 +154,28 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), String> {
     source.read_exact(bytes).map_err(|e| format!("no entropy source: {e}"))
 }
 
+/// Fill `bytes` from the standard library's random keys.
+///
+/// The keys are the operating system's, and the hasher is keyed with them, so
+/// the bytes are the system's own output run through a keyed function. The
+/// counter is what makes two calls differ: the keys are per thread, and a
+/// second call with the same input would otherwise be the same bytes.
 #[cfg(not(unix))]
 fn fill_random(bytes: &mut [u8]) -> Result<(), String> {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-    let local = 0u8;
-    let addr = &local as *const u8 as u64;
-    for (i, b) in bytes.iter_mut().enumerate() {
-        let mix = nanos.rotate_left((i % 8) as u32 * 8) ^ addr.rotate_left(i as u32 % 64);
-        *b = (mix >> ((i / 8 % 8) * 8)) as u8;
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // How many secrets have been made in this process.
+    static SECRETS: AtomicU64 = AtomicU64::new(0);
+
+    let mut out = Vec::with_capacity(bytes.len() + 8);
+    while out.len() < bytes.len() {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u64(SECRETS.fetch_add(1, Ordering::Relaxed));
+        out.extend_from_slice(&hasher.finish().to_le_bytes());
     }
+    bytes.copy_from_slice(&out[..bytes.len()]);
     Ok(())
 }
 

@@ -3108,6 +3108,46 @@ pub fn the_tree_says_how_its_files_are_checked_out(root: &Path) -> Result<Vec<St
 /// The file in which the tree says how its files are checked out.
 const ATTRIBUTES_FILE: &str = ".gitattributes";
 
+/// The control channel's secret does not come from the clock. §220.
+///
+/// The token is the secret that guards the control channel, and it used to be
+/// made of the clock and a stack address on every platform that is not Unix.
+/// A clock is a **reading**, not a source, and a reading can be looked up: the
+/// secret's search space was the clock's window rather than the system's
+/// generator.
+///
+/// The claim is narrow on purpose. This gate says the code that makes the
+/// secret does not **read the clock** — it does not say the secret is strong,
+/// because a gate cannot measure that, and it does not say the secret comes
+/// from the operating system, because that is a claim about another program's
+/// internals that only the standard library's own source answers.
+///
+/// The subject is the **code view** of the module: a mention of the clock in
+/// a comment or in a string is not a reading of it, and the module's whole
+/// job is the secret, so the whole module is the subject.
+pub fn the_control_channel_secret_is_not_the_clock(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let path = root.join(SECRET_HOME);
+    let Ok(production) = crate::tree::read_rust(&path, Subject::Production) else {
+        problems.push(format!(
+            "{SECRET_HOME}: the tree's secret has no home, so nothing says where it comes from. §220."
+        ));
+        return Ok(problems);
+    };
+    let code = crate::tree::code_lines_kept(&production);
+    if has_word(&code, "SystemTime") {
+        problems.push(format!(
+            "{SECRET_HOME}: the code that makes the secret reads the clock; a reading is not a \
+             source, and the clock's window is a search space somebody can walk. §220."
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The module in which the control channel's secret is made.
+const SECRET_HOME: &str = "crates/control/src/token.rs";
+
 /// The tree's files are written through one home.
 ///
 /// §215. The tree has a rule for writing a file — *into a temporary name, then
@@ -5444,6 +5484,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the anchor's text must be found wherever it is, and a comment is a place it can be",
     ),
     (
+        "the_control_channel_secret_is_not_the_clock",
+        Subject::Production,
+        "the question is which lines the tree ships, and a test's fixture is not the secret",
+    ),
+    (
         "the_gates_that_read_rust_say_what_they_read",
         Subject::Everything,
         "a gate in a test is still a gate the xtask has, and a raw read in a test is still a raw read",
@@ -6662,6 +6707,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         the_tree_says_how_its_files_are_checked_out(root)?
             .into_iter()
             .map(|p| format!("{p}\n     One set of line endings, so every machine reads the same text.")),
+    );
+
+    // The control channel's secret does not come from the clock. §220.
+    problems.extend(
+        the_control_channel_secret_is_not_the_clock(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A secret from a source, not from a reading somebody can look up.")),
     );
 
     if problems.is_empty() {
@@ -8736,6 +8788,64 @@ mod tests {
 
         let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
         assert!(problems.is_empty(), "a binary file has no endings: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The tree's own secret is not made of the clock.
+    #[test]
+    fn the_control_channel_secret_is_not_made_of_the_clock() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_control_channel_secret_is_not_the_clock(&root).expect("runs");
+        assert!(problems.is_empty(), "the secret comes from a source: {problems:#?}");
+    }
+
+    /// A secret made of the clock is caught.
+    ///
+    /// This is the defect the gate exists for: the token was made of the
+    /// clock and a stack address on every platform that is not Unix, and a
+    /// reading can be looked up. §220.
+    #[test]
+    fn a_secret_made_of_the_clock_is_caught() {
+        let dir = crate::temp::dir("secret-clock").expect("a temporary folder");
+        let module = dir.join("crates/control/src");
+        std::fs::create_dir_all(&module).expect("the fabricated tree");
+        std::fs::write(
+            module.join("token.rs"),
+            "fn fill_random(bytes: &mut [u8]) -> Result<(), String> {\n    \
+             let nanos = std::time::SystemTime::now()\n        \
+             .duration_since(std::time::UNIX_EPOCH)\n        \
+             .map(|d| d.as_nanos() as u64)\n        \
+             .unwrap_or(0);\n    \
+             let _ = (bytes, nanos);\n    \
+             Ok(())\n}\n",
+        )
+        .expect("the fabricated secret");
+
+        let problems = the_control_channel_secret_is_not_the_clock(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("reads the clock")),
+            "a secret made of the clock is not reported: {problems:#?}"
+        );
+        assert_eq!(problems.len(), 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A **mention** of the clock in a comment is not a reading of it.
+    #[test]
+    fn a_comment_about_the_clock_is_not_a_reading_of_it() {
+        let dir = crate::temp::dir("secret-comment").expect("a temporary folder");
+        let module = dir.join("crates/control/src");
+        std::fs::create_dir_all(&module).expect("the fabricated tree");
+        std::fs::write(
+            module.join("token.rs"),
+            "// The clock is not a source of randomness.\nfn fill_random(bytes: &mut [u8]) -> Result<(), String> {\n    \
+             let _ = (bytes, \"SystemTime\");\n    \
+             Ok(())\n}\n",
+        )
+        .expect("the fabricated secret");
+
+        let problems = the_control_channel_secret_is_not_the_clock(&dir).expect("runs");
+        assert!(problems.is_empty(), "a comment is not a reading: {problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

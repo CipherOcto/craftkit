@@ -25869,6 +25869,122 @@ run could have found: a deprecated call, a tool installed in the wrong place,
 a socket's mode on another operating system, and a checkout that rewrote the
 tree's text.
 
+## 220. The control channel's secret came from the clock, and the crate said it came from the OS
+
+### The finding
+
+The control crate's header says:
+
+> Either `CRAFTKIT_CONTROL_TOKEN` — which is how a test or a script pins it —
+> or **32 bytes from the OS**, written to a `0600` file so the launching user
+> can read it and nobody else can.
+
+and the type's own method says *"A fresh token from the operating system's
+randomness."*
+
+**On Unix that was true.** On every other platform it was not: the token was
+made of the **clock** and the address of a stack local.
+
+```rust
+let nanos = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_nanos() as u64)
+    .unwrap_or(0);
+let local = 0u8;
+let addr = &local as *const u8 as u64;
+for (i, b) in bytes.iter_mut().enumerate() {
+    let mix = nanos.rotate_left((i % 8) as u32 * 8) ^ addr.rotate_left(i as u32 % 64);
+    *b = (mix >> ((i / 8 % 8) * 8)) as u8;
+}
+```
+
+**A clock is a reading, not a source**, and a reading can be looked up.
+
+### The measurement
+
+**Measured**: one millisecond of that clock, with one stack address, gives
+**1,000,000** distinct 32-byte secrets — one per nanosecond, and the map is
+injective over that window. The same 32 bytes from the operating system's
+source are 2²⁵⁶ possibilities.
+
+So the secret's search space was **the clock's window**, not the system's
+generator: a peer that knows roughly when the process started has a million
+candidates per millisecond to try, and the token is the only thing standing
+between it and the channel.
+
+### And the claim in the code was false, on two counts
+
+The comment above that code said:
+
+> there is no entropy source to reach for, and refusing to start would be a
+> worse outcome than a weak token on a socket that is bound to loopback.
+
+**Measured in the standard library's own source**, that is true on exactly one
+of the platforms the tree builds for:
+
+| Platform | What the standard library's random source is |
+|---|---|
+| Unix | `/dev/urandom`, which the tree already used |
+| Windows | **`ProcessPrng`** — the system's own generator, documented as always succeeding (`std/src/sys/random/windows.rs`) |
+| `wasm32-unknown-unknown` | **nothing**: its `fill_bytes` there *panics* — *"this target does not support random data generation"* — and its random keys are the addresses of two allocations |
+
+So on Windows the tree had an operating-system source in reach and did not
+use it, and the comment's reason for not using it was false. On wasm it was
+true, and the tree is honest about the platform: the browser page does not
+depend on the control crate at all.
+
+### The port
+
+The secret comes from the operating system's own randomness on every platform
+that has one:
+
+- **Unix** — `/dev/urandom`, unchanged.
+- **Everywhere else** — the standard library's own random keys, which the
+  operating system fills where it has a generator. A counter makes two calls
+  differ, because the keys are per thread.
+
+The clock is **gone**. The header now says what is true on every platform,
+and it says which platform is the weak one.
+
+### The gate's own teeth
+
+`the_control_channel_secret_is_not_the_clock`, in `cargo xtask lists`, asks
+one question of the **code view** of the module that makes the secret: does
+it read the clock? A mention of the clock in a comment or in a string is not
+a reading of it, and the test says so.
+
+The claim is deliberately narrow. The gate does not say the secret is
+**strong** — a gate cannot measure that — and it does not say the secret
+comes from the operating system, because that is a claim about another
+program's internals that only the standard library's own source answers.
+
+**And the mutation bites**: the case puts the clock arm back exactly as it
+was, and the gate catches it — **verified by running it**.
+
+### What is not claimed
+
+**The gate does not hold the standard library's behaviour.** If a future
+standard library filled its random keys from something weaker, this gate
+would stay green. The evidence for the claim is the standard library's
+source, read at the version the tree builds with, and a change there would
+need a new measurement — not a new gate.
+
+**And the wasm case is still weak.** The standard library has no generator
+there, and the tree does not invent one: the browser page has no control
+channel, so there is nothing to protect.
+
+### The lesson
+
+**A clock is a reading, not a source.** The secret's search space was the
+clock's window — a million candidates a millisecond — and nothing in the
+tree said so, because the code that made it was written as if the clock were
+a source.
+
+**And a claim about a platform is worth what the platform's own source
+says.** The comment said "there is no entropy source to reach for", and the
+standard library's source says there is one on Windows and none on wasm. The
+tree had one platform's answer written down as if it were all of them's.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26408,6 +26524,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A connection's socket waits for the request that is on its way** | `blocking()` in `crates/control/src/server.rs` | 1 mutation — §218 |
 | **A request that arrives late is still answered** | `a_request_that_arrives_after_the_connection_is_still_answered` | — §218 (macOS job) |
 | **The tree's files are checked out with the same endings everywhere** | `the_tree_says_how_its_files_are_checked_out` | 1 mutation — §219 |
+| **The control channel's secret does not come from the clock** | `the_control_channel_secret_is_not_the_clock` | 1 mutation — §220 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28501,3 +28618,33 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **The residual**: the effect check reads the files the tree's walk finds,
     which is every file except the ones in a hidden directory. The declaration
     covers those; the check is evidence, not a second rule.
+
+73. ~~**The control channel's secret came from the clock, and the crate said it
+    came from the OS.**~~ **Done in §220.**
+
+    The control crate's header says the token is *"32 bytes from the OS"*, and
+    on every platform that is not Unix it was made of the **clock** and a
+    stack address. A clock is a reading, not a source, and a reading can be
+    looked up.
+
+    **Measured**: one millisecond of that clock, with one address, gives
+    **1,000,000** distinct secrets — against 2²⁵⁶ from the operating
+    system's source.
+
+    **And the claim in the code was false.** The comment said *"there is no
+    entropy source to reach for"* — and the standard library's own source
+    says otherwise on Windows, where its random source is `ProcessPrng`, the
+    system's own generator. It is true on wasm32-unknown-unknown, where the
+    standard library has none at all and the browser page has no control
+    channel to protect.
+
+    The port is the standard library's random keys everywhere the platform is
+    not Unix, with a counter so two calls differ. The teeth are
+    `the_control_channel_secret_is_not_the_clock`, which asks the **code
+    view** of the module one question — does it read the clock? — and a
+    mutation that puts the clock arm back.
+
+    **The residual**: the gate does not hold the standard library's own
+    behaviour. If a future standard library filled its random keys from
+    something weaker, the gate would stay green; the evidence is the standard
+    library's source, read at the version the tree builds with.

@@ -585,6 +585,37 @@ swap .gitattributes '* text=auto eol=lf' '* text=auto eol=lf
 * text eol=crlf'
 expect_catch "lists: the tree asks for CRLF endings" "cargo xtask lists"
 
+# §220. The control channel's secret comes from the operating system's own
+# randomness. On every platform that is not Unix it used to come from the
+# clock instead -- and a clock is a reading, not a source, so the secret's
+# search space was the clock's window rather than the system's generator.
+swap crates/control/src/token.rs '    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // How many secrets have been made in this process.
+    static SECRETS: AtomicU64 = AtomicU64::new(0);
+
+    let mut out = Vec::with_capacity(bytes.len() + 8);
+    while out.len() < bytes.len() {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u64(SECRETS.fetch_add(1, Ordering::Relaxed));
+        out.extend_from_slice(&hasher.finish().to_le_bytes());
+    }
+    bytes.copy_from_slice(&out[..bytes.len()]);
+    Ok(())' '    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let local = 0u8;
+    let addr = &local as *const u8 as u64;
+    for (i, b) in bytes.iter_mut().enumerate() {
+        let mix = nanos.rotate_left((i % 8) as u32 * 8) ^ addr.rotate_left(i as u32 % 64);
+        *b = (mix >> ((i / 8 % 8) * 8)) as u8;
+    }
+    Ok(())'
+expect_catch "lists: the control channel's secret comes from the clock" "cargo xtask lists"
+
 # Prose points at code by line number, and line numbers rot the moment anything
 # above them moves. The tree carried ninety such citations and nothing looked at
 # any of them; five pointed at blank lines or braces and two more pointed at the
