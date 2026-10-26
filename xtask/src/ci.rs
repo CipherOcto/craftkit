@@ -122,11 +122,32 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// Running them at once would print interleaved output and make the failure of
 /// either harder to read, for no time saved. [`PHASES`] is a sequence, so
 /// running them in order is what this file does by construction.
+///
+/// **One package at a time, and each one named.** `cargo test --workspace`
+/// runs every package's tests and says nothing until they are all done — so a
+/// run that hangs is a hang with **no evidence** about where it was. That is
+/// not hypothetical: **measured** on the Windows runner, this phase ran for
+/// **92 minutes** and produced no output at all, and the job was cancelled
+/// with nothing to read. A run that names its package says where it is
+/// before it hangs. §224.
 pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
-    cargo(&["test", "--workspace", "--profile", "ci"], root)?;
+    for name in workspace_packages(root)? {
+        println!("   {name}");
+        cargo(&["test", "--profile", "ci", "--package", &name], root)?;
+    }
     println!("   ok");
     Ok(crate::Outcome::Ran)
+}
+
+/// The packages of the workspace, in the order cargo lists them.
+///
+/// Read from cargo's own metadata, so a new crate is tested the moment it is
+/// created and not the moment somebody remembers.
+fn workspace_packages(root: &Path) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = crate::layers::load(root)?.into_iter().map(|krate| krate.name).collect();
+    names.sort();
+    Ok(names)
 }
 
 /// The closing line of `ci`.
