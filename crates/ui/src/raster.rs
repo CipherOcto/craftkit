@@ -437,7 +437,10 @@ pub fn render_pixels(
             egui::epaint::Primitive::Mesh(m) => m,
             egui::epaint::Primitive::Callback(_) => continue,
         };
-        for triangle in mesh.indices.chunks_exact(3) {
+        // `as_chunks` rather than `chunks_exact`: the newest clippy refuses
+        // a constant chunk size, and the two agree on the remainder — the
+        // tail of a malformed index list is dropped either way. §217.
+        for triangle in mesh.indices.as_chunks::<3>().0 {
             // A mesh with a short index list is malformed; skipping the
             // triangle draws less, which beats panicking in a screenshot tool.
             let (Some(a), Some(b), Some(c)) =

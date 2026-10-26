@@ -25611,6 +25611,24 @@ than a skip — so the job failed exactly as it should. The fix is the way the
 tree's own documentation says: `cargo install cargo-deny --locked`, into
 `$CARGO_HOME/bin`, which is on the PATH of every later step.
 
+**And a second round found two more, in the UI crate**, because a compiler
+stops at the first crate that fails:
+
+```text
+error: falling back to `f32` as the trait bound `f32: From<f64>` is not satisfied
+  --> crates/ui/src/shell.rs:256:68
+   = warning: this was previously accepted by the compiler but is being phased out
+error: using `chunks_exact` with a constant chunk size
+  --> crates/ui/src/raster.rs:440:38
+   = help: consider using `as_chunks` instead: `as_chunks::<3>().0`
+```
+
+The first is a float literal that reached an `f32` through a trait bound
+`f32` does not satisfy — a **future** error, phased out. The second is a new
+clippy rule about a constant chunk size. The fixes are the ones the compiler
+names — `1.0_f32`, and `as_chunks::<3>()` — and both are on the floor too:
+**measured**, `as_chunks` compiles on 1.93.
+
 **And the tree's own §216 rule proved itself in that very log:**
 
 ```text
@@ -25627,6 +25645,10 @@ there.
 
 **The workflow installs the tool where the gate can find it**, and says why it
 does it that way — so the next reader does not put the action back.
+
+**And the UI crate's two findings are fixed at the source**, not with an
+`allow`: the float literal is spelled as the `f32` it is, and the chunking
+uses the API that names its chunk size.
 
 **And the mutation that turns the counter back into a thread-local is
 re-anchored** on the new text. Measured: it still bites — the kernel's

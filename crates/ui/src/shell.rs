@@ -253,7 +253,12 @@ impl<'a> Shell<'a> {
                 // palette, and a dialog in a different palette is a dialog
                 // that does not look like the window it is in. §118.
                 ui.visuals_mut().window_fill = tokens.surface;
-                ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, tokens.border);
+                // The width is spelled as an `f32`, because the newest Rust
+                // refuses to fall back to one: a float literal that reaches
+                // an `f32` through a trait bound that `f32` does not satisfy
+                // is a future error, and the workflow builds with warnings as
+                // errors. §217.
+                ui.visuals_mut().window_stroke = egui::Stroke::new(1.0_f32, tokens.border);
                 ui.visuals_mut().override_text_color = Some(tokens.text);
                 ui.visuals_mut().weak_text_color = Some(tokens.text_dim);
                 // The title is drawn here rather than by the window, so it is
