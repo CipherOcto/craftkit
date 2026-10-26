@@ -578,6 +578,13 @@ swap Cargo.toml '    "apps/*",
     "apps/*",'
 expect_catch "lists: the workspace member list is unsorted" "cargo xtask lists"
 
+# §219. The tree says how its files are checked out, and this rule asks for the
+# other endings. The rule that is added comes last, so it is the one git
+# applies -- which is what a real change to the file would do.
+swap .gitattributes '* text=auto eol=lf' '* text=auto eol=lf
+* text eol=crlf'
+expect_catch "lists: the tree asks for CRLF endings" "cargo xtask lists"
+
 # Prose points at code by line number, and line numbers rot the moment anything
 # above them moves. The tree carried ninety such citations and nothing looked at
 # any of them; five pointed at blank lines or braces and two more pointed at the

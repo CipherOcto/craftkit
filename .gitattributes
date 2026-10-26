@@ -1,0 +1,15 @@
+# Every file in this tree is checked out with LF line endings.
+#
+# §219: the tree's gates read the tree's text and compare it with other text
+# in the tree -- an anchor with the file it names, a block of prose with the
+# code it quotes. A checkout that rewrites the line endings makes the same
+# tree read differently on different machines, and the comparison stops
+# answering the same question.
+#
+# The first thing that broke was the anchors gate on Windows: the script it
+# reads was CRLF there and LF here, and the gate could not find a single
+# anchor in it. The tree says how it is checked out; this file is that say.
+#
+# `text=auto` leaves the binary files to git -- it detects them -- and
+# `eol=lf` gives every text file the same ending on every platform.
+* text=auto eol=lf

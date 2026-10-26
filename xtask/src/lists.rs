@@ -3013,6 +3013,101 @@ const TEMPORARY_HOMES: &[(&str, &str, &str)] = &[
     ("xtask", "xtask/src/temp.rs", "crate::temp::dir"),
 ];
 
+/// The tree says how its files are checked out, and this checkout agrees. §219.
+///
+/// Two questions, and the second one is the one that catches the failure:
+///
+/// - **What does the tree say?** `.gitattributes` has to ask for LF endings
+///   for **every** file, and must not ask for CRLF for any of them.
+/// - **What does this checkout have?** No text file in the tree may end a
+///   line with CRLF.
+///
+/// The first is the rule and the second is the effect, and a checkout that
+/// ignored the rule — a stale working tree, a clone made before the rule
+/// existed — passes the first and fails the second. That is the case the
+/// Windows job hit: the script the anchors gate reads was CRLF there and LF
+/// here, and the gate could not find a single anchor in it, so the tree's CI
+/// was red on a machine the tree had never run on.
+///
+/// The effect is checked on the files the tree's walk finds, which is every
+/// file except the ones in a hidden directory. The declaration covers those
+/// too; the check is a sample of what the declaration says, not a second
+/// rule.
+pub fn the_tree_says_how_its_files_are_checked_out(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    // What the tree says.
+    let attributes = root.join(ATTRIBUTES_FILE);
+    match crate::tree::read_text(&attributes) {
+        Err(_) => problems.push(format!(
+            "{ATTRIBUTES_FILE}: the tree does not say how its files are checked out, so a checkout \
+             may rewrite the line endings and the tree's gates read a different tree on a \
+             different machine. §219."
+        )),
+        Ok(text) => {
+            let mut every_file_is_lf = false;
+            for (number, line) in text.lines().enumerate() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                let mut words = line.split_whitespace();
+                let Some(pattern) = words.next() else { continue };
+                let set: Vec<&str> = words.collect();
+                if set.contains(&"eol=crlf") {
+                    problems.push(format!(
+                        "{ATTRIBUTES_FILE}: line {} asks for CRLF endings (`{line}`); the tree's \
+                         gates compare the tree's text with other text in the tree, and a line \
+                         ending that is not the same everywhere makes the comparison a different \
+                         question on every machine. §219.",
+                        number + 1
+                    ));
+                }
+                if pattern == "*" && set.contains(&"eol=lf") {
+                    every_file_is_lf = true;
+                }
+            }
+            if !every_file_is_lf {
+                problems.push(format!(
+                    "{ATTRIBUTES_FILE}: no rule asks for LF endings for every file; a rule that \
+                     covers only some of them leaves the rest to the machine's checkout settings, \
+                     and those differ. §219."
+                ));
+            }
+        }
+    }
+
+    // What this checkout has.
+    let mut files = Vec::new();
+    crate::tree::walk(root, root, &mut files, &|_path| true);
+    files.sort();
+    for relative in files {
+        let path = root.join(&relative);
+        // A Rust file is read with a subject, and a file that is not text is
+        // not a file whose endings can differ.
+        let text = if relative.extension().and_then(|e| e.to_str()) == Some("rs") {
+            crate::tree::read_rust(&path, Subject::Everything).ok()
+        } else {
+            crate::tree::read_text(&path).ok()
+        };
+        let Some(text) = text else { continue };
+        let Some(at) = text.find("\r\n") else { continue };
+        let line = text[..at].matches('\n').count() + 1;
+        problems.push(format!(
+            "{}: line {} ends with CRLF; the tree's files are checked out with LF endings, so \
+             every machine reads the same text. §219.",
+            relative.display(),
+            line
+        ));
+    }
+
+    problems.sort();
+    Ok(problems)
+}
+
+/// The file in which the tree says how its files are checked out.
+const ATTRIBUTES_FILE: &str = ".gitattributes";
+
 /// The tree's files are written through one home.
 ///
 /// §215. The tree has a rule for writing a file — *into a temporary name, then
@@ -5370,6 +5465,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the question is which lines are tests, and a test is in the file and not in the shipped code",
     ),
     (
+        "the_tree_says_how_its_files_are_checked_out",
+        Subject::Everything,
+        "the question is which bytes the file has on this machine, and a test's file is on the machine too",
+    ),
+    (
         "the_tree_writes_its_files_through_one_home",
         Subject::Production,
         "the question is which lines the tree ships, and a test's fixture is not a file the tree writes",
@@ -6556,6 +6656,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     problems.extend(the_tree_writes_its_files_through_one_home(root)?.into_iter().map(|p| {
         format!("{p}\n     One home for writing a file, so a write that fails leaves the file that was there alone.")
     }));
+
+    // The tree says how its files are checked out, and this checkout agrees. §219.
+    problems.extend(
+        the_tree_says_how_its_files_are_checked_out(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     One set of line endings, so every machine reads the same text.")),
+    );
 
     if problems.is_empty() {
         println!(
@@ -8543,6 +8650,93 @@ mod tests {
         let root = crate::root().expect("the workspace root");
         let problems = the_tree_has_one_temporary_folder(&root).expect("runs");
         assert!(problems.is_empty(), "the tree has one home for a temporary folder: {problems:#?}");
+    }
+
+    /// The tree says how its files are checked out, and this checkout agrees.
+    #[test]
+    fn the_tree_says_how_its_files_are_checked_out_and_the_checkout_agrees() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_tree_says_how_its_files_are_checked_out(&root).expect("runs");
+        assert!(problems.is_empty(), "one set of line endings: {problems:#?}");
+    }
+
+    /// A tree that asks for CRLF endings is caught.
+    ///
+    /// This is the defect the gate exists for: the tree's gates compare the
+    /// tree's text with other text in the tree, and a line ending that is
+    /// not the same everywhere makes the comparison a different question on
+    /// every machine. §219.
+    #[test]
+    fn a_tree_that_asks_for_crlf_endings_is_caught() {
+        let dir = crate::temp::dir("endings-crlf").expect("a temporary folder");
+        std::fs::write(dir.join(ATTRIBUTES_FILE), "# the tree's rule\n* text=auto eol=lf\n* text eol=crlf\n")
+            .expect("the fabricated rule");
+
+        let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("asks for CRLF endings")),
+            "a tree that asks for CRLF endings is not reported: {problems:#?}"
+        );
+        assert_eq!(problems.len(), 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A tree that says nothing about its endings is caught.
+    #[test]
+    fn a_tree_that_says_nothing_about_its_endings_is_caught() {
+        let dir = crate::temp::dir("endings-silent").expect("a temporary folder");
+        std::fs::write(dir.join(ATTRIBUTES_FILE), "# nothing else\n").expect("the silent file");
+
+        let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("no rule asks for LF endings")),
+            "a tree that says nothing is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A tree with no file that says how it is checked out is caught.
+    #[test]
+    fn a_tree_with_no_such_file_is_caught() {
+        let dir = crate::temp::dir("endings-missing").expect("a temporary folder");
+
+        let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("does not say how its files are checked out")),
+            "a tree with no such file is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A checkout with CRLF in it is caught, even when the tree's rule is
+    /// right.
+    ///
+    /// The rule and the effect are two questions, and a stale working tree
+    /// passes the first and fails the second. §219.
+    #[test]
+    fn a_checkout_with_crlf_in_it_is_caught() {
+        let dir = crate::temp::dir("endings-stale").expect("a temporary folder");
+        std::fs::write(dir.join(ATTRIBUTES_FILE), "* text=auto eol=lf\n").expect("the rule");
+        std::fs::write(dir.join("stale.txt"), "one\r\ntwo\r\n").expect("the stale file");
+
+        let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("stale.txt")),
+            "a checkout with CRLF in it is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A binary file is not a file whose endings can differ.
+    #[test]
+    fn a_binary_file_is_not_reported_for_its_endings() {
+        let dir = crate::temp::dir("endings-binary").expect("a temporary folder");
+        std::fs::write(dir.join(ATTRIBUTES_FILE), "* text=auto eol=lf\n").expect("the rule");
+        std::fs::write(dir.join("blob.bin"), [0u8, 13, 10, 255, 0]).expect("the blob");
+
+        let problems = the_tree_says_how_its_files_are_checked_out(&dir).expect("runs");
+        assert!(problems.is_empty(), "a binary file has no endings: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The one home for writing a file, written into a fabricated tree.

@@ -13,6 +13,7 @@
 # One path per line, relative to the repository root. A blank line, a
 # duplicate, or a path that is not in the tree is reported by the gate.
 Cargo.lock
+.gitattributes
 Cargo.toml
 ATTRIBUTION.md
 clippy.toml

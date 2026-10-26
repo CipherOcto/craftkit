@@ -25781,6 +25781,94 @@ ever had to.
 listener's mode was the tree's own choice; the accepted socket's mode was the
 platform's.
 
+## 219. The tree's checkout rewrote its line endings, and the gates read a different tree
+
+### The finding
+
+The `gates (windows-latest)` job was red on §217's first run, one phase in:
+
+```text
+── anchors
+error: `anchors` failed
+scripts/mutation-test-gates.sh:525: a `swap` on crates/ui/Cargo.toml with no anchor
+```
+
+The anchors gate reads the tree's mutation script and finds the **anchors** in
+it — the exact text each case replaces. It could not find one, and the reason
+is in the reader: the script's line continuation is a backslash at the end of a
+line, and the reader recognises a backslash followed by a newline. On the
+Windows runner the script was checked out with **CRLF**, so the backslash was
+followed by `\r\n`, the continuation was not recognised, and the word after it
+was never read.
+
+### The cause
+
+Git rewrites the line endings of the files it checks out, and nothing in the
+tree said otherwise. So the tree's text was **CRLF on Windows** and **LF**
+everywhere else.
+
+**And the tree's gates compare the tree's text with other text in the tree**:
+an anchor with the file it names, a block of prose with the code it quotes, a
+label with the shell's own reading of it. Every one of those comparisons is a
+*different question* on a machine whose endings differ — and the tree's CI had
+never run on such a machine, so nothing had ever noticed.
+
+### The port
+
+`.gitattributes`, with one rule:
+
+```text
+* text=auto eol=lf
+```
+
+`text=auto` leaves the binary files to git — it detects them — and `eol=lf`
+gives every text file the same ending on every platform. The tree now says
+how it is checked out, in the file that says it.
+
+### The gate's own teeth
+
+`the_tree_says_how_its_files_are_checked_out`, in `cargo xtask lists`, asks
+**two** questions:
+
+- **What does the tree say?** `.gitattributes` has to ask for LF endings for
+  **every** file, and must not ask for CRLF for any of them.
+- **What does this checkout have?** No text file in the tree may end a line
+  with CRLF.
+
+The first is the rule and the second is the effect, and a checkout that
+ignored the rule — a stale working tree, a clone made before the rule existed
+— passes the first and fails the second.
+
+**Both halves were measured failing**: with the rule changed to `eol=crlf`
+the gate names the line that asks for it; with one CRLF file in the tree the
+gate names the file and the line.
+
+**And the mutation bites**: the case swaps the rule for `eol=crlf`, and the
+gate must catch it — **verified by running it**.
+
+### What is not claimed
+
+**The effect check is a sample, not a second rule.** It reads the files the
+tree's walk finds, which is every file except the ones in a hidden directory
+— `.github/workflows/ci.yml` among them. The declaration covers those; the
+check is evidence that the declaration took effect.
+
+**And a file that is not text is not a file whose endings can differ**: the
+binary files are read as bytes and left alone, and the tree's own assets are
+among them.
+
+### The lesson
+
+**A checkout is part of the tree.** The same repository, read on two
+machines, was two different trees — and the tree's gates are comparisons, so
+a different tree means different answers to the same question.
+
+**And the tree's first CI run was worth more than a green one.** §217's run
+was red in four jobs, and every one of the four causes was something no local
+run could have found: a deprecated call, a tool installed in the wrong place,
+a socket's mode on another operating system, and a checkout that rewrote the
+tree's text.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26319,6 +26407,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The policy's tool is installed where the gate can find it** | `cargo xtask deny` in CI | — §217 |
 | **A connection's socket waits for the request that is on its way** | `blocking()` in `crates/control/src/server.rs` | 1 mutation — §218 |
 | **A request that arrives late is still answered** | `a_request_that_arrives_after_the_connection_is_still_answered` | — §218 (macOS job) |
+| **The tree's files are checked out with the same endings everywhere** | `the_tree_says_how_its_files_are_checked_out` | 1 mutation — §219 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28393,3 +28482,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     the teeth are two tests, one of which is portable (the mode is measured
     before and after) and one of which is the macOS job's (a late request is
     still answered).
+
+72. ~~**The tree's checkout rewrote its line endings, and the gates read a
+    different tree.**~~ **Done in §219.**
+
+    Git rewrites the endings of the files it checks out, and nothing in the
+    tree said otherwise, so the tree's text was CRLF on the Windows runner and
+    LF everywhere else. The anchors gate reads the tree's script and finds the
+    anchors in it — and the script's line continuation is a backslash at the
+    end of a line, which the reader recognises only when the next byte is a
+    newline.
+
+    The port is `.gitattributes` and one rule: `* text=auto eol=lf`. The teeth
+    are `the_tree_says_how_its_files_are_checked_out`, which asks both what
+    the tree says and what this checkout has — a stale working tree passes the
+    first and fails the second.
+
+    **The residual**: the effect check reads the files the tree's walk finds,
+    which is every file except the ones in a hidden directory. The declaration
+    covers those; the check is evidence, not a second rule.
