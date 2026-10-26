@@ -75,17 +75,38 @@ use crate::session::Session;
 /// The environment variable that relocates the crash folder.
 pub const CRASH_DIR_ENV: &str = "CRAFTKIT_CRASH_DIR";
 
+/// How many bytes of file one byte of a design's memory costs, at the worst.
+///
+/// A report **carries** the design it was made from, so a report's size is the
+/// design's file plus the report's own fields, and the design's file is the
+/// design's memory times the format's expansion. The expansion is a fact about
+/// the machine: measured, the report of a design the model accepts is
+/// **43.4 MiB** on a 64-bit host and **65.7 MiB** on a 32-bit ARM target, for
+/// designs whose own estimates are 31.7 MiB and 32.0 MiB. §231.
+///
+/// So the number is **3** — the worst case over the platforms, and a constant
+/// rather than a measurement.
+pub const REPORT_EXPANSION: usize = 3;
+
 /// How many bytes a crash report file may be.
 ///
 /// A report is **input**, not output: `docs/recipes/fix-a-crash.md` asks for
 /// `report.json` from whoever had the crash, so the file arrives from another
-/// machine. The design reader in `crates/io` caps its own files at 64 MiB for
+/// machine. The design reader in `crates/io` caps its own files at 96 MiB for
 /// the same reason — *"a hostile or truncated file must not reach
 /// `serde_json::from_str` with a megabyte of input"* — and the script reader
 /// in the CLI caps at [`craftkit_core::MAX_JSON_TEXT_BYTES`]. The crash reader
 /// capped at nothing.
 ///
 /// Measured: a 104 857 690-byte report was read in 105 ms without a word.
+///
+/// **And the cap has to hold the reports the tree writes itself**, or the app
+/// writes crash reports it cannot read back. It did: on a 32-bit target the
+/// report of a design the model accepts is 65.7 MiB, past the 64 MiB the
+/// reader stopped at, and the reader said *"the input is longer than the limit
+/// of 67108864 bytes"*. The cap is now derived from the same expansion the
+/// design file uses, so it is the worst case over the platforms rather than
+/// one machine's. §231.
 ///
 /// The cap is a cap on **text**, and what the reader spends on the text is
 /// another number. Before §72 the design was read as a JSON *tree*, and a
@@ -94,7 +115,7 @@ pub const CRASH_DIR_ENV: &str = "CRAFTKIT_CRASH_DIR";
 /// memory and 2.37 s to read. Read as a document, the same report costs
 /// 67 796 KiB and 0.04 s, and a report whose design is not a document is
 /// refused by the format instead of being materialised first.
-pub const MAX_REPORT_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_REPORT_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * REPORT_EXPANSION;
 
 /// How many bytes of memory reading one report may take.
 ///
@@ -1058,6 +1079,31 @@ mod tests {
         assert_eq!(back.design.meta, report.design.meta, "the settings came back changed");
         assert_eq!(back.design.nodes, report.design.nodes, "the nodes came back changed");
         assert_eq!(back.command, report.command, "the command came back changed");
+    }
+
+    /// The report's cap covers the worst case over the platforms the tree runs on.
+    ///
+    /// §231: a report carries the design it was made from, and the design's file
+    /// is the design's memory times an expansion that is a fact about the
+    /// machine. Measured: the report of a design the model accepts is 43.4 MiB
+    /// on a 64-bit host and **65.7 MiB** on a 32-bit ARM target — and the reader
+    /// stopped at 64 MiB, so on the device the app wrote crash reports it could
+    /// not read back.
+    ///
+    /// The number is written down, because a constant cannot be a measurement.
+    #[test]
+    fn the_reports_cap_covers_the_worst_case_over_the_platforms() {
+        // The measured worst case, in ten-thousandths: 2.1524 bytes of report
+        // for every byte of estimate, on a 32-bit ARM target.
+        const MEASURED_WORST_X_10_000: usize = 21_524;
+        // Asserted with locals so clippy does not fold them into a constant
+        // comparison — the same way `crates/model/src/lib.rs` asserts its own.
+        let (expansion, worst) = (REPORT_EXPANSION, MEASURED_WORST_X_10_000);
+        assert!(
+            expansion * 10_000 >= worst,
+            "the expansion is {expansion}, and the worst case measured over the platforms the \
+             tree runs on is 2.1524 — a 64-bit host measures 1.435 and a 32-bit ARM target 2.152"
+        );
     }
 
     /// A design the model accepts, and a big one: 32 properties with 10 000

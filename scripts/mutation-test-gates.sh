@@ -4209,6 +4209,19 @@ swap crates/engine/src/crash.rs \
 expect_catch "engine: the crash report is written with a writer of its own" \
     "cargo xtask lists"
 
+# §231. The report's cap has to hold the reports the tree writes itself.
+#
+# A report carries the design it was made from, and the design's file is the
+# design's memory times an expansion that is a fact about the machine: the
+# report of a design the model accepts is 43.4 MiB on a 64-bit host and
+# 65.7 MiB on a 32-bit ARM target. The cap was 64 MiB, so on the device the app
+# wrote crash reports it could not read back.
+swap crates/engine/src/crash.rs \
+    'pub const REPORT_EXPANSION: usize = 3;' \
+    'pub const REPORT_EXPANSION: usize = 2;'
+expect_catch "engine: the report's cap falls below the worst case over the platforms" \
+    "cargo test -p craftkit-engine --profile ci the_reports_cap_covers_the_worst_case_over_the_platforms"
+
 # The recipe for adding a control-channel method told an agent to add a
 # `Method::Render` variant -- a variant the tree has never had -- and to move
 # `ui.render` out of the group of spellings that reach `Method::Ui`. Applied to
