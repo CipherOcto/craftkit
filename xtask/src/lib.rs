@@ -29,7 +29,6 @@
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
 //! | [`deny`] | the dependency policy: licences, bans, sources, advisories |
 //! | [`fuzz`] | the design-file reader, fuzzed: broken files in, crashes out |
-//! | [`flake`] | the two suites that failed once, run again and again, and the failure named |
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
@@ -53,7 +52,6 @@ pub mod ci;
 pub mod cleanroom;
 pub mod deny;
 pub mod doctor;
-pub mod flake;
 pub mod fuzz;
 pub mod layers;
 pub mod lists;
@@ -132,11 +130,6 @@ pub const COMMANDS: &[Subcommand] = &[
         run: fuzz::command,
     },
     Subcommand {
-        name: "flake",
-        what: "run the two suites that failed once again and again, and name the failure (it repeats, so CI runs it in its own job)",
-        run: flake::run,
-    },
-    Subcommand {
         name: "bundle",
         what: "build the browser bundle (it writes files; `ci` does not run it)",
         run: wasm::bundle,
@@ -176,10 +169,6 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
-    (
-        "flake",
-        "it repeats a test that failed once, so it is a measurement and not a gate; CI runs it in its own job",
-    ),
 ];
 
 /// Whether `ci` runs this command.

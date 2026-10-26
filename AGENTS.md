@@ -188,11 +188,12 @@ other REMOTE ONLY processing."*)
   faster); twenty of them is not a measurement, it is a way of
   occupying a machine that other people are using. **One run of it is already
   a CI job**, so it needs no approval here — it needs a push.
-- **The hunt for a rare failure runs in CI, not here.** Two tests have failed
-  once each and never again; the loop that would find them is **not** for a
-  shared machine, and `cargo xtask flake` runs it on the runner instead
-  (§229). If a failure like that appears, say so in the tree's issue or
-  commit — do not go looking for it here.
+- **The hunt for a rare failure is off, and it is not for here either.** Two
+  tests have failed once each and never again. A job that repeated them on
+  the runner was built and measured (§229) and the owner turned it off, so
+  the tree does not run it and nothing in the tree claims it does. If a
+  failure like that appears, say so in the tree's issue or commit — do not go
+  looking for it here.
 - **Prefer a bounded measurement to a brute-force loop.** A hundred cheap
   runs of one test binary beat a hundred runs of the whole `ci`, and a
   measurement of the *number* beats a repetition of the *suite*.

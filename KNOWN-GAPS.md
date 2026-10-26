@@ -26566,7 +26566,7 @@ it.** The number was right when it was written and wrong sixteen minutes
 later, and nothing said so — because the thing that moved was the tree, and
 the tree does not check its own prose about itself.
 
-## 229. The loop that would find the flake runs on the runner, in a job of its own
+## 229. The hunt for the flake was built, measured, and turned off
 
 ### The finding
 
@@ -26575,40 +26575,32 @@ expensive: the **loop** — run the tests until one fails and capture the name �
 is what would find it, and the owner ruled it out on a shared machine; the
 **repetition count** is cheap, and it was never chosen.
 
-**The owner has now decided: the hunt is remote, and it is a job of its own.**
+**The owner decided: the hunt is remote, and it is a job of its own.** And
+the decision needed no new rule, because the tree already has the rule and it
+says something narrower than it looks. The owner's five-minute rule is about
+**local** processes: *a test or suite that takes all the CPU for more than
+five minutes needs the owner's approval first* — because a machine that takes
+all the CPU is **somebody else's**. **A CI runner has nobody's machine to
+take.** So the heavy half of item 42 was never ruled out; it was only ruled
+out **here**.
 
-And the decision does not need a new rule to justify it, because the tree
-already has the rule and it says something narrower than it looks. The owner's
-five-minute rule is about **local** processes: *a test or suite that takes
-all the CPU for more than five minutes needs the owner's approval first* —
-because a machine that takes all the CPU is **somebody else's**. **A CI
-runner has nobody's machine to take.** So the heavy half of item 42 was never
-ruled out; it was only ruled out **here**.
+### What was built, and what it measured
 
-### The port
+A **command** — the `flake` command — that ran the two suites which failed
+once each, `craftkit-engine --lib` and `craftkit-ui --lib`, **30 times each**
+under the `ci` profile, **named** any failing test and **kept** the failing
+output. **One number of repetitions, in one place**; not a flag, so there was
+nothing to pass differently on two machines. And **a job of its own** on the
+ubuntu runner, with the failure output uploaded as an artifact — §216: the
+failure that started this item was lost because the only copy of what it said
+was deleted.
 
-**A command: `cargo xtask flake`.** It runs the two suites that failed once
-each — `craftkit-engine --lib` and `craftkit-ui --lib` — **30 times each**
-under the `ci` profile, and for every failing repetition it **names the test**
-and **keeps the output** in `flake-out/`. §216: the failure that started this
-item was lost because the only copy of what it said was deleted.
-
-**The count is one number in one place.** `REPETITIONS`, in the code. Not a
-flag, not an argument: there is nothing to pass differently on two machines,
-so there is nothing to get wrong.
-
-**A job of its own**, on the ubuntu runner, with the evidence uploaded as an
-artifact. It does not slow the gate down, and it is the only job that runs
-the command — which is what §173's rule asks of a command `ci` does not run.
-
-**And the job can only go red when it has something to say.** One failure is
-the flake this item is about, so the command **succeeds** and says so loudly;
-the **same test failing twice**, or a run that died without naming a test
-twice, is a bug, and the command **fails**. A job that failed the build on
-the first rare failure would be a job that fails at random, and a job that
-fails at random is a job people learn to ignore.
-
-### Measured
+**And the job could only go red when it had something to say.** One failure is
+the flake itself, so the command **succeeded** and said so loudly; the **same
+test failing twice**, or a run that died without naming a test twice, **failed
+the job**. A job that went red on the first rare failure would be a job that
+fails at random, and a job that fails at random is a job people learn to
+ignore.
 
 | what | where | how long |
 |---|---|---|
@@ -26618,24 +26610,34 @@ fails at random is a job people learn to ignore.
 | **30 repetitions of each** | **the runner** | **105 s**, no failure in 60 runs |
 | **the whole job** — checkout, toolchain, build, repetitions | **the runner** | **2 m 08 s** |
 
-So the job costs a build and about two minutes, on a machine that belongs to
-nobody. **And the runner is twice as slow as this machine**, which is §222's
-lesson again: a number measured on one machine is a guess on another. The
-fifty seconds above was measured here; the hundred and five is what it costs
-where the job actually runs.
+So the hunt was cheap: a build and about two minutes on a machine that
+belongs to nobody. **And the runner is twice as slow as this machine**,
+which is §222's lesson again — the fifty seconds was measured here, the
+hundred and five is what it costs where the job actually ran.
+
+### And the owner turned it off
+
+**"No further work required on the flake job; the CI can be disabled for
+now."** So the command and the job are **out of the tree**.
+
+**And they are out rather than switched off**, which is a decision and not an
+accident. A job that is disabled but still named in the workflow would leave
+§173's gate **green on a name rather than on a run**: the gate asks whether
+the workflow runs the command, and a disabled job answers the question on
+paper. That is §170's mirror image — *a comment is not a command*, and a
+**name is not a run** — and a check that passes for the wrong reason is a
+defect this tree keeps finding. So the tree keeps nothing that is not true:
+the command is gone, the job is gone, and the code is in the history at
+`979bbff` for the day it is wanted back.
 
 ### What is not claimed
 
-**This does not find the flake.** Thirty repetitions of each suite is **60
-runs**, against the **160** runs that have already failed to reproduce it. The
-job is a **detector with a memory**, not a proof: what it adds is that when a
-failure happens it is **named**, its output is **kept**, and the evidence
-**accumulates across pushes** instead of being lost.
+**The flake is still unexplained.** The hunt was a **detector with a memory**,
+not a proof: **60 runs** against the **160** that had already failed to
+reproduce it, and it saw nothing. Turning it off does not make the flake
+less real, and item 42 stays open — the hunt is *off*, not *answered*.
 
-**And it looks at `--lib` only.** Both failures were in `--lib`, and a
-repetition of the wrong target is a measurement of the wrong thing.
-
-**And it does not say the crates have no flake.** It says what it did, how
+**And nothing here says the crates have no flake.** It says what ran, how
 many times, and what it saw.
 
 ### The lesson
@@ -26643,11 +26645,13 @@ many times, and what it saw.
 **A rule about local machines is a rule about local machines.** The owner's
 five-minute rule was never a rule against repetition; it was a rule against
 taking a machine that belongs to somebody else. The same work on a runner is
-nobody's machine — so *"remote only"* is not a lesser answer here, it is the
-**right** answer, and the tree now says it in a job instead of in a promise.
+nobody's machine — so *"remote only"* was the **right** answer, and the tree
+now says it in a job instead of in a promise.
 
-**And a detector that keeps its evidence is worth more than a detector that
-runs more often.**
+**And a detector that is not run is not a detector.** §222's lesson, one arc
+on: *a job that is cancelled is a job that never reports*. A job that is
+disabled is the same thing, and the tree's own rule about a name that is not
+a run says it more sharply than a comment ever could.
 
 ## What enforces what
 
@@ -27199,7 +27203,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A workflow step names the shell it is written in** | `shell: bash` in `.github/workflows/ci.yml` | the Windows runner — §226 |
 | **The instrument runs on every platform the tree runs on** | `scripts/mutation-test-gates.sh --self-test` | the macOS and Windows runners — §227 |
 | **A duration in prose is re-measured when the tree it measured changes** | the mutation suite's own report of its duration | the runner — §228 |
-| **The hunt for a rare failure runs on the runner, in a job of its own** | `cargo xtask flake` | the flake job — §229 |
+| **The hunt for a rare failure is not running** | nothing | the owner turned the job off — §229 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29476,18 +29480,22 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     guess on another, and only the measurement is corrected.
 
 82. ~~**The loop that would find the flake runs on the runner, in a job of
-    its own.**~~ **Done in §229.**
+    its own.**~~ **Tried in §229, and turned off by the owner.**
 
-    The owner has decided: the hunt for the two one-off failures is **remote**
-    and has **a CI job of its own**. The tree's own rule already said it —
-    the five-minute limit is about *local* processes, because a machine that
-    takes all the CPU is somebody else's, and a runner has nobody's machine
-    to take.
+    It was built, and it was cheap: **105 s** on the runner for thirty
+    repetitions of each of the two suites, plus a build — two minutes and
+    eight seconds for the whole job.
 
-    `cargo xtask flake` runs the two suites that failed once each **30 times
-    each** under the `ci` profile (**105 s** on the runner, **50 s** on this
-    machine), names any failing test and keeps its output. The job **fails only when a test fails twice** — one
-    failure is the flake, and CI must never fail at random.
+    It ran the two suites that failed once each **30 times each** under the
+    `ci` profile (**105 s** on the runner, **50 s** on this machine), named
+    any failing test and kept its output. The job **failed only when a test
+    failed twice** — one failure is the flake, and CI must never fail at
+    random.
 
-    **What it does not do**: find the flake. Sixty runs against the 160 that
-    have already failed to reproduce it; it is a detector with a memory.
+    **And then the owner turned it off** — no further work required, the CI
+    disabled for now. So the command and the job are out of the tree, and the
+    code is in the history at `979bbff` for the day it is wanted back.
+
+    **What it did not do**: find the flake. Sixty runs against the 160 that
+    have already failed to reproduce it; it was a detector with a memory, and
+    it saw nothing. Item 42 stays open: the hunt is *off*, not *answered*.

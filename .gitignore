@@ -14,10 +14,6 @@
 # Local, and never in the repository. §180.
 /fuzz-out/
 
-# The output of a failing repetition of the flake hunt: the only copy of what
-# a failing run said. Local, and never in the repository. §229.
-/flake-out/
-
 # Editors and operating systems.
 .DS_Store
 *.swp
