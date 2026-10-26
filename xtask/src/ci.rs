@@ -130,24 +130,147 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// **92 minutes** and produced no output at all, and the job was cancelled
 /// with nothing to read. A run that names its package says where it is
 /// before it hangs. §224.
+///
+/// **And the binaries are run directly, so the *test* is named too.** Cargo
+/// captures a test binary's output and prints it when the binary exits, so a
+/// test that hangs prints nothing — the package name says which package, and
+/// nothing says which test. Running the compiled binary ourselves hands it our
+/// stdout, and the harness prints each test's name as it goes.
 pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
-    for name in workspace_packages(root)? {
-        println!("   {name}");
-        cargo(&["test", "--profile", "ci", "--package", &name], root)?;
+    for package in workspace_packages(root)? {
+        println!("   {}", package.name);
+        test_package(root, &package)?;
     }
     println!("   ok");
     Ok(crate::Outcome::Ran)
+}
+
+/// One package of the workspace, and where its tests live.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Package {
+    /// The package name, as cargo calls it.
+    name: String,
+    /// The directory the package lives in. Cargo runs a package's test
+    /// binaries with that directory as the working directory, and a test that
+    /// opens a file by a relative path depends on it.
+    dir: std::path::PathBuf,
+    /// Whether the package has a library target, and therefore doc tests.
+    has_lib: bool,
 }
 
 /// The packages of the workspace, in the order cargo lists them.
 ///
 /// Read from cargo's own metadata, so a new crate is tested the moment it is
 /// created and not the moment somebody remembers.
-fn workspace_packages(root: &Path) -> Result<Vec<String>, String> {
-    let mut names: Vec<String> = crate::layers::load(root)?.into_iter().map(|krate| krate.name).collect();
-    names.sort();
-    Ok(names)
+fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
+    let out = crate::command("cargo", &["metadata", "--no-deps", "--format-version", "1", "--offline"], root)
+        .or_else(|_| crate::command("cargo", &["metadata", "--no-deps", "--format-version", "1"], root))?;
+    if !out.ok() {
+        return Err(format!("cargo metadata failed\n\n{}", out.all()));
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(&out.stdout).map_err(|e| format!("cargo metadata is not JSON: {e}"))?;
+    let packages = value
+        .get("packages")
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| "cargo metadata has no packages".to_string())?;
+    let mut found: Vec<Package> = Vec::new();
+    for entry in packages {
+        let name = entry
+            .get("name")
+            .and_then(|n| n.as_str())
+            .ok_or_else(|| "a package in cargo metadata has no name".to_string())?
+            .to_string();
+        let manifest = entry
+            .get("manifest_path")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| format!("{name} has no manifest path in cargo metadata"))?;
+        let dir = std::path::Path::new(manifest)
+            .parent()
+            .ok_or_else(|| format!("{name} has no directory in cargo metadata"))?
+            .to_path_buf();
+        let has_lib = entry
+            .get("targets")
+            .and_then(|t| t.as_array())
+            .map(|targets| {
+                targets.iter().any(|t| {
+                    t.get("kind")
+                        .and_then(|k| k.as_array())
+                        .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("lib")))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+        found.push(Package { name, dir, has_lib });
+    }
+    found.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(found)
+}
+
+/// Run one package's tests, naming the test that hangs.
+///
+/// **The test binaries are run directly, not through `cargo test`.** Cargo
+/// captures a test binary's output and prints it when the binary *exits*, so
+/// a test that hangs produces no output at all — the run says nothing about
+/// where it stopped. Running the compiled binary ourselves gives it our
+/// stdout, and the test harness prints each test's name as it goes, so the
+/// last name printed is the test that hung. §224.
+///
+/// Doc tests still go through cargo: they are compiled by cargo and there is
+/// no binary to run ourselves.
+fn test_package(root: &Path, package: &Package) -> Result<(), String> {
+    let built =
+        crate::command("cargo", &["test", "--profile", "ci", "--package", &package.name, "--no-run"], root)?;
+    if !built.ok() {
+        return Err(format!("building the tests of {} failed\n\n{}", package.name, built.all()));
+    }
+    // Cargo prints the "Executable ..." lines on its error stream, so both
+    // streams are read.
+    let binaries = test_binaries(&built.all());
+    if binaries.is_empty() {
+        return Err(format!(
+            "cargo built no test binary for {} — the tree's tests would not have run",
+            package.name
+        ));
+    }
+    for binary in binaries {
+        let path = if binary.is_absolute() { binary } else { root.join(&binary) };
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
+        println!("      {name}");
+        let status = std::process::Command::new(&path)
+            .current_dir(&package.dir)
+            // Cargo sets this for a test binary; the xtask's own tests read it
+            // at run time, so a binary run outside cargo needs it too.
+            .env("CARGO_MANIFEST_DIR", &package.dir)
+            .status()
+            .map_err(|e| format!("could not run the test binary {}: {e}", path.display()))?;
+        if !status.success() {
+            return Err(format!("the tests of {} failed ({name})", package.name));
+        }
+    }
+    if package.has_lib {
+        cargo(&["test", "--profile", "ci", "--package", &package.name, "--doc"], root)?;
+    }
+    Ok(())
+}
+
+/// The test binaries cargo built, from what it printed.
+///
+/// Cargo prints one line per binary: `Executable unittests src/lib.rs
+/// (target/ci/deps/name-hash)`. The path is in the brackets, and the path is
+/// what is run.
+fn test_binaries(stdout: &str) -> Vec<std::path::PathBuf> {
+    stdout
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("Executable "))
+        .filter_map(|rest| rest.rsplit_once('('))
+        .filter_map(|(_, tail)| tail.strip_suffix(')'))
+        .map(|path| std::path::PathBuf::from(path.trim()))
+        .collect()
 }
 
 /// The closing line of `ci`.
