@@ -168,6 +168,15 @@ needs and then runs it. §118.
 This is a **shared build machine**. Do not take all of its CPU, and do not
 run a long or repeated suite without saying so first.
 
+**Every rule in this section is about processes that run *here*, on this
+machine.** It is the owner's machine and other people's too. **Remote work is
+not covered by it**: CI runs on GitHub's runners, and so does any other
+remote processing — a job there takes nothing from this machine at all, so it
+needs no approval. **And that is where a heavy job belongs**: if something is
+expensive, put it in CI rather than running it here. (The owner's words:
+*"the rule is locally running processes, not for REMOTE and ONLY REMOTE CI and
+other REMOTE ONLY processing."*)
+
 - **Check the load before a big build** (`cut -d' ' -f1 /proc/loadavg`) and
   build with `nice -n 15`.
 - **A test or suite that takes all the CPU for more than five minutes needs
@@ -175,7 +184,8 @@ run a long or repeated suite without saying so first.
 - **Do not repeat a long suite to look for a rare failure without asking.**
   One run of the mutation suite is twenty-odd minutes; twenty of them is not
   a measurement, it is a way of occupying a machine that other people are
-  using.
+  using. **One run of it is already a CI job**, so it needs no approval
+  here — it needs a push.
 - **Prefer a bounded measurement to a brute-force loop.** A hundred cheap
   runs of one test binary beat a hundred runs of the whole `ci`, and a
   measurement of the *number* beats a repetition of the *suite*.
