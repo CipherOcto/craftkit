@@ -26326,6 +26326,68 @@ The socket's read timeout was set on one handle and the read happened on
 another, and the tree's promise held on Linux and not on Windows. A channel
 the program owns is the same promise everywhere.
 
+## 225. The tree quoted a path in the platform's form, and the rule for it was written three times
+
+### The finding
+
+**The Windows run now gets to the end.** The tests phase that ran for **91
+minutes and 58 seconds** now takes **2 minutes and 39 seconds** (run
+`40301545283`), and the control crate's hang is gone — it takes 47 seconds
+now.
+
+**And the next failure appears**, because the run gets that far:
+
+```text
+assets::tests::the_walk_finds_assets_and_skips_build_output
+assertion `left == right` failed
+  left: ["crates\ui\assets\splash.png"]
+ right: ["crates/ui/assets/splash.png"]
+```
+
+The tree quotes a path one way everywhere — `repo/path:line` — and this test
+compared a **walked** path with a **written** one in the platform's own form.
+On Windows the walked path has backslashes.
+
+**And nobody had seen this failure before, because the run never got there.**
+The packages run in the order of their names, and `craftkit-control` comes
+before `xtask`: the control crate's hang stopped every Windows run before
+the tool's own tests had run **once** on that platform. A failure behind a
+hang is a failure nobody has read.
+
+**And the rule was written three times.** `lists.rs` had
+`relative_name(root, path)`, `assets.rs` had `relative_name(path)` — the same
+name, a different signature, and no root — and `anchors.rs` wrote the rule out
+again inline. That is §149's shape: **a rule written three times is three
+chances to forget it**, and the copy in `assets.rs` was the one that forgot
+the root.
+
+### The port
+
+**One home**: `xtask/src/tree.rs::relative_name(root, path)` — a path relative
+to the root and `/`-separated, on every platform. `lists.rs`, `assets.rs` and
+`anchors.rs` all call it, and the two copies are gone.
+
+**And the gate's own report uses it**: the "unattributed file" finding named
+the path in the platform's form, which is the same disagreement in a place a
+reader sees.
+
+### What is not claimed
+
+**Nothing here is about Windows being different.** The tree's paths are one
+form because one form is easier to read, to copy and to compare — and
+because a rule that is written twice is a rule that will be written wrongly
+once.
+
+### The lesson
+
+**A path is a promise about its form.** The tree's paths are `repo/path:line`
+everywhere, and a rule that compares one path with another has to compare
+them in that form.
+
+**And a failure behind a hang is a failure nobody has read.** The Windows
+runner had never run the tool's own tests, because the hang was always
+earlier in the list.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26872,6 +26934,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A test that waits without a bound cannot catch a hang** | `READ_TIMEOUT` in `crates/control/src/server.rs` | the runner's own job — §224 |
 | **A bound the operating system offers is not a bound the program has** | `replies` in `crates/control/src/server.rs` | the runner's own job — §224 |
 | **A run that hangs says which test is hanging** | `test_package` in `xtask/src/ci.rs` | the runner's own job — §224 |
+| **A path is quoted in one form on every platform** | `relative_name` in `xtask/src/tree.rs` | the Windows runner — §225 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29075,3 +29138,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     The workflow's own *"About 43 seconds warm"* was wrong on every platform:
     **83.6 s** on ubuntu, **143.9 s** on macOS.
+
+78. ~~**The tree quoted a path in the platform's form, and the rule for it was
+    written three times.**~~ **Done in §225.**
+
+    With §224's hang gone, the Windows run reaches the end of the tests phase
+    in **2 minutes and 39 seconds** — and the next failure appears, in the
+    tool's own tests, which **no Windows run had ever reached**: the control
+    crate's hang was always earlier in the list.
+
+    The assets gate's test compared a walked path with a written one in the
+    platform's form, and on Windows the walked path has backslashes. The rule
+    for that comparison was written **three times** — in `lists.rs`, in
+    `assets.rs` and inline in `anchors.rs` — and the copy in `assets.rs` was
+    the one that forgot the root.
+
+    One home now: `xtask/src/tree.rs::relative_name(root, path)`, relative to
+    the root and `/`-separated, on every platform.

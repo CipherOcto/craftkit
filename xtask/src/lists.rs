@@ -39,7 +39,9 @@ use std::path::{Path, PathBuf};
 
 use crate::layers::{self, TABLE};
 use crate::step;
-use crate::tree::{Subject, code_lines_kept, is_word_byte, matching, production_of, read_rust, read_text};
+use crate::tree::{
+    Subject, code_lines_kept, is_word_byte, matching, production_of, read_rust, read_text, relative_name,
+};
 
 /// The deny list, in house order.
 ///
@@ -4082,10 +4084,6 @@ fn resolve(sources: &[PathBuf], name: &str) -> Option<PathBuf> {
             })
         })
         .cloned()
-}
-
-fn relative_name(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
 /// The crates whose roots carry the shared lines.

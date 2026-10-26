@@ -77,23 +77,13 @@ pub fn is_foreign_source(path: &Path) -> bool {
     }
 }
 
-/// A repository-relative path as a `/`-separated string.
-///
-/// `walk` yields whatever the platform's `strip_prefix` gives, which on Windows
-/// is backslash-separated. Comparing that against the exception table without
-/// normalising makes every exception a false negative on the one platform where
-/// the rule would then be silently off.
-fn relative_name(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
 /// Foreign-source files in the tree that no exception allows.
 pub fn find_foreign_source(root: &Path) -> Result<Vec<String>, String> {
     let mut all = Vec::new();
     crate::tree::walk(root, root, &mut all, &is_foreign_source);
     let mut found: Vec<String> = all
         .iter()
-        .map(|p| relative_name(p))
+        .map(|p| crate::tree::relative_name(root, p))
         .filter(|name| !FOREIGN_SOURCE_EXCEPTIONS.iter().any(|(allowed, _)| allowed == name))
         .collect();
     found.sort();
@@ -311,7 +301,7 @@ pub fn inspect(root: &Path) -> Result<Findings, String> {
     for asset in &assets {
         let name = asset.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
         if !claimed.contains(&name) {
-            unattributed.push(asset.display().to_string());
+            unattributed.push(crate::tree::relative_name(root, asset));
         }
     }
 
@@ -461,7 +451,8 @@ mod tests {
         temp.write(".hidden/secret.png", "hidden");
 
         let found = find_assets(temp.path()).expect("walks");
-        let names: Vec<String> = found.iter().map(|p| p.display().to_string()).collect();
+        // The tree's path form, on every platform. §225.
+        let names: Vec<String> = found.iter().map(|p| crate::tree::relative_name(temp.path(), p)).collect();
         assert_eq!(names, vec!["crates/ui/assets/splash.png".to_string()]);
     }
 

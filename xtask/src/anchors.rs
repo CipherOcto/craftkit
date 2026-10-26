@@ -1044,7 +1044,7 @@ pub fn prose_problems(root: &Path) -> Vec<String> {
     let mut problems = Vec::new();
     for doc in crate::lists::prose_files(root) {
         let Ok(text) = crate::tree::read_text(&doc) else { continue };
-        let relative = doc.strip_prefix(root).unwrap_or(&doc).display().to_string();
+        let relative = crate::tree::relative_name(root, &doc);
         for (line, block) in crate::lists::blocks(&text) {
             if !block.to_lowercase().contains("mutation") {
                 continue;

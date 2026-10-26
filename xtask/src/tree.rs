@@ -93,6 +93,23 @@ pub fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>, want: &dyn Fn(&Pa
     }
 }
 
+/// A path as the tree writes it: relative to `root`, and `/`-separated.
+///
+/// **One form, on every platform.** The tree quotes paths the same way
+/// everywhere — `repo/path:line` — and the platform's own form is not that.
+/// On Windows a path comes back with backslashes, so a rule that compares a
+/// walked path with a written one, or a test that does the same, fails on
+/// the one platform where the tree runs. **Measured**: the assets gate's own
+/// test failed on the Windows runner with `crates\ui\assets\splash.png`
+/// against `crates/ui/assets/splash.png`.
+///
+/// This is the tree's **one** way to write a path. It was written three
+/// times — in `lists.rs`, in `assets.rs` and in `anchors.rs` — and each copy
+/// was a chance to forget the rule. §225.
+pub fn relative_name(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+}
+
 /// The offset of the delimiter that closes the one at `open`.
 ///
 /// Strings are stepped over, so a parenthesis inside one does not count, and
