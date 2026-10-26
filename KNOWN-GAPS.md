@@ -26702,17 +26702,17 @@ separate arc, not a linker flag.
 
 **And the whole test suite, on the phone**:
 
-| package | on the phone |
-|---|---|
-| core | 68 passed, **1 failed** |
-| model | 107 passed |
-| eval | 30 passed |
-| kernel | 27 passed |
-| io | 46 passed, **1 failed** |
-| engine | 230 passed |
-| mcp | 74 passed |
-| ui | 119 passed, 13.06 s |
-| control | **hung** — killed at 60 s |
+| package | on the phone, before | on the phone, after the fixes |
+|---|---|---|
+| core | 68 passed, **1 failed** | **69 passed, 0 failed** |
+| model | 107 passed | 107 passed |
+| eval | 30 passed | 30 passed |
+| kernel | 27 passed | 27 passed |
+| io | 46 passed, **1 failed** | 46 passed, **1 failed** — §231 |
+| engine | 230 passed | 230 passed |
+| mcp | 74 passed | 74 passed |
+| ui | 119 passed, 13.06 s | 119 passed, 11.26 s |
+| control | **hung** — killed at 60 s | **67 passed, 0 failed**, 0.33 s |
 
 **Two of those three are the tree's own defects, and both are fixed.** The third
 is §231.
@@ -26804,16 +26804,20 @@ keyframe.
 design has two different estimates — while the file it writes is the same file
 in both places.
 
-Measured with a throwaway probe outside the tree:
+Measured with a throwaway probe outside the tree, and with the tree's own test
+(`crates/io/src/format.rs:502`, *a design's file is bounded by the design it
+holds*), which fails on the device with:
+
+> keyframes: the file is 2305044 bytes and the design holds 1026023 bytes
 
 | | 64-bit host | 32-bit phone |
 |---|---|---|
 | `size_of::<Node>()` | 112 | 64 |
 | `size_of::<Key>()` | 64 | 48 |
 | `size_of::<Value>()` | 32 | 16 |
-| the model's estimate | 1,539,107 | 1,026,023 |
-| the file on disk | 2,265,924 | 2,265,924 |
-| **estimate ÷ file** | **1.472** | **2.208** |
+| the model's estimate of the **same** design | 1,539,107 | 1,026,023 |
+| the file on disk | **2,305,044** | **2,305,044** |
+| **estimate ÷ file** | **1.498** | **2.247** |
 
 `FILE_EXPANSION` is **2** (`crates/io/src/format.rs:264`), and
 `MAX_FILE_BYTES = MAX_DOCUMENT_BYTES * FILE_EXPANSION`
@@ -26821,7 +26825,7 @@ Measured with a throwaway probe outside the tree:
 (`crates/model/src/lib.rs:119`).
 
 **So the phone's estimate of the same design is over the cap the writer
-enforces**: 2.208 > 2.
+enforces**: 2.247 > 2 — and the file is **the same file** on both machines.
 
 ### What that means in use
 
@@ -26851,7 +26855,7 @@ estimate that makes the promise true was measured on one machine.
   It stops being a memory estimate, and becomes a size estimate; then
   `MAX_DOCUMENT_BYTES` means something else.
 - **(b) Keep the per-platform estimate, and make the cap the worst case over
-  platforms.** `FILE_EXPANSION` 2 → 3 (2.208 is the measured worst case for
+  platforms.** `FILE_EXPANSION` 2 → 3 (2.247 is the measured worst case for
   these shapes, and the worst case over platforms has to be a constant, not a
   measurement). The model's budget stays a memory budget; the file cap becomes
   a little larger than it needs to be on 64-bit machines.
@@ -26863,8 +26867,9 @@ get to choose which meaning it wants.
 
 ### What is not claimed
 
-- **The 2.208 is a measurement of one design shape**, measured with a probe
-  outside the tree, not a bound over every shape a document can take.
+- **The 2.247 is a measurement of one design shape** — the tree's own
+  *keyframes* shape — measured with the tree's test and with a probe outside
+  the tree, not a bound over every shape a document can take.
 - **Nothing in CI checks this.** The ratio was found by running on a second
   machine; no gate compares an estimate with a file on a 32-bit target.
 
