@@ -292,7 +292,7 @@ mod tests {
         let marker = dir.join("child-started");
         std::fs::write(&path, b"OLD CONTENT").expect("the file that was there");
 
-        let status = std::process::Command::new("bash")
+        let status = std::process::Command::new("sh")
             .arg("-c")
             .arg("ulimit -f 1; exec \"$0\" \"$1\"")
             .arg(exe)
