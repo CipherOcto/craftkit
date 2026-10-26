@@ -54,7 +54,8 @@ jobs:
       - name: Can this machine build it?
         run: cargo xtask doctor
 
-      # Stops at the first failure and says which one. About 43 seconds warm.
+      # Stops at the first failure and says which one. Measured warm: 84 seconds on
+      # the Linux runner, 144 seconds on the macOS runner (section 224).
       - name: The gate
         run: cargo xtask ci
 

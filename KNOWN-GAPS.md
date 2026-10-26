@@ -26220,6 +26220,112 @@ tree's gaps was itself unexamined, and §148's deletion reached into it. A
 document about the tree is not the tree's own source code, and it does not get
 the tree's checks for free.
 
+## 224. The Windows runner's tests ran for thirty-five minutes, and the tree could not say which test
+
+### The finding
+
+**Measured, twice.** The `gates (windows-latest)` job's **tests** phase ran
+for **91 minutes and 58 seconds** and produced **no output at all**; the job
+was cancelled with nothing to read (runs `40274295479` and `40284510030`).
+The other two platforms finished the same phase in a minute and a half. And
+the workflow's own comment said the gate takes *"About 43 seconds warm"* — a
+number that was **wrong on every platform**, including the one it was written
+on. **Measured**: `83.6 s` on ubuntu, `143.9 s` on macOS.
+
+**And the tree could not say why**, because the phase ran
+`cargo test --workspace`, which says nothing until everything is done. A run
+that hangs is a hang with no evidence.
+
+**The first measurement** (commit `0eaa700`): the phase runs one package at a
+time and **names** each package before it runs. The next Windows run said:
+
+```text
+── tests
+   craftkit
+   craftkit-cli
+   craftkit-control          ← 66 minutes, and never finished
+```
+
+**The second measurement** (commit `f841492`): the phase builds each
+package's test binaries and runs them itself, so the harness prints each
+test's name as it goes. The next Windows run named the test:
+
+```text
+test server::tests::the_change_hook_fires_before_the_reply_is_sent
+     has been running for over 60 seconds
+```
+
+**And it is the program, not the socket, that has to say when to stop.**
+
+### The cause
+
+The test asks whether the server has sent its reply by **reading the socket
+with a 200 ms timeout**:
+
+```rust
+stream.set_read_timeout(Some(Duration::from_millis(200)))?;
+let mut early = String::new();
+let arrived = reader.read_line(&mut early).is_ok() && !early.is_empty();
+```
+
+**The timeout was set on one handle and the read happened on another.**
+`reader` is a `BufReader` over `stream.try_clone()`, and on Windows the
+duplicated socket does not carry the timeout over — so the read **waited
+forever**. The test never reached the line that releases the hook's gate, and
+the hook was waiting on a `Condvar` **with no bound of its own**. Two waits
+that were each supposed to be short: one was not short on that platform, and
+the other had no bound at all.
+
+### The port
+
+**Every wait in a test now has a bound, and the bound is the program's.**
+
+The replies of a connection come through a **channel**, and the channel's
+timeout is the same on every platform. It answers three different questions
+— *a reply arrived*, *nothing arrived yet*, *the connection ended* — and the
+three are told apart, because the tests that assert *"closed with no reply"*
+would otherwise pass against a server that never closed anything.
+
+**And the hook's own wait is bounded.** A hook that waits forever is a thread
+that never ends, and a test that hangs inside one says nothing about what it
+was waiting for.
+
+**And a run that hangs now says which test hangs** — the phase runs the
+compiled test binaries itself, so the harness prints each test's name as it
+goes, and the last name printed is the one that hung.
+
+**And the binaries are found in cargo's JSON, not in cargo's wording.** The
+first version of that change looked for cargo's `Executable ...` lines, and on
+the runner cargo printed **none** of them: every job on every platform failed
+with *"cargo built no test binary"* on builds that had produced one. Cargo's
+JSON is a contract — every artifact says what it is and where its executable
+is — and only the artifacts built with the **test profile** are taken, because
+a package's *binary* is also an artifact with an executable, and running the
+application is not a test.
+
+**And the socket's read timeout is no longer asked to prove that nothing
+arrived.** It is still used where it is the OS's own promise — the test that
+*measures* whether a socket waits (§218) and the server's own idle timeout.
+
+### What is not claimed
+
+**The tree cannot tell you why the Windows runner hung.** What it can do now
+is say *which test* hangs, in a bounded time, with the reason — and that is a
+measurement, not an explanation.
+
+### The lesson
+
+**A test that waits without a bound cannot catch a hang: it is the hang.**
+
+**And a timeout must not be confused with the answer.** The three tests that
+assert a closed connection would have passed against a server that never
+closed it, if a read that gave up at the timeout had been read as silence.
+
+**And a bound the operating system offers is not a bound the program has.**
+The socket's read timeout was set on one handle and the read happened on
+another, and the tree's promise held on Linux and not on Windows. A channel
+the program owns is the same promise everywhere.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -26763,6 +26869,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A promise of a file's mode says where it holds** | `a_promise_of_a_file_mode_says_where_it_holds` | 1 mutation — §221 |
 | **The mutation job's timeout leaves room for the suite** | `the_mutation_job_fits_the_suites_budget` | 1 mutation — §222 |
 | **The tree's index of enforcement names enforcement it has** | `the_tree_names_the_enforcement_it_has` | 1 mutation — §223 |
+| **A test that waits without a bound cannot catch a hang** | `READ_TIMEOUT` in `crates/control/src/server.rs` | the runner's own job — §224 |
+| **A bound the operating system offers is not a bound the program has** | `replies` in `crates/control/src/server.rs` | the runner's own job — §224 |
+| **A run that hangs says which test is hanging** | `test_package` in `xtask/src/ci.rs` | the runner's own job — §224 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -28940,3 +29049,29 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     enforcement column must be a definition in the tree's code, a file in the
     tree, a crate in the workspace, a command the xtask accepts, or a shell
     function in the tree's scripts.
+
+77. ~~**The Windows runner's tests ran for thirty-five minutes, and the tree
+    could not say which test.**~~ **Done in §224.**
+
+    The `gates (windows-latest)` job's tests phase ran for **91 minutes and
+    58 seconds** and produced **no output at all**: `cargo test --workspace`
+    says nothing until everything is done, so a run that hangs is a hang with
+    no evidence. The job was cancelled with nothing to read, on every run.
+
+    **Measured**, in three steps: the phase names its package (the culprit was
+    `craftkit-control`, 66 minutes), the phase runs the test binaries itself
+    so the harness names the test (the culprit was
+    `the_change_hook_fires_before_the_reply_is_sent`, 35 minutes), and the
+    cause is that the test asked a *socket* whether a reply had arrived — the
+    timeout was set on one handle and the read happened on another, so on
+    Windows the read waited forever, and the hook it was holding waited on a
+    `Condvar` with no bound of its own.
+
+    Every wait in a test now has a bound **the program provides**: the
+    replies of a connection come through a channel, so *a reply*, *nothing
+    yet* and *the connection ended* are three different answers on every
+    platform, and the tests that assert *"closed with no reply"* cannot pass
+    against a server that never closed anything.
+
+    The workflow's own *"About 43 seconds warm"* was wrong on every platform:
+    **83.6 s** on ubuntu, **143.9 s** on macOS.
