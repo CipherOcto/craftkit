@@ -26566,6 +26566,84 @@ it.** The number was right when it was written and wrong sixteen minutes
 later, and nothing said so — because the thing that moved was the tree, and
 the tree does not check its own prose about itself.
 
+## 229. The loop that would find the flake runs on the runner, in a job of its own
+
+### The finding
+
+**Item 42 was open** because the two ways of looking for the cause are both
+expensive: the **loop** — run the tests until one fails and capture the name —
+is what would find it, and the owner ruled it out on a shared machine; the
+**repetition count** is cheap, and it was never chosen.
+
+**The owner has now decided: the hunt is remote, and it is a job of its own.**
+
+And the decision does not need a new rule to justify it, because the tree
+already has the rule and it says something narrower than it looks. The owner's
+five-minute rule is about **local** processes: *a test or suite that takes
+all the CPU for more than five minutes needs the owner's approval first* —
+because a machine that takes all the CPU is **somebody else's**. **A CI
+runner has nobody's machine to take.** So the heavy half of item 42 was never
+ruled out; it was only ruled out **here**.
+
+### The port
+
+**A command: `cargo xtask flake`.** It runs the two suites that failed once
+each — `craftkit-engine --lib` and `craftkit-ui --lib` — **30 times each**
+under the `ci` profile, and for every failing repetition it **names the test**
+and **keeps the output** in `flake-out/`. §216: the failure that started this
+item was lost because the only copy of what it said was deleted.
+
+**The count is one number in one place.** `REPETITIONS`, in the code. Not a
+flag, not an argument: there is nothing to pass differently on two machines,
+so there is nothing to get wrong.
+
+**A job of its own**, on the ubuntu runner, with the evidence uploaded as an
+artifact. It does not slow the gate down, and it is the only job that runs
+the command — which is what §173's rule asks of a command `ci` does not run.
+
+**And the job can only go red when it has something to say.** One failure is
+the flake this item is about, so the command **succeeds** and says so loudly;
+the **same test failing twice**, or a run that died without naming a test
+twice, is a bug, and the command **fails**. A job that failed the build on
+the first rare failure would be a job that fails at random, and a job that
+fails at random is a job people learn to ignore.
+
+### Measured
+
+| what | how long |
+|---|---|
+| one repetition of the engine's library tests | **0.79 s** |
+| one repetition of the UI's library tests | **1.16 s** |
+| **30 repetitions of each** | **50 s**, and **no failure in 60 runs** |
+
+So the job costs one build and about a minute of test time, on a machine
+that belongs to nobody.
+
+### What is not claimed
+
+**This does not find the flake.** Thirty repetitions of each suite is **60
+runs**, against the **160** runs that have already failed to reproduce it. The
+job is a **detector with a memory**, not a proof: what it adds is that when a
+failure happens it is **named**, its output is **kept**, and the evidence
+**accumulates across pushes** instead of being lost.
+
+**And it looks at `--lib` only.** Both failures were in `--lib`, and a
+repetition of the wrong target is a measurement of the wrong thing.
+
+**And it does not say the crates have no flake.** It says what it did, how
+many times, and what it saw.
+
+### The lesson
+
+**A rule about local machines is a rule about local machines.** The owner's
+five-minute rule was never a rule against repetition; it was a rule against
+taking a machine that belongs to somebody else. The same work on a runner is
+nobody's machine — so *"remote only"* is not a lesser answer here, it is the
+**right** answer, and the tree now says it in a job instead of in a promise.
+
+**And a detector that keeps its evidence is worth more than a detector that
+runs more often.**
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -27116,6 +27194,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A workflow step names the shell it is written in** | `shell: bash` in `.github/workflows/ci.yml` | the Windows runner — §226 |
 | **The instrument runs on every platform the tree runs on** | `scripts/mutation-test-gates.sh --self-test` | the macOS and Windows runners — §227 |
 | **A duration in prose is re-measured when the tree it measured changes** | the mutation suite's own report of its duration | the runner — §228 |
+| **The hunt for a rare failure runs on the runner, in a job of its own** | `cargo xtask flake` | the flake job — §229 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -29390,3 +29469,20 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
 
     **The budget stays at ninety**: a budget measured on one machine is a
     guess on another, and only the measurement is corrected.
+
+82. ~~**The loop that would find the flake runs on the runner, in a job of
+    its own.**~~ **Done in §229.**
+
+    The owner has decided: the hunt for the two one-off failures is **remote**
+    and has **a CI job of its own**. The tree's own rule already said it —
+    the five-minute limit is about *local* processes, because a machine that
+    takes all the CPU is somebody else's, and a runner has nobody's machine
+    to take.
+
+    `cargo xtask flake` runs the two suites that failed once each **30 times
+    each** under the `ci` profile (**50 s**), names any failing test and
+    keeps its output. The job **fails only when a test fails twice** — one
+    failure is the flake, and CI must never fail at random.
+
+    **What it does not do**: find the flake. Sixty runs against the 160 that
+    have already failed to reproduce it; it is a detector with a memory.

@@ -117,6 +117,58 @@ jobs:
             echo "::error::index.html does not import $expected"; exit 1; }
           echo "ok: the page imports $expected and the job produced it"
 
+  # The one-off failures.
+  #
+  # Two tests have failed once each, and never again: one in
+  # `craftkit-engine`'s library tests, one in `craftkit-ui`'s. Neither
+  # failure was captured, so neither has a cause, and the tree's item 42 is
+  # open because the loop that would find it was ruled out on a shared
+  # machine — a test that takes all the CPU for more than five minutes needs
+  # the owner's approval first.
+  #
+  # **This job is the answer, and it is remote on purpose.** The owner's rule
+  # is about *local* processes: a machine that takes all the CPU is somebody
+  # else's. A runner has nobody's machine to take. So the loop runs here, in
+  # a job of its own, and it does not slow the gate down.
+  #
+  # **And the job can only go red when it has something to say.** One failure
+  # is the flake this item is about, and a job that fails at random is a job
+  # people learn to ignore; the same test failing twice is a bug, and that
+  # does fail. Section 229.
+  flake:
+    name: flake (the one-off failures)
+    runs-on: ubuntu-latest
+    # The budget for the repetitions. Thirty of each suite is about a minute
+    # of test time and one build; the timeout is four times that, so a slower
+    # runner does not cancel the run.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run the two suites again, and again
+        run: cargo xtask flake
+
+      # The evidence of a failure, kept. Section 216: a report that a reader
+      # can lose is not evidence, and the failure that started this item was
+      # lost exactly that way.
+      - name: The output of any failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-output
+          path: flake-out/
+          if-no-files-found: ignore
+
+      - name: What did it leave behind?
+        if: always()
+        run: git status --porcelain
+
   # Does each gate still catch the thing it claims?
   #
   # A gate that cannot fail teaches people to trust a check that has never
