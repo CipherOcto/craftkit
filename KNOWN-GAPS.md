@@ -26068,6 +26068,12 @@ the suite's **495** cases reported as caught. The cases run at about nine
 seconds each, so the whole suite needs about **sixty-one** minutes on the
 runner.
 
+**And that estimate was a little short.** The first run that ever finished —
+with the ninety-minute timeout — reported **67 minutes** and **496 of 497**
+caught, with **2** cases skipped and not passed. So the suite needs
+**sixty-seven**, not sixty-one; the estimate was made from a partial run and
+was ten minutes under, which is what the extra cases at the end cost.
+
 **And the number in the workflow came from another machine.** The tree's own
 prose says the suite takes *"twenty-odd minutes"* and *"twenty-five
 minutes"* — which is what it takes on the machine it was written on. The
@@ -28912,6 +28918,11 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     `the_mutation_job_fits_the_suites_budget` holds the two numbers
     together: a timeout below the budget, or a script without a budget, is
     reported.
+
+    **And the first run that ever finished reported the real number**:
+    **67 minutes**, **496 of 497** caught, **2** skipped and not passed. So
+    the suite needs sixty-seven, and the estimate from the partial run was ten
+    minutes under.
 
 76. ~~**The tree's own index of what enforces what named six things the tree
     does not have.**~~ **Done in §223.**
