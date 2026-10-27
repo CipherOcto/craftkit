@@ -120,6 +120,14 @@ pub fn run(flags: Flags) -> std::process::ExitCode {
 /// Runs the application on Android, with the platform's handle. §236.
 #[cfg(target_os = "android")]
 pub fn run_android(flags: Flags, app: AndroidApp) -> std::process::ExitCode {
+    // The window must not be laid out **in screen**: the platform's status
+    // bar and navigation bar are drawn over the application, and the clock
+    // lands on the toolbar's first row, where a tap is swallowed. Removing
+    // the flag is one call, and it is the platform's own API. §239.
+    app.set_window_flags(
+        winit::platform::android::activity::WindowManagerFlags::empty(),
+        winit::platform::android::activity::WindowManagerFlags::LAYOUT_IN_SCREEN,
+    );
     run_with(flags, Some(app))
 }
 
