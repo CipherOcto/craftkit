@@ -117,6 +117,58 @@ jobs:
             echo "::error::index.html does not import $expected"; exit 1; }
           echo "ok: the page imports $expected and the job produced it"
 
+  # The phone build.
+  #
+  # The recipe for a phone was a document - §230 - and a recipe in a document
+  # is not a recipe that runs. This job makes it one: the tree still builds
+  # for both ABIs a phone has, and the built library still exports the symbol
+  # the platform's loader looks up **by name**.
+  #
+  # It is a job and not a phase of `cargo xtask ci` because it needs a tool
+  # the tree's other gates do not - the Android NDK - and a gate that fails
+  # for want of a tool gets switched off. So the tool is installed here, at
+  # the version the tree was measured with, and the gate is `cargo xtask
+  # android` by name. §85, §236.
+  android:
+    name: android (the tree still builds for a phone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The NDK, at the version the tree was measured with.
+      #
+      # The gate finds it through `ANDROID_NDK_HOME`, and the version is
+      # pinned so that a runner whose image brings a different one builds the
+      # same thing the tree was measured on. The gate would say *skipped* if
+      # the NDK were missing, and CI requires it - so a machine that could
+      # not provide it fails here, with a message, instead of turning the
+      # rule into a green skip.
+      - name: The Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="25.2.9519653"
+          home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$home" ]; then
+            echo "::error::this runner has no Android SDK, and the phone build needs the NDK"
+            exit 1
+          fi
+          if [ ! -d "$home/ndk/$version" ]; then
+            echo "installing ndk;$version"
+            yes | sdkmanager "ndk;$version"
+          fi
+          echo "ANDROID_NDK_HOME=$home/ndk/$version" >> "$GITHUB_ENV"
+
+      - name: The tree builds for a phone, and exports the entry point
+        run: cargo xtask android
+
   # Does each gate still catch the thing it claims?
   #
   # A gate that cannot fail teaches people to trust a check that has never

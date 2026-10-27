@@ -4954,6 +4954,18 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the crate root's deny attribute is read out of a string" \
     "cargo test -p xtask --profile ci a_deny_attribute_in_a_string_is_not_a_deny_attribute"
 
+# The phone's entry point, and the symbol that says it is there.
+#
+# The gate that builds for a phone checks that the built library exports
+# `android_main` - the symbol the platform's loader looks up **by name**. A
+# library that wants the symbol (`U`, undefined) is not a library the
+# platform can start, so the check must not count it. Section 236.
+swap xtask/src/android.rs \
+    'kind == "T" && name == ENTRY' \
+    'kind != "W" && name == ENTRY'
+expect_catch "gate: an undefined symbol is not an export" \
+    "cargo test -p xtask --profile ci an_undefined_symbol_is_not_an_export"
+
 # The exception to the unsafe rule is for **one attribute** - the
 # `no_mangle` on the one function the platform looks up - and not for the
 # capability. The gate that says the exception has not grown has to be seen

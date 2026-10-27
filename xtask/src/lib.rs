@@ -28,6 +28,7 @@
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
 //! | [`deny`] | the dependency policy: licences, bans, sources, advisories |
+//! | [`android`] | the tree still builds for a phone, and exports the symbol the platform looks up by name |
 //! | [`fuzz`] | the design-file reader, fuzzed: broken files in, crashes out |
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
@@ -47,6 +48,7 @@
 #![forbid(unsafe_code)]
 
 pub mod anchors;
+pub mod android;
 pub mod assets;
 pub mod ci;
 pub mod cleanroom;
@@ -125,6 +127,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: deny::run,
     },
     Subcommand {
+        name: "android",
+        what: "the tree still builds for a phone, and exports the symbol the platform looks up",
+        run: android::run,
+    },
+    Subcommand {
         name: "fuzz",
         what: "fuzz the design-file reader: broken files in, crashes out",
         run: fuzz::command,
@@ -168,6 +175,7 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("bundle", "it writes files into the tree"),
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
+    ("android", "it needs the Android NDK; CI runs it by name"),
     ("ci", "it is the runner"),
 ];
 

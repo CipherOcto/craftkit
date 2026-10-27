@@ -103,6 +103,7 @@ CONTRIBUTING.md
 README.md
 apps/craftkit-web/index.html
 xtask/src/wasm.rs
+xtask/src/android.rs
 apps/craftkit-web/sw.js
 scripts/live-window-check.sh
 scripts/mutation-files.txt

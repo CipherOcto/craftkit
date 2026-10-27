@@ -27542,6 +27542,116 @@ that *CI must never fail at random* is right, and this is the other side of
 it: **a green run is not evidence that a test measures what it says**, and the
 evidence that this one did not was a number that was too good.
 
+## 238. The phone's build is a job now, and it checks the symbol
+
+### The finding
+
+**§85 asked for the recipe to become a job, and it is one.** §230 wrote the
+phone's recipe into this file; it was measured on a phone, and it was right —
+but **nothing checked it**, so a change that broke the phone build would have
+been found by somebody holding a phone, or not at all.
+
+The gate is `cargo xtask android`, and it does two things:
+
+1. **it builds the package for both ABIs a phone has** — `aarch64-linux-android`
+   and `armv7-linux-androideabi`; and
+2. **it checks the one thing nothing else checks**: that the built library
+   **exports the symbol the platform's loader looks up by name**.
+
+That second point is the reason the gate is worth its own job. `android_main`
+is a symbol **name**, and a library that builds without it is a library the
+platform will refuse to start — and **no Rust compiler says so**. The check
+reads the library's dynamic symbol table and looks for `T android_main`.
+
+**Measured, on this machine**: both ABIs build and both export the symbol.
+The 32-bit build and the 64-bit build together take **25.3 s** from a warm
+cache; the whole APK takes **29.1 s**.
+
+### The rule the gate follows about its own tool
+
+The gate needs a tool the tree's other gates do not: **the Android NDK**. So
+it has the policy gate's three rules (§217), and they are the same ones:
+
+- **the build does not work is a failure** — not a warning;
+- **the NDK is not installed is not a pass** — it is a *skip*, printed as a
+  skip, naming what would provide it;
+- **where the NDK is required, its absence is a failure** — under CI the job
+  installs it first, so a machine that silently failed to install it must not
+  turn the rule into a green skip.
+
+**The NDK is found in three places, in order**: `ANDROID_NDK_HOME`, then
+`ANDROID_NDK_LATEST_HOME`, then the newest directory under
+`$ANDROID_HOME/ndk`. The CI job installs **the version the tree was measured
+with** (`25.2.9519653`) and points `ANDROID_NDK_HOME` at it, so a runner
+whose image brings a different one builds the same thing the tree was
+measured on.
+
+**And the command is not a phase of `ci`**, for the reason the policy gate is
+not: a gate that fails for want of a tool gets switched off. So it is in the
+list of commands `ci` does not run, and `cargo xtask lists` holds the tree to
+the other half of that bargain — **a command `ci` does not run must be run by
+name in the workflow**. It is.
+
+### What the mutation found, and what it was really about
+
+The gate's symbol check was written with the parsing **inside** the function
+that ran `nm`, so nothing could test it without a toolchain and a built
+library. It was split into a pure function and a runner, and the pure one was
+given a test.
+
+**And the test passed for the wrong reason.**
+
+`nm` prints a **defined** symbol with an address and a **kind**:
+
+```text
+000000000033eaec T android_main
+```
+
+and an **undefined** one with **no address at all** — the kind and the name,
+two fields:
+
+```text
+                 U abort
+```
+
+Measured on the host: `nm -D /usr/bin/ls | grep " U "` prints **two** fields.
+The parser read the kind out of the *second* field, so for an undefined
+symbol it read the **name** as the kind — and the test that says "an
+undefined symbol is not an export" passed because the field count was wrong,
+not because the kind was checked.
+
+**The mutation found it.** The mutation case makes the check accept a weak
+symbol, and it *should* make the test fail. It did not — and a mutation that
+does not make the gate fail is not a failed mutation, it is **a fact about the
+tree**: the check was blind to the whole `U` case. The fix reads the **last
+two** fields, and the test now pins **both** shapes, because a test that only
+knows one shape is a test that passes for the wrong reason waiting to happen.
+
+### What is not claimed
+
+- **The job has never run on the runner.** It is in this commit, and this
+  commit's run is its first.
+- **The gate does not install the NDK.** It finds one, and it says *skipped*
+  when there is none. The workflow installs it.
+- **Nothing here says the package runs.** A build proves that the tree
+  compiles for a phone; §236's run on a phone is what proves it draws.
+- **The gate builds the library, not the APK.** The APK is `cargo-apk`'s job,
+  and `cargo-apk` is a third-party tool the tree does not depend on.
+
+### The lesson
+
+**A test that passes for the wrong reason is not a test, and the instrument
+is what finds those.** The unit test was green, and the *mutation* was the
+thing that said the check was blind — because a mutation asks a different
+question from a test. A test asks "does this input give this answer?"; a
+mutation asks "**is this answer doing any work?**" A gate that is always
+right for the wrong reason passes every test it has.
+
+**And a symbol check is worth writing.** The tree's whole Android arc rests on
+one name — `android_main` — and nothing in Rust's world would have told us it
+was missing. The build would have been green, the APK would have installed,
+and the application would have died on the phone with nothing to say.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28103,6 +28213,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The application's GUI runs on the phone** | the device's own run — the screenshot, the tap, the form | nothing — §236 |
 | **The keyboard opens, and the text does not arrive** | the device's own run — the keyboard on the screen, and what the field holds afterwards | nothing — §236 |
 | **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs` | the optimiser itself — §237 |
+| **The tree still builds for a phone, and exports the symbol the platform looks up** | `cargo xtask android` | 1 mutation — §238 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -30432,12 +30543,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **And the same measurement opened a second door**: the crash report carries
     the design it was made from, and its cap was one machine's too — §232.
 
-85. **An Android job in CI.** §230's recipe is a document, not a job.
+85. ~~**An Android job in CI.**~~ **Done in §238.**
 
-    Nothing checks that the tree still cross-compiles for a phone, and nothing
-    checks that the model's estimate still matches the file it writes. A job
-    needs a runner with the NDK; running the **suite** on a device needs
-    somebody with a phone.
+    The recipe is a job: `cargo xtask android` builds the package for both
+    ABIs a phone has and checks that the library exports `android_main`, and
+    the workflow runs it by name with the NDK installed at the version the
+    tree was measured with.
+
+    **What is still not a job**: the model's estimate against the file it
+    writes, and the **suite on a device** — that one needs somebody with a
+    phone, and no runner has one.
 
 86. **The Android GUI's two open ends.** §236 ran the tree's GUI on a
     32-bit phone; two things are left, and the first is a **decision**.
