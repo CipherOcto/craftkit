@@ -27080,6 +27080,79 @@ under load is a guess**, however well it argues — the tree's own rule about
 gates: *a check that has never failed is not known to work* has a twin here,
 *a shape that has never been measured is not known to hold*.
 
+## 234. The soft keyboard is the platform's half, and the tree's half is measured
+
+### The finding
+
+The owner asked what the tree does about **Android-specific input** — the
+soft keyboard. The question has two halves, and they are in different places.
+
+**The tree's half: the field.** Text is entered in four places in the shell —
+the parameter fields of a command's form (`crates/ui/src/shell.rs:277`), the
+property's value editor (`:568`), and the keyframe editor's path and value
+(`:639`, `:645`). All four are egui text fields.
+
+**Measured, on the phone**: a field takes what a soft keyboard commits.
+Android's keyboard does not send key presses — the platform composes the text
+in the app's `InputConnection` and **commits** it, and the host turns that into
+egui's own IME event (`Preedit` while composing, `Commit` when done). Feeding
+exactly that into the tree's form field leaves the field holding the committed
+text, and the preedit that came before it does not double up:
+
+```
+a_field_takes_what_the_soft_keyboard_commits ... ok
+```
+
+**And that test runs on the device**, because it is egui and not a window —
+the `craftkit-ui` test binary on the phone says the same. So the tree's half
+of the soft keyboard is not a question mark: it is a test.
+
+**The platform's half: the window.** There is none. `eframe` has no Android
+runner, `winit` has no Android backend, and `cargo build -p craftkit` for
+Android fails inside `android-activity` (§230). There is no Activity, no
+surface, no window, and so no keyboard to ask for.
+
+### What the tree would have to do, if the GUI arc goes that way
+
+Not guessed — read off the two libraries the tree already uses:
+
+| what | where it lives today | what Android needs |
+|---|---|---|
+| the text | `egui::Event::Text` — what `egui-winit` makes of a key press | `egui::Event::Ime(Preedit/Commit)` — what an `InputConnection` makes of a composition. **The tree's field already takes it.** |
+| the composition | `egui::ImeEvent` (`Enabled`, `Preedit`, `Commit`, `Disabled`) — `egui-0.33.3/src/data/input.rs:565` | the same four events, from Java |
+| asking for the keyboard | `egui-winit` calls `Window::set_ime_allowed(ctx.wants_keyboard_input())` (`egui-winit-0.33.3/src/lib.rs:395`) | `InputMethodManager.showSoftInput` when a field takes the focus |
+| the pointer | `egui::Event::PointerMoved` / `PointerButton` | the same events, from `MotionEvent`; egui also has `egui::Event::Touch` with a `TouchPhase` for multi-touch |
+| the window | `eframe::run_and_return` | an Activity, a `Surface`, and wgpu's Vulkan backend — **wgpu has it, eframe does not** |
+
+So the tree's own code would change **not at all**: the fields are egui
+fields, and egui takes what a keyboard commits. What is missing is the
+platform's half — an Activity that owns a surface, a window that turns
+`MotionEvent` into egui's pointer events, and an `InputConnection` that turns
+a composition into egui's IME events.
+
+### What is not claimed
+
+- **Nothing here is a soft keyboard.** A test that a field takes a committed
+  string is not a keyboard, a focus ring, a candidate window, a back key, or
+  a device rotation.
+- **The touch path is unmeasured.** egui has the events; nothing has fed them
+  from a `MotionEvent`, because there is no app to feed them from.
+- **The tree's input surface is mostly not a keyboard at all.** The commands
+  are the tree's real interface — the CLI, the control channel and MCP take
+  JSON — and §118's rule is that a user-visible behaviour is a command. A
+  person on a phone would drive the tree the way an agent does, over the
+  control channel, and the soft keyboard would only matter for the four fields
+  above.
+
+### The lesson
+
+**Ask which half of a feature is yours.** The soft keyboard is mostly the
+platform's: the composing, the candidate window, the back key and the focus
+ring are Android's, and the tree's part is "a field that takes a committed
+string". Measuring that part turned a question about a keyboard into a test
+that runs on the phone — and the part that is missing was named in one table
+instead of being discovered later.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -27636,6 +27709,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The file's cap is the worst case over the platforms the tree runs on** | `the_expansion_covers_the_worst_case_over_the_platforms` in `crates/io/src/format.rs` | 1 mutation — §231 |
 | **The report's cap holds the reports the tree writes itself** | `the_reports_cap_covers_the_worst_case_over_the_platforms` in `crates/engine/src/crash.rs` | 1 mutation — §232 |
 | **A measurement of two costs is the ratio of their quietest rounds** | `quietest_ratio` in `crates/core/src/measure.rs` | nothing — §233 |
+| **A field takes what the soft keyboard commits** | `a_field_takes_what_the_soft_keyboard_commits` in `crates/ui/src/shell.rs` | the device's own run — §234 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

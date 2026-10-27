@@ -2486,6 +2486,58 @@ mod tests {
         one_frame(ctx, session, tokens, state, input);
     }
 
+    /// A field takes what the soft keyboard commits.
+    ///
+    /// Android's keyboard does not send key presses. The platform composes the
+    /// text in the app's own `InputConnection` and **commits** it, and the host
+    /// turns that into egui's own IME event — `Preedit` while the person is
+    /// still composing, `Commit` when they are done.
+    ///
+    /// The tree's fields are egui text fields, so the question is whether they
+    /// take that event, and **they do**: the field holds exactly the committed
+    /// text, and the preedit that came before it does not double up. Measured.
+    /// §234.
+    ///
+    /// **What this is not**: a soft keyboard. It is the tree's half of one —
+    /// the field takes what a keyboard commits — and it runs on the device,
+    /// because it is egui and not a window.
+    #[test]
+    fn a_field_takes_what_the_soft_keyboard_commits() {
+        let mut session = Session::sample();
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut state = ShellState::default();
+
+        // Open the form, and give its field the focus.
+        click_named(&ctx, &mut session, &tokens, &mut state, AutomationId::toolbar("doc.rename").as_str());
+        one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let automation = one_frame(&ctx, &mut session, &tokens, &mut state, egui::RawInput::default());
+        let name = AutomationId::prompt_field("doc.rename", "name");
+        let rect = automation.rect(name.as_str()).expect("the field is on the screen");
+        press_at(&ctx, &mut session, &tokens, &mut state, rect.center().x, rect.center().y);
+
+        // What a keyboard commits: the text being composed, and then the text.
+        let input = egui::RawInput {
+            events: vec![
+                egui::Event::Ime(egui::ImeEvent::Preedit("Via".to_string())),
+                egui::Event::Ime(egui::ImeEvent::Commit("Via the IME".to_string())),
+            ],
+            ..Default::default()
+        };
+        one_frame(&ctx, &mut session, &tokens, &mut state, input);
+
+        let fields: Vec<String> = state
+            .prompt
+            .as_ref()
+            .map(|p| p.fields.iter().map(|f| f.text.clone()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            fields,
+            vec!["Via the IME".to_string()],
+            "the field did not take what the keyboard committed"
+        );
+    }
+
     /// A button that needs parameters opens a form instead of being refused.
     ///
     /// §118: the toolbar ran every command with an empty parameter object,
