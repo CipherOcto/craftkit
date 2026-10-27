@@ -981,6 +981,26 @@ fn previous_of(path: &Path) -> PathBuf {
 /// `OpenOptions::new` in a file that may only append, and it looks for
 /// `append(true)` on the same line. A call spread over three lines would
 /// look like a file that creates without appending. §240.
+///
+/// **And the file is private.** The tree's rule is that what the program
+/// writes is private (§55, §57), and the log is a file the program writes:
+/// it holds the commands the user ran and the names of their nodes. A file
+/// created with the umask is a file somebody else on the machine can read —
+/// on this account the umask is `0002`, so the log would be `0664`. The
+/// mode is asked for **at creation**, where the umask can only clear bits
+/// the mode does not grant, and not afterwards — a file that is readable for
+/// the length of a `chmod` is a file that was readable. §244.
+#[cfg(unix)]
+fn open_append(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(path)
+}
+
+/// Open a file to append to, on a system that has no modes to ask for.
+///
+/// Everywhere else the file is created with the process's own default, which
+/// is the best available. §244.
+#[cfg(not(unix))]
 fn open_append(path: &Path) -> std::io::Result<std::fs::File> {
     std::fs::OpenOptions::new().create(true).append(true).open(path)
 }
@@ -1728,5 +1748,26 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap_or_default();
         assert!(text.contains("from the first run"), "{text}");
         assert!(text.contains("from the second run"), "{text}");
+    }
+
+    /// The log's file is private.
+    ///
+    /// §244: the tree's rule is that **what the program writes is private**,
+    /// and the log is a file the program writes — it holds the commands the
+    /// user ran and the names of their nodes. A file created with the umask
+    /// is a file somebody else on the machine can read.
+    #[cfg(unix)]
+    #[test]
+    fn the_logs_file_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_dir, path) = log_folder("log-private");
+        let log = LogFile::open(path.clone()).expect("a log file");
+        drop(log);
+
+        let mode = std::fs::metadata(&path).map(|m| m.permissions().mode()).unwrap_or(0);
+        assert!(
+            craftkit_core::atomic::mode_is_private(mode),
+            "the log's file is {mode:04o}, and other users may read it"
+        );
     }
 }

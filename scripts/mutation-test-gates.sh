@@ -4973,8 +4973,8 @@ expect_catch "gate: an undefined symbol is not an export" \
 # the one file that may open a file of its own - to *append* to it - and the
 # exception is checked: an append is allowed and a write is not. Section 240.
 swap apps/craftkit/src/lib.rs \
-    'std::fs::OpenOptions::new().create(true).append(true).open(path)' \
-    'std::fs::OpenOptions::new().create(true).write(true).open(path)'
+    'std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(path)' \
+    'std::fs::OpenOptions::new().create(true).write(true).mode(0o600).open(path)'
 expect_catch "gate: the append exception is an append and nothing else" \
     "cargo xtask lists"
 
@@ -4991,6 +4991,18 @@ swap apps/craftkit/src/lib.rs \
     'if false {'
 expect_catch "the log's file is bounded" \
     "cargo test -p craftkit --profile ci --lib the_log_file_is_bounded"
+
+# The log's file is private.
+#
+# The tree's rule is that what the program writes is private, and the log is
+# a file the program writes: it holds the commands the user ran and the
+# names of their nodes. The mode is asked for at creation, where the umask
+# can only clear bits the mode does not grant. Section 244.
+swap apps/craftkit/src/lib.rs \
+    'std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(path)' \
+    'std::fs::OpenOptions::new().create(true).append(true).open(path)'
+expect_catch "the log's file is private" \
+    "cargo test -p craftkit --profile ci --lib the_logs_file_is_private"
 
 # The exception to the unsafe rule is for **one attribute** - the
 # `no_mangle` on the one function the platform looks up - and not for the

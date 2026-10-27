@@ -28145,6 +28145,92 @@ be checked on that platform once — in CI, by accident, because the tree runs
 its tests on three machines — and a rule that can be asked anywhere is asked
 everywhere.
 
+## 244. The log was the tree's file that nobody made private
+
+### The finding
+
+**The tree's rule is that what the program writes is private, and the log
+was not.**
+
+The convention was found twice and written down the second time (§55 and
+§57): *"what this program writes is private, and a directory the program did
+not create is not the program's to change"*. The tree's own one home for
+writing a file carries it — `craftkit_core::atomic::write_file` creates a
+file `0600` **at the moment it exists**, because a file that is created with
+the umask and restricted afterwards is a file that was readable for the
+length of a `chmod`.
+
+The log is a file the tree writes, in the tree's own folder, and it was
+created with the **umask**. The umask on this account is `0002`, so the log
+was:
+
+```text
+-rw-rw-r-- 1 mmacedoeu mmacedoeu 41 craftkit.log
+```
+
+**Measured, not assumed**: the check below was run with the fix removed, and
+it said so:
+
+```text
+the log's file is 100664, and other users may read it
+```
+
+The log holds the commands the user ran and **the names of their nodes** —
+the design's own vocabulary, in the order the user built it. It is copied
+into the tree's folder without being asked for, at exactly the moment nobody
+is thinking about who else is on the machine.
+
+**On the phone it was private — by the platform's accident.** Android's
+zygote runs with a umask of `0077`, so the file there came out `0600` and
+nothing was wrong. The tree was relying on the phone's umask for a rule
+that is the tree's.
+
+### The fix: the mode is asked for at creation
+
+The log's file is opened with the mode asked for, on the systems that have
+modes, and with the process's own default on the systems that do not — the
+same two answers `craftkit_core::atomic` gives.
+
+The **append** exception is untouched: the log still appends, and it still
+never truncates (§240). Only the mode at creation is new.
+
+### What enforces it
+
+- a test in the application's own crate: the log's file is private, and it
+  is **the tree's own** test — `craftkit_core::atomic::mode_is_private`
+  says what a mode means, so the test asks a question about a mode rather
+  than about a number;
+- and the test has been **seen to fail**: with the fix removed it said
+  *"the log's file is 100664, and other users may read it"*. A check that
+  has never failed is not known to work.
+
+### What is not claimed
+
+- **Only the log.** The tree's other files were audited in the sections that
+  found them (§55, §57, §215); this section is about the one file that was
+  added afterwards, and the audit of the others was not repeated here.
+- **A file that already exists keeps its mode.** The mode is asked for at
+  creation, which is the same rule the tree's one home follows: a file that
+  is already there was made by an earlier run, and changing its permissions
+  behind its owner's back is not the tree's business.
+
+### The lesson
+
+**A convention is a rule, and a rule needs the place where it is applied.**
+The tree had one home for writing a file, and that home makes the file
+private — and the log was the one file that **appends**, so it went around
+the home, and it took the home's privacy with it.
+
+The general form: *a rule that lives in one implementation is not a rule
+until every writer goes through that implementation.* The exception was
+right, and it was right about **what it was allowed to do** — append, never
+truncate — and it said nothing about the file's mode, so the mode was
+whatever the machine said.
+
+**And the platform's good behaviour is not the tree's.** Android's umask
+made the log private on the phone, so the phone showed nothing wrong. The
+defect was on the desktop, in a file the desktop does not write yet.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28712,6 +28798,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The NDK's host directory is the host's own** | `the_environment_names_the_linker_the_target_uses` in `xtask/src/android.rs` | the macOS and Windows runners — §241 |
 | **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
 | **A path is compared as a path, not as a spelling** | `a_path_is_compared_as_a_path_and_not_as_a_spelling` in `xtask/src/android.rs` | the Windows runner — §243 |
+| **The log's file is private** | `the_logs_file_is_private` in `apps/craftkit/src/lib.rs` | 1 mutation — §244 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
