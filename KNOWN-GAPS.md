@@ -27604,6 +27604,7 @@ Measured locally, with four different toolchains:
 | 24.0.8215888 | **yes** |
 | 25.2.9519653 | **yes** — the version the phone was measured with |
 | 26.1.10909125 | **yes** |
+| 30.0.16248370 | **yes** — on the runner, in the job that runs it |
 
 **So the job uses what the machine has**, and prints it. A job that fails for
 want of a tool gets switched off, and the tool was never the thing being
@@ -27652,10 +27653,14 @@ knows one shape is a test that passes for the wrong reason waiting to happen.
 
 ### What is not claimed
 
-- **The job has never run on the runner.** It is in this commit, and this
-  commit's run is its first.
 - **The gate does not install the NDK.** It finds one, and it says *skipped*
-  when there is none. The workflow installs it.
+  when there is none. The workflow does not install one either: the runner's
+  image has three.
+- **The job has run on the runner once.** Run `40474523624`: the SDK at
+  `/usr/local/lib/android/sdk`, the NDKs 27.3, 29.0 and 30.0 in it, the
+  newest taken, and **both ABIs built and exported `android_main`** — 94
+  seconds for the 64-bit one and 64 for the 32-bit one, from a cold cache.
+  One run is one run.
 - **Nothing here says the package runs.** A build proves that the tree
   compiles for a phone; §236's run on a phone is what proves it draws.
 - **The gate builds the library, not the APK.** The APK is `cargo-apk`'s job,
