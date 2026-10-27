@@ -6808,5 +6808,23 @@ swap crates/model/src/path.rs \
 expect_catch "model: an occurrence's digits are not bounded" \
     "cargo test -p craftkit-model --profile ci an_occurrence_with_too_many_digits_is_refused"
 
+# ------------------------------------------------- the digits a number is read from ----
+# Section 254. `from_str_radix` takes a leading `+`, so the colour parser read
+# "#+f+f+f" as the colour #0f0f0f -- a token that is neither of the two shapes
+# the tree says a colour has, and that the tree's own published pattern
+# rejects.
+swap crates/core/src/value.rs \
+    '        if !h.bytes().all(|b| b.is_ascii_hexdigit()) {' \
+    '        if false {'
+expect_catch "core: a colour is not hex digits and nothing else" \
+    "cargo test -p craftkit-core --profile ci a_colour_is_hex_digits_and_nothing_else"
+
+# And the same in the path's id spelling: "@+f" read as the id 15.
+swap crates/model/src/path.rs \
+    '        if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {' \
+    '        if false {'
+expect_catch "model: an id is not hex digits and nothing else" \
+    "cargo test -p craftkit-model --profile ci a_name_the_grammar_cannot_write_is_refused"
+
 restore
 finish

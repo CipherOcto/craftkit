@@ -26,14 +26,35 @@ impl Color {
     pub const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
     pub const TRANSPARENT: Color = Color { r: 0, g: 0, b: 0, a: 0 };
 
+    /// The shape of a colour, as a pattern.
+    ///
+    /// This is the **one** description of what a colour may look like, and it
+    /// lives beside the parser that reads one. The tree publishes it to the
+    /// MCP server's schema, so the schema a client reads is the rule the
+    /// parser enforces — and cannot drift from it, because it is the same
+    /// string. §254.
+    pub const PATTERN: &'static str = "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$";
+
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 255 }
     }
 
     /// Parse `#rrggbb` or `#rrggbbaa`. The leading `#` is required, so a bare
     /// token can never be mistaken for a colour.
+    ///
+    /// The digits are **hex digits and nothing else**. `u8::from_str_radix`
+    /// accepts a leading `+`, so `"#+f+f+f"` parsed as the colour `#0f0f0f` —
+    /// a token that is neither of the two shapes above, that the tree's own
+    /// published pattern rejects, and that a person would not have meant.
+    /// §254.
     pub fn parse(s: &str) -> Option<Self> {
         let h = s.strip_prefix('#')?;
+        if h.len() != 6 && h.len() != 8 {
+            return None;
+        }
+        if !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
         let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
         let r = byte(0)?;
         let g = byte(2)?;
@@ -435,6 +456,65 @@ mod tests {
         assert_eq!(Value::Bool(true).as_num(), None);
         assert_eq!(Value::Num(1.0).as_bool(), None);
         assert_eq!(Value::Num(1.0).as_text(), None);
+    }
+
+    /// A colour is hex digits and nothing else. §254.
+    ///
+    /// `u8::from_str_radix` takes a leading `+`, so `"#+f+f+f"` used to parse
+    /// as the colour `#0f0f0f` — a token that is neither `#rrggbb` nor
+    /// `#rrggbbaa`, and that the tree's own published pattern rejects.
+    #[test]
+    fn a_colour_is_hex_digits_and_nothing_else() {
+        assert_eq!(Color::parse("#ff00aa"), Some(Color { r: 255, g: 0, b: 170, a: 255 }));
+        assert_eq!(Color::parse("#ff00aa80"), Some(Color { r: 255, g: 0, b: 170, a: 128 }));
+        assert_eq!(Color::parse("#FF00AA"), Some(Color { r: 255, g: 0, b: 170, a: 255 }));
+        // A sign is not a digit.
+        assert_eq!(Color::parse("#+f+f+f"), None, "a sign is not a hex digit");
+        assert_eq!(Color::parse("#+1+2+3"), None, "a sign is not a hex digit");
+        // Neither is anything else.
+        assert_eq!(Color::parse("#gggggg"), None, "g is not a hex digit");
+        assert_eq!(Color::parse("#ff00aazz"), None, "z is not a hex digit");
+        // And the shapes are the two the tree says they are.
+        assert_eq!(Color::parse("#ff"), None, "a colour is six or eight digits");
+        assert_eq!(Color::parse("#fff"), None, "a colour is six or eight digits");
+        assert_eq!(Color::parse("#fffffff"), None, "a colour is six or eight digits");
+        assert_eq!(Color::parse("ff00aa"), None, "the leading # is required");
+    }
+
+    /// The published pattern and the parser are the same rule. §254.
+    ///
+    /// The pattern is a regular expression and the tree has no regular
+    /// expression engine, so the test states the pattern's two shapes — six
+    /// hex digits, or eight — and asks the parser the same question. The
+    /// pattern **string** is pinned beside it, so a change to either is a
+    /// change to one of the two.
+    #[test]
+    fn the_published_pattern_is_the_shape_the_parser_reads() {
+        assert_eq!(Color::PATTERN, "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$");
+        let matches_pattern = |s: &str| {
+            let Some(h) = s.strip_prefix('#') else { return false };
+            (h.len() == 6 || h.len() == 8) && h.bytes().all(|b| b.is_ascii_hexdigit())
+        };
+        for s in [
+            "#ff00aa",
+            "#ff00aa80",
+            "#FF00AA",
+            "#000000",
+            "#+f+f+f",
+            "#+1+2+3",
+            "#ff",
+            "#fff",
+            "#gggggg",
+            "#ff00aazz",
+            "#fffffff",
+            "ff00aa",
+        ] {
+            assert_eq!(
+                Color::parse(s).is_some(),
+                matches_pattern(s),
+                "the parser and the published pattern disagree about {s}"
+            );
+        }
     }
 
     #[test]

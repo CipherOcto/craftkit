@@ -29418,6 +29418,125 @@ one of them by hand. **The published path is the one that matters**: it is
 what a person copies, and it is what the tree itself offers to its own
 commands.
 
+## 254. `from_str_radix` takes a sign, and the tree's colours were read with it
+
+### The finding
+
+**The tree's colour parser accepted a token that is not a colour, and read
+it as a different colour from the one it looked like.**
+
+```rust
+pub fn parse(s: &str) -> Option<Self> {
+    let h = s.strip_prefix('#')?;
+    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+```
+
+`u8::from_str_radix` accepts a leading `+`. The colour's own comment says it
+parses *"`#rrggbb` or `#rrggbbaa`"*, and the MCP server publishes exactly
+that shape to its clients:
+
+```json
+"pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+```
+
+**Neither is what the code did.**
+
+### Measured
+
+```text
+#+f+f+f      -> Some((15, 15, 15))
+#+1+2+3      -> Some((1, 2, 3))
+#+fffff      -> Some((15, 255, 255))
+#ffffff      -> Some((255, 255, 255))
+#ff          -> None
+#gggggg      -> None
+```
+
+Two things are wrong with `"#+fffff"`, and the second is the worse:
+
+- it is **not** a colour — it is neither of the two shapes the tree says a
+  colour has, and the tree's own published pattern rejects it;
+- and it is **not the colour it looks like**. The `+` consumed a digit's
+  place, so `#ffffff` — the colour a person meant — was read as
+  **`#0fffff`**. The tree did not refuse a typo; it **answered** it with a
+  different colour.
+
+**And the same door was open in the path grammar.** An id segment is
+`@<hex>`:
+
+```rust
+return u64::from_str_radix(hex, 16).ok().map(PathSeg::Uid);
+```
+
+so **`@+f` was the id 15** — a spelling the tree never publishes (it writes
+`@f`) and one a person would not have meant.
+
+### Why nothing else would have caught it
+
+- **The engine tries every string as a colour.** `crates/engine/src/params.rs`
+  reads a string parameter as a colour before it reads it as text, so the
+  loose parser was on a live path: `prop.set` with a value of `"#+f+f+f"`
+  stored a colour.
+- **The rule was a copy in two places.** The core's parser and the MCP
+  schema each described a colour, and nothing said they were the same rule —
+  and they were not (§250's lesson: a copy is where a thing drifts).
+- **No test used a sign.** A test of `#ff00aa` passes in both worlds; only a
+  token with a `+` in it tells the two apart.
+- **`from_str_radix` is not wrong.** It reads a number, and a number may
+  have a sign. **The tree asked it for digits and got a number.**
+
+### The fix
+
+**Digits are digits, in both places.**
+
+- `Color::parse` refuses anything that is not exactly six or eight **hex
+  digits** — the length and the characters are checked before anything is
+  read.
+- The path's id segment refuses a sign the same way.
+- And the colour's shape has **one home**: `craftkit_core::Color::PATTERN`,
+  which the MCP schema publishes. The schema a client reads is the rule the
+  parser enforces, because it is the same string.
+
+**Four tests**, each measured failing before the fix:
+
+- `a_colour_is_hex_digits_and_nothing_else` — the core;
+- `the_published_pattern_is_the_shape_the_parser_reads` — the core, the
+  pattern and the parser asked the same question about the same tokens;
+- `the_colour_pattern_the_schema_publishes_is_the_core_own` — the MCP server;
+- and the path's own test, which now says that `@+f` is not a path.
+
+**Two mutations**, in `scripts/mutation-test-gates.sh`: the colour's digit
+check, and the id's.
+
+### What is not claimed
+
+- **No command declares a colour parameter today**, so the MCP schema's
+  colour branch publishes its pattern for nothing at the moment. The branch
+  is exercised by a test, not by a command — and that is a fact about the
+  registry, not about the fix.
+- **The tree's colours that were stored as colours are unchanged.** A design
+  that holds `#ff00aa` still holds `#ff00aa`; only the tokens that were not
+  colours are refused now.
+- **A sign in a *number* is still fine.** The tree's numbers are read with
+  the standard parser, and `-1` is a number a person means. This is about
+  the places where the tree reads **digits**, and asks for them as digits.
+- **The id spelling in a path is unchanged** for every id the tree writes:
+  `@1f4a` is still `@1f4a`.
+
+### The lesson
+
+**Asking a number parser for digits gets you a number.** `from_str_radix`
+reads a *number* written in a base, and a number may be signed; the tree
+wanted **digits**, and the two differ by exactly one character. **A rule that
+says "hex digits" has to be checked as digits**, because the parser it was
+written with will happily accept a sign and hand back a value.
+
+**And the copy of a rule is where the two versions meet.** The core's parser
+and the MCP schema each described a colour; one of them was loose and one
+was strict, and the tree's own schema was the strict one — so the tree
+published a promise it did not keep. **The shape now lives once**, beside the
+code that reads it, and the schema publishes that.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29996,6 +30115,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/core/src/value.rs` | 2 mutations — §251 |
 | **The instrument is not cancelled by a push** | `the_instrument_is_not_cancelled_by_a_push` in `xtask/src/lists.rs` | 2 mutations — §252 |
 | **A path the tree publishes is a path a command accepts** | `a_path_the_tree_publishes_fits_in_the_path_budget` in `crates/model/src/property.rs` | 2 mutations — §253 |
+| **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

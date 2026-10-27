@@ -176,6 +176,12 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
         if hex.is_empty() || hex.len() > 16 {
             return None;
         }
+        // The digits are hex digits and nothing else: `from_str_radix` takes a
+        // leading `+`, so `@+f` read as the id `15` — a spelling the tree
+        // never publishes and a person would not have meant. §254.
+        if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
         return u64::from_str_radix(hex, 16).ok().map(PathSeg::Uid);
     }
     if let Some(digits) = part.strip_prefix('#') {
@@ -449,6 +455,12 @@ mod tests {
         assert!(is_writable("amount#2"));
 
         assert!(!is_writable("a/b"));
+        // The id spelling is hex digits and nothing else: `from_str_radix`
+        // takes a leading `+`, so `@+f` used to read as the id 15. §254.
+        assert!(PropPath::parse("@f").is_some(), "a hex id is a path");
+        assert!(PropPath::parse("@+f").is_none(), "a sign is not a hex digit");
+        assert!(PropPath::parse("@-f").is_none(), "a sign is not a hex digit");
+        assert!(PropPath::parse("@gg").is_none(), "g is not a hex digit");
         assert!(!is_writable("@5"));
         assert!(!is_writable("#2"));
         assert!(!is_writable(""));
