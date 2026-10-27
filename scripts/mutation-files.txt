@@ -21,6 +21,7 @@ clippy.toml
 deny.toml
 .github/workflows/ci.yml
 docs/architecture.md
+skills/craftkit-editing/SKILL.md
 crates/core/Cargo.toml
 crates/core/src/lib.rs
 crates/core/src/ids.rs

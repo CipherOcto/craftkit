@@ -28835,6 +28835,122 @@ one for an afternoon and took it away again. The alternative — a "crash me"
 button in the toolbar — would have been a command in the registry, and every
 command is something a person can press by accident.
 
+## 250. The never-crash table, and the tree it described
+
+### The finding
+
+**The tree's own table of what keeps it from crashing described a tree that is
+not this one.** Four claims in `docs/architecture.md`, and a fifth in a
+document an agent is told to trust:
+
+| the claim | the tree |
+|---|---|
+| *"the nine `crates/*/src/lib.rs`, the three `apps/*/src/main.rs`, and `xtask/src/lib.rs` — thirteen in all"* | **fifteen** roots — and two of them are `apps/*/src/lib.rs`, a shape the table never named |
+| *"`FrameRate::new` refusing 0 and > 1000"* | the core refuses **only 0**; the ceiling is the model's, and the code says so three lines above the same table (§89) |
+| the hard-limits row | it names **nine** of the model's **ten** constants — `MAX_FRAME_RATE` is missing |
+| *"Bounded kernel walks — `craftkit_kernel::MAX_STEPS` (64)"* | a walk **nothing performs**: the tree's own evaluation is bounded by `MAX_NODES` (10 000), a hundred and fifty-six times larger |
+| `skills/craftkit-editing/SKILL.md`: *"the 21-command registry"* | the registry holds **23** — and the same document says *"The 23 ids today"* three lines further down |
+
+**The tree already knew.** `cargo xtask lists` prints, in its own closing
+line, *"15 crate roots share one deny line"* — the gate counted fifteen and
+the document said thirteen, in the same repository, on the same day.
+
+### Why nothing else would have caught it
+
+- **The gate that checks counts in prose checks a spelling.** It looks for a
+  number *immediately before* the word — "21 commands" — so "the
+  **21-command** registry" was invisible to it, and it is the same count in a
+  different shape.
+- **The gate that checks the limits table reads the model's table**, not the
+  copy of it in the architecture document (§74). The copy is a hand-written
+  table of a hand-written table.
+- **The crate roots were counted by hand, in prose, with no gate at all** —
+  and the count was two out of date and the *enumeration* was missing a whole
+  shape.
+
+### The fix
+
+**The table names what it protects, and the gates check the names.**
+
+- The crate-root row names the **shapes** — `crates/*/src/lib.rs`,
+  `apps/*/src/lib.rs`, `apps/*/src/main.rs`, `xtask/src/lib.rs` — and the
+  count is the gate's to print, not the prose's to hold.
+- The frame rate row names `craftkit_model::limits::MAX_FRAME_RATE` and the
+  place the bound is enforced.
+- The hard-limits row names all ten of the model's constants.
+- The walk row names the walk the tree actually performs, and says that the
+  kernel's own chain walk has no caller.
+- And **three new gates**:
+  - `the_never_crash_table_names_every_crate_root` — the row's patterns are
+    expanded against the tree, and a root they do not name is reported;
+  - `the_never_crash_table_names_every_limit` — every constant the model
+    declares must be named in the row;
+  - and the count rule now sees the **hyphenated** shape.
+
+### Measured
+
+**Three breaks, each measured failing**, and each measured passing again
+after the tree was put back:
+
+```text
+# the table forgets a crate root
+$ cargo xtask lists
+error: 1 shared-list problem(s):
+   • the never-crash table does not name the crate root `apps/craftkit/src/lib.rs`,
+     and a root the table does not name is a root the guarantee does not reach
+
+# the table forgets a limit
+$ cargo xtask lists
+error: 1 shared-list problem(s):
+   • the never-crash table's hard-limits row does not name `MAX_FRAME_RATE`,
+     and a limit the table does not name is a limit nobody reads
+
+# a count in a hyphenated shape
+$ cargo xtask lists
+error: 1 shared-list problem(s):
+   • skills/craftkit-editing/SKILL.md: line 26 says there are 21 commands, and there are 23
+```
+
+**And the checks have their own tests** — a fabricated tree with a root the
+table forgets, a fabricated table with a limit it forgets, and a count in a
+hyphenated shape that the counter has to find.
+
+### What is not claimed
+
+- **The gates read the table's rows, not the whole document.** A claim
+  outside the never-crash table that is false is still not caught by these
+  two gates.
+- **The crate-root gate checks the shapes the row names.** A row that names
+  a shape which matches no file would name every root wrongly and be caught —
+  but a row that names *fewer* shapes than the tree has is what this is for.
+- **The limits gate compares the model's declared constants with the row.** A
+  limit the model does not declare is not the row's business.
+- **`KNOWN-GAPS.md` is not in the prose the counts are checked over.** Its
+  "21 commands" is a statement about the day §71 was written, and rewriting it
+  would falsify the history rather than fix it.
+- **The frame rate's ceiling was not moved.** It is the model's, and the
+  model's is what the tree enforces; the table now says so.
+
+### The lesson
+
+**A gate that checks the named thing cannot see a copy of it.** §74's gate
+reads the model's limits table; the architecture document has a *second* table
+of the same constants, and the second one is the one a reader trusts. **A copy
+is where a thing drifts**, and a gate that reads the original cannot see the
+copy.
+
+**And the shape of the prose decides whether the gate can see it.** The count
+rule was written as "a number immediately before the noun" — a rule about
+*spelling*, not about meaning. "21 commands" and "the 21-command registry" are
+the same claim, and the gate could see one of them. **A gate that reads
+prose reads spelling**, so a rule about prose has to be checked against the
+shapes prose actually takes.
+
+**And the tree already knew.** The gate's own closing line said fifteen and
+the document said thirteen. The knowledge was there; it was in the wrong
+place, and nobody compared the two because the two were not supposed to
+differ.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29408,6 +29524,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree is laid out inside the rectangle the platform reports** | `the_insets_are_the_platforms_answer_in_egui_units` in `crates/ui/src/insets.rs` | 2 mutations, and the phone's own run — §247 |
 | **A warning the local compiler does not emit is a warning the runner fails on** | the runner's six jobs — three that run the gates, three that build for a phone | the runner's own compiler — §248 |
 | **A crash on a phone leaves a report another machine can read** | the phone's own run — the report in the application's folder | the phone's own run, and the desktop's own reader — §249 |
+| **The never-crash table names every crate root** | `the_table_names_every_crate_root` in `xtask/src/lists.rs` | 1 mutation — §250 |
+| **The never-crash table names every limit** | `the_table_names_every_limit` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

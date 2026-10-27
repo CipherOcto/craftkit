@@ -368,7 +368,13 @@ fn area_variants(root: &Path) -> Result<usize, String> {
 /// here, and a count in prose is a pattern simple enough to read.
 fn counts_in(text: &str) -> Vec<(usize, usize, &'static str)> {
     let mut found = Vec::new();
-    for (noun, kind) in [(" commands", "commands"), (" areas", "areas")] {
+    // The nouns, and the kind each one counts. The hyphenated forms are the
+    // same count in a different shape: "the 21-command registry" is a count of
+    // commands, and §250 found one that the gate could not see because the
+    // number was not immediately before the word.
+    for (noun, kind) in
+        [(" commands", "commands"), (" areas", "areas"), ("-command", "commands"), ("-area", "areas")]
+    {
         let mut at = 0usize;
         while let Some(found_at) = text[at..].find(noun) {
             let number_at = at + found_at;
@@ -6009,6 +6015,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         Subject::Everything,
         "the question is what names the tree has, and a name a test carries is a name the tree has",
     ),
+    (
+        "the_models_limits",
+        Subject::Production,
+        "the limits are the model's constants, and a constant in a comment is not a limit",
+    ),
 ];
 
 /// The gates that read the tree's Rust source say which view they read.
@@ -6215,16 +6226,13 @@ fn say_the_subject(subject: Subject) -> &'static str {
 /// `MAX_PROPERTIES` to check that the limits are ordered, and that read is
 /// perfectly good code — and it enforces nothing. §150.
 pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
-    let table = root.join("crates/model/src/lib.rs");
-    let source = read_rust(&table, Subject::Production)
-        .map_err(|e| format!("could not read the limits table: {e}"))?;
-    let code = code_lines_kept(&source);
-    let Some((declared, rest)) = limits_table(&code) else {
+    let Some((declared, rest)) = the_models_limits(root)? else {
         return Ok(vec!["the model's limits table could not be found".to_string()]);
     };
     if declared.is_empty() {
         return Ok(vec!["the model's limits table declares no limits at all".to_string()]);
     }
+    let table = root.join("crates/model/src/lib.rs");
     let mut used: Vec<String> = Vec::new();
     for path in rust_files(root) {
         let Ok(text) = read_rust(&path, Subject::Production) else { continue };
@@ -6245,6 +6253,132 @@ pub fn limits_are_enforced(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(problems)
+}
+
+/// The never-crash table, and the crate roots it names.
+///
+/// §250: the table said *"the nine `crates/*/src/lib.rs`, the three
+/// `apps/*/src/main.rs`, and `xtask/src/lib.rs` — thirteen in all"*, and the
+/// tree has **fifteen** roots: two of them are `apps/*/src/lib.rs`, and the
+/// table did not name that shape at all. A table that says where a guarantee
+/// is has to name every place the guarantee is.
+///
+/// The **row** is the claim, so the row is what is read: the document is
+/// where the row lives, and the row is what a reader relies on.
+pub fn the_never_crash_table_names_every_crate_root(root: &Path) -> Result<Vec<String>, String> {
+    let doc = root.join("docs/architecture.md");
+    let text = read_text(&doc).map_err(|e| format!("could not read {}: {e}", doc.display()))?;
+    let Some(row) = table_row(&text, "the six-lint deny") else {
+        return Ok(vec!["the never-crash table has no row for the crate roots".to_string()]);
+    };
+    let mut named: Vec<PathBuf> = Vec::new();
+    for pattern in backticked_paths(&row) {
+        named.extend(expand_pattern(root, &pattern));
+    }
+    let mut problems = Vec::new();
+    for crate_root in crate_roots(root)? {
+        if !named.contains(&crate_root) {
+            problems.push(format!(
+                "the never-crash table does not name the crate root `{}`, and a root the table does \
+                 not name is a root the guarantee does not reach",
+                relative_name(root, &crate_root)
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// The never-crash table's limits row, and the model's limits.
+///
+/// §250: the row listed nine of the model's ten constants. `MAX_FRAME_RATE`
+/// was missing — and the row above it named the **core** as the place a
+/// frame rate is bounded, which is not where the bound is: the core refuses
+/// only a rate of zero (§89).
+pub fn the_never_crash_table_names_every_limit(root: &Path) -> Result<Vec<String>, String> {
+    let Some((declared, _)) = the_models_limits(root)? else {
+        return Ok(vec!["the model's limits table could not be found".to_string()]);
+    };
+    let doc = root.join("docs/architecture.md");
+    let text = read_text(&doc).map_err(|e| format!("could not read {}: {e}", doc.display()))?;
+    let Some(row) = table_row(&text, "| Hard limits |") else {
+        return Ok(vec!["the never-crash table has no row for the hard limits".to_string()]);
+    };
+    let mut problems = Vec::new();
+    for name in declared {
+        if !has_word(&row, &name) {
+            problems.push(format!(
+                "the never-crash table's hard-limits row does not name `{name}`, and a limit the \
+                 table does not name is a limit nobody reads"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// The model's limits, and the code around them.
+///
+/// Read **once**, here, so that the two gates that need the table read the
+/// same table — and so that a copy of these lines cannot become a second
+/// place to forget.
+fn the_models_limits(root: &Path) -> Result<Option<(Vec<String>, String)>, String> {
+    let table = root.join("crates/model/src/lib.rs");
+    let source = read_rust(&table, Subject::Production)
+        .map_err(|e| format!("could not read the limits table: {e}"))?;
+    let code = code_lines_kept(&source);
+    Ok(limits_table(&code))
+}
+
+/// The row of a markdown table that holds a needle.
+///
+/// The row is the **whole line**: a table row is one line, and the claim is
+/// in the cell the needle is in.
+fn table_row(text: &str, needle: &str) -> Option<String> {
+    text.lines().find(|line| line.contains(needle)).map(|line| line.to_string())
+}
+
+/// The paths a table row names in backticks.
+///
+/// Only the ones that end in `.rs`: the row names files, and a backticked
+/// word that is not a file is not one of them.
+fn backticked_paths(row: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut at = 0usize;
+    while let Some(start) = row[at..].find('`') {
+        let open = at + start;
+        let Some(offset) = row[open + 1..].find('`') else { break };
+        let close = open + 1 + offset;
+        let inner = &row[open + 1..close];
+        if inner.ends_with(".rs") {
+            found.push(inner.to_string());
+        }
+        at = close + 1;
+    }
+    found
+}
+
+/// The files a path pattern names in the tree.
+///
+/// A pattern with a `*` names the files under a directory that match the
+/// rest of it — `crates/*/src/lib.rs` names one file per crate — and a
+/// pattern without one names the file itself, if it is there.
+fn expand_pattern(root: &Path, pattern: &str) -> Vec<PathBuf> {
+    let Some((head, tail)) = pattern.split_once('*') else {
+        let exact = root.join(pattern);
+        return if exact.is_file() { vec![exact] } else { Vec::new() };
+    };
+    let dir = root.join(head.trim_end_matches('/'));
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let mut found = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let candidate = entry.path().join(tail.trim_start_matches('/'));
+        if candidate.is_file() {
+            found.push(candidate);
+        }
+    }
+    found
 }
 
 /// The limits the model's table declares, and the rest of the file.
@@ -7147,6 +7281,20 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A limit nobody enforces protects nothing.")),
     );
 
+    // The never-crash table, and the roots it names. §250.
+    problems.extend(
+        the_never_crash_table_names_every_crate_root(root)?.into_iter().map(|p| {
+            format!("{p}\n     A table that says where a guarantee is has to name every place it is.")
+        }),
+    );
+
+    // The never-crash table's limits row, and the model's limits. §250.
+    problems.extend(
+        the_never_crash_table_names_every_limit(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A limit the table does not name is a limit nobody reads.")),
+    );
+
     // A field in the model, and the hash that has to see it. §80.
     problems.extend(
         fingerprint_sees_every_field(root)?
@@ -7334,7 +7482,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              without a file, every symbol claimed to be in a file is in it, every exact block \
              quotes the code it claims to, every limit in prose is the constant's value, every \
              citation of a test points at that test, every control-channel example in prose \
-             could be sent, every limit in the model's table is enforced in code, every \
+             could be sent, every limit in the model's table is enforced in code, the \
+             never-crash table names every crate root and every limit, every \
              number of commands in prose is the registry's number, every boundary that \
              catches a panic is declared in the pattern document, every field the \
              fingerprint hashes is a field the model has, the control channel's \
@@ -8324,8 +8473,7 @@ mod tests {
 
     /// The tree's own limits table: every limit in it is enforced.
     ///
-    /// The real tree, not a copy of it. §74 found a limit in this table that
-    /// nothing enforced, and this is the check that notices the next one.
+    /// The real tree, not a copy of it. §74 found a limit in this table that    /// nothing enforced, and this is the check that notices the next one.
     #[test]
     fn every_limit_in_the_table_is_enforced() {
         let root = crate::root().expect("the workspace root");
@@ -8364,6 +8512,89 @@ mod tests {
         let problems = limits_are_enforced(&dir).expect("the check runs");
         assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The never-crash table names every crate root. §250.
+    ///
+    /// The real tree, and then a copy of it with a root the table forgot.
+    #[test]
+    fn the_table_names_every_crate_root() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_never_crash_table_names_every_crate_root(&root).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // A tree with a crate root the table does not name.
+        let dir = crate::temp::dir("never-crash-roots").expect("a temporary folder");
+        let app = dir.join("apps/thing/src");
+        std::fs::create_dir_all(&app).expect("the fabricated tree");
+        std::fs::write(app.join("lib.rs"), "// a crate root\n").expect("the fabricated root");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(
+            docs.join("architecture.md"),
+            "| the six-lint deny (below) | every crate root: `crates/*/src/lib.rs` and `xtask/src/lib.rs` |\n",
+        )
+        .expect("the fabricated table");
+
+        let problems = the_never_crash_table_names_every_crate_root(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("apps/thing/src/lib.rs"), "{problems:#?}");
+
+        // And with the root named, the table is clean.
+        std::fs::write(
+            docs.join("architecture.md"),
+            "| the six-lint deny (below) | every crate root: `crates/*/src/lib.rs`, `apps/*/src/lib.rs` and `xtask/src/lib.rs` |\n",
+        )
+        .expect("the fabricated table");
+        let problems = the_never_crash_table_names_every_crate_root(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The never-crash table's limits row names every limit. §250.
+    ///
+    /// The real tree, and then a copy of it with a limit the row forgot.
+    #[test]
+    fn the_table_names_every_limit() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_never_crash_table_names_every_limit(&root).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        let dir = crate::temp::dir("never-crash-limits").expect("a temporary folder");
+        let model = dir.join("crates/model/src");
+        std::fs::create_dir_all(&model).expect("the fabricated tree");
+        std::fs::write(
+            model.join("lib.rs"),
+            "pub mod limits {\n    /// A limit.\n    pub const MAX_THING: usize = 7;\n}\n",
+        )
+        .expect("the fabricated table");
+        let docs = dir.join("docs");
+        std::fs::create_dir_all(&docs).expect("the fabricated tree");
+        std::fs::write(docs.join("architecture.md"), "| Hard limits | `MAX_OTHER` 7 |\n")
+            .expect("the fabricated table");
+
+        let problems = the_never_crash_table_names_every_limit(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("MAX_THING"), "{problems:#?}");
+
+        // And with the limit named, the row is clean.
+        std::fs::write(docs.join("architecture.md"), "| Hard limits | `MAX_THING` 7 |\n")
+            .expect("the fabricated table");
+        let problems = the_never_crash_table_names_every_limit(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A count in a hyphenated shape is a count. §250.
+    ///
+    /// "the 21-command registry" is a count of commands, and the gate that
+    /// checks the counts could not see it.
+    #[test]
+    fn a_count_in_a_hyphenated_shape_is_a_count() {
+        let found = counts_in("the 21-command registry and 7 areas");
+        let numbers: Vec<usize> = found.iter().map(|(_, number, _)| *number).collect();
+        assert!(numbers.contains(&21), "{found:?}");
+        assert!(numbers.contains(&7), "{found:?}");
     }
 
     /// A mention in a comment is not enforcement.

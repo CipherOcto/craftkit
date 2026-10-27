@@ -283,16 +283,16 @@ Nothing in a production path panics. This is enforced, not requested:
 
 | Mechanism | Where |
 |---|---|
-| the six-lint deny (below) | every crate root: the nine `crates/*/src/lib.rs`, the three `apps/*/src/main.rs`, and `xtask/src/lib.rs` — thirteen in all |
-| `#![forbid(unsafe_code)]` | the same thirteen roots, plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later |
+| the six-lint deny (below) | every crate root: `crates/*/src/lib.rs`, `apps/*/src/lib.rs`, `apps/*/src/main.rs` and `xtask/src/lib.rs` — and `cargo xtask lists` counts the roots and says if one is missing |
+| `#![forbid(unsafe_code)]` | every one of those roots **but one** — the Android package **denies** unsafe code instead, which is the tree's one named exception (§236) — plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later |
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
-| Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0 and > 1000 |
-| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
+| Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0, and `craftkit_model::limits::MAX_FRAME_RATE` (1 000) refusing a document that runs faster (§89) |
+| Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_FRAME_RATE` 1 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
 | Memory budgets | `craftkit_engine::MAX_SESSION_BYTES` (the documents a session holds) and `craftkit_engine::history::MAX_HISTORY_BYTES` (the undo and redo stacks) are derived from `craftkit_model::limits::MAX_DOCUMENT_BYTES` (§144); `craftkit_engine::MAX_TRACE_BYTES` is the command trace's budget in text, derived from `craftkit_engine::MAX_TRACE_MEMORY_BYTES` (§70) |
 | Command-step budget | `craftkit_engine::MAX_COMMAND_STEPS` (10 000) is how many commands one script or one crash replay may run. One bound for both doors, because the tree prints a replay *as* a script. Derived from the trace's own capacity (the trace holds at most 7 710 steps) and from `craftkit_model::limits::MAX_NODES` (§181) |
 | Bounded file reads | `craftkit_io::format::File::from_text` refuses input over 96 MiB before parsing, then `Document::validate`, then `reseat_id_counter`; the cap is the model's budget times the format's expansion, and the expansion is the worst case over the platforms the tree runs on (§231) |
-| Bounded kernel walks | `craftkit_kernel::MAX_STEPS` (64), refused up front rather than detected by a counter deep in a loop |
+| Bounded walks | the walk the tree actually performs — the evaluation — is bounded by `craftkit_model::limits::MAX_NODES` (10 000), refused up front rather than detected by a counter deep in a loop; the kernel's own chain walk is bounded by `craftkit_kernel::MAX_STEPS` (64) and **nothing in the tree performs it** |
 | The last resort | `Session::execute`'s `catch_unwind`, described above |
 | The gate | `cargo xtask ci` — fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm |
 

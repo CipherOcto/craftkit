@@ -6732,5 +6732,29 @@ swap crates/ui/src/insets.rs \
 expect_catch "ui: an empty rectangle is reserved as an inset" \
     "cargo test -p craftkit-ui --profile ci an_empty_rectangle_is_not_an_inset"
 
+# --------------------------------------- the never-crash table, against the tree ----
+# Section 250. The table said "the nine `crates/*/src/lib.rs`, the three
+# `apps/*/src/main.rs`" and the tree has fifteen roots, two of them under
+# `apps/*/src/lib.rs` — a shape the table did not name at all. A table that
+# says where a guarantee is has to name every place the guarantee is.
+swap docs/architecture.md \
+    '`crates/*/src/lib.rs`, `apps/*/src/lib.rs`, `apps/*/src/main.rs` and `xtask/src/lib.rs`' \
+    '`crates/*/src/lib.rs`, `apps/*/src/main.rs` and `xtask/src/lib.rs`'
+expect_catch "lists: the never-crash table forgets a crate root" "cargo xtask lists"
+
+# The same table's limits row listed nine of the model's ten constants, and
+# `MAX_FRAME_RATE` was the one it left out.
+swap docs/architecture.md \
+    '`MAX_NODES` 10 000, `MAX_FRAME_RATE` 1 000, `MAX_DEPTH` 32' \
+    '`MAX_NODES` 10 000, `MAX_DEPTH` 32'
+expect_catch "lists: the never-crash table forgets a limit" "cargo xtask lists"
+
+# And a count in a hyphenated shape is a count: "the 21-command registry" was
+# two commands out of date, and the gate could not see the shape.
+swap skills/craftkit-editing/SKILL.md \
+    'the 23-command registry' \
+    'the 21-command registry'
+expect_catch "lists: a count in a hyphenated shape is a count" "cargo xtask lists"
+
 restore
 finish

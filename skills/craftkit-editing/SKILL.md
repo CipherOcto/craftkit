@@ -23,7 +23,7 @@ and expensive to notice later.
 | `crates/kernel` | L2 | the numeric ops, behind the panic guard |
 | `crates/eval` | L3 | document → `Plan` |
 | `crates/io` | L3 | the `.craftkit` file: `format.rs`, `format/pending/` |
-| `crates/engine` | L4 | `CommandSpec`, the 21-command registry, `Session::execute`, undo, crash reports |
+| `crates/engine` | L4 | `CommandSpec`, the 23-command registry, `Session::execute`, undo, crash reports |
 | `crates/control` | L5 | the loopback JSON-lines channel |
 | `crates/mcp` | L5 | MCP tools over stdio |
 | `crates/ui` | L6 | `shell`, `icons`, `automation`, `theme`, `raster` — the only crate that may name egui |
