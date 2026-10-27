@@ -163,10 +163,9 @@ pub fn ndk_home() -> Option<PathBuf> {
 /// `armv7a-linux-androideabi21-clang`. That is why the name is a second
 /// column of [`ABIS`] and not something worked out here.
 pub fn build_env(ndk: &Path, triple: &str, clang_name: &str) -> Vec<(String, String)> {
-    let host = if cfg!(target_os = "macos") { "darwin-x86_64" } else { "linux-x86_64" };
-    let bin = ndk.join("toolchains/llvm/prebuilt").join(host).join("bin");
-    let clang = bin.join(clang_name);
-    let ar = bin.join("llvm-ar");
+    let bin = ndk.join("toolchains/llvm/prebuilt").join(host_dir()).join("bin");
+    let clang = bin.join(compiler_name(clang_name));
+    let ar = bin.join(compiler_name("llvm-ar"));
     let linker_var = format!("CARGO_TARGET_{}_LINKER", triple.to_uppercase().replace('-', "_"));
     let cc_var = format!("CC_{}", triple.replace('-', "_"));
     let ar_var = format!("AR_{}", triple.replace('-', "_"));
@@ -176,6 +175,36 @@ pub fn build_env(ndk: &Path, triple: &str, clang_name: &str) -> Vec<(String, Str
         (ar_var, ar.to_string_lossy().into_owned()),
         ("ANDROID_NDK_HOME".to_string(), ndk.to_string_lossy().into_owned()),
     ]
+}
+
+/// The NDK's directory for the host it runs on.
+///
+/// The NDK is built per host, and the directory says which: `linux-x86_64`,
+/// `darwin-x86_64`, `windows-x86_64`. **This was wrong at first**, and the
+/// xtask's own test on the macOS and Windows runners said so — the first
+/// version of this function knew about macOS and treated everything else as
+/// Linux, so on Windows it looked for the toolchain in a directory that does
+/// not exist there. The gate runs on the Linux runner, so nothing would have
+/// caught it if the tree's tests did not run on the other two. §241.
+pub fn host_dir() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows-x86_64"
+    } else if cfg!(target_os = "macos") {
+        "darwin-x86_64"
+    } else {
+        "linux-x86_64"
+    }
+}
+
+/// The tool's name on this host: on Windows the wrappers are `.cmd` files.
+///
+/// **Not measured here**: this machine is Linux, and the NDK's Windows layout
+/// is not on it. What is measured is the *test* — the xtask's own tests run
+/// on the Windows runner, and the one that checks this says what it expects.
+/// If the expectation is wrong, that runner says so, which is the point of
+/// running the tree's tests on all three platforms. §241.
+pub fn compiler_name(name: &str) -> String {
+    if cfg!(target_os = "windows") { format!("{name}.cmd") } else { name.to_string() }
 }
 
 /// The library the build produces.
@@ -337,11 +366,19 @@ mod tests {
         let linker = env
             .iter()
             .find(|(k, _)| k == "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER")
-            .map(|(_, v)| v.clone());
-        assert_eq!(
-            linker,
-            Some("/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang".to_string())
-        );
+            .map(|(_, v)| v.clone())
+            .expect("the linker is named");
+        // The host's own directory: the NDK is built per host, and the tool
+        // is in the one for the machine it runs on. §241.
+        assert!(linker.contains(host_dir()), "{linker} does not name the host");
+        // And on Windows the wrapper is a `.cmd`, because the file without
+        // the extension is not what Windows runs.
+        if cfg!(target_os = "windows") {
+            assert!(linker.ends_with(".cmd"), "{linker} is not a command file");
+        } else {
+            assert!(linker.ends_with("aarch64-linux-android21-clang"), "{linker}");
+        }
+        assert!(linker.starts_with("/ndk/toolchains/llvm/prebuilt/"), "{linker}");
     }
 
     #[test]

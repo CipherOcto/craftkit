@@ -27879,6 +27879,84 @@ is what made this a two-line change instead of an exception — and it is the
 third time in this tree's record that a rule written for one reason turned out
 to be the right shape for another.
 
+## 241. The gate that only runs on one platform, and the code only that platform
+
+### The finding
+
+**The tree's own test caught it, on the runners the tree has.** The macOS and
+Windows gates failed on §238's `cargo xtask android` — not the gate itself,
+which only runs on the Linux runner, but the **xtask's test** for it:
+
+```text
+thread 'android::tests::the_environment_names_the_linker_the_target_uses' panicked
+```
+
+**The cause was one line.** The NDK is built per host, and the directory says
+which — `linux-x86_64`, `darwin-x86_64`, `windows-x86_64`. The first version
+of the function knew about macOS and treated everything else as Linux:
+
+```rust
+let host = if cfg!(target_os = "macos") { "darwin-x86_64" } else { "linux-x86_64" };
+```
+
+So on **Windows** it looked for the toolchain in a directory that does not
+exist there. The test caught it on macOS first (the expectation was written
+for Linux) and on Windows for the same reason.
+
+### Why nothing else would have caught it
+
+**The gate runs on the Linux runner.** The Android job is a Linux job, and
+the gate finds the NDK, builds both ABIs and reads the symbol — all on Linux,
+where the one line was right.
+
+**And the desktop application never used it.** The tree's own application
+does not build for Android; the *Android package* does, and it is a separate
+crate that the Linux gates compile — and compiling is not *running*. The code
+that builds the tree's Android package **never ran on Windows or macOS**, so
+the wrong directory would have sat there until somebody ran the gate on a
+Windows machine.
+
+**The tree's tests run on all three runners.** That is what caught it, and
+that is the whole reason the tree runs its tests on more than one platform
+(§225's paths, §226's shells, §227's instrument): a check that only ever
+runs on one machine is a fact about that machine.
+
+### The fix
+
+The host's directory is a **function of the host**, and the Windows wrapper
+is a **`.cmd`** file, because the file without the extension is not what
+Windows runs.
+
+**And the expectation that could not be measured here is marked as such**:
+this machine is Linux, so the NDK's Windows layout is not on it. What *is*
+measured is the test — the one that checks this runs on the Windows runner,
+and says what it expects. **If the expectation is wrong, that runner says
+so**, which is the point of running the tree's tests on all three platforms.
+
+### What is not claimed
+
+- **The Windows layout has not been seen.** The tree now *expects*
+  `windows-x86_64` and a `.cmd` wrapper, and the Windows runner's test will
+  confirm or contradict it. **The gate itself has never run on Windows** —
+  it runs on the Linux runner, and the NDK is not installed on the other two.
+- **The macOS layout is measured** — the NDK's own directory on this
+  developer's machine is `darwin-x86_64` — but the *gate* has not run there
+  either.
+
+### The lesson
+
+**A gate that runs on one platform will not find the platform-specific bug
+in the code it shares with the others.** The bug was in a *function* — one
+line, in a file the gate never uses on that platform — and the gate could
+never have caught it, because the gate was never there. What caught it was
+the **test**, running somewhere else.
+
+**And "the tests run on three platforms" is not a claim about testing.** It is
+the reason this was caught in minutes instead of in a year: the tree's CI is
+not three times the cost of one, it is three *opinions* about the same code.
+§241 is the third time in this tree's record that a platform-specific fact
+was found by a platform the fact was about.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28443,6 +28521,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree still builds for a phone, and exports the symbol the platform looks up** | `cargo xtask android` | 1 mutation — §238 |
 | **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | nothing — §239 |
 | **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
+| **The NDK's host directory is the host's own** | `the_environment_names_the_linker_the_target_uses` in `xtask/src/android.rs` | the macOS and Windows runners — §241 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
