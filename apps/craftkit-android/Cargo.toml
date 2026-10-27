@@ -20,12 +20,12 @@ path = "src/lib.rs"
 [dependencies]
 # The application itself — the window, the session and the shell are the same
 # code the desktop application runs.
-craftkit = { path = "../craftkit" }
+craftkit = { workspace = true }
 # The handle the platform hands the application, and the feature that turns on
 # the platform's event loop and the glue crate that carries the activity's
 # events. The version is the one `egui-winit` already uses, so there is one
 # `winit` in the build and not two.
-winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+winit = { workspace = true, features = ["android-native-activity"] }
 # The same feature, on the frame: it is what tells `eframe` to build the event
 # loop from the activity's handle.
 eframe = { workspace = true, features = ["android-native-activity"] }

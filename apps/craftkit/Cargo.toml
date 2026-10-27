@@ -35,4 +35,4 @@ craftkit-ui = { workspace = true }
 # be able to name it. The version is the one `egui-winit` already uses, so
 # there is one `winit` in the build and not two. §236.
 [target.'cfg(target_os = "android")'.dependencies]
-winit = { version = "0.30", default-features = false }
+winit = { workspace = true }
