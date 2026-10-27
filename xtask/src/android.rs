@@ -378,7 +378,49 @@ mod tests {
         } else {
             assert!(linker.ends_with("aarch64-linux-android21-clang"), "{linker}");
         }
+        // The path is compared as a **path**, not as a spelling: a path on
+        // Windows spells its separators with backslashes, and the same path
+        // with forward slashes is the same path. §241, §243.
+        let linker = normalized(&linker);
         assert!(linker.starts_with("/ndk/toolchains/llvm/prebuilt/"), "{linker}");
+    }
+
+    /// A path, with its separators spelled the same way on every machine.
+    ///
+    /// Windows spells a separator with a backslash and Linux with a
+    /// forward slash, and **both spellings are the same path**. A check
+    /// that compares the spelling fails on one machine and passes on the
+    /// other, and the machine it fails on is the one that was never asked.
+    ///
+    /// The rule is a function of a string, so a test can ask it about a
+    /// path from the other platform on this one — which is how the Windows
+    /// runner's failure became a check that runs everywhere. §243.
+    fn normalized(path: &str) -> String {
+        path.replace('\\', "/")
+    }
+
+    /// A path from another platform is compared as the same path.
+    ///
+    /// The check that failed on the Windows runner was a comparison of a
+    /// path against a spelling, and this is the same comparison with the
+    /// spelling taken out — so it runs on the machine that writes it.
+    #[test]
+    fn a_path_is_compared_as_a_path_and_not_as_a_spelling() {
+        // The shape the tree's own test uses: a root-relative path, with no
+        // drive letter. Windows spells its separators with backslashes, and
+        // the same path with forward slashes is the same path.
+        let windows = r"\ndk\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android21-clang.cmd";
+        assert!(normalized(windows).starts_with("/ndk/toolchains/llvm/prebuilt/"), "{windows}");
+        // And the same path, spelled the other way, is the same path.
+        assert_eq!(
+            normalized(windows),
+            normalized("/ndk/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd")
+        );
+        // A drive letter is a prefix of its own, and the tree's paths are
+        // root-relative — so the comparison is about the path, not about
+        // where the machine keeps its drives.
+        let with_drive = format!("C:{windows}");
+        assert!(normalized(&with_drive).contains("/ndk/toolchains/llvm/prebuilt/"), "{with_drive}");
     }
 
     #[test]

@@ -28063,6 +28063,88 @@ like a file that cannot grow.
 in the same sentence as the fix, three lines from the end of the section,
 and it took a second visit to see it as a gap rather than as a footnote.
 
+## 243. A path is not a string, and the runner that failed was the one that was right
+
+### The finding
+
+**The Windows runner failed the tree's own test, and the test was wrong.**
+
+The failure was in `the_environment_names_the_linker_the_target_uses`, the
+test that checks the Android gate names the linker the target uses. The
+assertion that failed was this one:
+
+```text
+assert!(linker.starts_with("/ndk/toolchains/llvm/prebuilt/"), "{linker}");
+```
+
+and the path it was given was this:
+
+```text
+\ndk\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android21-clang.cmd
+```
+
+**The same path, spelled the other way.** On Windows a separator is a
+backslash, and the test asked a *spelling* whether it was a path. The path
+was right; the question was not.
+
+### Why nothing else would have caught it
+
+- the test **passes** on Linux and on macOS, because there the separator is
+  a forward slash and the spelling matches;
+- the tree's Android gate runs on the Linux runner, so the gate never built
+  a Windows path;
+- and the tree's CI **runs the tree's tests on three platforms** — which is
+  the only reason this was found at all.
+
+§241 was the same shape: a platform-specific fact in a function the gate
+never uses on that platform, found by a **test** running somewhere else.
+§243 is the second time, and the second time in the *same file*.
+
+### The fix: compare paths, not spellings
+
+The comparison now goes through a helper that spells the separators the same
+way on every machine:
+
+```text
+fn normalized(path: &str) -> String {
+    path.replace('\\', "/")
+}
+```
+
+And because the rule is **a function of a string**, a test can ask it about
+the *other* platform's path on this one:
+
+```text
+\ndk\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android21-clang.cmd
+```
+
+normalizes to the same text as the same path with forward slashes — and that
+test runs on Linux, on macOS and on Windows alike. The defect the Windows
+runner found is now a check that runs everywhere.
+
+### What is not claimed
+
+- **The NDK's Windows layout is still not measured here.** §241's note
+  stands: this machine is Linux, and what the NDK's Windows directory is
+  called is not on it. What is measured now is the tree's own **comparison**
+  of a path, and the Windows runner is what says the rest.
+- The tree's other path comparisons were not audited in this pass. The
+  helper is there for the next one; the rule is "a path is a path, not a
+  spelling".
+
+### The lesson
+
+**A path is not a string, and the platform that disagrees is the platform
+that was never asked.** The test was written on a machine whose separator is
+a forward slash, so the spelling and the path were the same thing in the
+test's world, and the check was about the wrong thing without saying so.
+
+**And the fix is to move the question into something that can be asked
+anywhere.** A rule that can only be checked on the platform it is about will
+be checked on that platform once — in CI, by accident, because the tree runs
+its tests on three machines — and a rule that can be asked anywhere is asked
+everywhere.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28629,6 +28711,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
 | **The NDK's host directory is the host's own** | `the_environment_names_the_linker_the_target_uses` in `xtask/src/android.rs` | the macOS and Windows runners — §241 |
 | **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
+| **A path is compared as a path, not as a spelling** | `a_path_is_compared_as_a_path_and_not_as_a_spelling` in `xtask/src/android.rs` | the Windows runner — §243 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
