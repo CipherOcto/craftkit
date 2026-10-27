@@ -27742,13 +27742,22 @@ only the older flag-based call, and that call is what the tree uses.
 2. **JNI from Rust.** `setDecorFitsSystemWindows` from the native side. That
    is `unsafe`, and the tree's rule is one named exception, not two.
 
-**And a third way, which is the tree's own**: ask the platform where the
-content is. `AndroidApp::content_rect()` is a **safe** call and reports the
-activity's content area — if it is smaller than the window, the shell could
-reserve the difference itself, the way a desktop window reserves its frame.
-**That has not been measured**: the application's own output does not reach
-the device (a `NativeActivity`'s stdout goes nowhere — §236), so the numbers
-would have to be drawn on the screen to be read. It is the first thing to try.
+**And a third way, which is the tree's own: measured, and it does not
+work.** Ask the platform where the content is. `AndroidApp::content_rect()` is
+a **safe** call and reports the activity's content area — if it were smaller
+than the window, the shell could reserve the difference itself, the way a
+desktop window reserves its frame.
+
+**Measured on the phone, in both orientations: `content_rect [0,0,0,0]`.**
+The platform reports an **empty** rect, so the call carries no information
+about the insets. (It was measured by drawing the numbers on the screen and
+reading them from a screenshot, because a `NativeActivity`'s own output does
+not reach the device — §236 — and the drawing code was taken out again
+afterwards.)
+
+So the landscape case needs the theme or the JNI, and the tree has neither.
+**It stays open**, and it is a small thing: the clock overlaps the toolbar's
+first row in landscape, and nothing else is wrong.
 
 ### The lesson
 
@@ -30689,9 +30698,10 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     **And a third end: the window in landscape.** The status bar overlap is
     fixed in portrait (§239) and **not** in landscape, where the system
     reserves 96 px for the rotated navigation bar and the window covers it
-    anyway. The three ways to fix it are a theme in a manifest the tree does
-    not own, JNI the tree does not do, or the tree's own — ask
-    `AndroidApp::content_rect()` and reserve the difference, which is **not
-    measured yet**, because the application's own output does not reach the
-    device and the numbers would have to be drawn on the screen to be read.
+    anyway. The tree's own way — ask `AndroidApp::content_rect()` and reserve
+    the difference — is **measured and empty**: the platform reports
+    `[0,0,0,0]` in both orientations (§239). So the two ways left are a theme
+    in a manifest the tree does not own, and JNI the tree does not do. It is
+    a small thing: the clock overlaps the toolbar's first row in landscape,
+    and nothing else is wrong.
 
