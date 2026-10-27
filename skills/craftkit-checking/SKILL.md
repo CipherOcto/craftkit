@@ -298,7 +298,7 @@ cargo run --release -p craftkit -- --sample --control 4711
 ```
 
 Flags: `--sample`, `--control PORT`, an optional `[FILE]`, `-h`, `-V`
-(`parse_flags` in `apps/craftkit/src/main.rs`). An unreadable file still yields a usable session
+(`parse_flags` in `apps/craftkit/src/lib.rs`). An unreadable file still yields a usable session
 rather than refusing to start.
 
 ### c. The control channel
@@ -365,7 +365,7 @@ how you write one, and an empty text clears it. §110.
 
 **`ui.*` works in the desktop app.** `craftkit-control` is layer 5 and
 `craftkit-ui` is layer 6, so the channel does not draw: the host installs a
-handler with `ServerOptions::with_ui` (`apps/craftkit/src/main.rs`'s `ServerOptions::with_ui`) and a
+handler with `ServerOptions::with_ui` (`apps/craftkit/src/lib.rs`'s `ServerOptions::with_ui`) and a
 process without a UI leaves it unset, which is what answers `no-window`. The
 handler draws a **fresh** frame into a new egui context via
 `craftkit_ui::raster::render`, so it needs no GPU and no window:

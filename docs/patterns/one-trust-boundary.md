@@ -22,7 +22,7 @@ tested.
 | `craftkit_kernel::guard`, around the arithmetic the evaluator calls per frame | panics in code craftkit does not own | nothing — kernel calls take immutable input and return a new value | `KernelError::Internal` |
 | `Session::execute` | everything else, including a panic in our own future command | the pre-command document snapshot | `EngineError::Internal` |
 | the control channel's `ui.*` handler (`crates/control/src/server.rs`) | a panic in the host's window handler, which runs with the session locked | nothing — the document is not touched, and catching here keeps the lock from being poisoned | a `handler-panicked` error, and the connection stays good |
-| the render path (`apps/craftkit/src/main.rs`) | a panic in the drawing code | nothing — the document is not touched | a crash report, written from the only place that can still see the session |
+| the render path (`apps/craftkit/src/lib.rs`) | a panic in the drawing code | nothing — the document is not touched | a crash report, written from the only place that can still see the session |
 
 The last two are here because of a **lock**, and neither of them is a general
 safety net:

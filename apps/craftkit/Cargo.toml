@@ -1,6 +1,6 @@
 [package]
 name = "craftkit"
-description = "The craftkit desktop application: a window, a document, and a control channel."
+description = "The craftkit application: a window, a document, and a control channel."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,11 @@ publish = false
 
 [lints]
 workspace = true
+
+# The application is a library, and the desktop binary is one of its entry
+# points. The Android package is the other, and it is its own crate: the
+# platform's loader opens a shared library and looks up a symbol in it by
+# name, and that is the one thing the tree cannot forbid. §236.
 
 [[bin]]
 name = "craftkit"
@@ -24,3 +29,10 @@ craftkit-engine = { workspace = true }
 craftkit-io = { workspace = true }
 craftkit-control = { workspace = true }
 craftkit-ui = { workspace = true }
+
+# Android only, and only for the *type* of the handle the platform hands the
+# application: `eframe` takes it in `NativeOptions`, so the application has to
+# be able to name it. The version is the one `egui-winit` already uses, so
+# there is one `winit` in the build and not two. §236.
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { version = "0.30", default-features = false }

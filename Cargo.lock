@@ -422,6 +422,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "winit",
 ]
 
 [[package]]

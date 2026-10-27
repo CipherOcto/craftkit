@@ -187,7 +187,7 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
         "crates/kernel/src/lib.rs",
         "crates/engine/src/session.rs",
         "crates/control/src/server.rs",
-        "apps/craftkit/src/main.rs",
+        "apps/craftkit/src/lib.rs",
     ];
     const DOCUMENT: &str = "docs/patterns/one-trust-boundary.md";
 
@@ -8771,7 +8771,7 @@ mod tests {
         std::fs::write(
             docs.join("one-trust-boundary.md"),
             "The boundaries are `crates/kernel/src/lib.rs`, `crates/engine/src/session.rs`, \
-             `crates/control/src/server.rs` and `apps/craftkit/src/main.rs`.\n",
+             `crates/control/src/server.rs` and `apps/craftkit/src/lib.rs`.\n",
         )
         .expect("the fabricated document");
         // A test outside a module, catching a panic.
@@ -9660,7 +9660,7 @@ fn also_production() {}
         std::fs::write(
             docs.join("one-trust-boundary.md"),
             "crates/kernel/src/lib.rs crates/engine/src/session.rs crates/control/src/server.rs \
-             apps/craftkit/src/main.rs\n",
+             apps/craftkit/src/lib.rs\n",
         )
         .expect("the fabricated document");
 

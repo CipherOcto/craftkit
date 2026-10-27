@@ -915,7 +915,7 @@ expect_catch "control: the default stops being loopback-only" \
 
 # The realistic way the boundary goes is not a flipped default but somebody
 # setting the flag where the server is built.
-append apps/craftkit/src/main.rs \
+append apps/craftkit/src/lib.rs \
     '// let options = ServerOptions { allow_remote: true, ..Default::default() };'
 expect_catch "control: a binary sets the flag that opens the channel to the network" \
     "cargo test -p craftkit-control --profile ci"
@@ -1370,9 +1370,9 @@ expect_catch "docs: the format's example file is not what the document says" \
 swap xtask/src/lists.rs \
     '        "crates/engine/src/session.rs",
         "crates/control/src/server.rs",
-        "apps/craftkit/src/main.rs",' \
+        "apps/craftkit/src/lib.rs",' \
     '        "crates/engine/src/session.rs",
-        "apps/craftkit/src/main.rs",'
+        "apps/craftkit/src/lib.rs",'
 expect_catch "docs: a boundary that catches a panic is not declared" \
     "cargo xtask lists"
 
@@ -1394,7 +1394,7 @@ expect_catch "prose: the number of commands is not the registry's number" \
 # session was locked wrote *no report at all*, and the hook's own comment used
 # to name that case as the one it existed for. The render path catches it now,
 # because that is the one place that can still see the session.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(session)));' \
     '    let outcome: Result<(), Box<dyn std::any::Any + Send>> = Ok(());
     draw(session);'
@@ -1478,7 +1478,7 @@ expect_catch "control: the ui.click method name stops deciding what a ui request
 # The click reply said `clicked \`toolbar.node.duplicate\`` — three in a row
 # against a live app, with the document byte-identical afterwards. A click is a
 # hit test; the sentence must not claim the other thing.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '        Some(name) => format!(
             "`{name}` is at that point; a click reports where it landed and does not activate \
              anything — run it with `engine.execute`"
@@ -3119,7 +3119,7 @@ expect_catch "ui: a click by name lands somewhere else" \
 
 # The widgets reply carries the rectangles, so an agent can say where a
 # widget is without guessing. §104.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '                        Json::from(rect.width()),' \
     '                        Json::from(0.0),'
 expect_catch "ui: the published rectangles have no width" \
@@ -3193,7 +3193,7 @@ expect_catch "ui: a click by name looks for the widget on the empty screen" \
 
 # The channel was handed a state of its own instead of the window's, so the
 # screen it described was not the screen the window was showing. §106.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '            let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             ui_request(session, request, &guard)' \
     '            let _guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -3203,7 +3203,7 @@ expect_catch "ui: the channel reports a screen of its own" \
 
 # The `selected` parameter was ignored, so an agent could not ask about a
 # screen with a node selected -- and the properties panel stayed invisible. §106.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '    state.selected = Some(node);' \
     '    state.selected = None;'
 expect_catch "ui: the selected node is ignored" \
@@ -3211,7 +3211,7 @@ expect_catch "ui: the selected node is ignored" \
 
 # A node that is not in the document was accepted, and answered with an empty
 # panel instead of a refusal. §106.
-swap apps/craftkit/src/main.rs \
+swap apps/craftkit/src/lib.rs \
     '    if session.node(node).is_none() {' \
     '    if session.node(node).is_some() {'
 expect_catch "ui: a selected node that is not there is accepted" \
