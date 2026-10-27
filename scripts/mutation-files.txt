@@ -48,6 +48,7 @@ crates/ui/src/lib.rs
 crates/ui/src/automation.rs
 crates/ui/src/shell.rs
 crates/ui/src/raster.rs
+crates/ui/src/insets.rs
 crates/mcp/src/lib.rs
 crates/mcp/src/server.rs
 crates/mcp/src/rpc.rs

@@ -6712,5 +6712,25 @@ swap xtask/src/lib.rs \
 expect_catch "gate: a failing gate throws away the evidence of its failure" \
     "cargo test -p xtask --profile ci a_failing_command_leaves_its_output_behind"
 
+# ------------------------------------------- the safe area, in the tree's units ----
+# Section 247. The platform reports the rectangle the application may draw in,
+# in pixels; `egui` lays out in points. The division by the scale factor is
+# the whole of the conversion, and a conversion that forgets it puts the
+# toolbar a whole screen-height out of place.
+swap crates/ui/src/insets.rs \
+    '    let points = |pixels: i32| pixels as f32 / pixels_per_point;' \
+    '    let points = |pixels: i32| pixels as f32;'
+expect_catch "ui: the safe area forgets the scale factor" \
+    "cargo test -p craftkit-ui --profile ci the_insets_are_the_platforms_answer_in_egui_units"
+
+# The other half: an empty rectangle is what the platform reports before it
+# has laid the window out, and an empty rectangle reserved as an inset would
+# take the whole screen away from the application.
+swap crates/ui/src/insets.rs \
+    '    let content = content.content()?;' \
+    '    let content = content;'
+expect_catch "ui: an empty rectangle is reserved as an inset" \
+    "cargo test -p craftkit-ui --profile ci an_empty_rectangle_is_not_an_inset"
+
 restore
 finish

@@ -27761,6 +27761,13 @@ So the landscape case needs the theme or the JNI, and the tree has neither.
 **It stays open**, and it is a small thing: the clock overlaps the toolbar's
 first row in landscape, and nothing else is wrong.
 
+> **§247 overturned this.** The last paragraph was wrong in the same way a
+> true measurement can be wrong: `content_rect` answered `[0,0,0,0]` because
+> the flag that carries the answer — `LAYOUT_IN_SCREEN` — had been removed
+> four lines above, by this section's own fix. With the two flags together
+> the platform reports the rectangle, and the tree lays out inside it. The
+> theme and the JNI were never needed, and the landscape overlap is closed.
+
 ### The lesson
 
 **A defect that was in the first screenshot is a defect nobody looked at.**
@@ -28495,6 +28502,160 @@ is a fact about a dependency, and a fact about a dependency is either
 worked around or waited for — and waiting for it is what the owner chose
 for the second half.
 
+## 247. The rectangle the platform reports, and the flag that carried it
+
+### The finding
+
+**§239 wrote the landscape overlap off as closed to the tree.** Its words:
+*"So the landscape case needs the theme or the JNI, and the tree has neither.
+It stays open."* And it gave its reason: *"`AndroidApp::content_rect()` is a
+safe call and reports the activity's content area — if it were smaller than
+the window, the shell could reserve the difference itself, the way a desktop
+window reserves its frame"* — with the measurement:
+
+```text
+Measured on the phone, in both orientations: content_rect [0,0,0,0].
+```
+
+**The measurement was right and the conclusion was wrong, and the difference
+is one flag.**
+
+`LAYOUT_INSET_DECOR` is the flag that makes the window manager report the
+inset rectangle — and it reports it **only when the window is laid out in the
+screen**. §239's fix *removed* `LAYOUT_IN_SCREEN`, so the platform was
+answering an empty rectangle because the mechanism was switched off.
+
+Measured on the phone, with the two flags together:
+
+| the window's flags | the platform's answer |
+|---|---|
+| `LAYOUT_IN_SCREEN` removed — what §239 shipped | `[0,0,0,0]`, nothing at all |
+| `LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR` | portrait `(0,167,720,1504)`, landscape `(0,167,1449,720)` |
+
+**And the rectangle is the platform's own.** In landscape the window sits at
+the display's `x=55`, and the reported right edge `1449 + 55 = 1504` is
+exactly the window manager's content frame; the bottom edge `1504` is the
+navigation bar's `1600 - 96`. The rectangle is not an estimate — it is the
+window manager's own frame, in the window's own coordinates.
+
+### The fix
+
+**`egui` already has the mechanism, and it is the one §239 was looking for:
+the safe area.** `RawInput::safe_area_insets` is subtracted from the
+viewport, and every panel is laid out inside what is left — the toolbar, the
+node list, the properties panel, the central panel, all of them.
+
+So the two halves are:
+
+- the **application** asks the platform for the rectangle
+  (`AndroidApp::content_rect()`, a safe call, no Java and no JNI) and hands it
+  to `egui` in `raw_input_hook` — eframe's hook, which runs before every
+  frame;
+- the **arithmetic** is the tree's own: `craftkit_ui::insets` turns the
+  platform's **pixels** into `egui`'s **points**, and refuses to answer when
+  the platform has not said anything — an empty rectangle is not an inset,
+  and a scale factor that is not a number is not an answer.
+
+The desktop has no insets, and the hook does nothing there.
+
+### Measured on the phone
+
+Before and after, on the tree's own build, on the 32-bit phone.
+
+**Portrait, before** — the clock over the toolbar's first row, and the
+navigation bar over the tree's own status line:
+
+```text
+(what the screen showed:  15:03 over "Document | Set note | …"
+                           and the navigation bar's square, circle and
+                           triangle over "added filter `filter 4`")
+```
+
+**Portrait, after** — the status bar is the platform's, the tree's toolbar is
+below it, and the tree's status line is above the navigation bar:
+
+```text
+(the clock row on its own:  15:14 … 99%
+ the toolbar below it:       Document | Set note | ⓘ | Set range | …
+ the tree's status line:     Ready.                       3 nodes  saved
+ the navigation bar:         in its own strip, below the tree's status line)
+```
+
+**Landscape, before** — the clock over the toolbar's first row:
+
+```text
+(the screen showed:  14:28 over "Document | Set note | ⓘ | Rename plan")
+```
+
+**Landscape, after** — the clock is clear of the toolbar, and the content is
+clear of the navigation bar on the right:
+
+```text
+(the clock row on its own:  15:23 … 99%
+ the toolbar below it:       Document | Set note | ⓘ | Set range | …
+ the navigation bar:         in its own strip, on the right)
+```
+
+**And the taps still land.** The band moved the widgets, so the question is
+whether the pointer still finds them: the "Add node" button, in the row that
+used to be under the clock, was tapped and the node was added — the tree's
+own status line said *"added filter `filter 4`"* and the count went from
+three nodes to four. A layout that pushes the buttons down and the taps with
+them would have been a silent way to lose the input.
+
+### What enforces it
+
+- `the_insets_are_the_platforms_answer_in_egui_units` — the platform's pixels
+  become `egui`'s points, and the rectangle that is left is the platform's;
+- `an_empty_rectangle_is_not_an_inset` — the platform's "I have not said
+  anything yet" is not an inset that takes the whole screen;
+- `a_scale_factor_that_is_not_a_number_is_not_an_answer` — zero, negative and
+  `NaN` are refused rather than dividing by zero or turning the inset inside
+  out;
+- `an_inset_is_never_negative` — a platform that reports a rectangle larger
+  than the window reserves nothing on that side;
+- and **two mutations**: one that drops the division by the scale factor, and
+  one that reserves the empty rectangle. Both were measured failing.
+
+### What is not claimed
+
+- **The band at the top is the platform's, not the tree's.** The platform says
+  the top inset is **167 pixels**; the visible clock row ends at **55**. The
+  phone is a Xiaomi M2006C3LII (a Redmi Note 9), and MIUI's status-bar region
+  is taller than the row of icons inside it. The tree does not second-guess
+  the platform: it reserves what the platform says, and on a device whose
+  platform reserves 55 the band is 55. **The number has not been measured on
+  any other device** — the 64-bit phone has not been attached.
+- **The tree does not hide the system bars.** `FULLSCREEN` would take the
+  band away and the clock with it, and that is a decision about what a person
+  sees, not a defect to be fixed quietly.
+- **The platform's keyboard is still deferred** (§246): the tree draws its
+  own, and the safe area does not change that.
+- **Nothing about the desktop changed**, and nothing about the tree's own
+  rasteriser changed: the hook asks the platform, and the desktop has no
+  platform to ask.
+
+### The lesson
+
+**A measurement taken with the mechanism switched off is not a measurement of
+the mechanism.** §239 measured `content_rect` and got an empty rectangle, and
+the empty rectangle was *true*: the flag that carries the answer had been
+removed four lines earlier in the same file, by the same fix, for a good
+reason. The tree then concluded from a true measurement that the platform had
+nothing to say — and the platform had something to say the whole time.
+
+**The conclusion was the expensive half.** "The tree has neither the theme nor
+the JNI" is a sentence that reads like a wall, and it would have stayed a
+wall: no one goes looking for a third road behind a sentence that says there
+is no third road.
+
+**And the third road was already in the dependency.** `egui` 0.33 has the safe
+area, `eframe` 0.33 has the hook that fills it (`App::raw_input_hook`, called
+before every frame on the native path as well as the web one), and
+`android-activity` 0.6 has the call that reports the rectangle — three crates
+the tree already used, and a fix that needed **no new dependency, no Java,
+no JNI and no second unsafe exception**.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29057,7 +29218,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The keyboard opens, and the text does not arrive** | the device's own run — the keyboard on the screen, and what the field holds afterwards | nothing — §236 |
 | **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs` | the optimiser itself — §237 |
 | **The tree still builds for a phone, and exports the symbol the platform looks up** | `cargo xtask android` | 1 mutation — §238 |
-| **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | nothing — §239 |
+| **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | the phone's own run, and §247 |
 | **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
 | **The NDK's host directory is the host's own** | `the_environment_names_the_linker_the_target_uses` in `xtask/src/android.rs` | the macOS and Windows runners — §241 |
 | **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
@@ -29065,6 +29226,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The log's file is private** | `the_logs_file_is_private` in `apps/craftkit/src/lib.rs` | 1 mutation — §244 |
 | **The tree's own keyboard types into the field that has the focus** | `the_trees_own_keyboard_types_into_the_field_that_has_the_focus` in `crates/ui/src/shell.rs` | the phone's own run — §246 |
 | **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
+| **The tree is laid out inside the rectangle the platform reports** | `the_insets_are_the_platforms_answer_in_egui_units` in `crates/ui/src/insets.rs` | 2 mutations, and the phone's own run — §247 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

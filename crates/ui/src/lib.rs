@@ -21,6 +21,7 @@
 //! - [`icons`] — every icon, drawn in code from original coordinates.
 //! - [`automation`] — stable names for widgets, so an agent can address one.
 //! - [`keyboard`] — the tree's own keyboard, for the platforms that have none.
+//! - [`insets`] — the safe area: where the platform says the tree may draw.
 //! - [`shell`] — the panels themselves.
 //! - [`raster`] — a software rasteriser, so a frame can be produced with no GPU.
 //!
@@ -42,6 +43,7 @@
 
 pub mod automation;
 pub mod icons;
+pub mod insets;
 pub mod keyboard;
 pub mod raster;
 pub mod shell;

@@ -120,13 +120,23 @@ pub fn run(flags: Flags) -> std::process::ExitCode {
 /// Runs the application on Android, with the platform's handle. §236.
 #[cfg(target_os = "android")]
 pub fn run_android(flags: Flags, app: AndroidApp) -> std::process::ExitCode {
-    // The window must not be laid out **in screen**: the platform's status
-    // bar and navigation bar are drawn over the application, and the clock
-    // lands on the toolbar's first row, where a tap is swallowed. Removing
-    // the flag is one call, and it is the platform's own API. §239.
+    // The window is laid out **in screen**, and the platform is asked to
+    // report the rectangle that its status bar and navigation bar do not
+    // cover. §247.
+    //
+    // The two flags are one thing: `LAYOUT_INSET_DECOR` is the flag that
+    // makes the window manager report the inset rectangle, and it only
+    // reports it when the window is laid out in the screen. §239 tried to fix
+    // the landscape overlap by taking `LAYOUT_IN_SCREEN` away, which fixed
+    // portrait and left landscape broken, and it could not see the second
+    // flag because the platform answered an empty rectangle.
+    //
+    // The rectangle is the platform's, and the tree's job is to lay out
+    // inside it.
     app.set_window_flags(
+        winit::platform::android::activity::WindowManagerFlags::LAYOUT_IN_SCREEN
+            | winit::platform::android::activity::WindowManagerFlags::LAYOUT_INSET_DECOR,
         winit::platform::android::activity::WindowManagerFlags::empty(),
-        winit::platform::android::activity::WindowManagerFlags::LAYOUT_IN_SCREEN,
     );
     run_with(flags, Some(app))
 }
@@ -160,6 +170,15 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     // The tree's files, on a phone: the application's own directory. `None`
     // on the desktop, where the tree's own rule finds the right place.
     let tree_folder = app.as_ref().and_then(phone_folder);
+    // The platform's handle, kept so the safe area can be asked for every
+    // frame. §247.
+    //
+    // The handle is a handle, and a handle is cheap to keep: `eframe` takes
+    // one by value and the application keeps another for the insets.
+    #[cfg(target_os = "android")]
+    let platform: Option<AndroidApp> = app.as_ref().map(|a| a.clone());
+    #[cfg(not(target_os = "android"))]
+    let _platform: Option<AndroidApp> = None;
     install_logger_to(tree_folder.as_ref().map(|p| p.join("craftkit.log")));
     // The crash reports, in the tree's own shape: the folder, and `crashes`
     // inside it — the same name `report_dir` gives it on the desktop.
@@ -229,7 +248,16 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     let run = eframe::run_native(
         "craftkit",
         options,
-        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot, state, crash_dir }))),
+        Box::new(|_cc| {
+            Ok(Box::new(Application {
+                session,
+                ctx_slot,
+                state,
+                crash_dir,
+                #[cfg(target_os = "android")]
+                platform: platform.clone(),
+            }))
+        }),
     );
     match run {
         Ok(()) => {
@@ -1043,6 +1071,13 @@ struct Application {
     /// §106: it is shared with the control channel, so the screen the channel
     /// reports is the screen the window is showing.
     state: SharedState,
+    /// The platform's handle, when there is one. §247.
+    ///
+    /// The application is the one that knows the platform, the same way it is
+    /// the one that knows where the tree's files go (§240): the tree asks,
+    /// and the application answers.
+    #[cfg(target_os = "android")]
+    platform: Option<AndroidApp>,
 }
 
 /// The shell's memory, shared by the window and the control channel.
@@ -1053,7 +1088,55 @@ struct Application {
 /// them in the same order, and neither can be waiting for the other.
 type SharedState = Arc<Mutex<craftkit_ui::shell::ShellState>>;
 
+/// The safe area, on a phone. §247.
+///
+/// The platform says where the application may draw: the window is laid out
+/// in the screen, and the platform reports the rectangle that its status bar
+/// and navigation bar do not cover. The rectangle is in **pixels**; `egui`
+/// works in **points**, and the tree's own module does that arithmetic — the
+/// application only asks the platform and hands the answer over.
+#[cfg(target_os = "android")]
+impl Application {
+    fn fill_safe_area(&self, ctx: &eframe::egui::Context, raw_input: &mut eframe::egui::RawInput) {
+        let Some(handle) = self.platform.as_ref() else { return };
+        let rect = handle.content_rect();
+        let Some(viewport) = raw_input.screen_rect else { return };
+        // The scale factor: the platform's rectangle is in pixels and `egui`
+        // works in points. The window's own answer is the first one to ask
+        // for, and the context's is the fallback — the context's is the
+        // frame before, and the first frame has none.
+        let ppp = raw_input
+            .viewports
+            .get(&raw_input.viewport_id)
+            .and_then(|view| view.native_pixels_per_point)
+            .unwrap_or_else(|| ctx.input(|i| i.pixels_per_point));
+        let platform = craftkit_ui::insets::PlatformRect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        };
+        if let Some(insets) = craftkit_ui::insets::insets(platform, viewport, ppp) {
+            raw_input.safe_area_insets = Some(insets);
+        }
+    }
+}
+
 impl eframe::App for Application {
+    /// The safe area: the platform's insets, in the points `egui` uses. §247.
+    ///
+    /// The platform draws its status bar and navigation bar over the window,
+    /// and the clock lands on the toolbar's first row (§239). `egui` has the
+    /// mechanism for this — the **safe area** — and the tree's job is to fill
+    /// it in with what the platform says, so that every panel is laid out
+    /// inside the area nothing covers.
+    ///
+    /// The desktop has no insets, and the hook does nothing there.
+    fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, _raw_input: &mut eframe::egui::RawInput) {
+        #[cfg(target_os = "android")]
+        self.fill_safe_area(_ctx, _raw_input);
+    }
+
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         // Published before the session is touched, and every frame rather than
         // once, because a window can be replaced and a stale context would ask
