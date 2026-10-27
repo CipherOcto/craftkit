@@ -29129,8 +29129,8 @@ test exercises is a wish.
 
 ### The finding
 
-**The tree had no verdict of its own for ten and a half hours, and the reason
-was a rule written for the wrong job.**
+**The tree had no verdict of its own for eleven hours, and the reason was a
+rule written for the wrong job.**
 
 `.github/workflows/ci.yml` carried nine jobs: the fast gates on three
 platforms, the phone build on three platforms, the policy, the portability
@@ -29172,11 +29172,14 @@ And the history of the runs says what that cost:
 | `40493355520` | `75c0cf98` | **success** — 11:04 |
 | `40549660983` | `e724881` | failure — the compiler warning (§248) |
 | `40562586800` | `9898c7a` | failure — the same warning |
-| `40575696299` … `40584129065` | `892adbb` … `763a62a` | **cancelled** — twelve runs in a row |
-| `40588604095` | `8c2d38c` | queued behind the next push |
+| `40575696299` … `40584129065` | `892adbb` … `763a62a` | **cancelled** — six runs in a row |
+| `40588604095`, `40591216184` | `8c2d38c`, `0217831` | **cancelled** — pushed again while they ran |
+| `40591610243` | `c6260be` | **success** — 22:08, in 6 minutes 34 seconds |
 
-**Every run after 11:04 was cancelled, and the last green one was ten and a
-half hours earlier.** The instrument had not completed since the morning.
+**Ten runs after 11:04 were not green** — two failed (the compiler warning,
+§248) and eight were cancelled — **and the first green verdict since came at
+22:08, eleven hours later.** The instrument had not completed since the
+morning.
 
 ### Why nothing else would have caught it
 

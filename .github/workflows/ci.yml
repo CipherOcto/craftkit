@@ -205,8 +205,8 @@ jobs:
   # about sixty-one. The concurrency rule below — "a new push supersedes an
   # in-flight run" — is right for a job that takes minutes and wrong for a job
   # that takes an hour, so every push cancelled the instrument and with it the
-  # whole run. Fourteen consecutive runs were cancelled, and the tree had no
-  # verdict between eleven o'clock and nine at night.
+  # whole run. Eight consecutive runs were cancelled, and the tree had no
+  # green verdict between eleven o'clock and ten past ten at night.
   #
   # The instrument now runs nightly, on demand, and on every pull request,
   # and a push no longer cancels it.

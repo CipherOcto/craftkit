@@ -8,8 +8,9 @@
 # That rule is right for a job that takes minutes and wrong for a job that
 # takes an hour: measured on the runner, the eight fast jobs finish in five
 # minutes and sixteen seconds, and the instrument needs about sixty-one. So
-# every push cancelled the instrument, and with it the whole run — fourteen
-# consecutive runs, and no verdict for the tree since eleven o'clock.
+# every push cancelled the instrument, and with it the whole run — eight
+# consecutive runs, and no green verdict for the tree between eleven o'clock
+# and ten past ten at night.
 #
 # So the instrument has its own workflow, and it is **not** cancelled by a
 # later push. It runs:
