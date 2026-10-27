@@ -3527,10 +3527,29 @@ pub fn the_tree_writes_its_files_through_one_home(root: &Path) -> Result<Vec<Str
             }
             let Ok(production) = read_rust(&path, Subject::Production) else { continue };
             let code = code_lines_kept(&production);
+            // The named exception: an append, and nothing else. §240.
+            let appends = FILE_APPEND_EXCEPTIONS
+                .iter()
+                .find(|(file, _)| *file == relative_name(root, &path))
+                .map(|(_, why)| *why);
             for (index, line) in code.lines().enumerate() {
                 let Some(shape) = FILE_WRITING_SHAPES.iter().find(|shape| has_word(line, shape)) else {
                     continue;
                 };
+                if let Some(why) = appends {
+                    // Only `OpenOptions::new` is allowed here, and only when
+                    // the file is opened to append to it.
+                    if shape == &"OpenOptions::new" && line.contains("append(true)") {
+                        continue;
+                    }
+                    problems.push(format!(
+                        "{}: line {} creates a file with `{shape}`; the file is on the list of the \
+                         files that may append ({why}), and an append is all it may do. §240.",
+                        relative_name(root, &path),
+                        index + 1
+                    ));
+                    continue;
+                }
                 problems.push(format!(
                     "{}: line {} creates a file with `{shape}`; a file the tree writes goes through \
                      `craftkit_core::atomic::write_file`, which writes into a temporary name and \
@@ -3572,6 +3591,26 @@ const FILE_WRITING_HOME: &str = "crates/core/src/atomic.rs";
 /// A shape, not a name: `std::fs::write` and `fs::write` are the same call, and
 /// a question about a call is a question about the shape of the call. §208.
 const FILE_WRITING_SHAPES: &[&str] = &["fs::write", "fs::copy", "File::create", "OpenOptions::new"];
+
+/// The files that may **append** to a file of their own, and why.
+///
+/// The rule above is about what happens when a write **fails**: the tree
+/// writes into a temporary name and moves the finished file into place, so a
+/// failed write leaves the file that was there alone. An **append** satisfies
+/// the same rule by a different road — it never truncates, so a failed append
+/// leaves the file that was there alone as well — and a log that is rewritten
+/// from scratch on every line would be O(n) per line and would lose the lines
+/// two threads wrote at once.
+///
+/// So the exception is **appending**, not creating: the file below may open a
+/// file to append to it, and it may not create one, copy one, or write one.
+/// The gate checks that: an `OpenOptions::new` in an exception file must be
+/// followed by `append(true)`, and the other shapes are still reported there.
+/// §240.
+pub const FILE_APPEND_EXCEPTIONS: &[(&str, &str)] = &[(
+    "apps/craftkit/src/lib.rs",
+    "the tree's log is appended to, and an append never destroys what was there",
+)];
 
 /// Whether a line of code calls the environment's temporary folder.
 ///
@@ -9635,6 +9674,58 @@ mod tests {
             "a writer outside the one home is not reported: {problems:#?}"
         );
         assert!(problems.len() == 1, "the case is caught for one reason: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The append exception is an append, and nothing else.
+    ///
+    /// The file on the list may open a file to **append** to it, because an
+    /// append never destroys what was there — the same property the tree's
+    /// one home gives. It may not create one, copy one, or write one: the
+    /// exception is the *append*, not the capability. §240.
+    #[test]
+    fn the_append_exception_is_an_append_and_nothing_else() {
+        let dir = crate::temp::dir("write-append").expect("a temporary folder");
+        the_writing_home_in(&dir);
+        let app = dir.join("apps/craftkit/src");
+        std::fs::create_dir_all(&app).expect("the fabricated tree");
+        let file = app.join("lib.rs");
+
+        // An append: allowed.
+        std::fs::write(
+            &file,
+            "pub fn log(path: &std::path::Path) {\n    \
+             let _ = std::fs::OpenOptions::new().create(true).append(true).open(path);\n}\n",
+        )
+        .expect("the fabricated writer");
+        let problems = the_tree_writes_its_files_through_one_home(&dir).expect("runs");
+        assert!(problems.is_empty(), "an append is reported: {problems:#?}");
+
+        // A write: the exception is the append, not the capability.
+        std::fs::write(
+            &file,
+            "pub fn log(path: &std::path::Path) {\n    \
+             let _ = std::fs::write(path, b\"x\");\n}\n",
+        )
+        .expect("the fabricated writer");
+        let problems = the_tree_writes_its_files_through_one_home(&dir).expect("runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("an append is all it may do"), "{problems:#?}");
+
+        // A file that is not on the list may not append either.
+        let other = dir.join("apps/other/src");
+        std::fs::create_dir_all(&other).expect("the fabricated tree");
+        std::fs::write(
+            other.join("lib.rs"),
+            "pub fn log(path: &std::path::Path) {\n    \
+             let _ = std::fs::OpenOptions::new().create(true).append(true).open(path);\n}\n",
+        )
+        .expect("the fabricated writer");
+        let problems = the_tree_writes_its_files_through_one_home(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("apps/other/src/lib.rs")),
+            "an append outside the list is not reported: {problems:#?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

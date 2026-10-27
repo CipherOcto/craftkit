@@ -131,10 +131,41 @@ pub fn run_android(flags: Flags, app: AndroidApp) -> std::process::ExitCode {
     run_with(flags, Some(app))
 }
 
+/// Where the tree's files go, on a phone.
+///
+/// **The tree has a rule and the application supplies the answer.** The rule
+/// is in `craftkit_engine::crash`: the reports go to `$XDG_DATA_HOME/craftkit`,
+/// then `$HOME/.local/share/craftkit`, then the temporary directory. A phone
+/// has **none** of the first two, and the temporary directory on Android is
+/// `/tmp`, which does not exist — so a crash report on a phone would go
+/// nowhere, and the tree's own evidence would be lost.
+///
+/// The answer is the application's own directory, which is private to the
+/// application and is readable with `adb shell run-as`. The rule stays the
+/// tree's: the application passes the folder, because the tree already takes
+/// it as a parameter (`record_in`, `install_crash_hook_in`), and a
+/// process-global environment variable would race every other test in the
+/// binary. §240.
+#[cfg(target_os = "android")]
+fn phone_folder(app: &AndroidApp) -> Option<std::path::PathBuf> {
+    app.internal_data_path().map(|p| p.join("craftkit"))
+}
+
+#[cfg(not(target_os = "android"))]
+fn phone_folder(_app: &AndroidApp) -> Option<std::path::PathBuf> {
+    None
+}
+
 fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
-    install_logger();
+    // The tree's files, on a phone: the application's own directory. `None`
+    // on the desktop, where the tree's own rule finds the right place.
+    let tree_folder = app.as_ref().and_then(phone_folder);
+    install_logger_to(tree_folder.as_ref().map(|p| p.join("craftkit.log")));
+    // The crash reports, in the tree's own shape: the folder, and `crashes`
+    // inside it — the same name `report_dir` gives it on the desktop.
+    let crash_dir = tree_folder.as_ref().map(|p| p.join("crashes"));
     let session = Arc::new(Mutex::new(open(&flags)));
-    install_crash_hook(&session);
+    install_crash_hook_in(&session, crash_dir.clone());
 
     // The window's egui context does not exist until eframe runs, but the
     // control channel starts first and outlives any one frame — so the two
@@ -187,7 +218,7 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     let run = eframe::run_native(
         "craftkit",
         options,
-        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot, state }))),
+        Box::new(|_cc| Ok(Box::new(Application { session, ctx_slot, state, crash_dir }))),
     );
     match run {
         Ok(()) => {
@@ -664,11 +695,7 @@ fn base64(bytes: &[u8]) -> String {
 ///
 /// A report that could not be written is a log line, not a failure: the crash has
 /// already happened and there is nothing this can do about it.
-fn install_crash_hook(session: &Arc<Mutex<Session>>) {
-    install_crash_hook_in(session, None)
-}
-
-/// [`install_crash_hook`], writing to an explicit folder.
+/// The tree's panic hook, writing to an explicit folder.
 ///
 /// `None` is the real crash folder. The parameter exists so the *production*
 /// hook can be tested without an environment variable: a process-global
@@ -785,9 +812,21 @@ fn last_command_of(session: &Session) -> String {
 ///
 /// Hand-rolled rather than pulled in: a logging framework is a dependency
 /// surface for something this small, and the whole of it is twenty lines.
-fn install_logger() {
-    struct Stderr;
-    impl log::Log for Stderr {
+/// The tree's logger, writing to a file as well as to the standard error.
+///
+/// **A phone has no standard error.** A `NativeActivity`'s stdout and stderr
+/// go nowhere, so the tree's log on a phone was a log nobody could read. With
+/// a file, the log is in the application's own directory, and `adb shell
+/// run-as` reads it.
+///
+/// The file is opened once and appended to. A file that cannot be opened is
+/// **not** an error: the standard error is still there, and a logger that
+/// refused to start because of a file would take the application down.
+fn install_logger_to(path: Option<std::path::PathBuf>) {
+    struct Sink {
+        file: Option<std::sync::Mutex<std::fs::File>>,
+    }
+    impl log::Log for Sink {
         fn enabled(&self, _: &log::Metadata<'_>) -> bool {
             true
         }
@@ -796,15 +835,41 @@ fn install_logger() {
             if !self.enabled(record.metadata()) {
                 return;
             }
-            eprintln!("[{}] {}", record.level(), record.args());
+            let line = format!("[{}] {}\n", record.level(), record.args());
+            eprint!("{line}");
+            if let Some(file) = &self.file
+                && let Ok(mut file) = file.lock()
+            {
+                use std::io::Write;
+                let _ = file.write_all(line.as_bytes());
+            }
         }
 
         fn flush(&self) {}
     }
-    static LOGGER: Stderr = Stderr;
+
+    // The logger is a `static`, because `set_logger` wants a `&'static`, and
+    // a `File` cannot be built in one — so the sink lives in a one-shot cell
+    // and is filled in once, before the logger is installed.
+    static LOGGER: std::sync::OnceLock<Sink> = std::sync::OnceLock::new();
+
+    let file = path.and_then(|p| {
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::OpenOptions::new().create(true).append(true).open(&p) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("the log file could not be opened ({e}); the log goes to the standard error");
+                None
+            }
+        }
+    });
+
+    let sink = LOGGER.get_or_init(|| Sink { file: file.map(std::sync::Mutex::new) });
     // `set_logger` fails only if something already claimed the global logger,
     // which is a test harness rather than a reason to abort.
-    let _ = log::set_logger(&LOGGER);
+    let _ = log::set_logger(sink);
     log::set_max_level(log::LevelFilter::Info);
 }
 
@@ -819,6 +884,12 @@ fn install_logger() {
 struct Application {
     session: Arc<Mutex<Session>>,
     ctx_slot: ContextSlot,
+    /// Where the tree's crash reports go, when the platform says.
+    ///
+    /// `None` is the tree's own rule: the platform's data directory, or the
+    /// user's. On a phone the rule finds nothing (§240), so the application
+    /// says where — and this is the value that says it.
+    crash_dir: Option<std::path::PathBuf>,
     /// What the shell remembers between frames.
     ///
     /// §105: the window draws with a fresh shell every frame, and the shell
@@ -859,7 +930,7 @@ impl eframe::App for Application {
         };
         // A panic in the drawing code is caught here, where the session is
         // still in hand, and the crash report is written from here. §76.
-        let outcome = draw_guarded(&mut session, None, |session| {
+        let outcome = draw_guarded(&mut session, self.crash_dir.as_deref(), |session| {
             // The shell's memory, shared with the control channel: the screen
             // the channel reports is the screen the window is showing. §106.
             //

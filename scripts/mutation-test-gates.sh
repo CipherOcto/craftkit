@@ -4966,6 +4966,18 @@ swap xtask/src/android.rs \
 expect_catch "gate: an undefined symbol is not an export" \
     "cargo test -p xtask --profile ci an_undefined_symbol_is_not_an_export"
 
+# The append exception is an append, and nothing else.
+#
+# The tree's rule is that a file the tree writes goes through one home, so
+# a write that fails leaves the file that was there alone. The tree's log is
+# the one file that may open a file of its own - to *append* to it - and the
+# exception is checked: an append is allowed and a write is not. Section 240.
+swap apps/craftkit/src/lib.rs \
+    'std::fs::OpenOptions::new().create(true).append(true).open(&p)' \
+    'std::fs::OpenOptions::new().create(true).write(true).open(&p)'
+expect_catch "gate: the append exception is an append and nothing else" \
+    "cargo xtask lists"
+
 # The exception to the unsafe rule is for **one attribute** - the
 # `no_mangle` on the one function the platform looks up - and not for the
 # capability. The gate that says the exception has not grown has to be seen

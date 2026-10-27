@@ -27411,7 +27411,9 @@ second is the tree's own and costs work in `crates/ui`.
   one. **But no 64-bit phone has been attached**, so that library has never
   been *run*, and a library that has never run is not a library that works.
 - **No log was read from the device.** A `NativeActivity`'s stdout and stderr
-  go nowhere, so the app's own output on the phone is unknown.
+  go nowhere, so the app's own output on the phone is unknown. **Fixed in
+  §240**: the log is written to a file in the application's own directory and
+  read with `adb shell run-as`.
 - **The app draws under the system status bar.** The clock overlaps the
   toolbar's first row, and a tap there is swallowed. **Fixed in portrait in
   §239** — one call to the platform's own API — and **not fixed in
@@ -27771,6 +27773,111 @@ the success, and the defect was in the corner of it.
 the whole time, one re-export away, in a crate the tree already used. What
 was missing was not the API but the **question** — *why is the clock on top
 of my toolbar?* — and `dumpsys window` answers it in one line.
+
+## 240. The tree's files on a phone, and the log nobody could read
+
+### The finding
+
+**Two things the tree does not do on a phone, both measured.**
+
+**The first: the tree's files would have gone nowhere.** The tree has a rule
+for where its files live — in `craftkit_engine::crash`:
+
+1. `$XDG_DATA_HOME/craftkit`,
+2. then `$HOME/.local/share/craftkit`,
+3. then the temporary directory.
+
+**A phone has none of the first two**, and the temporary directory on Android
+is `/tmp`, which does not exist — so a **crash report on a phone would have
+been lost**. The tree's own evidence, on the platform where the tree now runs.
+
+**The second: the tree's log was unreadable.** The application's logger
+writes to the standard error, and **a `NativeActivity`'s stdout and stderr go
+nowhere**. §236 listed that as "no log has been read from the device" — and
+the reason was not that nobody had tried: there was nowhere for the log to
+go.
+
+### The fix: the application says where, and the tree's rule stays the tree's
+
+**The tree already had the right shape.** `record_in(dir, …)` and
+`install_crash_hook_in(session, Some(dir))` take the folder as a **parameter**
+— and §212's own note says why: *"`set_var` is process-wide and would make
+every test in the binary race this one."* So the application does not set an
+environment variable; it **passes the folder**.
+
+On Android the folder is the application's own private directory
+(`AndroidApp::internal_data_path()`), and the tree's files go there in the
+tree's own shape — the folder, and `crashes` inside it, the same name
+`report_dir` gives it on the desktop.
+
+**Measured on the phone**:
+
+```text
+$ adb shell run-as org.craftocto.craftkit ls -R files
+files:
+craftkit
+
+files/craftkit:
+craftkit.log
+
+$ adb shell run-as org.craftocto.craftkit cat files/craftkit/craftkit.log
+[INFO] node.add: added filter `filter 4`
+```
+
+**The log is written to a file as well as to the standard error.** The
+standard error is still there — on the desktop that is where it belongs, and
+on a phone it costs nothing.
+
+### The exception, and why it is an exception and not a hole
+
+**The tree's rule is that a file the tree writes goes through one home** —
+`craftkit_core::atomic::write_file`, which writes into a temporary name and
+moves the finished file into place, so **a write that fails leaves the file
+that was there alone** (§215). The gate caught the logger's
+`OpenOptions::new` at once, and the gate was right.
+
+**An append satisfies the same rule by a different road**: it never
+truncates, so a failed append leaves the file that was there alone as well. A
+log rewritten from scratch on every line would be O(n) per line, and would
+lose the lines two threads wrote at once.
+
+So the exception is **named, listed, and checked**:
+
+- one list — `FILE_APPEND_EXCEPTIONS` — with the reason in each row;
+- the exception is **appending, not creating**: an `OpenOptions::new` in an
+  exception file must be followed by `append(true)`, and the other shapes —
+  `fs::write`, `fs::copy`, `File::create` — are still reported there;
+- a test, and a mutation: the app's log opened with `write(true)` instead of
+  `append(true)`, and the gate reports it.
+
+### What is not claimed
+
+- **The crash folder on a phone has not been exercised.** The log proves the
+  *folder* is right — the file lands in `files/craftkit/` — and the crash
+  reports go to `files/craftkit/crashes/` by the same parameter the desktop
+  uses and that the tree's own test covers. But no crash has happened on a
+  phone, so that folder has never been written.
+- **The log is not bounded.** It grows for as long as the application runs.
+  The tree's rules bound the other files, and this one is not bounded yet.
+- **The desktop is unchanged**: `None` is still the folder there, so the
+  tree's own rule still finds the user's data directory, and the log still
+  goes to the standard error.
+
+### The lesson
+
+**A rule that finds the right place on the developer's machine finds no place
+at all on the phone.** The tree's rule was three lines long and had been
+right for a long time — on every machine the tree had ever run on. What it
+had never been asked is *what happens where the rule finds nothing*, and the
+answer was: **the tree's evidence is lost**, silently, on the platform where
+the tree now runs.
+
+**And the rule was already parameterised.** The tree had made the folder a
+parameter years ago, for a reason that had nothing to do with Android (§212:
+a process-global variable would race every test in the binary). That decision
+is what made this a two-line change instead of an exception — and it is the
+third time in this tree's record that a rule written for one reason turned out
+to be the right shape for another.
 
 ## What enforces what
 
@@ -28335,6 +28442,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs` | the optimiser itself — §237 |
 | **The tree still builds for a phone, and exports the symbol the platform looks up** | `cargo xtask android` | 1 mutation — §238 |
 | **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | nothing — §239 |
+| **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
