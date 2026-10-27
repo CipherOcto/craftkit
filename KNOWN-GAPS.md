@@ -27935,13 +27935,24 @@ so**, which is the point of running the tree's tests on all three platforms.
 
 ### What is not claimed
 
-- **The Windows layout has not been seen.** The tree now *expects*
-  `windows-x86_64` and a `.cmd` wrapper, and the Windows runner's test will
-  confirm or contradict it. **The gate itself has never run on Windows** —
-  it runs on the Linux runner, and the NDK is not installed on the other two.
-- **The macOS layout is measured** — the NDK's own directory on this
+- ~~**The Windows layout has not been seen.**~~ **Measured, §245.** The gate
+  now runs on all three platforms the tree claims to build for, and on the
+  Windows runner both ABIs build and export `android_main`:
+
+  ```text
+  host: x86_64-pc-windows-msvc
+  ok: aarch64-linux-android builds, and exports `android_main`
+  ok: armv7-linux-androideabi builds, and exports `android_main`
+  ```
+
+  So the tree's expectations — the `windows-x86_64` directory and the `.cmd`
+  wrapper — are no longer a table: they are what the machine did. The
+  measurement found **a second copy of the rule** on the way (§245), which is
+  what a guess costs.
+- ~~**The macOS layout is measured** — the NDK's own directory on this
   developer's machine is `darwin-x86_64` — but the *gate* has not run there
-  either.
+  either.~~ **The gate has now run there too**, and the phone build is green
+  on the macOS runner.
 
 ### The lesson
 
@@ -28296,6 +28307,25 @@ android (the tree still builds for a phone, on windows-latest)
 
 `fail-fast` is off on purpose: one platform's failure should not hide the
 other two's result — that is how §241's failure was found at all.
+
+**Measured, on the runners:**
+
+```text
+android (the tree still builds for a phone, on ubuntu-latest): success
+android (the tree still builds for a phone, on macos-latest): success
+android (the tree still builds for a phone, on windows-latest): success
+```
+
+and the Windows runner says which machine it was:
+
+```text
+host: x86_64-pc-windows-msvc
+ok: aarch64-linux-android builds, and exports `android_main`
+ok: armv7-linux-androideabi builds, and exports `android_main`
+```
+
+So the tree's table of hosts is now a **record of three measurements** rather
+than a guess with a table's shape.
 
 ### What is not claimed
 
