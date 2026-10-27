@@ -196,10 +196,12 @@ other REMOTE ONLY processing."*)
   the owner's explicit approval first.** Ask, do not assume.
 - **Do not repeat a long suite to look for a rare failure without asking.**
   One run of the mutation suite is twenty-five minutes on this machine and
-  about **fifty-four** on the runner CI uses (§228, measured on the run that
+  about **fifty-two** on the runner CI uses (§228, measured on the run that
   proved §224 to §227 and the run that measured §231 to §233; it was
-  sixty-seven before those arcs made the gate faster, and fifty-one after
-  them); twenty of them is not a measurement, it is a way of
+  sixty-seven before those arcs made the gate faster, fifty-one after them,
+  and fifty-four after the arcs that made it slower; **fifty-two** on the run
+  that carried the Android arc and its one new case — §237); twenty of them is
+  not a measurement, it is a way of
   occupying a machine that other people are using. **One run of it is already
   a CI job**, so it needs no approval here — it needs a push.
 - **The hunt for a rare failure is off, and it is not for here either.** Two

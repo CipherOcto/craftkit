@@ -26564,7 +26564,15 @@ MiB of text to prove the file's cap, the engine writes a 44 MiB crash report,
 and the model's listing test measures twenty-one rounds instead of five. The
 budget stays at ninety.
 
-**And fifty-four is not a promise about the next run.** It is what the runner
+**And then it moved back.** The run that carried the Android arc (§236, with
+its one new mutation case) reported **501 of 502** caught, *2* skipped and
+**not** passed, and the suite's own duration as **52 minutes** — *"the run took
+52 minute(s); the budget is 90"*, and *"Tree unchanged"* — run `40462277307`,
+all six jobs green. The tree grew by a case and the duration fell by two
+minutes, which is what a duration is: **a measurement of one run of one
+tree**, and the two minutes are the noise, not the trend.
+
+**And fifty-two is not a promise about the next run.** It is what the runner
 did on one run of one tree.
 
 ### The lesson
