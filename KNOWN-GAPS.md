@@ -27431,6 +27431,109 @@ thing the platform looks up **by name**. That is a list of one, with a reason
 in it, a gate that says the exception has not grown, and a mutation that puts
 an `unsafe` block in the package to prove the gate is awake.
 
+## 237. A measurement of a loop the compiler folds measures the compiler
+
+### The finding
+
+**The Windows runner failed on §233's own measurement** — the test
+`a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs`,
+with the message *"the work took no time at all"*. The elapsed time was
+**exactly zero**.
+
+The test measured a loop:
+
+```rust
+let mut sum = 0u64;
+for i in 0..2_000_000u64 {
+    sum = sum.wrapping_add(i);
+}
+std::hint::black_box(sum);
+```
+
+**and the loop was never run.** The sum of a range of wrapping additions is a
+closed form, so the optimiser computes it and deletes the loop. `black_box`
+was applied to the *result*, which is exactly the wrong end: it keeps the
+result from being deleted, and it does nothing to keep the *work* from being
+deleted.
+
+### Measured, outside the tree
+
+The same loop, twice, on this machine, in an optimised build:
+
+| the loop | what it took |
+|---|---|
+| `sum = sum.wrapping_add(i)` | **60 ns** — 59, 58, 60 ns over three trials |
+| `sum = sum.wrapping_add(black_box(i))` | **1.8 ms** — 1.48, 1.86, 1.81, 1.82 ms |
+
+**Thirty thousand times.** The plain loop is not slow work; it is no work.
+
+### Why the test passed on Linux and failed on Windows
+
+This is the part worth keeping.
+
+- On **Linux** the folded loop read **60 ns** — which is *not* zero, so
+  `elapsed > 0.0` **passed**. The test was measuring the optimiser and calling
+  it a measurement.
+- On **Windows** the same folded loop read **exactly zero**, and the test
+  failed.
+
+**The test was never testing the timing.** It was testing whether the
+machine's clock happened to tick once inside a loop that did not exist. Two
+runners, two verdicts, one test — and the honest reading is that the test was
+broken on both, and that the Windows runner found it.
+
+### The fix, and the guard
+
+The work must be work the optimiser **cannot** remove, and `black_box` inside
+the loop is that barrier:
+
+```rust
+for i in 0..2_000_000u64 {
+    sum = sum.wrapping_add(std::hint::black_box(i));
+}
+```
+
+And a floor, so that a future edit that drops the barrier fails **here** and
+not on a runner in another country: **100 µs**. That is three orders of
+magnitude above the folded value (60 ns) and an order of magnitude below the
+real one (1.8 ms).
+
+**Measured**: with the barrier removed, the test fails with *"the work
+measured 0.000000s, which is the time of work that was not done"*. With it in
+place, the test passes and reads about 1.8 ms.
+
+### The other two measurements were checked, not assumed
+
+The tree has three places that time something. The other two were **looked
+at**, because "the other two are fine" is a claim and not a measurement:
+
+| where | what it times | can the optimiser remove it? |
+|---|---|---|
+| `crates/model/src/property.rs` | `flatten()` over 1 000 and 4 000 properties | **no** — it allocates and walks |
+| `crates/ui/src/automation.rs` | publishing 5 000 widgets into a registry | **no** — it allocates and hashes |
+| `crates/core/src/measure.rs` | the loop above | **yes** — it was a closed form |
+
+### What is not claimed
+
+- **No run has been re-run on Windows with the fix in it.** The fix is
+  measured on this machine, and the Windows verdict is the runner's to give.
+- **Nothing else in the tree is claimed to be free of this.** The two other
+  measurement sites were read, not profiled; a third kind of work — one that
+  allocates in a loop the optimiser can hoist — would look the same.
+
+### The lesson
+
+**A measurement of work the optimiser removed is a measurement of the
+optimiser.** The tell is the number: 60 ns for two million iterations is not
+a slow machine, it is no machine.
+
+**And a test that passed on three runners and failed on the fourth was not a
+flaky test — it was a test that had been measuring the wrong thing**, and the
+runner that failed it was the one with the coarsest clock. The tree's rule
+that *CI must never fail at random* is right, and this is the other side of
+it: **a green run is not evidence that a test measures what it says**, and the
+evidence that this one did not was a number that was too good.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -27991,6 +28094,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The Android package is the only crate that may deny unsafe, and it holds no unsafe code** | `the_unsafe_exception_has_not_grown` in `xtask/src/lists.rs` | 1 mutation — §236 |
 | **The application's GUI runs on the phone** | the device's own run — the screenshot, the tap, the form | nothing — §236 |
 | **The keyboard opens, and the text does not arrive** | the device's own run — the keyboard on the screen, and what the field holds afterwards | nothing — §236 |
+| **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs` | the optimiser itself — §237 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

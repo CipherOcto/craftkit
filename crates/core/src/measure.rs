@@ -104,15 +104,38 @@ mod tests {
     }
 
     /// The timing is the whole of it.
+    ///
+    /// **The work must be work the compiler cannot remove.** A loop whose
+    /// result the compiler can compute in closed form *is* removed: measured
+    /// on this machine, two million wrapping additions took **60 ns** with
+    /// the plain loop and **1.8 ms** with `black_box` inside it — the plain
+    /// loop was never run, and the test was timing the compiler.
+    ///
+    /// That is not a Windows detail. On the Windows runner the folded loop
+    /// read **exactly zero** and the test failed; on Linux it read 60 ns and
+    /// passed **by luck**. A test that measures work the optimiser removed is
+    /// a test of the optimiser. §237.
     #[test]
     fn a_thing_that_takes_a_moment_takes_a_moment() {
         let mut work = || {
             let mut sum = 0u64;
             for i in 0..2_000_000u64 {
-                sum = sum.wrapping_add(i);
+                sum = sum.wrapping_add(std::hint::black_box(i));
             }
             std::hint::black_box(sum);
         };
-        assert!(seconds(&mut work) > 0.0, "the work took no time at all");
+        let elapsed = seconds(&mut work);
+        assert!(elapsed.is_finite(), "the measurement is not a number: {elapsed}");
+        assert!(elapsed > 0.0, "the work took no time at all");
+        // The floor, and why it is where it is: the **folded** loop measured
+        // 60 ns and the real one 1.8 ms, so this floor is three orders of
+        // magnitude above the folded value and an order of magnitude below the
+        // real one. A future edit that drops the `black_box` and lets the
+        // optimiser fold the loop again fails here instead of on a runner in
+        // another country. §237.
+        assert!(
+            elapsed > 100e-6,
+            "the work measured {elapsed:.6}s, which is the time of work that was not done"
+        );
     }
 }
