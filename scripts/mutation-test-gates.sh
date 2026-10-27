@@ -4973,10 +4973,24 @@ expect_catch "gate: an undefined symbol is not an export" \
 # the one file that may open a file of its own - to *append* to it - and the
 # exception is checked: an append is allowed and a write is not. Section 240.
 swap apps/craftkit/src/lib.rs \
-    'std::fs::OpenOptions::new().create(true).append(true).open(&p)' \
-    'std::fs::OpenOptions::new().create(true).write(true).open(&p)'
+    'std::fs::OpenOptions::new().create(true).append(true).open(path)' \
+    'std::fs::OpenOptions::new().create(true).write(true).open(path)'
 expect_catch "gate: the append exception is an append and nothing else" \
     "cargo xtask lists"
+
+# The log's file is bounded.
+#
+# The tree bounds its other files - the undo stack by bytes, the trace by
+# bytes, the command log by count - and the log was the one file it wrote
+# with no limit on it: it grew for as long as the application ran, and it
+# grew across runs as well, because the file is appended to and never
+# rotated. A bound that is only a comment is not a bound, so the rotation
+# has to stop working for the test to fail. Section 242.
+swap apps/craftkit/src/lib.rs \
+    'if self.bytes + line.len() as u64 > MAX_LOG_BYTES {' \
+    'if false {'
+expect_catch "the log's file is bounded" \
+    "cargo test -p craftkit --profile ci --lib the_log_file_is_bounded"
 
 # The exception to the unsafe rule is for **one attribute** - the
 # `no_mangle` on the one function the platform looks up - and not for the

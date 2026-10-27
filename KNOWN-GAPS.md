@@ -27957,6 +27957,112 @@ not three times the cost of one, it is three *opinions* about the same code.
 §241 is the third time in this tree's record that a platform-specific fact
 was found by a platform the fact was about.
 
+## 242. The log that grew for as long as the application ran
+
+### The finding
+
+**The tree's log was the one file it wrote with no limit on it.**
+
+§240 put the log in the tree's folder on a phone, and said so in its own
+"What is not claimed": *"The log is not bounded. It grows for as long as the
+application runs."* That was true, and it was worse than it looked:
+
+- the file is **appended to**, so it grows **across runs** — a phone that
+  starts the application fifty times a day keeps fifty days of log;
+- the tree bounds every other file it writes — the undo stack by bytes, the
+  command trace by bytes, the command log by a count — and this one had no
+  bound at all;
+- and the file it grows into is on the **phone**, in the application's own
+  private directory, where nothing prunes it and nothing tells the user.
+
+A file that is *appended to* feels like a file that cannot grow. It can.
+
+### The fix: rotation, not truncation
+
+The log's file is bounded by `MAX_LOG_BYTES`, which is `1 << 20`. When the
+next line would take the file past the bound, the file is **moved aside**
+under a second name and the log starts a new one.
+
+**Rotation, not truncation**, because a truncated log loses the lines at the
+**start** — the ones that say what the application was doing before it went
+wrong — and those are the lines worth having. The lines that do go are the
+ones the tree has already had two chances to keep.
+
+The file that was there is **not** thrown away: it becomes the previous
+file, and the previous file is removed at the next rotation. So the tree
+keeps **two** files — the one being written and the one before it — and the
+folder the log lives in holds two files and no more.
+
+The rule is still the tree's own rule about writing a file. The log is the
+one file that may **append** to a file of its own, because an append never
+destroys what was there (§240), and a rotation is a **rename**, which is
+what the tree's own one home does to move a finished file into place
+(§215). Nothing was added to the list of the files that may write: the log
+still appends, and the bound is on how much it may append.
+
+### Measured on the phone
+
+The file was filled past the bound by hand — a megabyte and a bit of filler
+— and then the application was started and one command was run: a tap on
+"Add node". The log rotated on the first line it wrote.
+
+```text
+before the tap:
+-rw------- 1 u0_a249 u0_a249  1200000 craftkit.log
+
+after the tap:
+-rw------- 1 u0_a249 u0_a249       41 craftkit.log
+-rw------- 1 u0_a249 u0_a249  1200000 craftkit.log.1
+```
+
+and the new file's one line is the command that was run:
+
+```text
+$ adb shell run-as org.craftocto.craftkit cat files/craftkit/craftkit.log
+[INFO] node.add: added filter `filter 4`
+```
+
+The old file is still there, whole, under the second name — which is the
+point of a rotation rather than a truncation.
+
+### What enforces it
+
+- three tests in the application's own crate: the file stops at the bound,
+  the folder holds two files, and the rotation keeps the lines it wrote;
+- a mutation in the mutation script: the rotation stops happening, and the
+  test fails. A bound that is only a comment is not a bound.
+
+### What is not claimed
+
+- **Two files is the whole history.** The third rotation removes the oldest
+  file, so the tree keeps about two megabytes of the log and no more. A
+  bounded log keeps the **recent** past; an unbounded one keeps everything
+  and takes the folder with it. That is a trade, and the tree has made it.
+- **A rotation that fails leaves the file alone** and the log goes on
+  growing: the bound is a bound, and a log that stopped being written would
+  be worse than a log that is too big.
+- **The desktop's log still goes to the standard error**, and the desktop
+  passes no folder at all — the bound is on the file, and the desktop has no
+  file.
+- **The crash folder is still unbounded.** That is the ninth item of the
+  suggested order, and it is a **decision** — deleting somebody's evidence
+  is not a default — so this section does not touch it.
+- **The measurement above says how the bound works, not how fast the log
+  grows.** The megabyte of filler was put there by hand; what the tree
+  writes is a line per command.
+
+### The lesson
+
+**A rule the tree keeps for its own files is a rule about the tree's
+files, and the log was one of them.** The undo stack has a byte budget, the
+trace has a byte budget, the command log has a count — and the log, added
+to the tree in §240, had none, because a file that is *appended to* feels
+like a file that cannot grow.
+
+§240 wrote the gap down in the section that introduced the file. The gap was
+in the same sentence as the fix, three lines from the end of the section,
+and it took a second visit to see it as a gap rather than as a footnote.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28522,6 +28628,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | nothing — §239 |
 | **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
 | **The NDK's host directory is the host's own** | `the_environment_names_the_linker_the_target_uses` in `xtask/src/android.rs` | the macOS and Windows runners — §241 |
+| **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

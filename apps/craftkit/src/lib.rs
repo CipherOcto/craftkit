@@ -822,9 +822,13 @@ fn last_command_of(session: &Session) -> String {
 /// The file is opened once and appended to. A file that cannot be opened is
 /// **not** an error: the standard error is still there, and a logger that
 /// refused to start because of a file would take the application down.
+///
+/// **And the file is bounded.** The log was the one file the tree wrote with
+/// no limit on it: it grew for as long as the application ran, and it grew
+/// **across** runs, because the file was appended to and never rotated. §242.
 fn install_logger_to(path: Option<std::path::PathBuf>) {
     struct Sink {
-        file: Option<std::sync::Mutex<std::fs::File>>,
+        file: Option<std::sync::Mutex<LogFile>>,
     }
     impl log::Log for Sink {
         fn enabled(&self, _: &log::Metadata<'_>) -> bool {
@@ -840,8 +844,7 @@ fn install_logger_to(path: Option<std::path::PathBuf>) {
             if let Some(file) = &self.file
                 && let Ok(mut file) = file.lock()
             {
-                use std::io::Write;
-                let _ = file.write_all(line.as_bytes());
+                file.write_line(&line);
             }
         }
 
@@ -853,24 +856,133 @@ fn install_logger_to(path: Option<std::path::PathBuf>) {
     // and is filled in once, before the logger is installed.
     static LOGGER: std::sync::OnceLock<Sink> = std::sync::OnceLock::new();
 
-    let file = path.and_then(|p| {
-        if let Some(parent) = p.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        match std::fs::OpenOptions::new().create(true).append(true).open(&p) {
-            Ok(f) => Some(f),
-            Err(e) => {
-                eprintln!("the log file could not be opened ({e}); the log goes to the standard error");
-                None
-            }
-        }
-    });
+    let file = path.and_then(LogFile::open);
 
     let sink = LOGGER.get_or_init(|| Sink { file: file.map(std::sync::Mutex::new) });
     // `set_logger` fails only if something already claimed the global logger,
     // which is a test harness rather than a reason to abort.
     let _ = log::set_logger(sink);
     log::set_max_level(log::LevelFilter::Info);
+}
+
+/// The largest the log's file may grow before the sink starts a new one.
+///
+/// The tree bounds its other files — the undo stack by bytes (§52), the
+/// command trace by bytes, the command log by count — and the log was the one
+/// file it wrote with **no bound at all**. §242.
+const MAX_LOG_BYTES: u64 = 1 << 20;
+
+/// The log's file: the one being appended to, how big it has grown, and the
+/// name of the file before it.
+///
+/// The log is bounded by **rotation**, not by truncation. The file that has
+/// reached its limit is moved aside under a second name and the log starts a
+/// new one; a truncated log would lose the lines at the **start** — the ones
+/// that say what the application was doing before it went wrong.
+///
+/// **Two files is the whole history.** The file before the current one is
+/// removed when the log rotates again, so the tree keeps the last two files'
+/// worth of the log — about two megabytes — and no more. That is the trade
+/// this makes: a log that is bounded keeps the **recent** past and drops the
+/// rest, where an unbounded log keeps everything and takes the folder with
+/// it.
+struct LogFile {
+    /// The file the log is being appended to.
+    path: PathBuf,
+    /// The file the log was in before the last rotation.
+    previous: PathBuf,
+    /// The open file, or `None` when the log cannot be written to a file at
+    /// all — the standard error still has it.
+    file: Option<std::fs::File>,
+    /// How many bytes the file has grown to.
+    bytes: u64,
+}
+
+impl LogFile {
+    /// Open the log's file, appending to whatever is already there.
+    ///
+    /// A file that cannot be opened is **not** an error: the standard error is
+    /// still there, and a logger that refused to start because of a file
+    /// would take the application down.
+    fn open(path: PathBuf) -> Option<Self> {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let file = match open_append(&path) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("the log file could not be opened ({e}); the log goes to the standard error");
+                return None;
+            }
+        };
+        // The file may already hold a run's worth of lines: it is appended
+        // to across runs, so its size is asked for rather than assumed.
+        let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        Some(LogFile { previous: previous_of(&path), path, file: Some(file), bytes })
+    }
+
+    /// Write one line, and rotate the file if it has reached its limit.
+    fn write_line(&mut self, line: &str) {
+        if self.file.is_none() {
+            return;
+        }
+        if self.bytes + line.len() as u64 > MAX_LOG_BYTES {
+            self.rotate();
+        }
+        let Some(file) = self.file.as_mut() else { return };
+        use std::io::Write;
+        if file.write_all(line.as_bytes()).is_ok() {
+            self.bytes += line.len() as u64;
+        }
+    }
+
+    /// Move the full file aside and start a new one.
+    ///
+    /// A rotation that fails leaves the file that was there alone and the log
+    /// goes on growing: the bound is a bound, and a log that stopped being
+    /// written would be worse than a log that is too big.
+    fn rotate(&mut self) {
+        // The file before this one goes away: two files is the bound, and
+        // three would not be. The log is the tree's own file and the tree's
+        // own folder, so removing it is the tree's business.
+        let _ = std::fs::remove_file(&self.previous);
+        if std::fs::rename(&self.path, &self.previous).is_err() {
+            return;
+        }
+        match open_append(&self.path) {
+            Ok(file) => {
+                self.file = Some(file);
+                self.bytes = 0;
+            }
+            Err(_) => {
+                // The file the log was in is now the previous one, and the new
+                // one cannot be opened — so the log goes to the standard error
+                // and to the file it was in.
+                self.file = None;
+                self.bytes = 0;
+            }
+        }
+    }
+}
+
+/// The name of the file that holds the log before the current one.
+///
+/// The suffix is a `.1` beside the log's own name, so the two files are the
+/// same file in two ages rather than two things with names of their own.
+fn previous_of(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".1");
+    PathBuf::from(name)
+}
+
+/// Open a file to append to, creating it if it is not there.
+///
+/// The call is **one line** on purpose: the tree's gate allows
+/// `OpenOptions::new` in a file that may only append, and it looks for
+/// `append(true)` on the same line. A call spread over three lines would
+/// look like a file that creates without appending. §240.
+fn open_append(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new().create(true).append(true).open(path)
 }
 
 /// The eframe application.
@@ -1506,5 +1618,115 @@ mod tests {
         let render_message = response.message.unwrap_or_default();
         assert!(render_message.starts_with("rendered"), "{render_message}");
         assert!(response.data.and_then(|d| d.get("png_base64").cloned()).is_some(), "no frame");
+    }
+
+    /// A folder for the log's files, and the name of the log in it.
+    fn log_folder(tag: &str) -> (PathBuf, PathBuf) {
+        let dir = craftkit_core::temp::dir(tag).expect("a folder");
+        let path = dir.join("craftkit.log");
+        (dir, path)
+    }
+
+    /// The log's file stops growing at the bound.
+    ///
+    /// §242: the log was the one file the tree wrote with no limit on it,
+    /// and the fix has to be a **bound** — a file that has reached the limit
+    /// is moved aside and the log starts a new one.
+    #[test]
+    fn the_log_file_is_bounded() {
+        let (_dir, path) = log_folder("log-bound");
+        let mut log = LogFile::open(path.clone()).expect("a log file");
+
+        // Enough lines to pass the bound several times over.
+        let line = format!("[INFO] {}\n", "x".repeat(1024));
+        for i in 0..4096 {
+            log.write_line(&format!("{i} {line}"));
+        }
+
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        assert!(size <= MAX_LOG_BYTES, "the log's file is {size} bytes, past the bound of {MAX_LOG_BYTES}");
+
+        // And the bound is a bound on the folder, not on one file: the lines
+        // before the rotation are still there, under the other name.
+        let previous = previous_of(&path);
+        assert!(previous.exists(), "the log was rotated, and the old file is gone: {previous:?}");
+        let kept = std::fs::metadata(&previous).map(|m| m.len()).unwrap_or(0);
+        assert!(kept <= MAX_LOG_BYTES, "the previous file is {kept} bytes");
+    }
+
+    /// The rotation keeps the lines it wrote.
+    ///
+    /// A bound that threw the log away would be a bound that solved the
+    /// problem by deleting the evidence, and the lines at the start of a log
+    /// are the ones that say what the application was doing before it went
+    /// wrong. **One** rotation keeps them: the file before the current one is
+    /// removed at the next one, so the tree keeps two files' worth.
+    #[test]
+    fn the_rotation_keeps_the_lines_it_wrote() {
+        let (_dir, path) = log_folder("log-keeps");
+        let mut log = LogFile::open(path.clone()).expect("a log file");
+
+        log.write_line("[INFO] the first line\n");
+        // Enough to reach the bound once, and no further.
+        let filler = format!("[INFO] {}\n", "y".repeat(1024));
+        for _ in 0..1200 {
+            log.write_line(&filler);
+        }
+        log.write_line("[INFO] the last line\n");
+
+        let current = std::fs::read_to_string(&path).unwrap_or_default();
+        let previous = std::fs::read_to_string(previous_of(&path)).unwrap_or_default();
+        assert!(current.contains("the last line"), "the newest line is not in the log's file");
+        assert!(previous.contains("the first line"), "the oldest line is not in the previous file");
+    }
+
+    /// The folder the log lives in is bounded, not just the file.
+    ///
+    /// The bound is on what the tree keeps, and the tree keeps two files:
+    /// the one being written and the one before it. A third file would be a
+    /// third file in the folder the tree writes into, and the folder is on a
+    /// phone.
+    #[test]
+    fn the_logs_folder_is_bounded() {
+        let (dir, path) = log_folder("log-folder");
+        let mut log = LogFile::open(path.clone()).expect("a log file");
+
+        let filler = format!("[INFO] {}\n", "z".repeat(1024));
+        for _ in 0..4096 {
+            log.write_line(&filler);
+        }
+
+        let mut files = 0usize;
+        let mut total = 0u64;
+        for entry in std::fs::read_dir(dir).expect("the folder").flatten() {
+            let path = entry.path();
+            if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("craftkit.log")) {
+                files += 1;
+                total += std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            }
+        }
+        assert!(files <= 2, "the log's folder holds {files} files");
+        assert!(total <= 2 * MAX_LOG_BYTES, "the log's folder holds {total} bytes");
+    }
+
+    /// A log that is opened twice keeps what was there.
+    ///
+    /// The log is appended to **across runs** — the file is in the tree's
+    /// folder, and the folder is where the tree's files live — so the size a
+    /// new run starts from is the size the file already has, not zero.
+    #[test]
+    fn a_log_that_is_opened_again_keeps_what_was_there() {
+        let (_dir, path) = log_folder("log-again");
+        let mut first = LogFile::open(path.clone()).expect("a log file");
+        first.write_line("[INFO] from the first run\n");
+        drop(first);
+
+        let mut second = LogFile::open(path.clone()).expect("a log file");
+        second.write_line("[INFO] from the second run\n");
+        drop(second);
+
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(text.contains("from the first run"), "{text}");
+        assert!(text.contains("from the second run"), "{text}");
     }
 }
