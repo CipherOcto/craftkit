@@ -27396,9 +27396,12 @@ second is the tree's own and costs work in `crates/ui`.
 
 ### What is not claimed
 
-- **The 64-bit device is not done.** The package declares
-  `build_targets = ["armv7-linux-androideabi"]`; the aarch64 APK is not
-  built and not installed, and no 64-bit phone has been attached.
+- **The 64-bit device is not done.** The package declares both ABIs and the
+  aarch64 library **is** built — `lib/arm64-v8a/libcraftkit_android.so`,
+  896 KiB, and `nm -D` on it shows `T android_main` — and the dual-ABI APK
+  still installs and runs on the 32-bit phone, which takes the armeabi-v7a
+  one. **But no 64-bit phone has been attached**, so that library has never
+  been *run*, and a library that has never run is not a library that works.
 - **No log was read from the device.** A `NativeActivity`'s stdout and stderr
   go nowhere, so the app's own output on the phone is unknown.
 - **The app draws under the system status bar.** The clock overlaps the
@@ -30338,8 +30341,9 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     tree's own**, drawn with egui, with no new dependency and no Java. **The
     choice is the owner's.**
 
-    **The 64-bit device.** The package declares
-    `build_targets = ["armv7-linux-androideabi"]`; the aarch64 APK is not
-    built, not installed and not run, and no 64-bit phone has been attached.
-    It is one line in `Cargo.toml` and one attached phone.
+    **The 64-bit device.** The package declares both ABIs, the aarch64
+    library is built (896 KiB, and `nm -D` shows `T android_main`), and the
+    dual-ABI APK still installs and runs on the 32-bit phone. What is missing
+    is the **run**: no 64-bit phone has been attached, so that library has
+    never been executed. It is one attached phone and one `adb install`.
 

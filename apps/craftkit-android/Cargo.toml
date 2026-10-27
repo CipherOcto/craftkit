@@ -34,6 +34,6 @@ eframe = { workspace = true, features = ["android-native-activity"] }
 # `NativeActivity`, so the APK carries no Java at all. §236.
 [package.metadata.android]
 package = "org.craftocto.craftkit"
-build_targets = ["armv7-linux-androideabi"]
+build_targets = ["armv7-linux-androideabi", "aarch64-linux-android"]
 min_sdk_version = 21
 target_sdk_version = 30
