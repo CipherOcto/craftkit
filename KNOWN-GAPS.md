@@ -27107,10 +27107,13 @@ a_field_takes_what_the_soft_keyboard_commits ... ok
 the `craftkit-ui` test binary on the phone says the same. So the tree's half
 of the soft keyboard is not a question mark: it is a test.
 
-**The platform's half: the window.** There is none. `eframe` has no Android
-runner, `winit` has no Android backend, and `cargo build -p craftkit` for
-Android fails inside `android-activity` (§230). There is no Activity, no
-surface, no window, and so no keyboard to ask for.
+**The platform's half: the window.** There is none *in the tree* — but not
+because the platform lacks one. **§235 corrects this**: `eframe` has supported
+Android since 0.30, and the tree is on 0.33. What the tree does not do is ask:
+no `android-native-activity` feature, no `android_main` entry point, no
+`NativeOptions::android_app`. And `cargo build -p craftkit` for Android fails
+inside `android-activity` (§230) — which is the glue crate demanding to be
+told which base class the app is.
 
 ### What the tree would have to do, if the GUI arc goes that way
 
@@ -27122,13 +27125,15 @@ Not guessed — read off the two libraries the tree already uses:
 | the composition | `egui::ImeEvent` (`Enabled`, `Preedit`, `Commit`, `Disabled`) — `egui-0.33.3/src/data/input.rs:565` | the same four events, from Java |
 | asking for the keyboard | `egui-winit` calls `Window::set_ime_allowed(ctx.wants_keyboard_input())` (`egui-winit-0.33.3/src/lib.rs:395`) | `InputMethodManager.showSoftInput` when a field takes the focus |
 | the pointer | `egui::Event::PointerMoved` / `PointerButton` | the same events, from `MotionEvent`; egui also has `egui::Event::Touch` with a `TouchPhase` for multi-touch |
-| the window | `eframe::run_and_return` | an Activity, a `Surface`, and wgpu's Vulkan backend — **wgpu has it, eframe does not** |
+| the window | `eframe::run_and_return` | an Activity, a `Surface`, and wgpu's Vulkan backend — **wgpu has it, and eframe has had Android since 0.30** (§235) |
 
 So the tree's own code would change **not at all**: the fields are egui
 fields, and egui takes what a keyboard commits. What is missing is the
 platform's half — an Activity that owns a surface, a window that turns
 `MotionEvent` into egui's pointer events, and an `InputConnection` that turns
-a composition into egui's IME events.
+a composition into egui's IME events. **§235 measures what the world already
+has for each of those**, and the soft keyboard is the one piece that is still
+experimental.
 
 ### What is not claimed
 
@@ -27152,6 +27157,124 @@ ring are Android's, and the tree's part is "a field that takes a committed
 string". Measuring that part turned a question about a keyboard into a test
 that runs on the phone — and the part that is missing was named in one table
 instead of being discovered later.
+
+## 235. What the world has for egui on Android, read from the sources
+
+### The finding
+
+**§234 said something false and is corrected by this section.** It said that
+*`eframe` has no Android runner and `winit` has no Android backend*. Neither
+is true.
+
+**eframe has supported Android since 0.30.** The egui repository's own
+README: *"`eframe` is the official egui framework, which supports writing apps
+for Web, Linux, Mac, Windows, and Android."* The changelog says it plainly:
+**"0.30.0 — 2024-12-16 — Android support"** (PR #5318, by parasyte, merged
+12 December 2024). **The tree is on 0.33.**
+
+**Verified in the tree's own dependency source**, not from the web:
+`eframe-0.33.3/Cargo.toml` carries the features `android-native-activity` and
+`android-game-activity`, and `eframe-0.33.3/src/native/run.rs` takes
+`NativeOptions::android_app` and hands it to winit's
+`builder.with_android_app(...)` — and refuses to start without it
+(*"`NativeOptions` is missing required `android_app`"*).
+
+**So the tree's failure to build for Android is not a missing platform.** It is
+the tree not asking, in three places:
+
+1. **the feature** — the tree's `eframe` is `default-features = false` with
+   `default_fonts`, `glow`, `wayland` and `x11`; `android-native-activity` is
+   not among them;
+2. **the entry point** — an Android app is a `cdylib` with an `android_main`
+   function;
+3. **the app handle** — `NativeOptions::android_app` is never filled.
+
+And the error the tree saw — *"Either game-activity or native-activity must be
+enabled as features"* — is the glue crate doing its job: `android-activity`
+requires the app to name its base class, and the tree names none.
+
+### The soft keyboard: the known gap, and how far it has been solved
+
+- **egui issue #5590, "Keyboard not opening under Android"**: with
+  `NativeActivity`, the onscreen keyboard does not open when a text field
+  takes the focus, and long-press for copy/paste does not work.
+- **winit issue #1497** is the same problem one layer down, and **winit
+  #4126** reports `set_ime_allowed(true)` being ignored outright on some
+  devices (*"InputMethodManager: Ignoring showSoftInput() as view:… is not
+  served"*).
+- **The reason is in the platform**: `KeyEvent` carries only physical keys, so
+  there is no Unicode, no suggestion and no composition through that road. A
+  proper IME needs an **`InputConnection`** — and *in NativeActivity mode
+  `android-activity` conveys no IME events at all*.
+- **There is now a Rust-only answer.** `MatrixDev/android-ime-rs` (MIT or
+  Apache-2.0) is *a highly experimental PoC* whose idea is small and exact:
+  write a **small Java library** with the `InputConnection` glue and **no
+  dependencies** beyond `android.jar`, compile it to a jar, turn it into a
+  **dex**, embed the dex **in the Rust library** with `include_bytes!`, and
+  load it at run time with Android's `InMemoryDexLoader`. The app then needs
+  **no Java dependency** — only a Java shim it carries. Its third crate,
+  `android-ime-test`, is **egui-based**.
+- **The workaround everybody used first** was to call `showSoftInput(true)`
+  from Java: it opens the keyboard, and then *only backspace works*, because
+  no composition is coming.
+
+### The packaging
+
+| what | who | what it does |
+|---|---|---|
+| `cargo-apk` | rust-mobile | an APK from a `cdylib` with minimal setup: `crate-type = ["cdylib"]`, and `[package.metadata.android]` for the package name, the ABI list, the icon and the theme. `cargo apk run` builds, installs and runs over adb |
+| `cargo-apk2` | slint-ui | the successor — *the predecessor "has stagnated for over a year"* — with DEX compilation and **egui examples** of its own |
+| `cargo ndk` + Gradle | the toolchain's own advice | android-activity's README recommends Gradle for a real app, with `cargo ndk` producing the `cdylib` |
+
+**The glue version must match winit's**, and the table is in winit's own
+docs: **winit 0.30 ↔ `android-activity = "0.6"`** — which is exactly the
+0.6.1 the tree's failure named. winit's docs also say the way to avoid the
+clash: *use the API winit re-exports* under
+`winit::platform::android::activity::*` rather than depending on
+`android-activity` yourself.
+
+### The other way to Android: the browser
+
+The tree already builds for **wasm** (`apps/craftkit-web`), and a wasm egui
+app inside a WebView gets the platform's IME **for free** — the browser's
+input handling *is* the platform's. The price is a WebView shell, an asset
+pipeline and an APK, and the tree's web build is compile-only on this machine
+(§13: the `wasm-bindgen` versions disagree).
+
+### What this changes for the tree
+
+**The GUI arc is smaller than §234 said.** The platform's half is a *known
+shape* — three things the tree does not do, an APK tool, and an IME shim that
+is a PoC — and the tree's own code would change not at all.
+
+**And the soft keyboard is the one piece that is not finished anywhere.** Every
+other part of the Android story is a matter of following a recipe; the IME is
+the part where the platform insists on Java, and the Rust-only answer is a
+PoC from January 2026.
+
+### What is not claimed
+
+- **Nothing here has been tried on the tree.** No feature was enabled, no
+  `android_main` was written, no APK was built, and nothing was installed. This
+  is what the world has, read from the sources — and §230's rule holds: *a
+  recipe in a document is not a recipe that runs*.
+- **The IME shim is experimental**, by its own author's words.
+- **The community's own templates are not endorsements**: `fredrik-hammar`'s
+  demo, `sagebind`'s timer, `inferrna`'s and `jb55`'s wrappers, and
+  `SergioRibera/docker-rust-android` for the build environment.
+- **The tree's web path was not measured on the phone either.**
+
+### The lesson
+
+**A claim about a platform is a claim about a version.** §234 said "eframe has
+no Android runner" about **0.33**, in which it has had Android support since
+**0.30** — and the tree's own dependency source said so, one `grep` away. The
+claim came from knowing that winit had no Android backend *when winit had
+none*, and it was written into the tree's record without being checked.
+
+**And a search is cheap next to a wrong claim.** Two searches found the
+changelog line, the feature list, the glue table, the APK tools and the IME
+shim — all of it public, all of it older than the tree's dependency.
 
 ## What enforces what
 
