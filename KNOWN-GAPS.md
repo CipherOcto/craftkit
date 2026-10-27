@@ -29114,6 +29114,156 @@ and the comment had been there long enough to be believed. **A sentence in a
 comment is an intention; only a refusal is a bound** — and a bound that no
 test exercises is a wish.
 
+## 252. Every push cancelled the run, and the run that was cancelled was the one carrying the instrument
+
+### The finding
+
+**The tree had no verdict of its own for ten and a half hours, and the reason
+was a rule written for the wrong job.**
+
+`.github/workflows/ci.yml` carried nine jobs: the fast gates on three
+platforms, the phone build on three platforms, the policy, the portability
+check, and **the instrument** — `scripts/mutation-test-gates.sh`, which breaks
+each rule in the tree on purpose and requires the gate to notice.
+
+Over them sat one concurrency rule:
+
+```yaml
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+The rule's own comment says why it is there: *"A new push supersedes an
+in-flight run on the same ref: nobody is waiting for a result they no longer
+care about."* **That is true of a job that takes minutes and false of a job
+that takes an hour.**
+
+### Measured
+
+The two kinds of job, from one run (`40584129065`, the run before this one):
+
+| the job | started | finished | how long |
+|---|---|---|---|
+| `policy` | 21:08:40 | 21:09:18 | **38 seconds** |
+| `gates (ubuntu-latest)` | 21:08:40 | 21:10:55 | **2 minutes 15 seconds** |
+| `android (ubuntu-latest)` | 21:08:40 | 21:09:46 | **1 minute 6 seconds** |
+| `gates (windows-latest)` | 21:08:40 | 21:13:56 | **5 minutes 16 seconds** |
+| `mutation` | 21:08:41 | 21:40:14 | **cancelled at 31 minutes** — it needs about **61** |
+
+**Eight jobs finish in five minutes and sixteen seconds. The ninth takes an
+hour.** One rule covered both.
+
+And the history of the runs says what that cost:
+
+| the run | the commit | what happened |
+|---|---|---|
+| `40493355520` | `75c0cf98` | **success** — 11:04 |
+| `40549660983` | `e724881` | failure — the compiler warning (§248) |
+| `40562586800` | `9898c7a` | failure — the same warning |
+| `40575696299` … `40584129065` | `892adbb` … `763a62a` | **cancelled** — twelve runs in a row |
+| `40588604095` | `8c2d38c` | queued behind the next push |
+
+**Every run after 11:04 was cancelled, and the last green one was ten and a
+half hours earlier.** The instrument had not completed since the morning.
+
+### Why nothing else would have caught it
+
+- **The cancellation is not a failure.** A cancelled run is not red, and its
+  jobs that finished are green — so the tree's own author could read eight
+  green jobs and no complaint at all. The *run* was cancelled; nobody looks at
+  the run.
+- **The rule was right when it was written.** It was written for a workflow
+  whose jobs take minutes, and it was never re-read against a job that takes
+  an hour. **A rule is written for the thing it was written for**, and adding
+  a slow job under a fast rule does not change the rule.
+- **The instrument's own budget knew.** The script declares `BUDGET_MINUTES=90`
+  and a gate checks the job's timeout against it (§222) — so the tree knew the
+  suite needs an hour and had a gate that said so. **The gate checked the
+  timeout and not the cancellation**, and the cancellation was the thing that
+  stopped the job.
+
+### The fix
+
+**The instrument has its own workflow, and a push does not cancel it.**
+
+- `.github/workflows/mutation.yml` — the instrument's job, moved out of the
+  fast workflow, with `cancel-in-progress: false`.
+- It runs **nightly** (a cron at 03:17 UTC, not on the hour), **on demand**
+  (`workflow_dispatch`), and **on every pull request**.
+- The fast workflow keeps its rule, because now every job under it takes
+  minutes — and a push's verdict arrives in about five minutes.
+- The gate that checks the instrument's timeout now reads the file the
+  instrument is in.
+
+**And a new gate, so the split cannot quietly undo itself** —
+`the_instrument_is_not_cancelled_by_a_push`, in `xtask/src/lists.rs`:
+
+- the instrument's workflow must **not** cancel an in-flight run;
+- it must have a **schedule**, so the tree is proved every day and not only
+  when somebody remembers to ask;
+- and it must **not** trigger on `push`, because a run that is never cancelled
+  and starts on every push is a queue that grows for ever.
+
+**A comment is not a trigger.** The workflow explains itself in prose, and the
+gate reads the file *without its comments* — the same rule the gate on the
+workflow's commands reads by name (§170).
+
+**Two mutations**, each measured failing and passing again:
+
+```text
+# a push cancels the instrument
+$ cargo xtask lists
+error: 1 shared-list problem(s):
+   • .github/workflows/mutation.yml cancels an in-flight run when a new push
+     arrives, and the instrument needs about an hour: the tree would never see
+     it finish. §252.
+
+# the instrument has no schedule
+$ cargo xtask lists
+error: 1 shared-list problem(s):
+   • .github/workflows/mutation.yml has no schedule, so the instrument runs
+     only when somebody remembers to ask for it. §252.
+```
+
+### What is not claimed
+
+- **The instrument is no longer part of every push.** It runs nightly, on
+  demand and on pull requests. A gate that stops catching is noticed within a
+  day, where before it was noticed **never** — the tree had no verdict at all.
+- **Nothing about the fast workflow's rule changed.** It is right for the
+  eight jobs that are left under it, and all eight finish in minutes.
+- **The nightly run is a promise about a machine the tree does not own.**
+  A scheduled workflow runs only if GitHub's scheduler runs it, and the tree
+  cannot see that from inside itself. The instrument's *own* self-test is the
+  check that the script still works; whether the schedule fired is the
+  repository's own history.
+- **The cost went down, not up.** Every push used to start an instrument job
+  that was cancelled after a few minutes — the runner time was spent and the
+  answer thrown away. Now the instrument runs once a night and finishes.
+- **No verdict is claimed for this commit yet.** The run this change makes has
+  to finish before anything is said about it.
+
+### The lesson
+
+**A rule is written for the job it was written for.** "A new push supersedes
+an in-flight run" is a good rule for a five-minute gate and a terrible rule
+for a one-hour instrument, and putting both under it did not make the rule
+wrong — it made the *fast* rule govern the slow job, and the slow job never
+reported anything.
+
+**And a cancelled run is not a failed run, which is worse.** The eight jobs
+that finished were green; the run as a whole was cancelled; and the tree's
+author had eight green jobs and no signal at all. **A check that cannot
+report is not a check** — and the tree already had a word for that: a gate
+that cannot fail teaches people to trust a check that has never checked
+anything. **A gate that cannot finish teaches the same thing, more quietly.**
+
+**And the gate that was already there checked the wrong thing.** §222's gate
+holds the job's timeout to the suite's budget, and it was green throughout —
+because the timeout was never the problem. **The cancellation was.** A gate
+that checks a number beside the defect is not a gate on the defect.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29690,6 +29840,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The never-crash table names every crate root** | `the_table_names_every_crate_root` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **The never-crash table names every limit** | `the_table_names_every_limit` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/core/src/value.rs` | 2 mutations — §251 |
+| **The instrument is not cancelled by a push** | `the_instrument_is_not_cancelled_by_a_push` in `xtask/src/lists.rs` | 2 mutations — §252 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

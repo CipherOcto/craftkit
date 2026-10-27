@@ -6929,6 +6929,14 @@ pub fn gate_problems(root: &Path, commands: &[GateCommand], phases: &[&str]) -> 
 /// The workflow that decides where the gates run.
 const WORKFLOW: &str = ".github/workflows/ci.yml";
 
+/// The workflow that runs the instrument.
+///
+/// §252: the instrument used to be a job in [`WORKFLOW`], under a concurrency
+/// rule that cancels a run when a new push arrives — a rule that is right for
+/// a job that takes minutes and wrong for one that takes an hour. It has its
+/// own workflow now, and it is not cancelled by a later push.
+const MUTATION_WORKFLOW: &str = ".github/workflows/mutation.yml";
+
 /// The mutation job's timeout fits the suite's budget. §222.
 ///
 /// The workflow gave the mutation job **forty-five** minutes, and the number
@@ -6957,23 +6965,92 @@ pub fn the_mutation_job_fits_the_suites_budget(root: &Path) -> Result<Vec<String
         return Ok(problems);
     };
 
-    let workflow = read_text(root.join(WORKFLOW)).map_err(|e| format!("could not read {WORKFLOW}: {e}"))?;
+    let workflow = read_text(root.join(MUTATION_WORKFLOW))
+        .map_err(|e| format!("could not read {MUTATION_WORKFLOW}: {e}"))?;
     let Some(timeout) = workflow_timeout_minutes(&workflow) else {
         problems.push(format!(
-            "{WORKFLOW}: the mutation job does not say how long it may take, so a run that is \
-             cancelled at the limit looks like a run that failed. §222."
+            "{MUTATION_WORKFLOW}: the mutation job does not say how long it may take, so a run \
+             that is cancelled at the limit looks like a run that failed. §222."
         ));
         return Ok(problems);
     };
 
     if timeout < budget {
         problems.push(format!(
-            "{WORKFLOW}: the mutation job is given {timeout} minute(s) and the suite's budget is \
-             {budget}; a run that fits the budget is cancelled before it finishes. §222."
+            "{MUTATION_WORKFLOW}: the mutation job is given {timeout} minute(s) and the suite's \
+             budget is {budget}; a run that fits the budget is cancelled before it finishes. §222."
         ));
     }
     problems.sort();
     Ok(problems)
+}
+
+/// The instrument's runs are not cancelled by a later push, and it runs on a
+/// schedule. §252.
+///
+/// The instrument used to be a job in the fast workflow, under a concurrency
+/// rule that cancels a run when a new push arrives. That rule is right for a
+/// job that takes minutes and wrong for one that takes an hour: measured, the
+/// fast jobs finish in five minutes and sixteen seconds and the instrument
+/// needs about sixty-one, so every push cancelled it — and with it the whole
+/// run. Fourteen consecutive runs were cancelled, and the tree had no verdict
+/// for ten hours.
+///
+/// So the instrument has its own workflow, and this gate holds it there:
+///
+/// - the workflow must **not** cancel an in-flight run (`cancel-in-progress:
+///   false`), because a cancelled instrument run is a run that never reported;
+/// - it must run on a **schedule**, so the tree is proved every day and not
+///   only when somebody remembers to ask;
+/// - and it must **not** trigger on `push`, because a run that is never
+///   cancelled and starts on every push is a queue that grows for ever.
+///
+/// **A comment is not a trigger.** The workflow explains itself in prose, and
+/// the prose must not satisfy a rule about what it runs — the same rule the
+/// gate on the commands reads by name (§170).
+pub fn the_instrument_is_not_cancelled_by_a_push(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join(MUTATION_WORKFLOW);
+    let text = read_text(&path).map_err(|e| format!("could not read {MUTATION_WORKFLOW}: {e}"))?;
+    let code = without_comments(&text);
+    let mut problems = Vec::new();
+    if !code.contains("cancel-in-progress: false") {
+        problems.push(format!(
+            "{MUTATION_WORKFLOW} cancels an in-flight run when a new push arrives, and the \
+             instrument needs about an hour: the tree would never see it finish. §252."
+        ));
+    }
+    if !code.contains("schedule:") {
+        problems.push(format!(
+            "{MUTATION_WORKFLOW} has no schedule, so the instrument runs only when somebody \
+             remembers to ask for it. §252."
+        ));
+    }
+    if code.contains("push:") {
+        problems.push(format!(
+            "{MUTATION_WORKFLOW} starts a run on every push, and its runs are never cancelled: \
+             that is a queue that grows for ever. §252."
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// A file's code, with its comments taken out.
+///
+/// The workflow files explain themselves in prose, and the prose must not
+/// satisfy a rule about what they run. Everything from an unquoted `#` is a
+/// comment, and these files have no other use for the character.
+fn without_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for line in text.lines() {
+        let code = match line.find('#') {
+            Some(at) => &line[..at],
+            None => line,
+        };
+        out.push_str(code);
+        out.push('\n');
+    }
+    out
 }
 
 /// The budget the mutation script declares, in minutes.
@@ -7462,6 +7539,11 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A mode is a promise about a platform, so the platform is named.")),
     );
 
+    // The instrument is not cancelled by a later push. §252.
+    problems.extend(the_instrument_is_not_cancelled_by_a_push(root)?.into_iter().map(|p| {
+        format!("{p}\n     An instrument that is cancelled halfway is an instrument that never reported.")
+    }));
+
     // The mutation job's timeout fits the suite's budget. §222.
     problems.extend(
         the_mutation_job_fits_the_suites_budget(root)?.into_iter().map(|p| {
@@ -7504,7 +7586,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              the tree's walk \
              has one home, every pending change is declared and applied in code, \
              every test builds its temporary folder through its tree's one home, \
-             the tree's own index of enforcement names enforcement it has, \
+             the tree's own index of enforcement names enforcement it has, the \
+             instrument is not cancelled by a push, \
              and the session offers no way into the design but \
              the registry",
             roots.len()
@@ -9741,6 +9824,81 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The instrument's own workflow is the one the tree wants. §252.
+    #[test]
+    fn the_instruments_workflow_is_the_one_the_tree_wants() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_instrument_is_not_cancelled_by_a_push(&root).expect("runs");
+        assert!(problems.is_empty(), "the instrument's workflow is the one the tree wants: {problems:#?}");
+    }
+
+    /// A workflow that cancels the instrument is caught.
+    ///
+    /// The defect this gate exists for: every push cancelled the run, and the
+    /// run that was cancelled was the only one carrying the instrument. §252.
+    #[test]
+    fn an_instrument_that_a_push_cancels_is_caught() {
+        let dir = crate::temp::dir("instrument").expect("a temporary folder");
+        let workflow = dir.join(".github/workflows");
+        std::fs::create_dir_all(&workflow).expect("the fabricated tree");
+        std::fs::write(
+            workflow.join("mutation.yml"),
+            "on:\n  schedule:\n    - cron: \"17 3 * * *\"\nconcurrency:\n  \
+             cancel-in-progress: true\njobs:\n  mutation:\n    name: mutation\n",
+        )
+        .expect("the workflow");
+
+        let problems = the_instrument_is_not_cancelled_by_a_push(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("never see it finish")),
+            "a cancelled instrument is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An instrument that only runs when somebody remembers is caught.
+    #[test]
+    fn an_instrument_with_no_schedule_is_caught() {
+        let dir = crate::temp::dir("instrument-schedule").expect("a temporary folder");
+        let workflow = dir.join(".github/workflows");
+        std::fs::create_dir_all(&workflow).expect("the fabricated tree");
+        std::fs::write(
+            workflow.join("mutation.yml"),
+            "on:\n  workflow_dispatch:\nconcurrency:\n  cancel-in-progress: false\njobs:\n  \
+             mutation:\n    name: mutation\n",
+        )
+        .expect("the workflow");
+
+        let problems = the_instrument_is_not_cancelled_by_a_push(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("no schedule")),
+            "an instrument with no schedule is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An instrument that starts a run on every push is caught: its runs are
+    /// never cancelled, so that is a queue that grows for ever.
+    #[test]
+    fn an_instrument_that_starts_on_every_push_is_caught() {
+        let dir = crate::temp::dir("instrument-push").expect("a temporary folder");
+        let workflow = dir.join(".github/workflows");
+        std::fs::create_dir_all(&workflow).expect("the fabricated tree");
+        std::fs::write(
+            workflow.join("mutation.yml"),
+            "on:\n  push:\n    branches: [main]\n  schedule:\n    - cron: \"17 3 * * *\"\n\
+             concurrency:\n  cancel-in-progress: false\njobs:\n  mutation:\n    name: mutation\n",
+        )
+        .expect("the workflow");
+
+        let problems = the_instrument_is_not_cancelled_by_a_push(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("queue that grows")),
+            "an instrument on every push is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The mutation job's timeout leaves room for the suite.
     #[test]
     fn the_mutation_job_leaves_room_for_the_suite() {
@@ -9765,7 +9923,7 @@ mod tests {
         let workflow = dir.join(".github/workflows");
         std::fs::create_dir_all(&workflow).expect("the fabricated tree");
         std::fs::write(
-            workflow.join("ci.yml"),
+            workflow.join("mutation.yml"),
             "jobs:\n  mutation:\n    name: mutation\n    timeout-minutes: 45\n    steps:\n      - run: x\n",
         )
         .expect("the timeout");
@@ -9789,7 +9947,7 @@ mod tests {
         let workflow = dir.join(".github/workflows");
         std::fs::create_dir_all(&workflow).expect("the fabricated tree");
         std::fs::write(
-            workflow.join("ci.yml"),
+            workflow.join("mutation.yml"),
             "jobs:\n  mutation:\n    name: mutation\n    timeout-minutes: 45\n    steps:\n      - run: x\n",
         )
         .expect("the timeout");

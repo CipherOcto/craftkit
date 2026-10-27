@@ -197,73 +197,19 @@ jobs:
       - name: The tree builds for a phone, and exports the entry point
         run: cargo xtask android
 
-  # Does each gate still catch the thing it claims?
+  # The instrument used to be here. §252.
   #
-  # A gate that cannot fail teaches people to trust a check that has never
-  # checked anything. This job breaks each rule on purpose and requires the gate
-  # to notice. It is the only job that can catch a gate that has quietly stopped
-  # working, and it is the job the audit in `KNOWN-GAPS.md` §1 argues for.
+  # It is now its own workflow, `.github/workflows/mutation.yml`, and the
+  # reason is a measurement rather than a taste: this workflow's eight other
+  # jobs finish in five minutes and sixteen seconds, and the instrument needs
+  # about sixty-one. The concurrency rule below — "a new push supersedes an
+  # in-flight run" — is right for a job that takes minutes and wrong for a job
+  # that takes an hour, so every push cancelled the instrument and with it the
+  # whole run. Fourteen consecutive runs were cancelled, and the tree had no
+  # verdict between eleven o'clock and nine at night.
   #
-  # It is Ubuntu-only because what it tests is OS-independent, and because two of
-  # its cases run the whole of `cargo xtask ci`.
-  mutation:
-    name: mutation (gates must be able to fail)
-    runs-on: ubuntu-latest
-    # The budget for one run of the suite.
-    #
-    # §222: this was forty-five minutes, and the number came from the machine
-    # the suite was written on — where a run takes twenty-five. On the runner
-    # it actually runs on, the suite is **more than twice as slow**: measured,
-    # **344** of the suite's **495** cases had run when the forty-five minutes
-    # were up, at about nine seconds a case, so the whole run needs about
-    # **sixty-one** minutes. The job was therefore cancelled on every run, and
-    # nobody had seen it, because the job had never finished.
-    #
-    # Ninety minutes fits the measured sixty-one with room for a slower
-    # runner, and the script's own budget says ninety too — a gate holds the
-    # two numbers together, so lowering one without the other is reported.
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-
-      # The script is a gate, so it must be able to fail too. `--self-test`
-      # injects one synthetic case that is guaranteed to miss and exits
-      # non-zero. Asserting that here means a future edit that restores the old
-      # "print the failures and exit 0" behaviour goes red on this line, before
-      # the full run below can be believed.
-      - name: The mutation script fails when a gate stops catching
-        run: |
-          code=0
-          scripts/mutation-test-gates.sh --self-test || code=$?
-          if [[ $code -eq 0 ]]; then
-            echo "::error::scripts/mutation-test-gates.sh exited 0 on a missed mutation"
-            exit 1
-          fi
-          # Two non-zero codes, and they mean different things: 1 is the
-          # self-test's own synthetic cases failing as intended, and 2 is the
-          # self-test finding something wrong with itself. §203.
-          if [[ $code -ne 1 ]]; then
-            echo "::error::the self-test is broken: it exited $code, not 1"
-            exit 1
-          fi
-          echo "ok: a missed mutation makes the script exit non-zero, and the self-test itself is sound"
-
-      # Every mutation, one at a time, with the tree restored between them.
-      # The script restores the tree itself and compares checksums at the end;
-      # the checkout afterwards is belt and braces, so a failure here leaves an
-      # obviously dirty tree to read.
-      - name: Break each rule and require the gate to notice
-        run: scripts/mutation-test-gates.sh
-
-      - name: What did it leave behind?
-        if: always()
-        run: git status --porcelain
+  # The instrument now runs nightly, on demand, and on every pull request,
+  # and a push no longer cancels it.
 
   # What a Linux build machine cannot tell you.
   portability:

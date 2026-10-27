@@ -683,7 +683,7 @@ expect_catch "lists: a promise of a file's mode does not say where it holds" "ca
 # once forty-five minutes -- a number measured on another machine -- and the
 # suite needs about fifty-four on the runner it runs on (section 228: it was
 # sixty-seven, then fifty-one, and the tree got slower again).
-swap .github/workflows/ci.yml 'timeout-minutes: 90' 'timeout-minutes: 45'
+swap .github/workflows/mutation.yml 'timeout-minutes: 90' 'timeout-minutes: 45'
 expect_catch "lists: the mutation job's timeout does not fit the suite" "cargo xtask lists"
 
 # §223. The tree's own table of what enforces what is where a reader looks to
@@ -6773,6 +6773,20 @@ swap crates/core/src/value.rs \
     '        if false {'
 expect_catch "core: the constructor accepts a value past the depth limit" \
     "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
+
+# ------------------------------------------- the instrument, and the push that cancelled it ----
+# Section 252. The instrument was a job in the fast workflow, under a rule that
+# cancels a run when a new push arrives. The fast jobs take five minutes and
+# the instrument takes an hour, so every push cancelled it -- and with it the
+# whole run. Fourteen consecutive runs were cancelled and the tree had no
+# verdict for ten hours.
+swap .github/workflows/mutation.yml '  cancel-in-progress: false' '  cancel-in-progress: true'
+expect_catch "lists: a push cancels the instrument" "cargo xtask lists"
+
+# And an instrument that only runs when somebody remembers is an instrument
+# that has never run.
+swap .github/workflows/mutation.yml '  schedule:' '  # schedule:'
+expect_catch "lists: the instrument has no schedule" "cargo xtask lists"
 
 restore
 finish

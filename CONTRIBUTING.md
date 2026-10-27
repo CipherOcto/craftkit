@@ -162,9 +162,12 @@ exits 0. That happened once, and the next ordinary `cargo test` was what noticed
 it — not the script that made the mess. `swap` and `append` now refuse a target
 that is not listed, so you will be told rather than left to remember.
 
-`scripts/mutation-test-gates.sh` runs in CI as the `mutation` job, and
-`--self-test` asserts the script itself still fails when a gate stops catching.
-Run both locally before you claim a new gate works:
+`scripts/mutation-test-gates.sh` runs in CI as the `mutation` job of
+`.github/workflows/mutation.yml` — its own workflow, because it takes about
+an hour and a push must not cancel it (§252). It runs nightly, on demand
+(`workflow_dispatch`) and on every pull request; the fast gates run on every
+push. `--self-test` asserts the script itself still fails when a gate stops
+catching. Run both locally before you claim a new gate works:
 
 ```bash
 scripts/mutation-test-gates.sh --self-test   # must exit non-zero

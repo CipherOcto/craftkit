@@ -20,6 +20,7 @@ KNOWN-GAPS.md
 clippy.toml
 deny.toml
 .github/workflows/ci.yml
+.github/workflows/mutation.yml
 docs/architecture.md
 skills/craftkit-editing/SKILL.md
 crates/core/Cargo.toml

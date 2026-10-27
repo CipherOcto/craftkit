@@ -203,7 +203,9 @@ other REMOTE ONLY processing."*)
   that carried the Android arc and its one new case — §237); twenty of them is
   not a measurement, it is a way of
   occupying a machine that other people are using. **One run of it is already
-  a CI job**, so it needs no approval here — it needs a push.
+  a CI job** — the `mutation` job of `.github/workflows/mutation.yml`, which
+  runs nightly, on demand and on every pull request (§252) — so it needs no
+  approval here — it needs a dispatch.
 - **The hunt for a rare failure is off, and it is not for here either.** Two
   tests have failed once each and never again. A job that repeated them on
   the runner was built and measured (§229) and the owner turned it off, so

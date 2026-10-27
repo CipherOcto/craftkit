@@ -1,0 +1,122 @@
+# The instrument.
+#
+# The gates live in `cargo xtask`, not in this file — the same rule the fast
+# workflow follows. What is different here is *when* the instrument runs.
+#
+# §252. The instrument used to be a job in the same workflow as the fast
+# gates, under a concurrency rule that cancels a run when a new push arrives.
+# That rule is right for a job that takes minutes and wrong for a job that
+# takes an hour: measured on the runner, the eight fast jobs finish in five
+# minutes and sixteen seconds, and the instrument needs about sixty-one. So
+# every push cancelled the instrument, and with it the whole run — fourteen
+# consecutive runs, and no verdict for the tree since eleven o'clock.
+#
+# So the instrument has its own workflow, and it is **not** cancelled by a
+# later push. It runs:
+#
+# - **nightly**, so the tree is proved every day whether or not anybody
+#   pushes;
+# - **on demand** (`workflow_dispatch`), so a claim about a gate can be
+#   checked at once instead of waiting for the night;
+# - **on every pull request**, because a gate that stops catching is worth
+#   knowing about before the change is merged rather than after.
+#
+# The fast gates still run on every push, and they still gate every push:
+# `ci.yml` is unchanged in that respect, and it is now the only thing a push
+# has to wait for.
+
+name: mutation
+
+on:
+  schedule:
+    # 03:17 UTC. Not on the hour: every repository that runs at midnight
+    # runs at midnight, and the runners are busiest there.
+    - cron: "17 3 * * *"
+  pull_request:
+  # On demand: "the instrument, now".
+  workflow_dispatch:
+
+# A run of the instrument is not cancelled by a later push.
+#
+# This is the whole point of the file. The rule in the fast workflow — "a new
+# push supersedes an in-flight run on the same ref" — is right there and wrong
+# here: nobody is waiting for a result they no longer care about only when
+# the result takes minutes. §252.
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # `--locked` everywhere. A build that quietly updates the lock file is a
+  # build nobody has tested.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # Does each gate still catch the thing it claims?
+  #
+  # A gate that cannot fail teaches people to trust a check that has never
+  # checked anything. This job breaks each rule on purpose and requires the gate
+  # to notice. It is the only job that can catch a gate that has quietly stopped
+  # working, and it is the job the audit in `KNOWN-GAPS.md` §1 argues for.
+  #
+  # It is Ubuntu-only because what it tests is OS-independent, and because two of
+  # its cases run the whole of `cargo xtask ci`.
+  mutation:
+    name: mutation (gates must be able to fail)
+    runs-on: ubuntu-latest
+    # The budget for one run of the suite.
+    #
+    # §222: this was forty-five minutes, and the number came from the machine
+    # the suite was written on — where a run takes twenty-five. On the runner
+    # it actually runs on, the suite is **more than twice as slow**: measured,
+    # **344** of the suite's **495** cases had run when the forty-five minutes
+    # were up, at about nine seconds a case, so the whole run needs about
+    # **sixty-one** minutes. The job was therefore cancelled on every run, and
+    # nobody had seen it, because the job had never finished.
+    #
+    # Ninety minutes fits the measured sixty-one with room for a slower
+    # runner, and the script's own budget says ninety too — a gate holds the
+    # two numbers together, so lowering one without the other is reported.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # The script is a gate, so it must be able to fail too. `--self-test`
+      # injects one synthetic case that is guaranteed to miss and exits
+      # non-zero. Asserting that here means a future edit that restores the old
+      # "print the failures and exit 0" behaviour goes red on this line, before
+      # the full run below can be believed.
+      - name: The mutation script fails when a gate stops catching
+        run: |
+          code=0
+          scripts/mutation-test-gates.sh --self-test || code=$?
+          if [[ $code -eq 0 ]]; then
+            echo "::error::scripts/mutation-test-gates.sh exited 0 on a missed mutation"
+            exit 1
+          fi
+          # Two non-zero codes, and they mean different things: 1 is the
+          # self-test's own synthetic cases failing as intended, and 2 is the
+          # self-test finding something wrong with itself. §203.
+          if [[ $code -ne 1 ]]; then
+            echo "::error::the self-test is broken: it exited $code, not 1"
+            exit 1
+          fi
+          echo "ok: a missed mutation makes the script exit non-zero, and the self-test itself is sound"
+
+      # Every mutation, one at a time, with the tree restored between them.
+      # The script restores the tree itself and compares checksums at the end;
+      # the checkout afterwards is belt and braces, so a failure here leaves an
+      # obviously dirty tree to read.
+      - name: Break each rule and require the gate to notice
+        run: scripts/mutation-test-gates.sh
+
+      - name: What did it leave behind?
+        if: always()
+        run: git status --porcelain
