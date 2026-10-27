@@ -26080,7 +26080,7 @@ minutes"* — which is what it takes on the machine it was written on. The
 runner is **more than twice as slow**.
 
 **And the number has moved again since.** §224–§227 made the gate faster and
-the suite now takes **fifty-one** minutes on the runner; the sixty-seven
+the suite now takes **fifty-four** minutes on the runner; the sixty-seven
 above is what it took when it was measured. §228.
 
 So the job was cancelled on **every** run, and nobody had seen it, because
@@ -26541,9 +26541,9 @@ re-measured it afterwards.
 
 ### The port
 
-- **`AGENTS.md` says fifty-one**, and says that it was sixty-seven before
-  §224–§227 made the gate faster.
-- **The script's own comment** about the timeout case says fifty-one, and the
+- **`AGENTS.md` says fifty-four**, and says that it was sixty-seven before
+  §224–§227 made the gate faster and fifty-one after them.
+- **The script's own comment** about the timeout case says fifty-four, and the
   header keeps the sixty-one of §222 as the historical number.
 - **§222's section keeps its sixty-seven**, because that section is the
   record of what was measured then; it points forward to here.
@@ -26551,12 +26551,20 @@ re-measured it afterwards.
 ### What is not claimed
 
 **The budget stays at ninety.** §222's own lesson: *a budget measured on one
-machine is a guess on another*. Fifty-one on this runner with a ninety-minute
+machine is a guess on another*. Fifty-four on this runner with a ninety-minute
 budget leaves room for a slower one, and lowering the budget would be a
 promise the tree cannot keep. The budget is a limit; the duration is a
 measurement, and only the measurement is corrected.
 
-**And fifty-one is not a promise about the next run.** It is what the runner
+**And the measurement has moved again.** The run that proved §231 to §233
+(§231's caps, §232's second door, §233's measurement) reported **500 of 501**
+caught, *2* skipped and **54 minutes** — run `40422453284`. The tree got
+slower: the io crate's tests now hold a design of 73.3 MiB and write 105.1
+MiB of text to prove the file's cap, the engine writes a 44 MiB crash report,
+and the model's listing test measures twenty-one rounds instead of five. The
+budget stays at ninety.
+
+**And fifty-four is not a promise about the next run.** It is what the runner
 did on one run of one tree.
 
 ### The lesson
@@ -26970,6 +26978,107 @@ arriving from another machine may now be 96 MiB of text where it was 64 MiB.
 puts through it.** The design file's cap and the crash report's cap were two
 numbers for the same quantity — text for one design — and only one of them
 was checked against a machine that was not this one.
+
+## 233. A measurement of two costs was a statement about the scheduler
+
+### The finding
+
+**The tree's gate went red once, for no reason it could name.** A `cargo xtask
+ci` run failed with *"the tests of craftkit-model failed"* and no test output,
+the immediate re-run was green, and the model's own test binary passed 107
+tests when run on its own. The tree's rule is that **CI must never fail at
+random**, so a red gate with no cause is not a mystery to sit on: it is a
+defect to find.
+
+**The cause was found by reproduction.** The model's library test binary was
+run **40 times** under a synthetic load (40 busy loops on 16 cores), and it
+failed **6 times in 40** — always the same test, always with the same shape:
+
+```
+listing 4000 properties took 10.0x as long as listing 1000:
+the listing is counting the siblings the slow way
+```
+
+The test's threshold is 8, and **the true ratio is 5.0** — measured on an idle
+machine, over ten runs, between 4.90 and 5.00. The code the test measures had
+not changed; **the machine had**.
+
+### What the measurement was doing wrong
+
+The test measures two costs — listing 1 000 properties and listing 4 000 — and
+divides one by the other. The shape it used: each side is timed several times,
+the **fastest time of each side** is kept, and the number is one divided by
+the other.
+
+**The two fastest times come from different rounds.** On a busy machine the
+fast side's best round and the slow side's best round are not equally quiet,
+and the ratio of two such rounds is a statement about the scheduler rather
+than about the code.
+
+**And the shape that looks more principled is worse.** The middle of the
+per-round ratios was tried, on the theory that a round preempted on the fast
+side reads too low and one preempted on the slow side too high, and the middle
+would ignore both. Measured, it does not:
+
+| shape | ratio under load, ten runs | failures in 40 runs |
+|---|---|---|
+| the ratio of the fastest of each side, **5 rounds** (the tree's) | 4.75 – 5.39, with a tail to 11.9 | **6 of 40** |
+| the middle of the per-round ratios, 5 rounds | 4.13 – 8.88 | **20 of 40** |
+| the ratio of the fastest of each side, **9 rounds** | — | **1 of 40** |
+| the ratio of the fastest of each side, **21 rounds** | — | **0 of 40** |
+
+The last row was measured under a load that read **14** on the machine — and
+the ui's library tests, which had **no rounds at all**, failed **0 of 20**
+under the same load once they had nine.
+
+### What landed
+
+- **The shape has one home**, in the lowest layer: `crates/core/src/measure.rs`
+  holds `seconds` (how long a thing takes) and `quietest_ratio` (the ratio of
+  the two sides' quietest rounds). The shape was written **three times** and
+  each of them was a chance to get it wrong — §212's lesson, again.
+- **The model's listing test** takes **21 rounds**, because 21 is what the
+  measurement needed: five failed six times in forty, nine failed once in
+  forty, and twenty-one failed not at all.
+- **The ui's registry test** takes **9 rounds** (it had 8), and **the ui's
+  two panel tests** take **9 rounds** each — where before they had **one
+  measurement each** and no rounds at all, which was the most fragile shape
+  of the three.
+
+**The mutations still bite**, which is the point of a measurement: the slow
+listing reads **15.1** against a threshold of 8, and the slow registry reads
+**3.6** against a threshold of 2. Both were verified by applying the mutation
+and running the test.
+
+**And the threshold did not move.** The measurement was corrected, not the
+limit — §228's rule, and the same one the tree applies to durations.
+
+### What is not claimed
+
+- **0 of 40 is a measurement, not a proof.** The load was synthetic — 40 busy
+  loops on 16 cores — and a busier machine is a harsher judge. The claim is
+  what was measured, and how.
+- **The tree's own CI runners are not a busy machine** in the way this one
+  was, so the gate's red was the first sign; the test has been in the tree
+  since §122.
+- **The other relative measurements in the tree were not audited one by one.**
+  The three that share this shape were found by searching for it, and the
+  search is a search: `ratio` in the tree's Rust finds four places, three of
+  them now use the one home.
+
+### The lesson
+
+**A comparison is where a measurement breaks.** Two measurements taken at
+different moments are two facts about the machine, not one fact about the
+code — and the tree's tests were measuring the machine and calling it the
+code.
+
+**And the more principled shape can be the worse one.** The middle of the
+per-round ratios looks like the careful choice and read 4.13 to 8.88 where the
+shape it replaced read 4.75 to 5.39. **A shape that has never been measured
+under load is a guess**, however well it argues — the tree's own rule about
+gates: *a check that has never failed is not known to work* has a twin here,
+*a shape that has never been measured is not known to hold*.
 
 ## What enforces what
 
@@ -27526,6 +27635,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A check that cannot run on this machine says skipped, never passed** | `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one` in `crates/control/src/server.rs` | nothing — §230 |
 | **The file's cap is the worst case over the platforms the tree runs on** | `the_expansion_covers_the_worst_case_over_the_platforms` in `crates/io/src/format.rs` | 1 mutation — §231 |
 | **The report's cap holds the reports the tree writes itself** | `the_reports_cap_covers_the_worst_case_over_the_platforms` in `crates/engine/src/crash.rs` | 1 mutation — §232 |
+| **A measurement of two costs is the ratio of their quietest rounds** | `quietest_ratio` in `crates/core/src/measure.rs` | nothing — §233 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

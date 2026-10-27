@@ -145,7 +145,7 @@ fi
 # On the runner it actually runs on the suite is more than twice as slow:
 # measured, 344 of the suite's 495 cases had run when the forty-five minutes
 # were up, at about nine seconds a case, so the whole run needs about
-# sixty-one minutes at the time; the suite needs fifty-one now (section 228).
+# sixty-one minutes at the time; the suite needs fifty-four now (section 228).
 # The job was cancelled on every run, and nobody had seen
 # it, because the job had never finished.
 #
@@ -681,8 +681,8 @@ expect_catch "lists: a promise of a file's mode does not say where it holds" "ca
 # §222. The mutation job's timeout and the suite's budget are two numbers, and
 # the gate says the job's timeout leaves room for the suite. The timeout was
 # once forty-five minutes -- a number measured on another machine -- and the
-# suite needs about fifty-one on the runner it runs on (section 228: it was
-# sixty-seven, and the tree got faster).
+# suite needs about fifty-four on the runner it runs on (section 228: it was
+# sixty-seven, then fifty-one, and the tree got slower again).
 swap .github/workflows/ci.yml 'timeout-minutes: 90' 'timeout-minutes: 45'
 expect_catch "lists: the mutation job's timeout does not fit the suite" "cargo xtask lists"
 
