@@ -29537,6 +29537,110 @@ was strict, and the tree's own schema was the strict one — so the tree
 published a promise it did not keep. **The shape now lives once**, beside the
 code that reads it, and the schema publishes that.
 
+## 255. The prompt's template was filled twice, and the caller's text was filled in as well
+
+### The finding
+
+**The MCP server's prompts put the caller's own words into the wrong fields.**
+
+A prompt is a message the tree builds for an agent: a template with
+placeholders, the caller's arguments, and the registry's words for the
+command. `crates/mcp/src/prompts.rs` filled it like this:
+
+```rust
+for argument in prompt.arguments {
+    ...
+    text = text.replace(&format!("{{{}}}", argument.name), &value);
+}
+...
+text = text.replace("{command}", &id);
+text = text.replace("{label}", &label);
+text = text.replace("{doc}", &doc);
+text = text.replace("{params}", &params);
+```
+
+**Every replacement is applied to the text the previous replacement made.**
+So a value that itself looks like a placeholder is filled in again — and the
+registry's own words are substituted into the caller's text.
+
+### Measured
+
+The `add-node` prompt, with two arguments, `kind` and `name`:
+
+```text
+=== the caller's kind is the other argument's placeholder
+Kind: Injected          <- the caller's kind was "{name}"
+Name: Injected
+
+=== the caller's node is the registry's own word
+Node: DOC-TEXT          <- the caller's node was "{doc}"
+Property: 666           <- the caller's path was "{value}"
+Value: 666
+```
+
+**The message an agent reads is not the message the caller asked for.** The
+caller sent `kind = "{name}"`, and the tree sent the agent a `Kind:` field
+holding somebody else's name — a value the caller never supplied, in a
+field about something else.
+
+### Why nothing else would have caught it
+
+- **The tests filled in ordinary values.** `"filter"`, `"Probe"`, `"1"` —
+  text with no braces in it, which is what a value usually looks like.
+- **The doc said the right thing.** `PromptDef`'s own comment: *"`{argument}`
+  is replaced with the argument's value"*. The code did something else, and
+  the comment was not a test (§250's lesson: a sentence in a comment is an
+  intention).
+- **The substitution looked obviously right.** `str::replace` on a template
+  is the ordinary way to fill one; the re-scan is invisible until a value
+  contains a brace.
+
+### The fix
+
+**The template is read once, and a value goes into the result as it is.**
+
+- A new `fill` walks the **template**, and for each `{name}` looks the value
+  up — the caller's arguments first, and the registry's four words for the
+  names no argument claimed. A value is inserted literally.
+- A placeholder nobody claims is **left as it is**: the tree does not invent
+  a word for it.
+
+**Two tests**, the second one measured failing before the fix:
+
+- `a_value_that_looks_like_a_placeholder_is_left_alone` — the caller's
+  `kind` is `{name}` and the caller's `name` is `{doc}`, and both come back
+  as they were sent, while the registry's own words are still in the message
+  where the template asked for them.
+
+**One mutation**, in `scripts/mutation-test-gates.sh`: the one-pass fill
+replaced by the old one-at-a-time replacement, and the test fails.
+
+### What is not claimed
+
+- **The placeholders the tree writes are still written.** `{command}`,
+  `{label}`, `{doc}` and `{params}` are filled from the registry, exactly as
+  before.
+- **A prompt's text is still the tree's.** The template is the tree's; only
+  the *values* are the caller's, and now they stay values.
+- **The order of the two kinds of value changed in one way**: an argument
+  named `command` now means the caller's argument and not the registry's id.
+  No prompt has such an argument today, and the argument is the more
+  specific claim.
+- **Nothing about the session changed.** The message never read the session
+  and does not now.
+
+### The lesson
+
+**A template is read once.** Filling it one placeholder at a time, in the
+text the last fill made, is a second pass over the caller's data wearing the
+template's clothes — and the values are the part of a message that is not
+the tree's to change. **The tree's words are the tree's; the caller's words
+are the caller's, and neither is a template.**
+
+**And a value is text.** Nothing in a string a person sent is a placeholder,
+whatever it looks like. The tree reads its *own* template for placeholders
+and never the text it was given.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -30116,6 +30220,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The instrument is not cancelled by a push** | `the_instrument_is_not_cancelled_by_a_push` in `xtask/src/lists.rs` | 2 mutations — §252 |
 | **A path the tree publishes is a path a command accepts** | `a_path_the_tree_publishes_fits_in_the_path_budget` in `crates/model/src/property.rs` | 2 mutations — §253 |
 | **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
+| **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

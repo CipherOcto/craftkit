@@ -325,7 +325,12 @@ pub fn list_json() -> Json {
 pub fn message(name: &str, arguments: &Json, _session: &Mutex<Session>) -> Result<Json, PromptError> {
     let prompt =
         PROMPTS.iter().find(|p| p.name == name).ok_or_else(|| PromptError::NotFound(name.to_string()))?;
-    let mut text = prompt.text.to_string();
+    // The values the template is filled with, and the order they are read in.
+    //
+    // The arguments come first, so an argument named `command` is the
+    // caller's and not the registry's; the registry's own words come second
+    // and fill the names no argument claimed.
+    let mut values: Vec<(&str, String)> = Vec::new();
 
     for argument in prompt.arguments {
         let given = arguments.get(argument.name).and_then(Json::as_str);
@@ -339,7 +344,7 @@ pub fn message(name: &str, arguments: &Json, _session: &Mutex<Session>) -> Resul
             }
             None => argument.default.to_string(),
         };
-        text = text.replace(&format!("{{{}}}", argument.name), &value);
+        values.push((argument.name, value));
     }
 
     // The command's own words, from the registry: the id, the label, the
@@ -368,15 +373,53 @@ pub fn message(name: &str, arguments: &Json, _session: &Mutex<Session>) -> Resul
             )));
         }
     };
-    text = text.replace("{command}", &id);
-    text = text.replace("{label}", &label);
-    text = text.replace("{doc}", &doc);
-    text = text.replace("{params}", &params);
+    for (name, value) in [("command", id), ("label", label), ("doc", doc), ("params", params)] {
+        if !values.iter().any(|(claimed, _)| *claimed == name) {
+            values.push((name, value));
+        }
+    }
+
+    // The template is read **once**, and a value is put into it as it is.
+    //
+    // The old way replaced one placeholder at a time, in the text the last
+    // replacement had already made: so a caller's value that itself looked
+    // like a placeholder was filled in again, and the registry's own words
+    // were substituted into the caller's text. A value is text. §255.
+    let text = fill(prompt.text, &values);
 
     Ok(json!({
         "description": prompt.description,
         "messages": [{ "role": "user", "content": { "type": "text", "text": text } }],
     }))
+}
+
+/// Fill a template's placeholders, once.
+///
+/// The placeholders are read from the **template**, and a value goes into
+/// the result as it is: a value that itself looks like a placeholder is
+/// text, not a placeholder. §255.
+fn fill(template: &str, values: &[(&str, String)]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let Some(end) = after.find('}') else {
+            // No closing brace: the rest of the template is text.
+            out.push_str(after);
+            return out;
+        };
+        let name = &after[1..end];
+        match values.iter().find(|(claimed, _)| *claimed == name) {
+            Some((_, value)) => out.push_str(value),
+            // A placeholder nobody claims is left as it is: the tree does not
+            // invent a word for it.
+            None => out.push_str(&after[..=end]),
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The suggestions for one prompt argument.
@@ -410,6 +453,30 @@ mod tests {
 
     fn session() -> Mutex<Session> {
         Mutex::new(Session::sample())
+    }
+
+    /// **A value is text, not a placeholder.** §255.
+    ///
+    /// The old way replaced one placeholder at a time, in the text the last
+    /// replacement had already made: so a caller's value that itself looked
+    /// like a placeholder was filled in again — and the registry's own words
+    /// were substituted into the caller's text. An agent reading the message
+    /// would see text the caller never sent, in the field of another
+    /// argument.
+    #[test]
+    fn a_value_that_looks_like_a_placeholder_is_left_alone() {
+        let s = session();
+        // The caller's `kind` is the other argument's placeholder, and the
+        // caller's `name` is the registry's own word for the command's
+        // description.
+        let arguments = json!({"kind": "{name}", "name": "{doc}"});
+        let reply = message("add-node", &arguments, &s).expect("the message");
+        let text = reply["messages"][0]["content"]["text"].as_str().expect("the text");
+        assert!(text.contains("Kind: {name}"), "the caller's value was replaced: {text}");
+        assert!(text.contains("Name: {doc}"), "the caller's value was replaced: {text}");
+        // And the registry's own words are still in the message, where the
+        // template asked for them.
+        assert!(text.contains("Call the command `node.add`"), "{text}");
     }
 
     /// Every prompt names a command the registry has.

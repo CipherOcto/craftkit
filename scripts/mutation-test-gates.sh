@@ -5523,8 +5523,8 @@ expect_catch "mcp: a prompt names a command the registry does not have" \
 # The second leaves the placeholder in the message, so the prompt tells the
 # agent to call a command whose name was never filled in.
 swap crates/mcp/src/prompts.rs \
-    '    text = text.replace("{command}", &id);' \
-    '    text = text.clone();'
+    '        if !values.iter().any(|(claimed, _)| *claimed == name) {' \
+    '        if false {'
 expect_catch "mcp: the message does not carry the registry's words" \
     "cargo test -p craftkit-mcp --profile ci the_message_carries_the_registry_s_words"
 
@@ -6825,6 +6825,20 @@ swap crates/model/src/path.rs \
     '        if false {'
 expect_catch "model: an id is not hex digits and nothing else" \
     "cargo test -p craftkit-model --profile ci a_name_the_grammar_cannot_write_is_refused"
+
+# ------------------------------------------------- the values a prompt is given ----
+# Section 255. The prompt's template was filled one placeholder at a time,
+# in the text the last replacement had already made -- so a caller's value
+# that itself looked like a placeholder was filled in again, and the
+# registry's own words were substituted into the caller's text.
+swap crates/mcp/src/prompts.rs \
+    '    let text = fill(prompt.text, &values);' \
+    '    let mut text = prompt.text.to_string();
+    for (name, value) in &values {
+        text = text.replace(&format!("{{{name}}}"), value);
+    }'
+expect_catch "mcp: a caller's value is re-scanned for placeholders" \
+    "cargo test -p craftkit-mcp --profile ci a_value_that_looks_like_a_placeholder_is_left_alone"
 
 restore
 finish
