@@ -28656,6 +28656,75 @@ before every frame on the native path as well as the web one), and
 the tree already used, and a fix that needed **no new dependency, no Java,
 no JNI and no second unsafe exception**.
 
+## 248. The warning the local compiler does not emit
+
+### The finding
+
+**The tree's own gate was green on the machine, and the runner was red on
+every job.** The keyboard commit (`e724881`, §246) passed `cargo xtask ci`
+locally — every phase, including clippy with `-D warnings` — and the runner
+failed **six** jobs with the same error:
+
+```text
+error: unused variable: `c`
+   --> crates\ui\src\keyboard.rs:172:55
+    |
+172 |                 let text = if matches!(key, Key::Char(c) if *shifted) {
+    |                                                       ^  help: if this is intentional, prefix it with an underscore: `_c`
+    = note: `-D unused-variables` implied by `-D warnings`
+```
+
+The binding was real: `matches!(key, Key::Char(c) if *shifted)` binds the
+character and never uses it — the guard asks *whether* the key is a character,
+and the label comes from `key.label(*shifted)` a line above.
+
+**The local compiler is rustc 1.93.0; the runner's `stable` is newer, and the
+newer one emits the lint.** Nothing in the tree was different between the two
+runs: the same command, the same flags, the same source.
+
+### Why nothing else would have caught it
+
+**The local gate is the runner's gate, run with a different compiler.** There
+is no second gate that could have caught it, because there is nothing between
+"the local compiler did not complain" and "the runner's compiler did". The
+evidence the tree had was a green run *on this machine*, and a green run on
+this machine is a fact about this machine — the same shape as §230–§232,
+where a phone found four defects an hour that the desktop could not show.
+
+### The fix
+
+`Key::Char(_)` — the guard asks a question about the shape of the key, and
+the shape is all it needs.
+
+### What enforces it
+
+The runner's six jobs: the three `gates` jobs and the three `android` jobs,
+on ubuntu, macos and windows. **The local gate is not the evidence for this
+one** — it is evidence about the local toolchain.
+
+### What is not claimed
+
+- **The local gate is not wrong.** It ran the same command and the same
+  flags; the compiler was the only difference, and a compiler is a versioned
+  thing that moves.
+- **The tree does not pin the toolchain to hide this.** Pinning the local
+  compiler would make the local gate and the runner agree by making both of
+  them older, and the runner's `stable` is deliberately the moving one.
+- **Nothing else in the tree was affected.** The pattern was searched for
+  across the tree: one binding in one `matches!` guard.
+
+### The lesson
+
+**A green local gate is a fact about the local toolchain, not about the
+tree.** Every gate in the tree is the same command the runner runs, and every
+one of them can be green here and red there, because the compiler moves and
+the tree does not.
+
+**And the failure was uniform, which is what made it easy to read.** Six jobs,
+one error, one line. The tree's own rule — *a gate that cannot run says
+skipped, never a pass* — has a twin: **a gate that ran on a different
+compiler is a different gate.**
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29227,6 +29296,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's own keyboard types into the field that has the focus** | `the_trees_own_keyboard_types_into_the_field_that_has_the_focus` in `crates/ui/src/shell.rs` | the phone's own run — §246 |
 | **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
 | **The tree is laid out inside the rectangle the platform reports** | `the_insets_are_the_platforms_answer_in_egui_units` in `crates/ui/src/insets.rs` | 2 mutations, and the phone's own run — §247 |
+| **A warning the local compiler does not emit is a warning the runner fails on** | the runner's six jobs — three `gates` and three `android` | the runner's own compiler — §248 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
