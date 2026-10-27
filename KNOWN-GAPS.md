@@ -28231,6 +28231,101 @@ whatever the machine said.
 made the log private on the phone, so the phone showed nothing wrong. The
 defect was on the desktop, in a file the desktop does not write yet.
 
+## 245. The rule that was written twice, and the copy that forgot Windows
+
+### The finding
+
+**§241's fix was in the wrong place — or rather, in only one of two places.**
+
+§241 found that the Android gate looked for the NDK's toolchain in a
+directory named for the wrong host, and fixed it with a function:
+
+```text
+pub fn host_dir() -> &'static str {
+```
+
+That function is the tree's answer to "which host is this?". And the code
+that lists the symbols of the built library — the check that the library
+exports the entry point the platform's loader looks up by name — **had its
+own copy of the rule**:
+
+```text
+let host = if cfg!(target_os = "macos") { "darwin-x86_64" } else { "linux-x86_64" };
+```
+
+**A copy of the rule, in the same file, forty lines below the rule.** It
+knows about macOS and treats everything else as Linux — so on Windows it
+looked for `llvm-nm` in a Linux directory, did not find it, fell back to the
+host's `nm` — which a Windows runner does not have — and the gate's answer
+was "the library does not export the entry point".
+
+**Nothing caught it, because nothing ran it.** The gate that builds for a
+phone ran on the Linux runner only (§241's own note), and the *test* that
+covers this part of the gate is about the linker, not about the symbol
+lister.
+
+### The fix: one rule, one place, and a test that asks both
+
+The code now asks [`host_dir`] instead of answering the question itself, and
+the tools the check tries are in one function:
+
+```text
+fn nm_tools(ndk: Option<&Path>) -> Vec<PathBuf> {
+```
+
+so a **test** can ask the two for their answer and compare them:
+
+```text
+the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory
+```
+
+A third copy cannot appear without that test failing — which is the point:
+the defect was not a wrong answer, it was a **second place to be wrong**.
+
+### And the gate now runs where the guess was
+
+The job that builds for a phone ran on the Linux runner only, so the NDK's
+own layout was **asserted** on two platforms and **measured** on one. It now
+runs on the three platforms the tree claims to build for:
+
+```text
+android (the tree still builds for a phone, on ubuntu-latest)
+android (the tree still builds for a phone, on macos-latest)
+android (the tree still builds for a phone, on windows-latest)
+```
+
+`fail-fast` is off on purpose: one platform's failure should not hide the
+other two's result — that is how §241's failure was found at all.
+
+### What is not claimed
+
+- **The NDK's macOS and Windows layouts are measured on the runners**, and
+  the runners' results are in the CI log; what is written here is the tree's
+  side of it, and the tree's side is a table of two platforms.
+- The **host's own `nm`** is still the fallback, and on a Windows runner
+  there may not be one — which is exactly why the NDK's own tool is tried
+  first.
+
+### The lesson
+
+**A rule written twice is two chances to forget it, and this one was written
+twice in the same file.** The tree's own wording, from the one home for
+writing a file (§215): *"a rule written three times is three chances to
+forget it"* — and here it was twice, forty lines apart, with the second
+copy the one that was wrong.
+
+**And a fix that does not remove the second place is not a fix.** §241
+replaced a wrong answer with a right one; it did not make the question
+askable in one place, so the same wrong answer was still there to be
+re-introduced. The general form: *when a rule appears twice, the fix is not
+to correct both copies — it is to give the rule an address and make the
+copies call it.*
+
+**And a job that runs on one platform asserts the platforms it does not
+run.** The gate's table of hosts was a guess with a table's shape, and the
+table was enough to look like evidence. Running the job on the platform is
+what turns the table into a measurement.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28799,6 +28894,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
 | **A path is compared as a path, not as a spelling** | `a_path_is_compared_as_a_path_and_not_as_a_spelling` in `xtask/src/android.rs` | the Windows runner — §243 |
 | **The log's file is private** | `the_logs_file_is_private` in `apps/craftkit/src/lib.rs` | 1 mutation — §244 |
+| **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

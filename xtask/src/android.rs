@@ -251,13 +251,7 @@ pub fn exports_entry_in(listing: &str) -> bool {
 /// — the parsing is separated so that it can be tested without a phone and
 /// without a toolchain.
 pub fn exports_entry(ndk: Option<&Path>, library: &Path) -> bool {
-    let mut tools: Vec<PathBuf> = Vec::new();
-    if let Some(ndk) = ndk {
-        let host = if cfg!(target_os = "macos") { "darwin-x86_64" } else { "linux-x86_64" };
-        tools.push(ndk.join("toolchains/llvm/prebuilt").join(host).join("bin").join("llvm-nm"));
-    }
-    tools.push(PathBuf::from("nm"));
-    for tool in tools {
+    for tool in nm_tools(ndk) {
         let Ok(out) = command(
             &tool.to_string_lossy(),
             &["-D", "--defined-only", &library.to_string_lossy()],
@@ -271,6 +265,26 @@ pub fn exports_entry(ndk: Option<&Path>, library: &Path) -> bool {
         return exports_entry_in(&out.stdout);
     }
     false
+}
+
+/// The tools that can list the symbols of a library, in the order they are
+/// tried.
+///
+/// **The NDK's own `llvm-nm` first**, because it is there with the
+/// toolchain, and the host's `nm` second, because it usually is too.
+///
+/// The NDK's directory is the **host's own**, from [`host_dir`] — and it was
+/// a copy of the rule in this function once, which is how the Windows runner
+/// came to look for a Linux toolchain in a Windows NDK. A rule written twice
+/// is two chances to forget it, and this one was written twice and forgot
+/// once. §245.
+fn nm_tools(ndk: Option<&Path>) -> Vec<PathBuf> {
+    let mut tools: Vec<PathBuf> = Vec::new();
+    if let Some(ndk) = ndk {
+        tools.push(ndk.join("toolchains/llvm/prebuilt").join(host_dir()).join("bin").join("llvm-nm"));
+    }
+    tools.push(PathBuf::from("nm"));
+    tools
 }
 
 /// The gate.
@@ -397,6 +411,25 @@ mod tests {
     /// runner's failure became a check that runs everywhere. §243.
     fn normalized(path: &str) -> String {
         path.replace('\\', "/")
+    }
+
+    /// The tool that lists the symbols is the NDK's own, in the host's own
+    /// directory.
+    ///
+    /// §245: the host directory was written **twice** — once in the rule and
+    /// once in the code that needed it — and the second copy was the one
+    /// that forgot Windows. The test asks the two for their answer, so a
+    /// third copy cannot appear without this failing.
+    #[test]
+    fn the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory() {
+        let tools = nm_tools(Some(Path::new("/ndk")));
+        let first = tools.first().expect("the NDK's own tool comes first");
+        let text = first.to_string_lossy();
+        assert!(text.contains("llvm-nm"), "{text}");
+        assert!(text.contains(host_dir()), "{text} does not name the host");
+        // And the host's own `nm` is the fallback, because it usually is
+        // there.
+        assert!(tools.iter().any(|tool| tool == &PathBuf::from("nm")), "{tools:?}");
     }
 
     /// A path from another platform is compared as the same path.

@@ -130,8 +130,25 @@ jobs:
   # the version the tree was measured with, and the gate is `cargo xtask
   # android` by name. §85, §236.
   android:
-    name: android (the tree still builds for a phone)
-    runs-on: ubuntu-latest
+    name: android (the tree still builds for a phone, on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The gate, on every platform the tree claims to build for.
+    #
+    # §241: the gate that builds for a phone names the NDK's **host**
+    # directory, and that directory is a fact about the machine - and the
+    # first version of the gate knew about macOS and treated everything else
+    # as Linux, so on Windows it looked for the toolchain in a directory that
+    # does not exist there. The fix was a guess, and a guess is not a
+    # measurement.
+    #
+    # So the job runs where the tree claims to work: the NDK's own layout is
+    # then **measured** on each host by the job that builds with it, instead
+    # of being asserted in a table. `fail-fast` is off on purpose: one
+    # platform's failure should not hide the other two's result.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
