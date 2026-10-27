@@ -28725,6 +28725,114 @@ one error, one line. The tree's own rule — *a gate that cannot run says
 skipped, never a pass* — has a twin: **a gate that ran on a different
 compiler is a different gate.**
 
+## 249. The crash folder on a phone, written for the first time
+
+### The finding
+
+**§240 put the tree's files in the phone's own folder, and the crash folder
+had never been written.** The claim was that a crash on a phone leaves a
+report there, that the report is private, and that the report can be read
+back and replayed on another machine. All three were *reasoned*, and none had
+been *run*: no crash had ever happened on a phone, because nothing had ever
+crashed there.
+
+**A mechanism that has never run is not a mechanism.** The tree's own rule
+about gates — *a check that has never failed is not known to work* — is the
+same rule, and the crash folder is a mechanism in exactly that sense.
+
+### The measurement
+
+**The trigger was temporary and it is gone.** A file in the tree's folder on
+the phone made the application panic on the next frame:
+
+```rust
+// (taken out again after the measurement)
+if tree.join("panic").exists() {
+    panic!("the panic trigger file was there");
+}
+```
+
+The file was written from outside the application, with the phone's own
+tools:
+
+```text
+$ adb shell run-as org.craftocto.craftkit touch files/craftkit/panic
+```
+
+**And the folder was there.** The application's own panic hook wrote the
+report, in the application's own directory, with the design as it was:
+
+```text
+$ adb shell run-as org.craftocto.craftkit ls -l files/craftkit files/craftkit/crashes
+files/craftkit:
+-rw------- 1 u0_a249 u0_a249  118639 craftkit.log
+-rw------- 1 u0_a249 u0_a249 1200000 craftkit.log.1
+drwx------ 3 u0_a249 u0_a249    3488 crashes
+
+files/craftkit/crashes:
+drwx------ 2 u0_a249 u0_a249    3488 20261027-201655-3c53
+
+$ adb shell run-as org.craftocto.craftkit ls -l files/craftkit/crashes/20261027-201655-3c53
+-rw------- 1 u0_a249 u0_a249  8252 report.json
+```
+
+**The report is the tree's report**: the id, the time, the message, and the
+whole design as it was at the moment of the crash.
+
+```text
+$ adb shell run-as org.craftocto.craftkit cat files/craftkit/crashes/20261027-201655-3c53/report.json
+{
+  "id": "20261027-201655-3c53",
+  "unix": 1793132215,
+  "command": "none recorded",
+  "message": "the panic trigger file was there",
+  "design": { "meta": { "name": "Sample plan", "fps": 24, ... }, "nodes": [ ... ] },
+```
+
+**And it reads and replays on another machine.** The report was pulled off
+the phone and handed to the desktop's own tool — the CLI has a door for
+exactly this, *"a report in a file — one that arrived from another machine"*:
+
+```text
+$ craftkit-cli crashes show --file report.json
+{ "id": "20261027-201655-3c53", ... }
+
+$ craftkit-cli crashes replay --file report.json
+0 step(s) replayed onto the design the report recorded
+the replay reproduced the design in the report
+```
+
+### What is not claimed
+
+- **The replay had no steps to replay.** The panic happened with no command
+  running, so the report says *"none recorded"* and the replay had nothing to
+  put back. A crash **inside a command** would carry that command's steps.
+  What was measured is that the report survives the trip and the design in it
+  is the design that was on the screen.
+- **This was a Rust panic, not a platform crash.** The report is written by
+  the tree's own panic hook. A crash the platform raises in Java — what
+  `adb shell am crash` does — would not go through it, and would leave no
+  report.
+- **The trigger is gone.** The code that made the phone panic was taken out
+  after the measurement, the clean build was put on the phone, and the
+  trigger file was deleted. The tree keeps the mechanism, not the way in.
+- **One phone, one crash.** The 64-bit device has not been attached, and
+  nothing here has been measured on it.
+
+### The lesson
+
+**The proof of a mechanism is a file in the place the mechanism writes to.**
+§240's claim was about a *place* — the application's own directory on a
+phone — and a place is proved by something being in it. Nothing had ever
+crashed on a phone, so the folder was empty, and an empty folder is a
+promise.
+
+**And the trigger is not part of the product.** The tree needed a way to
+crash the application once, on a device, and it did not have one — so it had
+one for an afternoon and took it away again. The alternative — a "crash me"
+button in the toolbar — would have been a command in the registry, and every
+command is something a person can press by accident.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29297,6 +29405,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
 | **The tree is laid out inside the rectangle the platform reports** | `the_insets_are_the_platforms_answer_in_egui_units` in `crates/ui/src/insets.rs` | 2 mutations, and the phone's own run — §247 |
 | **A warning the local compiler does not emit is a warning the runner fails on** | the runner's six jobs — three that run the gates, three that build for a phone | the runner's own compiler — §248 |
+| **A crash on a phone leaves a report another machine can read** | the phone's own run — the report in the application's folder | the phone's own run, and the desktop's own reader — §249 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
