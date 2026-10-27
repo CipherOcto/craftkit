@@ -160,9 +160,27 @@ jobs:
             echo "::error::this runner has no Android SDK, and the phone build needs the NDK"
             exit 1
           fi
+          # What the runner has, printed: the first run of this job failed on
+          # `sdkmanager: command not found`, and the SDK was there - only the
+          # tool was not on the PATH. This prints the SDK's own layout, so the
+          # next failure says what the runner has instead of what it does not.
+          echo "the Android SDK is at $home"
+          ls "$home" || true
+          ls "$home/ndk" 2>/dev/null || echo "the SDK has no ndk directory"
           if [ ! -d "$home/ndk/$version" ]; then
-            echo "installing ndk;$version"
-            yes | sdkmanager "ndk;$version"
+            # The tool is **in the SDK**, not on the PATH: `cmdline-tools` is
+            # where the command-line tools live, and the runner puts the SDK on
+            # the PATH but not its tools.
+            manager=""
+            for candidate in "$home"/cmdline-tools/*/bin/sdkmanager "$home"/tools/bin/sdkmanager; do
+              if [ -x "$candidate" ]; then manager="$candidate"; break; fi
+            done
+            if [ -z "$manager" ]; then
+              echo "::error::no sdkmanager in $home, and the NDK $version is not installed"
+              exit 1
+            fi
+            echo "installing ndk;$version with $manager"
+            yes | "$manager" "ndk;$version"
           fi
           echo "ANDROID_NDK_HOME=$home/ndk/$version" >> "$GITHUB_ENV"
 
