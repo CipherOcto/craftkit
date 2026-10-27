@@ -154,35 +154,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="25.2.9519653"
           home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [ -z "$home" ]; then
             echo "::error::this runner has no Android SDK, and the phone build needs the NDK"
             exit 1
           fi
-          # What the runner has, printed: the first run of this job failed on
-          # `sdkmanager: command not found`, and the SDK was there - only the
-          # tool was not on the PATH. This prints the SDK's own layout, so the
-          # next failure says what the runner has instead of what it does not.
+          # What the runner has, printed - and **nothing downloaded**.
+          #
+          # The gate finds the NDK itself: `ANDROID_NDK_HOME`, then
+          # `ANDROID_NDK_LATEST_HOME`, then the newest under
+          # `$ANDROID_HOME/ndk`. The runner's image already carries three,
+          # and the tree builds with every NDK that was tried - measured:
+          # 23.1, 24.0, 25.2 and 26.1 each build both ABIs and export the
+          # entry point.
+          #
+          # The first version of this step downloaded the pinned NDK, and it
+          # failed twice for reasons that had nothing to do with the tree: the
+          # command-line tools are not on the PATH, and `yes |` under
+          # `pipefail` fails on the SIGPIPE that a successful install causes.
+          # A job that fails for want of a tool gets switched off, so the job
+          # uses what the machine has.
           echo "the Android SDK is at $home"
-          ls "$home" || true
           ls "$home/ndk" 2>/dev/null || echo "the SDK has no ndk directory"
-          if [ ! -d "$home/ndk/$version" ]; then
-            # The tool is **in the SDK**, not on the PATH: `cmdline-tools` is
-            # where the command-line tools live, and the runner puts the SDK on
-            # the PATH but not its tools.
-            manager=""
-            for candidate in "$home"/cmdline-tools/*/bin/sdkmanager "$home"/tools/bin/sdkmanager; do
-              if [ -x "$candidate" ]; then manager="$candidate"; break; fi
-            done
-            if [ -z "$manager" ]; then
-              echo "::error::no sdkmanager in $home, and the NDK $version is not installed"
-              exit 1
-            fi
-            echo "installing ndk;$version with $manager"
-            yes | "$manager" "ndk;$version"
-          fi
-          echo "ANDROID_NDK_HOME=$home/ndk/$version" >> "$GITHUB_ENV"
 
       - name: The tree builds for a phone, and exports the entry point
         run: cargo xtask android

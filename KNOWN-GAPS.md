@@ -27581,10 +27581,33 @@ it has the policy gate's three rules (§217), and they are the same ones:
 
 **The NDK is found in three places, in order**: `ANDROID_NDK_HOME`, then
 `ANDROID_NDK_LATEST_HOME`, then the newest directory under
-`$ANDROID_HOME/ndk`. The CI job installs **the version the tree was measured
-with** (`25.2.9519653`) and points `ANDROID_NDK_HOME` at it, so a runner
-whose image brings a different one builds the same thing the tree was
-measured on.
+`$ANDROID_HOME/ndk`.
+
+**And the CI job downloads nothing.** It used to install a pinned NDK, and it
+failed twice for reasons that had nothing to do with the tree:
+
+- `sdkmanager: command not found` — the runner has the Android SDK, but its
+  command-line tools are **not on the PATH**; the SDK's layout is
+  `/usr/local/lib/android/sdk`, with the tools in `cmdline-tools/latest/bin`;
+- then the install itself failed, because `yes | sdkmanager` under
+  `set -o pipefail` is a **failure when it succeeds**: `yes` takes a SIGPIPE
+  when the tool closes its input, `pipefail` makes the pipeline fail, and the
+  step exits 1 on a successful install.
+
+**The runner's image already carries three NDKs** — 27.3.13750724,
+29.0.14206865 and 30.0.16248370 — and the tree builds with all of them.
+Measured locally, with four different toolchains:
+
+| NDK | the tree builds for both ABIs, and exports `android_main` |
+|---|---|
+| 23.1.7779620 | **yes** |
+| 24.0.8215888 | **yes** |
+| 25.2.9519653 | **yes** — the version the phone was measured with |
+| 26.1.10909125 | **yes** |
+
+**So the job uses what the machine has**, and prints it. A job that fails for
+want of a tool gets switched off, and the tool was never the thing being
+tested.
 
 **And the command is not a phase of `ci`**, for the reason the policy gate is
 not: a gate that fails for want of a tool gets switched off. So it is in the
