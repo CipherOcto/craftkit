@@ -63,7 +63,7 @@ pub use ids::{DocumentId, IdCounter, NodeId};
 pub use params::{ParamError, Params};
 pub use readers::{ReadError, read_file_bounded, read_line_bounded, read_to_string_bounded};
 pub use tick::{FrameRate, MAX_INSTANT_TICKS, MIN_INSTANT_TICKS, TICKS_PER_FRAME_24, TICKS_PER_SECOND, Tick};
-pub use value::{Color, Value};
+pub use value::{Color, MAX_VALUE_DEPTH, Value};
 
 /// The crate's own error type. Everything a caller can be told goes through it.
 ///

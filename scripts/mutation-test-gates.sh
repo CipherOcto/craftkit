@@ -6756,5 +6756,23 @@ swap skills/craftkit-editing/SKILL.md \
     'the 21-command registry'
 expect_catch "lists: a count in a hyphenated shape is a count" "cargo xtask lists"
 
+# ------------------------------------------- the depth of a value, against the tree ----
+# Section 251. The tree's own walk over a value had no depth bound of its
+# own: measured, `Value::check` on a value nested ten thousand deep overflowed
+# the stack, and a stack overflow is a fatal abort. The bound was the loader's
+# default and nothing in the tree said so.
+swap crates/core/src/value.rs \
+    '                if depth + 1 > MAX_VALUE_DEPTH {' \
+    '                if depth + 1 > usize::MAX {'
+expect_catch "core: a value nested past the depth limit is accepted" \
+    "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
+
+# And the constructor that claims to keep the depth has to keep it too.
+swap crates/core/src/value.rs \
+    '        if nesting(&items) > MAX_VALUE_DEPTH {' \
+    '        if false {'
+expect_catch "core: the constructor accepts a value past the depth limit" \
+    "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
+
 restore
 finish

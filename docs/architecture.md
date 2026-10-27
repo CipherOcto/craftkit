@@ -287,6 +287,7 @@ Nothing in a production path panics. This is enforced, not requested:
 | `#![forbid(unsafe_code)]` | every one of those roots **but one** — the Android package **denies** unsafe code instead, which is the tree's one named exception (§236) — plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later |
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
+| Bounded value depth | `craftkit_core::MAX_VALUE_DEPTH` (64) — a value may not nest deeper than 64 list levels, and the tree's own walks over a value stop at that number rather than following it (a stack overflow is a fatal abort, not a catchable panic) (§251) |
 | Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0, and `craftkit_model::limits::MAX_FRAME_RATE` (1 000) refusing a document that runs faster (§89) |
 | Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_FRAME_RATE` 1 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
 | Memory budgets | `craftkit_engine::MAX_SESSION_BYTES` (the documents a session holds) and `craftkit_engine::history::MAX_HISTORY_BYTES` (the undo and redo stacks) are derived from `craftkit_model::limits::MAX_DOCUMENT_BYTES` (§144); `craftkit_engine::MAX_TRACE_BYTES` is the command trace's budget in text, derived from `craftkit_engine::MAX_TRACE_MEMORY_BYTES` (§70) |
@@ -296,7 +297,11 @@ Nothing in a production path panics. This is enforced, not requested:
 | The last resort | `Session::execute`'s `catch_unwind`, described above |
 | The gate | `cargo xtask ci` — fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm |
 
-`MAX_DEPTH` bounds the **node graph**; the **property tree** is bounded by
+`MAX_DEPTH` bounds the **node graph**; a **value** is bounded by
+`craftkit_core::MAX_VALUE_DEPTH` (64 list levels) — the same number the
+loader that reads values in refuses to parse past, now written in the tree
+rather than inherited from a dependency's default (§251). The **property
+tree** is bounded by
 `MAX_PATH_SEGMENTS`, because a property is named by a path and a path is the
 shorter limit. A property tree deeper than a path can name holds properties
 nothing can reach — the file keeps them, the listing drops them, the evaluator

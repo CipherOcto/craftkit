@@ -58,6 +58,7 @@ impl Color {
 /// - `Num` is always finite and within [`crate::MAX_MAGNITUDE`].
 /// - `Text` is always within [`crate::MAX_TEXT`].
 /// - `List` is always within `MAX_LIST` entries.
+/// - a value never nests deeper than [`MAX_VALUE_DEPTH`] list levels.
 ///
 /// The constructors are not the only way a value is made, and there are
 /// **three** doors into one:
@@ -90,6 +91,42 @@ pub enum Value {
 /// The most entries a [`Value::List`] may hold.
 pub const MAX_LIST: usize = 4_096;
 
+/// The most list levels a value may nest: a list inside a list inside a list.
+///
+/// The loader that brings values in — `serde_json` — refuses to parse a tagged
+/// list nested more than 64 levels (measured: 63 parses, 64 is refused with
+/// "recursion limit exceeded"), so the tree now says the same number itself.
+/// Before this the bound was the loader's default and the tree's own walks
+/// had none: `Value::check` on a value nested ten thousand deep overflowed the
+/// stack, and a stack overflow is a fatal abort, not a catchable panic. A
+/// bound nobody wrote down is a bound that can change under the tree's feet.
+/// §251.
+///
+/// This is the tree's *own* number, not the model's: `craftkit_model::limits::MAX_DEPTH`
+/// (32) bounds the node graph, and this bounds the values inside a property.
+pub const MAX_VALUE_DEPTH: usize = 64;
+
+/// How many list levels the values inside a list nest.
+///
+/// The walk is iterative on purpose: this function measures the depth of a
+/// value that may be hostile, and a recursive walk over a hundred thousand
+/// levels would overflow the stack while trying to say how deep it is.
+fn nesting(items: &[Value]) -> usize {
+    let mut deepest = 0usize;
+    let mut stack: Vec<(&[Value], usize)> = vec![(items, 1)];
+    while let Some((level, depth)) = stack.pop() {
+        if depth > deepest {
+            deepest = depth;
+        }
+        for item in level {
+            if let Value::List(inner) = item {
+                stack.push((inner, depth + 1));
+            }
+        }
+    }
+    deepest
+}
+
 impl Value {
     /// Build a number, refusing non-finite and out-of-range values.
     pub fn num(what: impl Into<String>, v: f64) -> Result<Self, crate::CoreError> {
@@ -109,6 +146,9 @@ impl Value {
         if items.len() > MAX_LIST {
             return Err(crate::CoreError::LimitReached { limit: "list length" });
         }
+        if nesting(&items) > MAX_VALUE_DEPTH {
+            return Err(crate::CoreError::LimitReached { limit: "value depth" });
+        }
         Ok(Value::List(items))
     }
 
@@ -118,13 +158,28 @@ impl Value {
     /// value can lie about is not a budget. String and list capacities are
     /// counted rather than their lengths, because the allocation is what the
     /// memory is.
+    ///
+    /// The walk stops at [`MAX_VALUE_DEPTH`], so a value too deep to be legal
+    /// cannot make this walk overflow the stack on its way to an answer.
     pub fn estimated_bytes(&self) -> usize {
+        self.estimated_bytes_at(0)
+    }
+
+    fn estimated_bytes_at(&self, depth: usize) -> usize {
         std::mem::size_of::<Value>()
             + match self {
                 Value::Text(s) => s.capacity(),
                 Value::List(items) => {
-                    items.capacity() * std::mem::size_of::<Value>()
-                        + items.iter().map(Value::estimated_bytes).sum::<usize>()
+                    let own = items.capacity() * std::mem::size_of::<Value>();
+                    if depth >= MAX_VALUE_DEPTH {
+                        own
+                    } else {
+                        let children = items
+                            .iter()
+                            .map(|item| item.estimated_bytes_at(depth + 1))
+                            .fold(0usize, usize::saturating_add);
+                        own.saturating_add(children)
+                    }
                 }
                 _ => 0,
             }
@@ -144,6 +199,15 @@ impl Value {
     /// one was. It costs nothing on the path where the value is fine: the
     /// message is only built when there is an error to build it for.
     pub fn check(&self, what: &str) -> Result<(), crate::CoreError> {
+        self.check_at(what, 0)
+    }
+
+    /// The check, with the depth of the enclosing lists carried along.
+    ///
+    /// The depth is what stops the walk: past [`MAX_VALUE_DEPTH`] the value is
+    /// refused rather than walked, so a value nested a hundred thousand deep
+    /// is answered with an error instead of an overflowed stack.
+    fn check_at(&self, what: &str, depth: usize) -> Result<(), crate::CoreError> {
         match self {
             Value::Num(v) => {
                 if !v.is_finite() {
@@ -178,8 +242,11 @@ impl Value {
                 if items.len() > MAX_LIST {
                     return Err(crate::CoreError::LimitReached { limit: "list length" });
                 }
+                if depth + 1 > MAX_VALUE_DEPTH {
+                    return Err(crate::CoreError::LimitReached { limit: "value depth" });
+                }
                 for item in items {
-                    item.check(what)?;
+                    item.check_at(what, depth + 1)?;
                 }
                 Ok(())
             }
@@ -263,6 +330,15 @@ impl From<Color> for Value {
 mod tests {
     use super::*;
 
+    /// A value nested `depth` list levels deep.
+    fn nested(depth: usize) -> Value {
+        let mut v = Value::Num(1.0);
+        for _ in 0..depth {
+            v = Value::List(vec![v]);
+        }
+        v
+    }
+
     #[test]
     fn num_refuses_nan_and_overlarge_values() {
         assert!(Value::num("x", f64::NAN).is_err());
@@ -275,6 +351,50 @@ mod tests {
     fn list_is_capped() {
         assert!(Value::list(vec![Value::Bool(true); MAX_LIST]).is_ok());
         assert!(Value::list(vec![Value::Bool(true); MAX_LIST + 1]).is_err());
+    }
+
+    /// The depth of a value is the tree's own bound, not the loader's default.
+    ///
+    /// The loader (`serde_json`) refuses a tagged list nested more than 64
+    /// levels, and the tree's own walk had no bound of its own: measured,
+    /// `Value::check` on a value nested ten thousand deep overflowed the
+    /// stack, and a stack overflow is a fatal abort. §251.
+    #[test]
+    fn a_value_nested_past_the_depth_limit_is_refused() {
+        // Exactly at the limit the value is fine.
+        let at_limit = nested(MAX_VALUE_DEPTH);
+        assert!(at_limit.check("deep").is_ok(), "a value at the depth limit is legal");
+        // One level past it is refused, by the check and by the constructor.
+        let past = nested(MAX_VALUE_DEPTH + 1);
+        let err = past.check("deep").expect_err("too deep");
+        assert!(err.to_string().contains("depth"), "{err}");
+        assert!(Value::list(vec![past]).is_err(), "the constructor refuses it too");
+    }
+
+    /// A value too deep to be legal must not overflow the stack on its way to
+    /// an answer: the walk stops at the limit instead of following the value
+    /// all the way down.
+    ///
+    /// Ten thousand is the depth at which the check used to overflow, measured
+    /// on this machine (§251).
+    #[test]
+    fn a_very_deep_value_is_answered_rather_than_overflowing() {
+        let deep = nested(10_000);
+        assert!(deep.check("deep").is_err(), "refused, not overflowed");
+        // The byte estimate walks too, and it answers instead of overflowing.
+        let bytes = deep.estimated_bytes();
+        assert!(bytes > 0, "the estimate is an answer, not a crash");
+    }
+
+    /// The estimate must never under-estimate: a budget a value can lie about
+    /// is not a budget. A value at the depth limit is legal, so it must be
+    /// counted all the way down.
+    #[test]
+    fn the_estimate_counts_a_legal_value_all_the_way_down() {
+        let at_limit = nested(MAX_VALUE_DEPTH);
+        let bytes = at_limit.estimated_bytes();
+        let floor = MAX_VALUE_DEPTH * std::mem::size_of::<Value>();
+        assert!(bytes >= floor, "the estimate {bytes} is below the floor {floor}");
     }
 
     #[test]

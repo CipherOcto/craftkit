@@ -28951,6 +28951,169 @@ the document said thirteen. The knowledge was there; it was in the wrong
 place, and nobody compared the two because the two were not supposed to
 differ.
 
+## 251. The depth of a value was the loader's default, and the tree said nothing
+
+### The finding
+
+**The tree had no bound of its own on how deep a value may nest, and the
+bound it had in fact was a dependency's default, written down nowhere.**
+
+`craftkit_core::value::Value` is a recursive type: a `List` holds
+`Vec<Value>`. Three walks over it had no depth limit of any kind:
+
+| the walk | where | what it did |
+|---|---|---|
+| `Value::check` | `crates/core/src/value.rs` | recursed into every list, to the end of the value |
+| `Value::estimated_bytes` | `crates/core/src/value.rs` | recursed into every list, to the end of the value |
+| `Value::list` | `crates/core/src/value.rs` | **claimed** to "recurse only to a depth the loader could actually have produced" — and checked only the list's *length* |
+
+The last one is the sharpest: **the doc comment described a check the code did
+not perform.** The constructor refused a list of 4 097 entries and said nothing
+at all about a list of a million *levels*.
+
+What stopped a hostile value from reaching those walks was `serde_json`'s
+parser, which refuses to nest more than a hundred and twenty-eight levels.
+Measured on the tagged form the tree actually stores — `{"t":"list","v":[…]}` —
+the boundary is lower, because each level of a value is two levels of JSON:
+
+```text
+k=60: parsed     k=63: parsed
+k=64: refused: recursion limit exceeded at line 1 column 1088
+```
+
+**Sixty-three is the deepest value the loader can hand the tree, and the tree
+did not know that number.** It had inherited it.
+
+### Measured
+
+**The tree's own walk overflowed the stack.** A value nested ten thousand
+levels — built in Rust, not parsed, so no loader's cap was in the way:
+
+```text
+$ PROBE_DEPTH=10000 cargo test -p craftkit-core --test depth_probe -- --nocapture
+probe: built
+probe: estimated_bytes = 640032
+thread 'probe_depth' (18716) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+```
+
+**This is the worst kind of crash.** A stack overflow is not a panic: it is
+`SIGABRT` from the runtime, it cannot be caught by `catch_unwind`, and the
+tree's last-resort guard — `Session::execute`'s `catch_unwind` — does not see
+it. **The design is lost.**
+
+At ten thousand the estimate survived and the check did not; at one thousand
+both did. The boundary is somewhere between, and it is a boundary of the
+*machine's stack*, not of the tree's design: a thread with a smaller stack
+overflows sooner, and the tree does not choose the stack.
+
+**Two more doors, measured.** `serde_json::from_value` — the door the tree
+uses for a crash report's document (`crates/engine/src/crash.rs`) — has **no
+recursion cap at all**:
+
+```text
+built 200000
+thread 'main' (34549) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+```
+
+And the **destructor** of a deeply nested value recurses as well: a value
+nested sixty thousand deep overflows the stack when it is dropped, while
+thirty thousand does not.
+
+### Why nothing else would have caught it
+
+- **The cap was a dependency's default.** `serde_json` states it in its own
+  documentation, not in the tree's; the tree's code, its tests and its
+  documents never mentioned it.
+- **Nothing in the tree walked a value without the loader in front of it** —
+  so the tree's own walks were never *reached* with a deep value. The
+  overflow was real but unreachable; it is one door away from reachable.
+- **The gate that reads the limits table reads the *model's* table**
+  (`crates/model/src/lib.rs`), and the model's table holds the node graph's
+  bounds, not the core's value bounds (§74, §250). The core's own limits —
+  `MAX_TEXT`, `MAX_MAGNITUDE` — are in the prose of other documents, and the
+  depth bound was in none of them because it did not exist.
+- **A doc comment is not a check.** `Value::list`'s comment said the
+  constructor recursed only to a depth the loader could have produced. That
+  sentence was the *intent*, written as if it were the fact; the code beside
+  it did not do it.
+
+### The fix
+
+**The tree now has its own number, and its own walks stop at it.**
+
+- `craftkit_core::MAX_VALUE_DEPTH` (**64**) — the same boundary the loader
+  refuses to parse past, now written in the tree and exported from the core.
+  It is *not* the model's `MAX_DEPTH` (32), which bounds the node graph; the
+  two names are deliberately different, so a reader cannot confuse them.
+- `Value::check` carries the depth along the walk and **refuses** past the
+  limit (`LimitReached { limit: "value depth" }`) instead of following the
+  value down.
+- `Value::list` measures the depth of what it is given and refuses a list
+  nested past the limit — so the constructor's comment is now true.
+- `Value::estimated_bytes` stops walking at the limit and adds with
+  `saturating_add`, so it answers instead of overflowing, and it still never
+  under-estimates a legal value.
+- The depth is measured **iteratively**, because measuring the depth of a
+  hostile value with a recursive walk is the same overflow one level down.
+
+**Three tests** (in `crates/core/src/value.rs`): a value at the limit is
+legal and one past it is refused by both the check and the constructor; a
+value nested ten thousand deep is *answered* rather than overflowed; and the
+estimate of a legal value is never below its floor, because a budget a value
+can lie about is not a budget.
+
+**Two mutations** in `scripts/mutation-test-gates.sh`, both measured failing
+and passing again:
+
+```text
+# the check stops refusing a value past the limit
+$ cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused
+thread 'value::tests::a_value_nested_past_the_depth_limit_is_refused' panicked at
+  crates/core/src/value.rs:369:38: too deep: ()
+test result: FAILED. 0 passed; 1 failed
+
+# the constructor stops refusing a value past the limit
+$ cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused
+thread 'value::tests::a_value_nested_past_the_depth_limit_is_refused' panicked at
+  crates/core/src/value.rs:371:41: the constructor refuses it too
+test result: FAILED. 0 passed; 1 failed
+```
+
+### What is not claimed
+
+- **The tree still holds a recursive type.** A value nested sixty thousand
+  deep still overflows the stack when it is *dropped* — the destructor
+  recurses, and that is Rust's `Vec`, not the tree's code. What changed is
+  that the tree can no longer *hold* such a value: the constructor refuses it
+  and the check refuses it, so the depth of anything the tree owns is at most
+  64.
+- **The bound is 64 because the loader's is.** A different loader would
+  change the number; that is why the number is the tree's, written down, and
+  not the loader's, inherited.
+- **`serde_json::from_value` still has no cap of its own.** The tree's use of
+  it reads a report the tree wrote, and the tree's own bound is what keeps
+  that report shallow.
+- **The model's `MAX_DEPTH` (32) is a different bound** and was not touched.
+- **Nothing was proven about the phone.** The overflow is in the core, and it
+  is the same code on the phone; no run on the device was made for it, and
+  none is claimed.
+
+### The lesson
+
+**A bound that belongs to a dependency is not the tree's bound.** The tree
+walked its values as deeply as the value went, and it was safe only because
+a library it did not write had a default it had never read. **The tree's own
+walks need the tree's own number** — and the number it needs is the one the
+loader already refuses, so nothing that loads today stops loading.
+
+**And a doc comment is not a check.** `Value::list`'s comment described the
+depth rule in the present tense, as though the code did it. The code did not,
+and the comment had been there long enough to be believed. **A sentence in a
+comment is an intention; only a refusal is a bound** — and a bound that no
+test exercises is a wish.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29526,6 +29689,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A crash on a phone leaves a report another machine can read** | the phone's own run — the report in the application's folder | the phone's own run, and the desktop's own reader — §249 |
 | **The never-crash table names every crate root** | `the_table_names_every_crate_root` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **The never-crash table names every limit** | `the_table_names_every_limit` in `xtask/src/lists.rs` | 1 mutation — §250 |
+| **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/core/src/value.rs` | 2 mutations — §251 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
