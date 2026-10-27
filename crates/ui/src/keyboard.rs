@@ -169,7 +169,7 @@ pub fn draw(ui: &mut egui::Ui, tokens: &Tokens, layer: &mut Layer, shifted: &mut
         ui.horizontal(|ui| {
             for key in row {
                 let label = key.label(*shifted);
-                let text = if matches!(key, Key::Char(c) if *shifted) {
+                let text = if matches!(key, Key::Char(_) if *shifted) {
                     egui::RichText::new(label).strong().color(tokens.text)
                 } else {
                     egui::RichText::new(label).color(tokens.text)
