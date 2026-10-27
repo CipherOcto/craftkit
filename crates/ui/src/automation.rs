@@ -564,28 +564,32 @@ mod tests {
     /// the time on a busy machine. The fastest round is the least disturbed
     /// one, and the fastest round of a quadratic implementation is still
     /// three times its first batch, so the mutation is still caught.
+    ///
+    /// **§233**: the fastest of each side is not enough, because the two
+    /// fastest times come from different rounds and the ratio is then a
+    /// statement about the scheduler. The number is the **middle** round's
+    /// ratio now, measured by the tree's one home for the shape.
     #[test]
     fn publishing_a_widget_does_not_cost_more_than_the_widgets_before_it() {
         let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(10.0, 10.0));
-        let batch = |registry: &mut Automation, from: usize| {
-            let start = std::time::Instant::now();
-            for i in from..from + 5_000 {
-                registry.publish(AutomationId(format!("widget.{i}")), rect, true);
-            }
-            start.elapsed()
-        };
-        // How many rounds to measure. Eight is enough for the fastest round
-        // to be a quiet one on a loaded machine, and the whole test still
+        // How many rounds to measure. Nine is odd, and the whole test still
         // takes about twenty milliseconds.
-        const ROUNDS: usize = 8;
-        let mut first = f64::MAX;
-        let mut second = f64::MAX;
-        for _ in 0..ROUNDS {
+        const ROUNDS: usize = 9;
+        let mut round = || {
             let mut registry = Automation::new();
-            first = first.min(batch(&mut registry, 0).as_secs_f64());
-            second = second.min(batch(&mut registry, 5_000).as_secs_f64());
-        }
-        let ratio = second / first.max(f64::MIN_POSITIVE);
+            let fast = craftkit_core::measure::seconds(&mut || {
+                for i in 0..5_000 {
+                    registry.publish(AutomationId(format!("widget.{i}")), rect, true);
+                }
+            });
+            let slow = craftkit_core::measure::seconds(&mut || {
+                for i in 5_000..10_000 {
+                    registry.publish(AutomationId(format!("widget.{i}")), rect, true);
+                }
+            });
+            (fast, slow)
+        };
+        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 2.0,
             "the second batch of 5000 widgets took {ratio:.1}x as long as the first: \

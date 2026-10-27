@@ -1909,15 +1909,21 @@ mod tests {
     ///
     /// The test is **relative**, so it does not depend on how fast the
     /// machine is: ten thousand keyframes must not cost eight times what one
-    /// costs. §101's shape — the fastest of several rounds, because a
-    /// preempted round says nothing about the code.
+    /// costs. §101's shape — and §233's fix to it: the number is the **middle**
+    /// round's ratio, because the ratio of two independent measurements is a
+    /// statement about the scheduler on a busy machine.
     #[test]
     fn the_properties_panel_does_not_copy_the_keyframes_it_does_not_draw() {
-        let one = node_with_keyframes(1, 16);
-        let many = node_with_keyframes(10_000, 16);
-        let few = panel_alone(one.0, one.1);
-        let much = panel_alone(many.0, many.1);
-        let ratio = much / few.max(f64::MIN_POSITIVE);
+        // Nine rounds, and each round builds the two designs it measures.
+        const ROUNDS: usize = 9;
+        let mut round = || {
+            let one = node_with_keyframes(1, 16);
+            let many = node_with_keyframes(10_000, 16);
+            let fast = panel_alone(one.0, one.1);
+            let slow = panel_alone(many.0, many.1);
+            (fast, slow)
+        };
+        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "the properties panel took {ratio:.1}x as long with 10000 keyframes as with 1: \
@@ -1936,11 +1942,15 @@ mod tests {
     /// **size** of what is copied, not the number of things.
     #[test]
     fn the_properties_panel_does_not_copy_the_keyframe_values() {
-        let small = node_with_keyframes(200, 1);
-        let big = node_with_keyframes(200, 64 * 1024);
-        let few = panel_alone(small.0, small.1);
-        let much = panel_alone(big.0, big.1);
-        let ratio = much / few.max(f64::MIN_POSITIVE);
+        const ROUNDS: usize = 9;
+        let mut round = || {
+            let small = node_with_keyframes(200, 1);
+            let big = node_with_keyframes(200, 64 * 1024);
+            let fast = panel_alone(small.0, small.1);
+            let slow = panel_alone(big.0, big.1);
+            (fast, slow)
+        };
+        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "the properties panel took {ratio:.1}x as long with 64 KiB keyframe values as with 1 byte: \

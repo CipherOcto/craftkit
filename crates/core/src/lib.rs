@@ -51,6 +51,7 @@
 
 pub mod atomic;
 pub mod ids;
+pub mod measure;
 pub mod params;
 pub mod readers;
 pub mod temp;

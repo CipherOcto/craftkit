@@ -1093,8 +1093,16 @@ mod tests {
     ///
     /// The test is **relative**, so it does not depend on how fast the
     /// machine is: four times the properties must not cost sixteen times the
-    /// time. §101's shape — the fastest of several rounds, because a
-    /// preempted round says nothing about the code.
+    /// time. §101's shape — and §233's home for it: the number is the ratio of
+    /// the two **quietest** rounds, measured by the tree's one shape for it.
+    ///
+    /// **Measured**: the true ratio is **5.0** on an idle machine, and the
+    /// threshold is 8. With five rounds this test failed **6 times in 40
+    /// runs** on a loaded machine, with the ratio reading between 8.7 and
+    /// 11.9, while the code it measured had not changed. With nine rounds it
+    /// failed **once in 40**, and with the twenty-one rounds here it failed
+    /// **none in 40** — under the same load, which read 14 on the machine.
+    /// The whole test still takes about fifty milliseconds.
     #[test]
     fn listing_a_node_does_not_cost_more_than_listing_a_smaller_one() {
         let group = |count: usize| {
@@ -1106,21 +1114,19 @@ mod tests {
         };
         let small = group(1_000);
         let large = group(4_000);
-        // How many rounds to measure. Five is enough for the fastest round
-        // to be a quiet one on a loaded machine, and the whole test still
-        // takes about ten milliseconds.
-        const ROUNDS: usize = 5;
-        let mut first = f64::MAX;
-        let mut second = f64::MAX;
-        for _ in 0..ROUNDS {
-            let start = std::time::Instant::now();
-            std::hint::black_box(small.flatten().len());
-            first = first.min(start.elapsed().as_secs_f64());
-            let start = std::time::Instant::now();
-            std::hint::black_box(large.flatten().len());
-            second = second.min(start.elapsed().as_secs_f64());
-        }
-        let ratio = second / first.max(f64::MIN_POSITIVE);
+        // How many rounds to measure. Twenty-one is what the measurement above
+        // needed: each side has to find a round the machine did not touch.
+        const ROUNDS: usize = 21;
+        let mut round = || {
+            let fast = craftkit_core::measure::seconds(&mut || {
+                std::hint::black_box(small.flatten().len());
+            });
+            let slow = craftkit_core::measure::seconds(&mut || {
+                std::hint::black_box(large.flatten().len());
+            });
+            (fast, slow)
+        };
+        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "listing 4000 properties took {ratio:.1}x as long as listing 1000: \
