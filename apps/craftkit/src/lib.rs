@@ -175,7 +175,18 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     // The shell's memory is shared by the window and the control channel, so
     // that the screen the channel describes is the screen the window is
     // showing. §106.
-    let state: SharedState = Arc::new(Mutex::new(craftkit_ui::shell::ShellState::default()));
+    // The shell's state, and the one fact about this platform that the
+    // shell cannot know: **does this platform have a keyboard of its own?**
+    //
+    // The desktop has one, and the tree's fields take the keys from it. A
+    // phone's soft keyboard opens and delivers nothing (§236), so the tree
+    // draws a keyboard of its own there (§246) — and the application is the
+    // one that knows which platform it is on, the same way it is the one
+    // that knows where the tree's files go (§240).
+    let state: SharedState = Arc::new(Mutex::new(craftkit_ui::shell::ShellState {
+        own_keyboard: cfg!(target_os = "android"),
+        ..craftkit_ui::shell::ShellState::default()
+    }));
 
     // Started *before* the window, so a port clash is reported before anything
     // is drawn, and held in a local so it lives exactly as long as the window

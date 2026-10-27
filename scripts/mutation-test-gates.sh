@@ -3147,11 +3147,8 @@ expect_catch "ui: the frame does not give the state back" \
 # The "key at the playhead" path field kept its text in a local, which is
 # rebuilt every frame: every keystroke was thrown away. §105.
 swap crates/ui/src/shell.rs \
-    '        let path_field =
-            ui.add(egui::TextEdit::singleline(&mut state.key_path).hint_text("path, e.g. amount"));' \
-    '        let mut path_text = String::new();
-        let path_field =
-            ui.add(egui::TextEdit::singleline(&mut path_text).hint_text("path, e.g. amount"));'
+    '        let mut path = std::mem::take(&mut state.key_path);' \
+    '        let mut path = String::new();'
 expect_catch "ui: the key path field keeps its text in a local" \
     "cargo test -p craftkit-ui --profile ci a_path_typed_into_the_key_field_is_still_there_in_the_next_frame"
 
@@ -3695,7 +3692,7 @@ expect_catch "engine: a node's name no longer goes to the name spelling" \
 # screen said there was not. §118.
 swap crates/ui/src/shell.rs \
     '        // The form is drawn last, so it is on top of the panels it is about.
-        self.prompt_window(ctx, tokens);' \
+        self.prompt_window(ctx, tokens, &mut typing);' \
     '        // The form is drawn last, so it is on top of the panels it is about.
         let _ = &self.state.prompt;'
 expect_catch "ui: the form is not on the screen" \

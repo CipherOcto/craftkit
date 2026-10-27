@@ -20,6 +20,7 @@
 //! - [`theme`] — every colour, as a named token, checked for contrast.
 //! - [`icons`] — every icon, drawn in code from original coordinates.
 //! - [`automation`] — stable names for widgets, so an agent can address one.
+//! - [`keyboard`] — the tree's own keyboard, for the platforms that have none.
 //! - [`shell`] — the panels themselves.
 //! - [`raster`] — a software rasteriser, so a frame can be produced with no GPU.
 //!
@@ -41,6 +42,7 @@
 
 pub mod automation;
 pub mod icons;
+pub mod keyboard;
 pub mod raster;
 pub mod shell;
 pub mod theme;

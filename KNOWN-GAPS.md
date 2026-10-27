@@ -28356,6 +28356,145 @@ run.** The gate's table of hosts was a guess with a table's shape, and the
 table was enough to look like evidence. Running the job on the platform is
 what turns the table into a measurement.
 
+## 246. The tree's own keyboard, because the platform's delivers nothing
+
+### The finding
+
+**§236 measured it and the measurement has not changed.** On a phone the
+soft keyboard **opens** when a field takes the focus — `mInputShown=true`,
+and a screenshot of the QWERTY keyboard on the screen — and **every key
+tapped on it leaves the field exactly as it was**. The hardware path
+(`adb shell input text`) reaches the field.
+
+The cause is in the dependencies, and the tree cannot fix it in the tree's
+own code:
+
+- `winit` 0.30's Android backend has **no IME events at all** — the call
+  that shows the keyboard only shows and hides it;
+- `android-activity` 0.6's `set_text_input_state` and `set_ime_editor_info`
+  are **no-ops**;
+- and the platform serves a `BaseInputConnection` that the tree's backend
+  never talks to.
+
+**The other way to the same text is Java**: an `InputConnection` shim in the
+package, a `dex` beside the library, and a second named exception for the
+tree's one unsafe rule. The tree's rules say the package carries **no
+Java** (§236), so that road is closed too.
+
+**So the tree draws its own keyboard.** In Rust, with no new dependency, and
+it works on every platform the tree runs on. The owner was asked which of
+the two roads to take, and chose **both, in this order**: the tree's keyboard
+now, the platform's keyboard later.
+
+### The fix
+
+**A keyboard is a row of buttons and a buffer.** The buttons are drawn by
+`craftkit_ui::keyboard`, and the buffer is the **field's own**: a key press
+does not own any text, it hands the key to the field that has the focus.
+
+That is the whole design, and it is what keeps the tree's rules:
+
+- **The keys are QWERTY**, because that is what a person who has ever typed
+  expects; there is a second layer for the digits and the signs, because a
+  keyboard that cannot type a number cannot fill in a distance.
+- **The focus is egui's.** The field that has the focus is the one that
+  types, and the tree asks egui to put the focus back after a key is
+  pressed — because a button takes the focus when it is clicked, and a
+  field without the focus is a field the keyboard cannot type into.
+- **The platform's keyboard is told to stay away.** The tree sends
+  `ViewportCommand::IMEAllowed(false)` every frame on the platforms that
+  have no usable keyboard of their own: the soft keyboard opens over the
+  tree's own and delivers nothing, so it does not open.
+- **Which platform is which is the application's to say**, the same way the
+  folder the tree's files go into is (§240): the application knows it is on
+  a phone, and the shell does not.
+
+**And a key typed by the tree is a change `egui` cannot see.** `egui` notices
+its own edits and reports them; the tree's keyboard edits the same buffer
+from outside, so the tree says so itself — the field pushes the edit when
+the field **changed** or when the keyboard **typed**.
+
+### What enforces it
+
+- a test that walks the way a person does — the form opens, the field is
+  tapped, a key is pressed — and the key is in the field's text;
+- a test that the keys go into **one** field and not into another;
+- and the tree's own tests for the keyboard: the QWERTY order, the digits,
+  the shift, and what a key does to a buffer.
+
+### Measured on the phone
+
+The tree's keyboard, on the phone, with the tree's own build.
+
+**The field is tapped**, and the tree's keyboard comes up — and the
+platform's does not:
+
+```text
+$ adb shell dumpsys input_method | grep mInputShown
+mShowRequested=false mShowExplicitlyRequested=false mShowForced=false mInputShown=false
+```
+
+**A key is tapped**, and the character is in the field:
+
+```text
+(the field's text, after one tap on the tree's own `t`: `t`)
+```
+
+**And the whole word, and the command that follows it.** Shift, `t`, `a`,
+`p`, `e`, `r` — and then OK:
+
+```text
+(the field's text: `Taper`)
+(the status bar: renamed to `Taper`)
+(the tree's own log, on the phone:
+ [INFO] doc.rename: renamed to `Taper`)
+```
+
+The last line is the one that matters: the text the tree's own keyboard
+produced **reached the engine** and ran as a command, on a phone, with no
+Java in the package and no new dependency in the tree.
+
+**Two things the phone measured that no test would have:**
+
+- **The keyboard did not fit.** The first version gave every key a fixed
+  width, and ten keys of that width do not fit on a 720-pixel screen: the
+  last key of every row was **off the screen**, and a key nobody can reach
+  is a key the keyboard does not have. The keys now share the width they
+  have, in proportion to what they are, and the space between them comes
+  off them.
+- **The shift was a caps lock.** The first version kept the shift on until
+  it was pressed again, and typing `Taper` gave `TAPER`. A shift types
+  **one** letter, the way every keyboard does.
+
+### What is not claimed
+
+- **The platform's keyboard still does not work**, and that is the other
+  half of the owner's answer: the platform's keyboard comes later, and it
+  comes with Java, and with a decision about the tree's one unsafe
+  exception.
+- **The tree's keyboard is a keyboard, not a text editor.** There is no
+  cursor, no selection and no clipboard: the hardware keyboard still gives
+  all of that on the desktop, and the tree's keyboard types characters and
+  takes the last one away.
+- **The tree's keyboard is drawn where the platform has none.** On the
+  desktop the tree's fields take the keys from the real keyboard, exactly as
+  before.
+
+### The lesson
+
+**The tree's own rules had already answered the question.** The owner was
+asked to choose between the platform's keyboard and the tree's, and the
+choice was not really open: the tree's rules say **Rust only** and the
+package carries **no Java**, so the platform's keyboard needs a second
+named exception and a `dex` — while the tree's own keyboard needs nothing
+but the tree.
+
+**And a dependency's missing half is not the tree's to build.** The text
+does not arrive because `winit`'s Android backend has no IME events; that
+is a fact about a dependency, and a fact about a dependency is either
+worked around or waited for — and waiting for it is what the owner chose
+for the second half.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -28924,6 +29063,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The log's file is bounded, and its folder holds two of them** | `the_log_file_is_bounded` in `apps/craftkit/src/lib.rs` | 1 mutation — §242 |
 | **A path is compared as a path, not as a spelling** | `a_path_is_compared_as_a_path_and_not_as_a_spelling` in `xtask/src/android.rs` | the Windows runner — §243 |
 | **The log's file is private** | `the_logs_file_is_private` in `apps/craftkit/src/lib.rs` | 1 mutation — §244 |
+| **The tree's own keyboard types into the field that has the focus** | `the_trees_own_keyboard_types_into_the_field_that_has_the_focus` in `crates/ui/src/shell.rs` | the phone's own run — §246 |
 | **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |

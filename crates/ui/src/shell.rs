@@ -19,6 +19,8 @@ use std::collections::HashMap;
 
 use egui::{Context, Layout, Rect, RichText, ScrollArea, Ui, Vec2};
 
+use crate::keyboard;
+
 use craftkit_core::NodeId;
 use craftkit_engine::{Area, ParamDoc, Session, all};
 
@@ -58,6 +60,71 @@ pub struct ShellState {
     /// design: it is what the person is typing into, and a form rebuilt
     /// every frame would lose every keystroke. §118.
     pub prompt: Option<Prompt>,
+    /// The tree's own keyboard: what it types into and what it has typed.
+    ///
+    /// §246: the platform's keyboard opens on a phone and its text never
+    /// arrives, so the tree draws a keyboard of its own — and the keyboard
+    /// has to know which field it is typing into, and what it has typed
+    /// since the field was last drawn.
+    pub typing: Typing,
+    /// Whether this platform has no keyboard of its own, and the tree draws one.
+    ///
+    /// **The platform's fact, and the application's to say.** The desktop
+    /// has a keyboard; a phone's soft keyboard opens and delivers nothing
+    /// (§236), so the tree draws one there. The application knows which
+    /// platform it is on, and the shell does not — the same shape as the
+    /// folder the tree's files go into (§240).
+    pub own_keyboard: bool,
+}
+
+/// The tree's own keyboard: the field it types into, and what it has typed.
+///
+/// The keyboard does not own any text: it hands every key to the field that
+/// has the focus, and the field's own buffer is the text. That is why the
+/// keys are **pending** rather than applied — the field is drawn in a panel
+/// that may come after the keyboard, and a key pressed now is typed into the
+/// field the next time the field is drawn.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Typing {
+    /// The field that has the focus, by the id the field gave itself.
+    pub field: Option<egui::Id>,
+    /// The keys pressed since the fields were last drawn.
+    pub keys: Vec<keyboard::Key>,
+    /// Whether the next letter is a capital.
+    pub shifted: bool,
+    /// Which layer of the keyboard is showing.
+    pub layer: keyboard::Layer,
+}
+
+/// Type the keyboard's pending keys into the field that has the focus.
+///
+/// The keys are taken **only** by the field they belong to, so two fields
+/// cannot both claim them: the field that has the focus is the one that
+/// types them.
+///
+/// It says whether it typed anything, because a key typed by the tree is a
+/// change `egui` cannot see — `egui` notices its own edits and reports
+/// them, and it has no way of knowing about the tree's.
+fn type_keys_into(typing: &mut Typing, id: egui::Id, buffer: &mut String) -> bool {
+    if typing.field != Some(id) || typing.keys.is_empty() {
+        return false;
+    }
+    let keys = std::mem::take(&mut typing.keys);
+    for key in keys {
+        keyboard::apply(buffer, key);
+    }
+    true
+}
+
+/// Remember which field has the focus.
+///
+/// The field is **not** forgotten when it loses the focus: the keyboard's own
+/// buttons take the focus when they are clicked, and the keyboard puts it
+/// back — so the field that was being typed into is still the one that is.
+fn focus_of(typing: &mut Typing, id: egui::Id, focused: bool) {
+    if focused {
+        typing.field = Some(id);
+    }
 }
 
 /// A form: the parameters of one command, waiting to be filled in.
@@ -220,20 +287,80 @@ impl<'a> Shell<'a> {
         // The registry is **this frame's**: the names are rebuilt and the
         // rectangles are the ones drawn just now. §99.
         self.automation.clear();
+        // The tree's own keyboard, where the platform has none. §246.
+        //
+        // The keyboard asks the platform to keep **its** keyboard away: the
+        // soft keyboard on a phone opens over the tree's own and delivers
+        // nothing (§236), so it is told not to open. The command is sent
+        // every frame, because the platform asks for the keyboard again
+        // whenever a field takes the focus.
+        if self.state.own_keyboard {
+            ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(false));
+        }
+        // The typing state is **taken out** of the shell for the frame: the
+        // panels borrow the session, and the shell cannot be borrowed again
+        // while they do. §246.
+        let mut typing = std::mem::take(&mut self.state.typing);
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui, tokens));
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status_bar(ui, tokens));
+        // The keyboard is a panel of its own, and it is added **before** the
+        // central panel, because `egui` wants the panels first and the
+        // centre last. It is added after the status bar, so it sits above
+        // it.
+        //
+        // And it is drawn **before** the fields, so a key pressed now is
+        // typed into the field in this same frame.
+        if self.state.own_keyboard && typing.field.is_some() {
+            egui::TopBottomPanel::bottom("keyboard")
+                .show(ctx, |ui| self.keyboard_panel(ui, tokens, &mut typing));
+        }
         egui::SidePanel::left("nodes").show(ctx, |ui| self.node_list(ui, tokens));
-        egui::SidePanel::right("properties").show(ctx, |ui| self.properties(ui, tokens));
+        egui::SidePanel::right("properties").show(ctx, |ui| self.properties(ui, tokens, &mut typing));
         egui::CentralPanel::default().show(ctx, |ui| self.plan_and_timeline(ui, tokens));
         // The form is drawn last, so it is on top of the panels it is about.
-        self.prompt_window(ctx, tokens);
+        self.prompt_window(ctx, tokens, &mut typing);
+        self.state.typing = typing;
+    }
+
+    /// The tree's own keyboard.
+    ///
+    /// A key press is **not** typed here: the keyboard hands the key to the
+    /// field that has the focus, and the field types it into its own buffer
+    /// the next time it is drawn. That is why the focus is put back on the
+    /// field: a button takes the focus when it is clicked, and a field
+    /// without the focus is a field the keyboard cannot type into.
+    fn keyboard_panel(&mut self, ui: &mut Ui, tokens: &Tokens, typing: &mut Typing) {
+        let pressed = keyboard::draw(ui, tokens, &mut typing.layer, &mut typing.shifted);
+        let Some(key) = pressed else { return };
+        match key {
+            keyboard::Key::Shift => typing.shifted = !typing.shifted,
+            keyboard::Key::Numbers => typing.layer = keyboard::Layer::Numbers,
+            keyboard::Key::Letters => typing.layer = keyboard::Layer::Letters,
+            keyboard::Key::Done => typing.field = None,
+            _ => {
+                // The character a key types is decided **here**, so that the
+                // shift types one letter and no more. §246.
+                let pressed = keyboard::press(key, typing.shifted);
+                typing.shifted = pressed.shift;
+                if let Some(character) = pressed.character {
+                    typing.keys.push(keyboard::Key::Char(character));
+                } else {
+                    typing.keys.push(key);
+                }
+            }
+        }
+        // The focus goes back to the field, so the next key is typed into it
+        // and the platform's own keyboard keeps reaching it.
+        if let Some(field) = typing.field {
+            ui.memory_mut(|memory| memory.request_focus(field));
+        }
     }
 
     /// The form, if one is open.
     ///
     /// It is a floating window rather than a panel: the panels are the
     /// design, and the form is a question about it. §118.
-    fn prompt_window(&mut self, ctx: &Context, tokens: &Tokens) {
+    fn prompt_window(&mut self, ctx: &Context, tokens: &Tokens, typing: &mut Typing) {
         let Some(mut prompt) = self.state.prompt.take() else { return };
         let mut fields = std::mem::take(&mut prompt.fields);
         let command = prompt.command.clone();
@@ -274,7 +401,16 @@ impl<'a> Shell<'a> {
                     };
                     ui.label(RichText::new(&label).color(tokens.text));
                     ui.label(RichText::new(field.param.help).color(tokens.text_dim).small().weak());
-                    let response = ui.add(egui::TextEdit::singleline(&mut field.text).hint_text(&label));
+                    // The tree's own keyboard types into the field that has
+                    // the focus, and the field's id is **its own**, so the
+                    // keyboard and the field agree on which field is which.
+                    // §246.
+                    let salt = ("prompt", command.clone(), field.param.name);
+                    let id = ui.make_persistent_id(&salt);
+                    type_keys_into(typing, id, &mut field.text);
+                    let response = ui
+                        .add(egui::TextEdit::singleline(&mut field.text).hint_text(&label).id_source(&salt));
+                    focus_of(typing, id, response.has_focus());
                     automation.publish(
                         AutomationId::prompt_field(&command, field.param.name),
                         response.rect,
@@ -297,7 +433,6 @@ impl<'a> Shell<'a> {
                     }
                 });
             });
-
         self.automation = automation;
         prompt.fields = fields;
 
@@ -457,7 +592,13 @@ impl<'a> Shell<'a> {
         }
     }
 
-    fn properties(&mut self, ui: &mut Ui, tokens: &Tokens) {
+    /// The properties panel.
+    ///
+    /// The typing state is **passed in** and not taken from the shell: the
+    /// node below borrows the session, and the shell cannot be borrowed
+    /// again while it does — so the keyboard's state is a parameter here,
+    /// the way the key editor's is. §246.
+    fn properties(&mut self, ui: &mut Ui, tokens: &Tokens, typing: &mut Typing) {
         ui.heading("Properties");
         ui.separator();
         let Some(id) = self.state.selected else {
@@ -563,12 +704,23 @@ impl<'a> Shell<'a> {
                     }
                     other => {
                         let mut text = other.display();
+                        // The tree's own keyboard types into the field that
+                        // has the focus. §246.
+                        //
+                        // The edit is pushed when the field **changed** or
+                        // when the keyboard **typed**: `egui` notices its
+                        // own edits and reports them, and it cannot see the
+                        // tree's.
+                        let salt = ("property", path.clone());
+                        let id = ui.make_persistent_id(&salt);
+                        let typed = type_keys_into(typing, id, &mut text);
                         let response = ui.add_enabled(
                             enabled,
-                            egui::TextEdit::singleline(&mut text).hint_text(path.clone()),
+                            egui::TextEdit::singleline(&mut text).hint_text(path.clone()).id_source(&salt),
                         );
+                        focus_of(typing, id, response.has_focus());
                         automation.publish(widget, response.rect, enabled);
-                        if response.changed() {
+                        if response.changed() || typed {
                             edits.push((path.clone(), serde_json::Value::from(text)));
                         }
                     }
@@ -635,16 +787,35 @@ impl<'a> Shell<'a> {
         // The text lives in the shell's state, not in a local: a local is
         // rebuilt every frame, and the person typing would watch every
         // keystroke disappear. §105.
+        //
+        // The tree's own keyboard types into the field that has the focus,
+        // and the buffer is **taken out** of the state while it is typed
+        // into: the state is borrowed for the typing and for the buffer at
+        // the same time, and the tree does not fight itself over a borrow.
+        // §246.
+        let path_salt = ("key_path",);
+        let path_id = ui.make_persistent_id(path_salt);
+        let mut path = std::mem::take(&mut state.key_path);
+        type_keys_into(&mut state.typing, path_id, &mut path);
         let path_field =
-            ui.add(egui::TextEdit::singleline(&mut state.key_path).hint_text("path, e.g. amount"));
+            ui.add(egui::TextEdit::singleline(&mut path).hint_text("path, e.g. amount").id_source(path_salt));
+        focus_of(&mut state.typing, path_id, path_field.has_focus());
+        state.key_path = path;
         automation.publish(AutomationId::key_path(), path_field.rect, true);
         // The value field is here while there is a path to put a value on.
         // It used to appear only on the frame the path changed, which meant
         // it was gone before anything could be typed into it. §105.
         if !state.key_path.is_empty() {
-            let value_field = ui.add(egui::TextEdit::singleline(&mut state.key_value).hint_text("value"));
+            let value_salt = ("key_value",);
+            let value_id = ui.make_persistent_id(value_salt);
+            let mut value = std::mem::take(&mut state.key_value);
+            let typed = type_keys_into(&mut state.typing, value_id, &mut value);
+            let value_field =
+                ui.add(egui::TextEdit::singleline(&mut value).hint_text("value").id_source(value_salt));
+            focus_of(&mut state.typing, value_id, value_field.has_focus());
+            state.key_value = value;
             automation.publish(AutomationId::key_value(), value_field.rect, true);
-            if value_field.changed() {
+            if value_field.changed() || typed {
                 actions.push((
                     "key.set",
                     serde_json::json!({
@@ -1092,6 +1263,90 @@ mod tests {
             let _ = ctx.run(egui::RawInput::default(), |ctx| shell.show(ctx, &tokens));
         }
         (shell.state, shell.automation)
+    }
+
+    /// The tree's own keyboard types into the field that has the focus.
+    ///
+    /// §246: the platform's keyboard opens on a phone and its text never
+    /// arrives, so the tree draws a keyboard of its own. The key has to
+    /// arrive **in the field's own text** — that is the whole point of it.
+    ///
+    /// The test walks the way a person does: the form opens, the field is
+    /// tapped, and a key is pressed.
+    #[test]
+    fn the_trees_own_keyboard_types_into_the_field_that_has_the_focus() {
+        let mut session = Session::new("probe");
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+        // This platform has no keyboard of its own, so the tree draws one.
+        shell.state.own_keyboard = true;
+        shell.start("node.rename");
+
+        // The screen the frames are drawn on: a click needs somewhere to land.
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 600.0));
+        let mut input = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        // The form is laid out **first**, and the layout is settled before
+        // anything is clicked: the form is a floating window, and a window
+        // does not know how big it is until it has been drawn — so it
+        // **moves** after the first frame, and a click into a layout that
+        // has not settled answers about where things *were*.
+        for _ in 0..crate::raster::FRAMES {
+            let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+        }
+
+        // The field is tapped, the way a person taps it.
+        let name = AutomationId::prompt_field("node.rename", "name").as_str().to_string();
+        let rect = shell.automation.rect(&name).expect("the field is on the screen");
+        let button = |pressed: bool| egui::Event::PointerButton {
+            pos: rect.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        let mut tap = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        tap.events.push(button(true));
+        input = tap;
+        let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+        let mut release = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        release.events.push(button(false));
+        input = release;
+        let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+        // A widget takes the focus at the end of the frame it is clicked in,
+        // so the field has it from the next frame.
+        let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+        assert!(
+            shell.state.typing.field.is_some(),
+            "the tapped field did not take the focus, so the keyboard has nothing to type into"
+        );
+
+        // And a key is pressed.
+        shell.state.typing.keys.push(keyboard::Key::Char('t'));
+        let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+
+        let prompt = shell.state.prompt.as_ref().expect("the form is open");
+        let field =
+            prompt.fields.iter().find(|field| field.param.name == "name").expect("the form has a name field");
+        assert_eq!(field.text, "t", "the key did not arrive in the field");
+    }
+
+    /// The keyboard types into the field that has the focus, and into no other.
+    ///
+    /// Two fields, one focus: the keys belong to the field that has it, and
+    /// the other field must not claim them.
+    #[test]
+    fn the_trees_own_keyboard_types_into_one_field_only() {
+        let mut typing = Typing::default();
+        let field = egui::Id::new("the field");
+        let other = egui::Id::new("the other field");
+        typing.field = Some(field);
+        typing.keys.push(keyboard::Key::Char('a'));
+
+        let mut buffer = String::new();
+        assert!(!type_keys_into(&mut typing, other, &mut buffer), "the wrong field took the keys");
+        assert!(buffer.is_empty(), "{buffer:?}");
+        assert!(type_keys_into(&mut typing, field, &mut buffer), "the field did not take the keys");
+        assert_eq!(buffer, "a");
     }
 
     #[test]
@@ -1881,15 +2136,16 @@ mod tests {
         let tokens = Tokens::dark();
         let mut shell = Shell::new(&mut session);
         shell.state.selected = Some(id);
+        let mut typing = shell.state.typing.clone();
         // The first frame lays out; the later ones place.
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens));
+            egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens, &mut typing));
         });
         let mut best = f64::MAX;
         for _ in 0..9 {
             let start = std::time::Instant::now();
             let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens));
+                egui::CentralPanel::default().show(ctx, |ui| shell.properties(ui, &tokens, &mut typing));
             });
             best = best.min(start.elapsed().as_secs_f64());
         }
