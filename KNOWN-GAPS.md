@@ -28698,9 +28698,9 @@ the shape is all it needs.
 
 ### What enforces it
 
-The runner's six jobs: the three `gates` jobs and the three `android` jobs,
-on ubuntu, macos and windows. **The local gate is not the evidence for this
-one** — it is evidence about the local toolchain.
+The runner's six jobs: the three that run the gates and the three that
+build for a phone, on ubuntu, macos and windows. **The local gate is not the
+evidence for this one** — it is evidence about the local toolchain.
 
 ### What is not claimed
 
@@ -29296,7 +29296,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The tree's own keyboard types into the field that has the focus** | `the_trees_own_keyboard_types_into_the_field_that_has_the_focus` in `crates/ui/src/shell.rs` | the phone's own run — §246 |
 | **The host's directory is asked for, not answered twice** | `the_symbol_lister_is_the_ndks_own_in_the_hosts_own_directory` in `xtask/src/android.rs` | the macOS and Windows runners — §245 |
 | **The tree is laid out inside the rectangle the platform reports** | `the_insets_are_the_platforms_answer_in_egui_units` in `crates/ui/src/insets.rs` | 2 mutations, and the phone's own run — §247 |
-| **A warning the local compiler does not emit is a warning the runner fails on** | the runner's six jobs — three `gates` and three `android` | the runner's own compiler — §248 |
+| **A warning the local compiler does not emit is a warning the runner fails on** | the runner's six jobs — three that run the gates, three that build for a phone | the runner's own compiler — §248 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
