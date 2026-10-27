@@ -158,7 +158,10 @@ and every result it gives is meaningless.
 When you add a gate, add a line that breaks its rule and asserts it rejects the
 tree. When you change a gate, the mutation that found the old bug is still in the
 script — that is what stops it coming back. The script runs in CI as the
-`mutation` job.
+`mutation` job of `.github/workflows/mutation.yml`: its own workflow, because
+it takes about an hour and a push must not cancel it (§252). It runs nightly,
+on demand (`workflow_dispatch`) and on every pull request; the fast gates run
+on every push.
 
 **And a rule about the script's own text needs its own door.** The script
 cannot be edited while it runs — bash reads a script as it goes — so the list

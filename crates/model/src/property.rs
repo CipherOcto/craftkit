@@ -905,18 +905,87 @@ mod tests {
         assert!(group.validate().is_ok(), "a name at the limit is a name");
     }
 
-    /// A path is made of names, and every name in the model is at most
-    /// `MAX_NAME` bytes — so a path of `MAX_PATH_SEGMENTS` of them is at most
+    /// A path is made of segments, and every segment the grammar can express
+    /// is a name of at most `MAX_NAME` bytes plus the `#` and the digits of
+    /// its occurrence — so a path of `MAX_PATH_SEGMENTS` of them is at most
     /// `MAX_PATH_BYTES` long, and the commands carry paths of that length.
     ///
     /// §97: the commands capped a path at a **name's** length, so a path the
     /// grammar could express was a path no command would carry.
+    ///
+    /// §253: the budget counted a segment as a name and **one** digit, while
+    /// the grammar's own spelling of an occurrence may carry six. The number
+    /// is now the length of the longest path the grammar accepts.
     #[test]
     fn the_longest_path_the_grammar_can_express_fits_in_the_path_budget() {
-        let segment = "a".repeat(limits::MAX_NAME);
+        // The longest segment the grammar accepts: the longest name, and the
+        // longest occurrence the grammar will read.
+        let name = "a".repeat(limits::MAX_NAME);
+        let segment = format!("{name}#{}", "9".repeat(limits::MAX_PATH_INDEX_DIGITS));
+        assert_eq!(segment.len(), limits::MAX_NAME + 1 + limits::MAX_PATH_INDEX_DIGITS);
         let path = vec![segment; limits::MAX_PATH_SEGMENTS].join("/");
         assert_eq!(path.len(), limits::MAX_PATH_BYTES);
         assert!(PropPath::parse(&path).is_some(), "the grammar must accept the longest path");
+    }
+
+    /// **A path the tree publishes is a path a command accepts.** §253.
+    ///
+    /// This is the sentence the path module has always claimed, and it was
+    /// false: the tree's own spelling of a name the grammar cannot write
+    /// plainly is `name#1`, two bytes longer than the name, and the budget
+    /// did not count those two bytes. A tree of sixteen such names published
+    /// a path of 4 127 bytes, and every command refused it — the tree told
+    /// the user a path and then would not take it.
+    #[test]
+    fn a_path_the_tree_publishes_fits_in_the_path_budget() {
+        // A name the grammar cannot write plainly: it contains a `#`, so the
+        // tree publishes it with an explicit occurrence.
+        let name = format!("{}#", "a".repeat(limits::MAX_NAME - 1));
+        assert_eq!(name.len(), limits::MAX_NAME);
+        let mut root = PropGroup::new("root", "root");
+        let mut current = &mut root;
+        for _ in 0..limits::MAX_PATH_SEGMENTS - 1 {
+            current.push_group(PropGroup::new(name.clone(), name.clone()));
+            current = match current.nodes.last_mut() {
+                Some(PropNode::Group(g)) => g,
+                _ => panic!("the group was pushed"),
+            };
+        }
+        // The leaf's label is the same worst-case name, so the path has the
+        // most segments it can have, each of them the longest it can be.
+        current.push(Property::new(1, name.clone(), Value::num("t", 1.0).unwrap()));
+        assert!(root.validate().is_ok(), "the tree is a legal tree");
+
+        let published = root.flatten()[0].0.to_string();
+        assert_eq!(
+            published.len(),
+            limits::MAX_PATH_SEGMENTS * (limits::MAX_NAME + 2) + (limits::MAX_PATH_SEGMENTS - 1),
+            "the published path is the longest one the tree can publish"
+        );
+        assert!(
+            published.len() <= limits::MAX_PATH_BYTES,
+            "the tree published a path of {} bytes and the budget is {}",
+            published.len(),
+            limits::MAX_PATH_BYTES
+        );
+        assert!(
+            PropPath::parse(&published).is_some(),
+            "the tree published a path its own grammar cannot read: {published}"
+        );
+    }
+
+    /// An occurrence's digits are bounded like a position's are. §253.
+    ///
+    /// The position spelling (`#2`) has always been limited to six digits; the
+    /// occurrence spelling was not, so a segment could be twenty bytes longer
+    /// than the budget assumed and a path of them was longer than any command
+    /// would carry.
+    #[test]
+    fn an_occurrence_with_too_many_digits_is_refused() {
+        let too_many = format!("a#{}", "9".repeat(limits::MAX_PATH_INDEX_DIGITS + 1));
+        assert!(PropPath::parse(&too_many).is_none(), "an occurrence past the digits is not a path");
+        let at_the_limit = format!("a#{}", "9".repeat(limits::MAX_PATH_INDEX_DIGITS));
+        assert!(PropPath::parse(&at_the_limit).is_some(), "an occurrence at the digits is a path");
     }
 
     #[test]

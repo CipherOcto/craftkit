@@ -29278,6 +29278,146 @@ holds the job's timeout to the suite's budget, and it was green throughout —
 because the timeout was never the problem. **The cancellation was.** A gate
 that checks a number beside the defect is not a gate on the defect.
 
+## 253. The tree published a path of 4 127 bytes, and every command refused it
+
+### The finding
+
+**The path module's own claim was false, and it had been false since the
+budget was written.** `crates/model/src/path.rs` says:
+
+> *"So the longest path the grammar can express is
+> [`limits::MAX_PATH_BYTES`] bytes, and that is the number the commands
+> carry: a path the tree publishes is a path a command accepts."*
+
+**The tree does not publish paths the commands accept.** It publishes paths
+that are **32 bytes too long**, and the commands refuse them with the
+budget's own number in the message:
+
+```text
+path 4127 bytes, the limit is 4095
+```
+
+### Measured
+
+The budget counted a segment as a name and **one** digit:
+
+```rust
+pub const MAX_PATH_BYTES: usize = MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1;
+```
+
+**16 × 256 − 1 = 4 095.**
+
+But a segment in the tree's own spelling is **not** a name — it is a name and
+an occurrence:
+
+```rust
+pub fn segment_spelling(name: &str, n: usize) -> String {
+    if n > 1 || !is_written_as_it_is(name) { format!("{name}#{n}") } else { name.to_string() }
+}
+```
+
+A name the grammar cannot write plainly — one that contains a `#`, like
+`C#` — is written `name#1`, **two bytes more**. Sixteen of them, and the
+slashes between:
+
+| | bytes |
+|---|---|
+| the budget | 4 095 |
+| sixteen names of `MAX_NAME` bytes, written plainly | 4 095 — exactly the budget |
+| sixteen names of `MAX_NAME` bytes containing a `#`, written `name#1` | **4 127** |
+| what the commands accept | **4 095** |
+
+**The tree publishes the third row and the commands accept the fourth.** The
+listing, the property panel, the MCP resource listing and the control
+channel's path listings all publish it; `prop.set`, `prop.get` and every
+other command that takes a path refuse it.
+
+**And the grammar accepted a third row the budget never imagined.** The
+position spelling (`#2`) has always been limited to six digits. The
+**occurrence** spelling (`name#n`) was not — so a segment could carry
+nineteen digits, and sixteen of them made a path of **4 415** bytes that the
+grammar read and no command would take.
+
+### Why nothing else would have caught it
+
+- **The test that guarded the budget tested the wrong path.** §97's test built
+  the longest path out of **plain** names — 16 × 255 bytes plus the slashes —
+  which is *exactly* the old budget. The tree's own spelling was never in
+  the test.
+- **The names in the test were not names the grammar has to spell.** A plain
+  name is written as it is; the budget only goes wrong for a name the
+  grammar must *help* with, and no test had one.
+- **The budget's derivation was prose.** `MAX_PATH_SEGMENTS * (MAX_NAME + 1)
+  - 1` says "a name and a separator"; the truth is "a name, a `#` and an
+  occurrence's digits".
+- **The gate that reads the limits table checks that every limit is
+  *enforced*** (§74), not that the limit is *right*. A number that is
+  enforced is enforced.
+
+### The fix
+
+**The budget is now the length of the longest path the grammar can express,
+and the grammar's own spelling is bounded by the rule the position spelling
+has always had.**
+
+- `craftkit_model::limits::MAX_PATH_INDEX_DIGITS` (**6**) — the digits in an
+  occurrence. Six digits is ten thousand more occurrences than any document
+  can hold (`MAX_PROPERTIES` is fifty thousand), so the cap costs nothing a
+  document could want.
+- `MAX_PATH_BYTES` is now
+  `MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1)`
+  — **4 207** — the length of the longest path the grammar accepts.
+- The grammar refuses a segment whose occurrence has too many digits, exactly
+  as it refuses a position with too many.
+
+**Three tests**, each measured failing before the fix and passing after:
+
+```text
+# without the fix
+test property::tests::a_path_the_tree_publishes_fits_in_the_path_budget ... FAILED
+  the tree published a path of 4127 bytes and the budget is 4095
+test property::tests::the_longest_path_the_grammar_can_express_fits_in_the_path_budget ... FAILED
+test property::tests::an_occurrence_with_too_many_digits_is_refused ... FAILED
+```
+
+**Two mutations**, in `scripts/mutation-test-gates.sh`:
+
+- the budget is back to the old formula — caught by
+  `a_path_the_tree_publishes_fits_in_the_path_budget`;
+- the occurrence's digits are not bounded — caught by
+  `an_occurrence_with_too_many_digits_is_refused`.
+
+### What is not claimed
+
+- **The commands' path cap is now 4 207 bytes**, not 4 095. It was the wrong
+  number before; a path of 4 127 bytes was legal to the tree and illegal to
+  the commands, and the tree does not get to choose which of the two is
+  wrong.
+- **The names are still 255 bytes and the property tree is still 16 levels
+  deep.** Nothing about the model's own limits moved; only the path's *byte*
+  budget, which was derived from the other two and was wrong.
+- **The invariant is now by construction, not by test alone**: the commands
+  cap a path at `MAX_PATH_BYTES` and the model publishes paths of at most
+  `MAX_PATH_BYTES`, so the two cannot drift apart again — unless somebody
+  changes the derivation without changing the test that reads it.
+- **Nothing was measured on a phone**, and nothing about the Android build
+  changed.
+
+### The lesson
+
+**A budget derived from a rule is only as good as the rule it was derived
+from.** `MAX_PATH_BYTES` was derived from "a segment is a name", and the
+tree's own segments are a name *and an occurrence* — the grammar's spelling
+of a name it cannot write plainly. **The derivation was the defect**, and it
+was invisible because the test used the same simplification the formula did.
+
+**And a claim about what the tree publishes is a claim about the tree's
+spelling.** "A path the tree publishes is a path a command accepts" is a
+statement about two things that have to agree, and the test only ever built
+one of them by hand. **The published path is the one that matters**: it is
+what a person copies, and it is what the tree itself offers to its own
+commands.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -29855,6 +29995,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The never-crash table names every limit** | `the_table_names_every_limit` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/core/src/value.rs` | 2 mutations — §251 |
 | **The instrument is not cancelled by a push** | `the_instrument_is_not_cancelled_by_a_push` in `xtask/src/lists.rs` | 2 mutations — §252 |
+| **A path the tree publishes is a path a command accepts** | `a_path_the_tree_publishes_fits_in_the_path_budget` in `crates/model/src/property.rs` | 2 mutations — §253 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |

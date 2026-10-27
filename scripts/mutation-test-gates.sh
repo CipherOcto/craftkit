@@ -4278,7 +4278,7 @@ expect_catch "engine: the session's budget forgot the trace's base" \
 # exactly one place, and a bound named in exactly one place is one edit away
 # from being named in none.
 swap docs/architecture.md \
-    ', `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1`' \
+    ', `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1)`' \
     ','
 expect_catch "prose: a bound the tree has is not named" \
     "cargo xtask lists"
@@ -6787,6 +6787,26 @@ expect_catch "lists: a push cancels the instrument" "cargo xtask lists"
 # that has never run.
 swap .github/workflows/mutation.yml '  schedule:' '  # schedule:'
 expect_catch "lists: the instrument has no schedule" "cargo xtask lists"
+
+# ------------------------------------------- the path budget, against the tree ----
+# Section 253. The budget was a kilobyte short of the longest path the tree
+# publishes: it counted a segment as a name and one digit, while the tree's
+# own spelling of a name the grammar cannot write plainly is `name#1` -- two
+# bytes more. A tree of sixteen such names published a path of 4 127 bytes
+# and every command refused it.
+swap crates/model/src/lib.rs \
+    '        MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1);' \
+    '        MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1;'
+expect_catch "model: the path budget is short of what the tree publishes" \
+    "cargo test -p craftkit-model --profile ci a_path_the_tree_publishes_fits_in_the_path_budget"
+
+# And the occurrence's digits are a number the grammar can count, like a
+# position's digits are.
+swap crates/model/src/path.rs \
+    '            if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {' \
+    '            if false {'
+expect_catch "model: an occurrence's digits are not bounded" \
+    "cargo test -p craftkit-model --profile ci an_occurrence_with_too_many_digits_is_refused"
 
 restore
 finish

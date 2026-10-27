@@ -93,6 +93,14 @@
 //! So the longest path the grammar can express is
 //! [`limits::MAX_PATH_BYTES`] bytes, and that is the number the commands
 //! carry: a path the tree publishes is a path a command accepts.
+//!
+//! That sentence was false once, and the number was the reason. §253: the
+//! budget counted a segment as a name and one digit, but the tree's own
+//! spelling of a name the grammar cannot write plainly is `name#1` — two
+//! bytes more — so the longest path the tree could publish was 4 127 bytes
+//! and every command refused it. The budget is now the length of the longest
+//! path the **grammar** can express, and the grammar's own spelling is
+//! bounded by the same rule the position spelling has always had.
 
 use crate::limits;
 use craftkit_core::NodeId;
@@ -188,6 +196,14 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
             // with an explicit occurrence — `name#1`. A name the model would
             // refuse is a name no path may spell. §97.
             if name.len() > limits::MAX_NAME {
+                return None;
+            }
+            // The occurrence's digits are a number, and a number the grammar
+            // writes is a number it can count: the same six digits the
+            // position spelling has always had. Without this the grammar
+            // accepted a segment twenty bytes longer than the budget assumed,
+            // and a path of them was longer than any command would carry. §253.
+            if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {
                 return None;
             }
             let n: usize = digits.parse().ok()?;

@@ -80,18 +80,37 @@ pub mod limits {
     /// the file. A bound makes it readable: the note can be carried whole,
     /// and a file with a longer one is refused rather than half-kept. §110.
     pub const MAX_COMMENT_BYTES: usize = 4_096;
+    /// The digits in a path segment's occurrence, at most.
+    ///
+    /// A segment may be written `name#n`, and `n` is a number. The position
+    /// spelling (`#2`) has always been limited to six digits; the occurrence
+    /// spelling was not, so a segment could be twenty bytes longer than the
+    /// budget assumed. Six digits is ten thousand more occurrences than any
+    /// document can hold ([`MAX_PROPERTIES`] is fifty thousand), so the cap
+    /// costs nothing a document could want. §253.
+    pub const MAX_PATH_INDEX_DIGITS: usize = 6;
     /// The longest property path, in bytes.
     ///
-    /// A path is made of names, and a name is at most [`MAX_NAME`] bytes, so a
-    /// path of [`MAX_PATH_SEGMENTS`] segments is at most this long: the names
-    /// plus the slashes between them.
+    /// A path is made of segments, and a segment is a name of at most
+    /// [`MAX_NAME`] bytes plus the `#` and the digits of its occurrence, so a
+    /// path of [`MAX_PATH_SEGMENTS`] segments is at most this long: the
+    /// segments plus the slashes between them.
     ///
     /// The number is here so that **every layer that carries a path agrees on
     /// how long one may be**. The grammar accepted a path of four kilobytes,
     /// the commands refused anything over 255 bytes, and the model did not
     /// limit a group's id at all — so a file could hold a property that the
     /// tree published a path to and no command would accept. §97.
-    pub const MAX_PATH_BYTES: usize = MAX_PATH_SEGMENTS * (MAX_NAME + 1) - 1;
+    ///
+    /// §253: the number was a kilobyte **short** of what the tree publishes.
+    /// It counted a segment as a name and one digit, but the tree's own
+    /// spelling of a name the grammar cannot write plainly is `name#1` — two
+    /// bytes more — so a path of sixteen such names was 4 127 bytes and every
+    /// command refused it. **The budget is now the length of the longest path
+    /// the grammar can express**, and a path the tree publishes is a path a
+    /// command accepts, which is what this number has always claimed to be.
+    pub const MAX_PATH_BYTES: usize =
+        MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1);
     /// How much memory **one document** may hold.
     ///
     /// Every other limit here is a **count**, and a count does not say how
