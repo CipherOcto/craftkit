@@ -28474,6 +28474,17 @@ Java in the package and no new dependency in the tree.
 - **The shift was a caps lock.** The first version kept the shift on until
   it was pressed again, and typing `Taper` gave `TAPER`. A shift types
   **one** letter, the way every keyboard does.
+- **The backspace takes the last character away.** Typed `tt`, pressed
+  backspace, and the field held `t` — one character, not two, and not none.
+- **The second layer types the digits.** The `123` key showed the digits
+  and the signs, and `t5` typed `t` and then `5`; the layer switches back
+  on the same key.
+
+The tree's own tests cover these three keys — the digits, the shift, and
+what a key does to a buffer — so the phone's part is not that they work but
+that **the buttons a person presses are the ones the tests describe**: a key
+that types the wrong character still types *a* character, and only the
+device can say which one.
 
 ### What is not claimed
 
