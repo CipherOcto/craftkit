@@ -426,6 +426,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-android"
+version = "0.1.0"
+dependencies = [
+ "craftkit",
+ "eframe",
+ "winit",
+]
+
+[[package]]
 name = "craftkit-cli"
 version = "0.1.0"
 dependencies = [

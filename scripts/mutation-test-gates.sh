@@ -4954,6 +4954,17 @@ swap xtask/src/lists.rs \
 expect_catch "gate: the crate root's deny attribute is read out of a string" \
     "cargo test -p xtask --profile ci a_deny_attribute_in_a_string_is_not_a_deny_attribute"
 
+# The exception to the unsafe rule is for **one attribute** - the
+# `no_mangle` on the one function the platform looks up - and not for the
+# capability. The gate that says the exception has not grown has to be seen
+# to fail, so an `unsafe` block is put in the exception crate and the gate
+# has to report it. Section 236.
+swap apps/craftkit-android/src/lib.rs \
+    'pub fn android_main(app: winit::platform::android::activity::AndroidApp) {' \
+    'pub fn android_main(app: winit::platform::android::activity::AndroidApp) { unsafe { let _ = 0; }'
+expect_catch "gate: an unsafe block in the exception crate is reported" \
+    "cargo xtask lists"
+
 swap xtask/src/lists.rs \
     '        let Some(code_line) = code.get(number) else { continue };
         let code_line = code_line.trim();' \

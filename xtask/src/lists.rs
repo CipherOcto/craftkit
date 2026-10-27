@@ -41,6 +41,7 @@ use crate::layers::{self, TABLE};
 use crate::step;
 use crate::tree::{
     Subject, code_lines_kept, is_word_byte, matching, production_of, read_rust, read_text, relative_name,
+    walk,
 };
 
 /// The deny list, in house order.
@@ -77,6 +78,38 @@ pub const DENY: &str = concat!(
 
 /// The unsafe line, exactly as every crate root must carry it.
 pub const FORBID: &str = "#![forbid(unsafe_code)]";
+
+/// The unsafe line, for the crate that may not forbid it.
+///
+/// A function with a fixed name in a binary needs `#[unsafe(no_mangle)]`, and
+/// `forbid` cannot be relaxed by an `allow`: `forbid` is a promise that can
+/// never be broken, and the platform's loader looks a symbol up **by name**.
+/// §236.
+pub const DENY_UNSAFE: &str = "#![deny(unsafe_code)]";
+
+/// The crates that may **deny** unsafe instead of **forbid** it, and why.
+///
+/// One list, one thing. A crate that is not on it must forbid unsafe; a crate
+/// that is on it must deny it and must still hold no `unsafe` block, no
+/// `unsafe` function, no `unsafe` impl and no `unsafe` trait — the exception
+/// is the *attribute*, not the capability. The check is
+/// [`the_unsafe_exception_has_not_grown`], and it is what keeps this list
+/// from becoming a hole. §236.
+pub const UNSAFE_DENY_EXCEPTIONS: &[(&str, &str)] =
+    &[("craftkit-android", "Android's loader opens the shared library and looks up `android_main` by name")];
+
+/// The crate a root belongs to: its directory's name.
+///
+/// `apps/craftkit-android/src/lib.rs` is the crate `craftkit-android`. A path
+/// that has no such directory has no crate name, and the caller treats that as
+/// "not an exception" rather than guessing.
+pub fn crate_name_of(root: &std::path::Path) -> Option<String> {
+    root.parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string())
+}
 
 /// The deny attribute of a file, with every space removed and the `clippy::`
 /// prefix dropped, for comparison against [`canonical`].
@@ -4155,7 +4188,101 @@ pub fn check_roots(roots: &[std::path::PathBuf]) -> Vec<String> {
             )),
         }
         if !code.contains(FORBID) {
-            problems.push(format!("{}: no `#![forbid(unsafe_code)]`.\n     Add: {FORBID}", path.display()));
+            // The named exception: a crate on the list denies unsafe instead of
+            // forbidding it, because the platform looks a symbol up by name.
+            // §236.
+            let name = crate_name_of(path).unwrap_or_default();
+            let allowed = UNSAFE_DENY_EXCEPTIONS.iter().find(|(c, _)| *c == name);
+            match allowed {
+                Some((_, why)) => {
+                    if !code.contains(DENY_UNSAFE) {
+                        problems.push(format!(
+                            "{}: the exception crate must carry `{DENY_UNSAFE}`.\n     It is on the list because: {why}\n     Add: {DENY_UNSAFE}",
+                            path.display()
+                        ));
+                    }
+                }
+                None => problems.push(format!("{}: no `{FORBID}`.\n     Add: {FORBID}", path.display())),
+            }
+        }
+    }
+    problems
+}
+
+/// The exception has not grown: the named crate holds no unsafe code.
+///
+/// The exception in [`UNSAFE_DENY_EXCEPTIONS`] is for **one attribute**, not
+/// for the capability. The crate that may deny unsafe must still hold no
+/// `unsafe` block, no `unsafe` function, no `unsafe` impl, no `unsafe` trait
+/// and no `unsafe` extern block — only the `no_mangle` attribute on the one
+/// function the platform looks up.
+///
+/// A check that only looked at the lint attribute would pass the moment
+/// somebody wrote an `unsafe` block in the exception crate, and then the
+/// exception would have become a hole with a name on it. §236.
+pub fn the_unsafe_exception_has_not_grown(root: &std::path::Path) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (crate_name, why) in UNSAFE_DENY_EXCEPTIONS {
+        let dir = root.join("apps").join(crate_name);
+        if !dir.is_dir() {
+            problems.push(format!(
+                "apps/{crate_name}: the exception names a crate that is not in the tree ({why})"
+            ));
+            continue;
+        }
+        let src = dir.join("src");
+        let mut found = Vec::new();
+        walk(&src, &src, &mut found, &|p: &Path| p.extension().and_then(|e| e.to_str()) == Some("rs"));
+        for path in found.into_iter().map(|relative| src.join(relative)) {
+            let body = match read_rust(&path, Subject::Production) {
+                Ok(b) => b,
+                Err(e) => {
+                    problems.push(format!("{}: could not be read ({e})", path.display()));
+                    continue;
+                }
+            };
+            // The code, not the comments: a comment that says "unsafe" is
+            // prose. §161's rule, applied here.
+            //
+            // The call is written with `body.as_str()` rather than `&body` so
+            // that this line is not the same text as the one in `check_roots`
+            // — the mutation script's anchor for that one must name **one**
+            // place, and an anchor that names two names none. §236.
+            let code = code_lines_kept(body.as_str());
+            for (what, needle) in [
+                ("an unsafe block", "unsafe {"),
+                ("an unsafe function", "unsafe fn"),
+                ("an unsafe impl", "unsafe impl"),
+                ("an unsafe trait", "unsafe trait"),
+                ("an unsafe extern block", "unsafe extern"),
+                ("an unsafe attribute other than `no_mangle`", "unsafe("),
+            ] {
+                if what == "an unsafe attribute other than `no_mangle`" {
+                    // `#[unsafe(no_mangle)]` is the one attribute the exception
+                    // is for; any other `unsafe(` attribute is not.
+                    let mut rest = code.as_str();
+                    while let Some(at) = rest.find("unsafe(") {
+                        let after = &rest[at + "unsafe(".len()..];
+                        let end = after.find(')').unwrap_or(after.len());
+                        let inside = &after[..end];
+                        if inside.trim() != "no_mangle" {
+                            problems.push(format!(
+                                "{}: the exception crate holds {what}.\n     The exception is the `no_mangle` attribute on the one function the platform looks up, and nothing else.",
+                                path.display()
+                            ));
+                            break;
+                        }
+                        rest = &after[end..];
+                    }
+                    continue;
+                }
+                if code.contains(needle) {
+                    problems.push(format!(
+                        "{}: the exception crate holds {what}.\n     The exception is the `no_mangle` attribute on the one function the platform looks up, and nothing else.",
+                        path.display()
+                    ));
+                }
+            }
         }
     }
     problems
@@ -5712,6 +5839,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the bound is a constant the tree ships, and a literal in a comment is not it",
     ),
     (
+        "the_unsafe_exception_has_not_grown",
+        Subject::Production,
+        "the exception is about the code the tree ships, and an `unsafe` block in a comment is not one",
+    ),
+    (
         "the_trace_budget_is_derived_from_its_memory_budget",
         Subject::Production,
         "the derivation is code the tree ships, and a derivation mentioned in a comment is not one",
@@ -6794,6 +6926,10 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         return Err("found no crate roots at all; the scan is wrong, not the repository".to_string());
     }
     problems.extend(check_roots(&roots));
+
+    // The named exception to the unsafe rule, and that it has not grown.
+    // §236.
+    problems.extend(the_unsafe_exception_has_not_grown(root));
 
     // The gates the tree names, and the gates that run.
     problems.extend(the_gates_are_real(root)?);
@@ -9709,6 +9845,105 @@ pub fn f() {}
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("no deny attribute"), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The exception crate may deny unsafe, and may not forbid it.
+    ///
+    /// The one crate that carries `#[unsafe(no_mangle)]` cannot also carry
+    /// `#![forbid(unsafe_code)]`, because `forbid` cannot be relaxed by an
+    /// `allow`. So the gate accepts `#![deny(unsafe_code)]` there — and only
+    /// there. A crate that is not on the list must still forbid unsafe, and a
+    /// crate on the list that does not deny it is reported. §236.
+    #[test]
+    fn the_exception_crate_denies_unsafe_where_the_others_forbid_it() {
+        let dir = crate::temp::dir("unsafe-exception").expect("a temporary folder");
+        let crate_dir = dir.join("apps/craftkit-android/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        let root = crate_dir.join("lib.rs");
+        // The house deny, and the deny that the exception is about.
+        std::fs::write(&root, format!("{DENY}\n{DENY_UNSAFE}\n\npub fn f() {{}}\n"))
+            .expect("the fabricated root");
+
+        let problems = check_roots(std::slice::from_ref(&root));
+        assert!(problems.is_empty(), "the exception crate was reported: {problems:#?}");
+
+        // A crate that is not on the list must forbid unsafe, even if it only
+        // denies it.
+        let other = dir.join("apps/other/src");
+        std::fs::create_dir_all(&other).expect("the fabricated tree");
+        let other_root = other.join("lib.rs");
+        std::fs::write(&other_root, format!("{DENY}\n{DENY_UNSAFE}\n\npub fn f() {{}}\n"))
+            .expect("the fabricated root");
+        let problems = check_roots(&[other_root]);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("forbid(unsafe_code)"), "{problems:#?}");
+
+        // The exception crate that does not deny unsafe is reported too.
+        std::fs::write(&root, format!("{DENY}\n\npub fn f() {{}}\n")).expect("the fabricated root");
+        let problems = check_roots(&[root]);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("must carry"), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The exception is for one attribute, and not for the capability.
+    ///
+    /// The crate that may deny unsafe must still hold no `unsafe` block: the
+    /// moment it does, the exception has become a hole with a name on it. The
+    /// gate that says so is only known to work if it has been seen to fail —
+    /// so it is given a crate with an `unsafe` block in it, and it has to
+    /// report it. §236.
+    #[test]
+    fn an_unsafe_block_in_the_exception_crate_is_reported() {
+        let dir = crate::temp::dir("unsafe-grown").expect("a temporary folder");
+        let crate_dir = dir.join("apps/craftkit-android/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+        let root = crate_dir.join("lib.rs");
+
+        // The exception as it is: one attribute, on one function.
+        std::fs::write(
+            &root,
+            format!(
+                "{DENY}\n{DENY_UNSAFE}\n\n#[allow(unsafe_code)]\n#[unsafe(no_mangle)]\npub fn f() {{}}\n"
+            ),
+        )
+        .expect("the fabricated root");
+        let problems = the_unsafe_exception_has_not_grown(&dir);
+        assert!(problems.is_empty(), "the exception crate was reported: {problems:#?}");
+
+        // An `unsafe` block: the capability, and not the attribute.
+        std::fs::write(
+            &root,
+            format!("{DENY}\n{DENY_UNSAFE}\n\npub fn f() {{ unsafe {{ std::mem::zeroed::<u8>(); }} }}\n"),
+        )
+        .expect("the fabricated root");
+        let problems = the_unsafe_exception_has_not_grown(&dir);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("unsafe block"), "{problems:#?}");
+
+        // An `unsafe` attribute that is not `no_mangle`.
+        std::fs::write(
+            &root,
+            format!("{DENY}\n{DENY_UNSAFE}\n\n#[unsafe(link_section = \".text\")]\npub fn f() {{}}\n"),
+        )
+        .expect("the fabricated root");
+        let problems = the_unsafe_exception_has_not_grown(&dir);
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("unsafe attribute"), "{problems:#?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The real tree's exception crate is the exception, and nothing more.
+    ///
+    /// A gate that is only ever run against a fabricated tree has never met
+    /// the thing it checks. §236.
+    #[test]
+    fn the_tree_s_own_exception_crate_holds_no_unsafe_code() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_unsafe_exception_has_not_grown(&root);
+        assert!(problems.is_empty(), "{problems:#?}");
     }
 
     /// A `mod` line that stands only in a string is not a module.

@@ -54,6 +54,19 @@ loses it, and the user's trust in everything else.
   in the same order, because a deny list that varies between crates is a deny
   list nobody can reason about.
 
+- **One crate denies unsafe instead of forbidding it, and it is named.**
+  `apps/craftkit-android` is the Android package: Android's loader opens the
+  shared library and looks up `android_main` **by name**, and a function with a
+  fixed name needs `#[unsafe(no_mangle)]`. `forbid` cannot be relaxed by an
+  `allow` — it is a promise that can never be broken — so that crate carries
+  `#![deny(unsafe_code)]` and **one** `#[allow(unsafe_code)]` on that one
+  function. The exception is the *attribute*, not the capability: the crate
+  holds no `unsafe` block, no `unsafe` function, no `unsafe` impl and no
+  `unsafe` trait, and `cargo xtask lists` checks that it still does not.
+  The list is one list, in `xtask/src/lists.rs` (`UNSAFE_DENY_EXCEPTIONS`),
+  and the workspace's own lint is the **backstop** — `deny`, not `forbid` —
+  because every crate root carries the `forbid` above, and that is the rule.
+
 - **`clippy.toml` re-enables the unwrap lints in tests only.** A test may panic;
   nothing else may.
 

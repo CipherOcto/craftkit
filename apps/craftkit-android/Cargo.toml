@@ -1,0 +1,39 @@
+[package]
+name = "craftkit-android"
+description = "The craftkit Android package: the entry point the platform looks up by name."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# The Android package is a shared library and nothing else: Android's loader
+# opens it and looks up one symbol in it by name. §236.
+[lib]
+name = "craftkit_android"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+# The application itself — the window, the session and the shell are the same
+# code the desktop application runs.
+craftkit = { path = "../craftkit" }
+# The handle the platform hands the application, and the feature that turns on
+# the platform's event loop and the glue crate that carries the activity's
+# events. The version is the one `egui-winit` already uses, so there is one
+# `winit` in the build and not two.
+winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+# The same feature, on the frame: it is what tells `eframe` to build the event
+# loop from the activity's handle.
+eframe = { workspace = true, features = ["android-native-activity"] }
+
+# How `cargo apk` packages the application. The activity is the platform's own
+# `NativeActivity`, so the APK carries no Java at all. §236.
+[package.metadata.android]
+package = "org.craftocto.craftkit"
+build_targets = ["armv7-linux-androideabi"]
+min_sdk_version = 21
+target_sdk_version = 30

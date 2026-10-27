@@ -80,6 +80,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-ui", Class::Layer(6)),
     // The binaries and the build tool. Exempt.
     ("craftkit", Class::Exempt),
+    // The Android package: the same application, packaged for the phone.
+    // §236.
+    ("craftkit-android", Class::Exempt),
     ("craftkit-cli", Class::Exempt),
     ("craftkit-web", Class::Exempt),
     ("xtask", Class::Exempt),

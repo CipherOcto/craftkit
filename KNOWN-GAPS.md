@@ -27276,6 +27276,158 @@ none*, and it was written into the tree's record without being checked.
 changelog line, the feature list, the glue table, the APK tools and the IME
 shim — all of it public, all of it older than the tree's dependency.
 
+## 236. The Android application, on the phone
+
+### What was built
+
+**The tree's GUI now runs on the attached phone.** It is the same application
+as the desktop one — the same window, the same session, the same shell — and
+the tree's own code did not change to make it happen.
+
+The shape is **one application, two entry points**:
+
+| what | where | what it is |
+|---|---|---|
+| the application | `apps/craftkit/src/lib.rs` | the window, the session, the shell, the crash hook |
+| the desktop entry | `apps/craftkit/src/main.rs` | parses the flags, calls `run` |
+| the Android entry | `apps/craftkit-android/src/lib.rs` | one function, `android_main`, in a `cdylib` |
+
+**Why the Android package is its own crate.** Android's loader opens the
+shared library and looks up **one symbol in it by name** — `android_main`.
+A function with a fixed name needs `#[unsafe(no_mangle)]`, and the tree's
+`unsafe_code` lint covers unsafe attributes, and **`forbid` cannot be relaxed
+by an `allow`**: it is a promise that can never be broken. So:
+
+- the **workspace** lint is `deny` now, not `forbid` — it is the *backstop*,
+  and every crate root still carries `#![forbid(unsafe_code)]`, which is the
+  rule;
+- the **Android package** carries `#![deny(unsafe_code)]` and **one**
+  `#[allow(unsafe_code)]` on **one** function;
+- `cargo xtask lists` knows the exception, **names** it
+  (`UNSAFE_DENY_EXCEPTIONS`, one list), and checks that it has not grown: the
+  package may hold no `unsafe` block, no `unsafe` function, no `unsafe` impl,
+  no `unsafe` trait, and no `unsafe` attribute other than `no_mangle`.
+
+The exception is the **attribute**, not the capability. A mutation puts an
+`unsafe` block in the package, and the gate reports it.
+
+**No Java in the APK.** The activity is the platform's own
+`android.app.NativeActivity`, and `has_code` is false — the package carries
+`lib/armeabi-v7a/libcraftkit_android.so` and nothing else. The renderer stays
+`glow`: `glutin 0.32.3` accepts `RawDisplayHandle::Android` when the EGL
+extension `EGL_KHR_platform_android` is there, and the device is Android 11.
+
+### The recipe, measured on the device
+
+| step | command | what happened |
+|---|---|---|
+| build | `cargo apk apk build --package craftkit-android` | a signed APK, 98 MiB, one ABI |
+| install | `adb install -r …` | `Success` |
+| run | `adb shell am start -n org.craftocto.craftkit/android.app.NativeActivity` | the process starts |
+| draw | `adb shell screencap -p` | the **whole egui interface**: the toolbar, the Nodes panel with the sample design, the Properties panel, the status bar (`3 nodes saved`) |
+| touch | `adb shell input tap` on *Add node* | a node appears — `filter 4` — and the status bar says `added filter \`filter 4\`` |
+| a form | `adb shell input tap` on *Set property* | the form opens, with its three text fields and OK/Cancel |
+| evaluate | the plan view | `3 reused, 1 evaluated` |
+
+**The device**: `M2006C3LII`, serial `UWOZXWCMZ5IJCUPF`, Android 11,
+**32-bit ARM** (`armv7-linux-androideabi`), the attached phone.
+
+**The first launch failed, and the reason is worth keeping.** The screen was
+**asleep**: `mWakefulness=Asleep`, `Display Power: state=OFF`, the activity
+paused, zero frames. Nothing was wrong with the application — it was a phone
+with the screen off. Waking it (`input keyevent KEYCODE_WAKEUP`) and starting
+the activity again worked at once. **A launch that fails because the device is
+asleep is not a launch that failed**, and the difference is one `dumpsys`.
+
+### The soft keyboard: measured, and half of the guess was wrong
+
+§234 and §235 both said the onscreen keyboard would not open. **Measured on
+the phone: it opens.**
+
+- With the *Set property* form open and **no field focused**:
+  `mShowRequested=false`, `mInputShown=false` — this is what the earlier
+  measurement saw, and it was measuring *an unfocused form*.
+- After a tap on the **first text field**: **`mInputShown=true`**, and the
+  **full QWERTY keyboard is on the screen** (a screenshot shows it, letter by
+  letter, with the suggestions bar).
+
+**And the text does not arrive.** Two different roads, two different answers:
+
+| how the text was produced | what the field holds |
+|---|---|
+| `adb shell input text "Taper"` — the **hardware** key path | **`Taper`** — the text is in the field, rendered |
+| a tap on the onscreen key **`t`** — the **IME** path | **`Taper`** — unchanged; the letter never arrived |
+
+The second is the real gap, and the reason is in the tree's own dependency
+source, not in a guess:
+
+- `winit-0.30.13/src/platform_impl/android/mod.rs` has **no IME events at
+  all**. `set_ime_allowed` shows and hides the soft input; `set_ime_cursor_area`
+  and `set_ime_purpose` are empty. There is no `Preedit` and no `Commit` on
+  Android — `grep -rn "Ime\|Preedit\|Commit"` over the Android backend finds
+  nothing but `ImePurpose`.
+- `android-activity-0.6.1` is no better: `set_text_input_state` and
+  `set_ime_editor_info` are both marked *"NOP: Unsupported"*.
+- The device says the same thing from the other side: the IME is served to
+  `DecorView@…[NativeActivity]` through a **`BaseInputConnection`**, which
+  takes the commit and gives it to nobody — the NDK's `NativeActivity` has no
+  view that forwards text to native code.
+
+So the tree's half is real and the platform's half is missing: egui takes an
+`Ime::Commit` when one arrives (§234's test), and on Android **none ever
+arrives**.
+
+**What would close it**, in order of what it costs:
+
+1. **An `InputConnection` that talks to native code.** The NDK's
+   `NativeActivity` cannot do it; a Java class can. The Rust-only way is
+   `MatrixDev/android-ime-rs` — a **dex** embedded in the library and loaded
+   with `InMemoryDexLoader` — which is a **PoC by its own author's words**
+   (§235) and is **not** on crates.io (it is a git dependency), and which
+   brings a Java artifact into a tree whose rule is *"Rust only, and it is now
+   checked"*.
+2. **An onscreen keyboard of the tree's own**, drawn with egui. No Java, no
+   dex, no new dependency, and it works on every platform — and it is the
+   tree's own code, so it can be styled with the tree's tokens.
+
+**The choice is the owner's.** It is a fork in the road: the first keeps the
+platform's keyboard and costs a policy exception and a third-party PoC; the
+second is the tree's own and costs work in `crates/ui`.
+
+### What is not claimed
+
+- **The 64-bit device is not done.** The package declares
+  `build_targets = ["armv7-linux-androideabi"]`; the aarch64 APK is not
+  built and not installed, and no 64-bit phone has been attached.
+- **No log was read from the device.** A `NativeActivity`'s stdout and stderr
+  go nowhere, so the app's own output on the phone is unknown.
+- **The app draws under the system status bar.** The clock overlaps the
+  toolbar's first row, and a tap there is swallowed. Nothing was done about
+  it.
+- **`dumpsys gfxinfo` reports zero frames.** The app renders with OpenGL, not
+  with HWUI, so that counter counts nothing here; the screenshot is the
+  evidence.
+- **The screen orientation was set by hand** (`accelerometer_rotation 0`,
+  `user_rotation 1`), so the landscape layout in the evidence is the one the
+  phone was put into.
+
+### The lesson
+
+**A platform's missing half is not the same as a platform's broken half.**
+§234 and §235 both reported the soft keyboard as *not opening*, and it
+opens. What does not work is the *text*, and it fails in a place a screenshot
+of the keyboard cannot show. The difference was found by asking the device
+two different questions — `mInputShown` for the keyboard, and *what the field
+holds afterwards* for the text — and by reading the two roads apart
+(hardware keys, IME commits) instead of sending one kind of text and seeing
+nothing happen.
+
+**And the exception has to be named, not allowed.** `forbid` is the right
+rule for everything, and the one thing that cannot live under it is the one
+thing the platform looks up **by name**. That is a list of one, with a reason
+in it, a gate that says the exception has not grown, and a mutation that puts
+an `unsafe` block in the package to prove the gate is awake.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -27833,6 +27985,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The report's cap holds the reports the tree writes itself** | `the_reports_cap_covers_the_worst_case_over_the_platforms` in `crates/engine/src/crash.rs` | 1 mutation — §232 |
 | **A measurement of two costs is the ratio of their quietest rounds** | `quietest_ratio` in `crates/core/src/measure.rs` | nothing — §233 |
 | **A field takes what the soft keyboard commits** | `a_field_takes_what_the_soft_keyboard_commits` in `crates/ui/src/shell.rs` | the device's own run — §234 |
+| **The Android package is the only crate that may deny unsafe, and it holds no unsafe code** | `the_unsafe_exception_has_not_grown` in `xtask/src/lists.rs` | 1 mutation — §236 |
+| **The application's GUI runs on the phone** | the device's own run — the screenshot, the tap, the form | nothing — §236 |
+| **The keyboard opens, and the text does not arrive** | the device's own run — the keyboard on the screen, and what the field holds afterwards | nothing — §236 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -30140,9 +30295,10 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     came back — the control test binary hung, taking its other 67 results with
     it — and a test that asked for bash, which Android does not have.
 
-    **The GUI is not part of it.** The eframe app does not compile for Android:
-    the failure is inside `android-activity`, and an Android app is an
-    Activity, a manifest and an APK. That is an arc of its own.
+    **The GUI was not part of it, and now it is — §236.** The eframe app did
+    not compile for Android in §230: the failure was inside `android-activity`,
+    and an Android app is an Activity, a manifest and an APK. That was an arc
+    of its own, and §236 is it: the tree's GUI **runs on the phone**.
 
 84. ~~**The model's memory estimate must not depend on the machine.**~~ **Decided
     in §231, and the decision was the owner's.**
@@ -30167,3 +30323,23 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     checks that the model's estimate still matches the file it writes. A job
     needs a runner with the NDK; running the **suite** on a device needs
     somebody with a phone.
+
+86. **The Android GUI's two open ends.** §236 ran the tree's GUI on a
+    32-bit phone; two things are left, and the first is a **decision**.
+
+    **The soft keyboard's text.** The keyboard **opens** — measured, with
+    `mInputShown=true` and a screenshot of it — but the text the onscreen keys
+    produce never reaches the field, because `winit`'s Android backend has no
+    IME events and the NDK's `NativeActivity` serves a `BaseInputConnection`
+    that gives the commit to nobody. Hardware key events *do* reach the field.
+    The two ways out are the platform's own keyboard (a Java `InputConnection`
+    — the Rust-only route is `MatrixDev/android-ime-rs`, a PoC, a git
+    dependency, and a Java artifact in a Rust-only tree) or **a keyboard of the
+    tree's own**, drawn with egui, with no new dependency and no Java. **The
+    choice is the owner's.**
+
+    **The 64-bit device.** The package declares
+    `build_targets = ["armv7-linux-androideabi"]`; the aarch64 APK is not
+    built, not installed and not run, and no 64-bit phone has been attached.
+    It is one line in `Cargo.toml` and one attached phone.
+

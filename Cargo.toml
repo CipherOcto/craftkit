@@ -63,7 +63,13 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# **Deny**, not forbid: a crate that exports a symbol the platform looks up
+# **by name** cannot avoid an unsafe attribute (`#[unsafe(no_mangle)]`), and
+# `forbid` cannot be relaxed by an `allow`. Every crate root carries
+# `#![forbid(unsafe_code)]` — the house rule, checked by `cargo xtask lists` —
+# so this is the backstop and not the rule. The one crate that may not forbid
+# is the Android package, and it is named in the gate. §236.
+unsafe_code = "deny"
 
 # The house deny. Every production crate root repeats this with
 # `#![deny(clippy::unwrap_used, ...)]`; `clippy.toml` relaxes it for tests.

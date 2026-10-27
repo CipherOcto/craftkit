@@ -35,16 +35,22 @@ enforced.
 | L5 | `craftkit-control` | core, engine |
 | L5 | `craftkit-mcp` | core, model, engine |
 | L6 | `craftkit-ui` | core, model, eval, engine |
-| exempt | `apps/craftkit`, `apps/craftkit-cli`, `apps/craftkit-web`, `xtask` | all of the above |
+| exempt | `apps/craftkit`, `apps/craftkit-cli`, `apps/craftkit-web`, `apps/craftkit-android`, `xtask` | all of the above |
 
 The third column lists workspace dependencies only; `cargo xtask lists` compares
 it against `cargo metadata`, so adding a dependency without updating this row is
 a failing check rather than a stale document.
 
 `craftkit-ui` also depends on `egui`, and it is the only library crate that is
-allowed to: no UI toolkit may appear below L6. The three applications and
+allowed to: no UI toolkit may appear below L6. The four applications and
 `xtask` are `Class::Exempt` in `xtask/src/layers.rs` — they legitimately depend
 on everything, and a rule about them would only be noise.
+
+`apps/craftkit-android` is the **same application** as `apps/craftkit`: the
+desktop binary and the Android package share the window, the session and the
+shell, and the package is its own crate only because the platform's loader
+looks its entry point up by name — which is the one thing a `forbid` cannot
+allow (§236).
 
 A crate with **no row at all** is not exempt. It is reported as
 `Violation::Unregistered`, because a crate with no layer has no constraints: it
