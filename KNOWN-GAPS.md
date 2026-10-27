@@ -27417,7 +27417,9 @@ second is the tree's own and costs work in `crates/ui`.
 - **The app draws under the system status bar.** The clock overlaps the
   toolbar's first row, and a tap there is swallowed. **Fixed in portrait in
   §239** — one call to the platform's own API — and **not fixed in
-  landscape**, which §239 measures and explains.
+  landscape**, which §239 measures and explains. **Fixed in both in §247**,
+  with the platform's own rectangle: §239's landscape half was a true
+  measurement of a mechanism that was switched off.
 - **`dumpsys gfxinfo` reports zero frames.** The app renders with OpenGL, not
   with HWUI, so that counter counts nothing here; the screenshot is the
   evidence.
@@ -31758,7 +31760,10 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     — the Rust-only route is `MatrixDev/android-ime-rs`, a PoC, a git
     dependency, and a Java artifact in a Rust-only tree) or **a keyboard of the
     tree's own**, drawn with egui, with no new dependency and no Java. **The
-    choice is the owner's.**
+    choice is the owner's** — and the owner chose: **the tree's own keyboard
+    now, the platform's later** (§246). The tree's keyboard is built and
+    measured on the phone; the platform's half is still open, and it comes
+    with Java and with a decision about the tree's one unsafe exception.
 
     **The 64-bit device.** The package declares both ABIs, the aarch64
     library is built (896 KiB, and `nm -D` shows `T android_main`), and the
@@ -31766,13 +31771,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     is the **run**: no 64-bit phone has been attached, so that library has
     never been executed. It is one attached phone and one `adb install`.
 
-    **And a third end: the window in landscape.** The status bar overlap is
-    fixed in portrait (§239) and **not** in landscape, where the system
-    reserves 96 px for the rotated navigation bar and the window covers it
-    anyway. The tree's own way — ask `AndroidApp::content_rect()` and reserve
-    the difference — is **measured and empty**: the platform reports
-    `[0,0,0,0]` in both orientations (§239). So the two ways left are a theme
-    in a manifest the tree does not own, and JNI the tree does not do. It is
-    a small thing: the clock overlaps the toolbar's first row in landscape,
-    and nothing else is wrong.
+    **And a third end, now closed: the window in landscape.** §239 wrote it
+    off — *"the status bar overlap is fixed in portrait and not in landscape"*
+    — and gave the reason: the platform's own answer, `content_rect()`, was
+    **measured and empty**, `[0,0,0,0]`, in both orientations. §247 found the
+    reason for the empty answer: the flag that carries it, `LAYOUT_IN_SCREEN`,
+    had been removed four lines earlier, by §239's own fix. With the two
+    flags together the platform reports the rectangle, `egui`'s safe area
+    takes it, and the tree is laid out inside it — in **both** orientations,
+    and over the navigation bar as well as under the status bar. No theme in a
+    manifest the tree does not own, and no JNI the tree does not do.
 
