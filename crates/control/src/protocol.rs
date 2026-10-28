@@ -271,15 +271,13 @@ impl Request {
 }
 
 /// A JSON value described by its kind, for an error message.
+///
+/// **The core's word.** §270: the tree had three copies of this word — here,
+/// in the MCP and in the engine — and they did not agree: this one said "a
+/// boolean" where the others said "a bool". The same JSON type had two names
+/// in two messages.
 fn kind_of(value: &Json) -> &'static str {
-    match value {
-        Json::Null => "null",
-        Json::Bool(_) => "a boolean",
-        Json::Number(_) => "a number",
-        Json::String(_) => "a string",
-        Json::Array(_) => "an array",
-        Json::Object(_) => "an object",
-    }
+    craftkit_core::value::json_kind(value)
 }
 
 /// One reply.
@@ -384,6 +382,21 @@ mod tests {
         assert_eq!(req.id, json!(1));
         assert_eq!(req.method(), Ok(Method::Execute));
         assert_eq!(req.params["command"], json!("node.add"));
+    }
+
+    /// The word for a JSON type is the tree's one word.
+    ///
+    /// §270: the tree had three copies of it, and the control channel's said
+    /// "a boolean" where the others said "a bool" — the same JSON type with
+    /// two names in two messages, and nothing checked either.
+    #[test]
+    fn the_word_for_a_json_type_is_the_core_s_word() {
+        let req =
+            Request { id: json!(7), token: None, method: "ui".into(), params: json!({ "action": true }) };
+        let err = req.ui_action().expect_err("refused");
+        let message = err.message.expect("message");
+        assert!(message.contains("not a bool"), "the message names another word: {message}");
+        assert!(!message.contains("boolean"), "the message names another word: {message}");
     }
 
     #[test]

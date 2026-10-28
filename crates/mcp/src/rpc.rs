@@ -264,15 +264,11 @@ pub fn parse(line: &str) -> Result<Request, Error> {
 }
 
 /// The word used in a message to name a JSON type.
+///
+/// **The core's word.** §270: the tree had three copies of this word — here,
+/// in the engine and in the control channel — and they did not agree.
 pub fn kind_of(v: &Json) -> &'static str {
-    match v {
-        Json::Null => "null",
-        Json::Bool(_) => "a bool",
-        Json::Number(_) => "a number",
-        Json::String(_) => "a string",
-        Json::Array(_) => "an array",
-        Json::Object(_) => "an object",
-    }
+    craftkit_core::value::json_kind(v)
 }
 
 /// The `initialize` result.
@@ -357,6 +353,18 @@ mod tests {
     fn an_empty_method_is_refused() {
         let r = parse(r#"{"jsonrpc":"2.0","id":1,"method":"  "}"#).expect("parses");
         assert!(r.check().is_err());
+    }
+
+    /// The word for a JSON type is the tree's one word.
+    ///
+    /// §270: the tree had three copies of it — here, in the engine and in the
+    /// control channel — and they did not agree.
+    #[test]
+    fn the_word_for_a_json_type_is_the_core_s_word() {
+        assert_eq!(kind_of(&json!(null)), craftkit_core::value::json_kind(&json!(null)));
+        assert_eq!(kind_of(&json!(true)), "a bool");
+        assert_eq!(kind_of(&json!([])), "an array");
+        assert_eq!(kind_of(&json!({})), "an object");
     }
 
     #[test]

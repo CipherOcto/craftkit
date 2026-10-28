@@ -7112,5 +7112,15 @@ swap crates/eval/src/plan.rs \
 expect_catch "eval: the plan publishes a value the command refuses" \
     "cargo test -p craftkit-engine --profile ci a_published_value_is_a_value_the_command_accepts"
 
+# --------------------------------------- the word for a JSON type is the tree's one word ----
+# Section 270. The tree wrote the word for a JSON type three times, and the
+# control channel's said "a boolean" where the others said "a bool": the same
+# JSON type with two names in two messages.
+swap crates/control/src/protocol.rs \
+    '    craftkit_core::value::json_kind(value)' \
+    '    if matches!(value, Json::Bool(_)) { "a boolean" } else { "a number" }'
+expect_catch "control: the word for a JSON type has drifted" \
+    "cargo test -p craftkit-control --profile ci the_word_for_a_json_type_is_the_core_s_word"
+
 restore
 finish

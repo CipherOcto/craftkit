@@ -30674,6 +30674,7 @@ places claim to write it, the two places are the defect, not the reader.
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
@@ -30805,6 +30806,7 @@ tree's own sample tests the sample.**
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
@@ -31035,6 +31037,7 @@ the conversion happens in a place the lint cannot reach.
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
@@ -31183,6 +31186,7 @@ itself is not a round trip.**
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
@@ -31429,7 +31433,122 @@ serialised by `#[derive(Serialize)]` ✓ — one line ✓ — and nobody chose i
 and a decision nobody made is a decision the wrong spelling won ✓.
 
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
+
+## 270. The tree said "a bool" in one message and "a boolean" in another
+
+### The finding
+
+**The tree wrote the word for a JSON type three times, and the three copies
+did not agree.**
+
+```rust
+// crates/control/src/protocol.rs — the control channel's message
+fn kind_of(value: &Json) -> &'static str {
+    match value {
+        Json::Bool(_) => "a boolean",   // <- the drift
+        ...
+    }
+}
+```
+
+```rust
+// crates/engine/src/params.rs — the engine's message
+pub fn kind_of(v: &Json) -> &'static str {
+    match v {
+        Json::Bool(_) => "bool",
+        ...
+    }
+}
+```
+
+```rust
+// crates/mcp/src/rpc.rs — the MCP's message
+pub fn kind_of(v: &Json) -> &'static str {
+    match v {
+        Json::Bool(_) => "a bool",
+        ...
+    }
+}
+```
+
+So the same JSON type had **two names in two messages** an agent can read:
+the control channel said "not a boolean" and the MCP said "not a bool".
+
+And the engine's copy was the one with the **wrong article** in a
+user-facing message: "a object cannot be a property value" (§269).
+
+### Measured
+
+Before — the control channel's own message, on the tree's own protocol:
+
+```text
+`action` must be a string naming one of render, screenshot, widgets or click, not a boolean
+```
+
+and the engine's:
+
+```text
+`prop.set` rejected its parameters: `value` a object cannot be a property value
+```
+
+After — one word, in one home:
+
+```text
+`action` must be a string naming one of render, screenshot, widgets or click, not a bool
+`prop.set` rejected its parameters: `value` an object cannot be a property value
+```
+
+### Why nothing else would have caught it
+
+- **Nothing tested the words.** The control's copy had no test at all ✓ —
+  the message it wrote was never read by a test ✓ — and the engine's copy was
+  tested ✓ but only against **its own** words ✓ ("number" ✓, "bool" ✓), so
+  the test agreed with the copy and nobody compared the copies ✓.
+- **The three copies lived in three crates**, each with its own reason to
+  have a helper ✓ — so each looked local and reasonable ✓.
+- **One of them had drifted for a long time** — "a boolean" is the word a
+  person writes ✓, and "a bool" is the word the JSON type is called ✓ — so
+  the drift looked like care ✓.
+
+### The fix
+
+**The word for a JSON type is in the core, and everybody asks.**
+
+`craftkit_core::value::json_kind` is it ✓ — and it carries the article ✓, so
+the messages read "an object cannot be a property value" ✓ and "not a bool" ✓
+without a caller guessing ✓. The engine's public `kind_of` asks it ✓, the
+MCP's asks it ✓ and the control channel's asks it ✓; the two local copies are
+gone ✓.
+
+### What is not claimed
+
+- **No behaviour changed.** The words in the messages changed ✓ — "a boolean"
+  is now "a bool" ✓, and "a object" is now "an object" ✓ — and nothing else
+  did ✓.
+- **The MCP's copy was not wrong.** It said the same words the core now says
+  ✓ — so consolidating it is tidiness ✓, not a fix ✓.
+- **The control channel's protocol is unchanged.** Only the word inside one
+  error message changed ✓.
+
+### The lesson
+
+**Every copy of a word is a place the word can drift — and a copy that looks
+careful is the copy that drifts.**
+
+The control channel's copy said "a boolean" ✓ — the word a person writes ✓ —
+and the MCP's said "a bool" ✓ — the word the JSON type is called ✓. Both
+were right ✓, and together they were two names for one thing ✓. **The
+general form: *a shared vocabulary needs one home, and a copy that improves
+the wording is exactly the copy that breaks the agreement*.**
+
+**And a word nobody tested is a word nobody checked.** The control channel's
+copy had no test ✓ — not because it was hard to test ✓, but because the
+message it wrote looked obvious ✓. **A message is a contract with whoever
+reads it, and an obvious message is still a contract.**
+
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 
 ## What enforces what
 
@@ -32032,6 +32151,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
