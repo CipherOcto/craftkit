@@ -123,9 +123,24 @@ pub const MAX_LIST: usize = 4_096;
 /// bound nobody wrote down is a bound that can change under the tree's feet.
 /// §251.
 ///
+/// **The number is 48, and it was measured on the tree's own file.** §251
+/// measured the loader's limit on a *bare* value — 63 levels — and took 64 as
+/// the bound. But a value in a file is not bare: the file wraps it in a
+/// document, and the document's own nesting counts against the same limit.
+/// Measured on the tree's own format: a value nested **59** deep is saved and
+/// read back, and at **60** the read is refused — "recursion limit
+/// exceeded". So a tree bound at 64 could **save a design it could not open**,
+/// and the person who opened it found their work unreadable. §260.
+///
+/// The margin is deliberate: 59 is what the file can do **today**, and the
+/// document's shape is allowed to change (a pending format change may nest
+/// it deeper). Eleven levels of margin is room for that, and the round trip
+/// is pinned by a test, so a change that breaks it is a failing test and not
+/// a design nobody can open. §260.
+///
 /// This is the tree's *own* number, not the model's: `craftkit_model::limits::MAX_DEPTH`
 /// (32) bounds the node graph, and this bounds the values inside a property.
-pub const MAX_VALUE_DEPTH: usize = 64;
+pub const MAX_VALUE_DEPTH: usize = 48;
 
 /// How many list levels the values inside a list nest.
 ///

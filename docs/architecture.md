@@ -304,7 +304,7 @@ Nothing in a production path panics. This is enforced, not requested:
 | `#![forbid(unsafe_code)]` | every one of those roots **but one** — the Android package **denies** unsafe code instead, which is the tree's one named exception (§236) — plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later. The **second** named exception is one module inside that package: `apps/craftkit-android/src/ime.rs`, the bridge the platform's Java calls, which is compiled **only** with the `platform-ime` feature and is the tree's only `allow(unsafe_code)` (§257) |
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
-| Bounded value depth | `craftkit_core::MAX_VALUE_DEPTH` (64) — a value may not nest deeper than 64 list levels, and the tree's own walks over a value stop at that number rather than following it (a stack overflow is a fatal abort, not a catchable panic) (§251) |
+| Bounded value depth | `craftkit_core::MAX_VALUE_DEPTH` (48) — a value may not nest deeper than 48 list levels, and the tree's own walks over a value stop at that number rather than following it (a stack overflow is a fatal abort, not a catchable panic) (§251). The number is measured on the tree's **own file**: the format can read back a value nested 59 deep, and the bound keeps eleven levels of margin, so the tree never writes a design it cannot open (§260) |
 | Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0, and `craftkit_model::limits::MAX_FRAME_RATE` (1 000) refusing a document that runs faster (§89) |
 | The platform's own keyboard | `craftkit::ime::MAX_PENDING` (64) — the texts the platform committed and the tree has not drawn yet; the oldest is dropped rather than the queue growing, and a commit asks for the frame that will show it (§257) |
 | Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_FRAME_RATE` 1 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_PATH_INDEX_DIGITS` 6, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1)` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
@@ -316,9 +316,12 @@ Nothing in a production path panics. This is enforced, not requested:
 | The gate | `cargo xtask ci` — fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm |
 
 `MAX_DEPTH` bounds the **node graph**; a **value** is bounded by
-`craftkit_core::MAX_VALUE_DEPTH` (64 list levels) — the same number the
-loader that reads values in refuses to parse past, now written in the tree
-rather than inherited from a dependency's default (§251). The **property
+`craftkit_core::MAX_VALUE_DEPTH` (48 list levels) — written in the tree
+rather than inherited from a dependency's default (§251), and **measured on
+the tree's own file**: the loader refuses to parse a value nested 59 deep
+*inside a document*, so a bound of 64 would let the tree save a design it
+could not open. Eleven levels of margin, and a test that pins the round trip
+(§260). The **property
 tree** is bounded by
 `MAX_PATH_SEGMENTS`, because a property is named by a path and a path is the
 shorter limit. A property tree deeper than a path can name holds properties

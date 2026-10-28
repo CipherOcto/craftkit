@@ -6924,5 +6924,15 @@ swap crates/model/src/keyframe.rs \
 expect_catch "model: a hold does not hold for a boolean" \
     "cargo test -p craftkit-model --profile ci a_hold_holds_for_a_boolean_and_for_a_text"
 
+# --------------------------------------- the deepest value round-trips ----
+# Section 260. The bound on a value's nesting was measured on the loader's
+# bare value and not on the tree's own file, so the tree could save a design
+# it could not open.
+swap crates/core/src/value.rs \
+    'pub const MAX_VALUE_DEPTH: usize = 48;' \
+    'pub const MAX_VALUE_DEPTH: usize = 64;'
+expect_catch "io: the deepest value the tree accepts does not round-trip" \
+    "cargo test -p craftkit-io --profile ci --test value_depth"
+
 restore
 finish

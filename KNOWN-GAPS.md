@@ -30110,6 +30110,7 @@ the thing you build decides what you ask for, you do not know what you are
 asking for.**
 
 | **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
+| **The deepest value the tree accepts round-trips through the tree's own format** | `the_deepest_value_the_tree_accepts_round_trips` in `crates/io/tests/value_depth.rs` | 1 mutation — §260 |
 ## 259. A hold did not hold, for a boolean and for a text
 
 ### The finding
@@ -30191,6 +30192,91 @@ said. **A test's name is a claim about what it tests, and a test that does
 not test what its name says is a test that pins whatever the code happens to
 do.** §259's fix is two lines; finding it took reading the *name* of a test
 that had been describing the wrong thing for a long time.
+
+## 260. The tree could save a design it could not open
+
+### The finding
+
+**The tree's bound on how deep a value may nest was measured on the wrong
+thing.**
+
+§251 gave the tree its own bound on a value's nesting, because a value
+nested ten thousand deep overflowed the stack, and a stack overflow is a
+fatal abort. The bound was **64**, and the measurement behind it was the
+loader's limit on a **bare** value:
+
+> the loader refuses to parse a tagged list nested more than 64 levels
+> (measured: 63 parses, 64 is refused with "recursion limit exceeded")
+
+But **a value in a file is not bare**. The file wraps it in a document, and
+the document's own nesting counts against the same limit. Measured on the
+tree's **own format**:
+
+```text
+levels 60: saved but load REFUSED: the file is not valid JSON: recursion limit exceeded
+deepest saved: 60
+deepest read back: 59
+```
+
+**So a tree bound at 64 could save a design it could not open.** The file was
+on the disk, the tree wrote it, and the tree then refused to read it — with
+the *reader's* message, which says nothing about the tree's own bound, and
+which names no number the tree ever wrote down.
+
+### Measured
+
+| what | measured |
+|---|---|
+| the tree's bound on a value's nesting | 64 list levels (§251) |
+| the tree's own file, read back | a value nested **59** deep — 60 is refused |
+| the bare tagged value, parsed | 63 levels — 64 is refused |
+| the difference | the document's own nesting: **4 levels** |
+
+### Why nothing else would have caught it
+
+- **Every gate was about the value, not the file.** §251's bound, the tree's
+  walks, the fuzzer: all of them hand a value to the tree. **Nothing ever
+  wrote a deep value and read the file back.**
+- **The loader's own limit is a good limit** — for a bare value. It is the
+  tree's *document* that eats the rest, and the document is the tree's own
+  shape.
+- **The bound was "the loader's number"**, and a loader's number is not the
+  tree's number.
+
+### The fix
+
+**The bound is measured on the tree's own file, and the round trip is pinned
+by a test.**
+
+`craftkit_core::MAX_VALUE_DEPTH` is now **48**. The margin is deliberate:
+59 is what the file can do *today*, and the document's shape is allowed to
+change (a pending format change may nest it deeper). Eleven levels of
+margin is room for that — and `crates/io/tests/value_depth.rs` writes the
+deepest value the tree accepts, reads it back, and fails if it cannot.
+
+### What is not claimed
+
+- **A value nested 49 to 59 deep is now refused by the tree**, where before
+  it was written and then refused by the reader. A design that old could
+  only have been made by hand or by a tool that ignored the bound, and the
+  tree now says so in its own words.
+- **The reader's own limit is still there** — a file nested deeper than the
+  reader can parse is refused by the reader, not by the tree. That is a
+  backstop behind the tree's own bound, not the bound itself.
+- **The document's shape did not change.** Nothing about the file format
+  moved; only the number the tree allows.
+
+### The lesson
+
+**A bound measured on a dependency is a bound on the dependency.** The
+loader parses a *value*; the tree stores a *design*, and a design is a value
+inside a document, and the document counts too. The number was right and the
+thing it was about was wrong.
+
+**And a bound that nothing round-trips is a bound that is only a promise.**
+The tree checked that a deep value could be *built* and that the tree's walks
+stopped at the bound — and never that a design could be **opened**. **A
+limit nobody has crossed in both directions is a limit nobody has measured.**
 
 ## What enforces what
 

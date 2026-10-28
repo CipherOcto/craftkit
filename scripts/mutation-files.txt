@@ -61,6 +61,7 @@ crates/io/src/format/pending.rs
 crates/io/src/lib.rs
 crates/io/src/store.rs
 crates/io/tests/properties.rs
+crates/io/tests/value_depth.rs
 crates/kernel/src/lib.rs
 crates/mcp/src/lib.rs
 crates/mcp/src/prompts.rs
