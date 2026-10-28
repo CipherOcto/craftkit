@@ -20,8 +20,14 @@
 //! ```text
 //! → {"id":1,"token":"…","method":"engine.execute","params":{"command":"node.add","params":{…}}}
 //! ← {"id":1,"ok":true,"message":"added filter `Echo`","data":{"id":4}}
-//! ← {"id":1,"ok":false,"kind":"bad-parameter","message":"…","command":"node.add"}
+//! ← {"id":1,"ok":false,"kind":"bad-parameter","message":"…"}
 //! ```
+//!
+//! The error reply does **not** name the command: the caller sent it, so it
+//! already knows which one failed, and the field the MCP door publishes for
+//! that purpose (`structuredContent.command`) has no place in a channel whose
+//! caller is the one that asked. §279.
+//!
 //!
 //! ## The rules
 //!

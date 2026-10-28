@@ -384,6 +384,48 @@ mod tests {
         assert_eq!(req.params["command"], json!("node.add"));
     }
 
+    /// The crate's own protocol section is the protocol's promise, and it has
+    /// to be the promise the wire keeps.
+    ///
+    /// §279: the section showed an error reply carrying a `"command"` field,
+    /// and the control channel has never sent one — the MCP door publishes
+    /// the command in `structuredContent`, and this door does not. An agent
+    /// that read the section and waited for the field would wait forever.
+    ///
+    /// The check is against the **fields**, not the values: the example's
+    /// `id` and its message are placeholders, and the promise is about which
+    /// keys arrive.
+    #[test]
+    fn the_documented_replies_carry_exactly_the_fields_the_channel_sends() {
+        let doc = include_str!("lib.rs");
+        let mut examples: Vec<Json> = Vec::new();
+        for line in doc.lines() {
+            let Some(start) = line.find('{') else { continue };
+            let Some(end) = line.rfind('}') else { continue };
+            let text = &line[start..=end];
+            if !text.starts_with("{\"id\":1") || !text.contains("\"ok\":") {
+                continue;
+            }
+            let value: Json = serde_json::from_str(text).expect("the example is JSON");
+            examples.push(value);
+        }
+        assert_eq!(examples.len(), 2, "the protocol section shows one good reply and one refusal");
+
+        let good = serde_json::to_value(Response::ok(&json!(1), "m", json!({ "id": 4 })))
+            .expect("the good reply is JSON");
+        let refused = serde_json::to_value(Response::error(&json!(1), "bad-parameter", "m")).expect("JSON");
+        assert_eq!(fields(&examples[0]), fields(&good), "the good reply's fields differ");
+        assert_eq!(fields(&examples[1]), fields(&refused), "the refusal's fields differ");
+    }
+
+    /// The keys of a reply, in the order the wire writes them.
+    fn fields(value: &Json) -> Vec<&str> {
+        let Json::Object(map) = value else {
+            return Vec::new();
+        };
+        map.keys().map(String::as_str).collect()
+    }
+
     /// The word for a JSON type is the tree's one word.
     ///
     /// §270: the tree had three copies of it, and the control channel's said

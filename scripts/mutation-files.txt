@@ -32,6 +32,7 @@ apps/craftkit-web/sw.js
 apps/craftkit/src/ime.rs
 apps/craftkit/src/lib.rs
 clippy.toml
+crates/control/src/lib.rs
 crates/control/src/protocol.rs
 crates/control/src/server.rs
 crates/control/src/token.rs

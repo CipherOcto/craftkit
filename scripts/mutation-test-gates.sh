@@ -7258,5 +7258,15 @@ swap crates/engine/src/history.rs \
 expect_catch "engine: the undo stack keeps the model's budget, not the caller's" \
     "cargo test -p craftkit-engine --profile ci the_stack_holds_snapshots_and_not_documents"
 
+# --------------------------------------- the documented reply is the wire's reply ----
+# Section 279. The control crate's protocol section showed an error reply
+# carrying a "command" field -- and the control channel has never sent one.
+# The MCP door publishes the command; this door does not.
+swap crates/control/src/lib.rs \
+    '"ok":false,"kind":"bad-parameter"' \
+    '"ok":false,"kind":"bad-parameter","command":"node.add"'
+expect_catch "control: the documented reply carries a field the channel never sends" \
+    "cargo test -p craftkit-control --profile ci the_documented_replies_carry_exactly_the_fields_the_channel_sends"
+
 restore
 finish

@@ -32417,6 +32417,114 @@ contracts?") is what asked ✓.
 
 | **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
 
+## 279. The control channel's own protocol section promised a field it never sent
+
+### The finding
+
+**The crate's protocol section showed an error reply the channel never sends.**
+
+```text
+// crates/control/src/lib.rs — before
+//! ← {"id":1,"ok":false,"kind":"bad-parameter","message":"…","command":"node.add"}
+```
+
+And the reply the channel actually writes has **no `command` field** ✓ — the
+whole of `Response` is five fields ✓:
+
+```rust
+// crates/control/src/protocol.rs
+pub struct Response {
+    pub id: Json,
+    pub ok: bool,
+    pub message: Option<String>,
+    pub data: Option<Json>,
+    pub kind: Option<&'static str>,
+}
+```
+
+The field **is** real — but it belongs to the **MCP** door ✓, which publishes
+it in `structuredContent` ✓ (`crates/mcp/src/rpc.rs:121`) ✓. The control
+channel's example had been written from the wrong door's shape ✓.
+
+**So the section promised a field that never arrives** ✓ — and an agent that
+read the section and waited for `command` would wait forever ✓.
+
+### Measured
+
+Before — the section and the wire disagreed ✓:
+
+```text
+documented: id, ok, kind, message, command
+sent:      id, ok, kind, message
+```
+
+After — they agree ✓, and the agreement is **checked** ✓:
+
+```text
+test protocol::tests::the_documented_replies_carry_exactly_the_fields_the_channel_sends ... ok
+```
+
+And the check **fails** when the promise grows a field the wire does not
+send ✓ — measured by hand, with the old line put back:
+
+```text
+assertion `left == right` failed: the refusal's fields differ
+  left: ["command", "id", "kind", "message", "ok"]
+ right: ["id", "kind", "message", "ok"]
+```
+
+### Why nothing else would have caught it
+
+- **Nothing read the prose.** The section is a comment ✓ and the wire is code
+  ✓, and no gate in the tree compared a documented shape with a sent one ✓ —
+  §271 and §275 were the same kind of gap in other places ✓, and both were
+  found by reading ✓ rather than by a tool ✓.
+- **The wrong door's shape is a real shape.** `command` **is** a field the
+  tree publishes ✓ — the MCP door publishes it ✓ — so the example looked
+  right ✓ to anyone who knew the tree ✓ and knew only the other door ✓.
+- **The section is the tree's front door for a new application** ✓ — it is
+  what a reader copies ✓ — so a wrong example is copied ✓.
+
+### The fix
+
+**The example now carries exactly the fields the channel sends, and a test
+reads the crate's own documentation and compares it with the wire.**
+
+The test parses the two replies out of the crate's protocol section ✓ and
+compares their **fields** — not their values ✓, because the example's message
+is a placeholder ✓ — with the fields a real reply of that kind serializes ✓.
+
+So the section cannot drift away from the wire ✓: a field added to the
+document and not to the protocol fails ✓, and a field removed from the
+protocol and left in the document fails ✓.
+
+### What is not claimed
+
+- **The check is about the fields.** The example's `id` and its message stay
+  placeholders ✓; only the set of keys is compared ✓.
+- **It checks the two replies the section shows** ✓ — the prose around them
+  is still prose ✓.
+- **The MCP door is unchanged** ✓ — it still publishes the command ✓ in
+  `structuredContent` ✓, because there the caller is not the one who sent it ✓.
+
+### The lesson
+
+**A protocol section is a promise, and only a test that reads it keeps the
+promise.**
+
+The wire is the truth ✓, but the wire is only read by the code that writes
+it ✓ — an agent reads the **section** ✓. The two can drift ✓, and the
+drift is invisible until an agent waits for a field that never comes ✓.
+
+**And the cheapest gate for a promise is to read the promise.** The tree
+already had the tools ✓ — a JSON parser ✓ and the reply type ✓ — and the
+check costs one test ✓ that reads a file the tree already owns ✓.
+
+**And the wrong door's shape is the likeliest source of a wrong example** ✓:
+every field in the tree's example was real ✓ — somewhere ✓.
+
+| **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33028,6 +33136,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
 | **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
 | **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
+| **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
