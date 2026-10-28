@@ -292,9 +292,18 @@ enum TimeError {
 /// different instant than the one that was asked for.
 fn parse_time_text(s: &str, rate: FrameRate) -> Result<Tick, TimeError> {
     let t = s.trim();
+    // **The tick spelling is the core's.** It is the spelling the tree
+    // publishes its instants in (§268), and the core is where that spelling
+    // is written and read — so the reader here and the writer there cannot
+    // drift apart.
+    if t.ends_with('t') || t.ends_with('T') {
+        return Tick::parse_ticks(t).map_err(|e| match e {
+            CoreError::OutOfRange { .. } => TimeError::Range,
+            _ => TimeError::Shape,
+        });
+    }
     let (body, factor) = match t.chars().last() {
         Some('f') | Some('F') => (&t[..t.len() - 1], 'f'),
-        Some('t') | Some('T') => (&t[..t.len() - 1], 't'),
         _ => (t, 's'),
     };
     let Ok(n) = body.trim().parse::<f64>() else { return Err(TimeError::Shape) };
@@ -312,10 +321,7 @@ fn parse_time_text(s: &str, rate: FrameRate) -> Result<Tick, TimeError> {
             let frames = whole_count(n).ok_or(TimeError::Shape)? as i64;
             Tick::try_from_frames_i64("time", frames, rate).map_err(|_| TimeError::Range)
         }
-        _ => {
-            let ticks = whole_count(n).ok_or(TimeError::Shape)? as i128;
-            Tick::try_from_raw("time", ticks).map_err(|_| TimeError::Range)
-        }
+        _ => Err(TimeError::Shape),
     }
 }
 

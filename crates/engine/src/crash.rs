@@ -1659,9 +1659,13 @@ mod tests {
         write_to(&dir, &report).expect("written");
 
         let outcome = reproduce_in(&dir, &report.id).expect("the replay runs");
-        let at = outcome.session["at"].as_i64().expect("the playhead is a number");
-        let start = outcome.session["start"].as_i64().expect("the start is a number");
-        let end = outcome.session["end"].as_i64().expect("the end is a number");
+        // The instants are published in the tree's own spelling. §268.
+        let at = outcome.session["at"].as_str().expect("the playhead is a time");
+        let start = outcome.session["start"].as_str().expect("the start is a time");
+        let end = outcome.session["end"].as_str().expect("the end is a time");
+        let at = craftkit_core::Tick::parse_ticks(at).expect("the playhead is a tick count");
+        let start = craftkit_core::Tick::parse_ticks(start).expect("the start is a tick count");
+        let end = craftkit_core::Tick::parse_ticks(end).expect("the end is a tick count");
         assert!(
             at >= start && at <= end,
             "the replay put the playhead at {at}, outside the design's range {start}..{end}"

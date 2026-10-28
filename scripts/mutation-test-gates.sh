@@ -3271,15 +3271,15 @@ expect_catch "engine: the state does not carry the frame rate" \
 # The range is the document's own, and the state is the only place an agent
 # can read it. §108.
 swap crates/engine/src/session.rs \
-    '            "start": self.doc.meta.start.as_json_number(),' \
-    '            "start": self.doc.meta.end.as_json_number(),'
+    '            "start": self.doc.meta.start.as_text(),' \
+    '            "start": self.doc.meta.end.as_text(),'
 expect_catch "engine: the state does not carry the document's start" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
 
 # ...and the end of it, which is the other half of the range. §108.
 swap crates/engine/src/session.rs \
-    '            "end": self.doc.meta.end.as_json_number(),' \
-    '            "end": 0,'
+    '            "end": self.doc.meta.end.as_text(),' \
+    '            "end": "0t",'
 expect_catch "engine: the state does not carry the document's end" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
 
@@ -3618,13 +3618,13 @@ expect_catch "cli: the catalogue's listing does not name the alternative" \
 # commands' parameters -- and no reply said when they were. §117.
 swap crates/engine/src/commands.rs \
     '                serde_json::json!({
-                    "time": k.time.as_json_number(),
+                    "time": k.time.as_text(),
                     "seconds": k.time.seconds_f64(),
                     "value": k.value,
                     "ease": k.ease.name(),
                 })' \
     '                serde_json::json!({
-                    "time": k.time.as_json_number(),
+                    "time": k.time.as_text(),
                 })'
 expect_catch "engine: the listing does not say when the keyframes are" \
     "cargo test -p craftkit-engine --profile ci the_keyframes_of_a_property_can_be_listed"
@@ -7076,6 +7076,24 @@ swap crates/model/src/keyframe.rs \
     '            _ => None,'
 expect_catch "model: a bezier written with its points is refused" \
     "cargo test -p craftkit-model --profile ci a_bezier_written_with_its_points_is_read_back"
+
+# --------------------------------------- a published instant is a value the command accepts ----
+# Section 268. The tree published its instants as bare tick counts, and the
+# tree's own time parameter reads a bare number as seconds: the state
+# published a range the command refused.
+swap crates/core/src/tick.rs \
+    '        format!("{}t", self.raw())' \
+    '        format!("{}", self.raw())'
+expect_catch "core: a published instant carries no unit" \
+    "cargo test -p craftkit-core --profile ci a_tick_spelling_round_trips"
+
+# And the reply site: the state publishes the design's end, and the command
+# that sets the range has to take it back.
+swap crates/engine/src/session.rs \
+    '            "end": self.doc.meta.end.as_text(),' \
+    '            "end": self.doc.meta.end.as_json_number(),'
+expect_catch "engine: a published instant is refused by the command" \
+    "cargo test -p craftkit-engine --profile ci a_published_instant_is_a_value_the_command_accepts"
 
 restore
 finish

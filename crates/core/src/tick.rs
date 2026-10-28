@@ -242,6 +242,48 @@ impl Tick {
         if raw >= 0 { serde_json::Value::from(raw as u64) } else { serde_json::Value::from(raw as i64) }
     }
 
+    /// The tree's spelling of an instant in ticks: `123t`.
+    ///
+    /// **One home.** The tree publishes its instants in this spelling (§268),
+    /// and this is where that spelling is written; [`Tick::parse_ticks`] is
+    /// where it is read.
+    ///
+    /// The spelling carries its unit, which a bare number does not: the tree's
+    /// time parameter reads a plain number as **seconds**, so a tick count
+    /// published as a number was an instant the tree would not take back.
+    pub fn as_text(self) -> String {
+        format!("{}t", self.raw())
+    }
+
+    /// Read an instant from the tree's tick spelling: `123t`.
+    ///
+    /// **The reader of what [`Tick::as_text`] writes.** A tick count is a
+    /// whole number, exactly — no fraction, no sign, no spaces inside — and
+    /// an instant outside the tree's range is refused rather than taken as
+    /// the nearest one. §268.
+    pub fn parse_ticks(text: &str) -> Result<Self, crate::CoreError> {
+        let t = text.trim();
+        let body = t
+            .strip_suffix('t')
+            .or_else(|| t.strip_suffix('T'))
+            .ok_or_else(|| crate::CoreError::BadData(format!("`{text}` is not a tick count")))?;
+        if body.is_empty() {
+            return Err(crate::CoreError::BadData(format!("`{text}` is not a tick count")));
+        }
+        // A whole number, exactly: a tick count is a count. The digits are
+        // checked here rather than left to the standard library's number
+        // parsing, which takes a leading `+` — and a tick count with a sign
+        // in front of it is a spelling the tree never writes. §254, §268.
+        let digits = body.strip_prefix('-').unwrap_or(body);
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(crate::CoreError::BadData(format!("`{text}` is not a whole number of ticks")));
+        }
+        let raw: i128 = body
+            .parse()
+            .map_err(|_| crate::CoreError::BadData(format!("`{text}` is not a whole number of ticks")))?;
+        Self::try_from_raw("time", raw)
+    }
+
     /// Convert from seconds, clamping absurd magnitudes to ±10^9 seconds.
     ///
     /// **A NaN becomes [`Tick::ZERO`]**. See [`Tick::try_from_seconds_f64`]
@@ -416,6 +458,35 @@ mod tests {
         let ntsc = FrameRate::new(30).unwrap();
         let t = Tick::from_seconds_f64(3600.0);
         assert_eq!(t.frames_i64(ntsc), 3600 * 30);
+    }
+
+    /// The tree's spelling of an instant round-trips.
+    ///
+    /// §268: the tree published its instants as bare tick counts, and the
+    /// tree's own time parameter reads a bare number as **seconds** — so an
+    /// instant the tree published was an instant the tree would not take
+    /// back. The spelling carries its unit, and the reader is the same home
+    /// as the writer.
+    #[test]
+    fn a_tick_spelling_round_trips() {
+        for raw in [0i128, 1, -1, 24, 254_016_000_000, i64::MAX as i128, u64::MAX as i128] {
+            let tick = Tick::from_raw(raw);
+            let text = tick.as_text();
+            assert_eq!(Tick::parse_ticks(&text).expect("the spelling reads back"), tick, "for {text}");
+        }
+        // And the spelling is the tree's: a tick count, with its unit.
+        assert_eq!(Tick::from_raw(42).as_text(), "42t");
+        assert_eq!(Tick::from_raw(-42).as_text(), "-42t");
+        // A bare number is not a tick count.
+        assert!(Tick::parse_ticks("42").is_err(), "a bare number is not a tick count");
+        assert!(Tick::parse_ticks("42s").is_err(), "a seconds count is not a tick count");
+        assert!(Tick::parse_ticks("t").is_err(), "a tick count is not nothing");
+        assert!(Tick::parse_ticks("42.5t").is_err(), "a tick count is a whole number");
+        assert!(Tick::parse_ticks("+42t").is_err(), "a tick count has no sign");
+        assert!(Tick::parse_ticks("42 t").is_err(), "a tick count has no spaces inside");
+        // And an instant past the tree's range is refused, not taken as the
+        // nearest one.
+        assert!(Tick::parse_ticks("999999999999999999999t").is_err(), "past the range");
     }
 
     /// A tick knows how to become a reply's number.

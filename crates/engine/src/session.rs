@@ -436,9 +436,9 @@ impl Session {
             "name": self.doc.meta.name,
             "comment": self.doc.meta.comment,
             "fps": self.doc.meta.fps,
-            "start": self.doc.meta.start.as_json_number(),
-            "end": self.doc.meta.end.as_json_number(),
-            "at": self.at.as_json_number(),
+            "start": self.doc.meta.start.as_text(),
+            "end": self.doc.meta.end.as_text(),
+            "at": self.at.as_text(),
             "dirty": self.dirty,
             "nodes": self.doc.nodes.iter().map(|n| serde_json::json!({
                 "id": n.id.get(),
@@ -923,14 +923,16 @@ mod tests {
         let state = s.snapshot_json();
         let meta = &s.document().meta;
         assert_eq!(state.get("fps").and_then(|v| v.as_u64()), Some(u64::from(meta.fps)));
+        // The instants are published in the tree's own spelling, so they can
+        // be given back to the commands that take a time. §268.
         assert_eq!(
-            state.get("start").and_then(|v| v.as_i64()),
-            Some(meta.start.raw() as i64),
+            state.get("start").and_then(|v| v.as_str()),
+            Some(meta.start.as_text().as_str()),
             "the state's start is not the document's"
         );
         assert_eq!(
-            state.get("end").and_then(|v| v.as_i64()),
-            Some(meta.end.raw() as i64),
+            state.get("end").and_then(|v| v.as_str()),
+            Some(meta.end.as_text().as_str()),
             "the state's end is not the document's"
         );
         assert_eq!(state.get("name").and_then(|v| v.as_str()), Some(meta.name.as_str()));

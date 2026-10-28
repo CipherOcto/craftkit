@@ -30672,6 +30672,8 @@ places claim to write it, the two places are the defect, not the reader.
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
@@ -30799,6 +30801,8 @@ tree's own sample tests the sample.**
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
@@ -31025,6 +31029,8 @@ the conversion happens in a place the lint cannot reach.
 
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
@@ -31169,8 +31175,129 @@ never the writer against the reader. **A test that checks a thing against
 itself is not a round trip.**
 
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
+
+## 268. The tree published an instant it would not take back
+
+### The finding
+
+**The tree published its instants as bare tick counts, and the tree's own time
+parameter reads a bare number as _seconds_.**
+
+The tree's time parameter has three spellings (§118): a plain number is
+**seconds**, `"12f"` is a frame of this document's rate, and `"120t"` is a
+tick. The tree's replies published a **tick count** — as a bare number, with
+no unit:
+
+```rust
+"start": self.doc.meta.start.as_json_number(),
+"end": self.doc.meta.end.as_json_number(),
+"at": self.at.as_json_number(),
+```
+
+So the state published the design's end as `1270080000000`, and the command
+that sets the design's range reads that number as **seconds** — twelve billion
+seconds, past the tree's range, refused.
+
+And the same for the keyframes: `key.list` published each key's time as a tick
+count, and `key.set` reads a bare number as seconds.
+
+### Measured
+
+Before — the tree's own engine, on the tree's own sample:
+
+```text
+the state publishes start=0 end=1270080000000 at=0
+doc.range refused it: `doc.range` rejected its parameters: `end` 1270080000000 is past
+                      the tree's range: an instant is at most 72620402 seconds after zero
+playback.seek accepted it: 0.000s      <- the zero, read as seconds: a coincidence
+```
+
+After — the instants are published in the tree's own spelling:
+
+```text
+the state publishes start="0t" end="1270080000000t" at="0t"
+doc.range accepted it: range 0.000s..5.000s at 24 fps
+playback.seek accepted it: 0.000s
+```
+
+and the playhead and a keyframe's time, given back:
+
+```text
+the state publishes at="254016000000t"
+after giving it back, at="254016000000t"
+key.list publishes time="508032000000t"
+  key time="508032000000t" seconds=2.0
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own test read the published instant as a number** — so the
+  test agreed with the reply, and the reply agreed with nothing else.
+- **The parameter's number spelling is seconds**, which is the *sensible*
+  reading, so nobody thought to look for the mismatch: both sides were
+  right about their own vocabulary.
+- **The zero hid it.** The sample's playhead starts at zero, and zero is
+  zero in both units — so the one field a test would naturally check was the
+  one field that could not show the defect.
+- **Nothing ever gave a published instant back.** Every command took an
+  instant as a parameter and every reply published one, and nobody put the
+  two together.
+
+### The fix
+
+**An instant is published in the tree's own spelling, and the spelling has
+one home.**
+
+`Tick::as_text` writes it — `1270080000000t` — and `Tick::parse_ticks` reads
+it, in the core, where the range the spelling must satisfy is the type's own
+range. The spelling **carries its unit**, which a bare number does not.
+
+The engine's time parameter now asks the core for the tick spelling, so the
+reader here and the writer there cannot drift apart — and the reader is
+strict about what the writer writes: a whole number of ticks, no fraction, no
+sign in front of it, and an instant past the tree's range is refused rather
+than taken as the nearest one.
+
+Every published instant now uses it: the session state's `start`, `end` and
+`at`; `doc.range`'s reply; `key.set`'s reply; each keyframe's time in
+`key.list`; and `playback.seek`'s `from` and `to`. The `seconds` fields stay
+as they were — a number is seconds, and a number of seconds reads back ✓.
+
+### What is not claimed
+
+- **The numbers are the same numbers.** The instants are the same instants;
+  they are published with their unit.
+- **The crash report's `at` is unchanged.** It is an `i64` field of a file,
+  read by the replay through its own door, not a reply.
+- **The file format is unchanged.** A file stores its times as numbers, and
+  the file's reader is the file's door.
+- **The seconds spelling is unchanged.** A plain number is still seconds.
+
+### The lesson
+
+**A published number without a unit is a published number that will be read
+as something else.**
+
+This is the third member of the family: an id written in decimal and read in
+hex (§263), an easing published as a shape the reader refused (§267), and an
+instant published as a number the reader reads as seconds. **The general
+form: *a value the tree publishes is a value the tree takes back, and a value
+that carries no unit carries no promise*.**
+
+**And the tree already had the right spelling.** The tick spelling — `120t` —
+has been the tree's own since §118, and the tree published instants in a
+*different* spelling, one that no command accepted. **When a tree has a
+spelling for a thing, publishing another spelling is publishing a promise
+about a vocabulary that does not exist.**
+
+**And zero is the worst possible sample.** The sample's playhead starts at
+zero, and zero is zero in every unit, so the one field the tests looked at
+could not show the defect. **A test that reads a published value back should
+read back a value that is not zero in the unit it is published in.**
 
 ## What enforces what
 
@@ -31771,6 +31898,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |

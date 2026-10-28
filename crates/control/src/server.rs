@@ -502,7 +502,7 @@ pub fn dispatch_with(session: &mut Session, request: &Request, ui: Option<&UiHan
             Err(e) => Response::error(&request.id, e.kind(), e.to_string()),
         },
         Method::Crashes => crashes(session, request),
-        Method::Ping => Response::ok(&request.id, "pong", json!({ "at": session.at().as_json_number() })),
+        Method::Ping => Response::ok(&request.id, "pong", json!({ "at": session.at().as_text() })),
         // `ui.*` is answered by the host, which is the only thing that knows
         // whether there is a UI. Without one this is a refusal rather than a
         // silent success, because a silent success here is how an agent comes

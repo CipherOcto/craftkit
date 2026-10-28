@@ -176,10 +176,10 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
         Ok(Outcome::with(
             message,
             serde_json::json!({
-                "start": start.as_json_number(),
-                "end": end.as_json_number(),
+                "start": start.as_text(),
+                "end": end.as_text(),
                 "fps": fps,
-                "at": at.as_json_number(),
+                "at": at.as_text(),
             }),
         )
         .unchanged_if(!changed))
@@ -618,7 +618,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
             serde_json::json!({
                 "id": id.get(),
                 "path": path,
-                "time": time.as_json_number(),
+                "time": time.as_text(),
                 "value": value,
                 // Whether the instant is one the design has. §119.
                 "outside_range": is_outside,
@@ -828,7 +828,7 @@ pub static KEY_LIST: CommandSpec = CommandSpec {
             .iter()
             .map(|k| {
                 serde_json::json!({
-                    "time": k.time.as_json_number(),
+                    "time": k.time.as_text(),
                     "seconds": k.time.seconds_f64(),
                     "value": k.value,
                     "ease": k.ease.name(),
@@ -887,8 +887,8 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
         Ok(Outcome::with(
             format!("{:.3}s", clamped.seconds_f64()),
             serde_json::json!({
-                "from": was.as_json_number(),
-                "to": clamped.as_json_number(),
+                "from": was.as_text(),
+                "to": clamped.as_text(),
                 "seconds": clamped.seconds_f64(),
             }),
         ))
@@ -1650,6 +1650,32 @@ mod tests {
         let mut session = Session::new("probe");
         session.load_document(doc);
         session
+    }
+
+    /// A published instant is a value the command accepts.
+    ///
+    /// §268: the tree published its instants as bare tick counts, and the
+    /// tree's own time parameter reads a bare number as **seconds** — so the
+    /// state published a range the command refused, and a keyframe list
+    /// published a time the command would not take back.
+    #[test]
+    fn a_published_instant_is_a_value_the_command_accepts() {
+        let mut s = session();
+        // The design's own range, given back to the command that sets it.
+        let state = s.snapshot_json();
+        let end = state["end"].clone();
+        ok(&mut s, "doc.range", json!({ "end": end }));
+
+        // A keyframe's time, given back to the command that keys a property.
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 0, "time": 2.0 }));
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the list");
+        let time = listed.data["keyframes"][0]["time"].clone();
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 1, "time": time }));
+        // And it is the same key, not a second one an instant away.
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the list");
+        let keys = listed.data["keyframes"].as_array().expect("the keys");
+        assert_eq!(keys.len(), 1, "the time was read back as another instant: {keys:#?}");
+        assert_eq!(keys[0]["seconds"], json!(2.0), "the key moved: {keys:#?}");
     }
 
     /// A published easing is a value the command accepts.
