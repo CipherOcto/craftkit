@@ -31841,6 +31841,15 @@ rewritten ✓ and the format does not move ✓.
   **The command door now takes the file's words back; the file door has not
   learned the command's** ✓ — and that is stated here rather than left to
   be discovered ✓.
+- **The file's *instants* are not taken back, and cannot be.** The file
+  writes an instant as a raw tick count ✓ (`"end": 1270080000000`) ✓, and
+  the command door reads a bare number as **seconds** ✓ — so the two words
+  would mean different things ✓, and taking the file's word back would
+  make `"60"` sixty seconds in one door and sixty million ticks in the
+  other ✓. **An easing's word is a name and can be taken back ✓; an
+  instant's word is a number and cannot ✓** — which is why §268 gave the
+  command door its own spelling ✓ (`"1270080000000t"`) ✓ instead of
+  borrowing the file's ✓.
 - **No file was rewritten.** The format did not change ✓ — this is a door
   that learned a word ✓, not a change to what is saved ✓.
 - **§267 was not wrong.** It fixed the command's published word ✓ and
