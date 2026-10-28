@@ -7040,6 +7040,44 @@ pub fn the_instrument_is_not_cancelled_by_a_push(root: &Path) -> Result<Vec<Stri
     Ok(problems)
 }
 
+/// The tree's phone package asks for what its control channel needs. §258.
+///
+/// **On a phone, opening a socket is an operation the platform permits.** A
+/// package that asks for no permission cannot open one: the bind fails with
+/// "Operation not permitted", and the tree's own control channel — the way
+/// an agent drives a phone, and the only way on a phone that will not let
+/// the shell inject a touch (§256) — can never answer there.
+///
+/// This gate reads both of the tree's manifests and says no when either one
+/// has forgotten the permission. It is a small rule, and it is here because
+/// the thing it protects is invisible until a person tries to drive a phone:
+/// the package installs, the application draws, and the channel is simply
+/// never there.
+pub fn the_phone_package_asks_for_what_its_channel_needs(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for manifest in
+        ["apps/craftkit-android/AndroidManifest.xml", "apps/craftkit-android/AndroidManifest.ime.xml"]
+    {
+        let path = root.join(manifest);
+        let text = match read_text(&path) {
+            Ok(text) => text,
+            Err(e) => {
+                problems.push(format!("{manifest}: could not be read ({e})"));
+                continue;
+            }
+        };
+        if !text.contains("android.permission.INTERNET") {
+            problems.push(format!(
+                "{manifest}: the package does not ask for the permission the tree's own \
+                 control channel needs. On a phone, opening a socket is an operation the \
+                 platform permits: without it the bind fails with \"Operation not permitted\" \
+                 and the application leaves. §258."
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The platform's own keyboard is behind the gate. §257.
 ///
 /// The tree draws a keyboard of its own on a phone, because the platform's
@@ -7688,6 +7726,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         the_platforms_keyboard_is_behind_the_gate(root)?
             .into_iter()
             .map(|p| format!("{p}\n     A gate that is open by default is not a gate.")),
+    );
+
+    // The phone's package asks for what its control channel needs. §258.
+    problems.extend(
+        the_phone_package_asks_for_what_its_channel_needs(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A channel that cannot bind is not a channel.")),
     );
 
     // The mutation job's timeout fits the suite's budget. §222.
@@ -9976,6 +10021,33 @@ mod tests {
         let root = crate::root().expect("the workspace root");
         let problems = the_instrument_is_not_cancelled_by_a_push(&root).expect("runs");
         assert!(problems.is_empty(), "the instrument's workflow is the one the tree wants: {problems:#?}");
+    }
+
+    /// The phone's package asks for what its control channel needs. §258.
+    #[test]
+    fn the_phone_package_asks_for_what_its_channel_needs_in_this_tree() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_phone_package_asks_for_what_its_channel_needs(&root).expect("runs");
+        assert!(problems.is_empty(), "the phone's package asks for what it needs: {problems:#?}");
+    }
+
+    /// A manifest that has forgotten the permission is caught.
+    ///
+    /// The defect this gate exists for: a package that asks for no
+    /// permission cannot open a socket on a phone, so the tree's own
+    /// control channel is never there. §258.
+    #[test]
+    fn a_manifest_without_the_permission_is_caught() {
+        let dir = crate::temp::dir("ime-permission").expect("a temporary folder");
+        let package = dir.join("apps/craftkit-android");
+        std::fs::create_dir_all(&package).expect("the fabricated tree");
+        let manifest = "<manifest package=\"org.craftocto.craftkit\"></manifest>";
+        std::fs::write(package.join("AndroidManifest.xml"), manifest).expect("the manifest");
+        std::fs::write(package.join("AndroidManifest.ime.xml"), manifest).expect("the manifest");
+
+        let problems = the_phone_package_asks_for_what_its_channel_needs(&dir).expect("runs");
+        assert_eq!(problems.len(), 2, "both of the tree's manifests forgot the permission: {problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The platform's keyboard is behind the gate. §257.

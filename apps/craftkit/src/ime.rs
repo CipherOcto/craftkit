@@ -128,8 +128,24 @@ pub fn pending() -> usize {
 mod tests {
     use super::*;
 
+    /// The queue, the asker and the repainter are the tree's own globals, and
+    /// the tests share them.
+    ///
+    /// Rust runs the tests in this module **at the same time**, and one test's
+    /// commit is another test's commit: the queue is one queue. So the tests
+    /// take a lock, and one of them runs at a time. A poisoned lock is taken
+    /// anyway — a failed test must not make the next one fail for the wrong
+    /// reason.
+    static LOCK: Mutex<()> = Mutex::new(());
+
+    /// The lock, held for the length of a test.
+    fn alone() -> std::sync::MutexGuard<'static, ()> {
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn a_commit_waits_for_the_frame() {
+        let _alone = alone();
         commit("a".to_string());
         commit("b".to_string());
         assert_eq!(pending(), 2, "both texts are waiting");
@@ -141,6 +157,7 @@ mod tests {
     /// ever.
     #[test]
     fn the_queue_is_bounded() {
+        let _alone = alone();
         for _ in 0..(MAX_PENDING + 10) {
             commit("x".to_string());
         }
@@ -162,6 +179,7 @@ mod tests {
     /// frame that may never come, and the person sees nothing (§257).
     #[test]
     fn a_commit_asks_for_a_frame() {
+        let _alone = alone();
         use std::sync::atomic::Ordering;
         set_repainter(Box::new(|| {
             REPAINTS.fetch_add(1, Ordering::SeqCst);
@@ -179,6 +197,7 @@ mod tests {
     /// bridge: the same answer must not be sent again and again.
     #[test]
     fn the_platform_is_asked_only_when_the_answer_changes() {
+        let _alone = alone();
         use std::sync::atomic::Ordering;
         set_asker(Box::new(|_wanted| {
             ASKS.fetch_add(1, Ordering::SeqCst);

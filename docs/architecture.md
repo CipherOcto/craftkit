@@ -52,6 +52,13 @@ shell, and the package is its own crate only because the platform's loader
 looks its entry point up by name — which is the one thing a `forbid` cannot
 allow (§236).
 
+The tree builds the phone's packages itself — `scripts/build-android.sh` for
+the default one and `scripts/build-android-ime.sh` for the gated one, with the
+steps they share in `scripts/android-package.sh` and the ABI table in the
+tree's own gate (`cargo xtask android --abis`). The tree's manifests are its
+own: a package that asks for **no permission** cannot open a socket on a
+phone, and the tree's own control channel is a socket (§258).
+
 The package has one **gate**: the cargo feature `platform-ime`, off unless it
 is asked for. Behind it the package carries three Java files, a dex and the
 bridge the platform's own keyboard talks to — a view that holds the focus, a

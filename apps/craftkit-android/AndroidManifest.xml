@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The manifest of the tree's **default** package: the one a phone runs when
+  the platform's keyboard is not wanted. §258.
+
+  It is the tree's own, and not `cargo apk`'s, for two reasons that are
+  measured:
+
+  - **The permission.** The tree's own control channel — the way an agent
+    drives a phone, and the only way on a phone that will not let the shell
+    inject a touch (§256) — opens a socket, and on a phone opening a socket
+    is an operation the platform *permits*. Without the permission the bind
+    fails with "Operation not permitted", and the application leaves. §258.
+  - **The gate.** The tree's gated package (§257) carries Java and a dex,
+    and the default package must carry neither: the platform's
+    `NativeActivity` serves an input connection that gives the commit to
+    nobody, so the tree draws a keyboard of its own (§246). Two manifests,
+    and the difference between them is the gate.
+
+  The gated package's manifest is `AndroidManifest.ime.xml`, and the two
+  differ in three places: `android:hasCode`, the activity's name, and the
+  dex and the resources that go with the Java.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.craftocto.craftkit"
+    android:versionCode="16777472"
+    android:versionName="0.1.0"
+    android:compileSdkVersion="34">
+
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="30" />
+
+    <!--
+      The control channel, and only the control channel.
+
+      On a phone, opening a socket is an operation the platform **permits**:
+      without this permission the bind fails with "Operation not permitted"
+      and the tree's own channel can never answer on the device (§258). It is
+      a normal permission — the platform grants it at install, and nobody is
+      asked.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="craftkit"
+        android:hasCode="false"
+        android:debuggable="true">
+
+        <!--
+          The platform's own activity, and the library's name.
+
+          The platform's loader opens the shared library and looks up one
+          symbol in it **by name** — `android_main` — and the library's name
+          is what tells it which file to open (§236). The activity is the
+          platform's own, because the tree's default package carries no Java
+          at all.
+        -->
+        <activity
+            android:name="android.app.NativeActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|screenLayout|smallestScreenSize|uiMode"
+            android:exported="true">
+
+            <meta-data android:name="android.app.lib_name" android:value="craftkit_android" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

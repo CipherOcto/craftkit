@@ -86,6 +86,14 @@ pub const FOREIGN_SOURCE_EXCEPTIONS: &[(&str, &str)] = &[
         "scripts/build-android-ime.sh",
         "builds the gated package; the SDK's own tools are what package an Android app (§257)",
     ),
+    (
+        "scripts/build-android.sh",
+        "builds the default package; the tree's own manifest is what says what the package asks for (§258)",
+    ),
+    (
+        "scripts/android-package.sh",
+        "the one home for the packaging steps the tree's two packages share (§258)",
+    ),
     (".github/workflows/ci.yml", "continuous integration is YAML and runs nothing"),
 ];
 

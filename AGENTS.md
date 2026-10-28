@@ -67,6 +67,18 @@ loses it, and the user's trust in everything else.
   and the workspace's own lint is the **backstop** — `deny`, not `forbid` —
   because every crate root carries the `forbid` above, and that is the rule.
 
+- **The tree builds its own packages for a phone, and it asks for what it
+  needs.** `scripts/build-android.sh` builds the default package — no Java, no
+  dex, the tree's own keyboard on a phone (§246) — and
+  `scripts/build-android-ime.sh` builds the **gated** one, the package with
+  the platform's own keyboard (§257). The steps they share live in
+  `scripts/android-package.sh`, and the ABI table is the tree's own gate's
+  (`cargo xtask android --abis`), so there is one list of the phone's ABIs.
+  Both packages ask for `android.permission.INTERNET`, because on a phone
+  opening a socket is an operation the platform **permits**, and the tree's
+  own control channel is a socket (§258). A package that asks for no
+  permission cannot be driven at all, and nothing on the screen says so.
+
 - **`clippy.toml` re-enables the unwrap lints in tests only.** A test may panic;
   nothing else may.
 

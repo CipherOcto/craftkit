@@ -207,6 +207,16 @@ pub fn compiler_name(name: &str) -> String {
     if cfg!(target_os = "windows") { format!("{name}.cmd") } else { name.to_string() }
 }
 
+/// Print the tree's ABI table: a triple and the compiler for it, one line
+/// each. §258.
+///
+/// The scripts that build the package read this, so the table has one home.
+pub fn print_abis() {
+    for (triple, clang_name) in ABIS {
+        println!("{triple} {clang_name}");
+    }
+}
+
 /// The library the build produces.
 pub fn library(root: &Path, triple: &str) -> PathBuf {
     root.join("target").join(triple).join("debug").join("libcraftkit_android.so")
@@ -288,7 +298,17 @@ fn nm_tools(ndk: Option<&Path>) -> Vec<PathBuf> {
 }
 
 /// The gate.
-pub fn run(root: &Path, _args: &[String]) -> Result<Outcome, String> {
+pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
+    // The tree's ABI table, for the tools that build the package. §258.
+    //
+    // **The list is printed, not asked for twice.** The tree's phone package
+    // is built by the tree's own scripts, and a script that wrote the ABIs
+    // out for itself would be a second list of the same thing — and the two
+    // would drift. The gate is the one home, and the scripts read it.
+    if args.iter().any(|a| a == "--abis") {
+        print_abis();
+        return Ok(Outcome::Ran);
+    }
     step("android");
     let Some(ndk) = ndk_home() else {
         return match conclude(false, required(), None) {

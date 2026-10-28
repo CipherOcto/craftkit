@@ -29956,6 +29956,134 @@ but the *path* the platform's keyboard takes can be, because the path
 belongs to the connection and not to the keyboard. **A tree that owns an
 instrument can measure itself on a device that refuses to be measured.**
 
+## 258. The phone's package asked for no permission at all, and the tree's own channel could never answer
+
+### The finding
+
+**The tree's package on a phone asked for no permission whatsoever — and the
+tree's own control channel is a socket.**
+
+A control channel is how the tree is driven: the toolbar, the sketch tools,
+the scripts, the CLI and the control channel all reach the same commands
+(`docs/agent-playbook.md`). On a phone it is the **only** way, because a
+phone that will not let the shell inject a touch cannot be driven by taps at
+all (§256).
+
+And on a phone, **opening a socket is an operation the platform permits.** A
+package with no permission cannot open one. The tree's package declared none,
+so the bind failed — and the application, which reports a channel it cannot
+open by stopping, **left**.
+
+### Measured
+
+The package, as it was built, asked for nothing:
+
+```text
+$ aapt2 dump badging target/debug/apk/craftkit-android.apk
+package: name='org.craftocto.craftkit' versionCode='16777472' ...
+  uses-feature: name='android.hardware.faketouch'
+  uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+```
+
+**Not one `uses-permission`.** And with it, on the phone:
+
+```text
+control channel: could not bind 127.0.0.1:4711: Operation not permitted (os error 1)
+```
+
+followed by the application leaving — the tree's own folder's log ends with
+the window's state being dropped, and the process is gone.
+
+The **same package, one attribute later** — the gated package of §257, which
+declares the permission — binds:
+
+```text
+control channel listening on 127.0.0.1:4711
+token in /data/user/0/org.craftocto.craftkit/files/craftkit/4711.token
+try: {"id":1,"token":"…","method":"engine.describe"}
+```
+
+and the channel answers over `adb forward`, on the phone, with the command
+catalogue in the reply.
+
+### The fix
+
+**The tree's own manifest, and the tree's own package build.**
+
+`cargo apk` built the tree's default package, and it is a third-party tool
+the tree does not depend on (§236). Its manifest cannot say what the tree
+needs to say. So the tree now has **two manifests of its own**:
+
+| | the default package | the gated package |
+|---|---|---|
+| manifest | `apps/craftkit-android/AndroidManifest.xml` | `apps/craftkit-android/AndroidManifest.ime.xml` |
+| `android:hasCode` | `false` — no Java, no dex (§236) | `true` — the Java half (§257) |
+| the activity | the platform's own `NativeActivity` | the tree's own `CraftkitActivity` (§257) |
+| the permission | `android.permission.INTERNET` | `android.permission.INTERNET` |
+| built by | `scripts/build-android.sh` | `scripts/build-android-ime.sh` |
+
+The steps the two share — where the SDK is, which tools it has, how a
+library is built for a phone's ABI, how a package is linked, staged, aligned
+and signed — live in **`scripts/android-package.sh`**, which is their one
+home. The ABI table is **not** written there: it is the tree's own gate's
+table (`xtask/src/android.rs`), and the script asks the gate for it
+(`cargo xtask android --abis`). **Two lists of the same thing drift, and the
+one that drifts is the one that stops working on a phone nobody owns.**
+
+### Measured: the tree's own default package
+
+```text
+$ bash scripts/build-android.sh
+the default package is target/craftkit-android.apk
+-rw-rw-r-- 1 mmacedoeu mmacedoeu 58069504 out 28 01:09 target/craftkit-android.apk
+
+$ aapt2 dump badging target/craftkit-android.apk
+package: name='org.craftocto.craftkit' versionCode='16777472' ...
+uses-permission: name='android.permission.INTERNET'
+native-code: 'arm64-v8a' 'armeabi-v7a'
+
+$ unzip -l target/craftkit-android.apk | grep -E "dex|\.so"
+  132535904  lib/arm64-v8a/libcraftkit_android.so
+  103011304  lib/armeabi-v7a/libcraftkit_android.so
+```
+
+**The permission is there, both ABIs are there, and there is no dex** — the
+package carries no Java at all, and the tree draws a keyboard of its own
+(§246).
+
+### What is not claimed
+
+- **The default package has not been run on a phone.** The platform refused
+  the sideload — `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`:
+  the install wants a person to confirm, and this phone cannot be tapped
+  (§256) — and the device was then unplugged. What *is* measured is the
+  attribute that matters, on the same phone and with the same code: the
+  bind fails without the permission and succeeds with it, and the package
+  the tree now builds carries the permission.
+- **The application still leaves when the channel cannot bind.** That is the
+  desktop's rule too — a port clash is reported before anything is drawn —
+  and it was not changed here. What changed is that the phone's package can
+  now have a channel at all.
+- **`cargo apk` is still installed on this machine.** The tree no longer
+  *needs* it for the default package; the tree's own script is what the
+  tree's own recipe says now.
+
+### The lesson
+
+**A permission is part of what a program asks for, and a program that asks
+for nothing cannot do the things it was written to do.** The tree's package
+on a phone declared no permission, and the consequence was not an error
+message: it was a socket that could not open, on a device where nobody can
+tap the application to find out. **The failure was invisible because the
+thing that failed was invisible** — and the only thing that made it visible
+was asking for the permission and seeing the bind work.
+
+**And the tool that built the package was the tool that could not say what
+the package needed.** A third-party builder is not a neutral fact: it decides
+what the package asks for, by default, and its defaults are its own. **When
+the thing you build decides what you ask for, you do not know what you are
+asking for.**
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -30537,6 +30665,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
 | **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
 | **The tree is laid out inside the rectangle the platform reports, on a 64-bit phone too** | the device's own run — the platform's rectangle and the pixels | the second phone's own run — §256 |
+| **The phone's package asks for the permission its own control channel needs** | `the_phone_package_asks_for_what_its_channel_needs` in `xtask/src/lists.rs` | 1 mutation — §258 |
 | **The platform's own keyboard is behind a gate** | `the_platforms_keyboard_is_behind_the_gate` in `xtask/src/lists.rs` | 4 mutations — §257 |
 | **A commit asks for the frame that will show it** | `a_commit_asks_for_a_frame` in `apps/craftkit/src/ime.rs` | 1 mutation — §257 |
 | **The tree asks the platform only when the answer changes** | `the_platform_is_asked_only_when_the_answer_changes` in `apps/craftkit/src/ime.rs` | 1 mutation — §257 |

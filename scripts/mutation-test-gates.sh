@@ -6876,5 +6876,15 @@ swap apps/craftkit/src/ime.rs \
 expect_catch "app: a commit does not ask for the frame that shows it" \
     "cargo test -p craftkit --profile ci a_commit_asks_for_a_frame"
 
+# --------------------------------------- the phone's package asks for what it needs ----
+# Section 258. On a phone, opening a socket is an operation the platform
+# permits: a package that asks for no permission cannot have the tree's own
+# control channel, and the failure is invisible — the application draws and
+# the channel is simply never there.
+swap apps/craftkit-android/AndroidManifest.xml \
+    '<uses-permission android:name="android.permission.INTERNET" />' \
+    '<uses-permission android:name="android.permission.CAMERA" />'
+expect_catch "lists: the phone's package asks for the wrong permission" "cargo xtask lists"
+
 restore
 finish
