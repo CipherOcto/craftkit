@@ -516,6 +516,10 @@ mod tests {
     /// parameter refused that word — so a key could be written and could not
     /// be read back, and the file the tree wrote carried the same word. The
     /// spelling has one home now: `name` writes it and `preset` reads it.
+    ///
+    /// **The file's spelling is a different spelling**, and it has its own
+    /// reader — `from_stored` ✓ — which the command door also asks ✓, so
+    /// that the door takes back what the tree publishes ✓. §273.
     #[test]
     fn a_published_easing_is_a_name_the_parameter_accepts() {
         let every = [
