@@ -17,7 +17,12 @@ edition = "2024"
 # are actually using and tells you when they disagree.
 rust-version = "1.93"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/storytold/craftkit"
+# Where the code actually is. It used to name `storytold/craftkit`, a
+# repository that does not exist: the GitHub API answers 404 for it, and
+# the tree's own remote is `CipherOcto/craftkit`. A package's `repository`
+# field is where a reader is sent, so it has to be a place that answers.
+# Measured 2026-10-28.
+repository = "https://github.com/CipherOcto/craftkit"
 authors = ["craftkit contributors"]
 
 [workspace.dependencies]
