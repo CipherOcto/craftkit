@@ -275,7 +275,7 @@ impl Default for Format {
 /// 311 MiB of file for a 31 MiB design. §141.
 ///
 /// The writer's indentation now stops growing
-/// ([`craftkit_core::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
+/// ([`craftkit_foundation::writer::MAX_INDENT_DEPTH`]), so the factor is a constant of the
 /// format rather than a function of the design. Measured over the same
 /// shapes, the worst case is **1.51** bytes of text per byte of memory — on a
 /// 64-bit machine.
@@ -406,7 +406,7 @@ impl File {
     /// agree about what a file is.
     pub fn to_text_bounded(&self, max: usize) -> Result<String, FormatError> {
         let mut out = LimitedWriter::new(max);
-        match craftkit_core::writer::write_json(&mut out, self) {
+        match craftkit_foundation::writer::write_json(&mut out, self) {
             Ok(()) => {}
             Err(e) if e.is_io() => {
                 return Err(FormatError::TooLargeToWrite { bytes: out.seen, limit: max });
@@ -589,7 +589,7 @@ mod tests {
                 let id = doc.add_node(format!("node{n}"), NodeKind::Filter).expect("node");
                 let mut g = PropGroup::new("props", "Properties");
                 for p in 0..3u64 {
-                    g.push(Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0)));
+                    g.push(Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0)));
                 }
                 doc.get_mut(id).expect("just added").props = g;
             }
@@ -603,7 +603,7 @@ mod tests {
             let id = doc.add_node("wide", NodeKind::Source).expect("node");
             let mut g = PropGroup::new("props", "Properties");
             for p in 0..64u64 {
-                g.push(Property::new(p + 1, format!("t{p}"), craftkit_core::Value::Text(text.clone())));
+                g.push(Property::new(p + 1, format!("t{p}"), craftkit_foundation::Value::Text(text.clone())));
             }
             doc.get_mut(id).expect("just added").props = g;
             out.push(("text values", doc));
@@ -616,11 +616,11 @@ mod tests {
             let id = doc.add_node("animated", NodeKind::Cue).expect("node");
             let mut g = PropGroup::new("props", "Properties");
             for p in 0..8u64 {
-                let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
                 for t in 0..2_000i128 {
                     let Ok(key) = craftkit_model::Key::new(
                         craftkit_core::Tick::from_raw(t * 10_584_000),
-                        craftkit_core::Value::Num(t as f64),
+                        craftkit_foundation::Value::Num(t as f64),
                         craftkit_model::Easing::Linear,
                     ) else {
                         break;
@@ -669,11 +669,11 @@ mod tests {
         let id = doc.add_node("n", NodeKind::Source).expect("node");
         let mut group = PropGroup::new("props", "Properties");
         for p in 0..80u64 {
-            let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+            let mut prop = Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
             for t in 0..10_000i128 {
                 let Ok(key) = craftkit_model::Key::new(
                     craftkit_core::Tick::from_raw(t),
-                    craftkit_core::Value::Num(t as f64),
+                    craftkit_foundation::Value::Num(t as f64),
                     craftkit_model::Easing::Linear,
                 ) else {
                     break;
@@ -1016,7 +1016,11 @@ mod tests {
         for label in ["a/b", "@5", "#2"] {
             let mut doc = Document::empty("by hand");
             let _ = doc.add_node("In", craftkit_model::NodeKind::Source);
-            doc.nodes[0].props.push(craftkit_model::Property::new(1, label, craftkit_core::Value::Num(2.0)));
+            doc.nodes[0].props.push(craftkit_model::Property::new(
+                1,
+                label,
+                craftkit_foundation::Value::Num(2.0),
+            ));
             let mut file = File::new(doc);
             file.format = tag(CURRENT);
             let text = file.to_text().expect("json");

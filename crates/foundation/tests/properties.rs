@@ -57,7 +57,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use serde_json::{Value as Json, json};
 
-use craftkit_core::{MAX_MAGNITUDE, Params, ReadError, read_line_bounded, read_to_string_bounded};
+use craftkit_foundation::{MAX_MAGNITUDE, Params, ReadError, read_line_bounded, read_to_string_bounded};
 
 /// The seed the suites run with, unless `PROPTEST_RNG_SEED` says otherwise.
 const SEED: u64 = 0x5eed_9a7f;

@@ -4,7 +4,8 @@
 //! holds no references into it, and it is cheap to throw away. That is what lets
 //! the editor re-evaluate on every pointer move.
 
-use craftkit_core::{NodeId, Tick, Value};
+use craftkit_core::{NodeId, Tick};
+use craftkit_foundation::Value;
 use craftkit_model::NodeKind;
 use serde::{Deserialize, Serialize};
 

@@ -577,19 +577,19 @@ mod tests {
         const ROUNDS: usize = 9;
         let mut round = || {
             let mut registry = Automation::new();
-            let fast = craftkit_core::measure::seconds(&mut || {
+            let fast = craftkit_foundation::measure::seconds(&mut || {
                 for i in 0..5_000 {
                     registry.publish(AutomationId(format!("widget.{i}")), rect, true);
                 }
             });
-            let slow = craftkit_core::measure::seconds(&mut || {
+            let slow = craftkit_foundation::measure::seconds(&mut || {
                 for i in 5_000..10_000 {
                     registry.publish(AutomationId(format!("widget.{i}")), rect, true);
                 }
             });
             (fast, slow)
         };
-        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
+        let ratio = craftkit_foundation::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 2.0,
             "the second batch of 5000 widgets took {ratio:.1}x as long as the first: \

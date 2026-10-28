@@ -121,7 +121,7 @@ and the docs' parameter tables are all generated from `CommandSpec` / `ParamDoc`
 
 ## 3. Never index a parameter
 
-`crates/core/src/params.rs` is the only place a command parameter is read.
+`crates/foundation/src/params.rs` is the only place a command parameter is read.
 
 ```rust
 // never
@@ -137,16 +137,16 @@ command at every documented parameter name with every hostile value; a single
 
 | Reader | Line | Use it for |
 |---|---|---|
-| `num(key)` | `crates/core/src/params.rs` | a number; missing / null / string → `Ok(None)` |
-| `num_in(key, lo, hi)` | `crates/core/src/params.rs` | a number the caller has already decided bounds for |
-| `int(key)` | `crates/core/src/params.rs` | a whole number; **refuses** a fraction rather than truncating |
-| `bool(key)` | `crates/core/src/params.rs` | a flag |
-| `text(key, max)` | `crates/core/src/params.rs` | a string with a byte cap, so a 100 MB value is refused on read |
-| `color(key)` | `crates/core/src/params.rs` | `"#rrggbb"` or `[r, g, b]` |
-| `num_list(key, max)` | `crates/core/src/params.rs` | a homogeneous list with a caller-supplied cap |
-| `has(key)` | `crates/core/src/params.rs` | was the parameter given at all? `null` counts as absent |
-| `raw_json(key)` | `crates/core/src/params.rs` | the raw `Json`, when you must interpret it yourself — **the two reader modules only**; the gate refuses a third (§136) |
-| `deny_unknown(allowed)` | `crates/core/src/params.rs` | reject a misspelled key instead of ignoring it |
+| `num(key)` | `crates/foundation/src/params.rs` | a number; missing / null / string → `Ok(None)` |
+| `num_in(key, lo, hi)` | `crates/foundation/src/params.rs` | a number the caller has already decided bounds for |
+| `int(key)` | `crates/foundation/src/params.rs` | a whole number; **refuses** a fraction rather than truncating |
+| `bool(key)` | `crates/foundation/src/params.rs` | a flag |
+| `text(key, max)` | `crates/foundation/src/params.rs` | a string with a byte cap, so a 100 MB value is refused on read |
+| `color(key)` | `crates/foundation/src/params.rs` | `"#rrggbb"` or `[r, g, b]` |
+| `num_list(key, max)` | `crates/foundation/src/params.rs` | a homogeneous list with a caller-supplied cap |
+| `has(key)` | `crates/foundation/src/params.rs` | was the parameter given at all? `null` counts as absent |
+| `raw_json(key)` | `crates/foundation/src/params.rs` | the raw `Json`, when you must interpret it yourself — **the two reader modules only**; the gate refuses a third (§136) |
+| `deny_unknown(allowed)` | `crates/foundation/src/params.rs` | reject a misspelled key instead of ignoring it |
 
 `Session::execute` already calls `deny_unknown` for every command
 (in `crates/engine/src/session.rs`), so an agent's typo is already loud — do not repeat it by hand.

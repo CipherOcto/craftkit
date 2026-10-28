@@ -27,7 +27,7 @@
 //!
 //! **A copy that forgets where it came from is a copy that drifts**, so the
 //! record is in this file and not only in the history. The core's home is
-//! `crates/core/src/temp.rs`, and it is the same shape: a **counter** in the
+//! `crates/foundation/src/temp.rs`, and it is the same shape: a **counter** in the
 //! name, so every call gets a folder of its own, and an existing folder
 //! **emptied** first, so no call inherits one.
 

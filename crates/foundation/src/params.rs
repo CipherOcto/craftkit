@@ -22,7 +22,7 @@
 //! were never fired at all. §92.
 //!
 //! ```
-//! use craftkit_core::Params;
+//! use craftkit_foundation::Params;
 //! let json = serde_json::json!({ "distance": 20 });
 //! let p = Params::new(&json);
 //! assert_eq!(p.num("distance").unwrap(), Some(20.0));

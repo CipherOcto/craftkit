@@ -8,12 +8,12 @@
 //! about the tree's own bound.
 //!
 //! The bound is now measured on the **file**, not on the loader's bare value
-//! (`craftkit_core::MAX_VALUE_DEPTH`), and this test is what keeps the two
+//! (`craftkit_foundation::MAX_VALUE_DEPTH`), and this test is what keeps the two
 //! in step: if the document's shape ever nests deeper, or the reader's limit
 //! moves, this test fails instead of the tree quietly writing designs that
 //! cannot be opened.
 
-use craftkit_core::{MAX_VALUE_DEPTH, Value};
+use craftkit_foundation::{MAX_VALUE_DEPTH, Value};
 use craftkit_model::{Document, NodeKind, PropGroup, Property};
 
 /// A value nested `levels` list levels deep.

@@ -41,7 +41,7 @@ impl Server {
     fn start() -> Self {
         // The folder comes from the tree's one home, so this test cannot be the
         // one that shares a folder with another run. §212.
-        let dir = craftkit_core::temp::dir("mcp-stdio").expect("a folder for the server's log");
+        let dir = craftkit_foundation::temp::dir("mcp-stdio").expect("a folder for the server's log");
         let log = dir.join(format!("{:?}.log", std::thread::current().id()));
         // A file, not a pipe: a pipe nobody reads fills up, and then the
         // server blocks writing to it — which would look exactly like the

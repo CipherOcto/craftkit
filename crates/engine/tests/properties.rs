@@ -31,8 +31,9 @@
 //! that says so is here — but it is a property about the *engine's* promise,
 //! not about the commands, and it is checked by the engine's own tests. §177.
 
-use craftkit_core::{MAX_INSTANT_TICKS, MAX_MAGNITUDE, MAX_TEXT, MIN_INSTANT_TICKS, TICKS_PER_SECOND};
+use craftkit_core::{MAX_INSTANT_TICKS, MIN_INSTANT_TICKS, TICKS_PER_SECOND};
 use craftkit_engine::{Doc, EngineError, Session, command, params::PAST_THE_RANGE};
+use craftkit_foundation::{MAX_MAGNITUDE, MAX_TEXT};
 use craftkit_model::limits::{MAX_FRAME_RATE, MAX_NAME, MAX_PATH_BYTES};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};

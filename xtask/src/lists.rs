@@ -1437,7 +1437,7 @@ fn collect_manifests(root: &Path, out: &mut Vec<std::path::PathBuf>) {
 /// the engine's module where a parameter becomes a typed value. A third file
 /// that calls it is a third place where the shape of a parameter is decided,
 /// and the shape is decided by matching, never by indexing.
-const RAW_PARAMETER_HOMES: &[&str] = &["crates/core/src/params.rs", "crates/engine/src/params.rs"];
+const RAW_PARAMETER_HOMES: &[&str] = &["crates/foundation/src/params.rs", "crates/engine/src/params.rs"];
 
 /// The files that may read a tick's raw count.
 ///
@@ -1529,7 +1529,7 @@ pub fn the_raw_parameter_reader_has_two_homes(root: &Path) -> Result<Vec<String>
         let line = code.lines().position(|l| l.contains("raw_json(")).map_or(1, |n| n + 1);
         problems.push(format!(
             "{relative}: line {line} reads a parameter's raw JSON: the two readers are \
-             `crates/core/src/params.rs` and `crates/engine/src/params.rs`, and a parameter is \
+             `crates/foundation/src/params.rs` and `crates/engine/src/params.rs`, and a parameter is \
              never indexed"
         ));
     }
@@ -2039,7 +2039,7 @@ fn the_tree_s_bounds(source: &str) -> Vec<String> {
 /// text, and the crash reader refuses anything past 64 MiB. The app wrote
 /// crash reports it could not read back.
 ///
-/// The tree has one writer for its JSON (`craftkit_core::writer`), and the
+/// The tree has one writer for its JSON (`craftkit_foundation::writer`), and the
 /// crash folder is written with it, so a design is the same bytes in the crash
 /// folder as it is on disk.
 pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<String>, String> {
@@ -2075,14 +2075,14 @@ pub fn the_tree_writes_its_json_with_one_writer(root: &Path) -> Result<Vec<Strin
             if let Some(line) = code.lines().position(|l| l.contains(needle)).map(|n| n + 1) {
                 problems.push(format!(
                     "{relative}: line {line} writes {what} with {because}; the tree has one writer \
-                     for its JSON, and it is `craftkit_core::writer`. §142."
+                     for its JSON, and it is `craftkit_foundation::writer`. §142."
                 ));
             }
         }
-        if !has_word(&code, "craftkit_core::writer::write_json") {
+        if !has_word(&code, "craftkit_foundation::writer::write_json") {
             problems.push(format!(
                 "{relative}: {what} is not written with the tree's writer \
-                 (`craftkit_core::writer::write_json`); a design written in two places has to be \
+                 (`craftkit_foundation::writer::write_json`); a design written in two places has to be \
                  written the same way in both. §142."
             ));
         }
@@ -3109,8 +3109,8 @@ pub fn the_tree_has_one_temporary_folder(root: &Path) -> Result<Vec<String>, Str
 /// tree that can see it, and this list says which is which — a list of two,
 /// and each row says why the row is there.
 const TEMPORARY_HOMES: &[(&str, &str, &str)] = &[
-    ("crates", "crates/core/src/temp.rs", "craftkit_core::temp::dir"),
-    ("apps", "crates/core/src/temp.rs", "craftkit_core::temp::dir"),
+    ("crates", "crates/foundation/src/temp.rs", "craftkit_foundation::temp::dir"),
+    ("apps", "crates/foundation/src/temp.rs", "craftkit_foundation::temp::dir"),
     ("xtask", "xtask/src/temp.rs", "crate::temp::dir"),
 ];
 
@@ -3566,7 +3566,7 @@ fn doc_paragraphs(text: &str) -> Vec<(usize, String)> {
 /// rename, so a write that fails leaves the file that was there alone* — and
 /// the rule was written **three** times, in three crates, with three different
 /// temporary names, while **two** of the tree's own writers did not follow it
-/// at all. The rule now lives in `craftkit_core::atomic`, and this gate holds
+/// at all. The rule now lives in `craftkit_foundation::atomic`, and this gate holds
 /// it up.
 ///
 /// The question this gate asks is about **the code the tree ships**: a test may
@@ -3618,7 +3618,7 @@ pub fn the_tree_writes_its_files_through_one_home(root: &Path) -> Result<Vec<Str
                 }
                 problems.push(format!(
                     "{}: line {} creates a file with `{shape}`; a file the tree writes goes through \
-                     `craftkit_core::atomic::write_file`, which writes into a temporary name and \
+                     `craftkit_foundation::atomic::write_file`, which writes into a temporary name and \
                      moves the finished file into place, so a write that fails leaves the file that \
                      was there alone. §215.",
                     relative_name(root, &path),
@@ -3650,7 +3650,7 @@ pub fn the_tree_writes_its_files_through_one_home(root: &Path) -> Result<Vec<Str
 }
 
 /// Where the tree's one home for writing a file lives.
-const FILE_WRITING_HOME: &str = "crates/core/src/atomic.rs";
+const FILE_WRITING_HOME: &str = "crates/foundation/src/atomic.rs";
 
 /// The shapes of a call that creates a file.
 ///
@@ -9814,7 +9814,7 @@ mod tests {
     /// without it would be reported for a second reason and the case would
     /// not be caught for one reason. §212.
     fn the_home_in(dir: &std::path::Path) {
-        let home = dir.join("crates/core/src");
+        let home = dir.join("crates/foundation/src");
         std::fs::create_dir_all(&home).expect("the fabricated tree");
         std::fs::write(
             home.join("temp.rs"),
@@ -9888,7 +9888,7 @@ mod tests {
              mod tests {\n\
              \x20   #[test]\n\
              \x20   fn a_test() {\n\
-             \x20       let dir = craftkit_core::temp::dir(\"demo\");\n\
+             \x20       let dir = craftkit_foundation::temp::dir(\"demo\");\n\
              \x20       let _ = dir;\n\
              \x20   }\n\
              }\n",
@@ -10377,7 +10377,7 @@ mod tests {
     /// without it would be reported for a second reason and the case would
     /// not be caught for one reason. §215.
     fn the_writing_home_in(dir: &std::path::Path) {
-        let home = dir.join("crates/core/src");
+        let home = dir.join("crates/foundation/src");
         std::fs::create_dir_all(&home).expect("the fabricated tree");
         std::fs::write(
             home.join("atomic.rs"),
@@ -10542,7 +10542,7 @@ mod tests {
         std::fs::write(
             demo.join("lib.rs"),
             "pub fn write_it(path: &std::path::Path) {\n    \
-             let _ = craftkit_core::atomic::write_file(path, b\"x\", craftkit_core::atomic::Visibility::AsCreated);\n}\n\
+             let _ = craftkit_foundation::atomic::write_file(path, b\"x\", craftkit_foundation::atomic::Visibility::AsCreated);\n}\n\
              \n\
              #[cfg(test)]\n\
              mod tests {\n\
@@ -11072,7 +11072,7 @@ pub fn f() {}
     ///
     /// The gate that says the tree's JSON has one writer looked for the
     /// writer's path with a **substring** test, and
-    /// `craftkit_core::writer::write_json_pretty` has the writer's path
+    /// `craftkit_foundation::writer::write_json_pretty` has the writer's path
     /// inside it. §164.
     #[test]
     fn the_writer_is_not_a_path_that_starts_the_same_way() {
@@ -11081,10 +11081,13 @@ pub fn f() {}
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
-        std::fs::write(io.join("format.rs"), "fn f() { craftkit_core::writer::write_json_pretty(); }\n")
-            .expect("the fabricated source");
+        std::fs::write(
+            io.join("format.rs"),
+            "fn f() { craftkit_foundation::writer::write_json_pretty(); }\n",
+        )
+        .expect("the fabricated source");
         // The crash report is written with the tree's writer.
-        std::fs::write(engine.join("crash.rs"), "fn f() { craftkit_core::writer::write_json(); }\n")
+        std::fs::write(engine.join("crash.rs"), "fn f() { craftkit_foundation::writer::write_json(); }\n")
             .expect("the fabricated source");
 
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
@@ -12291,8 +12294,9 @@ fn parse(s: &str) -> Option<Self> {
         // The rows are found, or the comparison above is comparing nothing.
         let text = read_text(root.join("README.md")).expect("README.md");
         let rows = readme_layer_rows(&text);
-        assert_eq!(rows.len(), 9, "the README's table should list nine crates: {rows:?}");
-        assert!(rows.contains(&("crates/core".to_string(), 0)), "{rows:?}");
+        assert_eq!(rows.len(), 10, "the README's table should list ten crates: {rows:?}");
+        assert!(rows.contains(&("crates/foundation".to_string(), 0)), "{rows:?}");
+        assert!(rows.contains(&("crates/core".to_string(), 1)), "{rows:?}");
         assert!(rows.contains(&("crates/ui".to_string(), 6)), "{rows:?}");
     }
 
@@ -12525,7 +12529,7 @@ fn parse(s: &str) -> Option<Self> {
         );
 
         // The two homes are the two readers.
-        assert!(RAW_PARAMETER_HOMES.contains(&"crates/core/src/params.rs"));
+        assert!(RAW_PARAMETER_HOMES.contains(&"crates/foundation/src/params.rs"));
         assert!(RAW_PARAMETER_HOMES.contains(&"crates/engine/src/params.rs"));
         assert_eq!(RAW_PARAMETER_HOMES.len(), 2, "a third home is a third reader");
 
@@ -12563,7 +12567,7 @@ fn parse(s: &str) -> Option<Self> {
         // type, and this check is about modules.
         assert_eq!(module_path_head("Session::execute"), None);
         // A file path is not a module path.
-        assert_eq!(module_path_head("crates/core/src/params.rs"), None);
+        assert_eq!(module_path_head("crates/foundation/src/params.rs"), None);
         // And neither is a name that is not dotted at all.
         assert_eq!(module_path_head("catch_unwind"), None);
 
@@ -12847,7 +12851,7 @@ printf '%s%d/%d caught.%s\\n' \\
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
-        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        let good = "let _ = craftkit_foundation::writer::write_json(&mut out, &value);\n";
         std::fs::write(io.join("format.rs"), good).expect("the fabricated source");
         std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
@@ -12873,7 +12877,7 @@ printf '%s%d/%d caught.%s\\n' \\
         // printer: the tests are not the writer.
         std::fs::write(
             engine.join("crash.rs"),
-            "let _ = craftkit_core::writer::write_json(&mut out, &value);\n\
+            "let _ = craftkit_foundation::writer::write_json(&mut out, &value);\n\
              #[cfg(test)]\nmod tests {\n    fn a_shape() {\n        let _ = serde_json::to_string_pretty(&report);\n    }\n}\n",
         )
         .expect("the fabricated source");
@@ -12898,7 +12902,7 @@ printf '%s%d/%d caught.%s\\n' \\
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
-        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        let good = "let _ = craftkit_foundation::writer::write_json(&mut out, &value);\n";
         std::fs::write(io.join("format.rs"), good).expect("the fabricated source");
         std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");
@@ -12907,7 +12911,7 @@ printf '%s%d/%d caught.%s\\n' \\
         // The same writer, after a test item: still production, still caught.
         std::fs::write(
             io.join("format.rs"),
-            "let _ = craftkit_core::writer::write_json(&mut out, &value);\n\
+            "let _ = craftkit_foundation::writer::write_json(&mut out, &value);\n\
              #[cfg(test)]\nmod tests {\n    fn a_shape() {}\n}\n\
              fn another() { let _ = serde_json::to_string_pretty(&value); }\n",
         )
@@ -12933,7 +12937,7 @@ printf '%s%d/%d caught.%s\\n' \\
         let engine = dir.join("crates/engine/src");
         std::fs::create_dir_all(&io).expect("the fabricated tree");
         std::fs::create_dir_all(&engine).expect("the fabricated tree");
-        let good = "let _ = craftkit_core::writer::write_json(&mut out, &value);\n";
+        let good = "let _ = craftkit_foundation::writer::write_json(&mut out, &value);\n";
         std::fs::write(engine.join("crash.rs"), good).expect("the fabricated source");
 
         // The writer call is *after* the indented attribute, in the same impl
@@ -12941,7 +12945,7 @@ printf '%s%d/%d caught.%s\\n' \\
         std::fs::write(
             io.join("format.rs"),
             "impl Writer {\n    #[cfg(test)]\n    fn a_shape() {}\n\
-             fn write_it() { let _ = craftkit_core::writer::write_json(&mut out, &value); }\n}\n",
+             fn write_it() { let _ = craftkit_foundation::writer::write_json(&mut out, &value); }\n}\n",
         )
         .expect("the fabricated source");
         let problems = the_tree_writes_its_json_with_one_writer(&dir).expect("the check runs");

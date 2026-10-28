@@ -27,6 +27,7 @@ authors = ["craftkit contributors"]
 
 [workspace.dependencies]
 # --- internal -------------------------------------------------------------
+craftkit-foundation = { path = "crates/foundation", version = "0.1.0" }
 craftkit-core = { path = "crates/core", version = "0.1.0" }
 craftkit-model = { path = "crates/model", version = "0.1.0" }
 craftkit-eval = { path = "crates/eval", version = "0.1.0" }

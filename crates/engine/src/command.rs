@@ -27,7 +27,7 @@ use crate::commands::*;
 use crate::error::EngineError;
 use crate::params::Doc;
 use crate::session::{Outcome, Session};
-use craftkit_core::Params;
+use craftkit_foundation::Params;
 use serde_json::Value as Json;
 
 /// Where a command appears in the toolbar.
@@ -227,7 +227,7 @@ pub struct CommandSpec {
 }
 
 impl CommandSpec {
-    /// The parameter names, for [`craftkit_core::Params::deny_unknown`].
+    /// The parameter names, for [`craftkit_foundation::Params::deny_unknown`].
     pub fn param_names(&self) -> Vec<&'static str> {
         self.params.iter().map(|p| p.name).collect()
     }
@@ -423,12 +423,12 @@ pub static TEST_HALF_APPLY: CommandSpec = CommandSpec {
         // re-evaluated is visible in the number the caller reads.
         let node = s.doc_mut().get_mut(craftkit_core::NodeId(2)).ok_or_else(|| EngineError::Param {
             id: TEST_HALF_APPLY.id.to_string(),
-            source: craftkit_core::ParamError::new("node", "the sample has no node 2"),
+            source: craftkit_foundation::ParamError::new("node", "the sample has no node 2"),
         })?;
         node.muted = true;
         Err(EngineError::Param {
             id: TEST_HALF_APPLY.id.to_string(),
-            source: craftkit_core::ParamError::new(
+            source: craftkit_foundation::ParamError::new(
                 "command",
                 "this command failed on purpose, after changing the document",
             ),
@@ -557,7 +557,7 @@ pub static TEST_WRITE_WHILE_READ_ONLY: CommandSpec = CommandSpec {
     run: |s, _p| {
         let node = s.doc_mut().get_mut(craftkit_core::NodeId(2)).ok_or_else(|| EngineError::Param {
             id: TEST_WRITE_WHILE_READ_ONLY.id.to_string(),
-            source: craftkit_core::ParamError::new("node", "the sample has no node 2"),
+            source: craftkit_foundation::ParamError::new("node", "the sample has no node 2"),
         })?;
         node.name = "renamed".to_string();
         Ok(Outcome::new("renamed the node and claimed to be read-only"))

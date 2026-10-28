@@ -663,7 +663,7 @@ impl<'a> Shell<'a> {
                 // the UI, and the UI had never heard of `locked`.
                 let enabled = !prop.locked;
                 match &prop.value {
-                    craftkit_core::Value::Bool(b) => {
+                    craftkit_foundation::Value::Bool(b) => {
                         let mut value = *b;
                         let response = ui.add_enabled(enabled, egui::Checkbox::new(&mut value, path.clone()));
                         automation.publish(widget, response.rect, enabled);
@@ -671,7 +671,7 @@ impl<'a> Shell<'a> {
                             edits.push((path.clone(), serde_json::Value::Bool(value)));
                         }
                     }
-                    craftkit_core::Value::Num(n) => {
+                    craftkit_foundation::Value::Num(n) => {
                         let mut value = *n;
                         let response = ui.add_enabled(
                             enabled,
@@ -684,7 +684,7 @@ impl<'a> Shell<'a> {
                             edits.push((path.clone(), serde_json::Value::from(value)));
                         }
                     }
-                    craftkit_core::Value::Color(c) => {
+                    craftkit_foundation::Value::Color(c) => {
                         let mut rgb = [c.r, c.g, c.b];
                         // The colour button is a function of the `Ui`, not a
                         // widget, so it cannot be wrapped by `add_enabled` — it is
@@ -1354,8 +1354,8 @@ mod tests {
         // One definition, shared with the colour ramp: two ways to turn a level
         // into a fraction is two ways for them to disagree about a NaN.
         assert_eq!(Tokens::ramp_fraction(0.0), 0.0);
-        assert_eq!(Tokens::ramp_fraction(craftkit_core::MAX_MAGNITUDE), 1.0);
-        assert_eq!(Tokens::ramp_fraction(-craftkit_core::MAX_MAGNITUDE), 1.0);
+        assert_eq!(Tokens::ramp_fraction(craftkit_foundation::MAX_MAGNITUDE), 1.0);
+        assert_eq!(Tokens::ramp_fraction(-craftkit_foundation::MAX_MAGNITUDE), 1.0);
         assert_eq!(Tokens::ramp_fraction(f64::NAN), 0.0);
     }
 
@@ -1898,7 +1898,7 @@ mod tests {
             let property = craftkit_model::Property::new(
                 1,
                 "amount",
-                craftkit_core::Value::num("amount", 0.5).expect("a number"),
+                craftkit_foundation::Value::num("amount", 0.5).expect("a number"),
             );
             node.props.push(if locked { property.locked() } else { property });
         }
@@ -2105,13 +2105,13 @@ mod tests {
         let mut property = craftkit_model::Property::new(
             1,
             "amount",
-            craftkit_core::Value::num("amount", 0.5).expect("a number"),
+            craftkit_foundation::Value::num("amount", 0.5).expect("a number"),
         );
         let text = "x".repeat(value_bytes);
         let mut list = craftkit_model::Keyframes::new();
         for k in 0..keys {
             let time = craftkit_core::Tick::from_raw(k as i128 * 1_000_000_000);
-            let value = craftkit_core::Value::text("amount", text.clone()).expect("a text");
+            let value = craftkit_foundation::Value::text("amount", text.clone()).expect("a text");
             let key = craftkit_model::Key::new(time, value, craftkit_model::Easing::Linear).expect("a key");
             list.set(key).expect("the key is set");
         }
@@ -2179,7 +2179,7 @@ mod tests {
             let slow = panel_alone(many.0, many.1);
             (fast, slow)
         };
-        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
+        let ratio = craftkit_foundation::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "the properties panel took {ratio:.1}x as long with 10000 keyframes as with 1: \
@@ -2206,7 +2206,7 @@ mod tests {
             let slow = panel_alone(big.0, big.1);
             (fast, slow)
         };
-        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
+        let ratio = craftkit_foundation::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "the properties panel took {ratio:.1}x as long with 64 KiB keyframe values as with 1 byte: \
@@ -2259,7 +2259,7 @@ mod tests {
         {
             let node = doc.get_mut(id).expect("the node");
             for p in 0..count {
-                let value = craftkit_core::Value::num("v", 0.5).expect("a number");
+                let value = craftkit_foundation::Value::num("v", 0.5).expect("a number");
                 node.props.push(craftkit_model::Property::new(p as u64 + 1, format!("p{p}"), value));
             }
         }

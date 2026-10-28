@@ -13,7 +13,8 @@
 
 use crate::limits;
 use crate::property::{PropGroup, Property};
-use craftkit_core::{CoreError, IdCounter, NodeId, Tick, Value};
+use craftkit_core::{IdCounter, NodeId, Tick};
+use craftkit_foundation::{CoreError, Value};
 use serde::{Deserialize, Serialize};
 
 /// What a node does.
@@ -150,7 +151,11 @@ impl Node {
             Property::new(2, "amount", Value::num("amount", amount)?)
                 .with_hint(crate::property::PropHint::Slider { min: 0.0, max: 1.0 }),
         );
-        self.props.push(Property::new(3, "tint", Value::Color(craftkit_core::Color::rgb(140, 170, 210))));
+        self.props.push(Property::new(
+            3,
+            "tint",
+            Value::Color(craftkit_foundation::Color::rgb(140, 170, 210)),
+        ));
         self.props.push(Property::new(4, "label", Value::text("label", String::new())?));
         Ok(())
     }

@@ -44,7 +44,7 @@
 use crate::document::Node;
 use crate::keyframe::{Easing, Key, Keyframes};
 use crate::property::{PropGroup, PropHint, PropNode, Property};
-use craftkit_core::Value;
+use craftkit_foundation::Value;
 
 /// A 64-bit FNV-1a hash, written out so that nothing is allocated.
 ///

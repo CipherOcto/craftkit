@@ -91,7 +91,7 @@ impl Tokens {
         if !level.is_finite() {
             return 0.0;
         }
-        (level.abs() / craftkit_core::MAX_MAGNITUDE).clamp(0.0, 1.0) as f32
+        (level.abs() / craftkit_foundation::MAX_MAGNITUDE).clamp(0.0, 1.0) as f32
     }
 
     /// The meter colour for a level, low to high.
@@ -191,8 +191,8 @@ mod tests {
     fn the_meter_ramps_from_low_to_high() {
         let t = Tokens::dark();
         assert_eq!(t.meter(0.0), t.meter_low);
-        assert_eq!(t.meter(craftkit_core::MAX_MAGNITUDE), t.meter_high);
-        let mid = t.meter(craftkit_core::MAX_MAGNITUDE / 2.0);
+        assert_eq!(t.meter(craftkit_foundation::MAX_MAGNITUDE), t.meter_high);
+        let mid = t.meter(craftkit_foundation::MAX_MAGNITUDE / 2.0);
         assert!(mid.r() > t.meter_low.r(), "the ramp should move");
     }
 
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn ramp_fraction_refuses_every_shape_of_nonsense() {
         assert_eq!(Tokens::ramp_fraction(0.0), 0.0);
-        assert_eq!(Tokens::ramp_fraction(craftkit_core::MAX_MAGNITUDE), 1.0);
+        assert_eq!(Tokens::ramp_fraction(craftkit_foundation::MAX_MAGNITUDE), 1.0);
         assert_eq!(Tokens::ramp_fraction(1e300), 1.0);
         assert_eq!(Tokens::ramp_fraction(f64::NAN), 0.0);
         assert_eq!(Tokens::ramp_fraction(f64::INFINITY), 0.0);

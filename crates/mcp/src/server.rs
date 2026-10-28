@@ -64,7 +64,7 @@ pub fn serve(session: Arc<Mutex<Session>>) -> Result<(), String> {
         // The buffer is the *text*. The parse of it is what costs memory, and
         // the message limit is derived from the memory budget so that the
         // parse stays inside it. §64.
-        let line = match craftkit_core::read_line_bounded(&mut input, rpc::MAX_MESSAGE) {
+        let line = match craftkit_foundation::read_line_bounded(&mut input, rpc::MAX_MESSAGE) {
             Ok(Some(line)) => line,
             Ok(None) => break,
             Err(e) => {

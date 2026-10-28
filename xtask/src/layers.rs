@@ -62,12 +62,16 @@ impl Class {
 /// Names are the full package names, sorted by layer and then by name, so the
 /// table itself is reviewable as a diff.
 pub const TABLE: &[(&str, Class)] = &[
-    // L0 — values and units. No workspace dependency at all.
-    ("craftkit-core", Class::Layer(0)),
-    // L1 — the document: nodes, properties, keyframes.
-    ("craftkit-model", Class::Layer(1)),
+    // L0 — the generic half: readers, values, file plumbing, limits. No
+    // workspace dependency at all, and nothing in it that knows what a
+    // document is. §276.
+    ("craftkit-foundation", Class::Layer(0)),
+    // L1 — craftkit's own core: the exact time base and the identifiers.
+    ("craftkit-core", Class::Layer(1)),
     // L2 — the numeric kernel, behind the panic guard.
     ("craftkit-kernel", Class::Layer(2)),
+    // L2 — the document: nodes, properties, keyframes.
+    ("craftkit-model", Class::Layer(2)),
     // L3 — two ways to get a value out of a document: evaluate it, or load it.
     ("craftkit-eval", Class::Layer(3)),
     ("craftkit-io", Class::Layer(3)),

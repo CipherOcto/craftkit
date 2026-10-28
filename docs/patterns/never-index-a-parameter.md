@@ -38,7 +38,7 @@ Two supporting rules:
 
 ## In the code
 
-The readers, `crates/core/src/params.rs`:
+The readers, `crates/foundation/src/params.rs`:
 
 ```rust
 /// A required number. Non-finite and out-of-range values are an error, not

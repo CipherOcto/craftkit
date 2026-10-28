@@ -73,7 +73,7 @@ impl ChainInput {
 /// **This does not saturate; it refuses.** A value that leaves the finite world
 /// stops the walk with an error naming the node it happened at. That is a
 /// deliberate difference from [`apply_gain`], which clamps at
-/// [`craftkit_core::MAX_MAGNITUDE`] instead — see that function for why the two
+/// [`craftkit_foundation::MAX_MAGNITUDE`] instead — see that function for why the two
 /// differ.
 ///
 /// This doc previously claimed "saturating arithmetic throughout, so a long chain
@@ -117,7 +117,7 @@ fn evaluate_chain_inner(input: ChainInput) -> Result<Vec<f64>, KernelError> {
 
 /// The one arithmetic operation the plan evaluator is allowed to perform.
 ///
-/// `level * gain`, saturated at [`craftkit_core::MAX_MAGNITUDE`].
+/// `level * gain`, saturated at [`craftkit_foundation::MAX_MAGNITUDE`].
 ///
 /// It exists as a separate entry point rather than as a `ChainStep` because the
 /// evaluator applies it **per node, per frame**, and allocating a `Vec` of
@@ -155,7 +155,7 @@ pub fn apply_gain(level: f64, gain: f64) -> Result<f64, KernelError> {
                 detail: "the product is not a number".to_string(),
             });
         }
-        Ok(v.clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
+        Ok(v.clamp(-craftkit_foundation::MAX_MAGNITUDE, craftkit_foundation::MAX_MAGNITUDE))
     })
 }
 
@@ -172,7 +172,7 @@ mod tests {
     fn a_runaway_gain_saturates_instead_of_producing_an_infinity() {
         let got = apply_gain(1e300, 1e300).expect("saturates, it does not fail");
         assert!(got.is_finite());
-        assert_eq!(got, craftkit_core::MAX_MAGNITUDE);
+        assert_eq!(got, craftkit_foundation::MAX_MAGNITUDE);
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
         // accident — which is what the two doc comments managed to do, claiming
         // a single shared rule that never existed.
         let saturated = apply_gain(1e300, 1e300).expect("apply_gain saturates rather than failing");
-        assert_eq!(saturated, craftkit_core::MAX_MAGNITUDE);
+        assert_eq!(saturated, craftkit_foundation::MAX_MAGNITUDE);
 
         let refused = evaluate_chain(ChainInput {
             start: 1.0,

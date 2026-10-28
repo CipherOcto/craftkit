@@ -66,7 +66,7 @@ impl SaveError {
 /// what the serialiser actually produces:
 ///
 /// ```
-/// use craftkit_core::Value;
+/// use craftkit_foundation::Value;
 /// use craftkit_io::save_text;
 /// use craftkit_model::{Document, NodeKind, PropGroup, PropHint, PropNode, Property};
 ///
@@ -203,11 +203,15 @@ pub fn save(path: &Path, doc: &Document) -> Result<(), SaveError> {
     //
     // The mode is the process's own: a document the user saves where they
     // chose is the user's business, not the program's.
-    craftkit_core::atomic::write_file(path, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
-        .map_err(|e| SaveError::Write {
-            path: e.path().to_path_buf(),
-            source: std::io::Error::other(e.to_string()),
-        })?;
+    craftkit_foundation::atomic::write_file(
+        path,
+        text.as_bytes(),
+        craftkit_foundation::atomic::Visibility::AsCreated,
+    )
+    .map_err(|e| SaveError::Write {
+        path: e.path().to_path_buf(),
+        source: std::io::Error::other(e.to_string()),
+    })?;
     Ok(())
 }
 
@@ -219,9 +223,9 @@ pub fn load(path: &Path) -> Result<Document, SaveError> {
     // full, and only then refused — which meant the memory was already
     // spent. Measured: a 300 MiB file was read in 180 ms and refused
     // afterwards, with the peak resident size at 300 MiB. §49.
-    let text = match craftkit_core::read_file_bounded(path, crate::format::MAX_FILE_BYTES) {
+    let text = match craftkit_foundation::read_file_bounded(path, crate::format::MAX_FILE_BYTES) {
         Ok(text) => text,
-        Err(craftkit_core::ReadError::TooLong { len, max }) => {
+        Err(craftkit_foundation::ReadError::TooLong { len, max }) => {
             return Err(SaveError::Format(FormatError::TooLarge { bytes: len, limit: max }));
         }
         Err(e) => {
@@ -242,9 +246,9 @@ mod tests {
     /// A temporary folder of its own.
     ///
     /// The rule is the tree's, and it lives in one place: §212 gave the
-    /// temporary folder a home in `craftkit_core::temp`.
+    /// temporary folder a home in `craftkit_foundation::temp`.
     fn scratch(tag: &str) -> PathBuf {
-        craftkit_core::temp::dir(tag).expect("a temporary folder")
+        craftkit_foundation::temp::dir(tag).expect("a temporary folder")
     }
 
     fn sample() -> Document {
@@ -388,12 +392,12 @@ mod tests {
         let mut group = craftkit_model::PropGroup::new("props", "Properties");
         for p in 0..32u64 {
             let mut prop =
-                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
             for k in 0..10_000i128 {
                 let _ = prop.keys.set(
                     craftkit_model::Key::new(
                         craftkit_core::Tick::from_raw(k),
-                        craftkit_core::Value::Num(k as f64),
+                        craftkit_foundation::Value::Num(k as f64),
                         craftkit_model::Easing::Linear,
                     )
                     .expect("key"),

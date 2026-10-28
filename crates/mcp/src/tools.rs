@@ -299,7 +299,7 @@ fn property_for(kind: Doc, help: &str) -> Json {
             if matches!(kind, Doc::Color) {
                 // The colour's shape is the core's own: the tree publishes
                 // the rule the parser enforces, not a copy of it. §254.
-                map.insert("pattern".to_string(), json!(craftkit_core::Color::PATTERN));
+                map.insert("pattern".to_string(), json!(craftkit_foundation::Color::PATTERN));
             }
         }
         Doc::NodeRef => {
@@ -363,12 +363,12 @@ mod tests {
     /// own, so the two cannot drift.
     #[test]
     fn the_colour_pattern_the_schema_publishes_is_the_core_own() {
-        assert_eq!(craftkit_core::Color::PATTERN, "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$");
+        assert_eq!(craftkit_foundation::Color::PATTERN, "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$");
         let params = [command::ParamDoc::req("tint", craftkit_engine::Doc::Color, "the colour")];
         let schema = schema_for(&params);
         assert_eq!(
             schema["properties"]["tint"]["pattern"].as_str(),
-            Some(craftkit_core::Color::PATTERN),
+            Some(craftkit_foundation::Color::PATTERN),
             "the schema publishes its own copy of the colour's shape"
         );
     }

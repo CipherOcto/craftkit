@@ -371,7 +371,7 @@ fn handle(
         // The buffer is the *text*. The parse of it is what costs memory, and
         // the line limit is derived from the memory budget so that the parse
         // stays inside it. §64.
-        let line = match craftkit_core::read_line_bounded(&mut reader, MAX_LINE) {
+        let line = match craftkit_foundation::read_line_bounded(&mut reader, MAX_LINE) {
             Ok(Some(line)) => line,
             Ok(None) => break,
             Err(e) => {
@@ -387,7 +387,7 @@ fn handle(
                     break;
                 }
                 // A timeout is the normal end of an idle connection.
-                if let craftkit_core::ReadError::Io { kind, message } = &e
+                if let craftkit_foundation::ReadError::Io { kind, message } = &e
                     && *kind != std::io::ErrorKind::WouldBlock
                     && *kind != std::io::ErrorKind::TimedOut
                 {
@@ -1157,7 +1157,7 @@ mod tests {
     /// tell a reproduction from a different document. §47.
     #[test]
     fn the_crash_replay_says_whether_it_reproduced_the_document() {
-        let dir = craftkit_core::temp::dir("replay").expect("a folder");
+        let dir = craftkit_foundation::temp::dir("replay").expect("a folder");
 
         let mut session = Session::sample();
         session
@@ -1303,7 +1303,7 @@ mod tests {
     /// whose window was right there, working. §54.
     #[test]
     fn a_second_instance_does_not_take_the_first_ones_token_file() {
-        let dir = craftkit_core::temp::dir("token-takeover").expect("a folder");
+        let dir = craftkit_foundation::temp::dir("token-takeover").expect("a folder");
 
         let first_token = Token::generate().expect("entropy");
         let (server, path) = serve_published(
@@ -1479,7 +1479,7 @@ mod tests {
 
     /// A directory of this test's own, from the tree's one home for it. §212.
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        craftkit_core::temp::dir(name).expect("a folder")
+        craftkit_foundation::temp::dir(name).expect("a folder")
     }
 
     /// The workspace root: the directory holding this crate's parent's manifest.

@@ -42,15 +42,16 @@ number twice.
 ## The shape
 
 ```text
-crates/core     L0   ticks, values, ids, hostile parameters
-crates/model    L1   the document: nodes, properties, keyframes
-crates/kernel   L2   the numeric kernel, behind the panic guard
-crates/eval     L3   document -> plan
-crates/io       L3   the versioned .craftkit format
-crates/engine   L4   the command registry and the Session
-crates/control  L5   the loopback JSON-lines channel
-crates/mcp      L5   the MCP server
-crates/ui       L6   the egui shell, icons, automation names
+crates/foundation L0   the generic half: readers, values, file plumbing
+crates/core      L1   craftkit's own core: ticks and ids
+crates/kernel    L2   the numeric kernel, behind the panic guard
+crates/model     L2   the document: nodes, properties, keyframes
+crates/eval      L3   document -> plan
+crates/io        L3   the versioned .craftkit format
+crates/engine    L4   the command registry and the Session
+crates/control   L5   the loopback JSON-lines channel
+crates/mcp       L5   the MCP server
+crates/ui        L6   the egui shell, icons, automation names
 apps/*             the desktop window, the CLI, the browser build
 xtask               the gates
 ```
@@ -70,7 +71,7 @@ in both.
 
 **Never index a parameter.** Every value that arrives from outside — a command
 parameter, a `.craftkit` file, a line on the control channel — is read through a
-typed, range-checked helper in `crates/core/src/params.rs`. An index that is out
+typed, range-checked helper in `crates/foundation/src/params.rs`. An index that is out
 of bounds is a panic, and this is a program whose whole promise is not crashing.
 
 **Clone before edit, then one trust boundary.** `Session::execute` clones the

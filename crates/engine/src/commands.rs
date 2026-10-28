@@ -6,7 +6,7 @@
 //!
 //! # House rules for anything in this file
 //!
-//! - **Read parameters through [`craftkit_core::Params`].** Never index. This
+//! - **Read parameters through [`craftkit_foundation::Params`].** Never index. This
 //!   file does not even *see* the raw JSON: the readers that have to know a
 //!   parameter's shape live in [`crate::params`], and the gate in
 //!   `cargo xtask lists` refuses the tree when a third file reaches for it.
@@ -20,7 +20,8 @@ use crate::command::{Area, CommandSpec, Icon, ParamDoc};
 use crate::error::EngineError;
 use crate::params::{Doc, node_by_id_or_name, opt_easing, opt_kind, opt_time, value_for};
 use crate::session::{Outcome, Session};
-use craftkit_core::{FrameRate, Params, Tick};
+use craftkit_core::{FrameRate, Tick};
+use craftkit_foundation::Params;
 use craftkit_model::{Easing, Key, Node, NodeKind, PropGroup, PropNode, PropPath, Property, limits};
 
 // ---------------------------------------------------------------- document --
@@ -69,7 +70,7 @@ pub static DOC_NOTE: CommandSpec = CommandSpec {
         let Some(text) = text else {
             return Err(EngineError::Param {
                 id: DOC_NOTE.id.to_string(),
-                source: craftkit_core::ParamError::new(
+                source: craftkit_foundation::ParamError::new(
                     "text",
                     "give the note's text; an empty text clears the note",
                 ),
@@ -112,7 +113,7 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
         if !p.has("start") && !p.has("end") && !p.has("fps") {
             return Err(EngineError::Param {
                 id: DOC_RANGE.id.to_string(),
-                source: craftkit_core::ParamError::new(
+                source: craftkit_foundation::ParamError::new(
                     "start",
                     "give at least one of `start`, `end` or `fps`",
                 ),
@@ -131,7 +132,7 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
                 if f < 1 || f > i64::from(limits::MAX_FRAME_RATE) {
                     return Err(EngineError::Param {
                         id: DOC_RANGE.id.to_string(),
-                        source: craftkit_core::ParamError::new(
+                        source: craftkit_foundation::ParamError::new(
                             "fps",
                             format!("{f} is not between 1 and {}", limits::MAX_FRAME_RATE),
                         ),
@@ -152,7 +153,7 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
             // *at* the start would leave a plan that could not be saved. §50.
             return Err(EngineError::Param {
                 id: DOC_RANGE.id.to_string(),
-                source: craftkit_core::ParamError::new("end", "the end must be after the start"),
+                source: craftkit_foundation::ParamError::new("end", "the end must be after the start"),
             });
         }
         let was_at = s.at();
@@ -207,7 +208,7 @@ pub static NODE_ADD: CommandSpec = CommandSpec {
     run: |s, p| {
         let kind = opt_kind(p, "kind")?.unwrap_or(NodeKind::Filter);
         let amount = p
-            .num_in("amount", -craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE, None)?
+            .num_in("amount", -craftkit_foundation::MAX_MAGNITUDE, craftkit_foundation::MAX_MAGNITUDE, None)?
             .unwrap_or(1.0);
         let name = match p.text("name", limits::MAX_NAME)? {
             Some(n) => n,
@@ -247,7 +248,10 @@ pub static NODE_REMOVE: CommandSpec = CommandSpec {
         let id = node_by_id_or_name(s.document(), p)?;
         let node = s.document().get(id).cloned().ok_or_else(|| EngineError::Param {
             id: NODE_REMOVE.id.to_string(),
-            source: craftkit_core::ParamError::new("node", format!("there is no node with id {}", id.get())),
+            source: craftkit_foundation::ParamError::new(
+                "node",
+                format!("there is no node with id {}", id.get()),
+            ),
         })?;
         s.doc_mut().remove(id);
         Ok(Outcome::with(
@@ -335,7 +339,7 @@ pub static NODE_KIND: CommandSpec = CommandSpec {
         let id = node_by_id_or_name(s.document(), p)?;
         let kind = opt_kind(p, "kind")?.ok_or_else(|| EngineError::Param {
             id: NODE_KIND.id.to_string(),
-            source: craftkit_core::ParamError::new("kind", "this parameter is required"),
+            source: craftkit_foundation::ParamError::new("kind", "this parameter is required"),
         })?;
         let changed = node_mut(s, id, NODE_KIND.id)?.set_kind(kind);
         Ok(Outcome::with(
@@ -366,12 +370,12 @@ pub static NODE_MOVE: CommandSpec = CommandSpec {
         let id = node_by_id_or_name(s.document(), p)?;
         let index = p.int("index")?.ok_or_else(|| EngineError::Param {
             id: NODE_MOVE.id.to_string(),
-            source: craftkit_core::ParamError::new("index", "this parameter is required"),
+            source: craftkit_foundation::ParamError::new("index", "this parameter is required"),
         })?;
         if index < 0 {
             return Err(EngineError::Param {
                 id: NODE_MOVE.id.to_string(),
-                source: craftkit_core::ParamError::new("index", format!("{index} is negative")),
+                source: craftkit_foundation::ParamError::new("index", format!("{index} is negative")),
             });
         }
         let changed = s.doc_mut().move_to(id, index as usize)?;
@@ -399,7 +403,10 @@ pub static NODE_DUPLICATE: CommandSpec = CommandSpec {
         let id = node_by_id_or_name(s.document(), p)?;
         let src = s.document().get(id).cloned().ok_or_else(|| EngineError::Param {
             id: NODE_DUPLICATE.id.to_string(),
-            source: craftkit_core::ParamError::new("node", format!("there is no node with id {}", id.get())),
+            source: craftkit_foundation::ParamError::new(
+                "node",
+                format!("there is no node with id {}", id.get()),
+            ),
         })?;
         let at = s.document().index_of(id).map(|i| i + 1).unwrap_or(0);
         let new_id = s.doc_mut().add_node(format!("{} copy", src.name), src.kind)?;
@@ -450,7 +457,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let value = value_for(p, "value")?.ok_or_else(|| EngineError::Param {
             id: PROP_SET.id.to_string(),
-            source: craftkit_core::ParamError::new("value", "this parameter is required"),
+            source: craftkit_foundation::ParamError::new("value", "this parameter is required"),
         })?;
         let animated = p.bool("animated")?.unwrap_or(false);
 
@@ -473,7 +480,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
                 let fresh_id = next_prop_id(&node.props);
                 node.props.insert(&parsed, fresh_id, value.clone()).map_err(|e| EngineError::Param {
                     id: PROP_SET.id.to_string(),
-                    source: craftkit_core::ParamError::new("path", e.to_string()),
+                    source: craftkit_foundation::ParamError::new("path", e.to_string()),
                 })?;
                 if animated {
                     let created = node.props.find_mut(&parsed).ok_or_else(|| EngineError::Internal {
@@ -516,7 +523,7 @@ pub static PROP_RESET: CommandSpec = CommandSpec {
         let parsed = parse_path(&path, PROP_RESET.id)?;
         let prop = writable(&mut node.props, &parsed, PROP_RESET.id)?.ok_or_else(|| EngineError::Param {
             id: PROP_RESET.id.to_string(),
-            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+            source: craftkit_foundation::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
         let n = prop.keys.len();
         prop.keys.clear();
@@ -562,7 +569,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let value = value_for(p, "value")?.ok_or_else(|| EngineError::Param {
             id: KEY_SET.id.to_string(),
-            source: craftkit_core::ParamError::new("value", "this parameter is required"),
+            source: craftkit_foundation::ParamError::new("value", "this parameter is required"),
         })?;
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
@@ -596,7 +603,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
                 let fresh_id = next_prop_id(&node.props);
                 node.props.insert(&parsed, fresh_id, value.clone()).map_err(|e| EngineError::Param {
                     id: KEY_SET.id.to_string(),
-                    source: craftkit_core::ParamError::new("path", e.to_string()),
+                    source: craftkit_foundation::ParamError::new("path", e.to_string()),
                 })?;
                 node.props.find_mut(&parsed).ok_or_else(|| EngineError::Internal {
                     id: KEY_SET.id.to_string(),
@@ -658,13 +665,13 @@ pub static KEY_REMOVE: CommandSpec = CommandSpec {
         let parsed = parse_path(&path, KEY_REMOVE.id)?;
         let prop = writable(&mut node.props, &parsed, KEY_REMOVE.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_REMOVE.id.to_string(),
-            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+            source: craftkit_foundation::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
         let removed = prop.keys.remove_at(time);
         if !removed {
             return Err(EngineError::Param {
                 id: KEY_REMOVE.id.to_string(),
-                source: craftkit_core::ParamError::new(
+                source: craftkit_foundation::ParamError::new(
                     "time",
                     format!("`{path}` has no keyframe at {:.3}s", time.seconds_f64()),
                 ),
@@ -700,7 +707,7 @@ pub static KEY_CLEAR: CommandSpec = CommandSpec {
         let parsed = parse_path(&path, KEY_CLEAR.id)?;
         let prop = writable(&mut node.props, &parsed, KEY_CLEAR.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_CLEAR.id.to_string(),
-            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+            source: craftkit_foundation::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
         let n = prop.keys.len();
         prop.keys.clear();
@@ -742,13 +749,13 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
         let easing = opt_easing(p, "easing")?.ok_or_else(|| EngineError::Param {
             id: KEY_EASE.id.to_string(),
-            source: craftkit_core::ParamError::new("easing", "this parameter is required"),
+            source: craftkit_foundation::ParamError::new("easing", "this parameter is required"),
         })?;
         let node = node_mut(s, id, KEY_EASE.id)?;
         let parsed = parse_path(&path, KEY_EASE.id)?;
         let prop = writable(&mut node.props, &parsed, KEY_EASE.id)?.ok_or_else(|| EngineError::Param {
             id: KEY_EASE.id.to_string(),
-            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+            source: craftkit_foundation::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
         // The easing goes in through the model's own door, so the list keeps
         // its rules: the easing is checked, and the key is found by its time
@@ -761,12 +768,12 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         if before.is_none() {
             return Err(EngineError::Param {
                 id: KEY_EASE.id.to_string(),
-                source: craftkit_core::ParamError::new("time", format!("`{path}` has no key there")),
+                source: craftkit_foundation::ParamError::new("time", format!("`{path}` has no key there")),
             });
         }
         prop.keys.set_ease(time, easing).map_err(|e| EngineError::Param {
             id: KEY_EASE.id.to_string(),
-            source: craftkit_core::ParamError::new("easing", e.to_string()),
+            source: craftkit_foundation::ParamError::new("easing", e.to_string()),
         })?;
         let changed = before != Some(easing);
         Ok(Outcome::with(format!("`{path}` eased {}", easing.name()), serde_json::json!({ "id": id.get() }))
@@ -816,12 +823,12 @@ pub static KEY_LIST: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let node = s.document().get(id).ok_or_else(|| EngineError::Param {
             id: KEY_LIST.id.to_string(),
-            source: craftkit_core::ParamError::new("node", format!("there is no node {}", id.get())),
+            source: craftkit_foundation::ParamError::new("node", format!("there is no node {}", id.get())),
         })?;
         let parsed = parse_path(&path, KEY_LIST.id)?;
         let prop = node.props.find(&parsed).ok_or_else(|| EngineError::Param {
             id: KEY_LIST.id.to_string(),
-            source: craftkit_core::ParamError::new("path", format!("there is no property `{path}`")),
+            source: craftkit_foundation::ParamError::new("path", format!("there is no property `{path}`")),
         })?;
         let keys: Vec<serde_json::Value> = prop
             .keys
@@ -872,12 +879,12 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
                 // as the nearest representable instant. §188.
                 Some(f) => Tick::try_from_frames_i64("frame", f, rate).map_err(|e| EngineError::Param {
                     id: PLAYBACK_SEEK.id.to_string(),
-                    source: craftkit_core::ParamError::new("frame", e.to_string()),
+                    source: craftkit_foundation::ParamError::new("frame", e.to_string()),
                 })?,
                 None => {
                     return Err(EngineError::Param {
                         id: PLAYBACK_SEEK.id.to_string(),
-                        source: craftkit_core::ParamError::new("seconds", "pass `seconds` or `frame`"),
+                        source: craftkit_foundation::ParamError::new("seconds", "pass `seconds` or `frame`"),
                     });
                 }
             },
@@ -1061,14 +1068,14 @@ fn required_text_capped(p: &Params<'_>, key: &str, max: usize) -> Result<String,
     match text {
         None => Err(EngineError::Param {
             id: String::new(),
-            source: craftkit_core::ParamError::new(key, "this parameter is required"),
+            source: craftkit_foundation::ParamError::new(key, "this parameter is required"),
         }),
         // The parameter **was** given. Saying "required" about a parameter
         // that arrived is a message that sends the reader looking for the
         // wrong mistake. §92.
         Some(s) if s.trim().is_empty() => Err(EngineError::Param {
             id: String::new(),
-            source: craftkit_core::ParamError::new(key, "this parameter must not be empty"),
+            source: craftkit_foundation::ParamError::new(key, "this parameter must not be empty"),
         }),
         Some(s) => Ok(s),
     }
@@ -1089,7 +1096,7 @@ fn check_name(name: &str) -> Result<(), EngineError> {
     if let Some(why) = craftkit_model::Node::why_not_a_name(name) {
         return Err(EngineError::Param {
             id: String::new(),
-            source: craftkit_core::ParamError::new("name", why),
+            source: craftkit_foundation::ParamError::new("name", why),
         });
     }
     Ok(())
@@ -1102,7 +1109,10 @@ fn node_mut<'a>(
 ) -> Result<&'a mut Node, EngineError> {
     s.doc_mut().get_mut(id).ok_or_else(|| EngineError::Param {
         id: id_of.to_string(),
-        source: craftkit_core::ParamError::new("node", format!("there is no node with id {}", id.get())),
+        source: craftkit_foundation::ParamError::new(
+            "node",
+            format!("there is no node with id {}", id.get()),
+        ),
     })
 }
 
@@ -1113,7 +1123,7 @@ fn node_mut<'a>(
 fn parse_path(path: &str, id_of: &'static str) -> Result<PropPath, EngineError> {
     PropPath::parse(path).ok_or_else(|| EngineError::Param {
         id: id_of.to_string(),
-        source: craftkit_core::ParamError::new(
+        source: craftkit_foundation::ParamError::new(
             "path",
             format!(
                 "`{path}` is not a path this build accepts: a path has at most {} segments, \
@@ -1145,7 +1155,7 @@ fn key_now(prop: &mut Property, at: Tick, id_of: &'static str) -> Result<(), Eng
     let value = prop.value.clone();
     prop.keys.set(Key::new(at, value, Easing::Linear).map_err(|e| EngineError::Param {
         id: id_of.to_string(),
-        source: craftkit_core::ParamError::new("time", e.to_string()),
+        source: craftkit_foundation::ParamError::new("time", e.to_string()),
     })?)?;
     Ok(())
 }
@@ -1167,7 +1177,7 @@ fn writable<'a>(
 ) -> Result<Option<&'a mut Property>, EngineError> {
     group.find_writable(parsed).map_err(|e| EngineError::Param {
         id: id_of.to_string(),
-        source: craftkit_core::ParamError::new("path", e.to_string()),
+        source: craftkit_foundation::ParamError::new("path", e.to_string()),
     })
 }
 
@@ -1455,7 +1465,7 @@ mod tests {
         let flat = node.props.flatten();
         // The property the path names holds the new value.
         let by_id = flat.iter().find(|(_, prop)| prop.id == nested).map(|(_, prop)| prop.value.clone());
-        assert_eq!(by_id, Some(craftkit_core::Value::Num(42.0)), "the named property was not set");
+        assert_eq!(by_id, Some(craftkit_foundation::Value::Num(42.0)), "the named property was not set");
         // And nothing was invented.
         assert_eq!(flat.len(), 5, "a property was invented: {flat:?}");
         assert!(!flat.iter().any(|(p, _)| p.to_string() == "5"), "a property labelled `5` was created");
@@ -1499,12 +1509,12 @@ mod tests {
 
         let flat = s.document().get(craftkit_core::NodeId(1)).expect("node").props.flatten();
         let by_id = flat.iter().find(|(_, p)| p.id == target).map(|(_, p)| p.value.clone());
-        assert_eq!(by_id, Some(craftkit_core::Value::Num(42.0)), "the named property was not set");
+        assert_eq!(by_id, Some(craftkit_foundation::Value::Num(42.0)), "the named property was not set");
         // And nothing else took the value: a hex reading would have landed it
         // on the id sixteen.
         let others: Vec<u64> = flat
             .iter()
-            .filter(|(_, p)| p.value == craftkit_core::Value::Num(42.0) && p.id != target)
+            .filter(|(_, p)| p.value == craftkit_foundation::Value::Num(42.0) && p.id != target)
             .map(|(_, p)| p.id)
             .collect();
         assert!(others.is_empty(), "the value also landed on {others:?}");
@@ -1633,12 +1643,12 @@ mod tests {
         {
             let node = doc.get_mut(id).expect("the node");
             let property =
-                Property::new(1, "amount", craftkit_core::Value::num("amount", 0.5).expect("value"));
+                Property::new(1, "amount", craftkit_foundation::Value::num("amount", 0.5).expect("value"));
             let mut keys = craftkit_model::Keyframes::new();
             keys.set(
                 Key::new(
                     Tick::from_raw(1_000_000_000),
-                    craftkit_core::Value::num("amount", 0.25).expect("value"),
+                    craftkit_foundation::Value::num("amount", 0.25).expect("value"),
                     Easing::Linear,
                 )
                 .expect("the key"),
@@ -1822,14 +1832,17 @@ mod tests {
         keys.set(
             craftkit_model::Key::new(
                 craftkit_core::Tick::ZERO,
-                craftkit_core::Value::num("amount", 1.0).expect("value"),
+                craftkit_foundation::Value::num("amount", 1.0).expect("value"),
                 craftkit_model::Easing::Bezier { out_x: 0.5, out_y: 0.25 },
             )
             .expect("the key"),
         )
         .expect("the key is set");
-        let mut property =
-            craftkit_model::Property::new(1, "amount", craftkit_core::Value::num("amount", 0.0).expect("v"));
+        let mut property = craftkit_model::Property::new(
+            1,
+            "amount",
+            craftkit_foundation::Value::num("amount", 0.0).expect("v"),
+        );
         property.keys = keys;
         node.props.push(property);
         let mut s = Session::new("probe");
@@ -2391,7 +2404,7 @@ mod tests {
         {
             let node = s.doc_mut_for_test(id);
             node.props.nodes[0] =
-                PropNode::Prop(Property::new(1, "amount", craftkit_core::Value::Bool(true)));
+                PropNode::Prop(Property::new(1, "amount", craftkit_foundation::Value::Bool(true)));
         }
         s.recompute_for_test();
         let out = s.execute("diagnostics.list", &json!({})).expect("diagnostics");

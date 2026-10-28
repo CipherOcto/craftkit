@@ -208,18 +208,18 @@ fn empty_object() -> Json {
 /// The largest script, in bytes of text.
 ///
 /// A limit on **text**. The parser then turns that text into a tree, and the
-/// tree is up to [`craftkit_core::JSON_EXPANSION`] times bigger — a JSON
+/// tree is up to [`craftkit_foundation::JSON_EXPANSION`] times bigger — a JSON
 /// number is two bytes of text and thirty-two bytes of memory, and the
 /// vector holding a long list grows to twice its length. Measured: a
 /// 32 000 063-byte script cost 1 034 584 KiB of resident memory, a factor of
 /// thirty-two, and the limit below is what keeps that inside
-/// [`craftkit_core::MAX_JSON_MEMORY_BYTES`]. §64.
+/// [`craftkit_foundation::MAX_JSON_MEMORY_BYTES`]. §64.
 ///
 /// It used to be 32 MiB, which bought a gigabyte of memory for a file the
 /// user pointed at. A script that carries a base document bigger than this
 /// cannot be written any more — [`replay_as_script`] says so rather than
 /// printing a script that would replay onto the wrong document.
-pub const MAX_SCRIPT_BYTES: usize = craftkit_core::MAX_JSON_TEXT_BYTES;
+pub const MAX_SCRIPT_BYTES: usize = craftkit_foundation::MAX_JSON_TEXT_BYTES;
 
 fn load_script(path: &Path) -> Result<Script, String> {
     // Bounded, because a script is read from wherever a caller pointed at and a
@@ -229,9 +229,9 @@ fn load_script(path: &Path) -> Result<Script, String> {
     // read has already paid for what it was meant to prevent. §49.
     //
     // The limit bounds the *text*; the parse of it costs up to
-    // `craftkit_core::JSON_EXPANSION` times as much, which is why the number
+    // `craftkit_foundation::JSON_EXPANSION` times as much, which is why the number
     // is the one the whole tree uses. §64.
-    let body = craftkit_core::read_file_bounded(path, MAX_SCRIPT_BYTES)
+    let body = craftkit_foundation::read_file_bounded(path, MAX_SCRIPT_BYTES)
         .map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let script: Script =
         serde_json::from_str(&body).map_err(|e| format!("{} is not a script: {e}", path.display()))?;
@@ -392,8 +392,12 @@ fn script(out: &Path) -> Result<(), String> {
     // The tree's one writer: into a temporary name beside the target, and then
     // moved into place, so a script that is cut short is not a script that
     // looks complete. §215.
-    craftkit_core::atomic::write_file(out, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
-        .map_err(|e| format!("could not write {}: {e}", out.display()))?;
+    craftkit_foundation::atomic::write_file(
+        out,
+        text.as_bytes(),
+        craftkit_foundation::atomic::Visibility::AsCreated,
+    )
+    .map_err(|e| format!("could not write {}: {e}", out.display()))?;
     println!("wrote {}", out.display());
     Ok(())
 }
@@ -463,7 +467,7 @@ fn render(session: &mut Session, out: &Path) -> Result<(), String> {
     // The tree's one writer: into a temporary name beside the target, and then
     // moved into place, so a picture that is cut short is not a picture that
     // looks complete. §215.
-    craftkit_core::atomic::write_file(out, &png, craftkit_core::atomic::Visibility::AsCreated)
+    craftkit_foundation::atomic::write_file(out, &png, craftkit_foundation::atomic::Visibility::AsCreated)
         .map_err(|e| format!("could not write {}: {e}", out.display()))?;
     println!("wrote {}x{} to {}", width, height, out.display());
     Ok(())
@@ -784,9 +788,9 @@ mod tests {
     /// A temporary folder of its own.
     ///
     /// The rule is the tree's, and it lives in one place: §212 gave the
-    /// temporary folder a home in `craftkit_core::temp`.
+    /// temporary folder a home in `craftkit_foundation::temp`.
     fn temp(tag: &str) -> PathBuf {
-        craftkit_core::temp::dir(tag).expect("a temporary folder")
+        craftkit_foundation::temp::dir(tag).expect("a temporary folder")
     }
 
     fn write_script(tag: &str, body: &str) -> PathBuf {
@@ -861,9 +865,12 @@ mod tests {
     fn the_script_limit_is_the_tree_s_json_limit() {
         // Asserted with locals so clippy does not fold them into a constant
         // comparison — the same trick the model's limit test uses.
-        let (script, expansion, budget) =
-            (MAX_SCRIPT_BYTES, craftkit_core::JSON_EXPANSION, craftkit_core::MAX_JSON_MEMORY_BYTES);
-        assert_eq!(script, craftkit_core::MAX_JSON_TEXT_BYTES);
+        let (script, expansion, budget) = (
+            MAX_SCRIPT_BYTES,
+            craftkit_foundation::JSON_EXPANSION,
+            craftkit_foundation::MAX_JSON_MEMORY_BYTES,
+        );
+        assert_eq!(script, craftkit_foundation::MAX_JSON_TEXT_BYTES);
         assert!(
             script * expansion <= budget,
             "a script of {script} bytes can cost {} bytes",

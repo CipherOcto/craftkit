@@ -24,8 +24,9 @@
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use craftkit_core::{NodeId, Params, Tick};
+use craftkit_core::{NodeId, Tick};
 use craftkit_eval::{Evaluator, Plan};
+use craftkit_foundation::Params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
@@ -541,7 +542,7 @@ impl Session {
         if step_bytes > crate::MAX_TRACE_BYTES {
             let err = EngineError::Param {
                 id: id.to_string(),
-                source: craftkit_core::ParamError::new(
+                source: craftkit_foundation::ParamError::new(
                     "params",
                     format!(
                         "they are {step_bytes} bytes of JSON, and the crash report's trace keeps at \
@@ -1668,7 +1669,7 @@ mod tests {
     fn hostile_params_never_panic() {
         // Every registered command, fired at every documented parameter name
         // with hostile values. Either it refuses or it succeeds; panicking is
-        // not on the menu. This is the test `crates/core/src/params.rs` refers
+        // not on the menu. This is the test `crates/foundation/src/params.rs` refers
         // to, and it is why "never index a parameter" is a rule with teeth.
         let fired = fire_hostile_params();
         assert!(!fired.is_empty(), "nothing was fired at all");
@@ -1974,7 +1975,7 @@ mod tests {
     /// The trace's budget is derived from the memory it may hold.
     ///
     /// The trace holds parsed values, and a parsed JSON value costs up to
-    /// [`craftkit_core::JSON_EXPANSION`] times its text, so a limit written in
+    /// [`craftkit_foundation::JSON_EXPANSION`] times its text, so a limit written in
     /// bytes of text has to be read as a limit in bytes of memory that many
     /// times larger. §70.
     ///
@@ -1992,7 +1993,10 @@ mod tests {
     /// `xtask/src/lists.rs` holds it. §207.
     #[test]
     fn the_trace_budget_is_derived_from_the_memory_budget() {
-        assert_eq!(crate::MAX_TRACE_BYTES, crate::MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION);
+        assert_eq!(
+            crate::MAX_TRACE_BYTES,
+            crate::MAX_TRACE_MEMORY_BYTES / craftkit_foundation::JSON_EXPANSION
+        );
     }
 
     /// A document of a given size, for the tests that need a big one.
@@ -2006,12 +2010,12 @@ mod tests {
         let keys = (mebibytes * 1024 * 1024) / 88 / 4;
         for p in 0..4u64 {
             let mut prop =
-                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
             for t in 0..keys {
                 let _ = prop.keys.set(
                     craftkit_model::Key::new(
                         craftkit_core::Tick::from_raw(t as i128),
-                        craftkit_core::Value::Num(t as f64),
+                        craftkit_foundation::Value::Num(t as f64),
                         craftkit_model::Easing::Linear,
                     )
                     .expect("key"),

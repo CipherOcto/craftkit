@@ -1,6 +1,6 @@
 [package]
 name = "craftkit-core"
-description = "craftkit foundation: exact time, typed values, identifiers, and the hostile-input readers."
+description = "craftkit's own core: the exact time base and the identifiers, over the generic foundation."
 # Not published: the tree has no release process, and the family shares
 # this code by copying it, not by depending on it. Publishing a 0.1.0
 # would promise a stability the tree does not have.
@@ -14,6 +14,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+craftkit-foundation = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -21,7 +21,7 @@
 //!    then calls this. §118.
 //! 3. **Clone before edit.** A mutating command runs against a snapshot, and the
 //!    snapshot is restored on both an error and a panic.
-//! 4. **Read parameters through [`craftkit_core::Params`].** Never index a
+//! 4. **Read parameters through [`craftkit_foundation::Params`].** Never index a
 //!    parameter object, anywhere, ever. The one door out — the raw JSON — has
 //!    two homes, and `cargo xtask lists` refuses the tree when a third file
 //!    opens it. §136.
@@ -56,7 +56,7 @@ pub use session::{MAX_SESSION_BYTES, Outcome, SESSION_DOCUMENTS, Session, sample
 ///
 /// The trace is in memory for the whole session, and what it holds is the
 /// **parsed** parameters of every command — not the text they arrived as. A
-/// parsed JSON value costs up to [`craftkit_core::JSON_EXPANSION`] times its
+/// parsed JSON value costs up to [`craftkit_foundation::JSON_EXPANSION`] times its
 /// text, so a budget written in bytes of text is a budget in bytes of memory
 /// that many times larger. §70.
 pub const MAX_TRACE_MEMORY_BYTES: usize = 8 * 1024 * 1024;
@@ -73,7 +73,7 @@ pub const MAX_TRACE_MEMORY_BYTES: usize = 8 * 1024 * 1024;
 /// and not text: 8 MiB of memory is 256 KiB of text at the tree's own
 /// measured expansion. The number is the same as it always was; what it
 /// *means* is now stated. §70.
-pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;
+pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_foundation::JSON_EXPANSION;
 
 /// How many commands one script or one replay may run.
 ///

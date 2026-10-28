@@ -17,7 +17,7 @@
 //!
 //! It does not validate hostile input. Every [`Value`] that reaches here was
 //! built through `craftkit_core`'s checked constructors, and every command
-//! parameter was read through [`craftkit_core::Params`]. Re-checking is not
+//! parameter was read through [`craftkit_foundation::Params`]. Re-checking is not
 //! defence in depth, it is a second, drifting copy of the rules.
 //!
 //! It does not decide what is *valid* either. A node whose `amount` is the

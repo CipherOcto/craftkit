@@ -5095,7 +5095,7 @@ And four places said so in as many words. `crates/io/src/format.rs`:
 > of any size costs at most this much memory — a cap checked after the read
 > has already paid for what it was meant to prevent.
 
-`crates/core/src/readers.rs`:
+`crates/foundation/src/readers.rs`:
 
 > so a line of any length costs at most `max` bytes of memory
 
@@ -14995,7 +14995,7 @@ The tree says the same thing in four places:
   parameter. Never index."*
 - `crates/engine/src/lib.rs`: *"Never index a parameter object, anywhere,
   ever."*
-- `crates/core/src/params.rs`: *"**Never index a parameter object.**
+- `crates/foundation/src/params.rs`: *"**Never index a parameter object.**
   `params["distance"]` is a panic waiting for an agent, a script, or a file
   from a future version."*
 
@@ -15019,7 +15019,7 @@ matched the JSON's shape with a `match` and never indexed:
 
 | File | Call sites | What it read |
 |---|---|---|
-| `crates/core/src/params.rs` | 1 | `value_of` — the generic value path |
+| `crates/foundation/src/params.rs` | 1 | `value_of` — the generic value path |
 | `crates/engine/src/params.rs` | 2 | `node_ref`, `value_for` |
 | `crates/engine/src/commands.rs` | 4 | presence, `opt_time`, `opt_kind`, `opt_easing` |
 
@@ -15106,7 +15106,7 @@ was a configuration key.
 > is not there.
 
 Two modules may call it, and both are *readers*:
-`crates/core/src/params.rs`, which owns the parameters, and
+`crates/foundation/src/params.rs`, which owns the parameters, and
 `crates/engine/src/params.rs`, which is where a parameter becomes a typed
 value. `cargo xtask lists` refuses the tree when a third file calls it.
 
@@ -17446,7 +17446,7 @@ tell them apart.
 The control: with no third file calling the reader at all, the gate was
 green.
 
-And the tree's own position on this: `crates/core/src/params.rs` — one of the
+And the tree's own position on this: `crates/foundation/src/params.rs` — one of the
 two homes — has a test that calls the reader *and indexes it*, on purpose:
 
 > The point of the test is that it **can** be indexed — that is why the gate
@@ -19401,7 +19401,7 @@ name of a gate that was never broken.
 
 **And the measurement found a second hole.** Choosing a limit to measure
 this one, the obvious candidate turned out to be answered by a **different
-constant with the same name**: `crates/core/src/params.rs` has its own
+constant with the same name**: `crates/foundation/src/params.rs` has its own
 `const MAX_DEPTH: u8 = 8`, and the limits gate, which asks whether a *name*
 is in the tree, took that for the model's `MAX_DEPTH: usize = 32`. Measured:
 with the model's limit left unenforced, the gate said **green**; with the
@@ -20401,7 +20401,7 @@ and number and list, none of which anybody thought of.
 `proptest` as a **dev-dependency** — never linked into a shipped binary —
 and nine properties over the code that turns hostile input into typed
 values, plus a test for the configuration they run with:
-`crates/core/tests/properties.rs`.
+`crates/foundation/tests/properties.rs`.
 
 | The property | What it holds |
 |---|---|
@@ -20520,7 +20520,7 @@ clippy, which is already in the tree and runs on every target, refused it:
 
 ```text
 error: comparison is useless due to type limits
-  --> crates/core/tests/properties.rs:233:17
+  --> crates/foundation/tests/properties.rs:233:17
 ```
 
 **A property that cannot fail is a gate that cannot fail**, and here the
@@ -23813,7 +23813,7 @@ it a broken parameter object, and the command ran anyway, with parameters
 nobody had written.
 
 **Where the rule comes from, and why the two doors disagreed.** The engine's
-parameter reader says so plainly (`crates/core/src/params.rs:55`):
+parameter reader says so plainly (`crates/foundation/src/params.rs:55`):
 
 > A non-object (a number, a list, `null`) becomes an empty view, so
 > `execute(id, null)` behaves like `execute(id, {})` instead of panicking.
@@ -25381,7 +25381,7 @@ to survive the process that wrote it.
 
 ### The port
 
-**One home, in the lowest layer**: `crates/core/src/atomic.rs`, reached as
+**One home, in the lowest layer**: `crates/foundation/src/atomic.rs`, reached as
 `craftkit_core::atomic::write_file(path, bytes, visibility)`. The rule is
 written once, and it is:
 
@@ -26755,7 +26755,7 @@ directory, the other comes back empty when there is none. **On the phone now:
 
 ### The failure: a test that asked for a shell Android does not have
 
-`crates/core/src/atomic.rs` proves that a write which fails leaves the file
+`crates/foundation/src/atomic.rs` proves that a write which fails leaves the file
 that was there alone. It makes the write fail with a file-size limit, and it
 asked for **bash** to set that limit.
 
@@ -27041,7 +27041,7 @@ under the same load once they had nine.
 
 ### What landed
 
-- **The shape has one home**, in the lowest layer: `crates/core/src/measure.rs`
+- **The shape has one home**, in the lowest layer: `crates/foundation/src/measure.rs`
   holds `seconds` (how long a thing takes) and `quietest_ratio` (the ratio of
   the two sides' quietest rounds). The shape was written **three times** and
   each of them was a chance to get it wrong — §212's lesson, again.
@@ -27449,7 +27449,7 @@ an `unsafe` block in the package to prove the gate is awake.
 ### The finding
 
 **The Windows runner failed on §233's own measurement** — the test
-`a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs`,
+`a_thing_that_takes_a_moment_takes_a_moment` in `crates/foundation/src/measure.rs`,
 with the message *"the work took no time at all"*. The elapsed time was
 **exactly zero**.
 
@@ -27524,7 +27524,7 @@ at**, because "the other two are fine" is a claim and not a measurement:
 |---|---|---|
 | `crates/model/src/property.rs` | `flatten()` over 1 000 and 4 000 properties | **no** — it allocates and walks |
 | `crates/ui/src/automation.rs` | publishing 5 000 widgets into a registry | **no** — it allocates and hashes |
-| `crates/core/src/measure.rs` | the loop above | **yes** — it was a closed form |
+| `crates/foundation/src/measure.rs` | the loop above | **yes** — it was a closed form |
 
 ### What is not claimed
 
@@ -28979,9 +28979,9 @@ bound it had in fact was a dependency's default, written down nowhere.**
 
 | the walk | where | what it did |
 |---|---|---|
-| `Value::check` | `crates/core/src/value.rs` | recursed into every list, to the end of the value |
-| `Value::estimated_bytes` | `crates/core/src/value.rs` | recursed into every list, to the end of the value |
-| `Value::list` | `crates/core/src/value.rs` | **claimed** to "recurse only to a depth the loader could actually have produced" — and checked only the list's *length* |
+| `Value::check` | `crates/foundation/src/value.rs` | recursed into every list, to the end of the value |
+| `Value::estimated_bytes` | `crates/foundation/src/value.rs` | recursed into every list, to the end of the value |
+| `Value::list` | `crates/foundation/src/value.rs` | **claimed** to "recurse only to a depth the loader could actually have produced" — and checked only the list's *length* |
 
 The last one is the sharpest: **the doc comment described a check the code did
 not perform.** The constructor refused a list of 4 097 entries and said nothing
@@ -29074,7 +29074,7 @@ thirty thousand does not.
 - The depth is measured **iteratively**, because measuring the depth of a
   hostile value with a recursive walk is the same overflow one level down.
 
-**Three tests** (in `crates/core/src/value.rs`): a value at the limit is
+**Three tests** (in `crates/foundation/src/value.rs`): a value at the limit is
 legal and one past it is refused by both the check and the constructor; a
 value nested ten thousand deep is *answered* rather than overflowed; and the
 estimate of a legal value is never below its floor, because a budget a value
@@ -29087,13 +29087,13 @@ and passing again:
 # the check stops refusing a value past the limit
 $ cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused
 thread 'value::tests::a_value_nested_past_the_depth_limit_is_refused' panicked at
-  crates/core/src/value.rs:369:38: too deep: ()
+  crates/foundation/src/value.rs:369:38: too deep: ()
 test result: FAILED. 0 passed; 1 failed
 
 # the constructor stops refusing a value past the limit
 $ cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused
 thread 'value::tests::a_value_nested_past_the_depth_limit_is_refused' panicked at
-  crates/core/src/value.rs:371:41: the constructor refuses it too
+  crates/foundation/src/value.rs:371:41: the constructor refuses it too
 test result: FAILED. 0 passed; 1 failed
 ```
 
@@ -30673,7 +30673,7 @@ places claim to write it, the two places are the defect, not the reader.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
@@ -30805,7 +30805,7 @@ tree's own sample tests the sample.**
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
@@ -31036,7 +31036,7 @@ the conversion happens in a place the lint cannot reach.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
@@ -31185,7 +31185,7 @@ itself is not a round trip.**
 
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
@@ -31432,7 +31432,7 @@ serialised by `#[derive(Serialize)]` ✓ — one line ✓ — and nobody chose i
 **Every place the tree publishes a value is a decision about a spelling**,
 and a decision nobody made is a decision the wrong spelling won ✓.
 
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 
@@ -31974,6 +31974,119 @@ the fix had to change the test as well as the code ✓.
 
 | **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
 
+## 276. The generic half of the tree was in the same crate as the domain
+
+### The finding
+
+**`craftkit-core` held two different things: the plumbing every application
+needs, and the things that are craftkit.**
+
+The crate's own header said so, in three numbered items ✓ — exact time ✓,
+typed values ✓, the parameter reader ✓ — and then the crate also held the
+node ids ✓, the document ids ✓ and the identifier counter ✓.
+
+None of the plumbing knows what a document is ✓: the readers turn bytes into
+bounded values ✓, the parameter reader reads a JSON object without indexing
+it ✓, the atomic writer writes into a temporary name and moves the file into
+place ✓, the temporary folder is one folder ✓, the JSON limits are one
+number ✓.
+
+**And all of that was in the same crate as the node ids** — so a new
+application, a PDF editor or a vector illustrator, wanted the whole crate
+and could keep only a third of it ✓.
+
+### Measured
+
+Before — the crates, by what they hold (lines under `crates/*/src/*.rs`):
+
+| Crate | Lines | Holds |
+|---|---:|---|
+| `craftkit-core` | 3,562 | the readers, the values, the parameter reader, the writer, the temp folder, the limits **and** the time base **and** the ids |
+| `craftkit-model` | 4,732 | the document: nodes, properties, keyframes |
+
+After:
+
+| Crate | Lines | Holds |
+|---|---:|---|
+| `craftkit-foundation` | 2,569 | the readers, the values, the parameter reader, the writer, the temp folder, the limits — **and nothing that knows what a document is** |
+| `craftkit-core` | 993 | the exact time base and the identifiers |
+| `craftkit-model` | 4,732 | the document: nodes, properties, keyframes |
+
+And the layer table moved with it ✓: `craftkit-foundation` is the new L0 ✓
+with **no workspace dependency at all** ✓, `craftkit-core` is L1 ✓,
+`craftkit-model` is L2 ✓.
+
+### Why nothing else would have caught it
+
+- **Nothing was wrong.** Every rule was kept ✓ — one home per reader ✓, one
+  writer ✓, one temp folder ✓, one set of limits ✓ — and the *placement*
+  was the defect ✓, and a rule about placement is only enforceable by a
+  rule about placement ✓.
+- **The layer table could not see it.** `cargo xtask layers` checks that a
+  crate depends only on lower layers ✓ — and `craftkit-core` depended on
+  nothing ✓, so it was a perfect L0 ✓ by the letter ✓ and a poor one by the
+  purpose ✓.
+- **The survey that found it was a survey of the *family*, not of the
+  tree.** The knowledge base asks what is worth copying into craftkit ✓, and
+  the answer was "the crates that know nothing about the domain" ✓ — and
+  there was no such crate ✓, because the pieces were inside one that knew
+  plenty ✓.
+
+### The fix
+
+**The generic half is its own crate, with no workspace dependency at all.**
+
+`craftkit-foundation` holds the readers ✓, the values ✓, the parameter
+reader ✓, the measurement helpers ✓, the atomic writer ✓, the temporary
+folder ✓ and the JSON limits ✓ — and **no node, no property, no keyframe
+and no plan** ✓, which is the property that makes it liftable ✓.
+
+`craftkit-core` keeps what is craftkit ✓ — the exact time base ✓ and the
+identifiers ✓ — and **re-exports** the generic half ✓, so every old path
+still names what it named ✓.
+
+The tree's own code now says `craftkit_foundation::` ✓ where it can ✓ (213
+references ✓), and the re-export is there for the reader who knows the old
+name ✓.
+
+### What is not claimed
+
+- **Nothing moved that was craftkit's.** The time base and the identifiers
+  stayed in `craftkit-core` ✓ — a new application with no playhead does not
+  want a `Tick` ✓.
+- **`NodeId` is still craftkit's.** It stayed in `craftkit-core` ✓, which is
+  now L1 ✓ — so the "a node id in the lowest layer" leak is gone ✓
+  because the lowest layer no longer has node ids in it ✓.
+- **The other seams are not closed.** The engine's `Session` still holds a
+  `craftkit_model::Document` ✓, the renderer still draws a plan ✓, and the
+  file format still says `craftkit` ✓ — **this is the first step, not the
+  last** ✓.
+- **No behaviour changed.** The crate moved ✓; the commands, the format and
+  the file are the same ✓.
+
+### The lesson
+
+**A layer that cannot be reused will grow a dependency on something it
+should not know about** — and the dependency that proves it is not the one
+in its `Cargo.toml` ✓ but the one in its **contents** ✓.
+
+`craftkit-core` had no workspace dependency ✓ and was therefore a perfect L0
+✓ — and it held the node ids ✓, the document ids ✓ and the identifier
+counter ✓, because the ids arrived at the same time as the counters that
+mint them ✓ and nobody asked which half had to travel together ✓.
+
+**The general form: *the unit that can be lifted is not the unit the build
+system measures — a crate's dependencies say what it needs, and its
+contents say what it is*.** A new application could take `craftkit-core` ✓
+today ✓ — it depends on nothing ✓ — and would have to delete two thirds of
+it ✓ to get what it wanted ✓.
+
+**And a survey of the family is how the tree learns it is not generic
+enough.** The knowledge base asked "what is worth copying into craftkit" ✓,
+and the answer named a crate that did not exist ✓.
+
+| **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32388,12 +32501,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A mutation that cannot run is skipped, not passed** | `expect_catch` in the mutation script | the skipped line — §173 |
 | **The CLI answers what version it is** | `cli::version_line` | 1 mutation — §174 |
 | **The version the CLI prints is the crate's own** | `env!("CARGO_PKG_VERSION")` | 1 mutation — §174 |
-| **A reader keeps at most its limit** | the properties in `crates/core/tests/properties.rs` | 1 mutation — §175 |
+| **A reader keeps at most its limit** | the properties in `crates/foundation/tests/properties.rs` | 1 mutation — §175 |
 | **A reader reports the length it counted, not the limit** | the same | 1 mutation — §175 |
 | **A parameter's bound holds, and a value over it is refused** | the same | 1 mutation — §175 |
-| **A refused input says how long the input was** | the message in `crates/core/src/readers.rs` | the property that found it — §175 |
-| **A property suite runs from a fixed seed, and writes nothing down** | `config()` in `crates/core/tests/properties.rs` | 1 mutation — §175 |
-| **A bound that cannot fire says so** | `MAX_INT_MAGNITUDE` in `crates/core/src/params.rs` | the property that found it — §175 |
+| **A refused input says how long the input was** | the message in `crates/foundation/src/readers.rs` | the property that found it — §175 |
+| **A property suite runs from a fixed seed, and writes nothing down** | `config()` in `crates/foundation/tests/properties.rs` | 1 mutation — §175 |
+| **A bound that cannot fire says so** | `MAX_INT_MAGNITUDE` in `crates/foundation/src/params.rs` | the property that found it — §175 |
 | **A resource the server advertises can be read** | `resources::RESOURCES` | 1 mutation — §176 |
 | **A resource the server can read is advertised** | `resources::RESOURCES` | 1 mutation — §176 |
 | **The handshake advertises the capability the server has** | `rpc::capabilities` | 1 mutation — §176 |
@@ -32529,12 +32642,12 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A check that cannot run on this machine says skipped, never passed** | `nothing_in_the_tree_turns_the_control_channel_into_a_remote_one` in `crates/control/src/server.rs` | nothing — §230 |
 | **The file's cap is the worst case over the platforms the tree runs on** | `the_expansion_covers_the_worst_case_over_the_platforms` in `crates/io/src/format.rs` | 1 mutation — §231 |
 | **The report's cap holds the reports the tree writes itself** | `the_reports_cap_covers_the_worst_case_over_the_platforms` in `crates/engine/src/crash.rs` | 1 mutation — §232 |
-| **A measurement of two costs is the ratio of their quietest rounds** | `quietest_ratio` in `crates/core/src/measure.rs` | nothing — §233 |
+| **A measurement of two costs is the ratio of their quietest rounds** | `quietest_ratio` in `crates/foundation/src/measure.rs` | nothing — §233 |
 | **A field takes what the soft keyboard commits** | `a_field_takes_what_the_soft_keyboard_commits` in `crates/ui/src/shell.rs` | the device's own run — §234 |
 | **The Android package is the only crate that may deny unsafe, and it holds no unsafe code** | `the_unsafe_exception_has_not_grown` in `xtask/src/lists.rs` | 1 mutation — §236 |
 | **The application's GUI runs on the phone** | the device's own run — the screenshot, the tap, the form | nothing — §236 |
 | **The keyboard opens, and the text does not arrive** | the device's own run — the keyboard on the screen, and what the field holds afterwards | nothing — §236 |
-| **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/core/src/measure.rs` | the optimiser itself — §237 |
+| **A measurement times work the optimiser cannot remove** | `a_thing_that_takes_a_moment_takes_a_moment` in `crates/foundation/src/measure.rs` | the optimiser itself — §237 |
 | **The tree still builds for a phone, and exports the symbol the platform looks up** | `cargo xtask android` | 1 mutation — §238 |
 | **The application's window is not laid out under the system bars** | the device's own run — the window's flags and the surface's size | the phone's own run, and §247 |
 | **The tree's files go where the platform says, and the log is readable** | the device's own run — `adb shell run-as` | 1 mutation — §240 |
@@ -32549,10 +32662,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A crash on a phone leaves a report another machine can read** | the phone's own run — the report in the application's folder | the phone's own run, and the desktop's own reader — §249 |
 | **The never-crash table names every crate root** | `the_table_names_every_crate_root` in `xtask/src/lists.rs` | 1 mutation — §250 |
 | **The never-crash table names every limit** | `the_table_names_every_limit` in `xtask/src/lists.rs` | 1 mutation — §250 |
-| **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/core/src/value.rs` | 2 mutations — §251 |
+| **A value is not nested deeper than the tree's own bound** | `a_value_nested_past_the_depth_limit_is_refused` in `crates/foundation/src/value.rs` | 2 mutations — §251 |
 | **The instrument is not cancelled by a push** | `the_instrument_is_not_cancelled_by_a_push` in `xtask/src/lists.rs` | 2 mutations — §252 |
 | **A path the tree publishes is a path a command accepts** | `a_path_the_tree_publishes_fits_in_the_path_budget` in `crates/model/src/property.rs` | 2 mutations — §253 |
-| **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
+| **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/foundation/src/value.rs` | 2 mutations — §254 |
 | **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
 | **The tree is laid out inside the rectangle the platform reports, on a 64-bit phone too** | the device's own run — the platform's rectangle and the pixels | the second phone's own run — §256 |
 | **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
@@ -32574,13 +32687,14 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
-| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/foundation/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
 | **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
 | **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
+| **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
@@ -34217,7 +34331,7 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     parameters nobody had written.
 
     **Where the rule comes from.** The engine's parameter reader says so
-    plainly (`crates/core/src/params.rs:55`): "A non-object (a number, a
+    plainly (`crates/foundation/src/params.rs:55`): "A non-object (a number, a
     list, `null`) becomes an empty view, so `execute(id, null)` behaves like
     `execute(id, {})` instead of panicking." So the *engine* is not wrong —
     the rule is deliberate, and it is the right rule for a call that passes

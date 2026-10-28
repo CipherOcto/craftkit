@@ -79,7 +79,7 @@ Run one on its own while you work; run `ci` when you are done.
 | `layers` | `TABLE` is the layering rules | a dependency upward (`craftkit-core` naming `craftkit-io`), a UI crate below L6 |
 | `web` | the two hand-written JavaScript files: the canvas id, the bundle path, the worker's precache shell, the service worker's three safety rules, and `node --check` | a rename that missed `index.html`/`sw.js`, an unregistered worker |
 | `clippy` | `-D clippy::all -D warnings`, `--all-targets`, `--profile ci` | a warning you were going to ignore; a lint the house deny exists to catch |
-| `tests` | behaviour, including `hostile_params_never_panic` and the properties in `crates/core/tests/properties.rs` and `crates/engine/tests/properties.rs` | a new command that panics on a hostile parameter; **an instant past the tree's range taken silently instead of refused** (§188) |
+| `tests` | behaviour, including `hostile_params_never_panic` and the properties in `crates/foundation/tests/properties.rs` and `crates/engine/tests/properties.rs` | a new command that panics on a hostile parameter; **an instant past the tree's range taken silently instead of refused** (§188) |
 | `fuzz` | the three readers the tree has a writer for — the design file, the script and the crash report — handed broken files by `cargo xtask fuzz`: a crash or a hang is a bug, a refusal is the reader working | a reader that panics on a file it should have refused; a corpus that is not the tree's own format |
 | `wasm` | every library crate and `craftkit-web` still build for `wasm32-unknown-unknown` | a new dependency that is not wasm-safe |
 

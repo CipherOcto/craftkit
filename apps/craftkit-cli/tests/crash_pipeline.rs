@@ -23,7 +23,7 @@ struct CrashDir(PathBuf);
 
 impl CrashDir {
     fn new(name: &str) -> Self {
-        let path = craftkit_core::temp::dir(&format!("crash-cli-{name}")).expect("a writable folder");
+        let path = craftkit_foundation::temp::dir(&format!("crash-cli-{name}")).expect("a writable folder");
         CrashDir(path)
     }
 

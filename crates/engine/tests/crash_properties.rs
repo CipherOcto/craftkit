@@ -72,7 +72,7 @@ fn the_text(report: &crash::CrashReport) -> String {
 fn the_folder(property: &str) -> std::path::PathBuf {
     // The tree's one temporary folder: §212 gave the rule a home, so every
     // call gets a folder of its own and none inherits another run's.
-    let dir = craftkit_core::temp::dir(property).expect("the folder");
+    let dir = craftkit_foundation::temp::dir(property).expect("the folder");
     std::fs::create_dir_all(dir.join("probe")).expect("the folder");
     dir
 }

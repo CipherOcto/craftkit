@@ -416,6 +416,7 @@ dependencies = [
  "craftkit-control",
  "craftkit-core",
  "craftkit-engine",
+ "craftkit-foundation",
  "craftkit-io",
  "craftkit-ui",
  "eframe",
@@ -441,6 +442,7 @@ version = "0.1.0"
 dependencies = [
  "craftkit-core",
  "craftkit-engine",
+ "craftkit-foundation",
  "craftkit-io",
  "craftkit-mcp",
  "craftkit-model",
@@ -457,6 +459,7 @@ version = "0.1.0"
 dependencies = [
  "craftkit-core",
  "craftkit-engine",
+ "craftkit-foundation",
  "log",
  "serde",
  "serde_json",
@@ -467,6 +470,7 @@ dependencies = [
 name = "craftkit-core"
 version = "0.1.0"
 dependencies = [
+ "craftkit-foundation",
  "proptest",
  "serde",
  "serde_json",
@@ -479,6 +483,7 @@ version = "0.1.0"
 dependencies = [
  "craftkit-core",
  "craftkit-eval",
+ "craftkit-foundation",
  "craftkit-kernel",
  "craftkit-model",
  "log",
@@ -493,8 +498,19 @@ name = "craftkit-eval"
 version = "0.1.0"
 dependencies = [
  "craftkit-core",
+ "craftkit-foundation",
  "craftkit-kernel",
  "craftkit-model",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craftkit-foundation"
+version = "0.1.0"
+dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -505,6 +521,7 @@ name = "craftkit-io"
 version = "0.1.0"
 dependencies = [
  "craftkit-core",
+ "craftkit-foundation",
  "craftkit-model",
  "log",
  "proptest",
@@ -518,6 +535,7 @@ name = "craftkit-kernel"
 version = "0.1.0"
 dependencies = [
  "craftkit-core",
+ "craftkit-foundation",
  "log",
  "serde",
  "thiserror 2.0.21",
@@ -529,6 +547,7 @@ version = "0.1.0"
 dependencies = [
  "craftkit-core",
  "craftkit-engine",
+ "craftkit-foundation",
  "craftkit-model",
  "log",
  "serde",
@@ -541,6 +560,7 @@ name = "craftkit-model"
 version = "0.1.0"
 dependencies = [
  "craftkit-core",
+ "craftkit-foundation",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -553,6 +573,7 @@ dependencies = [
  "craftkit-core",
  "craftkit-engine",
  "craftkit-eval",
+ "craftkit-foundation",
  "craftkit-model",
  "egui",
  "image",

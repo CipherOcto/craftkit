@@ -20,7 +20,7 @@ const BIN: &str = env!("CARGO_BIN_EXE_craftkit-cli");
 
 #[test]
 fn the_script_is_written_and_read_back_by_the_tree() {
-    let dir = craftkit_core::temp::dir("script").expect("a directory to write into");
+    let dir = craftkit_foundation::temp::dir("script").expect("a directory to write into");
     let out = dir.join("script.json");
 
     let written = Command::new(BIN)
@@ -49,7 +49,7 @@ fn the_script_is_written_and_read_back_by_the_tree() {
 /// alone, so an agent could not tell a refusal from a bug. §197.
 #[test]
 fn a_failure_the_cli_prints_carries_the_kind() {
-    let dir = craftkit_core::temp::dir("script-kind").expect("a directory to write into");
+    let dir = craftkit_foundation::temp::dir("script-kind").expect("a directory to write into");
     let path = dir.join("bad-parameter.json");
     std::fs::write(
         &path,
@@ -73,7 +73,7 @@ fn the_script_is_the_sample_designs_own_commands() {
     // One copy. The sample design is built through three `node.add`
     // commands, and the script is those three — so a change to the sample
     // changes the script, and the fuzzer's corpus stays the tree's format.
-    let dir = craftkit_core::temp::dir("script-steps").expect("a directory to write into");
+    let dir = craftkit_foundation::temp::dir("script-steps").expect("a directory to write into");
     let out = dir.join("script.json");
 
     let written = Command::new(BIN)

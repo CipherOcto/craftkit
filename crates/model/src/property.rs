@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 use crate::keyframe::{Key, Keyframes};
 use crate::limits;
 use crate::path::{PathSeg, PropPath, uid_spelling};
-use craftkit_core::{CoreError, Value};
+use craftkit_foundation::{CoreError, Value};
 use serde::{Deserialize, Serialize};
 
 /// One animatable or settable value.
@@ -846,7 +846,8 @@ fn ordinal(n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craftkit_core::{FrameRate, Tick, Value};
+    use craftkit_core::{FrameRate, Tick};
+    use craftkit_foundation::Value;
 
     const FPS: FrameRate = FrameRate(24);
 
@@ -860,7 +861,11 @@ mod tests {
             .with_group(
                 PropGroup::new("output", "Output")
                     .with_prop(Property::new(3, "amount", Value::num("t", 0.5).unwrap()))
-                    .with_prop(Property::new(4, "tint", Value::Color(craftkit_core::Color::rgb(1, 2, 3)))),
+                    .with_prop(Property::new(
+                        4,
+                        "tint",
+                        Value::Color(craftkit_foundation::Color::rgb(1, 2, 3)),
+                    )),
             )
     }
 
@@ -993,7 +998,7 @@ mod tests {
     #[test]
     fn a_leaf_is_found_by_label() {
         assert_eq!(get(&tree(), "trigger/lead"), Value::Num(1.5));
-        assert_eq!(get(&tree(), "output/tint"), Value::Color(craftkit_core::Color::rgb(1, 2, 3)));
+        assert_eq!(get(&tree(), "output/tint"), Value::Color(craftkit_foundation::Color::rgb(1, 2, 3)));
     }
 
     #[test]
@@ -1189,15 +1194,15 @@ mod tests {
         // needed: each side has to find a round the machine did not touch.
         const ROUNDS: usize = 21;
         let mut round = || {
-            let fast = craftkit_core::measure::seconds(&mut || {
+            let fast = craftkit_foundation::measure::seconds(&mut || {
                 std::hint::black_box(small.flatten().len());
             });
-            let slow = craftkit_core::measure::seconds(&mut || {
+            let slow = craftkit_foundation::measure::seconds(&mut || {
                 std::hint::black_box(large.flatten().len());
             });
             (fast, slow)
         };
-        let ratio = craftkit_core::measure::quietest_ratio(ROUNDS, &mut round);
+        let ratio = craftkit_foundation::measure::quietest_ratio(ROUNDS, &mut round);
         assert!(
             ratio < 8.0,
             "listing 4000 properties took {ratio:.1}x as long as listing 1000: \

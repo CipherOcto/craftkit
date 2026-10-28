@@ -29,6 +29,7 @@ name = "craftkit"
 path = "src/main.rs"
 
 [dependencies]
+craftkit-foundation = { workspace = true }
 eframe = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -7,19 +7,20 @@
 //! It also exists for a second reason. When a new command is written, the
 //! temptation is to reach for a JSON value directly. This module is the answer
 //! to that temptation: every reader here goes through
-//! [`craftkit_core::Params`], which never indexes and always validates.
+//! [`craftkit_foundation::Params`], which never indexes and always validates.
 //!
 //! **This module is one of the two homes of the raw reader.**
-//! [`craftkit_core::Params::raw_json`] hands back a `&Json`, and a `&Json` can
+//! [`craftkit_foundation::Params::raw_json`] hands back a `&Json`, and a `&Json` can
 //! be indexed — `json["key"]` panics on anything that is not an object and
 //! answers `null` for a key that is not there. So a command's parameter is
 //! read **here**, where the shape is matched with a `match` and never indexed,
-//! and the other home is `crates/core/src/params.rs`. `cargo xtask lists`
+//! and the other home is `crates/foundation/src/params.rs`. `cargo xtask lists`
 //! refuses the tree when a third file calls it. §136.
 
+use craftkit_core::{FrameRate, NodeId, Tick};
 #[cfg(test)]
-use craftkit_core::Color;
-use craftkit_core::{CoreError, FrameRate, NodeId, ParamError, Params, Tick, Value};
+use craftkit_foundation::Color;
+use craftkit_foundation::{CoreError, ParamError, Params, Value};
 use craftkit_model::{Easing, NodeKind};
 use serde_json::Value as Json;
 
@@ -402,7 +403,7 @@ pub fn value_for(p: &Params<'_>, key: &str) -> Result<Option<Value>, ParamError>
 /// and another "a boolean", and this one said "a object cannot be a property
 /// value", where the article was wrong.
 pub fn kind_of(v: &Json) -> &'static str {
-    craftkit_core::value::json_kind(v)
+    craftkit_foundation::value::json_kind(v)
 }
 
 #[cfg(test)]

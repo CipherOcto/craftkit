@@ -249,10 +249,10 @@ pub fn write_token(path: &Path, token: &Token) -> Result<(), String> {
     // The tree's **one** writer (§215): into a temporary name beside the
     // token, created private from the moment it exists, and then moved into
     // place.
-    craftkit_core::atomic::write_file(
+    craftkit_foundation::atomic::write_file(
         path,
         token.as_str().as_bytes(),
-        craftkit_core::atomic::Visibility::OwnerOnly,
+        craftkit_foundation::atomic::Visibility::OwnerOnly,
     )
     .map_err(|e| format!("could not write {}: {e}", path.display()))
 }
@@ -352,9 +352,9 @@ mod tests {
     /// A temporary folder of its own.
     ///
     /// The rule is the tree's, and it lives in one place: §212 gave the
-    /// temporary folder a home in `craftkit_core::temp`.
+    /// temporary folder a home in `craftkit_foundation::temp`.
     fn temp_dir(tag: &str) -> PathBuf {
-        craftkit_core::temp::dir(tag).expect("a temporary folder")
+        craftkit_foundation::temp::dir(tag).expect("a temporary folder")
     }
 
     #[test]

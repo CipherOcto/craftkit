@@ -624,7 +624,7 @@ expect_catch "lists: a crate root drops one lint from its deny attribute" "cargo
 swap docs/architecture.md '| L4 | `craftkit-engine` |' '| L7 | `craftkit-engine` |'
 expect_catch "lists: the documented layer table moves a crate" "cargo xtask lists"
 
-swap docs/architecture.md '| L5 | `craftkit-mcp` | core, model, engine |' '| L5 | `craftkit-mcp` | core, engine |'
+swap docs/architecture.md '| L5 | `craftkit-mcp` | core, foundation, model, engine |' '| L5 | `craftkit-mcp` | core, engine |'
 expect_catch "lists: a dependency column drifts from cargo metadata" "cargo xtask lists"
 
 swap Cargo.toml '    "apps/*",
@@ -1151,7 +1151,7 @@ expect_catch "crash: the report is read into a JSON tree before it is read as a 
 # The shared reader is the one that applies the limit while reading. Take the
 # limit away and the file is read whole before it is refused — the memory the
 # cap was meant to prevent is spent anyway.
-swap crates/core/src/readers.rs \
+swap crates/foundation/src/readers.rs \
     '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
     '    reader.take(u64::MAX).read_to_string(&mut out).map_err(io_error)?;'
 expect_catch "io: a bounded read is not bounded" \
@@ -1162,7 +1162,7 @@ expect_catch "io: a bounded read is not bounded" \
 # mutated a branch that the *error* also depended on, and the test passed
 # anyway -- the error was the same either way, and the difference was in the
 # memory. The mutation now moves the property the test can see.
-swap crates/core/src/readers.rs \
+swap crates/foundation/src/readers.rs \
     '    let take = room.min(chunk.len());' \
     '    let take = chunk.len();'
 expect_catch "io: a long line is kept instead of dropped" \
@@ -1537,8 +1537,8 @@ expect_catch "prose: a module path that names a module this tree does not have" 
 # the one in docs/architecture.md. Only the architecture one was checked, so the
 # README's was decoration.
 swap README.md \
-    'crates/kernel   L2   the numeric kernel, behind the panic guard' \
-    'crates/kernel   L3   the numeric kernel, behind the panic guard'
+    'crates/kernel    L2   the numeric kernel, behind the panic guard' \
+    'crates/kernel    L3   the numeric kernel, behind the panic guard'
 expect_catch "the README's layer table drifts from the code" \
     "cargo xtask lists"
 
@@ -1812,8 +1812,8 @@ expect_catch "engine: the crash report's folder is left readable by other users"
 # The files are created private rather than created open and locked down
 # afterwards, so the design is never on disk in a file another user can read.
 swap crates/engine/src/crash.rs \
-    '    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::OwnerOnly)' \
-    '    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)'
+    '        craftkit_foundation::atomic::Visibility::OwnerOnly,' \
+    '        craftkit_foundation::atomic::Visibility::AsCreated,'
 expect_catch "engine: the crash report's design is written readable by other users" \
     "cargo test -p craftkit-engine --profile ci a_crash_report_is_not_readable_by_other_users"
 
@@ -1910,8 +1910,8 @@ expect_catch "control: a directory the tool did not create is made private anywa
 # user can read — not even for the length of the chmod that used to follow
 # the write.
 swap crates/control/src/token.rs \
-    '        craftkit_core::atomic::Visibility::OwnerOnly,' \
-    '        craftkit_core::atomic::Visibility::AsCreated,'
+    '        craftkit_foundation::atomic::Visibility::OwnerOnly,' \
+    '        craftkit_foundation::atomic::Visibility::AsCreated,'
 expect_catch "control: the token file is created readable by other users" \
     "cargo test -p craftkit-control --profile ci the_token_file_is_private_in_a_shared_directory"
 
@@ -1927,7 +1927,7 @@ expect_catch "control: the tool's own directory is left readable by other users"
 # left over from a previous launch is replaced rather than kept. A file that
 # survives its launch names a token the app does not answer to — the same
 # family as §54, where the file held a token and the port did not.
-swap crates/core/src/atomic.rs \
+swap crates/foundation/src/atomic.rs \
     '    if let Err(e) = std::fs::rename(&temp, path) {' \
     '    if path.exists() {
         let _ = std::fs::remove_file(&temp);
@@ -2255,13 +2255,13 @@ expect_catch "control: the token comparison forgets that the lengths differ" \
 # because none of them was written down as what it was for. They are derived
 # from one budget now. §64.
 swap crates/mcp/src/rpc.rs \
-    'pub const MAX_MESSAGE: usize = craftkit_core::MAX_JSON_TEXT_BYTES;' \
+    'pub const MAX_MESSAGE: usize = craftkit_foundation::MAX_JSON_TEXT_BYTES;' \
     'pub const MAX_MESSAGE: usize = 4 * 1024 * 1024;'
 expect_catch "mcp: the message limit is a number of its own again" \
     "cargo test -p craftkit-mcp --profile ci the_message_limit_is_the_tree_s_json_limit"
 
 swap apps/craftkit-cli/src/cli.rs \
-    'pub const MAX_SCRIPT_BYTES: usize = craftkit_core::MAX_JSON_TEXT_BYTES;' \
+    'pub const MAX_SCRIPT_BYTES: usize = craftkit_foundation::MAX_JSON_TEXT_BYTES;' \
     'pub const MAX_SCRIPT_BYTES: usize = 32 * 1024 * 1024;'
 expect_catch "cli: the script limit is a number of its own again" \
     "cargo test -p craftkit-cli --profile ci the_script_limit_is_the_tree_s_json_limit"
@@ -2271,17 +2271,17 @@ expect_catch "cli: the script limit is a number of its own again" \
 # to clamp to the range the constructors hold to. It did not, and a source
 # node took its level to 1 497 942 087. §65.
 swap crates/model/src/keyframe.rs \
-    '        (V::Num(x), V::Num(y)) => {
-            V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
-        }' \
+    '        (V::Num(x), V::Num(y)) => V::Num(
+            (x + (y - x) * t).clamp(-craftkit_foundation::MAX_MAGNITUDE, craftkit_foundation::MAX_MAGNITUDE),
+        ),' \
     '        (V::Num(x), V::Num(y)) => V::Num(x + (y - x) * t),'
 expect_catch "model: the interpolation stops clamping to the range" \
     "cargo test -p craftkit-model --profile ci an_overshooting_easing_stays_inside_the_range"
 
 swap crates/model/src/keyframe.rs \
-    '        (V::Num(x), V::Num(y)) => {
-            V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
-        }' \
+    '        (V::Num(x), V::Num(y)) => V::Num(
+            (x + (y - x) * t).clamp(-craftkit_foundation::MAX_MAGNITUDE, craftkit_foundation::MAX_MAGNITUDE),
+        ),' \
     '        (V::Num(x), V::Num(y)) => V::Num(x + (y - x) * t),'
 expect_catch "eval: a source takes the level out of range" \
     "cargo test -p craftkit-eval --profile ci an_animated_amount_never_takes_the_level_out_of_range"
@@ -2391,7 +2391,7 @@ expect_catch "engine: a command too big for the trace is not refused" \
 # source as text, and a derivation mentioned in a comment beside a literal
 # satisfied it. The gate is the one that holds it now.
 swap crates/engine/src/lib.rs \
-    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;' \
+    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_foundation::JSON_EXPANSION;' \
     'pub const MAX_TRACE_BYTES: usize = 256 * 1024;'
 expect_catch "engine: the trace budget is a number of its own again" \
     "cargo xtask lists"
@@ -2401,8 +2401,8 @@ expect_catch "engine: the trace budget is a number of its own again" \
 # the gate reads the code, and a derivation that stands only in a sentence
 # about code is not a derivation. Section 207.
 swap crates/engine/src/lib.rs \
-    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION;' \
-    'pub const MAX_TRACE_BYTES: usize = 256 * 1024; // MAX_TRACE_MEMORY_BYTES / craftkit_core::JSON_EXPANSION'
+    'pub const MAX_TRACE_BYTES: usize = MAX_TRACE_MEMORY_BYTES / craftkit_foundation::JSON_EXPANSION;' \
+    'pub const MAX_TRACE_BYTES: usize = 256 * 1024; // MAX_TRACE_MEMORY_BYTES / craftkit_foundation::JSON_EXPANSION'
 expect_catch "lists: a derivation in a comment is not a derivation" \
     "cargo xtask lists"
 
@@ -2695,7 +2695,7 @@ expect_catch "model: an easing the model refuses is accepted" \
 
 # And the easing's own check: the control point's range.
 swap crates/model/src/keyframe.rs \
-    '            craftkit_core::in_range("easing out_x", out_x as f64, 0.0, 1.0)?;' \
+    '            craftkit_foundation::in_range("easing out_x", out_x as f64, 0.0, 1.0)?;' \
     '            let _ = out_x as f64;'
 expect_catch "model: a bezier control point outside 0..=1 is accepted" \
     "cargo test -p craftkit-model --profile ci a_non_finite_control_point_is_refused"
@@ -2770,8 +2770,8 @@ expect_catch "engine: a command asked to change nothing is reported as a crash" 
 
 # A parameter that was given but is empty is not "required". §92.
 swap crates/engine/src/commands.rs \
-    '            source: craftkit_core::ParamError::new(key, "this parameter must not be empty"),' \
-    '            source: craftkit_core::ParamError::new(key, "this parameter is required"),'
+    '            source: craftkit_foundation::ParamError::new(key, "this parameter must not be empty"),' \
+    '            source: craftkit_foundation::ParamError::new(key, "this parameter is required"),'
 expect_catch "engine: a parameter that was given but is empty says it is required" \
     "cargo test -p craftkit-engine --profile ci a_parameter_that_was_given_but_is_empty_says_so"
 
@@ -4143,7 +4143,7 @@ expect_catch "prose: a quoted command spec is not the one in the code" \
 # The bound on the indentation is the whole of the fix: take it away and the
 # file is ten times the design again, and a design the model accepts no
 # longer fits in a file.
-swap crates/core/src/writer.rs \
+swap crates/foundation/src/writer.rs \
     'pub const MAX_INDENT_DEPTH: usize = 4;' \
     'pub const MAX_INDENT_DEPTH: usize = 64;'
 expect_catch "io: the writer indents as deep as the design goes" \
@@ -4191,7 +4191,8 @@ expect_catch "io: the file's cap is a number somebody chose" \
 # anything past 64 MiB. The app wrote crash reports it could not read back.
 # §142.
 swap crates/engine/src/crash.rs \
-    '    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;' \
+    '    craftkit_foundation::writer::write_json(&mut out, value)
+        .map_err(|e| format!("could not serialize: {e}"))?;' \
     '    let text = serde_json::to_string_pretty(value).map_err(|e| format!("could not serialize: {e}"))?;
     out.extend_from_slice(text.as_bytes());'
 expect_catch "engine: the crash report is written with an unbounded writer" \
@@ -4201,7 +4202,8 @@ expect_catch "engine: the crash report is written with an unbounded writer" \
 # crash report's own test would not notice -- but the design in the crash
 # folder would not be the design on disk, and the gate says so.
 swap crates/engine/src/crash.rs \
-    '    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;' \
+    '    craftkit_foundation::writer::write_json(&mut out, value)
+        .map_err(|e| format!("could not serialize: {e}"))?;' \
     '    let text = serde_json::to_string(value).map_err(|e| format!("could not serialize: {e}"))?;
     out.extend_from_slice(text.as_bytes());'
 expect_catch "engine: the crash report is written with a writer of its own" \
@@ -4350,7 +4352,7 @@ expect_catch "prose: an exact block quotes something the gate cannot compare" \
 #
 # The first mutation changes the divisor in the code. The prose still claims
 # the old expression, and the gate has to say so.
-swap crates/core/src/lib.rs \
+swap crates/foundation/src/lib.rs \
     'pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;' \
     'pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / 16;'
 expect_catch "prose: a limit derived by division is not the constant's value" \
@@ -5116,7 +5118,7 @@ expect_catch "gate: the matcher calls an empty name a word" \
 #     reported as **derived from the model** -- a false negative. The
 #     control, with the statement naming no model budget, was reported by
 #     both.
-#   * a file that named `craftkit_core::writer::write_json_pretty` was
+#   * a file that named `craftkit_foundation::writer::write_json_pretty` was
 #     reported as written with the tree's **writer** -- a false negative.
 #     The control, with the file naming no writer at all, was reported by
 #     both.
@@ -5141,8 +5143,8 @@ expect_catch "gate: a budget names the model's budget inside a longer name" \
     "cargo test -p xtask --profile ci a_budget_that_names_only_a_longer_name_is_not_derived_from_the_model"
 
 swap xtask/src/lists.rs \
-    '        if !has_word(&code, "craftkit_core::writer::write_json") {' \
-    '        if !code.contains("craftkit_core::writer::write_json") {'
+    '        if !has_word(&code, "craftkit_foundation::writer::write_json") {' \
+    '        if !code.contains("craftkit_foundation::writer::write_json") {'
 expect_catch "gate: the writer gate reads a path inside a longer path" \
     "cargo test -p xtask --profile ci the_writer_is_not_a_path_that_starts_the_same_way"
 
@@ -5407,13 +5409,13 @@ expect_catch "cli: the parser stops accepting the version flag" \
 # because that is the point: the unit tests do not catch the first two, so a
 # case that ran the whole crate would not say that the property is what
 # caught it.
-swap crates/core/src/readers.rs \
+swap crates/foundation/src/readers.rs \
     '                    content_len = content_len.saturating_add(index);' \
     '                    content_len = content_len.saturating_add(index + 1);'
 expect_catch "reader: the line's length counts the newline" \
     "cargo test -p craftkit-core --profile ci a_line_longer_than_the_limit_is_refused_with_its_true_length"
 
-swap crates/core/src/params.rs \
+swap crates/foundation/src/params.rs \
     '                if s.len() > max {' \
     '                if s.len() > max + 1 {'
 expect_catch "params: the text cap is one too large" \
@@ -5421,7 +5423,7 @@ expect_catch "params: the text cap is one too large" \
 
 # And the suites stop running from a fixed seed, so a CI run can fail at
 # random. The rule is a test rather than a comment, so it can be caught.
-swap crates/core/tests/properties.rs \
+swap crates/foundation/tests/properties.rs \
     '    Config { failure_persistence: None, rng_seed: RngSeed::Fixed(SEED), cases: CASES, ..Config::default() }' \
     '    Config { failure_persistence: None, rng_seed: RngSeed::Random, cases: CASES, ..Config::default() }'
 expect_catch "property: the suites stop running from a fixed seed" \
@@ -5844,7 +5846,7 @@ expect_catch "the reason does not name the document that is wrong" \
 # The first break: an anchor that moved. The reader's own limit changes by
 # one, so the text the case names is not in the file any more. The swap
 # changes nothing the case was about; it is here to move the anchor.
-swap crates/core/src/readers.rs \
+swap crates/foundation/src/readers.rs \
     '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
     '    reader.take(max as u64 + 2).read_to_string(&mut out).map_err(io_error)?;'
 expect_catch "anchors: an anchor that moved is not found" \
@@ -5867,13 +5869,13 @@ expect_catch "anchors: an anchor that names two places is reported" \
 # the same tag shared one folder, and a later run that reused the process id
 # inherited the last run's files.
 #
-# Section 212 gave the rule one home -- `crates/core/src/temp.rs` -- because
+# Section 212 gave the rule one home -- `crates/foundation/src/temp.rs` -- because
 # the rule had been written in sixteen places at once, and each place was a
 # chance to get it wrong. The two cases below are the home's, and they are
 # where the rule lives now.
 #
 # The first break takes the counter away: two calls share a folder again.
-swap crates/core/src/temp.rs \
+swap crates/foundation/src/temp.rs \
     '    let name = format!("{tag}-{}-{n}", std::process::id());' \
     '    let name = format!("{tag}-{}", std::process::id());'
 expect_catch "temp: two calls share one temporary folder" \
@@ -5881,7 +5883,7 @@ expect_catch "temp: two calls share one temporary folder" \
 
 # And the second takes the emptying away: a folder that is already there is
 # inherited instead of fresh.
-swap crates/core/src/temp.rs \
+swap crates/foundation/src/temp.rs \
     '    if dir.exists() {
         std::fs::remove_dir_all(&dir)
             .map_err(|e| CoreError::BadPath(format!("could not clear {}: {e}", dir.display())))?;
@@ -5894,7 +5896,7 @@ expect_catch "temp: a temporary folder inherits the last run's files" \
 # a test that can inherit the last run's files -- which is what the home was
 # made to stop.
 swap crates/io/src/store.rs \
-    '        craftkit_core::temp::dir(tag).expect("a temporary folder")' \
+    '        craftkit_foundation::temp::dir(tag).expect("a temporary folder")' \
     '        std::env::temp_dir().join(format!("io-{tag}-{}", std::process::id()))'
 expect_catch "lists: a test builds its temporary folder by hand" \
     "cargo xtask lists"
@@ -5990,7 +5992,7 @@ expect_catch "crash: the report's folder is created instead of the report being 
 # first. The claim is the property suite's own — "two properties do not share
 # a corpus" — and the home is only how the suite keeps it.
 swap crates/engine/tests/crash_properties.rs \
-    '    let dir = craftkit_core::temp::dir(property).expect("the folder");' \
+    '    let dir = craftkit_foundation::temp::dir(property).expect("the folder");' \
     '    let dir = std::env::temp_dir().join("craftkit-crash-properties").join(format!("{}", std::process::id()));'
 expect_catch "property: two properties share one corpus" \
     "cargo test -p craftkit-engine --profile ci two_properties_do_not_share_a_corpus"
@@ -6030,8 +6032,8 @@ expect_catch "the file list names a file that is not in the tree" \
 # The third break: the list has a blank line. A blank line is not a path,
 # and the script refuses it before it does anything else.
 swap scripts/mutation-files.txt \
-    'crates/core/src/value.rs' \
-    'crates/core/src/value.rs
+    'crates/foundation/src/value.rs' \
+    'crates/foundation/src/value.rs
 '
 expect_catch "the script refuses a list with a blank line" \
     "scripts/mutation-test-gates.sh --check"
@@ -6040,8 +6042,8 @@ expect_catch "the script refuses a list with a blank line" \
 # script refuses that too -- the gate's rule and the script's rule are the
 # same rule, and each door has to notice it.
 swap scripts/mutation-files.txt \
-    'crates/core/src/value.rs' \
-    'crates/core/src/value.rs
+    'crates/foundation/src/value.rs' \
+    'crates/foundation/src/value.rs
 crates/core/src/not-a-file.rs'
 expect_catch "the script refuses a list with a file that is not in the tree" \
     "scripts/mutation-test-gates.sh --check"
@@ -6049,8 +6051,8 @@ expect_catch "the script refuses a list with a file that is not in the tree" \
 # The fifth break: the list names the same file twice. The same file twice
 # is not two files.
 swap scripts/mutation-files.txt \
-    'crates/core/src/value.rs' \
-    'crates/core/src/value.rs
+    'crates/foundation/src/value.rs' \
+    'crates/foundation/src/value.rs
 Cargo.lock'
 expect_catch "the file list lists the same file twice" \
     "cargo xtask anchors"
@@ -6666,7 +6668,7 @@ expect_catch 'the tree: a reason that restates the subject is not a reason' \
 # do. Measured: with a one-kibibyte file-size limit, the write is stopped
 # where the limit is, and the target is left holding 1024 bytes of the new
 # content where 11 bytes of the old content had been.
-swap crates/core/src/atomic.rs \
+swap crates/foundation/src/atomic.rs \
     '    let temp = temp_path(path)?;
     if let Err(e) = write_temp(&temp, bytes, visibility) {
         let _ = std::fs::remove_file(&temp);
@@ -6686,8 +6688,9 @@ expect_catch "atomic: the home writes the file without a temporary name" \
 # script writer goes back to writing the file itself. The gate holds up the
 # home, so a writer that is not the home is reported.
 swap apps/craftkit-cli/src/cli.rs \
-    '    craftkit_core::atomic::write_file(out, text.as_bytes(), craftkit_core::atomic::Visibility::AsCreated)
-        .map_err(|e| format!("could not write {}: {e}", out.display()))?;' \
+    '        craftkit_foundation::atomic::Visibility::AsCreated,
+    )
+    .map_err(|e| format!("could not write {}: {e}", out.display()))?;' \
     '    std::fs::write(out, text).map_err(|e| format!("could not write {}: {e}", out.display()))?;'
 expect_catch "lists: a writer writes a file outside the one home" \
     "cargo xtask lists"
@@ -6762,14 +6765,14 @@ expect_catch "lists: a count in a hyphenated shape is a count" "cargo xtask list
 # own: measured, `Value::check` on a value nested ten thousand deep overflowed
 # the stack, and a stack overflow is a fatal abort. The bound was the loader's
 # default and nothing in the tree said so.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     '                if depth + 1 > MAX_VALUE_DEPTH {' \
     '                if depth + 1 > usize::MAX {'
 expect_catch "core: a value nested past the depth limit is accepted" \
     "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
 
 # And the constructor that claims to keep the depth has to keep it too.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     '        if nesting(&items) > MAX_VALUE_DEPTH {' \
     '        if false {'
 expect_catch "core: the constructor accepts a value past the depth limit" \
@@ -6814,7 +6817,7 @@ expect_catch "model: an occurrence's digits are not bounded" \
 # "#+f+f+f" as the colour #0f0f0f -- a token that is neither of the two shapes
 # the tree says a colour has, and that the tree's own published pattern
 # rejects.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     '        if !h.bytes().all(|b| b.is_ascii_hexdigit()) {' \
     '        if false {'
 expect_catch "core: a colour is not hex digits and nothing else" \
@@ -6902,7 +6905,7 @@ expect_catch "model: a hold does not hold for a boolean" \
 # Section 260. The bound on a value's nesting was measured on the loader's
 # bare value and not on the tree's own file, so the tree could save a design
 # it could not open.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     'pub const MAX_VALUE_DEPTH: usize = 48;' \
     'pub const MAX_VALUE_DEPTH: usize = 64;'
 expect_catch "io: the deepest value the tree accepts does not round-trip" \
@@ -6931,7 +6934,7 @@ expect_catch "model: a hold does not hold for a boolean" \
 # Section 260. The bound on a value's nesting was measured on the loader's
 # bare value and not on the tree's own file, so the tree could save a design
 # it could not open.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     'pub const MAX_VALUE_DEPTH: usize = 48;' \
     'pub const MAX_VALUE_DEPTH: usize = 64;'
 expect_catch "io: the deepest value the tree accepts does not round-trip" \
@@ -7099,7 +7102,7 @@ expect_catch "engine: a published instant is refused by the command" \
 # Section 269. The plan published every property's value the way the *file*
 # spells it -- a tagged object -- and `prop.set`, the command that writes the
 # very property the plan names, refused it.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     '            Value::Color(c) => serde_json::Value::String(c.to_hex()),' \
     '            Value::Color(c) => serde_json::json!({ "t": "color", "v": c }),'
 expect_catch "core: a published value is not a value a command accepts" \
@@ -7117,7 +7120,7 @@ expect_catch "eval: the plan publishes a value the command refuses" \
 # control channel's said "a boolean" where the others said "a bool": the same
 # JSON type with two names in two messages.
 swap crates/control/src/protocol.rs \
-    '    craftkit_core::value::json_kind(value)' \
+    '    craftkit_foundation::value::json_kind(value)' \
     '    if matches!(value, Json::Bool(_)) { "a boolean" } else { "a number" }'
 expect_catch "control: the word for a JSON type has drifted" \
     "cargo test -p craftkit-control --profile ci the_word_for_a_json_type_is_the_core_s_word"
@@ -7160,7 +7163,7 @@ expect_catch "engine: the property's value is published in the file's spelling" 
     "cargo test -p craftkit-engine --profile ci the_engine_publishes_a_value_the_command_takes_back"
 
 # And the door that takes it back: the file's tagged spelling.
-swap crates/core/src/value.rs \
+swap crates/foundation/src/value.rs \
     '                    Ok(value) => {
                         value.check(what)?;
                         Ok(value)
@@ -7205,6 +7208,17 @@ swap crates/eval/src/plan.rs \
     '    serde_json::json!(tick.raw()).serialize(serializer)'
 expect_catch "eval: the plan publishes a bare tick count" \
     "cargo test -p craftkit-engine --profile ci the_plans_instant_is_an_instant_the_command_accepts"
+
+# --------------------------------------- the generic half is its own crate ----
+# Section 276. The readers, the values, the parameter reader, the writer, the
+# temp folder and the limits used to live in craftkit-core, beside the node
+# ids -- so a crate with no workspace dependency held the domain anyway.
+swap crates/foundation/Cargo.toml \
+    'serde = { workspace = true }' \
+    'craftkit-core = { workspace = true }
+serde = { workspace = true }'
+expect_catch "layers: the generic crate reaches up into the domain" \
+    "cargo xtask layers"
 
 restore
 finish

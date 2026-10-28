@@ -10,15 +10,15 @@ use serde_json::{Map, Value as Json, json};
 /// The largest message accepted, in bytes.
 ///
 /// A limit on **text**. The parser then turns that text into a tree, and the
-/// tree is up to [`craftkit_core::JSON_EXPANSION`] times bigger — a JSON
+/// tree is up to [`craftkit_foundation::JSON_EXPANSION`] times bigger — a JSON
 /// number is two bytes of text and thirty-two bytes of memory. So this is
 /// the limit that keeps one message's parse inside
-/// [`craftkit_core::MAX_JSON_MEMORY_BYTES`], and it is the same number the
+/// [`craftkit_foundation::MAX_JSON_MEMORY_BYTES`], and it is the same number the
 /// control channel and the CLI use, because it is the same question. §64.
 ///
 /// It used to be 4 MiB, which was four times the memory budget and was not
 /// derived from anything.
-pub const MAX_MESSAGE: usize = craftkit_core::MAX_JSON_TEXT_BYTES;
+pub const MAX_MESSAGE: usize = craftkit_foundation::MAX_JSON_TEXT_BYTES;
 
 /// A request or a notification.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -268,7 +268,7 @@ pub fn parse(line: &str) -> Result<Request, Error> {
 /// **The core's word.** §270: the tree had three copies of this word — here,
 /// in the engine and in the control channel — and they did not agree.
 pub fn kind_of(v: &Json) -> &'static str {
-    craftkit_core::value::json_kind(v)
+    craftkit_foundation::value::json_kind(v)
 }
 
 /// The `initialize` result.
@@ -361,7 +361,7 @@ mod tests {
     /// control channel — and they did not agree.
     #[test]
     fn the_word_for_a_json_type_is_the_core_s_word() {
-        assert_eq!(kind_of(&json!(null)), craftkit_core::value::json_kind(&json!(null)));
+        assert_eq!(kind_of(&json!(null)), craftkit_foundation::value::json_kind(&json!(null)));
         assert_eq!(kind_of(&json!(true)), "a bool");
         assert_eq!(kind_of(&json!([])), "an array");
         assert_eq!(kind_of(&json!({})), "an object");
@@ -390,8 +390,8 @@ mod tests {
         // Asserted with locals so clippy does not fold them into a constant
         // comparison — the same trick the model's limit test uses.
         let (message, expansion, budget) =
-            (MAX_MESSAGE, craftkit_core::JSON_EXPANSION, craftkit_core::MAX_JSON_MEMORY_BYTES);
-        assert_eq!(message, craftkit_core::MAX_JSON_TEXT_BYTES);
+            (MAX_MESSAGE, craftkit_foundation::JSON_EXPANSION, craftkit_foundation::MAX_JSON_MEMORY_BYTES);
+        assert_eq!(message, craftkit_foundation::MAX_JSON_TEXT_BYTES);
         assert!(
             message * expansion <= budget,
             "a message of {message} bytes can cost {} bytes",

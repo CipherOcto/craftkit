@@ -480,12 +480,12 @@ mod tests {
         let keys = (mebibytes * 1024 * 1024) / 88 / 4;
         for p in 0..4u64 {
             let mut prop =
-                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
             for t in 0..keys {
                 let _ = prop.keys.set(
                     craftkit_model::Key::new(
                         craftkit_core::Tick::from_raw(t as i128),
-                        craftkit_core::Value::Num(t as f64),
+                        craftkit_foundation::Value::Num(t as f64),
                         craftkit_model::Easing::Linear,
                     )
                     .expect("key"),

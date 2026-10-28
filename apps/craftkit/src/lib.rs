@@ -1512,7 +1512,7 @@ mod tests {
 
         // A directory of its own, so the test does not write into the
         // user's own control folder.
-        let dir = craftkit_core::temp::dir("control").expect("a directory for the token");
+        let dir = craftkit_foundation::temp::dir("control").expect("a directory for the token");
 
         let token = craftkit_control::Token::from_text("0123456789abcdef0123").expect("a valid token");
         let (server, _path) =
@@ -1601,7 +1601,7 @@ mod tests {
         // The whole point of the hook. A crash report that nobody can read is
         // worse than none, because it displaces the crash you would otherwise
         // have noticed.
-        let dir = craftkit_core::temp::dir("crash-probe").expect("a directory for the probe");
+        let dir = craftkit_foundation::temp::dir("crash-probe").expect("a directory for the probe");
 
         let _lock = hook_lock();
 
@@ -1669,7 +1669,7 @@ mod tests {
     /// while the session was locked wrote **no report at all**. §76.
     #[test]
     fn a_panic_in_the_drawing_code_writes_a_report() {
-        let dir = craftkit_core::temp::dir("crash-draw").expect("a directory for the crash");
+        let dir = craftkit_foundation::temp::dir("crash-draw").expect("a directory for the crash");
 
         let _lock = hook_lock();
 
@@ -1695,7 +1695,7 @@ mod tests {
     /// A frame that does not panic writes no report and says nothing.
     #[test]
     fn a_frame_that_does_not_panic_writes_no_report() {
-        let dir = craftkit_core::temp::dir("crash-draw-ok").expect("a directory for the crash");
+        let dir = craftkit_foundation::temp::dir("crash-draw-ok").expect("a directory for the crash");
 
         let mut session = Session::sample();
         let outcome = draw_guarded(&mut session, Some(dir.as_path()), |_session| {});
@@ -1805,7 +1805,7 @@ mod tests {
 
     /// A folder for the log's files, and the name of the log in it.
     fn log_folder(tag: &str) -> (PathBuf, PathBuf) {
-        let dir = craftkit_core::temp::dir(tag).expect("a folder");
+        let dir = craftkit_foundation::temp::dir(tag).expect("a folder");
         let path = dir.join("craftkit.log");
         (dir, path)
     }
@@ -1929,7 +1929,7 @@ mod tests {
 
         let mode = std::fs::metadata(&path).map(|m| m.permissions().mode()).unwrap_or(0);
         assert!(
-            craftkit_core::atomic::mode_is_private(mode),
+            craftkit_foundation::atomic::mode_is_private(mode),
             "the log's file is {mode:04o}, and other users may read it"
         );
     }

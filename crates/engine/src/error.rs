@@ -6,8 +6,8 @@
 //! says **what was refused, by what rule, and what to do instead**. "invalid
 //! input" is not an error message; it is a shrug.
 
-use craftkit_core::{CoreError, ParamError};
 use craftkit_eval::EvalError;
+use craftkit_foundation::{CoreError, ParamError};
 use craftkit_kernel::KernelError;
 use craftkit_model::DocError;
 use serde_json::Value as Json;

@@ -27,7 +27,7 @@ pub const START_LEVEL: f64 = 1.0;
 /// Saturating keeps such a chain *sounding* wrong instead of poisoning every
 /// later value with a `NaN`. The clamp itself lives in
 /// [`craftkit_kernel::apply_gain`], so there is exactly one copy of the rule.
-pub const MAX_LEVEL: f64 = craftkit_core::MAX_MAGNITUDE;
+pub const MAX_LEVEL: f64 = craftkit_foundation::MAX_MAGNITUDE;
 
 /// One cached node answer — its state and its problems — with the
 /// fingerprint that justifies keeping it.
@@ -443,7 +443,8 @@ pub fn state_of(plan: &Plan, id: NodeId) -> Option<&NodeState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craftkit_core::{FrameRate, Tick, Value};
+    use craftkit_core::{FrameRate, Tick};
+    use craftkit_foundation::Value;
     use craftkit_model::{Document, Easing, Key, Keyframes, Property};
 
     fn doc_with(spec: &[(NodeKind, &str, f64)]) -> Document {
@@ -618,7 +619,7 @@ mod tests {
         keys.set(
             Key::new(
                 Tick::from_frames_i64(0, FrameRate(24)),
-                Value::num("a", craftkit_core::MAX_MAGNITUDE).expect("value"),
+                Value::num("a", craftkit_foundation::MAX_MAGNITUDE).expect("value"),
                 Easing::Bezier { out_x: 0.5, out_y: 2.0 },
             )
             .expect("key"),
@@ -627,7 +628,7 @@ mod tests {
         keys.set(
             Key::new(
                 Tick::from_frames_i64(24, FrameRate(24)),
-                Value::num("b", -(craftkit_core::MAX_MAGNITUDE)).expect("value"),
+                Value::num("b", -(craftkit_foundation::MAX_MAGNITUDE)).expect("value"),
                 Easing::Linear,
             )
             .expect("key"),
@@ -642,7 +643,7 @@ mod tests {
             let plan = evaluate_once(&d, at).expect("plan");
             let level = plan.state(id).expect("src").level_out;
             assert!(
-                level.abs() <= craftkit_core::MAX_MAGNITUDE,
+                level.abs() <= craftkit_foundation::MAX_MAGNITUDE,
                 "frame {f} took the level to {level}, which is outside the range"
             );
         }

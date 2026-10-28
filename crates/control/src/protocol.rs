@@ -13,12 +13,12 @@ use serde_json::Value as Json;
 /// user's document.
 ///
 /// A limit on **text**. The parser then turns that text into a tree, and the
-/// tree is up to [`craftkit_core::JSON_EXPANSION`] times bigger — a JSON
+/// tree is up to [`craftkit_foundation::JSON_EXPANSION`] times bigger — a JSON
 /// number is two bytes of text and thirty-two bytes of memory. So this is
 /// the limit that keeps one request's parse inside
-/// [`craftkit_core::MAX_JSON_MEMORY_BYTES`], and it is the same number the
+/// [`craftkit_foundation::MAX_JSON_MEMORY_BYTES`], and it is the same number the
 /// MCP server and the CLI use, because it is the same question. §64.
-pub const MAX_LINE: usize = craftkit_core::MAX_JSON_TEXT_BYTES;
+pub const MAX_LINE: usize = craftkit_foundation::MAX_JSON_TEXT_BYTES;
 
 /// What a client is asking for.
 ///
@@ -277,7 +277,7 @@ impl Request {
 /// boolean" where the others said "a bool". The same JSON type had two names
 /// in two messages.
 fn kind_of(value: &Json) -> &'static str {
-    craftkit_core::value::json_kind(value)
+    craftkit_foundation::value::json_kind(value)
 }
 
 /// One reply.
@@ -370,8 +370,8 @@ mod tests {
         // Asserted with locals so clippy does not fold them into a constant
         // comparison — the same trick the model's limit test uses.
         let (line, expansion, budget) =
-            (MAX_LINE, craftkit_core::JSON_EXPANSION, craftkit_core::MAX_JSON_MEMORY_BYTES);
-        assert_eq!(line, craftkit_core::MAX_JSON_TEXT_BYTES);
+            (MAX_LINE, craftkit_foundation::JSON_EXPANSION, craftkit_foundation::MAX_JSON_MEMORY_BYTES);
+        assert_eq!(line, craftkit_foundation::MAX_JSON_TEXT_BYTES);
         assert!(line * expansion <= budget, "a line of {line} bytes can cost {} bytes", line * expansion);
     }
 

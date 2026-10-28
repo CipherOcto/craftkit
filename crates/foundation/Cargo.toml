@@ -1,0 +1,25 @@
+[package]
+name = "craftkit-foundation"
+description = "The tree's generic half: the readers that turn hostile input into typed values, the typed values, the atomic writer, the temporary folder and the JSON limits. Nothing here knows what a document is."
+# Not published: the tree has no release process, and the family shares
+# this code by copying it, not by depending on it. Publishing a 0.1.0
+# would promise a stability the tree does not have.
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Property tests for the readers and the parameter readers — the code that
+# turns hostile input into typed values. A dev-dependency: it is in the test
+# build and never in a shipped binary. §175.
+proptest = { workspace = true }

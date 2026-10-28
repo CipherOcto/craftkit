@@ -50,7 +50,7 @@
 //!   through must not leave a half-written file that looks like a real one —
 //!   and the *folder* is written the same way, so a folder in the crash
 //!   directory is a report that is finished. §185. The file part of that rule
-//!   is the tree's **one** writer, `craftkit_core::atomic`, since every file
+//!   is the tree's **one** writer, `craftkit_foundation::atomic`, since every file
 //!   the tree writes has to obey it and not three of them. §215.
 //! - **Write privately.** A report holds the user's design. The files are
 //!   created `0600` and the report's own folder is `0700`, where the platform
@@ -95,7 +95,7 @@ pub const REPORT_EXPANSION: usize = 3;
 /// machine. The design reader in `crates/io` caps its own files at 96 MiB for
 /// the same reason — *"a hostile or truncated file must not reach
 /// `serde_json::from_str` with a megabyte of input"* — and the script reader
-/// in the CLI caps at [`craftkit_core::MAX_JSON_TEXT_BYTES`]. The crash reader
+/// in the CLI caps at [`craftkit_foundation::MAX_JSON_TEXT_BYTES`]. The crash reader
 /// capped at nothing.
 ///
 /// Measured: a 104 857 690-byte report was read in 105 ms without a word.
@@ -110,7 +110,7 @@ pub const REPORT_EXPANSION: usize = 3;
 ///
 /// The cap is a cap on **text**, and what the reader spends on the text is
 /// another number. Before §72 the design was read as a JSON *tree*, and a
-/// tree costs [`craftkit_core::JSON_EXPANSION`] — thirty-two — times its
+/// tree costs [`craftkit_foundation::JSON_EXPANSION`] — thirty-two — times its
 /// text. Measured: a 66 000 101-byte report cost 1 260 292 KiB of resident
 /// memory and 2.37 s to read. Read as a document, the same report costs
 /// 67 796 KiB and 0.04 s, and a report whose design is not a document is
@@ -413,7 +413,8 @@ pub fn last_command(session: &Session) -> String {
 /// that stopped being true ✓. The writer is shared ✓; the bytes are not ✓.
 fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
     let mut out: Vec<u8> = Vec::new();
-    craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;
+    craftkit_foundation::writer::write_json(&mut out, value)
+        .map_err(|e| format!("could not serialize: {e}"))?;
     String::from_utf8(out).map_err(|e| format!("could not serialize: {e}"))
 }
 
@@ -424,8 +425,12 @@ fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
 /// report that is half written is not a report, and a report that holds the
 /// user's design is not a file the world may read.
 fn write_atomic(path: &Path, body: &str) -> Result<(), String> {
-    craftkit_core::atomic::write_file(path, body.as_bytes(), craftkit_core::atomic::Visibility::OwnerOnly)
-        .map_err(|e| format!("could not write {}: {e}", path.display()))
+    craftkit_foundation::atomic::write_file(
+        path,
+        body.as_bytes(),
+        craftkit_foundation::atomic::Visibility::OwnerOnly,
+    )
+    .map_err(|e| format!("could not write {}: {e}", path.display()))
 }
 
 /// Make a folder private, where the platform has permissions to say so.
@@ -589,7 +594,8 @@ fn report_path(dir: &Path, id: &str) -> Result<PathBuf, String> {
 /// here, not a panic — the crash folder can hold whatever somebody copied
 /// into it.
 fn read_bounded(path: &Path, max: usize) -> Result<String, String> {
-    craftkit_core::read_file_bounded(path, max).map_err(|e| format!("could not read {}: {e}", path.display()))
+    craftkit_foundation::read_file_bounded(path, max)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))
 }
 
 /// Read a report's replay steps.
@@ -933,10 +939,10 @@ mod tests {
     /// why [`write_to`] and its siblings take the folder as a parameter.
     ///
     /// The rule is the tree's, and it lives in one place: §212 gave the
-    /// temporary folder a home in `craftkit_core::temp`, because the rule had
+    /// temporary folder a home in `craftkit_foundation::temp`, because the rule had
     /// been written in sixteen places at once. §211 fixed it here first.
     fn temp_dir(tag: &str) -> PathBuf {
-        craftkit_core::temp::dir(tag).expect("a temporary folder")
+        craftkit_foundation::temp::dir(tag).expect("a temporary folder")
     }
 
     /// The mode of a path, where the platform has modes.
@@ -1131,7 +1137,8 @@ mod tests {
         // the indentation. So the room the report has over the design is a
         // measured 4 231 bytes, and the margin here is four times that.
         let mut design_text = Vec::new();
-        craftkit_core::writer::write_json(&mut design_text, &report.design).expect("the design is written");
+        craftkit_foundation::writer::write_json(&mut design_text, &report.design)
+            .expect("the design is written");
         let room = u64::try_from(design_text.len()).expect("the length fits in a u64") + 4 * 4_231;
         assert!(
             size <= room,
@@ -1184,11 +1191,11 @@ mod tests {
         let mut group = craftkit_model::PropGroup::new("props", "Properties");
         for p in 0..32u64 {
             let mut prop =
-                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_core::Value::Num(1.0));
+                craftkit_model::Property::new(p + 1, format!("p{p}"), craftkit_foundation::Value::Num(1.0));
             for t in 0..10_000i128 {
                 let Ok(key) = craftkit_model::Key::new(
                     craftkit_core::Tick::from_raw(t),
-                    craftkit_core::Value::Num(t as f64),
+                    craftkit_foundation::Value::Num(t as f64),
                     craftkit_model::Easing::Linear,
                 ) else {
                     break;
@@ -2130,7 +2137,7 @@ mod tests {
     ///
     /// This is the defect in its smallest form. The report's design used to be
     /// read as a JSON tree, and a tree costs
-    /// [`craftkit_core::JSON_EXPANSION`] — thirty-two — times the text it was
+    /// [`craftkit_foundation::JSON_EXPANSION`] — thirty-two — times the text it was
     /// parsed from: a 66 000 101-byte report cost 1 260 292 KiB of resident
     /// memory, and 2.37 s. Read as a document, the same report costs 67 796
     /// KiB and 0.04 s.

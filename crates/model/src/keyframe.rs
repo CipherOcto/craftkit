@@ -19,7 +19,8 @@
 //! arrives out of order samples to the **wrong value**, not to an untidy one.
 //! §91.
 
-use craftkit_core::{CoreError, Tick};
+use craftkit_core::Tick;
+use craftkit_foundation::CoreError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -130,7 +131,7 @@ impl Easing {
                     value: format!("{out_x},{out_y}"),
                 });
             }
-            craftkit_core::in_range("easing out_x", out_x as f64, 0.0, 1.0)?;
+            craftkit_foundation::in_range("easing out_x", out_x as f64, 0.0, 1.0)?;
             // out_y is deliberately allowed outside 0..=1: that is how an ease-out
             // overshoots, and clamping it would make every easing preset a lie.
         }
@@ -155,13 +156,13 @@ fn bezier_with_its_points(name: &str) -> Option<Easing> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Key {
     pub time: Tick,
-    pub value: craftkit_core::Value,
+    pub value: craftkit_foundation::Value,
     #[serde(default)]
     pub ease: Easing,
 }
 
 impl Key {
-    pub fn new(time: Tick, value: craftkit_core::Value, ease: Easing) -> Result<Self, CoreError> {
+    pub fn new(time: Tick, value: craftkit_foundation::Value, ease: Easing) -> Result<Self, CoreError> {
         Ok(Self { time, value, ease: ease.checked()? })
     }
 }
@@ -324,7 +325,7 @@ impl Keyframes {
     ///
     /// Returns `None` when there are no keys at all, which the caller resolves
     /// to the property's static value.
-    pub fn sample(&self, time: Tick) -> Option<craftkit_core::Value> {
+    pub fn sample(&self, time: Tick) -> Option<craftkit_foundation::Value> {
         let n = self.0.len();
         if n == 0 {
             return None;
@@ -437,8 +438,12 @@ pub fn bezier_progress(x: f64, cx: f64, cy: f64) -> f64 {
 /// and the value jumped at the *previous* key instead of the next one.
 /// Measured: two boolean keys, true at 0 and false at 100, sampled at 50,
 /// gave `false` — the value had already jumped. §259.
-fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit_core::Value {
-    use craftkit_core::Value as V;
+fn blend(
+    a: &craftkit_foundation::Value,
+    b: &craftkit_foundation::Value,
+    t: f64,
+) -> craftkit_foundation::Value {
+    use craftkit_foundation::Value as V;
     match (a, b) {
         // The result is **clamped** to the range a stored number may take.
         //
@@ -450,16 +455,16 @@ fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit
         // them is not one of them, and without a clamp it is not checked
         // either. Measured: two keys at ±`MAX_MAGNITUDE` and a bezier that
         // overshoots sampled to -1 497 942 087, which is outside the range
-        // `craftkit_core::Value` documents. §65.
-        (V::Num(x), V::Num(y)) => {
-            V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
-        }
+        // `craftkit_foundation::Value` documents. §65.
+        (V::Num(x), V::Num(y)) => V::Num(
+            (x + (y - x) * t).clamp(-craftkit_foundation::MAX_MAGNITUDE, craftkit_foundation::MAX_MAGNITUDE),
+        ),
         (V::Color(x), V::Color(y)) => {
             let mix = |p: u8, q: u8| {
                 let v = f64::from(p) + (f64::from(q) - f64::from(p)) * t;
                 v.clamp(0.0, 255.0).round() as u8
             };
-            V::Color(craftkit_core::Color {
+            V::Color(craftkit_foundation::Color {
                 r: mix(x.r, y.r),
                 g: mix(x.g, y.g),
                 b: mix(x.b, y.b),
@@ -485,7 +490,8 @@ fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craftkit_core::{FrameRate, Value};
+    use craftkit_core::FrameRate;
+    use craftkit_foundation::Value;
 
     const FPS: FrameRate = FrameRate(24);
 
@@ -834,7 +840,7 @@ mod tests {
 
     #[test]
     fn colours_interpolate_per_channel() {
-        use craftkit_core::Color;
+        use craftkit_foundation::Color;
         let mut k = Keyframes::new();
         k.set(Key::new(Tick::ZERO, Value::Color(Color::rgb(0, 0, 0)), Easing::Linear).unwrap()).unwrap();
         k.set(
@@ -852,7 +858,7 @@ mod tests {
     /// The keys are numbers the tree checked, so they are in range; the
     /// interpolation between them is not one of them, and an easing's
     /// overshoot is deliberate. Without a clamp the sample left the range
-    /// that `craftkit_core::Value` documents — measured at -1 497 942 087
+    /// that `craftkit_foundation::Value` documents — measured at -1 497 942 087
     /// against a limit of 1 000 000 000. §65.
     #[test]
     fn an_overshooting_easing_stays_inside_the_range_a_stored_number_may_take() {
@@ -860,11 +866,18 @@ mod tests {
         // The first key's easing is the one used across the span, and a
         // bezier with an overshoot in y is a checked, legal easing.
         let overshoot = Easing::Bezier { out_x: 0.5, out_y: 2.0 };
-        k.set(Key::new(Tick::from_frames_i64(0, FPS), num(craftkit_core::MAX_MAGNITUDE), overshoot).unwrap())
-            .unwrap();
         k.set(
-            Key::new(Tick::from_frames_i64(24, FPS), num(-(craftkit_core::MAX_MAGNITUDE)), Easing::Linear)
+            Key::new(Tick::from_frames_i64(0, FPS), num(craftkit_foundation::MAX_MAGNITUDE), overshoot)
                 .unwrap(),
+        )
+        .unwrap();
+        k.set(
+            Key::new(
+                Tick::from_frames_i64(24, FPS),
+                num(-(craftkit_foundation::MAX_MAGNITUDE)),
+                Easing::Linear,
+            )
+            .unwrap(),
         )
         .unwrap();
         for f in 0..=24 {
@@ -872,7 +885,7 @@ mod tests {
             let value = k.sample(at).expect("a value at every frame");
             let n = value.as_num().expect("a number");
             assert!(
-                n.abs() <= craftkit_core::MAX_MAGNITUDE,
+                n.abs() <= craftkit_foundation::MAX_MAGNITUDE,
                 "frame {f} sampled {n}, which is outside the range a stored number may take"
             );
         }

@@ -26,15 +26,16 @@ enforced.
 
 | Layer | Crate | Depends on |
 |---|---|---|
-| L0 | `craftkit-core` | nothing (no workspace deps) |
-| L1 | `craftkit-model` | core |
-| L2 | `craftkit-kernel` | core |
-| L3 | `craftkit-eval` | core, model, kernel |
-| L3 | `craftkit-io` | core, model |
-| L4 | `craftkit-engine` | core, model, eval, kernel |
-| L5 | `craftkit-control` | core, engine |
-| L5 | `craftkit-mcp` | core, model, engine |
-| L6 | `craftkit-ui` | core, model, eval, engine |
+| L0 | `craftkit-foundation` | nothing (no workspace deps) |
+| L1 | `craftkit-core` | foundation |
+| L2 | `craftkit-kernel` | core, foundation |
+| L2 | `craftkit-model` | core, foundation |
+| L3 | `craftkit-eval` | core, foundation, model, kernel |
+| L3 | `craftkit-io` | core, foundation, model |
+| L4 | `craftkit-engine` | core, foundation, model, eval, kernel |
+| L5 | `craftkit-control` | core, foundation, engine |
+| L5 | `craftkit-mcp` | core, foundation, model, engine |
+| L6 | `craftkit-ui` | core, foundation, model, eval, engine |
 | exempt | `apps/craftkit`, `apps/craftkit-cli`, `apps/craftkit-web`, `apps/craftkit-android`, `xtask` | all of the above |
 
 The third column lists workspace dependencies only; `cargo xtask lists` compares

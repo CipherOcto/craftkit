@@ -64,7 +64,7 @@ rather than `params["distance"].as_f64().unwrap_or(10.0)`.
 
 The first says *this may not panic*. The second says *this cannot panic even if
 the input is hostile*. The second is the one that matters, and it is why
-`crates/core/src/params.rs` exists as a separate crate instead of a helper
+`crates/foundation/src/params.rs` exists as a separate crate instead of a helper
 function: it is the boundary, and putting it at layer 0 means nothing below it
 can get at the raw JSON by accident.
 
