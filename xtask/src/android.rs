@@ -217,6 +217,24 @@ pub fn print_abis() {
     }
 }
 
+/// The minimum API level the package declares.
+///
+/// **Pure, and a function of its own, so that a test can pin it** — the
+/// shape the gate's other decisions use (§241).
+///
+/// The number is in the tree's own manifest (`uses-sdk`), and it is the
+/// number the package says it runs on: the gate builds the library for
+/// [`API_LEVEL`], and a package that claims less than that would be claiming
+/// to run on a platform the library was never built for.
+pub fn declared_min_sdk_version(manifest: &str) -> Option<u32> {
+    let after = manifest.split("android:minSdkVersion=\"").nth(1)?;
+    let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
+}
+
 /// The library the build produces.
 pub fn library(root: &Path, triple: &str) -> PathBuf {
     root.join("target").join(triple).join("debug").join("libcraftkit_android.so")
@@ -478,19 +496,32 @@ mod tests {
 
     #[test]
     fn the_package_declares_the_api_level_the_toolchain_is_asked_for() {
-        // One number, in one place. The gate asks the toolchain for API 21
-        // and the package says 21; if the package says 24, the gate would
-        // build something the package does not claim to support.
-        // The workspace root, not the crate directory: a test's working
-        // directory is the crate it is in, and the manifest is one level up
-        // and two over.
+        // One number, in one place — and the place is the tree's own
+        // manifest, because that is where the package says what it is
+        // (§258). The gate asks the toolchain for API 21, so the package must
+        // claim **at least** that: a package that claims 19 would be claiming
+        // to run on a platform the library was never built for.
         let root = crate::root().expect("the workspace root");
-        let manifest = crate::tree::read_text(root.join("apps/craftkit-android/Cargo.toml"))
-            .expect("the package's manifest");
-        assert!(
-            manifest.contains(&format!("min_sdk_version = {API_LEVEL}")),
-            "the package's min_sdk_version is not {API_LEVEL}:\\n{manifest}"
-        );
+        for manifest in
+            ["apps/craftkit-android/AndroidManifest.xml", "apps/craftkit-android/AndroidManifest.ime.xml"]
+        {
+            let text = crate::tree::read_text(root.join(manifest)).expect("the manifest");
+            let declared = declared_min_sdk_version(&text)
+                .unwrap_or_else(|| panic!("{manifest} declares no minimum API level:\n{text}"));
+            assert!(
+                declared >= API_LEVEL,
+                "{manifest} declares the minimum API level {declared}, and the gate builds for {API_LEVEL}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_manifest_that_declares_no_api_level_declares_none() {
+        // The parser is pinned by its own shape: the number is in the
+        // attribute, and an attribute that is not there is not a number.
+        assert_eq!(declared_min_sdk_version("<manifest></manifest>"), None);
+        assert_eq!(declared_min_sdk_version("<uses-sdk android:minSdkVersion=\"23\" />"), Some(23));
+        assert_eq!(declared_min_sdk_version("<uses-sdk android:targetSdkVersion=\"30\" />"), None);
     }
 
     #[test]

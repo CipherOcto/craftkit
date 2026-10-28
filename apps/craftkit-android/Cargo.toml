@@ -44,10 +44,18 @@ winit = { workspace = true, features = ["android-native-activity"] }
 # loop from the activity's handle.
 eframe = { workspace = true, features = ["android-native-activity"] }
 
-# How `cargo apk` packages the application. The activity is the platform's own
-# `NativeActivity`, so the APK carries no Java at all. §236.
-[package.metadata.android]
-package = "org.craftocto.craftkit"
-build_targets = ["armv7-linux-androideabi", "aarch64-linux-android"]
-min_sdk_version = 21
-target_sdk_version = 30
+# There is **no** `[package.metadata.android]` here, and there was one.
+#
+# It was how `cargo apk` packaged the application, and it held three things:
+# the package's name, the phone's ABIs, and the API levels. The tree now
+# builds its own packages (§258), and each of those three has a home that
+# can be checked:
+#
+# - the package's name and the API levels are in the tree's own manifest,
+#   `apps/craftkit-android/AndroidManifest.xml`;
+# - the ABIs are the tree's own gate's table (`xtask/src/android.rs`), which
+#   the packaging scripts read with `cargo xtask android --abis`.
+#
+# Two homes for one fact is a fact that drifts — and this one had already
+# drifted: the metadata said the minimum API level was 21 and the manifest
+# said 23.

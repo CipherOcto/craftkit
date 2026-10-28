@@ -14,8 +14,9 @@
   - and the library's name is still `craftkit_android`, because the
     platform's loader looks up that symbol and by no other name (§236).
 
-  The default package's manifest is written by `cargo apk`, which has no
-  option for any of this; this file is the gate's own.
+  The default package's manifest is `AndroidManifest.xml`, and both are the
+  tree's own (§258) — `cargo apk` wrote one of them and could not say what
+  the tree needs to say.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.craftocto.craftkit"
