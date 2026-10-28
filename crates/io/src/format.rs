@@ -209,6 +209,23 @@ fn version_of(tag: &str) -> Result<u32, FormatError> {
     let Some(rest) = tag.strip_prefix(&format!("{TAG_PREFIX}/")) else {
         return Err(FormatError::NotOurs(tag.to_string()));
     };
+    // The version is **digits and nothing else**, written the way the tree
+    // writes it.
+    //
+    // `u32::from_str` accepts a leading `+`, so `"craftkit/+1"` parsed as
+    // version 1 — and a version the tree has never written, read as a
+    // version this build recognises. The document says the opposite: *"a
+    // reader refuses a version it does not know rather than guessing,
+    // because a guessed read of a newer file silently corrupts a design."*
+    // §261.
+    if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(FormatError::TooOld(tag.to_string()));
+    }
+    // And no leading zeros: `"craftkit/01"` is a spelling of one, and not the
+    // one. §261.
+    if rest.len() > 1 && rest.starts_with('0') {
+        return Err(FormatError::TooOld(tag.to_string()));
+    }
     rest.parse::<u32>()
         .map_err(|_| FormatError::TooOld(tag.to_string()))
         .and_then(|v| if v == 0 { Err(FormatError::TooOld(tag.to_string())) } else { Ok(v) })
@@ -904,6 +921,26 @@ mod tests {
         file.format = "somethingelse/9".to_string();
         let err = file.check().expect_err("refused");
         assert!(matches!(err, FormatError::NotOurs(_)), "{err}");
+    }
+
+    /// The version is digits and nothing else. §261.
+    ///
+    /// The defect this test exists for: `u32::from_str` accepts a leading
+    /// `+`, so `"craftkit/+1"` parsed as version 1 — a tag no build of the
+    /// tree has ever written, read as a version this build recognises. The
+    /// document says a reader refuses a version it does not know rather than
+    /// guessing.
+    #[test]
+    fn a_version_that_is_not_a_plain_number_is_refused() {
+        for tag in ["craftkit/+1", "craftkit/01", "craftkit/ 1", "craftkit/1 ", "craftkit/"] {
+            let mut file = File::new(Document::empty("x"));
+            file.format = tag.to_string();
+            assert!(matches!(file.check(), Err(FormatError::TooOld(_))), "{tag} was not refused");
+        }
+        // And the one the tree writes is read.
+        let mut file = File::new(Document::empty("x"));
+        file.format = tag(CURRENT);
+        assert!(file.check().is_ok());
     }
 
     #[test]

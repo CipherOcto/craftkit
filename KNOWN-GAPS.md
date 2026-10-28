@@ -30111,6 +30111,7 @@ asking for.**
 
 | **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
 | **The deepest value the tree accepts round-trips through the tree's own format** | `the_deepest_value_the_tree_accepts_round_trips` in `crates/io/tests/value_depth.rs` | 1 mutation — §260 |
+| **A version is digits and nothing else** | `a_version_that_is_not_a_plain_number_is_refused` in `crates/io/src/format.rs` | 1 mutation — §261 |
 ## 259. A hold did not hold, for a boolean and for a text
 
 ### The finding
@@ -30277,6 +30278,95 @@ thing it was about was wrong.
 The tree checked that a deep value could be *built* and that the tree's walks
 stopped at the bound — and never that a design could be **opened**. **A
 limit nobody has crossed in both directions is a limit nobody has measured.**
+
+## 261. The format's version was guessed, and the document says it is not
+
+### The finding
+
+**The reader guessed a version it did not know, and the tree's own document
+says it must not.**
+
+The file's header is a tag: `"craftkit/1"`. The document says:
+
+> A reader refuses a version it does not know (`FormatError::TooNew`) rather
+> than guessing, because a guessed read of a newer file silently corrupts a
+> design.
+
+And the reader guessed:
+
+```rust
+rest.parse::<u32>()
+```
+
+`u32::from_str` accepts a leading `+`. So:
+
+```text
+    craftkit/1 -> version = Ok(1)
+   craftkit/+1 -> version = Ok(1)      <- guessed
+   craftkit/01 -> version = Ok(1)      <- guessed
+   craftkit/ 1 -> version = Err(TooOld("craftkit/ 1"))
+   craftkit/1  -> version = Err(TooOld("craftkit/1 "))
+```
+
+**A tag the tree has never written — in any build, ever — was read as a
+version the tree recognises**, and a whole file with the tag `craftkit/+1`
+loaded:
+
+```text
+load_text with craftkit/+1 = Ok("n")
+```
+
+### Why nothing else would have caught it
+
+- **The same defect was already fixed once**, for the colour: `u8::from_str_radix`
+  accepts a leading `+` too, so `"#+f+f+f"` parsed as a colour (§254). **The
+  rule was known and it was not applied here.**
+- **The dangerous direction was safe.** `craftkit/+2` is version 2, and a
+  version above the current one is refused — so no newer file was ever read
+  as an older one. The guess only ever produced the version the tree already
+  knew.
+- **The tag is not written by hand**, so the spelling nobody would use is
+  exactly the spelling nothing checks.
+
+### The fix
+
+**The version is digits and nothing else**, written the way the tree writes
+it:
+
+```rust
+if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
+    return Err(FormatError::TooOld(tag.to_string()));
+}
+if rest.len() > 1 && rest.starts_with('0') {
+    return Err(FormatError::TooOld(tag.to_string()));
+}
+```
+
+The error is the one a file with an unparsable version has always had —
+*"this file is format version 0 or less"* — so the tree's own rule table
+(KNOWN-GAPS §73) does not move.
+
+### What is not claimed
+
+- **No file the tree wrote is affected.** The tree has only ever written
+  `craftkit/1`.
+- **A file with a tag from a future build is still refused** — that is the
+  `TooNew` path, and it did not move.
+- **The fingerprint did not change.** The tag was never part of it.
+
+### The lesson
+
+**The same number, parsed in two places, is two rules.** The colour's rule
+was fixed in §254 — *hex digits and nothing else* — and the version's rule
+was not, in the same tree, in the same week. **A rule that is written down
+once and applied everywhere is a rule; a rule that is applied where somebody
+remembered is a coincidence.**
+
+**And "the guess was harmless this time" is not a reason to keep it.** The
+guess could only produce the version the tree already knew, so nothing broke.
+The tree's own document says a guessed read corrupts a design — and a rule
+that is kept because it has not hurt yet is a rule waiting for the day it
+does.
 
 ## What enforces what
 

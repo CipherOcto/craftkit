@@ -57,6 +57,7 @@ crates/engine/src/session.rs
 crates/engine/tests/crash_properties.rs
 crates/engine/tests/properties.rs
 crates/eval/src/evaluate.rs
+crates/io/src/format.rs
 crates/io/src/format/pending.rs
 crates/io/src/lib.rs
 crates/io/src/store.rs

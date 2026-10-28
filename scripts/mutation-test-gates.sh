@@ -6934,5 +6934,15 @@ swap crates/core/src/value.rs \
 expect_catch "io: the deepest value the tree accepts does not round-trip" \
     "cargo test -p craftkit-io --profile ci --test value_depth"
 
+# --------------------------------------- a version is digits and nothing else ----
+# Section 261. The version in the file's tag is digits and nothing else: the
+# reader guesses a leading plus, and the document says a reader refuses a
+# version it does not know rather than guessing.
+swap crates/io/src/format.rs \
+    '    if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {' \
+    '    if false {'
+expect_catch "io: a version that is not a plain number is guessed" \
+    "cargo test -p craftkit-io --profile ci a_version_that_is_not_a_plain_number_is_refused"
+
 restore
 finish
