@@ -6984,9 +6984,15 @@ expect_catch "model: an occurrence is read by a second rule" \
 # Section 263. The same swap, caught end to end: the tree's own writer wrote a
 # decimal id and the grammar read it as hex, so the command reported success
 # and the value landed on another property.
+#
+# The swap is the spelling's home, because that is the end-to-end defect: if
+# the home writes hex, the id the tree publishes is not the id the tree reads
+# back, and a script that recorded it and replayed it changes the wrong
+# property. The engine's test spells the path with the tree's own home, so
+# it fails when the home changes.
 swap crates/model/src/path.rs \
-    '        return (uid_spelling(id) == part).then_some(PathSeg::Uid(id));' \
-    '        return Some(PathSeg::Uid(id));'
+    '    format!("@{id}")' \
+    '    format!("@{id:x}")'
 expect_catch "engine: a property set by its id is another property" \
     "cargo test -p craftkit-engine --profile ci a_property_set_by_its_decimal_id_is_the_property_that_id_names"
 

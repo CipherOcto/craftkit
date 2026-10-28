@@ -1474,14 +1474,12 @@ mod tests {
             .expect("the property labelled p10");
         assert!(target >= 10, "this test is about an id of ten or more, not {target}");
 
-        let outcome = s
-            .execute("prop.set", &json!({ "node": 1, "path": format!("@{target}"), "value": 42 }))
-            .expect("set");
-        assert_eq!(
-            outcome.data["path"],
-            json!(format!("@{target}")),
-            "the command must name the path it set"
-        );
+        // The path is spelled the way the tree spells it — by the tree's own
+        // home for the spelling — so the test pins the **agreement** between
+        // the writer and the reader rather than a literal it wrote itself.
+        let path = craftkit_model::path::uid_spelling(target);
+        let outcome = s.execute("prop.set", &json!({ "node": 1, "path": path, "value": 42 })).expect("set");
+        assert_eq!(outcome.data["path"], json!(path), "the command must name the path it set");
 
         let flat = s.document().get(craftkit_core::NodeId(1)).expect("node").props.flatten();
         let by_id = flat.iter().find(|(_, p)| p.id == target).map(|(_, p)| p.value.clone());

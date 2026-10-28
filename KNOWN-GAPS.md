@@ -30619,6 +30619,20 @@ gone, because the round trip refuses every spelling it refused and more
 the round trip: the case that used to break the digit check breaks the rule
 instead.
 
+### What the runner said about it
+
+**The runner's own mutation run caught the audit's own case.** The first
+version of the end-to-end case swapped the grammar's round trip and asked the
+engine's test to fail; the run reported the case **MISSED** — the test could
+not fail, because the spelling it used was the spelling the tree writes, and
+the round trip only refuses spellings the tree does *not* write.
+
+**A case that cannot fail is not evidence, and the runner is the only place
+that knows.** The fix was to make the test ask the tree's own home for the
+spelling (`uid_spelling`) instead of writing one itself: then the case that
+breaks the home breaks the test. All three of the section's mutations were
+then run by hand against their own gates and each one failed its gate.
+
 ### What is not claimed
 
 - **The tree's own spellings change.** `@10` now names the id ten, where it
