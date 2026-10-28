@@ -7007,5 +7007,28 @@ swap crates/eval/src/evaluate.rs \
 expect_catch "eval: the evaluator resolves a name for itself" \
     "cargo test -p craftkit-eval --profile ci the_amount_is_the_property_the_model_names"
 
+# --------------------------------------- a suggestion is a value the command accepts ----
+# Section 265. The completion offered a node's name for the `node` argument,
+# and the command's `node` parameter takes an id: the tree suggested a value
+# the command it drives refuses.
+swap crates/mcp/src/prompts.rs \
+    '            guard.document().nodes.iter().map(|n| n.id.get().to_string()).collect()' \
+    '            guard.document().nodes.iter().flat_map(|n| [n.id.get().to_string(), n.name.clone()]).collect()'
+expect_catch "mcp: a suggestion is a value the command refuses" \
+    "cargo test -p craftkit-mcp --profile ci every_suggested_node_is_a_value_the_command_accepts"
+
+# Section 265. The path suggestions carried one entry per node that held the
+# path, so the same path was suggested three times and the count was the
+# number of owners rather than the number of paths.
+swap crates/mcp/src/prompts.rs \
+    '                    let path = path.to_string();
+                    if !out.contains(&path) {
+                        out.push(path);
+                    }' \
+    '                    let path = path.to_string();
+                    out.push(path);'
+expect_catch "mcp: a suggestion list is not a set" \
+    "cargo test -p craftkit-mcp --profile ci the_path_suggestions_are_distinct"
+
 restore
 finish

@@ -47,7 +47,7 @@ pub enum Live {
     /// Every command id in the registry.
     Commands,
     /// The nodes of the open design, by id and by name.
-    Nodes,
+    NodeIds,
     /// The property paths of the open design.
     PropertyPaths,
 }
@@ -80,23 +80,31 @@ fn live_values(live: Live, session: &Mutex<Session>) -> Vec<String> {
     match live {
         Live::NodeKinds => craftkit_model::NodeKind::all().iter().map(|k| k.label().to_string()).collect(),
         Live::Commands => craftkit_engine::command::ids().into_iter().map(|id| id.to_string()).collect(),
-        Live::Nodes => {
+        // **Ids, and only ids.** The command's `node` parameter takes an id;
+        // a name belongs to `node_name` (§116). The suggestion used to offer
+        // names as well, so the tree suggested a value the command it drives
+        // refuses — the agent took the tree's own suggestion and the call
+        // failed. §265.
+        Live::NodeIds => {
             let Ok(guard) = session.lock() else { return Vec::new() };
-            let mut out = Vec::new();
-            for node in &guard.document().nodes {
-                out.push(node.id.get().to_string());
-                out.push(node.name.clone());
-            }
-            out
+            guard.document().nodes.iter().map(|n| n.id.get().to_string()).collect()
         }
+        // **Distinct paths.** The paths are the design's, and two nodes may
+        // hold the same path; the list used to carry one entry per node, so
+        // the same path was suggested three times and the count was the
+        // number of owners rather than the number of paths. §265.
         Live::PropertyPaths => {
             let Ok(guard) = session.lock() else { return Vec::new() };
-            let mut out = Vec::new();
+            let mut out: Vec<String> = Vec::new();
             for node in &guard.document().nodes {
                 for (path, _) in node.props.flatten() {
-                    out.push(path.to_string());
+                    let path = path.to_string();
+                    if !out.contains(&path) {
+                        out.push(path);
+                    }
                 }
             }
+            out.sort();
             out
         }
     }
@@ -187,10 +195,10 @@ does next.",
         arguments: &[
             PromptArg {
                 name: "node",
-                description: "The node, by its id or by its name.",
+                description: "The node, by its id. A name belongs to `node_name`.",
                 required: true,
                 default: "",
-                values: Values::Live(Live::Nodes),
+                values: Values::Live(Live::NodeIds),
             },
             PromptArg {
                 name: "path",
@@ -214,6 +222,9 @@ Node: {node}
 Property: {path}
 Value: {value}
 
+The node is named by its id. If you have the node's name instead, pass it as
+`node_name`.
+
 Call the command `{command}` — {label}.
 
 {label} does this: {doc}
@@ -232,10 +243,10 @@ what the design holds, and take the path from there.",
         arguments: &[
             PromptArg {
                 name: "node",
-                description: "The node, by its id or by its name.",
+                description: "The node, by its id. A name belongs to `node_name`.",
                 required: true,
                 default: "",
-                values: Values::Live(Live::Nodes),
+                values: Values::Live(Live::NodeIds),
             },
             PromptArg {
                 name: "path",
@@ -266,6 +277,9 @@ Node: {node}
 Property: {path}
 At: {time} seconds
 Value: {value}
+
+The node is named by its id. If you have the node's name instead, pass it as
+`node_name`.
 
 Call the command `{command}` — {label}.
 
@@ -562,6 +576,63 @@ mod tests {
         // with nothing.
         assert!(complete("add-node", "nope", "", &s).is_err(), "an unknown argument was answered");
         assert!(complete("nope", "kind", "", &s).is_err(), "an unknown prompt was answered");
+    }
+
+    /// **Every suggestion is a value the command accepts.**
+    ///
+    /// §265: the completion offered a node's **name** for the `node`
+    /// argument, and the command's `node` parameter takes an id — a name
+    /// belongs to `node_name` (§116). So the tree suggested a value that the
+    /// command it drives refuses, and the agent that took the tree's own
+    /// suggestion got a failed call.
+    #[test]
+    fn every_suggested_node_is_a_value_the_command_accepts() {
+        let s = session();
+        let suggestions = complete("set-property", "node", "", &s).expect("the argument is known");
+        assert!(!suggestions.values.is_empty(), "the prompt suggests no node at all");
+        for value in &suggestions.values {
+            // The suggestion is a whole number, and the schema asks for the
+            // node's id as a number — so the command is given the id the
+            // suggestion names.
+            let id: u64 = value
+                .parse()
+                .unwrap_or_else(|_| panic!("the tree suggested `{value}`, which is not a whole number"));
+            let s = session();
+            let mut guard = s.lock().expect("the lock");
+            guard
+                .execute("prop.set", &json!({ "node": id, "path": "amount", "value": 1 }))
+                .unwrap_or_else(|e| panic!("the tree suggested `{value}` and the command refused it: {e}"));
+        }
+    }
+
+    /// **A suggestion list is a set.**
+    ///
+    /// §265: the path suggestions carried one entry per node that held the
+    /// path, so the same path was suggested three times and the count the
+    /// client is told was the number of owners rather than the number of
+    /// paths.
+    #[test]
+    fn the_path_suggestions_are_distinct() {
+        let s = session();
+        let suggestions = complete("set-property", "path", "", &s).expect("the argument is known");
+        let mut seen: Vec<&String> = Vec::new();
+        for value in &suggestions.values {
+            assert!(!seen.contains(&value), "the path `{value}` is suggested twice");
+            seen.push(value);
+        }
+        // And the count is the number of paths in the design, not the number
+        // of nodes that hold them.
+        let guard = s.lock().expect("the lock");
+        let mut distinct: Vec<String> = Vec::new();
+        for node in &guard.document().nodes {
+            for (path, _) in node.props.flatten() {
+                let path = path.to_string();
+                if !distinct.contains(&path) {
+                    distinct.push(path);
+                }
+            }
+        }
+        assert_eq!(suggestions.total as usize, distinct.len(), "the count is not the number of paths");
     }
 
     /// The suggestions are filtered by what the caller has typed.

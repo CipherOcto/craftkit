@@ -30669,6 +30669,8 @@ places claim to write it, the two places are the defect, not the reader.
 | **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
+| **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
 ## 264. The evaluator's amount was a different property from the model's
 
@@ -30789,6 +30791,118 @@ seen in a document the tree did not write. **A gate that only reads the
 tree's own sample tests the sample.**
 
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
+| **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+
+## 265. The prompt suggested a value the command refuses
+
+### The finding
+
+**The MCP's completion offered a node's *name* for the `node` argument, and
+the command's `node` parameter takes an *id*.**
+
+The live catalogue for the prompt's `node` argument pushed both:
+
+```rust
+for node in &guard.document().nodes {
+    out.push(node.id.get().to_string());
+    out.push(node.name.clone());
+}
+```
+
+But §116 made `node` and `node_name` **one parameter in two spellings**: `node`
+takes a whole number and `node_name` takes a name, and the reader says so —
+"`Level` is a name, not an id; names are resolved by `node_name`".
+
+So the tree suggested a value that the command it drives refuses. An agent
+that took the tree's own suggestion got a failed call, and the tree's prompt
+described the argument as "The node, by its id or by its name" — the same
+sentence that misleads.
+
+The **path** suggestions had the same shape of defect: one entry per node that
+held the path, so the same path was suggested three times and the count the
+client is told was the number of **owners** rather than the number of paths.
+
+### Measured
+
+Before — the tree's own MCP server, on the tree's own sample:
+
+```text
+completion(node) -> {"total":6, "values":["1","Level","2","Taper","3","Out"]}
+completion(path) -> {"total":12, "values":["enabled","amount","tint","label",
+                                              "enabled","amount","tint","label",
+                                              "enabled","amount","tint","label"]}
+```
+
+Taking the tree's own suggestion for the node:
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"tools/call",
+ "params":{"name":"craftkit_prop_set","arguments":{"node":"Level","path":"level","value":2}}}
+```
+```text
+isError: true
+`prop.set` rejected its parameters: `node` pass `node` (an id) or `node_name` (a name)
+```
+
+After:
+
+```text
+completion(node) -> {"total":3, "values":["1","2","3"]}
+completion(path) -> {"total":4, "values":["amount","enabled","label","tint"]}
+```
+
+### Why nothing else would have caught it
+
+- **§179's gates never looked at the values.** `the_suggestions_are_live`
+  compares the list with the model's own list **for the `kind` argument** —
+  and the kinds are unique. `the_suggestions_are_filtered_by_what_was_typed`
+  checks the filter, not the values. **No gate asked whether a suggestion is
+  usable.**
+- **§116 fixed the schema and never looked at the prompts.** The tool's
+  schema already said `node` is a whole number; the prompt's suggestions
+  still carried names.
+- **The names in the list looked right.** A node's name is a node's name, and
+  the catalogue was "the design's nodes" — which is true, and not the
+  question the argument asks.
+
+### The fix
+
+**A suggestion is a value the parameter accepts.**
+
+The `node` argument's catalogue is now the **ids** (`Live::NodeIds`), the
+argument's own description says "The node, by its id. A name belongs to
+`node_name`", and the prompt's text says the same thing in prose — so an
+agent that has a name is told where to put it.
+
+**A suggestion list is a set.** The path catalogue keeps one entry per
+**distinct** path, sorted, so the count the client is told is the number of
+paths.
+
+### What is not claimed
+
+- **The paths are still the design's paths, not one node's.** The protocol's
+  completion request carries the argument and what has been typed, and not
+  the other arguments' values, so the catalogue cannot be scoped to the node
+  the caller is addressing. **A path that the chosen node does not hold is
+  created there** — that is `prop.set`'s own rule (§85), and it is said in
+  the prompt's text.
+- **The names are still reachable.** They are simply in the parameter that
+  takes them.
+- **The kinds, the commands and the filter are unchanged.**
+
+### The lesson
+
+**A suggestion is a promise: "this value will work here".** The catalogue
+answered a different question — "what does the design hold?" — and the
+argument asks a narrower one: "what does *this parameter* accept?". **The
+two coincide for some arguments and not for others, and the ones that do not
+coincide are the ones the argument is for.**
+
+**And the gate that would have caught it is one line: try the suggestion.**
+The test now takes every value the completion offers for `node` and calls the
+command with it. **A gate that uses the thing it checks is stronger than a
+gate that compares it with a list.**
 
 ## What enforces what
 
@@ -31386,6 +31500,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
+| **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by
