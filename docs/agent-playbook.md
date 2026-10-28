@@ -503,7 +503,7 @@ pub static NODE_ENABLE: CommandSpec = CommandSpec {
 };
 ```
 
-`NODE_MUTE` (`crates/engine/src/commands.rs:190`) is the closest existing
+`NODE_MUTE` (`crates/engine/src/commands.rs`) is the closest existing
 example and it is built from the same parts. `has_nodes`, `node_mut`,
 `find_mut`, `node_by_id_or_name`, `Outcome::with` and `EngineError::Param` are
 all already in scope in that file.

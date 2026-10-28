@@ -436,9 +436,9 @@ impl Session {
             "name": self.doc.meta.name,
             "comment": self.doc.meta.comment,
             "fps": self.doc.meta.fps,
-            "start": self.doc.meta.start.raw(),
-            "end": self.doc.meta.end.raw(),
-            "at": self.at.raw(),
+            "start": self.doc.meta.start.as_json_number(),
+            "end": self.doc.meta.end.as_json_number(),
+            "at": self.at.as_json_number(),
             "dirty": self.dirty,
             "nodes": self.doc.nodes.iter().map(|n| serde_json::json!({
                 "id": n.id.get(),

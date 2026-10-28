@@ -3271,14 +3271,14 @@ expect_catch "engine: the state does not carry the frame rate" \
 # The range is the document's own, and the state is the only place an agent
 # can read it. §108.
 swap crates/engine/src/session.rs \
-    '            "start": self.doc.meta.start.raw(),' \
-    '            "start": self.doc.meta.end.raw(),'
+    '            "start": self.doc.meta.start.as_json_number(),' \
+    '            "start": self.doc.meta.end.as_json_number(),'
 expect_catch "engine: the state does not carry the document's start" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
 
 # ...and the end of it, which is the other half of the range. §108.
 swap crates/engine/src/session.rs \
-    '            "end": self.doc.meta.end.raw(),' \
+    '            "end": self.doc.meta.end.as_json_number(),' \
     '            "end": 0,'
 expect_catch "engine: the state does not carry the document's end" \
     "cargo test -p craftkit-engine --profile ci the_state_carries_the_document_s_own_parameters"
@@ -3618,13 +3618,13 @@ expect_catch "cli: the catalogue's listing does not name the alternative" \
 # commands' parameters -- and no reply said when they were. §117.
 swap crates/engine/src/commands.rs \
     '                serde_json::json!({
-                    "time": k.time.raw(),
+                    "time": k.time.as_json_number(),
                     "seconds": k.time.seconds_f64(),
                     "value": k.value,
                     "ease": k.ease.name(),
                 })' \
     '                serde_json::json!({
-                    "time": k.time.raw(),
+                    "time": k.time.as_json_number(),
                 })'
 expect_catch "engine: the listing does not say when the keyframes are" \
     "cargo test -p craftkit-engine --profile ci the_keyframes_of_a_property_can_be_listed"
@@ -7029,6 +7029,29 @@ swap crates/mcp/src/prompts.rs \
                     out.push(path);'
 expect_catch "mcp: a suggestion list is not a set" \
     "cargo test -p craftkit-mcp --profile ci the_path_suggestions_are_distinct"
+
+# --------------------------------------- a reply asks the tick for its number ----
+# Section 266. The reply sites carried a tick's raw count themselves, and
+# `json!` unwraps the conversion -- inside the macro, where the lint that
+# forbids `unwrap` cannot see it. The rule now lives on the type, and the
+# gate holds the reply sites to it.
+swap crates/core/src/tick.rs \
+    '        if raw >= 0 { serde_json::Value::from(raw as u64) } else { serde_json::Value::from(raw as i64) }' \
+    '        serde_json::Value::from(self.seconds_f64())'
+expect_catch "core: a tick is not a reply's number" \
+    "cargo test -p craftkit-core --profile ci a_tick_becomes_a_reply_number_exactly"
+
+# And the gate that holds the sites to it: a gate that never reports is a
+# gate that is not there.
+swap xtask/src/lists.rs \
+    '        if TICK_COUNT_HOMES.contains(&relative.as_str()) {
+            continue;
+        }' \
+    '        if true {
+            continue;
+        }'
+expect_catch "lists: a reply may read a tick's raw count" \
+    "cargo test -p xtask --profile ci a_reply_site_that_reads_a_tick_is_caught"
 
 restore
 finish

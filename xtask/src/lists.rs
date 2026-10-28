@@ -1439,6 +1439,66 @@ fn collect_manifests(root: &Path, out: &mut Vec<std::path::PathBuf>) {
 /// and the shape is decided by matching, never by indexing.
 const RAW_PARAMETER_HOMES: &[&str] = &["crates/core/src/params.rs", "crates/engine/src/params.rs"];
 
+/// The files that may read a tick's raw count.
+///
+/// **A reply asks the tick for its number.** §266: six reply sites carried a
+/// tick's raw count themselves, and `json!` **unwraps** the conversion —
+/// inside the macro, where the lint that forbids `unwrap` cannot see it. The
+/// rule now lives on the type that owns the range (`Tick::as_json_number`),
+/// and these are the files that read the count for their own arithmetic:
+///
+/// - `crates/core/src/tick.rs` — the type's own accessor.
+/// - `crates/model/src/document.rs` — the design's own duration.
+/// - `crates/model/src/keyframe.rs` — the keyframe range checks.
+/// - `crates/model/src/fingerprint.rs` — the hash of a key's time.
+/// - `crates/io/src/format.rs` — the file's `written_at` field is an `i128`.
+/// - `crates/engine/src/crash.rs` — the report's `at` field is an `i64`.
+///
+/// A file that is not on this list and reads a tick's raw count is a reply
+/// that is deciding for itself what a tick looks like on the wire.
+const TICK_COUNT_HOMES: &[&str] = &[
+    "crates/core/src/tick.rs",
+    "crates/model/src/document.rs",
+    "crates/model/src/keyframe.rs",
+    "crates/model/src/fingerprint.rs",
+    "crates/io/src/format.rs",
+    "crates/engine/src/crash.rs",
+];
+
+/// A reply asks the tick for its number.
+///
+/// §266: the reply sites carried a tick's raw count themselves and relied on
+/// an unwritten rule — that a tick's range is the range a JSON number holds
+/// (§60) — while `json!` unwraps the conversion, where the lint that
+/// forbids `unwrap` cannot see it. The rule now lives on the type, and this
+/// gate holds the reply sites to it.
+pub fn a_reply_asks_the_tick(root: &Path) -> Result<Vec<String>, String> {
+    let mut sources = Vec::new();
+    collect_rust(root, &mut sources);
+    let mut problems = Vec::new();
+    for path in sources {
+        let Ok(text) = read_rust(&path, Subject::Production) else { continue };
+        // Comments do not count: a doc comment that says `raw()` is saying
+        // the opposite.
+        let code = code_lines_kept(&text);
+        if !code.contains(".raw()") {
+            continue;
+        }
+        let relative = relative_name(root, &path);
+        if TICK_COUNT_HOMES.contains(&relative.as_str()) {
+            continue;
+        }
+        let line = code.lines().position(|l| l.contains(".raw()")).map_or(1, |n| n + 1);
+        problems.push(format!(
+            "{relative}: line {line} reads a tick's raw count: a reply asks the tick for its \
+             number, with `Tick::as_json_number`, and the count is read by the files that \
+             need it for their own arithmetic"
+        ));
+    }
+    problems.sort();
+    Ok(problems)
+}
+
 /// The raw parameter reader has two homes, and no more.
 ///
 /// §136: the tree had a rule — *a parameter is never indexed* — in four
@@ -5869,6 +5929,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the budgets are constants the tree ships, and a literal in a comment is not one",
     ),
     (
+        "a_reply_asks_the_tick",
+        Subject::Production,
+        "the reply sites are the code that runs, and a call in a comment builds no reply",
+    ),
+    (
         "the_raw_parameter_reader_has_two_homes",
         Subject::Production,
         "the reader is a function the commands call, and a helper in a test is not a third home",
@@ -7599,6 +7664,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A panel reads the design; the host opens it.")),
     );
 
+    // A reply that carries a tick, and the tick's own answer. §266.
+    problems.extend(
+        a_reply_asks_the_tick(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A reply asks the tick for its number; it does not read the count.")),
+    );
+
     // The raw parameter reader, and the two homes it has. §136.
     problems.extend(
         the_raw_parameter_reader_has_two_homes(root)?
@@ -7766,7 +7838,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              model's, every bound is named in the prose, the two doors share one \
              step bound, the shell never \
              evaluates the \
-             document, the shell never writes the document, the raw parameter \
+             document, the shell never writes the document, a reply asks the tick for its \
+             number, the raw parameter \
              reader has two homes, every clippy setting names a denied lint, the \
              shell's state holds no evaluated value, every parameter a command \
              reads is declared, every gate the tree names exists, every \
@@ -9382,6 +9455,62 @@ mod tests {
         let problems = the_raw_parameter_reader_has_two_homes(&dir).expect("the check runs");
         assert_eq!(problems.len(), 1, "{problems:#?}");
         assert!(problems[0].contains("raw JSON"), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A reply asks the tick for its number.
+    ///
+    /// §266: the reply sites carried a tick's raw count themselves, and
+    /// `json!` unwraps the conversion — where the lint that forbids `unwrap`
+    /// cannot see it. The rule now lives on the type that owns the range, and
+    /// this gate holds the reply sites to it: a file that reads a tick's raw
+    /// count and is not one of the homes that need it for their own
+    /// arithmetic is a reply deciding for itself.
+    #[test]
+    fn a_reply_site_that_reads_a_tick_is_caught() {
+        let dir = crate::temp::dir("tick-count").expect("a temporary folder");
+        let crate_dir = dir.join("crates/thing/src");
+        std::fs::create_dir_all(&crate_dir).expect("the fabricated tree");
+
+        // A reply that asks the tick: nothing to say.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn reply(t: craftkit_core::Tick) -> serde_json::Value {\n\
+             serde_json::json!({ \"at\": t.as_json_number() })\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+        let problems = a_reply_asks_the_tick(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
+
+        // And a reply that reads the count itself is caught.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn reply(t: craftkit_core::Tick) -> serde_json::Value {\n\
+             serde_json::json!({ \"at\": t.raw() })\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+        let problems = a_reply_asks_the_tick(&dir).expect("the check runs");
+        assert_eq!(problems.len(), 1, "{problems:#?}");
+        assert!(problems[0].contains("raw count"), "{problems:#?}");
+
+        // And a test's call is not a reply either.
+        std::fs::write(
+            crate_dir.join("thing.rs"),
+            "fn f() -> usize { 1 }\n\
+             \n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             #[test]\n\
+             fn the_count_is_read() {\n\
+             let _ = craftkit_core::Tick::ZERO.raw();\n\
+             }\n\
+             }\n",
+        )
+        .expect("the fabricated code");
+        let problems = a_reply_asks_the_tick(&dir).expect("the check runs");
+        assert!(problems.is_empty(), "{problems:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

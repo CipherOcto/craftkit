@@ -30670,6 +30670,8 @@ places claim to write it, the two places are the defect, not the reader.
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
 ## 264. The evaluator's amount was a different property from the model's
@@ -30792,6 +30794,8 @@ tree's own sample tests the sample.**
 
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
 ## 265. The prompt suggested a value the command refuses
@@ -30903,6 +30907,118 @@ coincide are the ones the argument is for.**
 The test now takes every value the completion offers for `node` and calls the
 command with it. **A gate that uses the thing it checks is stronger than a
 gate that compares it with a list.**
+
+## 266. Six replies carried a tick and relied on a rule nobody wrote down
+
+### The finding
+
+**The reply sites put a tick's raw count into a JSON reply themselves, and
+`json!` unwraps the conversion — inside the macro, where the lint that
+forbids `unwrap` cannot see it.**
+
+Six sites did it:
+
+```rust
+"start": self.doc.meta.start.raw(),
+"end": self.doc.meta.end.raw(),
+"at": self.at.raw(),
+```
+
+```rust
+serde_json::json!({ "from": was.raw(), "to": clamped.raw(), "seconds": clamped.seconds_f64() }),
+```
+
+`Tick::raw()` is an `i128`, and a JSON number holds an `i64` or a `u64` and
+nothing else. `serde_json`'s `json!` macro converts an arbitrary expression
+with `to_value(...).unwrap()`, so a number outside that range is a **panic**
+in the macro — a panic the tree's own lint cannot see, because the `unwrap`
+is not in the tree's code.
+
+It was safe, and only because of a rule **nobody wrote down at the site**:
+`Tick`'s range *is* the range a JSON number holds (§60). The type's own
+document says so; the six sites did not ask.
+
+§60 recorded this as an open item: *"six `json!` sites carry a tick and now
+rely on the model's range being the reply's range … A helper that carried a
+tick safely — a `Tick` that knows how to become a `Value` — would make the
+six sites independent of the bound and would put the rule in one place."*
+
+### Measured
+
+The panic is real, and it is the macro's:
+
+```text
+serde_json::json!({ "x": i128::MAX })
+-> panicked: called `Result::unwrap()` on an `Err` value:
+   Error("number out of range")
+```
+
+and it is **unreachable today**: `Tick`'s range is the JSON number's range,
+and every tick in the tree is inside it. That is the point — the six sites
+were safe by an unwritten rule, and the tree's rule is that a rule nobody
+wrote down is a rule the next reader will not have.
+
+### Why nothing else would have caught it
+
+- **The tree's own lint cannot see it.** The `unwrap` is inside `serde_json`'s
+  macro, not in the tree's code, and `clippy::unwrap_used` reads the tree's
+  code.
+- **The tree's own test says the opposite is impossible.** `every_tick_the_
+  model_holds_can_be_put_in_a_reply` proves that a tick fits — which is
+  exactly why the sites were safe, and exactly why nothing was watching them.
+- **A tick that does not fit cannot be built.** The constructor saturates and
+  `serde_json` refuses an out-of-range integer, so the panic had no way in —
+  and no way to be *seen* either.
+
+### The fix
+
+**The tick owns its own answer, and a reply asks for it.**
+
+`Tick::as_json_number` is that answer: the raw tick count as a whole number,
+exact — no rounding through a float, no clamping — because this type's range
+is the range a JSON number holds. The six sites ask it.
+
+**And the rule is held by a gate.** `a_reply_asks_the_tick` reads the tree's
+production code and asks: *which files read a tick's raw count?* The answer
+is a list, and every name on it has a reason:
+
+| File | Why it reads the count |
+|---|---|
+| `crates/core/src/tick.rs` | the type's own accessor |
+| `crates/model/src/document.rs` | the design's own duration |
+| `crates/model/src/keyframe.rs` | the keyframe range checks |
+| `crates/model/src/fingerprint.rs` | the hash of a key's time |
+| `crates/io/src/format.rs` | the file's `written_at` field is an `i128` |
+| `crates/engine/src/crash.rs` | the report's `at` field is an `i64` |
+
+A file that is not on that list and reads a tick's raw count is a reply that
+is deciding for itself what a tick looks like on the wire — and the gate
+says so.
+
+### What is not claimed
+
+- **Nothing about a reply changed.** The numbers are the same numbers: the
+  same whole tick counts, in the same fields, in the same replies.
+- **The crash report's `at` is still an `i64`.** It is the report's own field
+  and it is not a reply; the file is on the list for that reason.
+- **`Tick::raw()` is still public.** The model and the file format need the
+  count for their own arithmetic, and the gate is what says where.
+
+### The lesson
+
+**A rule that holds by accident is a rule that is one edit away from a
+panic.** The six sites were safe because a *type* they did not consult had a
+range that happened to match. The tree's discipline is that a rule lives in
+one place and everybody asks; here the rule was in the type and the sites
+were carrying a copy of it in their heads.
+
+**And a panic inside a macro is a panic no lint can see.** `json!` unwraps,
+and the unwrap is not in the tree. **A tree that forbids `unwrap` in its own
+code has to ask its own types what they look like on the wire** — otherwise
+the conversion happens in a place the lint cannot reach.
+
+| **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 
 ## What enforces what
 
@@ -31501,6 +31617,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
+| **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The

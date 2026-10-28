@@ -221,6 +221,27 @@ impl Tick {
         self.0
     }
 
+    /// The tick as a reply's number: the raw tick count, as a whole number.
+    ///
+    /// **One home for the rule.** A reply is JSON, and a JSON number holds an
+    /// `i64` or a `u64` and nothing else — which is exactly this type's
+    /// range (§60). The reply sites used to carry a tick's raw count
+    /// themselves and relied on that unwritten rule, and `json!` **unwraps**
+    /// the conversion, where the lint that forbids `unwrap` cannot see it.
+    /// They ask this now.
+    ///
+    /// The conversion is **exact**: this type's range is the range a JSON
+    /// number holds (§60), so every tick converts to the number it is, with
+    /// no rounding through a float and no clamping.
+    pub fn as_json_number(self) -> serde_json::Value {
+        let raw = self.raw();
+        debug_assert!(
+            raw <= u64::MAX as i128 && raw >= i64::MIN as i128,
+            "a tick is inside the reply's range"
+        );
+        if raw >= 0 { serde_json::Value::from(raw as u64) } else { serde_json::Value::from(raw as i64) }
+    }
+
     /// Convert from seconds, clamping absurd magnitudes to ±10^9 seconds.
     ///
     /// **A NaN becomes [`Tick::ZERO`]**. See [`Tick::try_from_seconds_f64`]
@@ -395,6 +416,30 @@ mod tests {
         let ntsc = FrameRate::new(30).unwrap();
         let t = Tick::from_seconds_f64(3600.0);
         assert_eq!(t.frames_i64(ntsc), 3600 * 30);
+    }
+
+    /// A tick knows how to become a reply's number.
+    ///
+    /// §266: the reply sites carried a tick's raw count themselves, and
+    /// `json!` **unwraps** the conversion — where the lint that forbids
+    /// `unwrap` cannot see it. The rule now lives on the type that owns the
+    /// range, and the conversion is exact: a tick is a whole number of ticks
+    /// and a reply carries whole numbers.
+    #[test]
+    fn a_tick_becomes_a_reply_number_exactly() {
+        assert_eq!(Tick::ZERO.as_json_number(), serde_json::json!(0));
+        assert_eq!(Tick::from_raw(42).as_json_number(), serde_json::json!(42));
+        assert_eq!(Tick::from_raw(-42).as_json_number(), serde_json::json!(-42));
+        // The extremes are exact, not rounded through a float.
+        assert_eq!(Tick::MAX.as_json_number().as_u64(), Some(u64::MAX));
+        assert_eq!(Tick::MIN.as_json_number().as_i64(), Some(i64::MIN));
+        // And the conversion cannot fail, which is the whole point of it: the
+        // `json!` macro would panic where this does not.
+        for raw in [0i128, 1, -1, 24 * 3600, i64::MAX as i128, u64::MAX as i128] {
+            let tick = Tick::from_raw(raw);
+            let number = tick.as_json_number();
+            assert!(number.is_number(), "{raw} is not a number: {number}");
+        }
     }
 
     /// Every tick the model holds can be put into a reply.

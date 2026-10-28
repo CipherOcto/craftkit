@@ -175,7 +175,12 @@ pub static DOC_RANGE: CommandSpec = CommandSpec {
         };
         Ok(Outcome::with(
             message,
-            serde_json::json!({ "start": start.raw(), "end": end.raw(), "fps": fps, "at": at.raw() }),
+            serde_json::json!({
+                "start": start.as_json_number(),
+                "end": end.as_json_number(),
+                "fps": fps,
+                "at": at.as_json_number(),
+            }),
         )
         .unchanged_if(!changed))
     },
@@ -612,7 +617,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
             serde_json::json!({
                 "id": id.get(),
                 "path": path,
-                "time": time.raw(),
+                "time": time.as_json_number(),
                 "value": value,
                 // Whether the instant is one the design has. §119.
                 "outside_range": is_outside,
@@ -817,7 +822,7 @@ pub static KEY_LIST: CommandSpec = CommandSpec {
             .iter()
             .map(|k| {
                 serde_json::json!({
-                    "time": k.time.raw(),
+                    "time": k.time.as_json_number(),
                     "seconds": k.time.seconds_f64(),
                     "value": k.value,
                     "ease": k.ease.name(),
@@ -875,7 +880,11 @@ pub static PLAYBACK_SEEK: CommandSpec = CommandSpec {
         s.set_at(clamped);
         Ok(Outcome::with(
             format!("{:.3}s", clamped.seconds_f64()),
-            serde_json::json!({ "from": was.raw(), "to": clamped.raw(), "seconds": clamped.seconds_f64() }),
+            serde_json::json!({
+                "from": was.as_json_number(),
+                "to": clamped.as_json_number(),
+                "seconds": clamped.seconds_f64(),
+            }),
         ))
     },
 };
