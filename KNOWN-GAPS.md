@@ -30109,6 +30109,7 @@ what the package asks for, by default, and its defaults are its own. **When
 the thing you build decides what you ask for, you do not know what you are
 asking for.**
 
+| **A node's id is read the way the tree writes it** | `a_node_id_is_read_the_way_the_tree_writes_it` in `crates/core/src/ids.rs` | 1 mutation — §262 |
 | **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
 | **The deepest value the tree accepts round-trips through the tree's own format** | `the_deepest_value_the_tree_accepts_round_trips` in `crates/io/tests/value_depth.rs` | 1 mutation — §260 |
 | **A version is digits and nothing else** | `a_version_that_is_not_a_plain_number_is_refused` in `crates/io/src/format.rs` | 1 mutation — §261 |
@@ -30367,6 +30368,110 @@ guess could only produce the version the tree already knew, so nothing broke.
 The tree's own document says a guessed read corrupts a design — and a rule
 that is kept because it has not hurt yet is a rule waiting for the day it
 does.
+
+## 262. The node's id had two readers, and both of them guessed
+
+### The finding
+
+**A URI the tree never publishes was served as if the tree had published
+it.**
+
+The tree writes a node's id as `n12` — that is `NodeId`'s own spelling, and
+the one the design prints. The MCP's resource reader took the spelling apart
+itself:
+
+```rust
+fn node_id(value: &str) -> Option<NodeId> {
+    let rest = value.strip_prefix('n')?;
+    let raw = rest.parse::<u64>().ok()?;
+    Some(NodeId(raw))
+}
+```
+
+`u64::from_str` accepts a leading `+`. So `craftkit://node/n+1` was **node 1**,
+and `craftkit://node/n01` was **node 1** as well.
+
+And the **same spelling had a second reader**: the model's own
+`NodeRef::parse`, which parsed the number the same lenient way — and which
+also **indexed from zero** (`#0` was the first node) while the path's own `#`
+segment indexes from **one** and refuses `#0`. Two spellings of the same
+thing, meaning two different things.
+
+### Measured
+
+Before, on a design of ten nodes:
+
+```text
+              craftkit://node/n1 -> reads node 1
+             craftkit://node/n10 -> reads node 10
+             craftkit://node/n+1 -> reads node 1        <- guessed
+            craftkit://node/n01 -> reads node 1        <- guessed
+```
+
+After:
+
+```text
+             craftkit://node/n+1 -> refused: no resource at `craftkit://node/n+1`
+            craftkit://node/n01 -> refused: no resource at `craftkit://node/n01`
+            craftkit://node/n0000000010 -> refused: no resource at `craftkit://node/n0000000010`
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own document said the opposite.** The MCP's reader is
+  introduced by: *"The tree writes a node's id as `n12` … so a URI has
+  exactly one way to say it. A bare number is refused rather than guessed
+  at."* The **bare number** was indeed refused — the `n` is required — and
+  the **digits** were guessed. The sentence was true and the reader did
+  something else.
+- **The same defect had already been found twice in this tree**, and fixed
+  twice: a colour's digits (§254) and the format's version (§261). Both
+  were "the standard library's number parsing takes a leading `+`". **The
+  rule was known, written down, and applied where somebody remembered.**
+- **Nothing wrote the URI.** A URI is read by a client, and the tree's own
+  tests only ever read the spellings the tree prints.
+
+### The fix
+
+**The spelling has one home, and it is where the spelling is written.**
+
+`craftkit_core::NodeId::parse` is the one home of the id's spelling: `n`
+and then plain decimal digits — no sign, no leading zero, no underscore.
+The MCP's reader asks it, and so does the model's `NodeRef::parse`, which
+had been a second home with the same leniency and a different convention
+for `#`.
+
+The index's spelling has one home too: `parse_index` in the model, which is
+the rule the path's own `#` segment uses — plain digits, at most six, 1-based,
+no leading zero — and `NodeRef::parse` asks that as well.
+
+### What is not claimed
+
+- **The tree's own spellings are unaffected.** `n1`, `n12` and `#3` read
+  exactly as they did.
+- **`NodeRef::parse("#0")` now refuses.** It used to answer the first node,
+  while the path's `#0` was refused. The two agreed on nothing, and they
+  agree now.
+- **The MCP's *parameters* were never affected.** A node reference in a
+  tool's arguments is a number (§116), not this spelling.
+
+### The lesson
+
+**A rule that is fixed in one place is not fixed anywhere, until the rule
+has a home.**
+
+The tree has now found this defect three times: a colour's digits (§254), a
+file's version (§261), a node's id (§262). **All three were the same
+sentence**: the standard library's number parsing accepts a leading `+`, and
+a tree-owned spelling was parsed with it instead of with the tree's own rule.
+Each time the fix was local — a check in one reader — and each time a second
+reader of the same shape was left guessing.
+
+**The fix that ends the family is not a third check: it is a home.** The id's
+spelling is written by `NodeId`'s `Display`, so it is *read* by
+`NodeId::parse`, and every reader of it asks that. **A spelling that is
+written in one place must be read in one place**, and a rule that lives in a
+reader is a rule that the next reader will not have.
 
 ## What enforces what
 

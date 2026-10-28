@@ -6944,5 +6944,15 @@ swap crates/io/src/format.rs \
 expect_catch "io: a version that is not a plain number is guessed" \
     "cargo test -p craftkit-io --profile ci a_version_that_is_not_a_plain_number_is_refused"
 
+# --------------------------------------- a node's id is read the way the tree writes it ----
+# Section 262. The id's spelling had two readers, and both of them guessed:
+# the standard library's number parsing takes a leading plus, so a URI the
+# tree never publishes was served as if it had.
+swap crates/core/src/ids.rs \
+    '        if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {' \
+    '        if false {'
+expect_catch "core: a node's id is read the way the tree does not write it" \
+    "cargo test -p craftkit-core --profile ci a_node_id_is_read_the_way_the_tree_writes_it"
+
 restore
 finish

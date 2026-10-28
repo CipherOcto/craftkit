@@ -186,12 +186,9 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
     }
     if let Some(digits) = part.strip_prefix('#') {
         // `#0` is invalid: indexing is 1-based, and silently accepting 0 would
-        // make a typo mean "the node before the first one".
-        if digits.is_empty() || digits.len() > 6 {
-            return None;
-        }
-        let n: usize = digits.parse().ok()?;
-        return (n >= 1).then_some(PathSeg::Index(n));
+        // make a typo mean "the node before the first one". The rule is the
+        // one home's: `parse_index`. §262.
+        return parse_index(digits).map(PathSeg::Index);
     }
     // `name#n` — split on the LAST `#`, so a name may itself contain one.
     match part.rsplit_once('#') {
@@ -317,17 +314,41 @@ pub enum NodeRef {
 }
 
 impl NodeRef {
+    /// The node a spelling names, if it names one.
+    ///
+    /// **Both spellings are read by the one home of each.** The id's
+    /// spelling belongs to [`NodeId`] (§262), and the index's belongs to
+    /// this module's own rule — the same one the path's `#` segment uses.
+    ///
+    /// They did not agree: this one took a leading `+` (`n+1` was the id 1)
+    /// and indexed from **zero**, while the path's `#` segment indexes from
+    /// **one** and refuses `#0`. Two spellings of the same thing, meaning
+    /// two different things. §262.
     pub fn parse(s: &str) -> Option<Self> {
         if let Some(rest) = s.strip_prefix('#') {
-            let n: usize = rest.parse().ok()?;
-            return Some(NodeRef::Index(n));
+            return parse_index(rest).map(NodeRef::Index);
         }
-        if let Some(rest) = s.strip_prefix("n") {
-            let n: u64 = rest.parse().ok()?;
-            return Some(NodeRef::Id(NodeId(n)));
-        }
-        None
+        NodeId::parse(s).map(NodeRef::Id)
     }
+}
+
+/// The index a `#` spelling names, if it names one.
+///
+/// **One rule, in one place**, and it is the rule the path's own `#` segment
+/// uses: plain decimal digits, at most six of them (§253), 1-based, and no
+/// leading zero. §262.
+fn parse_index(digits: &str) -> Option<usize> {
+    if digits.is_empty() || digits.len() > 6 {
+        return None;
+    }
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if digits.len() > 1 && digits.starts_with('0') {
+        return None;
+    }
+    let n: usize = digits.parse().ok()?;
+    (n >= 1).then_some(n)
 }
 
 impl fmt::Display for NodeRef {
@@ -430,9 +451,15 @@ mod tests {
 
     #[test]
     fn node_refs_parse_both_spellings() {
-        assert_eq!(NodeRef::parse("#0"), Some(NodeRef::Index(0)));
+        assert_eq!(NodeRef::parse("#0"), None);
+        assert_eq!(NodeRef::parse("#3"), Some(NodeRef::Index(3)));
         assert_eq!(NodeRef::parse("n12"), Some(NodeRef::Id(NodeId(12))));
         assert_eq!(NodeRef::parse("garbage"), None);
+        // And the spellings the tree never publishes are refused. §262.
+        assert_eq!(NodeRef::parse("n+12"), None);
+        assert_eq!(NodeRef::parse("n012"), None);
+        assert_eq!(NodeRef::parse("#+3"), None);
+        assert_eq!(NodeRef::parse("#03"), None);
         assert_eq!(NodeRef::Index(3).to_string(), "#3");
     }
 

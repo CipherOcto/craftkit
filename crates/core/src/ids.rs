@@ -75,6 +75,30 @@ impl NodeId {
     pub const fn get(self) -> u64 {
         self.0
     }
+
+    /// The id a spelling names, if it names one.
+    ///
+    /// The spelling is the one [`Display`](std::fmt::Display) writes: `n` and
+    /// then the number, in plain decimal digits.
+    ///
+    /// **This is the one home of that spelling.** `u64::from_str` takes a
+    /// leading `+`, so `n+1` read as the id 1 — and the MCP's resource read
+    /// and the model's own node reference each read it for themselves, with
+    /// the same leniency and neither knowing about the other. A spelling the
+    /// tree never publishes is a spelling the tree must refuse. §262.
+    ///
+    /// The digits are **digits and nothing else**: no sign, no leading zero
+    /// (the tree prints `n7`, never `n07`), and no underscore.
+    pub fn parse(s: &str) -> Option<Self> {
+        let rest = s.strip_prefix('n')?;
+        if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        if rest.len() > 1 && rest.starts_with('0') {
+            return None;
+        }
+        rest.parse().ok().map(NodeId)
+    }
 }
 
 impl std::fmt::Display for NodeId {
@@ -102,6 +126,27 @@ pub struct DocumentId(pub u64);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The id's spelling is read back the way the tree writes it. §262.
+    ///
+    /// The defect this test exists for: `u64::from_str` takes a leading `+`,
+    /// so `n+1` read as the id 1 — and the MCP's resource read served it.
+    #[test]
+    fn a_node_id_is_read_the_way_the_tree_writes_it() {
+        assert_eq!(NodeId::parse("n1"), Some(NodeId(1)));
+        assert_eq!(NodeId::parse("n12"), Some(NodeId(12)));
+        // And the spellings the tree never publishes are refused.
+        assert_eq!(NodeId::parse("n+1"), None);
+        assert_eq!(NodeId::parse("n01"), None);
+        assert_eq!(NodeId::parse("n1_0"), None);
+        assert_eq!(NodeId::parse("1"), None);
+        assert_eq!(NodeId::parse("n"), None);
+        assert_eq!(NodeId::parse(""), None);
+        // And what the tree writes is what it reads.
+        for id in [1u64, 7, 12, 999] {
+            assert_eq!(NodeId::parse(&NodeId(id).to_string()), Some(NodeId(id)));
+        }
+    }
 
     #[test]
     fn ids_are_sequential_and_stop_at_the_ceiling() {

@@ -292,10 +292,13 @@ fn node(session: &Mutex<Session>, value: &str) -> Result<Json, ReadError> {
 /// The tree writes a node's id as `n12` — that is [`NodeId`]'s own spelling,
 /// and the one the design prints — so a URI has exactly one way to say it.
 /// A bare number is refused rather than guessed at.
+///
+/// **And the digits are read by the one home of the spelling.** The reader
+/// used to parse the number itself, and the standard library takes a leading
+/// `+`: `craftkit://node/n+1` read node 1 — a URI the tree never publishes,
+/// served as if it did. §262.
 fn node_id(value: &str) -> Option<NodeId> {
-    let rest = value.strip_prefix('n')?;
-    let raw = rest.parse::<u64>().ok()?;
-    Some(NodeId(raw))
+    NodeId::parse(value)
 }
 
 #[cfg(test)]
@@ -320,6 +323,23 @@ mod tests {
             assert_eq!(mime, resource.mime, "{}", resource.uri);
             assert!(!json.is_null(), "{} holds nothing", resource.uri);
         }
+    }
+
+    /// A URI spells a node the way the tree prints it, and nothing else.
+    ///
+    /// The defect this test exists for: the reader parsed the number itself,
+    /// and the standard library takes a leading `+` — so
+    /// `craftkit://node/n+1` read node 1, and `n01` read node 1. §262.
+    #[test]
+    fn a_node_uri_spellings_the_tree_does_not_publish_are_refused() {
+        let s = session();
+        for uri in ["craftkit://node/n+1", "craftkit://node/n01", "craftkit://node/n 1"] {
+            assert!(read(uri, &s).is_err(), "{uri} was served");
+        }
+        // And the spelling the tree prints is served.
+        let uri = "craftkit://node/n1";
+        let (_mime, json) = read(uri, &s).expect("the tree's own spelling reads");
+        assert_eq!(json.get("id").and_then(|v| v.as_u64()), Some(1));
     }
 
     /// The same rule for the templates: each one reads with a value the open
