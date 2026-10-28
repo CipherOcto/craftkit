@@ -2561,11 +2561,12 @@ expect_catch "model: the write side resolves an id differently from the read sid
 swap crates/model/src/property.rs \
     '            PathSeg::Uid(id) => {
                 return Err(CoreError::BadPath(format!(
-                    "`@{id:x}` names a property by its id, and there is no property with that id to create"
+                    "`{}` names a property by its id, and there is no property with that id to create",
+                    uid_spelling(*id)
                 )));
             }' \
     '            PathSeg::Uid(id) => {
-                format!("{id:x}")
+                format!("{id}")
             }'
 expect_catch "model: an id names a property that can be created" \
     "cargo test -p craftkit-engine --profile ci an_id_that_names_no_property_cannot_create_anything"
@@ -6803,8 +6804,8 @@ expect_catch "model: the path budget is short of what the tree publishes" \
 # And the occurrence's digits are a number the grammar can count, like a
 # position's digits are.
 swap crates/model/src/path.rs \
-    '            if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {' \
-    '            if false {'
+    '    if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {' \
+    '    if false {'
 expect_catch "model: an occurrence's digits are not bounded" \
     "cargo test -p craftkit-model --profile ci an_occurrence_with_too_many_digits_is_refused"
 
@@ -6819,12 +6820,14 @@ swap crates/core/src/value.rs \
 expect_catch "core: a colour is not hex digits and nothing else" \
     "cargo test -p craftkit-core --profile ci a_colour_is_hex_digits_and_nothing_else"
 
-# And the same in the path's id spelling: "@+f" read as the id 15.
+# And the same in the path's id spelling. The rule was "@ is hex digits" and
+# is now "@ is the spelling the tree writes" (§263): the segment has to come
+# back as itself, so "@01" and "@+1" are refused like "@+f" was.
 swap crates/model/src/path.rs \
-    '        if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {' \
-    '        if false {'
-expect_catch "model: an id is not hex digits and nothing else" \
-    "cargo test -p craftkit-model --profile ci a_name_the_grammar_cannot_write_is_refused"
+    '        return (uid_spelling(id) == part).then_some(PathSeg::Uid(id));' \
+    '        return Some(PathSeg::Uid(id));'
+expect_catch "model: an id is read the way the tree does not write it" \
+    "cargo test -p craftkit-model --profile ci an_id_is_read_the_way_the_tree_writes_it"
 
 # ------------------------------------------------- the values a prompt is given ----
 # Section 255. The prompt's template was filled one placeholder at a time,
@@ -6953,6 +6956,39 @@ swap crates/core/src/ids.rs \
     '        if false {'
 expect_catch "core: a node's id is read the way the tree does not write it" \
     "cargo test -p craftkit-core --profile ci a_node_id_is_read_the_way_the_tree_writes_it"
+
+# --------------------------------------- an id is read the way the tree writes it ----
+# Section 263. The path's id was written in one number and read in another:
+# the grammar read the id as hex while the tree's own writer wrote it in
+# decimal, so a script that recorded an id and replayed it changed the wrong
+# property.
+#
+# The id's spelling has one home. If that home writes hex, the grammar refuses
+# the spelling the tree publishes, and a published path is no longer a path a
+# command accepts.
+swap crates/model/src/path.rs \
+    '    format!("@{id}")' \
+    '    format!("@{id:x}")'
+expect_catch "model: the id's spelling is written in two numbers" \
+    "cargo test -p craftkit-model --profile ci an_id_is_read_the_way_the_tree_writes_it"
+
+# Section 263. The occurrence's digits had their own rule, and the position's
+# digits had another: `level#01` was the first `level` while `#01` was
+# refused.
+swap crates/model/src/path.rs \
+    '            let n = parse_index(digits)?;' \
+    '            let n: usize = digits.parse().ok()?;'
+expect_catch "model: an occurrence is read by a second rule" \
+    "cargo test -p craftkit-model --profile ci an_occurrence_is_read_by_the_positions_rule"
+
+# Section 263. The same swap, caught end to end: the tree's own writer wrote a
+# decimal id and the grammar read it as hex, so the command reported success
+# and the value landed on another property.
+swap crates/model/src/path.rs \
+    '        return (uid_spelling(id) == part).then_some(PathSeg::Uid(id));' \
+    '        return Some(PathSeg::Uid(id));'
+expect_catch "engine: a property set by its id is another property" \
+    "cargo test -p craftkit-engine --profile ci a_property_set_by_its_decimal_id_is_the_property_that_id_names"
 
 restore
 finish

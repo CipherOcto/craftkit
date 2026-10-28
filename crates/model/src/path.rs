@@ -17,7 +17,7 @@
 //! position          the first property called `position`
 //! transform/x       the `x` property inside the `transform` group
 //! effects/#2/amount the second effect's `amount`
-//! @1f4a             the property whose id is 0x1f4a, wherever it is
+//! @8006             the property whose id is 8006, wherever it is
 //! ```
 //!
 //! # What a path may name
@@ -28,7 +28,7 @@
 //!
 //! - `prop.set { path: "trigger/lead" }` creates the group `trigger` if it is
 //!   not there, and the property `lead` inside it.
-//! - `prop.set { path: "@1f4a" }` **changes** the property with that id. If
+//! - `prop.set { path: "@8006" }` **changes** the property with that id. If
 //!   there is no such property, it is refused — ids are the model's to
 //!   assign, not the caller's.
 //! - `prop.set { path: "effects/#2/amount" }` changes the `amount` of the
@@ -37,7 +37,7 @@
 //!
 //! The engine used to read every segment as a literal name and build the
 //! tree from that: `effects/#2/amount` made a group whose id was literally
-//! `#2`, and `@1f4a` made a property labelled `1f4a`. Neither could be read
+//! `#2`, and `@8006` made a property labelled `8006`. Neither could be read
 //! back by the path that created it. §85.
 //!
 //! # What a name may be
@@ -169,20 +169,33 @@ impl PropPath {
     }
 }
 
+/// The one spelling of an id in a path.
+///
+/// An id is a number, and the tree writes numbers in decimal everywhere else:
+/// the file format's ids are decimal numbers, the MCP publishes decimal ids,
+/// and the engine's own writer wrote a decimal id. So the path spelling is
+/// `@` and the id in decimal, and this function is where that is written —
+/// the parser asks it whether a spelling is the one the tree writes, and the
+/// display and the model's own messages print it. §263.
+pub fn uid_spelling(id: u64) -> String {
+    format!("@{id}")
+}
+
 fn parse_seg(part: &str) -> Option<PathSeg> {
-    if let Some(hex) = part.strip_prefix('@') {
-        // `from_str_radix` on a bounded length, so a path cannot be a long hex
-        // digit string that is slow to parse.
-        if hex.is_empty() || hex.len() > 16 {
-            return None;
-        }
-        // The digits are hex digits and nothing else: `from_str_radix` takes a
-        // leading `+`, so `@+f` read as the id `15` — a spelling the tree
-        // never publishes and a person would not have meant. §254.
-        if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return None;
-        }
-        return u64::from_str_radix(hex, 16).ok().map(PathSeg::Uid);
+    if let Some(digits) = part.strip_prefix('@') {
+        // The id spelling is **one** spelling, and it is the spelling the tree
+        // writes: `@` and the id in plain decimal. The file format's ids are
+        // decimal numbers, the MCP publishes decimal ids, and the engine's own
+        // writer wrote a decimal id — so decimal is what an id *is* everywhere
+        // else in the tree. §263.
+        //
+        // The digits are read as a number, and the segment has to come back
+        // as itself: `@01`, `@1F`, `@0000000000000001` and `@+1` all read as a
+        // number or as nothing, and none of them is the spelling the tree
+        // writes. The rule is the round trip, so a spelling that is not the
+        // tree's is refused rather than guessed at. §254, §263.
+        let id: u64 = digits.parse().ok()?;
+        return (uid_spelling(id) == part).then_some(PathSeg::Uid(id));
     }
     if let Some(digits) = part.strip_prefix('#') {
         // `#0` is invalid: indexing is 1-based, and silently accepting 0 would
@@ -202,15 +215,17 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
                 return None;
             }
             // The occurrence's digits are a number, and a number the grammar
-            // writes is a number it can count: the same six digits the
-            // position spelling has always had. Without this the grammar
-            // accepted a segment twenty bytes longer than the budget assumed,
-            // and a path of them was longer than any command would carry. §253.
-            if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {
-                return None;
-            }
-            let n: usize = digits.parse().ok()?;
-            (n >= 1).then(|| PathSeg::Match(name.to_string(), n))
+            // writes is a number it can count: the same rule the position
+            // spelling has always had, asked of the one home that holds it.
+            // Without this the grammar accepted a segment twenty bytes longer
+            // than the budget assumed, and a path of them was longer than any
+            // command would carry. §253.
+            //
+            // It used to be a **second** rule: `level#+1` and `level#01` read
+            // as the first `level`, while `#01` and `#+1` were refused. Two
+            // spellings of the same number is one too many. §263.
+            let n = parse_index(digits)?;
+            Some(PathSeg::Match(name.to_string(), n))
         }
         _ => {
             if part.is_empty() || part.len() > limits::MAX_NAME {
@@ -224,7 +239,7 @@ fn parse_seg(part: &str) -> Option<PathSeg> {
 /// Whether a name is written as it is.
 ///
 /// A name is a property's label or a group's id, and a path segment is
-/// written in the grammar: `@1f4a`, `#2`, `name#2`, `name`. So a name the
+/// written in the grammar: `@8006`, `#2`, `name#2`, `name`. So a name the
 /// grammar reads as something else is a name the grammar cannot write: `a/b`
 /// is two segments, `@5` is an id, `#2` is a position, and `C#` is nothing at
 /// all.
@@ -292,7 +307,7 @@ impl fmt::Display for PropPath {
             }
             first = false;
             match seg {
-                PathSeg::Uid(id) => write!(f, "@{id:x}")?,
+                PathSeg::Uid(id) => write!(f, "{}", uid_spelling(*id))?,
                 PathSeg::Index(n) => write!(f, "#{n}")?,
                 // The spelling is the one that parses back: a name the grammar
                 // cannot write plainly is written with an explicit occurrence.
@@ -338,7 +353,7 @@ impl NodeRef {
 /// uses: plain decimal digits, at most six of them (§253), 1-based, and no
 /// leading zero. §262.
 fn parse_index(digits: &str) -> Option<usize> {
-    if digits.is_empty() || digits.len() > 6 {
+    if digits.is_empty() || digits.len() > limits::MAX_PATH_INDEX_DIGITS {
         return None;
     }
     if !digits.bytes().all(|b| b.is_ascii_digit()) {
@@ -366,7 +381,7 @@ mod tests {
 
     #[test]
     fn every_segment_kind_parses() {
-        assert_eq!(PropPath::parse("@1f4a").unwrap().segs(), [PathSeg::Uid(0x1f4a)]);
+        assert_eq!(PropPath::parse("@8006").unwrap().segs(), [PathSeg::Uid(8006)]);
         assert_eq!(PropPath::parse("#2").unwrap().segs(), [PathSeg::Index(2)]);
         assert_eq!(PropPath::parse("position").unwrap().segs(), [PathSeg::Match("position".into(), 1)]);
         assert_eq!(PropPath::parse("position#3").unwrap().segs(), [PathSeg::Match("position".into(), 3)]);
@@ -427,6 +442,55 @@ mod tests {
         assert!(PropPath::parse(&format!("#{}", "9".repeat(7))).is_none());
     }
 
+    /// The id is spelled in decimal, once, and only the way the tree writes it.
+    ///
+    /// §263: the grammar read `@` as hex while the tree's own writer wrote a
+    /// decimal id, so for a property with an id of ten the tree wrote `@10` and
+    /// read it back as the id sixteen — a script that recorded an id and
+    /// replayed it changed the wrong property. Measured.
+    #[test]
+    fn an_id_is_read_the_way_the_tree_writes_it() {
+        // The tree's own spelling: plain decimal digits.
+        assert_eq!(PropPath::parse("@10").unwrap().segs(), [PathSeg::Uid(10)]);
+        assert_eq!(PropPath::parse("@0").unwrap().segs(), [PathSeg::Uid(0)]);
+        // The spellings the tree never writes are refused, not guessed at.
+        assert!(PropPath::parse("@01").is_none(), "a leading zero is not the tree's spelling");
+        assert!(PropPath::parse("@0000000000000001").is_none(), "nor is padding");
+        assert!(PropPath::parse("@1F").is_none(), "nor is a hex digit");
+        assert!(PropPath::parse("@+1").is_none(), "nor is a sign");
+        assert!(PropPath::parse("@-1").is_none(), "nor is a sign");
+        assert!(PropPath::parse("@ 1").is_none(), "nor is a space");
+        assert!(PropPath::parse("@1 ").is_none(), "nor a trailing space");
+        // And the spelling the tree writes comes back as itself.
+        for id in [0u64, 1, 9, 10, 15, 16, 255, 8006, u64::MAX] {
+            let spelling = uid_spelling(id);
+            assert_eq!(PropPath::parse(&spelling).unwrap().segs(), [PathSeg::Uid(id)], "for {spelling}");
+            assert_eq!(PropPath::parse(&spelling).unwrap().to_string(), spelling);
+        }
+        // A number too big for an id is not an id.
+        assert!(PropPath::parse(&format!("@{}", u64::MAX)).is_some());
+        assert!(PropPath::parse(&format!("@{}", u64::MAX as u128 + 1)).is_none());
+    }
+
+    /// The occurrence's digits are read by the same rule the position's are.
+    ///
+    /// §263: `level#+1` and `level#01` used to read as the first `level`,
+    /// while `#01` and `#+1` were refused — two rules for one number. The
+    /// position spelling's rule is the one home's rule, and the occurrence
+    /// spelling asks it.
+    #[test]
+    fn an_occurrence_is_read_by_the_positions_rule() {
+        assert_eq!(PropPath::parse("level#1").unwrap().segs(), [PathSeg::Match("level".into(), 1)]);
+        assert_eq!(PropPath::parse("level#3").unwrap().segs(), [PathSeg::Match("level".into(), 3)]);
+        assert!(PropPath::parse("level#0").is_none(), "indexing is one-based");
+        assert!(PropPath::parse("level#01").is_none(), "a leading zero is not the rule");
+        assert!(PropPath::parse("level#000001").is_none(), "nor is padding");
+        assert!(PropPath::parse("level#+1").is_none(), "nor is a sign");
+        assert!(PropPath::parse("level#-1").is_none(), "nor is a sign");
+        assert!(PropPath::parse("level#").is_none(), "nor is nothing");
+        assert!(PropPath::parse("level#9999999").is_none(), "nor is a long number");
+    }
+
     #[test]
     fn a_name_may_contain_a_hash_when_it_is_the_last_one() {
         let p = PropPath::parse("a#b#2").unwrap();
@@ -435,7 +499,7 @@ mod tests {
 
     #[test]
     fn display_round_trips_through_parse() {
-        for s in ["@1f4a", "#2", "position", "position#3", "transform/x", "fx.blur.gaussian/amount"] {
+        for s in ["@8006", "#2", "position", "position#3", "transform/x", "fx.blur.gaussian/amount"] {
             let p = PropPath::parse(s).unwrap();
             assert_eq!(p.to_string(), s, "display did not round trip for {s}");
             assert_eq!(PropPath::parse(&p.to_string()).unwrap(), p);
@@ -482,12 +546,12 @@ mod tests {
         assert!(is_writable("amount#2"));
 
         assert!(!is_writable("a/b"));
-        // The id spelling is hex digits and nothing else: `from_str_radix`
-        // takes a leading `+`, so `@+f` used to read as the id 15. §254.
-        assert!(PropPath::parse("@f").is_some(), "a hex id is a path");
-        assert!(PropPath::parse("@+f").is_none(), "a sign is not a hex digit");
-        assert!(PropPath::parse("@-f").is_none(), "a sign is not a hex digit");
-        assert!(PropPath::parse("@gg").is_none(), "g is not a hex digit");
+        // The id spelling is decimal digits and nothing else: a leading `+`
+        // used to be taken for a digit, so `@+f` read as an id. §254, §263.
+        assert!(PropPath::parse("@12").is_some(), "a decimal id is a path");
+        assert!(PropPath::parse("@+12").is_none(), "a sign is not a digit");
+        assert!(PropPath::parse("@-12").is_none(), "a sign is not a digit");
+        assert!(PropPath::parse("@gg").is_none(), "g is not a digit");
         assert!(!is_writable("@5"));
         assert!(!is_writable("#2"));
         assert!(!is_writable(""));

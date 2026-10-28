@@ -427,7 +427,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
             "path",
             Doc::PropertyPath,
             "The property path, e.g. `amount` or `trigger/lead`. A path that names an id \
-             (`@1f4a`) or a position (`#2`) names something that already exists, so it can \
+             (`@8006`) or a position (`#2`) names something that already exists, so it can \
              change a property but not create one.",
         ),
         ParamDoc::req(
@@ -1443,6 +1443,58 @@ mod tests {
         // And nothing was invented.
         assert_eq!(flat.len(), 5, "a property was invented: {flat:?}");
         assert!(!flat.iter().any(|(p, _)| p.to_string() == "5"), "a property labelled `5` was created");
+    }
+
+    /// A property set by its id is the property that id names — in decimal.
+    ///
+    /// §263: the grammar read `@` as *hex* while the tree's own writer wrote
+    /// a *decimal* id. For a property with an id of ten the tree wrote `@10`
+    /// and read it back as the id sixteen: the command reported "`@10` = 42",
+    /// the value landed on another property, and the property the script had
+    /// recorded kept its old value. The tree's own test passed because every
+    /// id in the sample was below ten, where the two readings coincide.
+    #[test]
+    fn a_property_set_by_its_decimal_id_is_the_property_that_id_names() {
+        let mut s = session();
+        // Enough properties that an id of ten exists: ids are handed out from
+        // one, per node.
+        for i in 1..=12 {
+            ok(&mut s, "prop.set", json!({ "node": 1, "path": format!("p{i}"), "value": i }));
+        }
+        let before = s.document().get(craftkit_core::NodeId(1)).expect("node").props.flatten().len();
+        let target = s
+            .document()
+            .get(craftkit_core::NodeId(1))
+            .expect("node")
+            .props
+            .flatten()
+            .into_iter()
+            .find(|(p, _)| p.to_string() == "p10")
+            .map(|(_, prop)| prop.id)
+            .expect("the property labelled p10");
+        assert!(target >= 10, "this test is about an id of ten or more, not {target}");
+
+        let outcome = s
+            .execute("prop.set", &json!({ "node": 1, "path": format!("@{target}"), "value": 42 }))
+            .expect("set");
+        assert_eq!(
+            outcome.data["path"],
+            json!(format!("@{target}")),
+            "the command must name the path it set"
+        );
+
+        let flat = s.document().get(craftkit_core::NodeId(1)).expect("node").props.flatten();
+        let by_id = flat.iter().find(|(_, p)| p.id == target).map(|(_, p)| p.value.clone());
+        assert_eq!(by_id, Some(craftkit_core::Value::Num(42.0)), "the named property was not set");
+        // And nothing else took the value: a hex reading would have landed it
+        // on the id sixteen.
+        let others: Vec<u64> = flat
+            .iter()
+            .filter(|(_, p)| p.value == craftkit_core::Value::Num(42.0) && p.id != target)
+            .map(|(_, p)| p.id)
+            .collect();
+        assert!(others.is_empty(), "the value also landed on {others:?}");
+        assert_eq!(flat.len(), before, "a property was invented: {flat:?}");
     }
 
     /// A path too long to name is refused, and the document is untouched.

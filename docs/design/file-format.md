@@ -138,8 +138,16 @@ amount                 the first property labelled `amount` among its siblings
 amount#2               the second
 trigger/lead           `lead`, inside the sibling group whose id is `trigger`
 #3                     the third child of the root group
-@7f3a                  by stable id
+@8006                  by stable id
 ```
+
+**An id is spelled in decimal, once.** The `@` spelling is the same number the
+file format writes as an id and the MCP publishes as an id — plain decimal
+digits, no sign, no leading zero. The grammar used to read `@` as *hex* while
+the tree's own writer wrote a *decimal* id, so for a property with an id of ten
+the tree wrote `@10` and read it back as the id sixteen: a script that recorded
+an id and replayed it changed the wrong property (§263). One spelling, one
+home, and a spelling the tree does not write is refused rather than guessed at.
 
 `PathSeg::Match(name, n)` counts **siblings**, not the whole tree. That matters:
 a counter that ran across levels would emit `amount#2` for a property that has no

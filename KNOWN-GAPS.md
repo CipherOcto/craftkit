@@ -30473,6 +30473,188 @@ spelling is written by `NodeId`'s `Display`, so it is *read* by
 written in one place must be read in one place**, and a rule that lives in a
 reader is a rule that the next reader will not have.
 
+## 263. The path's id was written in one number and read in another
+
+### The finding
+
+**The tree wrote a property's id in decimal and read it in hexadecimal, so a
+script that recorded an id and replayed it changed the wrong property.**
+
+The path grammar's `@` segment was a **hex** id:
+
+```rust
+if let Some(hex) = part.strip_prefix('@') {
+    if hex.is_empty() || hex.len() > 16 {
+        return None;
+    }
+    if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    return u64::from_str_radix(hex, 16).ok().map(PathSeg::Uid);
+}
+```
+
+and the path's own `Display` wrote a **hex** id:
+
+```rust
+PathSeg::Uid(id) => write!(f, "@{id:x}")?,
+```
+
+But the tree writes ids in **decimal** everywhere else: the file format stores
+an id as a JSON number, the MCP publishes `"id": prop.id` as a decimal number,
+and the engine's own writer — the one a script is handed — wrote a decimal id:
+
+```rust
+ok(&mut s, "prop.set", &json!({ "node": 1, "path": format!("@{nested}"), "value": 42 }));
+```
+
+So for a property with an id of ten, the tree wrote `@10`, and the grammar read
+`@10` as the id **sixteen**.
+
+And the grammar was lenient in the ways the tree never writes: `@01f` was the
+id 31, `@0000000000000001` was the id 1, `@1F` was the id 31 — while `@+1f`
+was refused. The **occurrence** spelling (`name#n`) was lenient in the same
+way and the **position** spelling (`#n`) was not: `level#01` and `level#+1`
+were the first `level`, while `#01` and `#+1` were refused. **Two spellings of
+one number, meaning two different things.**
+
+### Measured
+
+Before — the tree at `17e7552`, parsed by the tree's own grammar:
+
+```text
+                         @10 -> PropPath([Uid(16)])
+                        @01f -> PropPath([Uid(31)])
+           @0000000000000001 -> PropPath([Uid(1)])
+                         @1F -> PropPath([Uid(31)])
+                        @+1f -> refused
+                     level#01 -> PropPath([Match("level", 1)])
+                 level#000001 -> PropPath([Match("level", 1)])
+                     level#+1 -> PropPath([Match("level", 1)])
+```
+
+and end to end, on a node with twelve properties (the sixth of them has the
+id 10, and the twelfth has the id 16):
+
+```text
+the command says: `@10` = 42
+  p6  id=10  value=6      <- the property the script named: unchanged
+  p7  id=11  value=7
+  ...
+  p12 id=16  value=42     <- the property the hex reading named
+```
+
+The command **reported success**, and the value landed on a property the
+script had never heard of.
+
+After:
+
+```text
+                         @10 -> PropPath([Uid(10)])
+                          @0 -> PropPath([Uid(0)])
+                         @01 -> refused
+           @0000000000000001 -> refused
+                         @1F -> refused
+                         @+1 -> refused
+                         @-1 -> refused
+                         @ 1 -> refused
+       @18446744073709551615 -> PropPath([Uid(18446744073709551615)])
+       @18446744073709551616 -> refused
+                     level#1 -> PropPath([Match("level", 1)])
+                     level#3 -> PropPath([Match("level", 3)])
+                     level#0 -> refused
+                     level#01 -> refused
+                 level#000001 -> refused
+                     level#+1 -> refused
+                     level#-1 -> refused
+                     level#9999999 -> refused
+```
+
+```text
+the command says: `@10` = 42
+  p6  id=10  value=42     <- the property the script named
+  ...
+  p12 id=16  value=12     <- untouched
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own test used ids below ten.** `crates/model/src/property.rs`
+  tested `@7` and the engine tested `@5`: below ten the decimal reading and
+  the hex reading are the same number. The disagreement only starts at ten,
+  and every id in the sample was below it.
+- **The engine's test could not see it either.** It wrote the path itself, in
+  decimal, and the sample's ids were below ten — so the writer and the reader
+  agreed by accident.
+- **No file could disagree.** The file format stores an id as a number and
+  never stores a path, so no saved design carried the two spellings.
+- **The MCP published both spellings at once.** `"id": prop.id` was decimal
+  and `"path"` was hex — and the documented spelling (`@7f3a` in
+  `docs/design/file-format.md`) was the hex one, while the engine's own prose
+  said "`@99` means the property whose id is 99", which is the decimal one.
+
+### The fix
+
+**The id's spelling has one home, and it is the spelling the tree writes.**
+
+`craftkit_model::path::uid_spelling` writes it: `@` and the id in **plain
+decimal** — the number the file format stores, the number the MCP publishes,
+the number the engine's writer wrote. The grammar asks it whether a spelling
+is the one the tree writes, and refuses the ones that are not: the check is a
+**round trip**, not a list of characters, so `@01`, `@1F`,
+`@0000000000000001`, `@+1` and `@ 1` are all refused rather than guessed at.
+The path's `Display` prints it, and so do the model's own error messages,
+which used to print the hex spelling next to a decimal id.
+
+**The occurrence's digits ask the position's rule.** `name#n` now goes
+through `parse_index` — the one home of the index's spelling: plain digits,
+at most six, 1-based, no leading zero — so `level#01` is refused exactly as
+`#01` is.
+
+**§254's check became a guard, and the rule is the round trip.** The uid
+arm used to check "hex digits and nothing else"; it now reads the digits as a
+number and asks whether the segment comes back as itself. The old check is
+gone, because the round trip refuses every spelling it refused and more
+(`@01`, `@1F`, `@0000000000000001`), and §254's own mutation case now rides
+the round trip: the case that used to break the digit check breaks the rule
+instead.
+
+### What is not claimed
+
+- **The tree's own spellings change.** `@10` now names the id ten, where it
+  named sixteen. A path the tree published before this change that held a uid
+  is a path that named a different property; it now names the property it
+  was written for. This is the correction, and it is a change.
+- **No design file changes.** Ids live in the file as numbers and paths are
+  not stored, so nothing on disk is affected.
+- **A hexadecimal id is still an id.** `@1f` is not a path any more; an id is
+  written in the one spelling the tree writes.
+- **The node's id is a different thing.** `n12` is a node's id (§262) and is
+  unaffected.
+
+### The lesson
+
+**A number the tree writes must be read the way the tree writes it — and the
+writer is the tree, not the reader's habit.**
+
+§254 (a colour's digits), §261 (a file's version) and §262 (a node's id)
+were all "the standard library's number parsing guesses a leading `+`". This
+one is a fourth member of the family, and a sharper one: **the tree had two
+readers of the same spelling and each of them was right about a different
+number.** The grammar was not wrong about hexadecimal; the *tree* was wrong
+about which spelling it used.
+
+**The fix that ends the family is a home, and the home is the writer.** The id
+is written in decimal by the file format, by the MCP and by the engine's
+writer, so it is *read* in decimal, and the one function that writes it
+(`uid_spelling`) is the one every reader and every printer asks. **A spelling
+that is written in one place must be read in one place** — and when two
+places claim to write it, the two places are the defect, not the reader.
+
+| **An id is read the way the tree writes it** | `an_id_is_read_the_way_the_tree_writes_it` in `crates/model/src/path.rs` | 2 mutations — §263 |
+| **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
+| **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -31065,6 +31247,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
 | **The file that was there is replaced, not kept** | `a_token_file_left_over_from_a_previous_launch_is_replaced` | 1 mutation — §215 |
+| **An id is read the way the tree writes it** | `an_id_is_read_the_way_the_tree_writes_it` in `crates/model/src/path.rs` | 2 mutations — §263 |
+| **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
+| **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

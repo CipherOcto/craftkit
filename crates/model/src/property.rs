@@ -46,7 +46,7 @@ use std::collections::BTreeMap;
 
 use crate::keyframe::{Key, Keyframes};
 use crate::limits;
-use crate::path::{PathSeg, PropPath};
+use crate::path::{PathSeg, PropPath, uid_spelling};
 use craftkit_core::{CoreError, Value};
 use serde::{Deserialize, Serialize};
 
@@ -560,7 +560,7 @@ impl PropGroup {
     /// Resolve a path to a property, read-only.
     ///
     /// A segment that is a bare `@id` searches the **whole subtree**, which is
-    /// what makes an id a durable reference: a script that recorded `@1f4a`
+    /// what makes an id a durable reference: a script that recorded `@8006`
     /// keeps working after the property is renamed or moved.
     pub fn find(&self, path: &PropPath) -> Option<&Property> {
         let segs = path.segs();
@@ -757,7 +757,8 @@ impl PropGroup {
             }
             PathSeg::Uid(id) => {
                 return Err(CoreError::BadPath(format!(
-                    "`@{id:x}` names a property by its id, and there is no property with that id to create"
+                    "`{}` names a property by its id, and there is no property with that id to create",
+                    uid_spelling(*id)
                 )));
             }
             PathSeg::Index(n) => {
@@ -775,7 +776,8 @@ impl PropGroup {
     fn group_for(&mut self, seg: &PathSeg) -> Result<&mut PropGroup, CoreError> {
         match seg {
             PathSeg::Uid(id) => Err(CoreError::BadPath(format!(
-                "`@{id:x}` names a property by its id; a property is a leaf, so it cannot name a group"
+                "`{}` names a property by its id; a property is a leaf, so it cannot name a group",
+                uid_spelling(*id)
             ))),
             PathSeg::Index(n) => Err(CoreError::BadPath(format!(
                 "`#{n}` names the {} child of this group, and a new group has no position yet",
