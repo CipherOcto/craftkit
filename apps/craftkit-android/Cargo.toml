@@ -10,6 +10,14 @@ publish = false
 [lints]
 workspace = true
 
+# The platform's own keyboard, behind a gate. §257.
+#
+# The gate is off by default: the tree's default package carries no Java and
+# no dex (§236). Turning it on carries the Java files, a dex, and the bridge
+# the platform's keyboard talks to.
+[features]
+platform-ime = ["craftkit/platform-ime", "dep:jni"]
+
 # The Android package is a shared library and nothing else: Android's loader
 # opens it and looks up one symbol in it by name. §236.
 [lib]
@@ -18,6 +26,12 @@ crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [dependencies]
+# The JNI, for the one native method the platform's Java calls. §257.
+#
+# It is **optional** and it is only here behind the gate: the tree's default
+# build has no Java to call it, and the version is the one `android-activity`
+# already uses, so there is one `jni` in the build and not two.
+jni = { workspace = true, optional = true }
 # The application itself — the window, the session and the shell are the same
 # code the desktop application runs.
 craftkit = { workspace = true }

@@ -50,6 +50,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+/// The text the platform's own keyboard commits, behind the gate. §257.
+pub mod ime;
+
 use craftkit_control::ServerOptions;
 use craftkit_engine::Session;
 
@@ -70,6 +73,16 @@ impl Flags {
     /// application opens with `--sample`.
     pub fn sample() -> Self {
         Self { sample: true, ..Self::default() }
+    }
+
+    /// The flags the Android package starts with, and the control channel.
+    ///
+    /// A phone has no command line, so the port comes from the tree's own
+    /// folder: a file called `control.port` in it, with the port in it. The
+    /// folder is the tree's own, on the phone, and the file is written by
+    /// whoever wants to drive the phone.
+    pub fn sample_with_control(port: u16) -> Self {
+        Self { sample: true, control: Some(port), ..Self::default() }
     }
 }
 
@@ -191,6 +204,16 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     // sides meet here rather than in either one's lifetime.
     let ctx_slot: ContextSlot = Arc::new(Mutex::new(None));
 
+    // The platform's own keyboard, behind the gate: the text it commits
+    // arrives on the platform's own thread, and the frame that takes the
+    // text out has to be asked for — a window draws when something asks it
+    // to, and the platform's text is not a thing the window knows about.
+    // §257.
+    {
+        let slot = Arc::clone(&ctx_slot);
+        ime::set_repainter(Box::new(move || request_repaint(&slot)));
+    }
+
     // The shell's memory is shared by the window and the control channel, so
     // that the screen the channel describes is the screen the window is
     // showing. §106.
@@ -203,13 +226,25 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     // one that knows which platform it is on, the same way it is the one
     // that knows where the tree's files go (§240).
     let state: SharedState = Arc::new(Mutex::new(craftkit_ui::shell::ShellState {
-        own_keyboard: cfg!(target_os = "android"),
+        // The tree's own keyboard, where the platform has none — and where
+        // the platform's own keyboard is behind the gate and cannot be
+        // used. §246, §257.
+        own_keyboard: cfg!(all(target_os = "android", not(feature = "platform-ime"))),
         ..craftkit_ui::shell::ShellState::default()
     }));
 
     // Started *before* the window, so a port clash is reported before anything
     // is drawn, and held in a local so it lives exactly as long as the window
     // and not a moment longer.
+    // Where the token file goes. On the phone it is the tree's own folder,
+    // so the token can be read back with the same `run-as` the crash reports
+    // are read back with (§240, §249). On the desktop it is the usual
+    // place.
+    #[cfg(target_os = "android")]
+    let token_dir: Option<std::path::PathBuf> = tree_folder.clone();
+    #[cfg(not(target_os = "android"))]
+    let token_dir: Option<std::path::PathBuf> = None;
+
     let control = match flags.control {
         None => None,
         Some(port) => {
@@ -220,7 +255,7 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
                     return std::process::ExitCode::FAILURE;
                 }
             };
-            match start_control(port, &session, &ctx_slot, &state, token, None) {
+            match start_control(port, &session, &ctx_slot, &state, token, token_dir.as_deref()) {
                 Ok((server, _path)) => Some(server),
                 Err(e) => {
                     eprintln!("control channel: {e}");
@@ -1147,6 +1182,19 @@ impl eframe::App for Application {
             *slot = Some(ctx.clone());
         }
 
+        // The platform's own keyboard, behind the gate: the text it
+        // committed goes into this frame, as if it had been typed. §257.
+        //
+        // It is taken out **before** the frame is drawn, so the text lands in
+        // the field that has the focus in this same frame.
+        for text in ime::take() {
+            // The text is logged, because on a phone the platform's keyboard
+            // is the only way in and the log is the only place a person can
+            // see that it arrived. §257.
+            log::info!("the platform's keyboard committed {} characters", text.chars().count());
+            ctx.input_mut(|input| input.events.push(eframe::egui::Event::Text(text)));
+        }
+
         let tokens = craftkit_ui::Tokens::dark();
         let Ok(mut session) = self.session.lock() else {
             // A poisoned lock means another thread panicked. The document is
@@ -1168,6 +1216,27 @@ impl eframe::App for Application {
         });
         if let Err(message) = outcome {
             log::error!("the drawing code panicked ({message}); the crash report has been written");
+        }
+
+        // The platform's own keyboard, behind the gate: the platform is asked
+        // for its keyboard when a field of the tree's has the focus, and told
+        // that it is not wanted when the last one loses it. §257.
+        //
+        // The answer is the shell's own: it knows which field has the focus,
+        // and it is the only part of the tree that does.
+        //
+        // **And in the gated package the platform's keyboard is the
+        // keyboard.** The tree draws a keyboard of its own on a phone
+        // (§246), and the gate is the package that does not: there the
+        // platform's keyboard is what the person types with, so it is asked
+        // for as long as the tree is in front of them. Asking only for a
+        // focused field would mean a keyboard that appears and disappears
+        // with the focus — and, on a phone that will not let the shell
+        // inject a touch (§256), one that never appears at all.
+        {
+            let Ok(state) = self.state.lock() else { return };
+            let wanted = state.typing.field.is_some() || !state.own_keyboard;
+            ime::want_keyboard(wanted);
         }
     }
 

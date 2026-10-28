@@ -66,6 +66,26 @@ pub const FOREIGN_SOURCE_EXCEPTIONS: &[(&str, &str)] = &[
         "drives the real window on a real display; bash is what the display has",
     ),
     ("scripts/fold-format-pending.sh", "runs once, by hand, at a release"),
+    (
+        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitActivity.java",
+        "the gated package's activity; the platform's keyboard needs a view that serves the connection (§257)",
+    ),
+    (
+        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitInputView.java",
+        "the gated package's view; it is the view the platform asks for the connection (§257)",
+    ),
+    (
+        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitInputConnection.java",
+        "the gated package's connection; it is where the platform's committed text arrives (§257)",
+    ),
+    (
+        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitTestIme.java",
+        "the gated package's instrument keyboard; it is how the platform's half is measured (§257)",
+    ),
+    (
+        "scripts/build-android-ime.sh",
+        "builds the gated package; the SDK's own tools are what package an Android app (§257)",
+    ),
     (".github/workflows/ci.yml", "continuous integration is YAML and runs nothing"),
 ];
 

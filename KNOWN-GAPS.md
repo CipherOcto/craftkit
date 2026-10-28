@@ -29789,6 +29789,173 @@ the tree's** — and a measurement that needs a tool the device refuses is a
 measurement that does not happen, which is worth saying out loud rather than
 quietly skipping.
 
+## 257. The platform's own keyboard, behind a gate — and five walls between it and the tree
+
+### The finding
+
+**The tree can now use the platform's own keyboard, and it is a gate**: a
+cargo feature that is off unless it is asked for, so the tree's default
+package still carries no Java at all (§236).
+
+Getting there took **five separate breaks**, each of which looked like a
+working bridge from the Rust side and each of which was a wall. None of them
+was in the tree; all five were in the platform's own rules, and the tree
+could not see any of them from Rust.
+
+The five, in the order the measurement met them:
+
+1. **The library was not in the class loader's list.** The platform's
+   `NativeActivity` opens the shared library with `dlopen`, and a library
+   that `dlopen` opened is **not** in the class loader's list — so the
+   runtime could not find the JNI symbol, even though the symbol was there
+   and the tree's own code was already running.
+2. **The package asked for no permission at all**, so the tree's control
+   channel could not open a socket — and the application **exited**.
+3. **The window's decor was not focusable**, so *nothing* in the window
+   could take the focus, and the platform was served the decor instead of
+   the tree's view.
+4. **The view had no size**, and the platform's own rule says a view with
+   no size cannot take the focus — even a view that is visible, focusable,
+   enabled and attached.
+5. **The text arrived and the tree never drew it**, because a window draws
+   when something asks it to, and the platform's text is not a thing the
+   window knows about.
+
+### Measured
+
+**The wall that was not a wall at all.** The symbol was exported and the
+library was open:
+
+```text
+$ nm -D lib/arm64-v8a/libcraftkit_android.so | grep Java_
+000000000034ca38 T Java_org_craftocto_craftkit_CraftkitActivity_nativeSetActivity
+000000000034cbe8 T Java_org_craftocto_craftkit_CraftkitInputConnection_nativeCommit
+```
+
+and the runtime said:
+
+```text
+java.lang.UnsatisfiedLinkError: No implementation found for void
+  org.craftocto.craftkit.CraftkitActivity.nativeSetActivity(java.lang.Object)
+  (tried Java_org_craftocto_craftkit_CraftkitActivity_nativeSetActivity and
+  Java_org_craftocto_craftkit_CraftkitActivity_nativeSetActivity__Ljava_lang_Object_2)
+  - is the library loaded, e.g. System.loadLibrary?
+```
+
+**The wall that was a permission.** The gated package declared no
+permission at all, so the tree's own control channel — the way a phone is
+driven at all, since this device refuses injected touches (§256) — could not
+bind:
+
+```text
+control channel: could not bind 127.0.0.1:4711: Operation not permitted (os error 1)
+```
+
+and the application left, because a channel that cannot bind is a failure
+the application answers by stopping.
+
+**The wall that was the focus.** Measured, in the tree's own log:
+
+```text
+the tree's view has the focus: false; the focused view is none
+```
+
+— **no view in the window had the focus at all**, because the window's decor
+was not focusable, and the platform's rule for a view that wants the focus
+asks the *root* of the window whether it may have one.
+
+**The wall that was a size.** With the decor made focusable, the tree's own
+view still could not take the focus — and the platform's own `canTakeFocus`
+asks four questions: is it visible, is it focusable, is it enabled, and
+**does it have a size**. A view of **zero by zero** has none, and a view
+with no size cannot have the focus. One pixel is enough.
+
+### Measured: the whole path, on the phone
+
+With the five fixed, the platform's own state says the tree's own view and
+the tree's own connection are the ones being served:
+
+```text
+mInputShown=true
+mServedView=org.craftocto.craftkit.CraftkitInputView{4d7e729 VFED..... .F....ID 0,0-1,1}
+mServedInputConnection=RemoteInputConnectionImpl{
+    connection=org.craftocto.craftkit.CraftkitInputConnection@b121aae
+    mServedView=org.craftocto.craftkit.CraftkitInputView{4d7e729 ... 0,0-1,1}}
+```
+
+and the tree's own log says the text arrived:
+
+```text
+[INFO] the platform's keyboard committed 5 characters
+```
+
+**That is the whole path, measured on a phone**: the platform's keyboard →
+the view with the focus → the connection that view serves → the tree's own
+connection → the native method → the tree's queue → the tree's frame.
+
+### The instrument: the tree's own keyboard
+
+**This device will not let the shell press a key** (§256), so no key can be
+pressed on the platform's own keyboard here. The platform's half of the path
+was therefore measured with a keyboard of the tree's own — `CraftkitTestIme`,
+in the gated package — which commits through **the same connection**: the
+platform asks the focused view for its connection and hands that connection
+to whichever keyboard is active, so the instrument's `commitText` lands in
+the tree's own `CraftkitInputConnection`, exactly where the platform's own
+keyboard's would.
+
+```text
+the tree's instrument keyboard is up
+the instrument keyboard types probe
+the platform committed: probe
+[INFO] the platform's keyboard committed 5 characters
+```
+
+The instrument is in the **gated** package only, and it is an instrument: it
+types one word, on its own, when the platform starts it.
+
+### What is not claimed
+
+- **The tree's own keyboard is still the default.** The gate is off unless
+  it is asked for, and the tree's default package carries no Java at all.
+  §246's keyboard is what a phone gets by default; this is the alternative.
+- **The platform's own keyboard was not typed into.** This device refuses
+  input injection, and the tree's instrument keyboard was used instead. The
+  instrument commits through the same connection, but the platform's own
+  keyboard's own key handling was not exercised here.
+- **The last mile was not shown on this phone.** The tree's live window has
+  no field with the focus — a field takes the focus from a touch, and this
+  device refuses to have one injected, and the tree's own selection needs
+  one too — so the text was taken out of the queue and put into the tree's
+  context, and there was no field there to show it. The tree's own tests
+  cover that hop (the shell types into the field that has the focus, §246),
+  and this section does not claim it for the device.
+- **The default package still has no permission at all**, so the tree's
+  control channel still cannot bind there, and the application still leaves
+  when it cannot. That is §258, and this section does not fix it.
+- **The gate is a compile-time gate.** Turning it on is a build flag, not a
+  runtime switch: the default build has no Java, no dex, and no unsafe code
+  outside the tree's one named exception.
+
+### The lesson
+
+**A bridge to another language is a bridge to another set of rules, and every
+rule is a wall until the bridge meets it.** Four of the five breaks were
+rules the tree could not have found from its own code: a library opened with
+`dlopen` is not in the class loader's list; a window whose decor is not
+focusable has nothing in it that can hold the focus; a view with no size
+cannot have the focus; and a window draws only when something asks it to.
+**None of them is a bug in the tree, and every one of them stops the tree
+dead.** The tree's own rules (§236's "the platform's own activity serves a
+connection that gives the commit to nobody") were *true* and *not enough*:
+the commit had nowhere to go, and each of the walls was a different reason.
+
+**And the instrument is part of the measurement.** A device that will not let
+the shell press a key cannot have the platform's keyboard measured on it —
+but the *path* the platform's keyboard takes can be, because the path
+belongs to the connection and not to the keyboard. **A tree that owns an
+instrument can measure itself on a device that refuses to be measured.**
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -30370,6 +30537,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
 | **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
 | **The tree is laid out inside the rectangle the platform reports, on a 64-bit phone too** | the device's own run — the platform's rectangle and the pixels | the second phone's own run — §256 |
+| **The platform's own keyboard is behind a gate** | `the_platforms_keyboard_is_behind_the_gate` in `xtask/src/lists.rs` | 4 mutations — §257 |
+| **A commit asks for the frame that will show it** | `a_commit_asks_for_a_frame` in `apps/craftkit/src/ime.rs` | 1 mutation — §257 |
+| **The tree asks the platform only when the answer changes** | `the_platform_is_asked_only_when_the_answer_changes` in `apps/craftkit/src/ime.rs` | 1 mutation — §257 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -32724,8 +32894,18 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     tree's own**, drawn with egui, with no new dependency and no Java. **The
     choice is the owner's** — and the owner chose: **the tree's own keyboard
     now, the platform's later** (§246). The tree's keyboard is built and
-    measured on the phone; the platform's half is still open, and it comes
-    with Java and with a decision about the tree's one unsafe exception.
+    measured on the phone.
+
+    **The platform's half. Done in §257**, behind a gate: the cargo feature
+    `platform-ime`, off unless it is asked for, so the tree's default package
+    still carries no Java at all. Behind the gate the package carries three
+    Java files and the bridge the platform's keyboard talks to, and the whole
+    path was measured on the 64-bit phone — the platform's own state says the
+    tree's own view and the tree's own connection are the ones being served,
+    and the tree's own log says the text arrived. It came with the decision
+    about the tree's unsafe exception: the **second** named exception is one
+    module inside the Android package, compiled only with the gate, and the
+    safe half of the bridge is safe.
 
     **The 64-bit device. Done in §256.** The package declares both ABIs, the
     aarch64 library is built (896 KiB, and `nm -D` shows `T android_main`),

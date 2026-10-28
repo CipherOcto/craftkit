@@ -37,6 +37,11 @@ craftkit-ui = { path = "crates/ui", version = "0.1.0" }
 craftkit = { path = "apps/craftkit", version = "0.1.0" }
 
 # --- external -------------------------------------------------------------
+# The JNI, for the one native method the platform's Java calls. §257.
+#
+# The version is the one `android-activity` already uses, so there is one
+# `jni` in the build and not two.
+jni = "0.22.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

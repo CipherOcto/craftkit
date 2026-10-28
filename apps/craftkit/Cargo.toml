@@ -10,6 +10,15 @@ publish = false
 [lints]
 workspace = true
 
+# The platform's own keyboard, behind a gate. §257.
+#
+# Off by default, and the tree's default build carries **no Java and no
+# dex**: the tree draws its own keyboard where the platform has none (§246).
+# The gate turns on the platform's path — an input connection of the tree's
+# own, a dex beside the library, and the bridge between them.
+[features]
+platform-ime = []
+
 # The application is a library, and the desktop binary is one of its entry
 # points. The Android package is the other, and it is its own crate: the
 # platform's loader opens a shared library and looks up a symbol in it by

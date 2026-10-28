@@ -52,6 +52,16 @@ shell, and the package is its own crate only because the platform's loader
 looks its entry point up by name — which is the one thing a `forbid` cannot
 allow (§236).
 
+The package has one **gate**: the cargo feature `platform-ime`, off unless it
+is asked for. Behind it the package carries three Java files, a dex and the
+bridge the platform's own keyboard talks to — a view that holds the focus, a
+connection that hands the committed text to the tree, and a keyboard of the
+tree's own that measures the path. Without the gate the package carries **no
+Java at all** and the tree draws a keyboard of its own on a phone (§246).
+`cargo xtask lists` holds the gate shut: the feature must not be a default
+one, the safe half of the bridge must stay safe, and the tree's one
+`allow(unsafe_code)` must be the gated module's own (§257).
+
 A crate with **no row at all** is not exempt. It is reported as
 `Violation::Unregistered`, because a crate with no layer has no constraints: it
 could reach `craftkit-ui` and `egui` from anywhere, which would put a window
@@ -284,11 +294,12 @@ Nothing in a production path panics. This is enforced, not requested:
 | Mechanism | Where |
 |---|---|
 | the six-lint deny (below) | every crate root: `crates/*/src/lib.rs`, `apps/*/src/lib.rs`, `apps/*/src/main.rs` and `xtask/src/lib.rs` — and `cargo xtask lists` counts the roots and says if one is missing |
-| `#![forbid(unsafe_code)]` | every one of those roots **but one** — the Android package **denies** unsafe code instead, which is the tree's one named exception (§236) — plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later |
+| `#![forbid(unsafe_code)]` | every one of those roots **but one** — the Android package **denies** unsafe code instead, which is the tree's one named exception (§236) — plus `[workspace.lints.rust] unsafe_code = "forbid"` so it is also true of anything added later. The **second** named exception is one module inside that package: `apps/craftkit-android/src/ime.rs`, the bridge the platform's Java calls, which is compiled **only** with the `platform-ime` feature and is the tree's only `allow(unsafe_code)` (§257) |
 | `clippy.toml` `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, `allow-indexing-slicing-in-tests` | tests may panic; nothing else may |
 | Checked readers | `Params::num` / `num_in` / `int` / `text` / `color` / `num_list`, and `Value`'s checked constructors — hostile input is rejected at the read |
 | Bounded value depth | `craftkit_core::MAX_VALUE_DEPTH` (64) — a value may not nest deeper than 64 list levels, and the tree's own walks over a value stop at that number rather than following it (a stack overflow is a fatal abort, not a catchable panic) (§251) |
 | Finite and range checks | `craftkit_core::finite`, `in_range`, `Tick`'s saturating arithmetic, `FrameRate::new` refusing 0, and `craftkit_model::limits::MAX_FRAME_RATE` (1 000) refusing a document that runs faster (§89) |
+| The platform's own keyboard | `craftkit::ime::MAX_PENDING` (64) — the texts the platform committed and the tree has not drawn yet; the oldest is dropped rather than the queue growing, and a commit asks for the frame that will show it (§257) |
 | Hard limits | `craftkit_model::limits`: `MAX_NODES` 10 000, `MAX_FRAME_RATE` 1 000, `MAX_DEPTH` 32, `MAX_PROPERTIES` 50 000, `MAX_KEYS` 10 000, `MAX_PATH_SEGMENTS` 16, `MAX_NAME` 255, `MAX_PATH_INDEX_DIGITS` 6, `MAX_COMMENT_BYTES` 4 096, `MAX_DOCUMENT_BYTES` `32 * 1024 * 1024`, `MAX_PATH_BYTES` `MAX_PATH_SEGMENTS * (MAX_NAME + 1 + MAX_PATH_INDEX_DIGITS) + (MAX_PATH_SEGMENTS - 1)` — with a test asserting a "smaller" limit is never the larger one, and a gate asserting every one of them is enforced in code (§74) |
 | Memory budgets | `craftkit_engine::MAX_SESSION_BYTES` (the documents a session holds) and `craftkit_engine::history::MAX_HISTORY_BYTES` (the undo and redo stacks) are derived from `craftkit_model::limits::MAX_DOCUMENT_BYTES` (§144); `craftkit_engine::MAX_TRACE_BYTES` is the command trace's budget in text, derived from `craftkit_engine::MAX_TRACE_MEMORY_BYTES` (§70) |
 | Command-step budget | `craftkit_engine::MAX_COMMAND_STEPS` (10 000) is how many commands one script or one crash replay may run. One bound for both doors, because the tree prints a replay *as* a script. Derived from the trace's own capacity (the trace holds at most 7 710 steps) and from `craftkit_model::limits::MAX_NODES` (§181) |

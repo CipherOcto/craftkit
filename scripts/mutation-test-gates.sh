@@ -6840,5 +6840,41 @@ swap crates/mcp/src/prompts.rs \
 expect_catch "mcp: a caller's value is re-scanned for placeholders" \
     "cargo test -p craftkit-mcp --profile ci a_value_that_looks_like_a_placeholder_is_left_alone"
 
+# --------------------------------------- the platform's own keyboard, behind a gate ----
+# Section 257. The tree draws a keyboard of its own on a phone, because the
+# platform's keyboard opens and delivers nothing (section 236). The
+# platform's path is a gate: a cargo feature that is off unless it is asked
+# for, and the tree's default package carries no Java at all.
+swap apps/craftkit-android/src/lib.rs \
+    '#[cfg(all(target_os = "android", feature = "platform-ime"))]' \
+    '#[cfg(target_os = "android")]'
+expect_catch "lists: the gated module is not behind the gate" "cargo xtask lists"
+
+# And the text the platform committed waits for a frame: a queue that grows
+# is a memory that grows.
+swap apps/craftkit/src/ime.rs \
+    '    if queue.len() >= MAX_PENDING {' \
+    '    if false {'
+expect_catch "app: the queue of committed texts is not bounded" \
+    "cargo test -p craftkit --profile ci the_queue_is_bounded"
+
+# And the tree asks the platform on every frame, so the ask is made when the
+# answer changes and not before: a call across the bridge, sixty times a
+# second, for the same answer.
+swap apps/craftkit/src/ime.rs \
+    '        if *last == Some(wanted) {' \
+    '        if false {'
+expect_catch "app: the platform is asked again for an answer it has" \
+    "cargo test -p craftkit --profile ci the_platform_is_asked_only_when_the_answer_changes"
+
+# And a commit asks for the frame that will show it: a window draws when
+# something asks it to, and the platform's text is not a thing the window
+# knows about.
+swap apps/craftkit/src/ime.rs \
+    '    repaint();' \
+    '    let _ = repaint;'
+expect_catch "app: a commit does not ask for the frame that shows it" \
+    "cargo test -p craftkit --profile ci a_commit_asks_for_a_frame"
+
 restore
 finish

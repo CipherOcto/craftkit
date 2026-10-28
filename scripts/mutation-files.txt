@@ -74,6 +74,7 @@ crates/model/src/fingerprint.rs
 crates/model/src/path.rs
 crates/eval/src/evaluate.rs
 apps/craftkit/src/lib.rs
+apps/craftkit/src/ime.rs
 apps/craftkit-android/src/lib.rs
 apps/craftkit-cli/src/main.rs
 apps/craftkit-cli/src/args.rs

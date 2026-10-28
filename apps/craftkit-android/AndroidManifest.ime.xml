@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The manifest of the **gated** package: the one with the platform's own
+  keyboard. §257.
+
+  It differs from the tree's default manifest in three places, and each one
+  is the gate:
+
+  - `android:hasCode="true"` — the default package carries **no** Java and
+    no dex, and says so (§236);
+  - the activity is `org.craftocto.craftkit.CraftkitActivity` — a Java class
+    of the tree's own, because the platform's `NativeActivity` serves an
+    input connection that gives the commit to nobody (§236);
+  - and the library's name is still `craftkit_android`, because the
+    platform's loader looks up that symbol and by no other name (§236).
+
+  The default package's manifest is written by `cargo apk`, which has no
+  option for any of this; this file is the gate's own.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.craftocto.craftkit"
+    android:versionCode="16777473"
+    android:versionName="0.1.0"
+    android:compileSdkVersion="34">
+
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="30" />
+
+    <!--
+      The control channel, and only the control channel.
+
+      On a phone, opening a socket is an operation the platform **permits**:
+      without this permission the bind fails with "Operation not permitted"
+      and the tree's own channel can never answer on the device (§257). It is
+      a normal permission — the platform grants it at install, and nobody is
+      asked.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="craftkit"
+        android:hasCode="true"
+        android:debuggable="true">
+
+        <activity
+            android:name="org.craftocto.craftkit.CraftkitActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|screenLayout|smallestScreenSize|uiMode"
+            android:exported="true">
+
+            <meta-data android:name="android.app.lib_name" android:value="craftkit_android" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          The instrument: the tree's own keyboard, used to measure the bridge.
+
+          The platform's path is the platform's own keyboard → the view that
+          has the focus → the connection that view serves → the tree. On a
+          phone that will not let the shell inject a touch (§256) no key can
+          be pressed on the platform's keyboard, so the platform's half is
+          measured with this one instead: the platform hands it exactly the
+          connection the platform's own keyboard would get (§257).
+        -->
+        <service
+            android:name="org.craftocto.craftkit.CraftkitTestIme"
+            android:exported="true"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+
+            <!-- The platform's own description of the keyboard. -->
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+    </application>
+</manifest>

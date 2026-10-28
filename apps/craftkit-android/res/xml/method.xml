@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The platform's own description of an input method.
+
+  The platform builds its list of keyboards from this: a service that has
+  the `android.view.InputMethod` action but no description of its own is not
+  in the list at all — measured: `ime list` did not show it (§257).
+-->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsSwitchingToNextInputMethod="false" />

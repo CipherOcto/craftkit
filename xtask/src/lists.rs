@@ -5814,6 +5814,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the hash is the code the tree ships, and a field only a test declares is not hashed",
     ),
     (
+        "the_platforms_keyboard_is_behind_the_gate",
+        Subject::Production,
+        "the gate is about what the tree ships: the attribute that allows unsafe code is code, and a mention of it in a comment allows nothing",
+    ),
+    (
         "gate_problems",
         Subject::Production,
         "the table of commands is in the crate's own module doc, and a table in a test is not it",
@@ -7035,6 +7040,140 @@ pub fn the_instrument_is_not_cancelled_by_a_push(root: &Path) -> Result<Vec<Stri
     Ok(problems)
 }
 
+/// The platform's own keyboard is behind the gate. §257.
+///
+/// The tree draws a keyboard of its own on a phone, because the platform's
+/// keyboard opens and delivers nothing (§236, §246). The platform's path is
+/// a **gate**: a cargo feature that is off unless it is asked for, and the
+/// tree's default package carries no Java at all.
+///
+/// This gate is what keeps the gate a gate. It reads the tree and says no
+/// when:
+///
+/// - either crate turns the feature on **by default** — then the gate is
+///   not a gate, and the default package carries the Java half with it;
+/// - the **safe** half of the bridge is not safe — the application crate
+///   forbids unsafe code, and a bridge that needs unsafe code in the
+///   application is a bridge that was put in the wrong place;
+/// - the tree holds an `allow(unsafe_code)` anywhere but the one gated
+///   module in the package, which is the tree's **second** named exception
+///   and the only one; or
+/// - a `Cargo.toml` names the Java sources, which would put them into a
+///   build that is not the gated one.
+pub fn the_platforms_keyboard_is_behind_the_gate(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+
+    for manifest in ["apps/craftkit/Cargo.toml", "apps/craftkit-android/Cargo.toml"] {
+        let path = root.join(manifest);
+        let text = match read_text(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                problems.push(format!("{manifest}: could not be read ({e})"));
+                continue;
+            }
+        };
+        if !text.contains("platform-ime") {
+            problems.push(format!(
+                "{manifest}: the crate has no `platform-ime` feature, so the platform's \
+                 keyboard is not behind a gate at all. §257."
+            ));
+            continue;
+        }
+        // The default feature list is the one that decides what the default
+        // build carries, and it is read by name: a feature that is on by
+        // default is on in every build, gated or not.
+        for line in text.lines() {
+            let line = line.trim();
+            if !line.starts_with("default") {
+                continue;
+            }
+            if line.contains("platform-ime") {
+                problems.push(format!(
+                    "{manifest}: the `platform-ime` feature is a default feature, so the \
+                     tree's default package carries the Java half with it. §257."
+                ));
+            }
+        }
+    }
+
+    // The safe half is safe: the application crate forbids unsafe code.
+    let app_root = root.join("apps/craftkit/src/lib.rs");
+    match crate::tree::read_rust(&app_root, Subject::Production) {
+        Ok(text) => {
+            if !text.contains("forbid(unsafe_code)") {
+                problems.push(
+                    "apps/craftkit/src/lib.rs: the application crate does not forbid unsafe \
+                     code, so the safe half of the bridge is not safe. §257."
+                        .to_string(),
+                );
+            }
+        }
+        Err(e) => problems.push(format!("apps/craftkit/src/lib.rs: could not be read ({e})")),
+    }
+
+    // The one `allow(unsafe_code)` in the tree is the gated module's own
+    // declaration, and that declaration is behind the gate.
+    let package_root = "apps/craftkit-android/src/lib.rs";
+    let mut rust = Vec::new();
+    for group in ["crates", "apps"] {
+        let dir = root.join(group);
+        collect_rust(&dir, &mut rust);
+    }
+    for path in &rust {
+        let Ok(text) = crate::tree::read_rust(path, Subject::Production) else { continue };
+        if !text.contains("allow(unsafe_code)") {
+            continue;
+        }
+        let name = crate::tree::relative_name(root, path);
+        if name != package_root {
+            problems.push(format!(
+                "{name}: the tree allows unsafe code here, and the tree's second named \
+                 exception is one module, declared in {package_root}. §257."
+            ));
+        }
+    }
+    // The declaration itself: it must name the feature, or the module is
+    // compiled whether the gate is on or not.
+    match crate::tree::read_rust(root.join(package_root), Subject::Production) {
+        Ok(text) => {
+            let behind = text.lines().enumerate().any(|(at, line)| {
+                if !line.contains("mod ime;") {
+                    return false;
+                }
+                let start = at.saturating_sub(3);
+                text.lines().skip(start).take(at - start + 1).any(|l| l.contains("platform-ime"))
+            });
+            if !behind {
+                problems.push(format!(
+                    "{package_root}: the gated module is not behind the gate, so the Java \
+                     half is compiled whether it was asked for or not. §257."
+                ));
+            }
+        }
+        Err(e) => problems.push(format!("{package_root}: could not be read ({e})")),
+    }
+
+    // No build but the gated one names the Java sources.
+    let mut manifests = Vec::new();
+    crate::tree::walk(root, root, &mut manifests, &|path| {
+        path.file_name().and_then(|n| n.to_str()) == Some("Cargo.toml")
+    });
+    for path in manifests {
+        let Ok(text) = read_text(&path) else { continue };
+        if !text.contains("craftkit-android/java") {
+            continue;
+        }
+        let name = crate::tree::relative_name(root, &path);
+        problems.push(format!(
+            "{name}: a manifest names the Java sources, so a build that is not the gated \
+             one can carry them. §257."
+        ));
+    }
+
+    problems.sort();
+    Ok(problems)
+}
+
 /// A file's code, with its comments taken out.
 ///
 /// The workflow files explain themselves in prose, and the prose must not
@@ -7543,6 +7682,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     problems.extend(the_instrument_is_not_cancelled_by_a_push(root)?.into_iter().map(|p| {
         format!("{p}\n     An instrument that is cancelled halfway is an instrument that never reported.")
     }));
+
+    // The platform's own keyboard is behind the gate. §257.
+    problems.extend(
+        the_platforms_keyboard_is_behind_the_gate(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A gate that is open by default is not a gate.")),
+    );
 
     // The mutation job's timeout fits the suite's budget. §222.
     problems.extend(
@@ -9830,6 +9976,70 @@ mod tests {
         let root = crate::root().expect("the workspace root");
         let problems = the_instrument_is_not_cancelled_by_a_push(&root).expect("runs");
         assert!(problems.is_empty(), "the instrument's workflow is the one the tree wants: {problems:#?}");
+    }
+
+    /// The platform's keyboard is behind the gate. §257.
+    #[test]
+    fn the_platforms_keyboard_is_behind_the_gate_in_this_tree() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_platforms_keyboard_is_behind_the_gate(&root).expect("runs");
+        assert!(problems.is_empty(), "the platform's keyboard is behind the gate: {problems:#?}");
+    }
+
+    /// A feature that is on by default is not a gate.
+    ///
+    /// The defect this gate exists for: the tree's default package carries
+    /// no Java at all, and a default feature would put the Java half into
+    /// every build. §257.
+    #[test]
+    fn a_platform_ime_that_is_on_by_default_is_caught() {
+        let dir = crate::temp::dir("ime-default").expect("a temporary folder");
+        let app = dir.join("apps/craftkit");
+        let package = dir.join("apps/craftkit-android");
+        std::fs::create_dir_all(app.join("src")).expect("the fabricated tree");
+        std::fs::create_dir_all(package.join("src")).expect("the fabricated tree");
+        std::fs::write(
+            app.join("Cargo.toml"),
+            "[features]\ndefault = [\"platform-ime\"]\nplatform-ime = []\n",
+        )
+        .expect("the manifest");
+        std::fs::write(package.join("Cargo.toml"), "[features]\ndefault = []\nplatform-ime = []\n")
+            .expect("the manifest");
+        std::fs::write(app.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").expect("the crate root");
+
+        let problems = the_platforms_keyboard_is_behind_the_gate(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("default feature")),
+            "a feature that is on by default is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An `allow(unsafe_code)` anywhere but the gated module is caught.
+    ///
+    /// The tree's second named exception is one module, in the package, and
+    /// only behind the gate. §257.
+    #[test]
+    fn an_unsafe_allow_outside_the_gated_module_is_caught() {
+        let dir = crate::temp::dir("ime-unsafe").expect("a temporary folder");
+        let app = dir.join("apps/craftkit");
+        let package = dir.join("apps/craftkit-android");
+        std::fs::create_dir_all(app.join("src")).expect("the fabricated tree");
+        std::fs::create_dir_all(package.join("src")).expect("the fabricated tree");
+        std::fs::write(app.join("Cargo.toml"), "[features]\nplatform-ime = []\n").expect("the manifest");
+        std::fs::write(package.join("Cargo.toml"), "[features]\nplatform-ime = []\n").expect("the manifest");
+        std::fs::write(
+            app.join("src/lib.rs"),
+            "#![forbid(unsafe_code)]\n#[allow(unsafe_code)]\nmod bridge;\n",
+        )
+        .expect("the crate root");
+
+        let problems = the_platforms_keyboard_is_behind_the_gate(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("allows unsafe code here")),
+            "an unsafe allow outside the gated module is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A workflow that cancels the instrument is caught.
