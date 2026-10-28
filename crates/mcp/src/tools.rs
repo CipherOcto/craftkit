@@ -331,8 +331,19 @@ fn property_for(kind: Doc, help: &str) -> Json {
             map.insert("examples".to_string(), json!(["amount", "trigger/lead", "effects/#2/amount", "@12"]));
         }
         Doc::Easing => {
+            // **A string, and not an enum.** The tree publishes an easing's
+            // own spelling, and a bezier that is not one of the presets is
+            // published with its control points — `bezier(0.5,0.25)` — so an
+            // enum of the five preset names would refuse a value the tree
+            // itself writes. §267.
             map.insert("type".to_string(), json!("string"));
-            map.insert("enum".to_string(), json!(["linear", "hold", "easeIn", "easeOut", "easeInOut"]));
+            map.insert(
+                "description".to_string(),
+                json!(format!(
+                    "{help} linear, hold, easeIn, easeOut or easeInOut, or a bezier with its \
+                     control points, bezier(outX,outY)."
+                )),
+            );
         }
     }
     Json::Object(map)

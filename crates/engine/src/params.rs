@@ -361,7 +361,10 @@ pub(crate) fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, En
         id: String::new(),
         source: ParamError::new(
             key,
-            format!("`{s}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut"),
+            format!(
+                "`{s}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut, \
+                 or a bezier with its control points, bezier(outX,outY)"
+            ),
         ),
     })
 }

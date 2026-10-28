@@ -30671,6 +30671,9 @@ places claim to write it, the two places are the defect, not the reader.
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
@@ -30795,6 +30798,9 @@ tree's own sample tests the sample.**
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 
@@ -31018,7 +31024,153 @@ code has to ask its own types what they look like on the wire** — otherwise
 the conversion happens in a place the lint cannot reach.
 
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
+
+## 267. The tree published an easing its own parameter refused
+
+### The finding
+
+**The tree published `bezier` for every bezier, and the command that takes an
+easing refused that word.**
+
+The model had two vocabularies for the same thing:
+
+```rust
+pub fn preset(name: &str) -> Option<Self> {
+    match name {
+        "hold" | "step" => Some(Easing::Hold),
+        "linear" => Some(Easing::Linear),
+        "ease" | "easeInOut" | "smooth" => Some(Easing::EaseInOut),
+        "easeIn" => Some(Easing::Bezier { out_x: 0.42, out_y: 0.0 }),
+        "easeOut" => Some(Easing::Bezier { out_x: 0.58, out_y: 1.0 }),
+        _ => None,
+    }
+}
+
+pub fn name(&self) -> &'static str {
+    match self {
+        Easing::Hold => "hold",
+        Easing::Linear => "linear",
+        Easing::EaseInOut => "easeInOut",
+        Easing::Bezier { .. } => "bezier",   // <- refused by the reader above
+    }
+}
+```
+
+`Easing::Bezier` is **two** presets — `easeIn` is the bezier with control
+points `(0.42, 0)` and `easeOut` is `(0.58, 1)` — and the writer published
+neither name. It published the *shape* of the thing, which the reader does
+not accept.
+
+And a bezier with any **other** control points has no preset name at all: only
+a file can hold one, and the file's own spelling (`{"bezier":{"out_x":…}}`)
+is the file's door, not the command's.
+
+### Measured
+
+Before — the tree's own engine, on the tree's own sample:
+
+```text
+key.list publishes ease = "bezier"
+key.ease refused it: `key.ease` rejected its parameters: `easing` `bezier` is not an
+                      easing; expected linear, hold, easeIn, easeOut or easeInOut
+Easing::preset("bezier")               = None
+Easing::Bezier{0.42,0.0}.name()       = "bezier"
+```
+
+So: the tree wrote a key, listed it, and could not read its own listing back.
+A script that recorded the easing the tree published and replayed it got a
+refusal.
+
+After:
+
+```text
+key.list publishes ease = "easeIn"
+key.ease accepts it
+```
+
+and a bezier that is not a preset is published with its control points, and
+read back as the same curve:
+
+```text
+key.list publishes ease = "bezier(0.5,0.25)"
+key.ease accepts it, and the curve is the same one
+```
+
+### Why nothing else would have caught it
+
+- **The model's own easing test checked one direction.** It tested
+  `preset` → `preset`, never `name()` → `preset()` — the one round trip that
+  fails.
+- **The file format's tests only asked that a *broken* easing be refused.**
+  A file holding a bezier round-tripped through the file's own spelling,
+  which is the file's door and always worked.
+- **Nothing in the tree ever read a published easing back.** The commands
+  that take an easing take a *word*, and the command that publishes one
+  publishes a *word*, and nobody put the two together.
+- **The catalogue's help text was right and nobody compared it with the
+  output.** The parameter's own help said "linear, hold, easeIn, easeOut or
+  easeInOut" — and the tree published `bezier`, which is not in that list.
+
+### The fix
+
+**The spelling has one home, and the writer and the reader are the same
+pair.**
+
+`Easing::name` writes it and `Easing::preset` reads it, and the two agree
+for **every** easing the tree can hold:
+
+- `hold`, `linear` and `easeInOut` are spelled as they always were.
+- The two bezier presets are spelled by the words the tree has always used
+  for them — `easeIn` and `easeOut` — because a name is what a person
+  writes.
+- A bezier with any other control points has no preset name, so it is
+  spelled **with** them: `bezier(0.5,0.25)`. The reader takes that form, and
+  applies the **file's own rule** to it: a control point outside `0..=1`, or
+  not finite, is refused here as it is there.
+
+The MCP's schema for the easing parameter was an **enum** of the five preset
+names, and an enum refuses a value the tree itself writes — so it is now a
+string with the names in its description.
+
+### What is not claimed
+
+- **The file's spelling is unchanged.** The file has its own door
+  (`{"bezier":{"out_x":…}}`) and its own style; a file is not a command's
+  parameter.
+- **No design file changes.** Nothing about the format changed.
+- **The aliases are unchanged.** `step`, `ease` and `smooth` are still
+  accepted; the tree just never published them.
+- **`easeIn` and `easeOut` are still the two bezier presets.** What changed
+  is that the tree now *says* which one it is.
+
+### The lesson
+
+**A published name is a promise that the name can be read back.**
+
+This is §263's lesson in a second costume: the tree had two spellings for one
+thing, and each was right about a different set. The id was decimal in one
+place and hexadecimal in another; the easing is a preset name in one place
+and a shape in another. **The shape of a thing is not a name for it**, and a
+list of shapes is not a vocabulary.
+
+**And a preset is not a shape.** `easeIn` and `easeOut` are *beziers*, so the
+writer published the shape and the reader wanted the names — and the two
+bezier presets had different control points, so the shape could not even say
+which one it was. **When a thing has several named forms, the names are the
+thing; the shape is the thing's inside.**
+
+**And the round trip nobody performed is the one that finds these.** The
+model tested its reader against itself and its writer against itself, and
+never the writer against the reader. **A test that checks a thing against
+itself is not a round trip.**
+
+| **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 
 ## What enforces what
 
@@ -31618,6 +31770,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 | **Every suggestion is a value the command accepts** | `every_suggested_node_is_a_value_the_command_accepts` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
+| **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
+| **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
 | **A tick becomes a reply's number exactly** | `a_tick_becomes_a_reply_number_exactly` in `crates/core/src/tick.rs` | 1 mutation — §266 |
 | **A suggestion list is a set** | `the_path_suggestions_are_distinct` in `crates/mcp/src/prompts.rs` | 1 mutation — §265 |
 

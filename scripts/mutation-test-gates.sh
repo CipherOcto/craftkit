@@ -7053,5 +7053,29 @@ swap xtask/src/lists.rs \
 expect_catch "lists: a reply may read a tick's raw count" \
     "cargo test -p xtask --profile ci a_reply_site_that_reads_a_tick_is_caught"
 
+# --------------------------------------- a published easing is a name the parameter accepts ----
+# Section 267. The tree published `bezier` for every bezier, and the command
+# that takes an easing refused that word: the tree published a value it would
+# not take back.
+swap crates/model/src/keyframe.rs \
+    '                if *out_x == EASE_IN_X && *out_y == 0.0 {
+                    "easeIn".to_string()
+                } else if *out_x == EASE_OUT_X && *out_y == 1.0 {
+                    "easeOut".to_string()
+                } else {
+                    format!("bezier({out_x},{out_y})")
+                }' \
+    '                "bezier".to_string()'
+expect_catch "model: a published easing is a name the parameter refuses" \
+    "cargo test -p craftkit-model --profile ci a_published_easing_is_a_name_the_parameter_accepts"
+
+# And the reader of the spelling: a bezier written with its points is a
+# bezier, and the reader has to take it.
+swap crates/model/src/keyframe.rs \
+    '            _ => bezier_with_its_points(name),' \
+    '            _ => None,'
+expect_catch "model: a bezier written with its points is refused" \
+    "cargo test -p craftkit-model --profile ci a_bezier_written_with_its_points_is_read_back"
+
 restore
 finish

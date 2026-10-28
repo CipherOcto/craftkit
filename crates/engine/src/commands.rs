@@ -549,7 +549,8 @@ pub static KEY_SET: CommandSpec = CommandSpec {
         ParamDoc::opt(
             "easing",
             Doc::Easing,
-            "How this key is left: linear, hold, easeIn, easeOut or easeInOut. Defaults to linear.",
+            "How this key is left: linear, hold, easeIn, easeOut or easeInOut, or a bezier \
+             with its control points, bezier(outX,outY). Defaults to linear.",
         ),
     ],
     mutates: true,
@@ -723,7 +724,12 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         ParamDoc::opt("node_name", Doc::Text, "…or its name."),
         ParamDoc::req("path", Doc::PropertyPath, "The property path."),
         ParamDoc::opt("time", Doc::Time, "Which key. Defaults to the playhead."),
-        ParamDoc::req("easing", Doc::Easing, "linear, hold, easeIn, easeOut or easeInOut."),
+        ParamDoc::req(
+            "easing",
+            Doc::Easing,
+            "linear, hold, easeIn, easeOut or easeInOut, or a bezier with its control points, \
+             bezier(outX,outY).",
+        ),
     ],
     mutates: true,
     undoable: true,
@@ -1644,6 +1650,69 @@ mod tests {
         let mut session = Session::new("probe");
         session.load_document(doc);
         session
+    }
+
+    /// A published easing is a value the command accepts.
+    ///
+    /// §267: the tree published `bezier` for every bezier, and the command's
+    /// own easing parameter refused that word — so the tree published a
+    /// value it would not take back, and a key that could be written could
+    /// not be read.
+    #[test]
+    fn a_published_easing_is_a_value_the_command_accepts() {
+        let mut s = session();
+        ok(
+            &mut s,
+            "key.set",
+            json!({
+                "node": 1, "path": "amount", "value": 0, "time": 0.0, "easing": "easeIn"
+            }),
+        );
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the list");
+        let ease = listed.data["keyframes"][0]["ease"].as_str().expect("the easing").to_string();
+        assert_eq!(ease, "easeIn", "the tree published another spelling");
+        // And the command takes it back.
+        ok(&mut s, "key.ease", json!({ "node": 1, "path": "amount", "time": 0.0, "easing": ease }));
+    }
+
+    /// A bezier that is not a preset is published with its control points.
+    ///
+    /// Only a file can hold one, so the test loads a document that holds one:
+    /// the tree publishes a name for it, and the name is one the command
+    /// takes. §267.
+    #[test]
+    fn a_custom_bezier_is_published_with_its_control_points() {
+        let mut doc = craftkit_model::Document::empty("probe");
+        let id = doc.add_node("src", craftkit_model::NodeKind::Source).expect("the node");
+        let node = doc.get_mut(id).expect("the node");
+        let mut keys = craftkit_model::Keyframes::new();
+        keys.set(
+            craftkit_model::Key::new(
+                craftkit_core::Tick::ZERO,
+                craftkit_core::Value::num("amount", 1.0).expect("value"),
+                craftkit_model::Easing::Bezier { out_x: 0.5, out_y: 0.25 },
+            )
+            .expect("the key"),
+        )
+        .expect("the key is set");
+        let mut property =
+            craftkit_model::Property::new(1, "amount", craftkit_core::Value::num("amount", 0.0).expect("v"));
+        property.keys = keys;
+        node.props.push(property);
+        let mut s = Session::new("probe");
+        s.load_document(doc);
+
+        let listed = s.execute("key.list", &json!({ "node": id.get(), "path": "amount" })).expect("the list");
+        let ease = listed.data["keyframes"][0]["ease"].as_str().expect("the easing").to_string();
+        assert_eq!(ease, "bezier(0.5,0.25)", "the tree published another spelling");
+        // And the command takes it back — the same curve, not another one.
+        ok(&mut s, "key.ease", json!({ "node": id.get(), "path": "amount", "time": 0.0, "easing": ease }));
+        let listed = s.execute("key.list", &json!({ "node": id.get(), "path": "amount" })).expect("the list");
+        assert_eq!(
+            listed.data["keyframes"][0]["ease"],
+            json!("bezier(0.5,0.25)"),
+            "the easing changed when it was read back"
+        );
     }
 
     /// What a locked property holds: its value, how many keys, and how the

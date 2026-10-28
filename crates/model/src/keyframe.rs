@@ -45,29 +45,61 @@ pub enum Easing {
     EaseInOut,
 }
 
+/// The control point of the `easeIn` preset.
+const EASE_IN_X: f32 = 0.42;
+/// The control point of the `easeOut` preset.
+const EASE_OUT_X: f32 = 0.58;
+
 impl Easing {
-    /// The four built-in presets, by the name a script or an agent uses.
+    /// The built-in presets, by the name a script or an agent uses, and a
+    /// bezier written with its control points.
     ///
     /// Returned as `Option` rather than `unwrap`/`expect`, because an agent
     /// will pass a name that does not exist and that must be an error message,
     /// not a panic.
+    ///
+    /// **This is the reader of the easing's spelling, and [`Easing::name`] is
+    /// its writer.** Every name this accepts is a name `name` writes, and
+    /// every easing `name` writes is a name this accepts. §267.
     pub fn preset(name: &str) -> Option<Self> {
         match name {
             "hold" | "step" => Some(Easing::Hold),
             "linear" => Some(Easing::Linear),
             "ease" | "easeInOut" | "smooth" => Some(Easing::EaseInOut),
-            "easeIn" => Some(Easing::Bezier { out_x: 0.42, out_y: 0.0 }),
-            "easeOut" => Some(Easing::Bezier { out_x: 0.58, out_y: 1.0 }),
-            _ => None,
+            "easeIn" => Some(Easing::Bezier { out_x: EASE_IN_X, out_y: 0.0 }),
+            "easeOut" => Some(Easing::Bezier { out_x: EASE_OUT_X, out_y: 1.0 }),
+            _ => bezier_with_its_points(name),
         }
     }
 
-    pub fn name(&self) -> &'static str {
+    /// The spelling of this easing that the tree's own parameter accepts.
+    ///
+    /// **One home.** The parameter reads the spelling with
+    /// [`Easing::preset`], and the commands publish it with this, so a
+    /// published easing is always a value the command accepts. §267.
+    ///
+    /// The two bezier presets are spelled by the words the tree has always
+    /// used for them — `easeIn` and `easeOut` — because a name is what a
+    /// person writes. A bezier with any other control points has no preset
+    /// name, so it is spelled **with** them: `bezier(0.5,0.25)`.
+    ///
+    /// Before this, the tree published `bezier` for every bezier, and its own
+    /// parameter refused that word: a key that could be written could not be
+    /// read back, and the file the tree wrote carried the same word.
+    pub fn name(&self) -> String {
         match self {
-            Easing::Hold => "hold",
-            Easing::Linear => "linear",
-            Easing::EaseInOut => "easeInOut",
-            Easing::Bezier { .. } => "bezier",
+            Easing::Hold => "hold".to_string(),
+            Easing::Linear => "linear".to_string(),
+            Easing::EaseInOut => "easeInOut".to_string(),
+            Easing::Bezier { out_x, out_y } => {
+                if *out_x == EASE_IN_X && *out_y == 0.0 {
+                    "easeIn".to_string()
+                } else if *out_x == EASE_OUT_X && *out_y == 1.0 {
+                    "easeOut".to_string()
+                } else {
+                    format!("bezier({out_x},{out_y})")
+                }
+            }
         }
     }
 
@@ -87,6 +119,19 @@ impl Easing {
         }
         Ok(self)
     }
+}
+
+/// A bezier written with its control points: `bezier(0.5,0.25)`.
+///
+/// **The same rule the file's reader applies.** A bezier whose control points
+/// are outside `0..=1`, or not finite, is refused — here and in the file —
+/// because a curve the tree cannot draw is not an easing. §267.
+fn bezier_with_its_points(name: &str) -> Option<Easing> {
+    let rest = name.strip_prefix("bezier(")?.strip_suffix(')')?;
+    let (out_x, out_y) = rest.split_once(',')?;
+    let out_x: f32 = out_x.trim().parse().ok()?;
+    let out_y: f32 = out_y.trim().parse().ok()?;
+    Easing::Bezier { out_x, out_y }.checked().ok()
 }
 
 /// One keyframe.
@@ -446,6 +491,56 @@ mod tests {
         assert_eq!(Easing::preset("linear"), Some(Easing::Linear));
         assert_eq!(Easing::preset("easeOut"), Some(Easing::preset("easeOut").unwrap()));
         assert_eq!(Easing::preset("wobble"), None);
+    }
+
+    /// **A published easing is a value the tree's own parameter accepts.**
+    ///
+    /// §267: the tree published `bezier` for every bezier, and its own
+    /// parameter refused that word — so a key could be written and could not
+    /// be read back, and the file the tree wrote carried the same word. The
+    /// spelling has one home now: `name` writes it and `preset` reads it.
+    #[test]
+    fn a_published_easing_is_a_name_the_parameter_accepts() {
+        let every = [
+            Easing::Hold,
+            Easing::Linear,
+            Easing::EaseInOut,
+            Easing::Bezier { out_x: 0.42, out_y: 0.0 },
+            Easing::Bezier { out_x: 0.58, out_y: 1.0 },
+            Easing::Bezier { out_x: 0.5, out_y: 0.25 },
+            Easing::Bezier { out_x: 0.0, out_y: 2.0 },
+        ];
+        for easing in every {
+            let name = easing.name();
+            assert_eq!(
+                Easing::preset(&name),
+                Some(easing),
+                "`{name}` is not a name the parameter accepts, or it is another easing"
+            );
+        }
+        // And the names the parameter accepts are the ones the tree writes.
+        assert_eq!(Easing::Hold.name(), "hold");
+        assert_eq!(Easing::Linear.name(), "linear");
+        assert_eq!(Easing::EaseInOut.name(), "easeInOut");
+        assert_eq!(Easing::Bezier { out_x: 0.42, out_y: 0.0 }.name(), "easeIn");
+        assert_eq!(Easing::Bezier { out_x: 0.58, out_y: 1.0 }.name(), "easeOut");
+        // A bezier that is not a preset is spelled with its control points.
+        assert_eq!(Easing::Bezier { out_x: 0.5, out_y: 0.25 }.name(), "bezier(0.5,0.25)");
+    }
+
+    /// A bezier written with its control points is a bezier.
+    ///
+    /// And the rule is the file's rule: a control point outside `0..=1`, or
+    /// not finite, is refused here as it is there. §267.
+    #[test]
+    fn a_bezier_written_with_its_points_is_read_back() {
+        assert_eq!(Easing::preset("bezier(0.5,0.25)"), Some(Easing::Bezier { out_x: 0.5, out_y: 0.25 }));
+        // The points are the tree's own rule, not the parser's.
+        assert_eq!(Easing::preset("bezier(1.5,0.25)"), None, "out_x is outside 0..=1");
+        assert_eq!(Easing::preset("bezier(0.5,nonsense)"), None, "a point is not a number");
+        assert_eq!(Easing::preset("bezier(0.5)"), None, "a bezier has two points");
+        assert_eq!(Easing::preset("bezier(0.5,0.25"), None, "the spelling is closed");
+        assert_eq!(Easing::preset("bezier"), None, "a bezier with no points is not a bezier");
     }
 
     #[test]
