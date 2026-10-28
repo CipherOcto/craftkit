@@ -65,6 +65,21 @@ fn a_failure_the_cli_prints_carries_the_kind() {
     // is, not what went wrong.
     assert!(text.contains("bogus"), "the failure did not say what went wrong: {text:?}");
 
+    // **The other door, and the one that had the defect.** §275: `snapshot`
+    // printed the message alone -- no kind, and no step number -- so an
+    // agent asking for evidence could not tell a refusal from a bug, and
+    // could not say which step refused.
+    let shot = dir.join("shot.png");
+    let out = Command::new(BIN)
+        .args(["snapshot", path.to_str().expect("a path"), "--out", shot.to_str().expect("a path")])
+        .output()
+        .expect("the CLI runs");
+    assert!(!out.status.success(), "a script with a bad parameter must be refused");
+    let text = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(text.contains("bad-parameter"), "the failure did not name its kind: {text:?}");
+    assert!(text.contains("bogus"), "the failure did not say what went wrong: {text:?}");
+    assert!(text.contains("step 1/1"), "the failure did not say which step: {text:?}");
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 

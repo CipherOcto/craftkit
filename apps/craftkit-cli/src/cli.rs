@@ -429,11 +429,18 @@ fn snapshot(script: &Path, out: &Path, sample: bool) -> Result<(), String> {
     if let Some(base) = loaded.base {
         session.load_document(craftkit_engine::crash::document_from_json(base)?);
     }
-    for step in &loaded.commands {
-        session
-            .execute(&step.command, &step.params)
-            // As above: the error names its own command.
-            .map_err(|e| e.to_string())?;
+    // **The kind, as every other door carries it.** §275: the failure line
+    // here said what went wrong and not *which kind* of wrong, and this is
+    // the program an agent drives — `snapshot` is how an agent asks for
+    // evidence. §197's rule is the CLI's rule, and this door had not
+    // applied it.
+    let steps = loaded.commands.len();
+    for (i, step) in loaded.commands.iter().enumerate() {
+        session.execute(&step.command, &step.params).map_err(|e| {
+            // The engine's own message already names the command, so this
+            // prefix is only the step number.
+            format!("step {}/{steps}: {}", i + 1, failed(&e))
+        })?;
     }
     render(&mut session, out)
 }

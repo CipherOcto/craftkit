@@ -7220,5 +7220,15 @@ serde = { workspace = true }'
 expect_catch "layers: the generic crate reaches up into the domain" \
     "cargo xtask layers"
 
+# --------------------------------------- every CLI door prints the kind ----
+# Section 275. The CLI's `snapshot` door printed the failure message without
+# the kind its sibling door prints, and without the step number -- so an
+# agent could not tell a refusal from a bug.
+swap apps/craftkit-cli/src/cli.rs \
+    '            format!("step {}/{steps}: {}", i + 1, failed(&e))' \
+    '            format!("{}", e)'
+expect_catch "cli: a door prints a failure without its kind" \
+    "cargo test -p craftkit-cli --profile ci a_failure_the_cli_prints_carries_the_kind"
+
 restore
 finish

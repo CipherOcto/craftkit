@@ -32087,6 +32087,114 @@ and the answer named a crate that did not exist ✓.
 
 | **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
 
+## 275. The CLI's other door dropped the failure kind its sibling door prints
+
+### The finding
+
+**`craftkit-cli snapshot` printed the message and not the *kind* — and the
+CLI's own source says it must.**
+
+```rust
+// apps/craftkit-cli/src/cli.rs — `run`
+return Err(format!("step {}/{steps}: {}", i + 1, failed(&e)));
+```
+
+```rust
+// apps/craftkit-cli/src/cli.rs — `snapshot`
+session
+    .execute(&step.command, &step.params)
+    // As above: the error names its own command.
+    .map_err(|e| e.to_string())?;
+```
+
+And the promise, in the same file (`cli.rs:154-163`):
+
+> The other two doors carry it: the control channel's reply has a `kind`
+> field and the MCP's tool error has one. **The CLI is the program an agent
+> drives**, and it was the only door that dropped it: the failure line said
+> what went wrong and not *which kind* of wrong, so an agent could not tell
+> a refusal from a bug. §197.
+>
+> The kind comes first, then the message, so a reader (or a script) can
+> match on it without reading the rest.
+
+§197 fixed `run` ✓. **`snapshot` was the same program and the same promise,
+and it was not fixed** ✓.
+
+### Measured
+
+Before — the same script, the same refusal, the same exit code, two
+spellings:
+
+```text
+$ craftkit-cli run bad3.json
+1/3 node.add: added cue `A`
+craftkit-cli: step 2/3: bad-parameter: `node.add` rejected its parameters: `bogus` unknown parameter (expected one of: name, kind, amount)
+exit=1
+
+$ craftkit-cli snapshot bad3.json --out shot.png
+craftkit-cli: `node.add` rejected its parameters: `bogus` unknown parameter (expected one of: name, kind, amount)
+exit=1
+```
+
+After — one spelling:
+
+```text
+$ craftkit-cli snapshot bad3.json --out shot.png
+craftkit-cli: step 2/3: bad-parameter: `node.add` rejected its parameters: `bogus` unknown parameter (expected one of: name, kind, amount)
+exit=1
+```
+
+### Why nothing else would have caught it
+
+- **The gate that holds §197's rule exercises one door.** The test
+  (`apps/craftkit-cli/tests/script.rs:51`) runs `run` ✓, and its mutation
+  (`scripts/mutation-test-gates.sh`) swaps `run`'s formatter ✓ — so the rule
+  was enforced ✓ and the door that broke it was not in the rule ✓.
+- **`snapshot` had no failure test at all.** Its test was the happy path ✓ —
+  a picture ✓ — so the failure line was never read ✓ by anything ✓.
+- **The other two doors were fine,** which is what made the CLI look
+  inconsistent rather than wrong: the control channel's reply carries
+  `"kind":"bad-parameter"` ✓ and the MCP's tool error carries `kind` ✓ and
+  `command` ✓. **Four doors, two spellings** ✓, and the odd one out was the
+  one an agent uses to ask for evidence ✓.
+
+### The fix
+
+**`snapshot` fails the way `run` fails.**
+
+The same `failed(&e)` formatter ✓ and the same step number ✓ — so a reader
+can match on the kind ✓ and can say which step refused ✓.
+
+### What is not claimed
+
+- **No behaviour changed except the failure line.** The picture is written
+  the same way ✓, and the exit code is the same ✓.
+- **The control channel's and the MCP's replies were not wrong.** They
+  carried the kind ✓ already ✓.
+- **`craftkit-cli eval` was not wrong either** — it uses `failed(&e)` ✓.
+- **The command's own message is unchanged** ✓: the kind says which sort of
+  failure it is ✓, and the message says what went wrong ✓.
+
+### The lesson
+
+**A rule that is enforced at one door is a rule about that door.**
+
+§197 found "a failure the CLI prints carries the kind" ✓ and enforced it on
+`run` ✓ — and the same program had a second door ✓ that printed failures
+too ✓, with the same promise in the same file ✓, ten lines away ✓.
+
+**The general form: *when a rule names a place, count the places — the door
+you fixed is not the door you counted*.** §269's lesson again ✓ (§272's
+family ✓): a rule that names one site is a rule about one site ✓.
+
+**And the two doors were not equally used.** `run` is the common path ✓;
+`snapshot` is how an agent asks for **evidence** ✓ — a picture of what the
+script produced ✓ — so the door that lost the kind was the one an agent
+would use to check a change ✓.
+
+| **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32695,6 +32803,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
 | **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
 | **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
+| **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
