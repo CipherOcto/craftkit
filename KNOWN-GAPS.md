@@ -30668,6 +30668,127 @@ places claim to write it, the two places are the defect, not the reader.
 | **An id is read the way the tree writes it** | `an_id_is_read_the_way_the_tree_writes_it` in `crates/model/src/path.rs` | 2 mutations — §263 |
 | **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
+| **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
+
+## 264. The evaluator's amount was a different property from the model's
+
+### The finding
+
+**The evaluator compared the published path with a literal string, and the
+model resolves names case-insensitively.**
+
+The evaluator looks for a node's `amount` like this:
+
+```rust
+let Some(r) = props.iter().find(|p| p.path == "amount") else {
+    diag.push(Diagnostic::warn(Some(node.id), &node.name, "has no `amount` property; using 1.0"));
+    return Ok(1.0);
+};
+```
+
+The **model** resolves a name with one rule, in one place
+(`crates/model/src/property.rs`): `Property::matches` is
+`label.eq_ignore_ascii_case(name)`, and the resolver, the listing and the
+creator all ask it (§85).
+
+So a node whose property is labelled **`Amount`** — the very property that
+`prop.set { path: "amount" }` edits, and the very property the listing
+publishes — was **not** the evaluator's amount. The evaluator used 1.0, said
+so in a warning, and the level came out wrong.
+
+The evaluator was also the only reader that asked the question at all: the
+engine's `prop.set`, `prop.reset` and the listing all go through the model,
+and the evaluator was reaching around it to compare a string.
+
+### Measured
+
+Before — a node whose `amount` property is labelled `Amount`:
+
+```text
+props   = ["Amount=3"]
+output  = 1
+diagnostics = ["warning: src `1`: has no `amount` property; using 1.0"]
+```
+
+After:
+
+```text
+props   = ["Amount=3"]
+output  = 3
+diagnostics = []
+```
+
+And the command that set it, on the tree's own sample, before the fix:
+
+```text
+the command says: `amount` = 7
+  amount id=2   value=7
+level_out = 1.0        <- the evaluator disagreed with the command
+```
+
+after the fix, the same command and the same document:
+
+```text
+the command says: `amount` = 7
+  amount id=2   value=7
+level_out = 7.0
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own sample labels the property `amount`**, in lower case, so
+  the two spellings were the same string. Every document the tree wrote was
+  in the range where the bug is invisible.
+- **The evaluator's tests all used a lower-case `amount`.** There was no
+  test in `crates/eval` with a capitalised label, a group, or
+  `eq_ignore_ascii_case` anywhere in the crate.
+- **The engine's test could not see it either**: the engine's commands go
+  through the model, so they were right, and the evaluator was a *second*
+  reader of the same names.
+
+### The fix
+
+**Which property is the amount is the model's question, and the evaluator asks
+it.**
+
+The evaluator builds the model's own path — `PropPath::from_segs` with a
+single `Match("amount", 1)` segment, which is what the grammar's own parse of
+`"amount"` produces — and asks the model to resolve it against the node's
+property group. The model applies its own rule: the first child whose label
+matches, **case-insensitively**. The evaluator then takes the **value** from
+the resolved list by **id**, so the number it uses is the same sampled number
+the plan publishes.
+
+### What is not claimed
+
+- **A property inside a group is still not the node's amount.** `output/amount`
+  is another property, and the node has no amount — which the evaluator says
+  in a warning. That was the behaviour before the fix too, and it is the
+  model's rule: `amount` names a property among the node's own children.
+- **Nothing else about the level changed.** The clamping, the kernel's
+  `apply_gain` and the diagnostics are as they were.
+- **The plan's published properties are unchanged.** Every property is still
+  published, the grouped one included.
+
+### The lesson
+
+**A name is resolved by the tree's resolver, and a reader that compares the
+spelling itself is a second resolver.**
+
+The tree had already fixed this family twice — §85 (the resolver, the listing
+and the creator asked the question three different ways) and §263 (one id,
+two spellings). **Every one of them is the same mistake: a second place that
+decides what a name means.** The repair is always the same: **delete the
+second decision and ask the one that owns the question.** Here the model owns
+"which property is named `amount`"; the evaluator now asks it instead of
+answering for itself.
+
+**And the sample's own spelling is the range in which the bug is invisible.**
+The tree's sample labels its property `amount`, so the defect could only be
+seen in a document the tree did not write. **A gate that only reads the
+tree's own sample tests the sample.**
+
+| **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 
 ## What enforces what
 
@@ -31264,6 +31385,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **An id is read the way the tree writes it** | `an_id_is_read_the_way_the_tree_writes_it` in `crates/model/src/path.rs` | 2 mutations — §263 |
 | **An occurrence is read by the position's rule** | `an_occurrence_is_read_by_the_positions_rule` in `crates/model/src/path.rs` | 1 mutation — §263 |
 | **A property set by its id is the property that id names** | `a_property_set_by_its_decimal_id_is_the_property_that_id_names` in `crates/engine/src/commands.rs` | 1 mutation — §263 |
+| **The evaluator's amount is the property the model names** | `the_amount_is_the_property_the_model_names` in `crates/eval/src/evaluate.rs` | 1 mutation — §264 |
 
 The three `nothing` rows are not oversights, and there were four until §32. The
 last two cannot be checked by

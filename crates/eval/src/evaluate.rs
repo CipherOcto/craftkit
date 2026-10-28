@@ -2,7 +2,9 @@
 
 use craftkit_core::{NodeId, Tick};
 use craftkit_kernel::{KernelError, apply_gain};
+use craftkit_model::path::{PathSeg, PropPath};
 use craftkit_model::{Document, Node, NodeKind, PropGroup, PropNode, limits};
+use std::sync::OnceLock;
 
 use crate::plan::{Diagnostic, Diagnostics, NodeState, Plan, Resolved};
 
@@ -284,12 +286,12 @@ fn eval_node(node: &Node, level_in: f64, at: Tick) -> (NodeState, Vec<Diagnostic
                 // because the number *between* two keys is clamped to the
                 // same range: the interpolator is a second door into the
                 // value, and it was the one that was not checked. §65.
-                if let Ok(amount) = amount_of(&props, &mut own, node) {
+                if let Ok(amount) = amount_of(&node.props, &props, &mut own, node) {
                     level_out = amount;
                 }
             }
             NodeKind::Filter => {
-                if let Ok(amount) = amount_of(&props, &mut own, node) {
+                if let Ok(amount) = amount_of(&node.props, &props, &mut own, node) {
                     match apply_gain(level_in, amount) {
                         Ok(v) => level_out = v,
                         Err(e) => {
@@ -328,13 +330,43 @@ fn eval_node(node: &Node, level_in: f64, at: Tick) -> (NodeState, Vec<Diagnostic
     )
 }
 
+/// The path that names a node's `amount`.
+///
+/// **The model's own path**, built once: a name the grammar reads as a plain
+/// name, which is what the tree's own commands address. §264.
+fn amount_path() -> &'static PropPath {
+    static PATH: OnceLock<PropPath> = OnceLock::new();
+    PATH.get_or_init(|| PropPath::from_segs(vec![PathSeg::Match("amount".to_string(), 1)]))
+}
+
 /// The `amount` property, with the rules for what a missing or wrong one means.
+///
+/// **Which property is the amount is the model's question, not this file's.**
+/// The evaluator used to compare the *published path* with the literal string
+/// "amount": case-sensitively, and without asking the model. So a property
+/// labelled `Amount` — the very property `prop.set { path: "amount" }` edits,
+/// because the model resolves a name case-insensitively — was not the amount:
+/// the evaluator used 1.0, said so in a warning, and the level came out
+/// wrong. §264.
+///
+/// Now the model resolves the path and the evaluator uses the property it
+/// names, by id, so the value comes from the same sampling as every other
+/// property.
 ///
 /// `Ok(())`-free on purpose: the `Err` case has already pushed its diagnostic,
 /// so the caller only has to decide what value to carry instead of formatting
 /// the same message twice.
-fn amount_of(props: &[Resolved], diag: &mut Vec<Diagnostic>, node: &Node) -> Result<f64, ()> {
-    let Some(r) = props.iter().find(|p| p.path == "amount") else {
+fn amount_of(
+    group: &PropGroup,
+    props: &[Resolved],
+    diag: &mut Vec<Diagnostic>,
+    node: &Node,
+) -> Result<f64, ()> {
+    let Some(id) = group.find(amount_path()).map(|p| p.id) else {
+        diag.push(Diagnostic::warn(Some(node.id), &node.name, "has no `amount` property; using 1.0"));
+        return Ok(1.0);
+    };
+    let Some(r) = props.iter().find(|p| p.id == id) else {
         diag.push(Diagnostic::warn(Some(node.id), &node.name, "has no `amount` property; using 1.0"));
         return Ok(1.0);
     };
@@ -693,6 +725,91 @@ mod tests {
         assert_eq!(plan.diagnostics.error_count(), 0);
         assert_eq!(plan.diagnostics.items.len(), 1);
         assert_eq!(plan.output(), 1.0);
+    }
+
+    /// The node's `amount` is the property the **model** names.
+    ///
+    /// §264: the evaluator compared the published path with the literal
+    /// string "amount" — case-sensitively, and without asking the model. So a
+    /// property labelled `Amount` was not the amount, even though the model
+    /// resolves a name case-insensitively and `prop.set { path: "amount" }`
+    /// edits exactly that property: the evaluator used 1.0, said so in a
+    /// warning, and the level came out wrong.
+    #[test]
+    fn the_amount_is_the_property_the_model_names() {
+        let mut d = Document::empty("t");
+        let id = d.add_node("src", NodeKind::Source).expect("the node");
+        // The label is capitalised, and the model's own resolver does not care.
+        d.get_mut(id).expect("the node").props.push(Property::new(
+            1,
+            "Amount",
+            Value::num("amount", 3.0).expect("value"),
+        ));
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert_eq!(plan.state(id).expect("src").level_out, 3.0, "the level is the amount");
+        assert_eq!(
+            plan.diagnostics.items.len(),
+            0,
+            "nothing is wrong with the design: {:?}",
+            plan.diagnostics.items
+        );
+    }
+
+    /// A property in a group is not the node's amount, and the tree says so.
+    ///
+    /// The model's rule is the node's own rule: `amount` names a property
+    /// among the node's **own** children, and a group's property is another
+    /// thing. The evaluator used to find it anyway — by comparing the
+    /// published path's text — and a design with both a top-level `amount`
+    /// and an `output/amount` silently used one of them and said nothing
+    /// about the other.
+    #[test]
+    fn an_amount_inside_a_group_is_not_the_nodes_amount() {
+        let mut d = Document::empty("t");
+        let id = d.add_node("src", NodeKind::Source).expect("the node");
+        let node = d.get_mut(id).expect("the node");
+        node.props.push_group(PropGroup::new("output", "output").with_prop(Property::new(
+            2,
+            "amount",
+            Value::num("amount", 4.0).expect("value"),
+        )));
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert_eq!(
+            plan.diagnostics.items.len(),
+            1,
+            "the design should say it has no amount: {:?}",
+            plan.diagnostics.items
+        );
+        assert!(
+            plan.diagnostics.items[0].render().contains("amount"),
+            "the warning should name the property: {:?}",
+            plan.diagnostics.items[0]
+        );
+        assert_eq!(plan.output(), 1.0, "the level is the default, not the group's");
+    }
+
+    /// A top-level `amount` and a grouped one: the top-level one is the
+    /// node's amount, and the grouped one is simply another property.
+    #[test]
+    fn a_top_level_amount_wins_over_a_grouped_one() {
+        let mut d = Document::empty("t");
+        let id = d.add_node("src", NodeKind::Source).expect("the node");
+        let node = d.get_mut(id).expect("the node");
+        node.props.push(Property::new(1, "amount", Value::num("amount", 1.0).expect("value")));
+        node.props.push_group(PropGroup::new("output", "output").with_prop(Property::new(
+            2,
+            "amount",
+            Value::num("amount", 4.0).expect("value"),
+        )));
+
+        let plan = evaluate_once(&d, Tick::ZERO).expect("plan");
+        assert_eq!(plan.state(id).expect("src").level_out, 1.0, "the node's own amount");
+        assert_eq!(plan.diagnostics.items.len(), 0, "the design is not wrong: {:?}", plan.diagnostics.items);
+        // And the grouped property is still published, so nothing is hidden.
+        let paths: Vec<String> = plan.state(id).expect("src").props.iter().map(|p| p.path.clone()).collect();
+        assert!(paths.iter().any(|p| p == "output/amount"), "the group's property is published: {paths:?}");
     }
 
     #[test]

@@ -6996,5 +6996,16 @@ swap crates/model/src/path.rs \
 expect_catch "engine: a property set by its id is another property" \
     "cargo test -p craftkit-engine --profile ci a_property_set_by_its_decimal_id_is_the_property_that_id_names"
 
+# --------------------------------------- the evaluator's amount is the model's ----
+# Section 264. The evaluator compared the published path with the literal
+# string "amount", while the model resolves a name case-insensitively: a
+# property labelled `Amount` was edited by every command and ignored by the
+# evaluator.
+swap crates/eval/src/evaluate.rs \
+    '    let Some(id) = group.find(amount_path()).map(|p| p.id) else {' \
+    '    let Some(id) = props.iter().find(|p| p.path == "amount").map(|r| r.id) else {'
+expect_catch "eval: the evaluator resolves a name for itself" \
+    "cargo test -p craftkit-eval --profile ci the_amount_is_the_property_the_model_names"
+
 restore
 finish
