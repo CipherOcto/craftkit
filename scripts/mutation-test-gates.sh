@@ -6886,5 +6886,43 @@ swap apps/craftkit-android/AndroidManifest.xml \
     '<uses-permission android:name="android.permission.CAMERA" />'
 expect_catch "lists: the phone's package asks for the wrong permission" "cargo xtask lists"
 
+# --------------------------------------- a hold holds, and a version is a number ----
+# Section 259. A boolean and a text cannot be blended, and the tree took the
+# incoming key's value for the whole span: a hold did not hold, and the value
+# jumped at the previous key instead of the next one.
+swap crates/model/src/keyframe.rs \
+    '        (V::Bool(x), V::Bool(y)) => V::Bool(if t >= 1.0 { *y } else { *x }),' \
+    '        (V::Bool(x), V::Bool(y)) => V::Bool(*y),'
+expect_catch "model: a hold does not hold for a boolean" \
+    "cargo test -p craftkit-model --profile ci a_hold_holds_for_a_boolean_and_for_a_text"
+
+# Section 260. The bound on a value's nesting was measured on the loader's
+# bare value and not on the tree's own file, so the tree could save a design
+# it could not open.
+swap crates/core/src/value.rs \
+    'pub const MAX_VALUE_DEPTH: usize = 48;' \
+    'pub const MAX_VALUE_DEPTH: usize = 64;'
+expect_catch "io: the deepest value the tree accepts does not round-trip" \
+    "cargo test -p craftkit-io --profile ci --test value_depth"
+
+# Section 261. The version in the file's tag is digits and nothing else: the
+# reader guesses a leading plus, and the document says a reader refuses a
+# version it does not know rather than guessing.
+swap crates/io/src/format.rs \
+    '    if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {' \
+    '    if false {'
+expect_catch "io: a version that is not a plain number is guessed" \
+    "cargo test -p craftkit-io --profile ci a_version_that_is_not_a_plain_number_is_refused"
+
+# --------------------------------------- a hold holds ----
+# Section 259. A boolean and a text cannot be blended, and the tree took the
+# incoming key's value for the whole span: a hold did not hold, and the value
+# jumped at the previous key instead of the next one.
+swap crates/model/src/keyframe.rs \
+    '        (V::Bool(x), V::Bool(y)) => V::Bool(if t >= 1.0 { *y } else { *x }),' \
+    '        (V::Bool(x), V::Bool(y)) => V::Bool(*y),'
+expect_catch "model: a hold does not hold for a boolean" \
+    "cargo test -p craftkit-model --profile ci a_hold_holds_for_a_boolean_and_for_a_text"
+
 restore
 finish

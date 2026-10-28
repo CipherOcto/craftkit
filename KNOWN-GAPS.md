@@ -30051,15 +30051,40 @@ $ unzip -l target/craftkit-android.apk | grep -E "dex|\.so"
 package carries no Java at all, and the tree draws a keyboard of its own
 (§246).
 
+### Measured: the package on the phone
+
+The tree's own default package, on the **32-bit** phone (M2006C3LII, Android
+11, `armeabi-v7a`):
+
+```text
+$ adb install --no-incremental -r target/craftkit-android.apk
+Performing Streamed Install
+Success
+
+$ adb shell am start -n org.craftocto.craftkit/android.app.NativeActivity
+$ adb logcat -s RustStdoutStderr
+control channel listening on 127.0.0.1:4711
+token in /data/user/0/org.craftocto.craftkit/files/craftkit/4711.token
+```
+
+and the channel answers, over `adb forward`, with the command catalogue:
+
+```json
+{"id":1,"ok":true,"message":"the command catalogue","data":[{"area":"document", ...
+```
+
+The package that carries **no Java at all** draws the tree, with the tree's
+own keyboard behind the gate (§246): the sample design, three nodes, and the
+status line's "Ready." / "saved".
+
 ### What is not claimed
 
-- **The default package has not been run on a phone.** The platform refused
-  the sideload — `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`:
-  the install wants a person to confirm, and this phone cannot be tapped
-  (§256) — and the device was then unplugged. What *is* measured is the
-  attribute that matters, on the same phone and with the same code: the
-  bind fails without the permission and succeeds with it, and the package
-  the tree now builds carries the permission.
+- **The 64-bit phone refused the sideload** — `INSTALL_FAILED_USER_RESTRICTED:
+  Install canceled by user`: the install wants a person to confirm, and that
+  phone cannot be tapped (§256) — and it was then unplugged. The package was
+  therefore measured on the **32-bit** phone, which took the install at once.
+  The permission's effect was measured on **both**: the bind fails without it
+  and succeeds with it, on the same code, on the same phone.
 - **The application still leaves when the channel cannot bind.** That is the
   desktop's rule too — a port clash is reported before anything is drawn —
   and it was not changed here. What changed is that the phone's package can
@@ -30083,6 +30108,89 @@ the package needed.** A third-party builder is not a neutral fact: it decides
 what the package asks for, by default, and its defaults are its own. **When
 the thing you build decides what you ask for, you do not know what you are
 asking for.**
+
+| **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
+## 259. A hold did not hold, for a boolean and for a text
+
+### The finding
+
+**The tree's `Hold` easing did not hold — for booleans and for text.**
+
+`Easing::Hold` says, in the enum's own words: *"The value jumps at the key and
+stays."* Between two keys, a hold is `t = 0`, and the numbers have always
+done what a hold means: `x + (y - x) * 0` is `x`, the previous key's value.
+
+The booleans and the texts did not. `blend` took the **incoming** key's value
+for the whole span and ignored the progress entirely:
+
+```rust
+(V::Bool(_), V::Bool(y)) => V::Bool(*y),
+(V::Text(_), V::Text(y)) => V::Text(y.clone()),
+```
+
+So a boolean with a key at 0 (`true`) and a key at 100 (`false`) was `false`
+from the *first* key onwards: the value jumped at the **previous** key
+instead of the next one, and a hold between them held nothing.
+
+### Measured
+
+```text
+bool hold  t=0   -> Bool(true)
+bool hold  t=50  -> Bool(false)     <- the hold did not hold
+bool hold  t=100 -> Bool(false)
+text hold  t=50  -> Text("b")       <- the hold did not hold
+num hold   t=50  -> Num(1.0)        <- the numbers always held
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own test pinned the wrong behaviour.** `mismatched_end_values_hold_rather_than_panic`
+  asserted that a boolean pair sampled at the midpoint is the **incoming**
+  value — and its name says *hold*. The test used two booleans, which are
+  **matched**, so it never reached the mismatched arms its name was about.
+- **The numbers are right**, so every animation the tree made with numbers
+  looked correct, and nobody saw a boolean behave differently.
+- **A boolean and a text have no number between them**, so there is no
+  "wrong number" to notice — only a value that arrives at the wrong time.
+
+### The fix
+
+**A value that cannot be blended steps at the next key.** The value is the
+**outgoing** key's until the next key's time, and the incoming key's at it:
+
+```rust
+(V::Bool(x), V::Bool(y)) => V::Bool(if t >= 1.0 { *y } else { *x }),
+(V::Text(x), V::Text(y)) => V::Text(if t >= 1.0 { y.clone() } else { x.clone() }),
+_ => if t >= 1.0 { b.clone() } else { a.clone() },
+```
+
+The mismatched arms — four of them, one per incoming type, all of them doing
+the same thing — become the one arm that says the same thing.
+
+### What is not claimed
+
+- **Nothing about the numbers changed.** A number between two number keys is
+  still the number, and the bezier's overshoot is still the overshoot (§65).
+- **The colours still blend** per channel, as they did.
+- **This is a behaviour change** for a boolean or a text between two keys: it
+  used to take the next key's value from the first key onwards, and it now
+  takes it at the next key. The tree's own test that pinned the old
+  behaviour was changed with it, and the test's *name* — "hold rather than
+  panic" — is now true of what it tests.
+
+### The lesson
+
+**A step function has to step somewhere, and the tree had it stepping in the
+wrong place.** The booleans and the texts took the *incoming* value for the
+whole span, which is a step at the **previous** key — the one place a step
+never belongs, because it is the moment the value is *not* due to change.
+
+**And the test that pinned it had the wrong name.** `mismatched end values`
+tested two matching booleans, and asserted the opposite of what its name
+said. **A test's name is a claim about what it tests, and a test that does
+not test what its name says is a test that pins whatever the code happens to
+do.** §259's fix is two lines; finding it took reading the *name* of a test
+that had been describing the wrong thing for a long time.
 
 ## What enforces what
 
@@ -30665,6 +30773,9 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
 | **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
 | **The tree is laid out inside the rectangle the platform reports, on a 64-bit phone too** | the device's own run — the platform's rectangle and the pixels | the second phone's own run — §256 |
+| **A hold holds, for a boolean and for a text** | `a_hold_holds_for_a_boolean_and_for_a_text` in `crates/model/src/keyframe.rs` | 1 mutation — §259 |
+| **The deepest value the tree accepts round-trips through the tree's own format** | `the_deepest_value_the_tree_accepts_round_trips` in `crates/io/tests/value_depth.rs` | 1 mutation — §260 |
+| **A version is digits and nothing else** | `a_version_that_is_not_a_plain_number_is_refused` in `crates/io/src/format.rs` | 1 mutation — §261 |
 | **The phone's package asks for the permission its own control channel needs** | `the_phone_package_asks_for_what_its_channel_needs` in `xtask/src/lists.rs` | 1 mutation — §258 |
 | **The platform's own keyboard is behind a gate** | `the_platforms_keyboard_is_behind_the_gate` in `xtask/src/lists.rs` | 4 mutations — §257 |
 | **A commit asks for the frame that will show it** | `a_commit_asks_for_a_frame` in `apps/craftkit/src/ime.rs` | 1 mutation — §257 |

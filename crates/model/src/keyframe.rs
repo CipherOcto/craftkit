@@ -363,9 +363,18 @@ pub fn bezier_progress(x: f64, cx: f64, cy: f64) -> f64 {
 
 /// Interpolate two values.
 ///
-/// Mismatched types hold the incoming value rather than panicking or producing
-/// a default: a keyframe list whose ends disagree is a document bug, and holding
-/// is the least surprising thing to draw while the user fixes it.
+/// **A value that cannot be blended steps at the next key.** A boolean and a
+/// text have no number between them, and a keyframe list whose ends disagree
+/// has no blend at all: in both cases the value is the **outgoing** key's
+/// until the next key's time, and the incoming key's at it.
+///
+/// That is what a hold is — the enum says so: *"the value jumps at the key
+/// and stays"* — and the numbers have always done it (a hold is `t = 0`, and
+/// `x + (y - x) * 0` is `x`). The booleans and the texts did not: they took
+/// the **incoming** key's value for the whole span, so a hold did not hold,
+/// and the value jumped at the *previous* key instead of the next one.
+/// Measured: two boolean keys, true at 0 and false at 100, sampled at 50,
+/// gave `false` — the value had already jumped. §259.
 fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit_core::Value {
     use craftkit_core::Value as V;
     match (a, b) {
@@ -383,8 +392,6 @@ fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit
         (V::Num(x), V::Num(y)) => {
             V::Num((x + (y - x) * t).clamp(-craftkit_core::MAX_MAGNITUDE, craftkit_core::MAX_MAGNITUDE))
         }
-        (V::Bool(_), V::Bool(y)) => V::Bool(*y),
-        (V::Text(_), V::Text(y)) => V::Text(y.clone()),
         (V::Color(x), V::Color(y)) => {
             let mix = |p: u8, q: u8| {
                 let v = f64::from(p) + (f64::from(q) - f64::from(p)) * t;
@@ -397,11 +404,19 @@ fn blend(a: &craftkit_core::Value, b: &craftkit_core::Value, t: f64) -> craftkit
                 a: mix(x.a, y.a),
             })
         }
-        (_, V::Num(n)) => V::Num(*n),
-        (_, V::Bool(v)) => V::Bool(*v),
-        (_, V::Text(s)) => V::Text(s.clone()),
-        (_, V::Color(c)) => V::Color(*c),
-        _ => b.clone(),
+        (V::Bool(x), V::Bool(y)) => V::Bool(if t >= 1.0 { *y } else { *x }),
+        (V::Text(x), V::Text(y)) => V::Text(if t >= 1.0 { y.clone() } else { x.clone() }),
+        // Mismatched types hold the **outgoing** value rather than panicking
+        // or producing a default: a keyframe list whose ends disagree is a
+        // document bug, and holding is the least surprising thing to draw
+        // while the user fixes it. §259.
+        _ => {
+            if t >= 1.0 {
+                b.clone()
+            } else {
+                a.clone()
+            }
+        }
     }
 }
 
@@ -639,10 +654,45 @@ mod tests {
 
     #[test]
     fn mismatched_end_values_hold_rather_than_panic() {
+        // The ends disagree — a number and a text — and the tree holds the
+        // **outgoing** value rather than panicking or inventing one. §259.
+        let mut k = Keyframes::new();
+        k.set(Key::new(Tick::ZERO, Value::Num(1.0), Easing::Linear).unwrap()).unwrap();
+        k.set(Key::new(Tick::from_frames_i64(10, FPS), Value::Text("b".into()), Easing::Linear).unwrap())
+            .unwrap();
+        assert_eq!(k.sample(Tick::from_frames_i64(5, FPS)).unwrap(), Value::Num(1.0));
+    }
+
+    /// A hold holds. §259.
+    ///
+    /// The defect this test exists for: a boolean and a text cannot be
+    /// blended, and the tree took the **incoming** key's value for the whole
+    /// span — so a hold did not hold, and the value jumped at the previous
+    /// key instead of the next one.
+    #[test]
+    fn a_hold_holds_for_a_boolean_and_for_a_text() {
+        let mut kb = Keyframes::new();
+        kb.set(Key::new(Tick::ZERO, Value::Bool(true), Easing::Hold).unwrap()).unwrap();
+        kb.set(Key::new(Tick::from_raw(100), Value::Bool(false), Easing::Hold).unwrap()).unwrap();
+        assert_eq!(kb.sample(Tick::from_raw(50)).unwrap(), Value::Bool(true), "a hold did not hold");
+
+        let mut kt = Keyframes::new();
+        kt.set(Key::new(Tick::ZERO, Value::Text("a".into()), Easing::Hold).unwrap()).unwrap();
+        kt.set(Key::new(Tick::from_raw(100), Value::Text("b".into()), Easing::Hold).unwrap()).unwrap();
+        assert_eq!(kt.sample(Tick::from_raw(50)).unwrap(), Value::Text("a".into()), "a hold did not hold");
+    }
+
+    /// A value that cannot be blended changes at the **next** key. §259.
+    ///
+    /// The key at 0 says `true` and the key at 100 says `false`: the value is
+    /// `true` until the next key's time, and `false` from there on.
+    #[test]
+    fn a_boolean_changes_at_the_next_key() {
         let mut k = Keyframes::new();
         k.set(Key::new(Tick::ZERO, Value::Bool(true), Easing::Linear).unwrap()).unwrap();
-        k.set(Key::new(Tick::from_frames_i64(10, FPS), Value::Bool(false), Easing::Linear).unwrap()).unwrap();
-        assert_eq!(k.sample(Tick::from_frames_i64(5, FPS)).unwrap(), Value::Bool(false));
+        k.set(Key::new(Tick::from_raw(100), Value::Bool(false), Easing::Linear).unwrap()).unwrap();
+        assert_eq!(k.sample(Tick::from_raw(50)).unwrap(), Value::Bool(true), "it jumped early");
+        assert_eq!(k.sample(Tick::from_raw(100)).unwrap(), Value::Bool(false), "and never arrived");
     }
 
     #[test]
