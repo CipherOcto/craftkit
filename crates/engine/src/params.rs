@@ -358,6 +358,12 @@ pub(crate) fn opt_kind(p: &Params<'_>, key: &str) -> Result<Option<NodeKind>, En
 /// An easing preset, by its name.
 ///
 /// The shape is matched, never indexed.
+/// An easing, read by name.
+///
+/// §277: the tree publishes a keyframe's easing as **`ease`** — in the
+/// command's reply and in the file — and the command took it as `easing`, so
+/// the published name was refused: "unknown parameter". **A published name
+/// is a value the command accepts**, so the commands read both spellings ✓.
 pub(crate) fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, EngineError> {
     let Some(raw) = p.raw_json(key) else { return Ok(None) };
     // **The command's names first**, then **the file's own spelling**.

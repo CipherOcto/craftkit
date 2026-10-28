@@ -833,8 +833,14 @@ mod tests {
             }
         }
         assert!(pairs > 0, "no command in the tree has a parameter with an alternative");
-        // The two pairs the tree has, spelled out.
-        assert_eq!(pairs, 14, "the tree's pairs: node/node_name thirteen times, seconds/frame once");
+        // The pairs the tree has, spelled out.
+        //
+        // §277 added one: `text`/`comment` on `doc.note`, because the tree
+        // publishes the note as `comment` and the command took it as `text`.
+        assert_eq!(
+            pairs, 15,
+            "the tree's pairs: node/node_name thirteen times, seconds/frame once, text/comment once"
+        );
     }
 
     #[test]

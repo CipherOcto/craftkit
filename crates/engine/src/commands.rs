@@ -55,7 +55,14 @@ pub static DOC_NOTE: CommandSpec = CommandSpec {
     shortcut: None,
     doc: "Set the plan's note: the paragraph that says why the plan is the way it is.",
     asks: &["text"],
-    params: &[ParamDoc::req("text", Doc::Text, "The note. An empty text clears the note.")],
+    params: &[
+        ParamDoc::either("text", Doc::Text, "The note. An empty text clears the note.", "comment"),
+        ParamDoc::opt(
+            "comment",
+            Doc::Text,
+            "…or the note under the name the tree publishes it: `comment`. §277.",
+        ),
+    ],
     mutates: true,
     undoable: true,
     enabled: always,
@@ -64,9 +71,17 @@ pub static DOC_NOTE: CommandSpec = CommandSpec {
         // must be *there*. A command with no `text` says nothing about what
         // to write, and "write nothing" is not the same thing as "write an
         // empty note". §110.
-        let text = p
+        // **Either name.** §277: the tree publishes the note as `comment` —
+        // in the state, in the file and in this command's own reply — and the
+        // command took it as `text`, so the published name was refused.
+        let mut text = p
             .text("text", limits::MAX_COMMENT_BYTES)
             .map_err(|e| EngineError::Param { id: DOC_NOTE.id.to_string(), source: e })?;
+        if text.is_none() {
+            text = p
+                .text("comment", limits::MAX_COMMENT_BYTES)
+                .map_err(|e| EngineError::Param { id: DOC_NOTE.id.to_string(), source: e })?;
+        }
         let Some(text) = text else {
             return Err(EngineError::Param {
                 id: DOC_NOTE.id.to_string(),
@@ -560,6 +575,11 @@ pub static KEY_SET: CommandSpec = CommandSpec {
              with its control points, bezier(outX,outY). An easing the way the file spells \
              it is accepted too. Defaults to linear.",
         ),
+        ParamDoc::opt(
+            "ease",
+            Doc::Easing,
+            "…or the easing under the name the tree publishes it: `ease`. §277.",
+        ),
     ],
     mutates: true,
     undoable: true,
@@ -573,7 +593,15 @@ pub static KEY_SET: CommandSpec = CommandSpec {
         })?;
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
-        let easing = opt_easing(p, "easing")?.unwrap_or(Easing::Linear);
+        // **Either name.** §277: the tree publishes a keyframe's easing as
+        // `ease`, and the command took it as `easing`.
+        let easing = match opt_easing(p, "easing")? {
+            Some(easing) => easing,
+            None => match opt_easing(p, "ease")? {
+                Some(easing) => easing,
+                None => Easing::Linear,
+            },
+        };
         // Whether the instant is one the design has. A key outside the range
         // can never be reached by the playhead, and the value between two
         // keys is interpolated across it — so the key changes the design
@@ -738,6 +766,11 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
             "linear, hold, easeIn, easeOut or easeInOut, or a bezier with its control points, \
              bezier(outX,outY). An easing the way the file spells it is accepted too.",
         ),
+        ParamDoc::opt(
+            "ease",
+            Doc::Easing,
+            "…or the easing under the name the tree publishes it: `ease`. §277.",
+        ),
     ],
     mutates: true,
     undoable: true,
@@ -747,10 +780,15 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
         let path = required_path(p, "path")?;
         let rate = s.document().meta.frame_rate();
         let time = opt_time(p, "time", rate)?.unwrap_or(s.at());
-        let easing = opt_easing(p, "easing")?.ok_or_else(|| EngineError::Param {
-            id: KEY_EASE.id.to_string(),
-            source: craftkit_foundation::ParamError::new("easing", "this parameter is required"),
-        })?;
+        // **Either name.** §277: the tree publishes a keyframe's easing as
+        // `ease`, and the command took it as `easing`.
+        let easing = match opt_easing(p, "easing")? {
+            Some(easing) => easing,
+            None => opt_easing(p, "ease")?.ok_or_else(|| EngineError::Param {
+                id: KEY_EASE.id.to_string(),
+                source: craftkit_foundation::ParamError::new("easing", "this parameter is required"),
+            })?,
+        };
         let node = node_mut(s, id, KEY_EASE.id)?;
         let parsed = parse_path(&path, KEY_EASE.id)?;
         let prop = writable(&mut node.props, &parsed, KEY_EASE.id)?.ok_or_else(|| EngineError::Param {
@@ -1723,6 +1761,43 @@ mod tests {
             json!("ease_in_out"),
             "the file's spelling of the default easing has moved"
         );
+    }
+
+    /// A published name is a name the command takes.
+    ///
+    /// §277: the tree publishes the note as `comment` — in the state, in the
+    /// file and in `doc.note`'s own reply — and the command took it as
+    /// `text`, so the published name was refused: "unknown parameter". The
+    /// same for a keyframe's easing: the tree publishes `ease`, and the
+    /// command took `easing`.
+    #[test]
+    fn a_published_name_is_a_name_the_command_takes() {
+        let mut s = session();
+        // The note, under the name the tree publishes it.
+        let state = s.snapshot_json();
+        ok(&mut s, "doc.note", json!({ "comment": state["comment"].clone() }));
+        ok(&mut s, "doc.note", json!({ "text": "a note" }));
+        let state = s.snapshot_json();
+        assert_eq!(state["comment"], json!("a note"), "the note was not written: {state:?}");
+
+        // And the easing, under the name the tree publishes it -- in both
+        // commands that take one.
+        ok(
+            &mut s,
+            "key.set",
+            json!({ "node": 1, "path": "amount", "value": 1.0, "time": 1.0, "ease": "easeOut" }),
+        );
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("the keys");
+        // And the easing the command took is the one that was asked for: a
+        // command that ignores the published name would key the property
+        // linearly and say so.
+        assert_eq!(
+            listed.data["keyframes"][0]["ease"],
+            json!("easeOut"),
+            "the published easing name was not taken: {listed:?}"
+        );
+        let ease = listed.data["keyframes"][0]["ease"].clone();
+        ok(&mut s, "key.ease", json!({ "node": 1, "path": "amount", "time": 1.0, "ease": ease }));
     }
 
     /// The engine's own replies publish values the commands take back.

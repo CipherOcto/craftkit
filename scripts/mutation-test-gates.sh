@@ -7230,5 +7230,21 @@ swap apps/craftkit-cli/src/cli.rs \
 expect_catch "cli: a door prints a failure without its kind" \
     "cargo test -p craftkit-cli --profile ci a_failure_the_cli_prints_carries_the_kind"
 
+# --------------------------------------- a published name is a name the command takes ----
+# Section 277. The tree published the note as `comment` and a keyframe's
+# easing as `ease`, and the commands took them as `text` and `easing` -- so
+# the published names were refused.
+swap crates/engine/src/commands.rs \
+    '            None => match opt_easing(p, "ease")? {' \
+    '            None => match Ok::<Option<Easing>, EngineError>(None)? {'
+expect_catch "engine: the published easing name is refused" \
+    "cargo test -p craftkit-engine --profile ci a_published_name_is_a_name_the_command_takes"
+
+swap crates/engine/src/commands.rs \
+    '                .text("comment", limits::MAX_COMMENT_BYTES)' \
+    '                .text("text", limits::MAX_COMMENT_BYTES)'
+expect_catch "engine: the published note name is refused" \
+    "cargo test -p craftkit-engine --profile ci a_published_name_is_a_name_the_command_takes"
+
 restore
 finish

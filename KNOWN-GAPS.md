@@ -32195,6 +32195,103 @@ would use to check a change ✓.
 
 | **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
 
+## 277. The tree published two names the commands refused
+
+### The finding
+
+**The tree publishes a field under one name and takes it back under
+another.**
+
+The **note** ✓: the state publishes `"comment"` ✓, the design file carries
+`"comment"` ✓, and `doc.note`'s own reply publishes `"comment"` ✓ — and the
+command's parameter was `"text"` ✓.
+
+The **easing** ✓: `key.list` publishes `"ease"` ✓, the file's keyframe
+carries `"ease"` ✓ — and `key.set` and `key.ease` took `"easing"` ✓.
+
+So an agent that read a published field and wrote it back was told
+`unknown parameter` ✓ — twice, in two unrelated commands ✓.
+
+### Measured
+
+Before — the tree's own publications, given back to the tree's own commands:
+
+```text
+the state publishes comment = String("")
+doc.note accepts "comment": NO -> `doc.note` rejected its parameters: `comment` unknown parameter (expected one of: text)
+key.list publishes ease = String("linear")
+key.ease accepts "ease": NO -> `key.ease` rejected its parameters: `ease` unknown parameter (expected one of: node, node_name, path, time, easing)
+key.ease accepts "easing": yes
+```
+
+After:
+
+```text
+doc.note accepts "comment": yes
+key.ease accepts "ease": yes
+key.ease accepts "easing": yes
+```
+
+### Why nothing else would have caught it
+
+- **The gate that holds the rule is about *values*, not names.** §265 made
+  the tree's **suggestions** values the command accepts ✓, and §269/§272
+  made the tree's published **values** acceptable ✓ — and a field's **name**
+  is neither ✓. Nobody had asked the name question ✓.
+- **Each door was internally consistent.** The state published `comment` ✓
+  and the file stored `comment` ✓ — so the *publisher* was right ✓, and the
+  *command* was the odd one out ✓ — and the two never met ✓.
+- **The names were close enough to look deliberate.** `text` and `comment`
+  are both words for a note ✓; `easing` and `ease` differ by three letters ✓.
+  Neither looks like a mistake ✓, which is why nobody looked ✓.
+
+### The fix
+
+**Both names are taken, and the published one is in the catalogue.**
+
+`doc.note` takes `text` **or** `comment` ✓ — as a pair ✓, in the tree's own
+`node`/`node_name` shape ✓, so the catalogue says "one of the two is
+required" ✓.
+
+`key.set` and `key.ease` take `easing` **or** `ease` ✓ — both optional ✓,
+because the easing has a default ✓ and a pair that is "one of the two is
+required" would say otherwise ✓.
+
+And the tree's own gate — *every declared parameter is read* ✓ — held the
+fix to the letter ✓: the first attempt read the two names through a list ✓
+and the gate said the command read neither ✓, because the read was hidden ✓
+behind a variable ✓. **The names are read where they are declared** ✓.
+
+### What is not claimed
+
+- **No behaviour changed** except that two names are accepted ✓.
+- **The canonical names did not move.** `text` and `easing` are still the
+  catalogue's first names ✓ — so every existing script keeps working ✓ —
+  and the published names are the alternatives ✓.
+- **The command's own reply did not change.** `doc.note` still publishes
+  `"comment"` ✓ and `key.list` still publishes `"ease"` ✓ — those are the
+  names the tree publishes ✓, and now they are names the commands take ✓.
+
+### The lesson
+
+**A published name is a value the command accepts — and the name family had
+never been counted.**
+
+The published-value family grew over §263–§276 ✓ — ids ✓, amounts ✓,
+suggestions ✓, easings ✓, instants ✓, values ✓ — and every member of it was
+a **value** ✓. A field's **name** is not a value ✓, so it was never in the
+family ✓, and the two commands that refused a published name ✓ were not
+mistakes ✓ — they were *unasked questions* ✓.
+
+**And the tree's own gates found the fix's first attempt wrong.** The
+"every declared parameter is read" gate ✓ refused the indirection ✓ — a
+read hidden behind a variable ✓ is not a read the gate can see ✓ — and made
+the names be read where they are declared ✓. **A gate that can see how a
+command reads its parameters is a gate that can tell a declared parameter
+from a decorative one** ✓ (§136's rule, applied to names ✓).
+
+| **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32804,6 +32901,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
 | **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
 | **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
+| **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
