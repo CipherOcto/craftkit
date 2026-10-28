@@ -109,6 +109,22 @@ pub enum Value {
     None,
 }
 
+/// The word used to name what a JSON value is.
+///
+/// **One home for the tree's core.** The MCP and the control channel each
+/// had their own copy of this word, and a fourth place would have been a
+/// fourth spelling of "what kind of thing is this". §269.
+pub fn json_kind(v: &serde_json::Value) -> &'static str {
+    match v {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "a bool",
+        serde_json::Value::Number(_) => "a number",
+        serde_json::Value::String(_) => "a string",
+        serde_json::Value::Array(_) => "an array",
+        serde_json::Value::Object(_) => "an object",
+    }
+}
+
 /// The most entries a [`Value::List`] may hold.
 pub const MAX_LIST: usize = 4_096;
 
@@ -331,6 +347,63 @@ impl Value {
     }
 
     /// A short human-readable form for a UI table or an error message.
+    /// The value as the tree's **commands** take it.
+    ///
+    /// **One home.** A command reads a value with [`Value::from_parameter`],
+    /// and the tree publishes a value with this — so a value the tree
+    /// publishes is a value a command accepts. §269.
+    ///
+    /// A number is a number, a boolean is a boolean, a text is a string and a
+    /// colour is the colour's own spelling (`#rrggbb`). A **list** has no
+    /// spelling a command takes — the tree's commands set one value at a
+    /// time — so a list is published the way the *file* spells it, and this
+    /// is the only place that says so.
+    pub fn as_parameter(&self) -> serde_json::Value {
+        match self {
+            Value::Bool(b) => serde_json::Value::Bool(*b),
+            Value::Num(n) => {
+                serde_json::Number::from_f64(*n).map_or(serde_json::Value::Null, serde_json::Value::Number)
+            }
+            Value::Text(t) => serde_json::Value::String(t.clone()),
+            Value::Color(c) => serde_json::Value::String(c.to_hex()),
+            // A list and a "no value" have no command spelling; the file's
+            // tagged form is the only one there is.
+            other => serde_json::to_value(other).unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    /// The value as the tree's **commands** take it, read from a parameter.
+    ///
+    /// **The reader of what [`Value::as_parameter`] writes.** A number is a
+    /// number, a boolean is a boolean, and a string is a colour, a number or
+    /// text — in that order, so `#8caad2` is a colour and `42` is a number.
+    /// Anything else is not a property value, and says so. §269.
+    pub fn from_parameter(what: &str, json: &serde_json::Value) -> Result<Self, crate::CoreError> {
+        match json {
+            serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
+            serde_json::Value::String(s) => {
+                if let Some(c) = Color::parse(s) {
+                    return Ok(Value::Color(c));
+                }
+                // A numeric string is stored as a number, so a script that
+                // quotes its numbers does not silently produce text
+                // properties.
+                if let Ok(n) = s.trim().parse::<f64>() {
+                    return Value::num(what, n);
+                }
+                Value::text(what, s.clone())
+            }
+            serde_json::Value::Number(n) => {
+                // A NaN, which `Value::num` then refuses.
+                let v = n.as_f64().unwrap_or(f64::NAN);
+                Value::num(what, v)
+            }
+            other => {
+                Err(crate::CoreError::BadData(format!("{} cannot be a property value", json_kind(other))))
+            }
+        }
+    }
+
     pub fn display(&self) -> String {
         match self {
             Value::Bool(b) => b.to_string(),
@@ -360,6 +433,38 @@ impl From<Color> for Value {
     fn from(v: Color) -> Self {
         Value::Color(v)
     }
+}
+
+/// A published value is a value a command accepts.
+///
+/// §269: the tree published property values the way the *file* spells
+/// them — a tagged object — and `prop.set`, the command that writes the
+/// very property the plan names, refused it. The value's spelling is in
+/// the core now, and the command and the tree publish the same one.
+#[test]
+fn a_published_value_is_a_value_a_command_accepts() {
+    let every = [
+        Value::Bool(true),
+        Value::Num(1.0),
+        Value::Num(-0.25),
+        Value::Text("hello".to_string()),
+        Value::Color(Color::rgb(140, 170, 210)),
+    ];
+    for value in every {
+        let published = value.as_parameter();
+        assert!(
+            published.is_number() || published.is_boolean() || published.is_string(),
+            "{published} is not a shape a command takes"
+        );
+        assert_eq!(
+            Value::from_parameter("value", &published).expect("the published value reads back"),
+            value,
+            "the published value is another value"
+        );
+    }
+    // And the shapes the commands do not take are refused.
+    assert!(Value::from_parameter("value", &serde_json::json!({"t": "num", "v": 1.0})).is_err());
+    assert!(Value::from_parameter("value", &serde_json::json!([1, 2])).is_err());
 }
 
 #[cfg(test)]

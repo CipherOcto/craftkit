@@ -15,11 +15,33 @@ pub struct Resolved {
     pub path: String,
     /// The stable property id.
     pub id: u64,
+    /// The property's value.
+    ///
+    /// **Published in the spelling the tree's commands take.** §269: the plan
+    /// published the value the way the *file* spells it — a tagged object —
+    /// and `prop.set`, the command that writes the very property the plan
+    /// names, refused it: "a object cannot be a property value".
+    #[serde(serialize_with = "value_as_parameter", deserialize_with = "value_from_parameter")]
     pub value: Value,
     /// Whether the value came from the keyframe curve rather than the stored
     /// default. The UI marks these so an animated value is never mistaken for
     /// a constant one.
     pub animated: bool,
+}
+
+/// The value as the tree's commands take it.
+///
+/// **The core's spelling.** §269.
+fn value_as_parameter<S: serde::Serializer>(value: &Value, serializer: S) -> Result<S::Ok, S::Error> {
+    value.as_parameter().serialize(serializer)
+}
+
+/// The value as the tree's commands take it, read back.
+///
+/// **The core's reader.** §269.
+fn value_from_parameter<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
+    let json = serde_json::Value::deserialize(deserializer)?;
+    Value::from_parameter("value", &json).map_err(serde::de::Error::custom)
 }
 
 /// What one node contributed to the plan.

@@ -7095,5 +7095,22 @@ swap crates/engine/src/session.rs \
 expect_catch "engine: a published instant is refused by the command" \
     "cargo test -p craftkit-engine --profile ci a_published_instant_is_a_value_the_command_accepts"
 
+# --------------------------------------- a published value is a value a command accepts ----
+# Section 269. The plan published every property's value the way the *file*
+# spells it -- a tagged object -- and `prop.set`, the command that writes the
+# very property the plan names, refused it.
+swap crates/core/src/value.rs \
+    '            Value::Color(c) => serde_json::Value::String(c.to_hex()),' \
+    '            Value::Color(c) => serde_json::json!({ "t": "color", "v": c }),'
+expect_catch "core: a published value is not a value a command accepts" \
+    "cargo test -p craftkit-core --profile ci a_published_value_is_a_value_a_command_accepts"
+
+# And the plan: the value the plan publishes is the one a command takes.
+swap crates/eval/src/plan.rs \
+    '    value.as_parameter().serialize(serializer)' \
+    '    serde_json::to_value(value).unwrap_or(serde_json::Value::Null).serialize(serializer)'
+expect_catch "eval: the plan publishes a value the command refuses" \
+    "cargo test -p craftkit-engine --profile ci a_published_value_is_a_value_the_command_accepts"
+
 restore
 finish

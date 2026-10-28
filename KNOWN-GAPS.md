@@ -30673,6 +30673,8 @@ places claim to write it, the two places are the defect, not the reader.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
@@ -30802,6 +30804,8 @@ tree's own sample tests the sample.**
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
@@ -31030,6 +31034,8 @@ the conversion happens in a place the lint cannot reach.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
@@ -31176,6 +31182,8 @@ itself is not a round trip.**
 
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |
@@ -31298,6 +31306,130 @@ about a vocabulary that does not exist.**
 zero, and zero is zero in every unit, so the one field the tests looked at
 could not show the defect. **A test that reads a published value back should
 read back a value that is not zero in the unit it is published in.**
+
+## 269. The tree published values the command that writes them refuses
+
+### The finding
+
+**The plan published every property's value the way the *file* spells it — a
+tagged object — and `prop.set`, the command that writes the very property the
+plan names, refused it.**
+
+The model's value has a tagged shape, because a file has to say which kind of
+value it is:
+
+```json
+{"t": "num", "v": 1.0}
+```
+
+That is the **file's** spelling ✓. The **command's** spelling is the plain
+one the parameter takes:
+
+```rust
+Some(Json::Bool(b)) => Ok(Some(Value::Bool(*b))),
+Some(Json::String(s)) => { /* a colour, a number or text */ }
+Some(Json::Number(n)) => { /* a number */ }
+Some(other) => Err(ParamError::new(key, format!("a {} cannot be a property value", kind_of(other)))),
+```
+
+The plan and the MCP's node resource published the first ✓ and the command
+read the second ✗ — so the value the tree showed an agent was a value the
+agent could not use.
+
+### Measured
+
+Before — the tree's own plan, on the tree's own sample:
+
+```text
+the plan publishes "amount" = {"t":"num","v":1.0}
+the plan publishes "enabled" = {"t":"bool","v":true}
+the plan publishes "label" = {"t":"text","v":""}
+the plan publishes "tint" = {"t":"color","v":{"a":255,"b":210,"g":170,"r":140}}
+prop.set refused it: `prop.set` rejected its parameters: `value` a object cannot be a property value
+prop.set refused the number: `prop.set` rejected its parameters: `value` a object cannot be a property value
+```
+
+After:
+
+```text
+the plan publishes "amount" = 1.0
+the plan publishes "enabled" = true
+the plan publishes "label" = ""
+the plan publishes "tint" = "#8caad2"
+prop.set accepted it: `tint` = #8caad2
+prop.set accepted the number: `amount` = 1
+```
+
+### Why nothing else would have caught it
+
+- **The tree's own tests read the plan's value the model's way.** The plan's
+  own tests compared the *typed* value ✓ — the tree's plan holds a
+  `Value` ✓ — and the tag only appears when the plan is **serialised** ✓.
+  So the defect lived in one line of a derive ✗ and in no test at all ✓.
+- **The file's tests were right.** A file *does* spell its values in the
+  tagged way ✓, and the file's round trip passed ✓ — the file's door is its
+  own ✓.
+- **Nothing gave a published value back.** The commands take a value and the
+  plan publishes one ✓, and nobody put the two together — the same gap as
+  §267's easing and §268's instant ✓.
+- **The message was wrong in a way nobody read.** "a object cannot be a
+  property value" ✓ — the article ✓ — and the tree's own spelling of the
+  word for a JSON type was written **three** times ✓, in three different
+  words ✓.
+
+### The fix
+
+**The value's spelling is in the core, and the command and the tree publish
+the same one.**
+
+`Value::as_parameter` writes it and `Value::from_parameter` reads it, in the
+core ✓ — the layer below the commands ✓ and below the plan ✓, so both can
+ask ✓:
+
+- a number is a number ✓, a boolean is a boolean ✓, a text is a string ✓
+  and a colour is the colour's own spelling (`#8caad2` ✓);
+- a string is read as a **colour** first ✓, then as a number ✓, then as
+  text ✓ — the rule the parameter has always had ✓.
+
+The engine's `value_for` asks the core ✓, and the plan and the MCP's node
+resource publish with the core's writer ✓.
+
+**And the word for a JSON type has one home.** `craftkit_core::value::json_kind`
+is it ✓ — and it carries the article ✓, so the message reads "an object
+cannot be a property value" ✓ instead of "a object" ✓. The engine's own
+copy asks it ✓; the MCP's and the control channel's still have theirs ✓
+(§270).
+
+### What is not claimed
+
+- **The file's spelling is unchanged.** A file still says `{"t":"num","v":1}`
+  ✓ — that is the file's door ✓, and its round trip is its own ✓.
+- **A list has no command spelling.** The tree's commands set one value at a
+  time ✓, so a list is published the way the file spells it ✓, and this is
+  the only place that says so ✓.
+- **A numeric text is still a number when it is read back.** That is the
+  parameter's own rule ✓ ("a numeric string is stored as a number" ✓) and it
+  is deliberate ✓.
+
+### The lesson
+
+**A value the tree publishes is a value the tree takes back — and the tree
+had two spellings for one value, each right about a different door.**
+
+The file's tagged value and the command's plain value are **two doors**, and
+two doors may have two spellings ✓ — but only if each door uses its own ✓.
+The plan was publishing the *file's* spelling to a reader that speaks the
+*command's* ✓. **The general form: *when a value crosses from one door to
+another, it crosses in the second door's spelling* — and a value published to
+the wrong door is a value nobody can use.**
+
+**And a derive attribute is a publishing decision.** The plan's value was
+serialised by `#[derive(Serialize)]` ✓ — one line ✓ — and nobody chose it ✓.
+**Every place the tree publishes a value is a decision about a spelling**,
+and a decision nobody made is a decision the wrong spelling won ✓.
+
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 
 ## What enforces what
 
@@ -31899,6 +32031,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A reply asks the tick for its number** | `a_reply_asks_the_tick` in `xtask/src/lists.rs` | 1 mutation — §266 |
 | **A published easing is a name the parameter accepts** | `a_published_easing_is_a_name_the_parameter_accepts` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
+| **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
+| **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |

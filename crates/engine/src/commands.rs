@@ -1652,6 +1652,37 @@ mod tests {
         session
     }
 
+    /// A published value is a value the command accepts.
+    ///
+    /// §269: the plan published every property's value the way the *file*
+    /// spells it — a tagged object — and `prop.set`, the command that writes
+    /// the very property the plan names, refused it: "a object cannot be a
+    /// property value".
+    #[test]
+    fn a_published_value_is_a_value_the_command_accepts() {
+        let mut s = session();
+        let plan = s.execute("plan.evaluate", &json!({})).expect("the plan");
+        let props = plan.data["nodes"][0]["props"].as_array().expect("the properties").clone();
+        assert!(!props.is_empty(), "the plan published no property at all");
+        for prop in props {
+            let path = prop["path"].as_str().expect("the path").to_string();
+            let value = prop["value"].clone();
+            ok(&mut s, "prop.set", json!({ "node": 1, "path": path, "value": value }));
+        }
+        // And the values are still the values: the plan's numbers are numbers
+        // and its colours are the colour's own spelling.
+        let plan = s.execute("plan.evaluate", &json!({})).expect("the plan");
+        let props = plan.data["nodes"][0]["props"].as_array().expect("the properties");
+        let amount = props.iter().find(|p| p["path"] == "amount").expect("the amount");
+        assert!(amount["value"].is_number(), "the amount is not a number: {}", amount["value"]);
+        let tint = props.iter().find(|p| p["path"] == "tint").expect("the tint");
+        assert!(
+            tint["value"].as_str().expect("the tint is text").starts_with('#'),
+            "the tint is not the colour's spelling: {}",
+            tint["value"]
+        );
+    }
+
     /// A published instant is a value the command accepts.
     ///
     /// §268: the tree published its instants as bare tick counts, and the

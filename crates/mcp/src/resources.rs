@@ -273,7 +273,11 @@ fn node(session: &Mutex<Session>, value: &str) -> Result<Json, ReadError> {
             json!({
                 "path": path.to_string(),
                 "id": prop.id,
-                "value": serde_json::to_value(prop.value_at(at)).unwrap_or(Json::Null),
+                // **The value as the tree's commands take it.** §269: the
+                // resource published the value the way the *file* spells it,
+                // and `prop.set` — the command that writes the property the
+                // resource names — refused it.
+                "value": prop.value_at(at).as_parameter(),
                 "animated": prop.is_animated(),
             })
         })

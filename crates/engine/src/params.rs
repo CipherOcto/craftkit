@@ -17,7 +17,9 @@
 //! and the other home is `crates/core/src/params.rs`. `cargo xtask lists`
 //! refuses the tree when a third file calls it. §136.
 
-use craftkit_core::{Color, CoreError, FrameRate, NodeId, ParamError, Params, Tick, Value};
+#[cfg(test)]
+use craftkit_core::Color;
+use craftkit_core::{CoreError, FrameRate, NodeId, ParamError, Params, Tick, Value};
 use craftkit_model::{Easing, NodeKind};
 use serde_json::Value as Json;
 
@@ -240,7 +242,7 @@ pub(crate) fn opt_time(p: &Params<'_>, key: &str, rate: FrameRate) -> Result<Opt
             }
             Err(TimeError::Range) => Err(bad(past_the_range(&format!("`{s}`")))),
         },
-        Some(other) => Err(bad(format!("a {} is not a time", kind_of(other)))),
+        Some(other) => Err(bad(format!("{} is not a time", kind_of(other)))),
     }
 }
 
@@ -345,7 +347,7 @@ pub(crate) fn opt_kind(p: &Params<'_>, key: &str) -> Result<Option<NodeKind>, En
     let Some(raw) = p.raw_json(key) else { return Ok(None) };
     let text = match raw {
         Json::String(s) => s.clone(),
-        other => return Err(bad(format!("a {} is not a node kind; expected text", kind_of(other)))),
+        other => return Err(bad(format!("{} is not a node kind; expected text", kind_of(other)))),
     };
     NodeKind::all().iter().find(|k| k.label() == text).copied().map(Some).ok_or_else(|| {
         bad(format!("`{text}` is not a kind; expected one of source, filter, sink, cue, comment"))
@@ -377,38 +379,21 @@ pub(crate) fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, En
 
 /// A value for a property, read as whatever the document will store.
 pub fn value_for(p: &Params<'_>, key: &str) -> Result<Option<Value>, ParamError> {
-    match p.raw_json(key) {
-        None => Ok(None),
-        Some(Json::Bool(b)) => Ok(Some(Value::Bool(*b))),
-        Some(Json::String(s)) => {
-            if let Some(c) = Color::parse(s) {
-                return Ok(Some(Value::Color(c)));
-            }
-            // A numeric string is stored as a number, so a script that quotes
-            // its numbers does not silently produce text properties.
-            if let Ok(n) = s.trim().parse::<f64>() {
-                return Value::num(key, n).map(Some).map_err(|e| ParamError::new(key, e.to_string()));
-            }
-            Ok(Some(Value::text(key, s.clone()).map_err(|e| ParamError::new(key, e.to_string()))?))
-        }
-        Some(Json::Number(n)) => {
-            let v = n.as_f64().unwrap_or(f64::NAN); // NaN, which `Value::num` then refuses
-            Value::num(key, v).map(Some).map_err(|e| ParamError::new(key, e.to_string()))
-        }
-        Some(other) => Err(ParamError::new(key, format!("a {} cannot be a property value", kind_of(other)))),
-    }
+    let Some(raw) = p.raw_json(key) else { return Ok(None) };
+    // **The core reads a value**, because the core is where a value's
+    // spelling lives — and the tree publishes values in that spelling, so a
+    // published value is a value this accepts. §269.
+    Value::from_parameter(key, raw).map(Some).map_err(|e| ParamError::new(key, e.to_string()))
 }
 
 /// The word used in a message to name a JSON type.
+///
+/// **The core's word.** §269: the tree had three copies of it — here, in the
+/// MCP and in the control channel — and they did not agree: one said "a bool"
+/// and another "a boolean", and this one said "a object cannot be a property
+/// value", where the article was wrong.
 pub fn kind_of(v: &Json) -> &'static str {
-    match v {
-        Json::Null => "null",
-        Json::Bool(_) => "bool",
-        Json::Number(_) => "number",
-        Json::String(_) => "string",
-        Json::Array(_) => "array",
-        Json::Object(_) => "object",
-    }
+    craftkit_core::value::json_kind(v)
 }
 
 #[cfg(test)]
@@ -638,11 +623,11 @@ mod tests {
     #[test]
     fn json_types_are_named_for_messages() {
         assert_eq!(kind_of(&json!(null)), "null");
-        assert_eq!(kind_of(&json!(1)), "number");
-        assert_eq!(kind_of(&json!("s")), "string");
-        assert_eq!(kind_of(&json!(true)), "bool");
-        assert_eq!(kind_of(&json!([])), "array");
-        assert_eq!(kind_of(&json!({})), "object");
+        assert_eq!(kind_of(&json!(1)), "a number");
+        assert_eq!(kind_of(&json!("s")), "a string");
+        assert_eq!(kind_of(&json!(true)), "a bool");
+        assert_eq!(kind_of(&json!([])), "an array");
+        assert_eq!(kind_of(&json!({})), "an object");
     }
 
     #[test]
