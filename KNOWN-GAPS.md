@@ -32292,6 +32292,131 @@ from a decorative one** ✓ (§136's rule, applied to names ✓).
 
 | **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
 
+## 278. The undo stack could only hold documents
+
+### The finding
+
+**The tree's undo stack was written for one kind of thing.**
+
+```rust
+// crates/engine/src/history.rs — before
+use craftkit_model::Document;
+
+struct Entry {
+    label: String,
+    doc: Document,
+    ...
+}
+
+pub struct History { ... }
+
+pub fn push(&mut self, doc: Document, label: &str) { ... }
+```
+
+And the budget was the model's own:
+
+```rust
+pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;
+```
+
+So the stack could hold **documents** ✓ and nothing else ✓ — and the *only*
+reason it was worth reusing is that it is the tree's undo stack ✓.
+
+**A PDF editor's undo stack holds pages. A vector illustrator's holds trees.
+A video editor's holds timelines.** All three need the same stack ✓ — the
+budget, the trimming, the redo branch ✓ — and none of them can have this
+one ✓.
+
+### Measured
+
+Before — the stack's type said what it held:
+
+```text
+pub struct History { undo: Vec<Entry>, redo: Vec<Entry>, bytes: usize }
+struct Entry { label: String, doc: Document, bytes: usize }
+pub fn push(&mut self, doc: Document, label: &str)
+```
+
+After — the stack says what it needs of what it holds ✓:
+
+```text
+pub struct History<S: Snapshot> { undo: Vec<Entry<S>>, redo: Vec<Entry<S>>, bytes: usize, budget: usize }
+pub fn push(&mut self, doc: S, label: &str)
+pub fn new(budget: usize) -> Self
+```
+
+And the proof is a **second type** ✓ — a page ✓, which is not a document ✓
+and not a plan ✓:
+
+```text
+test history::tests::the_stack_holds_snapshots_and_not_documents ... ok
+```
+
+### Why nothing else would have caught it
+
+- **Nothing was wrong.** The stack did exactly what the tree needed ✓, and
+  every rule about it was kept ✓ (§52's budget ✓, §68's shared budget ✓,
+  §84's trimming on every path ✓). **The defect was what it could not do** ✓
+  — and a rule about what a thing cannot do is only enforceable by a rule
+  about it ✓.
+- **The stack was *about* documents.** The budget was the model's document
+  size ✓, the entry held a document ✓, and the tree's own undo was
+  documents' ✓ — so the stack looked like a document feature ✓ rather than
+  an undo feature ✓.
+- **The survey of the family asked the question that found it.** The
+  knowledge base asked which parts of the tree are shared contracts ✓, and
+  the undo stack — §52, §68, §84, four rules and a budget ✓ — was on the
+  list ✓, and it was not liftable ✓.
+
+### The fix
+
+**The stack asks its snapshots one question, and the budget is the
+caller's.**
+
+`craftkit_foundation::Snapshot` is the one thing the stack needs ✓ — *what
+does one of these cost?* ✓ — and it lives in the foundation ✓, because it
+is a domain-free shape ✓ and the model is above it ✓ (the model implements
+it ✓).
+
+The stack is generic over that ✓, and its budget is a **parameter** ✓
+rather than the model's document size ✓ — so a PDF editor's stack holds
+pages within *its* budget ✓.
+
+And the tree's own document still answers with the number it has always
+answered with ✓ — the stack's behaviour did not change ✓.
+
+### What is not claimed
+
+- **The session is still craftkit's.** `Session` still holds a
+  `craftkit_model::Document` ✓, and the crash report still embeds a
+  document ✓ — **this is the first increment, not the whole seam** ✓.
+- **The stack is still in the engine.** It is generic ✓ and the trait it
+  needs is in the foundation ✓ — but the stack itself has not moved down ✓,
+  and the next increment could move it ✓.
+- **Nothing about the tree's undo changed.** The budget, the trimming, the
+  redo branch and the labels are the same ✓.
+
+### The lesson
+
+**Write a stack for the stack, not for what the stack holds.**
+
+The undo stack is a *data structure* ✓ — a budget ✓, a trimming order ✓, a
+redo branch ✓ — and it was written as a *document feature* ✓, so it took
+the document's type ✓ and the document's budget ✓. **The general form: *a
+mechanism that takes its subject as a type parameter is reusable; a
+mechanism that names its subject is a feature of that subject*.**
+
+**And the parameter that makes it reusable is the smallest one.** Not a
+document, not a plan — *what does one of these cost?* ✓ One method ✓ and a
+clone ✓ ✓, and everything else about the subject stays the subject's ✓.
+
+**And the family survey is how the tree learns what it cannot lift.** The
+undo stack carries four of the tree's best rules ✓ and could not be given
+to a PDF editor ✓ — and the survey's question ("which parts are shared
+contracts?") is what asked ✓.
+
+| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32902,6 +33027,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
 | **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
 | **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
+| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |

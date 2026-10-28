@@ -36,7 +36,7 @@
 //! than the budget allows. Measured: 67 936 429 bytes against a 67 108 864
 //! byte budget. The undo path trims now, oldest step first, which is the
 //! same rule `push` follows.
-use craftkit_model::Document;
+use craftkit_foundation::Snapshot;
 
 /// How many undo steps are kept.
 ///
@@ -72,9 +72,9 @@ pub const MAX_HISTORY_BYTES: usize = craftkit_model::limits::MAX_DOCUMENT_BYTES 
 
 /// One step.
 #[derive(Debug, Clone)]
-struct Entry {
+struct Entry<S: Snapshot> {
     label: String,
-    doc: Document,
+    doc: S,
     /// How much memory the document in this step holds.
     ///
     /// Measured when the step was pushed, so dropping the oldest step is a
@@ -84,16 +84,27 @@ struct Entry {
 
 /// The undo/redo pair.
 #[derive(Debug, Default)]
-pub struct History {
-    undo: Vec<Entry>,
-    redo: Vec<Entry>,
+pub struct History<S: Snapshot> {
+    undo: Vec<Entry<S>>,
+    redo: Vec<Entry<S>>,
     /// The memory both stacks hold together.
     bytes: usize,
+    /// How much memory the two stacks may hold together.
+    ///
+    /// **A parameter, not a constant.** §278: the budget was the model's
+    /// document size times two, so the stack could only ever hold
+    /// documents. A PDF editor's stack holds pages and a vector
+    /// illustrator's holds trees, and each of them has its own budget.
+    budget: usize,
 }
 
-impl History {
-    pub fn new() -> Self {
-        Self::default()
+impl<S: Snapshot> History<S> {
+    /// A stack with a budget.
+    ///
+    /// The budget is what the stack may hold ✓ — two documents' worth, for
+    /// the tree's own document ✓ (§52) ✓.
+    pub fn new(budget: usize) -> Self {
+        Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget }
     }
 
     pub fn can_undo(&self) -> bool {
@@ -136,7 +147,7 @@ impl History {
     /// Pushing clears the redo stack, because a new edit after an undo means
     /// the undone branch is no longer reachable. That is what every editor
     /// does and what every person expects.
-    pub fn push(&mut self, doc: Document, label: &str) {
+    pub fn push(&mut self, doc: S, label: &str) {
         self.clear_redo();
         if self.undo.len() >= MAX_ENTRIES {
             // Drop the oldest, not the newest: recent steps are the ones a
@@ -148,13 +159,13 @@ impl History {
         // one fits. A document bigger than the whole budget is not kept at
         // all: there is no version of "keep it and use more memory" that is
         // still a budget.
-        while self.bytes + bytes > MAX_HISTORY_BYTES {
+        while self.bytes + bytes > self.budget {
             if self.undo.is_empty() {
                 break;
             }
             self.drop_oldest_undo();
         }
-        if self.bytes + bytes > MAX_HISTORY_BYTES {
+        if self.bytes + bytes > self.budget {
             return;
         }
         self.bytes += bytes;
@@ -162,7 +173,7 @@ impl History {
     }
 
     /// Take the state to restore, moving it to the redo stack.
-    pub fn pop_undo(&mut self, current: Document) -> Option<Document> {
+    pub fn pop_undo(&mut self, current: S) -> Option<S> {
         let entry = self.undo.pop()?;
         self.bytes -= entry.bytes;
         let bytes = current.estimated_bytes();
@@ -177,7 +188,7 @@ impl History {
     }
 
     /// Take the state to restore, moving it to the undo stack.
-    pub fn pop_redo(&mut self, current: Document) -> Option<Document> {
+    pub fn pop_redo(&mut self, current: S) -> Option<S> {
         let entry = self.redo.pop()?;
         self.bytes -= entry.bytes;
         let bytes = current.estimated_bytes();
@@ -229,7 +240,7 @@ impl History {
     /// that moved an 8 MiB document into the redo stack left the history
     /// holding 67 936 429 bytes against a 67 108 864-byte budget.
     fn trim_to_budget(&mut self) {
-        while self.bytes > MAX_HISTORY_BYTES {
+        while self.bytes > self.budget {
             if !self.undo.is_empty() {
                 self.drop_oldest_undo();
             } else if !self.redo.is_empty() {
@@ -271,9 +282,43 @@ mod tests {
         d
     }
 
+    /// The stack holds snapshots, not documents.
+    ///
+    /// §278: the stack was written for documents — the entry held a
+    /// `Document` and the budget was the model's document size — so a stack
+    /// of snapshots could not exist. **A PDF editor's undo stack holds
+    /// pages**, a vector illustrator's holds trees, and both need this
+    /// stack.
+    #[test]
+    fn the_stack_holds_snapshots_and_not_documents() {
+        /// A page: not a document, and not a plan.
+        #[derive(Clone, Debug)]
+        struct Page {
+            bytes: usize,
+        }
+        impl craftkit_foundation::Snapshot for Page {
+            fn estimated_bytes(&self) -> usize {
+                self.bytes
+            }
+        }
+
+        // The same stack, a different thing in it, and a different budget.
+        let mut h: History<Page> = History::new(100);
+        h.push(Page { bytes: 40 }, "a page");
+        h.push(Page { bytes: 40 }, "another page");
+        assert!(h.can_undo(), "the stack took the pages");
+        assert!(h.bytes() <= 100, "the stack held {} bytes, over its budget", h.bytes());
+
+        // And the budget is the stack's: a third page does not fit, so the
+        // oldest one goes.
+        h.push(Page { bytes: 40 }, "a third page");
+        assert!(h.bytes() <= 100, "the stack held {} bytes, over its budget", h.bytes());
+        assert_eq!(h.len(), 2, "the stack kept more than its budget allows: {h:?}");
+    }
+
     #[test]
     fn an_empty_history_can_do_nothing() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         assert!(!h.can_undo());
         assert!(!h.can_redo());
         assert!(h.pop_undo(doc_with(0)).is_none());
@@ -282,7 +327,7 @@ mod tests {
 
     #[test]
     fn undo_returns_the_previous_state_and_offers_a_redo() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         h.push(doc_with(1), "Add node");
         let restored = h.pop_undo(doc_with(2)).expect("a step");
         assert_eq!(restored.nodes.len(), 1);
@@ -292,7 +337,7 @@ mod tests {
 
     #[test]
     fn redo_returns_the_newer_state_and_offers_an_undo() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         h.push(doc_with(1), "Add node");
         let _ = h.pop_undo(doc_with(2)).expect("undo");
         let redone = h.pop_redo(doc_with(1)).expect("redo");
@@ -302,7 +347,7 @@ mod tests {
 
     #[test]
     fn a_new_edit_after_an_undo_discards_the_redo_branch() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         h.push(doc_with(1), "one");
         let _ = h.pop_undo(doc_with(2));
         assert!(h.can_redo());
@@ -312,7 +357,7 @@ mod tests {
 
     #[test]
     fn the_stack_is_bounded_and_drops_the_oldest() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         for i in 0..MAX_ENTRIES + 10 {
             h.push(doc_with(i % 3), &format!("step {i}"));
         }
@@ -324,7 +369,7 @@ mod tests {
 
     #[test]
     fn clearing_empties_both_directions() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         h.push(doc_with(1), "one");
         let _ = h.pop_undo(doc_with(2));
         h.clear();
@@ -340,7 +385,7 @@ mod tests {
     /// steps was never a bound on memory. The budget is what bounds it now.
     #[test]
     fn the_history_keeps_its_memory_within_a_budget() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_of_megabytes(2);
         for i in 0..MAX_ENTRIES + 10 {
             h.push(doc.clone(), &format!("step {i}"));
@@ -364,7 +409,7 @@ mod tests {
     /// "undo everything" never freed anything. §52.
     #[test]
     fn undoing_does_not_grow_the_history() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_of_megabytes(2);
         for i in 0..40 {
             h.push(doc.clone(), &format!("step {i}"));
@@ -385,7 +430,7 @@ mod tests {
     /// trimmed the undo stack against it.
     #[test]
     fn the_budget_counts_the_memory_the_stacks_hold() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_with(10);
         // What a *stored copy* costs. A clone has no spare capacity, so it
         // measures a little less than the document it was copied from — the
@@ -411,7 +456,7 @@ mod tests {
     /// not still be counting the branch that the edit made unreachable.
     #[test]
     fn a_discarded_redo_branch_gives_its_memory_back() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_with(10);
         h.push(doc.clone(), "one");
         let held = h.bytes();
@@ -430,7 +475,7 @@ mod tests {
     /// undo stopped working.
     #[test]
     fn undo_still_works_after_many_edits_that_discard_a_redo_branch() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_of_megabytes(4);
         for _ in 0..25 {
             h.push(doc.clone(), "edit");
@@ -450,7 +495,7 @@ mod tests {
     /// report said so.
     #[test]
     fn undoing_does_not_take_the_history_over_its_budget() {
-        let mut h = History::new();
+        let mut h = History::new(MAX_HISTORY_BYTES);
         let doc = doc_of_megabytes(2);
         for i in 0..MAX_ENTRIES {
             h.push(doc.clone(), &format!("step {i}"));

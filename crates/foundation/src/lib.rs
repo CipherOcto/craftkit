@@ -57,12 +57,14 @@ pub mod atomic;
 pub mod measure;
 pub mod params;
 pub mod readers;
+pub mod snapshot;
 pub mod temp;
 pub mod value;
 pub mod writer;
 
 pub use params::{ParamError, Params};
 pub use readers::{ReadError, read_file_bounded, read_line_bounded, read_to_string_bounded};
+pub use snapshot::Snapshot;
 pub use value::{Color, MAX_VALUE_DEPTH, Value};
 
 /// The crate's own error type. Everything a caller can be told goes through it.

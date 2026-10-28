@@ -1431,10 +1431,10 @@ expect_catch "model: the limits table grows a limit nobody enforces" \
 # The undo stack's memory budget. Both halves of it: the loop that drops the
 # oldest steps, and the check that refuses a step that does not fit.
 swap crates/engine/src/history.rs \
-    '        while self.bytes + bytes > MAX_HISTORY_BYTES {' \
+    '        while self.bytes + bytes > self.budget {' \
     '        while false {'
 swap crates/engine/src/history.rs \
-    '        if self.bytes + bytes > MAX_HISTORY_BYTES {' \
+    '        if self.bytes + bytes > self.budget {' \
     '        if false {'
 expect_catch "engine: the undo stack ignores its memory budget" \
     "cargo test -p craftkit-engine --profile ci the_history_keeps_its_memory_within_a_budget"
@@ -7245,6 +7245,18 @@ swap crates/engine/src/commands.rs \
     '                .text("text", limits::MAX_COMMENT_BYTES)'
 expect_catch "engine: the published note name is refused" \
     "cargo test -p craftkit-engine --profile ci a_published_name_is_a_name_the_command_takes"
+
+# --------------------------------------- the undo stack holds snapshots ----
+# Section 278. The stack held documents -- the entry held a Document and the
+# budget was the model's document size -- so a PDF editor's undo stack, which
+# holds pages, could not have it.
+swap crates/engine/src/history.rs \
+    '    pub fn new(budget: usize) -> Self {
+        Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget }' \
+    '    pub fn new(_budget: usize) -> Self {
+        Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget: MAX_HISTORY_BYTES }'
+expect_catch "engine: the undo stack keeps the model's budget, not the caller's" \
+    "cargo test -p craftkit-engine --profile ci the_stack_holds_snapshots_and_not_documents"
 
 restore
 finish

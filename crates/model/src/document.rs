@@ -522,6 +522,15 @@ pub enum DocError {
     TooLarge { bytes: usize, limit: usize },
 }
 
+impl craftkit_foundation::Snapshot for Document {
+    /// **The document's own size.** §278: the undo stack asks its snapshots
+    /// what they cost, and the document answers with the number it has
+    /// always answered with.
+    fn estimated_bytes(&self) -> usize {
+        Document::estimated_bytes(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

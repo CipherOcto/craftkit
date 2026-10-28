@@ -205,7 +205,7 @@ pub fn sample_steps() -> Vec<(String, serde_json::Value)> {
 pub struct Session {
     doc: craftkit_model::Document,
     evaluator: Evaluator,
-    history: History,
+    history: History<craftkit_model::Document>,
     at: Tick,
     plan: Option<Plan>,
     log: LogBook,
@@ -243,7 +243,7 @@ impl Session {
             trace_base: doc.clone(),
             doc,
             evaluator: Evaluator::new(),
-            history: History::new(),
+            history: History::new(crate::history::MAX_HISTORY_BYTES),
             at: Tick::ZERO,
             plan: None,
             log: LogBook::new(),
@@ -852,7 +852,7 @@ impl Session {
         self.set_at(Tick::from_raw(i128::from(at)));
     }
 
-    pub(crate) fn history_mut(&mut self) -> &mut History {
+    pub(crate) fn history_mut(&mut self) -> &mut History<craftkit_model::Document> {
         &mut self.history
     }
 }
