@@ -1,6 +1,10 @@
 [package]
 name = "craftkit-kernel"
 description = "The trust boundary: every call to an untrusted implementation goes through guard()."
+# Not published: the tree has no release process, and the family shares
+# this code by copying it, not by depending on it. Publishing a 0.1.0
+# would promise a stability the tree does not have.
+publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true

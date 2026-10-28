@@ -1,6 +1,10 @@
 [package]
 name = "craftkit-engine"
 description = "The command registry, the session, undo, and the crash reporter."
+# Not published: the tree has no release process, and the family shares
+# this code by copying it, not by depending on it. Publishing a 0.1.0
+# would promise a stability the tree does not have.
+publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
