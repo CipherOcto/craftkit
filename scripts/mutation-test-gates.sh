@@ -7122,5 +7122,25 @@ swap crates/control/src/protocol.rs \
 expect_catch "control: the word for a JSON type has drifted" \
     "cargo test -p craftkit-control --profile ci the_word_for_a_json_type_is_the_core_s_word"
 
+# --------------------------------------- the crash folder holds one report, whose design is a document ----
+# Section 271. The crash folder's writer said "a design is the same bytes in
+# the crash folder as it is on disk" -- a promise section 72 had already
+# stopped keeping, when the folder became one file and the report began to
+# carry the design as a *document*. The writer is still the tree's one
+# writer; the bytes are not the design file's bytes.
+swap crates/engine/src/crash.rs \
+    '    write_atomic(&staging.join(REPORT_FILE), &report_json)?;' \
+    '    write_atomic(&staging.join(REPORT_FILE), &report_json)?;
+    let _ = write_atomic(&staging.join("design.solidcraft"), &report_json);'
+expect_catch "engine: the crash folder holds more than the report" \
+    "cargo test -p craftkit-engine --profile ci the_crash_folder_holds_a_report_whose_design_is_a_document"
+
+# And the part of the promise that is still true: the tree's one writer.
+swap crates/engine/src/crash.rs \
+    '    let report_json = to_json(&report)?;' \
+    '    let report_json = serde_json::to_string_pretty(&report).map_err(|e| format!("could not serialize: {e}"))?;'
+expect_catch "engine: the report was not written with the tree's one writer" \
+    "cargo test -p craftkit-engine --profile ci the_crash_folder_holds_a_report_whose_design_is_a_document"
+
 restore
 finish

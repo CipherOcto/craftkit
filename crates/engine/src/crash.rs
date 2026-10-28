@@ -401,8 +401,16 @@ pub fn last_command(session: &Session) -> String {
 
 /// The tree's JSON layout, for one value.
 ///
-/// The same writer the design file uses, so a design is the same bytes in the
-/// crash folder as it is on disk. §142.
+/// The **same writer** the design file uses ✓ — so the layout is one layout ✓
+/// and cannot drift ✓.
+///
+/// **The bytes are not the same, and the promise they used to make was
+/// stopped when the folder became one file.** §142 made the crash folder
+/// write its report with the tree's one writer ✓; §72 then made the folder
+/// hold **one** file ✓ — the report ✓ — and the report carries the design as
+/// a **document** ✓, not as the file on disk ✓. So this comment used to say
+/// "a design is the same bytes in the crash folder as it is on disk" ✓, and
+/// that stopped being true ✓. The writer is shared ✓; the bytes are not ✓.
 fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
     let mut out: Vec<u8> = Vec::new();
     craftkit_core::writer::write_json(&mut out, value).map_err(|e| format!("could not serialize: {e}"))?;
@@ -947,6 +955,48 @@ mod tests {
     /// **same** report: one serializer, so a file and a folder hold the same
     /// bytes, and one reader, so the tree does not have two answers about
     /// one report.
+    /// The crash folder holds a report, and the report's design is a document.
+    ///
+    /// §271: the folder's writer said "a design is the same bytes in the
+    /// crash folder as it is on disk", and §72 had already stopped that being
+    /// true — the folder holds **one** file ✓, the report ✓, and the report
+    /// carries the design as a document ✓.
+    ///
+    /// The decision is pinned here ✓, so a change to it is a change to this
+    /// test ✓ and not an accident ✓.
+    #[test]
+    fn the_crash_folder_holds_a_report_whose_design_is_a_document() {
+        let dir = temp_dir("design-bytes");
+        let session = Session::sample();
+        let report = build(&session, "node.add", "written on request");
+        let filed = write_to(&dir, &report).expect("the report is filed");
+
+        // The folder holds one file: the report.
+        let mut files: Vec<String> = std::fs::read_dir(&filed)
+            .expect("the folder")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        files.sort();
+        assert_eq!(files, vec![REPORT_FILE.to_string()], "the folder holds more than the report");
+
+        // And the design inside the report is a **document**, not the design
+        // file: a design file carries the format's tag, and this does not.
+        let text = std::fs::read_to_string(filed.join(REPORT_FILE)).expect("the report");
+        let as_json: serde_json::Value = serde_json::from_str(&text).expect("the report is JSON");
+        let design = as_json.get("design").expect("the report carries a design");
+        assert!(design.get("format").is_none(), "the report's design is a file, not a document: {design}");
+        assert!(design.get("nodes").is_some(), "the design holds the nodes: {design}");
+
+        // The part of the old promise that is still true: the **writer** is
+        // the tree's one writer, so the report is written the way the tree
+        // writes things — and only the *bytes* stopped matching the file on
+        // disk, because the folder holds the design as a document now.
+        let expected = to_json(&report).expect("the report serializes");
+        let filed_bytes = std::fs::read(filed.join(REPORT_FILE)).expect("the filed report");
+        assert_eq!(filed_bytes, expected.as_bytes(), "the report was not written with the tree's one writer");
+    }
+
     #[test]
     fn the_file_door_and_the_folder_door_write_the_same_bytes() {
         let dir = temp_dir("file-door");

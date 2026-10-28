@@ -31550,6 +31550,110 @@ reads it, and an obvious message is still a contract.**
 
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 
+## 271. The crash folder promised the design's bytes, and had been keeping a different promise since §72
+
+### The finding
+
+**A comment in the tree promised something the tree had stopped doing.**
+
+```rust
+// crates/engine/src/crash.rs:404 — the crash folder's writer
+/// The same writer the design file uses, so a design is the same bytes in the
+/// crash folder as it is on disk. §142.
+fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> {
+```
+
+Read as one sentence, it says two things ✓: the writer is the same ✓, and
+the bytes are the same ✓. The first is true ✓. The second stopped being
+true when **§72** made the crash folder hold **one** file ✓ — the report ✓ —
+and made the report carry the design as a **document** ✓, not as the design
+file ✓.
+
+So the promise had been broken for a long time ✓, and nobody noticed ✓,
+because **the comment was the only thing that said it** ✓ — the code behind
+it never compared the folder's bytes with the file's ✓, so nothing could
+fail ✓.
+
+### Measured
+
+Before — the comment in the tree:
+
+```text
+The same writer the design file uses, so a design is the same bytes in the
+crash folder as it is on disk. §142.
+```
+
+The folder after §72: **one** file ✓ — `report.json` ✓ — and the design
+inside it is a document ✓ (it has `nodes` ✓ and no `format` tag ✓), so it is
+not the design file's bytes ✓.
+
+After — the comment says what is true ✓, and a test holds it:
+
+```text
+The **same writer** the design file uses ✓ — so the layout is one layout ✓
+and cannot drift ✓.
+... The writer is shared ✓; the bytes are not ✓.
+```
+
+### Why nothing else would have caught it
+
+- **Nothing read the comment.** A comment is not a command ✓ — there is no
+  gate that runs a sentence ✓, and this sentence was the **only** place the
+  promise lived ✓.
+- **The change that broke it was a good one.** §72 made the folder hold one
+  file ✓ so a report could not arrive with two copies that disagreed ✓ — and
+  nothing was obliged to revisit a comment in another part of the file ✓.
+- **The two halves of the sentence had different lifetimes.** "The same
+  writer" ✓ is a claim about a function ✓ that still holds ✓; "the same
+  bytes" ✓ is a claim about a folder's contents ✓ that §72 changed ✓ — and
+  the comment read as one promise ✓, so a reader could not tell which half
+  had died ✓.
+
+### The fix
+
+**The comment now says what the tree does, and a test holds the decision.**
+
+The promise is split ✓: the writer is shared ✓ and the bytes are not ✓, and
+the comment says why ✓ — §72 made the folder one file ✓ and the design a
+document ✓.
+
+And the decision is pinned by a test ✓ —
+`the_crash_folder_holds_a_report_whose_design_is_a_document` in
+`crates/engine/src/crash.rs` ✓ — which asserts that the folder holds
+**exactly** the report ✓, that the design inside it is a **document** ✓ (it
+has `nodes` ✓ and no `format` tag ✓), and that the report is written with
+**the tree's one writer** ✓ (the filed bytes are the writer's bytes ✓).
+
+### What is not claimed
+
+- **No behaviour changed.** The comment was corrected ✓ and a test was added ✓
+  — the crash folder's contents are exactly what they were ✓.
+- **§72 was not wrong.** Making the folder hold one file ✓ was the fix for
+  §72's own problem ✓, and it is not a change to §72 ✓.
+- **The tree's other prose was not audited here.** This section is about one
+  stale promise ✓, in one comment ✓ — it is not a claim that the tree's prose
+  has no other stale claims ✓.
+
+### The lesson
+
+**A promise in a comment is a promise with no witness.**
+
+The comment said the folder held the design file's bytes ✓ — and the code
+never compared them ✓, so the promise could not fail ✓, and could not be
+noticed as failing ✓ either ✓. **A prose claim about a behaviour needs a
+test beside it; otherwise it is only a wish that wears a promise's
+clothes.**
+
+**And when a good change moves what a comment is about, the comment is now
+wrong even though nothing in it was wrong when it was written.** §72 was
+right ✓ — the folder holds one file ✓ — and the comment in the other part
+of the file became a lie ✓. **The general form: *a comment that survives a
+change is a claim nobody is checking*, and the cheapest way to keep a claim
+honest is to make the tree assert it.**
+
+
+| **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32152,6 +32256,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A tick spelling round-trips** | `a_tick_spelling_round_trips` in `crates/core/src/tick.rs` | 1 mutation — §268 |
 | **A published value is a value a command accepts** | `a_published_value_is_a_value_a_command_accepts` in `crates/core/src/value.rs` | 1 mutation — §269 |
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
+| **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
