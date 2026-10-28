@@ -44,6 +44,31 @@ fn value_from_parameter<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Re
     Value::from_parameter("value", &json).map_err(serde::de::Error::custom)
 }
 
+/// The instant as the tree's commands take it.
+///
+/// **The core's spelling.** §274.
+fn tick_as_text<S: serde::Serializer>(tick: &Tick, serializer: S) -> Result<S::Ok, S::Error> {
+    tick.as_text().serialize(serializer)
+}
+
+/// The instant as the tree's commands take it, read back.
+///
+/// **The core's reader.** §274: the tree's spelling is read, and so is a
+/// bare count of ticks — so a plan written before the change still reads.
+fn tick_from_text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Tick, D::Error> {
+    let json = serde_json::Value::deserialize(deserializer)?;
+    match &json {
+        serde_json::Value::String(text) => Tick::parse_ticks(text).map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => {
+            let raw = n
+                .as_i64()
+                .ok_or_else(|| serde::de::Error::custom(format!("`{n}` is not a whole number of ticks")))?;
+            Tick::try_from_raw("time", i128::from(raw)).map_err(serde::de::Error::custom)
+        }
+        other => Err(serde::de::Error::custom(format!("`{other}` is not an instant"))),
+    }
+}
+
 /// What one node contributed to the plan.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodeState {
@@ -180,6 +205,14 @@ impl std::fmt::Display for Diagnostics {
 /// The evaluated document at one instant.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Plan {
+    /// The instant the plan was evaluated at.
+    ///
+    /// **Published in the spelling the tree's commands take.** §274: the
+    /// plan published the instant as a bare tick count, and the tree's own
+    /// time parameter reads a bare number as **seconds** — so the plan
+    /// published an instant the command refused, and the refusal came back
+    /// as "an instant is at most 72620402 seconds after zero".
+    #[serde(serialize_with = "tick_as_text", deserialize_with = "tick_from_text")]
     pub at: Tick,
     pub nodes: Vec<NodeState>,
     pub diagnostics: Diagnostics,

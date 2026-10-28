@@ -7196,5 +7196,15 @@ swap crates/model/src/keyframe.rs \
 expect_catch "model: the file's easing is not read back" \
     "cargo test -p craftkit-model --profile ci the_files_easing_is_read_back"
 
+# --------------------------------------- the plan's instant is in the tree's spelling ----
+# Section 274. The plan published the instant it was evaluated at as a bare
+# tick count, and the tree's own time parameter reads a bare number as
+# seconds -- so the plan published an instant the command refused.
+swap crates/eval/src/plan.rs \
+    '    tick.as_text().serialize(serializer)' \
+    '    serde_json::json!(tick.raw()).serialize(serializer)'
+expect_catch "eval: the plan publishes a bare tick count" \
+    "cargo test -p craftkit-engine --profile ci the_plans_instant_is_an_instant_the_command_accepts"
+
 restore
 finish

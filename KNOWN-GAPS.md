@@ -31869,6 +31869,102 @@ in **every** file the tree writes ✓ — a keyframe with no easing of its own
 
 | **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
 
+## 274. The plan published its instant as a bare number, and the tree's own time parameter read it as seconds
+
+### The finding
+
+**§268 gave every instant the tree publishes a spelling — `1270080000000t`
+— and the plan was not one of them.**
+
+The plan's instant is a `Tick` ✓, and `Tick`'s serde is the **file's**
+spelling ✓ — a bare count ✓ — so the plan published a bare count ✓:
+
+```rust
+// crates/eval/src/plan.rs
+pub struct Plan {
+    pub at: Tick,          // <- the file's spelling, on the command's door
+```
+
+And the tree's time parameter reads a bare number as **seconds** ✓ — §268
+established that ✓ — so the plan's instant was not an instant at all ✓: it
+was a number of seconds ✓, twenty million times too large ✓.
+
+### Measured
+
+Before — the plan at a playhead 2.5 s into the design, and its own instant
+given back to the command that moves the playhead:
+
+```text
+at = 635040000000
+the plan's at is REFUSED -> `playback.seek` rejected its parameters: `seconds` 635040000000 is past the tree's range: an instant is at most 72620402 seconds after zero, or 36310201 seconds before it
+the playhead is now at "635040000000t"
+```
+
+After:
+
+```text
+at = "635040000000t"
+the plan's at is accepted
+```
+
+### Why nothing else would have caught it
+
+- **The plan was published in two places and checked in neither.** The
+  `plan.evaluate` command's reply ✓ and the state's own `"plan"` ✓ — and
+  the state's own `"at"` ✓ was fixed by §268 ✓ while the plan's ✓ was not ✓,
+  so the two sat side by side ✓, in the same reply ✓, in two spellings ✓.
+- **A test pinned the wrong spelling.** The plan's command's test said
+  `assert!(out.data["at"].is_number())` ✓ — so the suite **required** the
+  bare count ✓. §272's lesson, again ✓: *a test that pins the bug is a
+  lock on the bug* ✓.
+- **At the start of the design the two spellings agree.** A playhead at
+  0 s ✓ is `0` ticks ✓ and `0` seconds ✓ — so the bug is invisible until
+  the playhead moves ✓, and the sample design starts at zero ✓.
+
+### The fix
+
+**The plan publishes the tree's instant spelling.**
+
+`Plan::at` is written with `Tick::as_text()` ✓ — the core's spelling ✓,
+§268's home ✓ — and read back with `Tick::parse_ticks` ✓, or with a bare
+count of ticks ✓ so that anything written before the change still reads ✓.
+
+The **file's** spelling is untouched ✓: a `.craftkit` file still carries
+the raw count ✓, because the file's door reads the document ✓ and the plan
+is not the document ✓.
+
+### What is not claimed
+
+- **The file did not change.** `Tick`'s own serde is still the file's ✓.
+- **The plan's reader is not exercised by the tree** — nothing deserializes
+  a plan today ✓ — so the reader is written for symmetry and for the next
+  door that needs it ✓, and it is **not** claimed to be tested by the
+  command path ✓.
+- **§268 was not wrong.** It fixed the instants the **state** publishes ✓;
+  the plan is a second publisher ✓ of the same thing ✓.
+
+### The lesson
+
+**A rule that fixes one publisher has to be asked: who else publishes it?**
+
+§268 gave the tree's instants a spelling ✓ and fixed the state ✓, the
+range ✓, the keyframes ✓, the seek ✓ and the control channel's ping ✓.
+The **plan** publishes an instant too ✓ — the same instant ✓ — and was not
+in the list ✓. **The general form: *a spelling is a rule about a value, not
+about a site — so a rule about a value has to list the sites that publish
+it*.**
+
+**And a publisher that is not in the list is invisible until it moves.** The
+two spellings agreed at zero ✓ — and the design the tree ships starts at
+zero ✓ — so the defect waited for a playhead that moved ✓. **A bug that
+only shows at a non-default value is a bug the default hides.**
+
+**And the same lesson as §272, one more time:** the tree's own test said
+`is_number()` ✓ — so the suite held the wrong spelling in place ✓, and
+the fix had to change the test as well as the code ✓.
+
+| **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32475,6 +32571,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
 | **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
+| **The plan publishes its instant in the tree's spelling** | `the_plans_instant_is_an_instant_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §274 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |

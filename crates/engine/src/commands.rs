@@ -2347,7 +2347,23 @@ mod tests {
         let out = s.execute("plan.evaluate", &json!({})).expect("plan");
         assert_eq!(out.data["nodes"].as_array().map(Vec::len), Some(3));
         assert!(out.data["diagnostics"].is_object());
-        assert!(out.data["at"].is_number());
+        assert_eq!(out.data["at"], json!("0t"), "the instant is not in the tree's spelling");
+    }
+
+    /// The plan's instant is an instant the command accepts.
+    ///
+    /// §274: the plan published the instant it was evaluated at as a bare
+    /// tick count, and the tree's own time parameter reads a bare number as
+    /// **seconds** — so the plan published an instant the command refused.
+    #[test]
+    fn the_plans_instant_is_an_instant_the_command_accepts() {
+        let mut s = session();
+        ok(&mut s, "playback.seek", json!({ "seconds": 2.5 }));
+        let plan = s.execute("plan.evaluate", &json!({})).expect("the plan");
+        let at = plan.data["at"].clone();
+        assert!(at.is_string(), "the plan published a bare number: {at}");
+        // And the command takes it back.
+        ok(&mut s, "playback.seek", json!({ "seconds": at }));
     }
 
     #[test]
