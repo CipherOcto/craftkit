@@ -550,7 +550,8 @@ pub static KEY_SET: CommandSpec = CommandSpec {
             "easing",
             Doc::Easing,
             "How this key is left: linear, hold, easeIn, easeOut or easeInOut, or a bezier \
-             with its control points, bezier(outX,outY). Defaults to linear.",
+             with its control points, bezier(outX,outY). An easing the way the file spells \
+             it is accepted too. Defaults to linear.",
         ),
     ],
     mutates: true,
@@ -728,7 +729,7 @@ pub static KEY_EASE: CommandSpec = CommandSpec {
             "easing",
             Doc::Easing,
             "linear, hold, easeIn, easeOut or easeInOut, or a bezier with its control points, \
-             bezier(outX,outY).",
+             bezier(outX,outY). An easing the way the file spells it is accepted too.",
         ),
     ],
     mutates: true,
@@ -1680,6 +1681,37 @@ mod tests {
             tint["value"].as_str().expect("the tint is text").starts_with('#'),
             "the tint is not the colour's spelling: {}",
             tint["value"]
+        );
+    }
+
+    /// An easing the file publishes is an easing the command accepts.
+    ///
+    /// §273: the tree's files spell an easing the way serde spells it —
+    /// `"ease_in_out"`, or an **object** for a bezier — and the command that
+    /// sets an easing refused both, so a design the tree wrote could not be
+    /// given back to the tree's own command.
+    #[test]
+    fn an_easing_the_file_publishes_is_an_easing_the_command_accepts() {
+        let mut s = session();
+        // A key to change.
+        ok(&mut s, "key.set", json!({ "node": 1, "path": "amount", "value": 0.5, "time": 1.0 }));
+        let every = [
+            craftkit_model::Easing::Hold,
+            craftkit_model::Easing::Linear,
+            craftkit_model::Easing::EaseInOut,
+            craftkit_model::Easing::Bezier { out_x: 0.5, out_y: 0.25 },
+        ];
+        for easing in every {
+            // The spelling the **file** writes — the tree's own writer's.
+            let stored = serde_json::to_value(easing).expect("the file's spelling");
+            ok(&mut s, "key.ease", json!({ "node": 1, "path": "amount", "easing": stored, "time": 1.0 }));
+        }
+        // And the file's word for the default easing is the one the tree's own
+        // files carry.
+        assert_eq!(
+            serde_json::to_value(craftkit_model::Easing::EaseInOut).expect("the file's spelling"),
+            json!("ease_in_out"),
+            "the file's spelling of the default easing has moved"
         );
     }
 

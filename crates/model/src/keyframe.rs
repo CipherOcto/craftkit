@@ -103,6 +103,23 @@ impl Easing {
         }
     }
 
+    /// The easing the **file** stores, read back.
+    ///
+    /// **The file's reader.** A `.craftkit` file spells an easing the way
+    /// serde spells it ✓ — a named easing is a word ✓ (`"ease_in_out"`) and a
+    /// bezier is an **object** ✓ (`{"bezier": {"out_x": …, "out_y": …}}`) ✓ —
+    /// and this is that reader ✓, the same one the file's door uses ✓.
+    ///
+    /// §273: the tree's own files carry the file's spelling ✓, and the
+    /// command that sets an easing refused it ✓ — so a design the tree wrote
+    /// could not be given back to the tree's command ✓. **The door takes
+    /// back what the tree publishes.**
+    ///
+    /// A value that is not an easing the file could hold is refused ✓.
+    pub fn from_stored(json: &serde_json::Value) -> Option<Self> {
+        serde_json::from_value(json.clone()).ok()
+    }
+
     /// Validate the control points. A NaN here would make every sampled frame
     /// garbage, so it is refused at construction rather than at draw time.
     pub fn checked(self) -> Result<Self, CoreError> {
@@ -526,6 +543,27 @@ mod tests {
         assert_eq!(Easing::Bezier { out_x: 0.58, out_y: 1.0 }.name(), "easeOut");
         // A bezier that is not a preset is spelled with its control points.
         assert_eq!(Easing::Bezier { out_x: 0.5, out_y: 0.25 }.name(), "bezier(0.5,0.25)");
+    }
+
+    /// The file's easing is read back.
+    ///
+    /// §273: the tree's files spell an easing the way serde spells it — a
+    /// named easing is a word (`"ease_in_out"`) and a bezier is an **object**
+    /// — and the command that sets an easing refused both, so a design the
+    /// tree wrote could not be given back to the tree's own command.
+    #[test]
+    fn the_files_easing_is_read_back() {
+        // The named easings, the file's spelling.
+        assert_eq!(Easing::from_stored(&serde_json::json!("ease_in_out")), Some(Easing::EaseInOut));
+        assert_eq!(Easing::from_stored(&serde_json::json!("hold")), Some(Easing::Hold));
+        assert_eq!(Easing::from_stored(&serde_json::json!("linear")), Some(Easing::Linear));
+        // And the bezier, which the file spells as an object.
+        let bezier = Easing::Bezier { out_x: 0.5, out_y: 0.25 };
+        assert_eq!(Easing::from_stored(&serde_json::to_value(bezier).expect("the bezier")), Some(bezier));
+        // And what is not an easing the file could hold is refused.
+        assert_eq!(Easing::from_stored(&serde_json::json!(42)), None);
+        assert_eq!(Easing::from_stored(&serde_json::json!("easeIn")), None);
+        assert_eq!(Easing::from_stored(&serde_json::json!({"nope": {}})), None);
     }
 
     /// A bezier written with its control points is a bezier.

@@ -341,7 +341,8 @@ fn property_for(kind: Doc, help: &str) -> Json {
                 "description".to_string(),
                 json!(format!(
                     "{help} linear, hold, easeIn, easeOut or easeInOut, or a bezier with its \
-                     control points, bezier(outX,outY)."
+                     control points, bezier(outX,outY). An easing the way the file spells it is \
+                     accepted too."
                 )),
             );
         }

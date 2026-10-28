@@ -7172,5 +7172,29 @@ swap crates/core/src/value.rs \
 expect_catch "core: the file's tagged value is not read back" \
     "cargo test -p craftkit-core --profile ci the_files_tagged_value_is_read_back"
 
+# --------------------------------------- the file's easing is read back ----
+# Section 273. The tree's files spell an easing the way serde spells it --
+# "ease_in_out", or an object for a bezier -- and the command that sets an
+# easing refused both, so a design the tree wrote could not be given back to
+# the tree's own command.
+swap crates/engine/src/params.rs \
+    '        Json::String(s) => Easing::preset(s).or_else(|| Easing::from_stored(raw)),' \
+    '        Json::String(s) => Easing::preset(s),'
+expect_catch "engine: the file's easing word is refused" \
+    "cargo test -p craftkit-engine --profile ci an_easing_the_file_publishes_is_an_easing_the_command_accepts"
+
+swap crates/engine/src/params.rs \
+    '        other => Easing::from_stored(other),' \
+    '        _other => None,'
+expect_catch "engine: the file's bezier is refused" \
+    "cargo test -p craftkit-engine --profile ci an_easing_the_file_publishes_is_an_easing_the_command_accepts"
+
+# And the reader itself.
+swap crates/model/src/keyframe.rs \
+    '        serde_json::from_value(json.clone()).ok()' \
+    '        let _ = json; None'
+expect_catch "model: the file's easing is not read back" \
+    "cargo test -p craftkit-model --profile ci the_files_easing_is_read_back"
+
 restore
 finish

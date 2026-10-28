@@ -31756,6 +31756,119 @@ the bug.**
 
 | **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
 
+## 273. The tree's own files carried an easing the tree's own command refused
+
+### The finding
+
+**The tree writes its easings one way and reads them another.**
+
+The **file's** spelling is serde's ✓ — a named easing is a word ✓ and a
+bezier is an **object** ✓:
+
+```json
+{"ease": "ease_in_out"}
+{"ease": {"bezier": {"out_x": 0.5, "out_y": 0.25}}}
+```
+
+The **command's** spelling is the tree's own ✓ — §267's decision ✓:
+
+```text
+linear, hold, easeIn, easeOut or easeInOut, or a bezier with its control points, bezier(outX,outY)
+```
+
+The two agree on `"hold"` ✓ and `"linear"` ✓ — and on **nothing else** ✓.
+The default easing — the one every keyframe has unless it says otherwise ✓ —
+is `"ease_in_out"` in every file the tree writes ✓ and `"easeInOut"` in every
+command the tree publishes ✓.
+
+And each door refused the other's word ✓.
+
+### Measured
+
+Before — the tree's own file, written by the tree, and given back to the
+tree's own command:
+
+```text
+the file's easing: "linear"
+the file's easing: {"bezier":{"out_x":0.5,"out_y":0.25}}
+the command accepts ease_in_out: NO -> `key.set` rejected its parameters: `easing` `ease_in_out` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut, or a bezier with its control points, bezier(outX,outY)
+the command accepts the file's bezier: NO -> `key.set` rejected its parameters: `easing` expected an easing name as text
+```
+
+After:
+
+```text
+the command accepts ease_in_out: yes
+the command accepts easeInOut: yes
+the command accepts the file's bezier: yes
+```
+
+### Why nothing else would have caught it
+
+- **§267 fixed the command door and stopped there.** Its own words: *the
+  file's spelling is unchanged — the file has its own door* ✓. That is a
+  true statement ✓ and it left the two doors disagreeing ✓, with the
+  default easing ✓ disagreeing ✓.
+- **Each door was internally consistent.** The file reader read the file's
+  words ✓; the command read the command's words ✓ — so every test inside
+  each door passed ✓, and no test crossed the doors ✓.
+- **The two words differ in a way that looks deliberate.** `"ease_in_out"`
+  is serde's snake_case ✓ and `"easeInOut"` is the tree's own ✓ — so each
+  looked like the right word for its own place ✓, and the mismatch read as
+  a design ✓.
+
+### The fix
+
+**The command door takes the file's easing back.**
+
+`Easing::from_stored` is the file's reader ✓ — serde's ✓, the same one the
+file's door uses ✓ — and the engine's easing parameter asks it ✓ when the
+command's own names do not answer ✓. So the door takes back what the tree
+publishes ✓:
+
+- `"ease_in_out"` ✓ — the file's word for the default easing ✓;
+- `{"bezier": {"out_x": …, "out_y": …}}` ✓ — the file's word for a bezier ✓.
+
+The command's own names are still what the commands **publish** ✓ — §267's
+decision ✓ — and the file's spelling is **unchanged** ✓: no file is
+rewritten ✓ and the format does not move ✓.
+
+### What is not claimed
+
+- **The file does not read the command's words.** A file that says
+  `"easeInOut"` is still refused ✓, and a bezier in a file is still
+  structural ✓ — the command's `bezier(0.5,0.25)` has no file spelling ✓.
+  **The command door now takes the file's words back; the file door has not
+  learned the command's** ✓ — and that is stated here rather than left to
+  be discovered ✓.
+- **No file was rewritten.** The format did not change ✓ — this is a door
+  that learned a word ✓, not a change to what is saved ✓.
+- **§267 was not wrong.** It fixed the command's published word ✓ and
+  declared the file's door its own ✓ — this section is the other half of
+  that decision ✓.
+
+### The lesson
+
+**Two doors for one thing are two vocabularies, and the tree publishes both.**
+
+The file says `"ease_in_out"` ✓ and the command says `"easeInOut"` ✓ — for
+the **same easing** ✓ — and each door refused the other's word ✓. **The
+general form: *a door that cannot read the other door's words is a door
+that cannot take back what the tree published*.**
+
+**And "each door has its own spelling" is not the same as "each door may
+refuse the other's".** §267's decision ✓ — the file keeps its own spelling
+✓ — was right ✓, and the *consequence* was left unstated ✓: the file's
+words became words the tree refused ✓. **A decision about who owns a
+spelling must also say what happens at the other door.**
+
+**And the default is the case that matters.** `"ease_in_out"` is the word
+in **every** file the tree writes ✓ — a keyframe with no easing of its own
+✓ — so the common case was the broken one ✓, while the words that agreed
+✓ (`"hold"` ✓, `"linear"` ✓) made the tree look consistent ✓.
+
+| **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32361,6 +32474,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
 | **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
+| **The file's easing is read back by the command** | `an_easing_the_file_publishes_is_an_easing_the_command_accepts` in `crates/engine/src/commands.rs` | 3 mutations — §273 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |

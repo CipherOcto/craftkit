@@ -359,19 +359,28 @@ pub(crate) fn opt_kind(p: &Params<'_>, key: &str) -> Result<Option<NodeKind>, En
 /// The shape is matched, never indexed.
 pub(crate) fn opt_easing(p: &Params<'_>, key: &str) -> Result<Option<Easing>, EngineError> {
     let Some(raw) = p.raw_json(key) else { return Ok(None) };
-    let Json::String(s) = raw else {
-        return Err(EngineError::Param {
-            id: String::new(),
-            source: ParamError::new(key, "expected an easing name as text"),
-        });
+    // **The command's names first**, then **the file's own spelling**.
+    //
+    // §273: the tree's files spell an easing the way serde spells it —
+    // `"ease_in_out"`, or an object for a bezier — and the command refused
+    // both, so a design the tree wrote could not be given back to the tree's
+    // command. The door takes back what the tree publishes.
+    let easing = match raw {
+        Json::String(s) => Easing::preset(s).or_else(|| Easing::from_stored(raw)),
+        other => Easing::from_stored(other),
     };
-    Easing::preset(s).map(Some).ok_or_else(|| EngineError::Param {
+    easing.map(Some).ok_or_else(|| EngineError::Param {
         id: String::new(),
         source: ParamError::new(
             key,
             format!(
-                "`{s}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut, \
-                 or a bezier with its control points, bezier(outX,outY)"
+                "`{}` is not an easing; expected linear, hold, easeIn, easeOut or easeInOut, \
+                 or a bezier with its control points, bezier(outX,outY), or an easing the way \
+                 the file spells it",
+                match raw {
+                    Json::String(s) => s.as_str(),
+                    _ => "(a value)",
+                }
             ),
         ),
     })
