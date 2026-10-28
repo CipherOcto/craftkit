@@ -182,9 +182,11 @@ have been structurally incapable of reporting the thing it exists to report.
 ## Undo: clone before edit
 
 `craftkit_engine::History` stores whole `Document` clones, not inverse commands.
-The reason is stated in `crates/engine/src/history.rs`: an inverse that is not
+The reason is stated in `crates/foundation/src/history.rs`: an inverse that is not
 *exactly* the inverse is how an undo stack starts losing work, and the bug only
-surfaces after a crash.
+surfaces after a crash. The stack itself lives in the foundation — it asks each
+snapshot what it costs and its budget is the caller's — so the engine's own
+budget for it is `craftkit_engine::history::MAX_HISTORY_BYTES`. §280.
 
 ```rust
 // crates/engine/src/session.rs — one unconditional snapshot per command.

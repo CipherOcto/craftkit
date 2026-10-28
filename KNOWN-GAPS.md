@@ -32415,7 +32415,7 @@ undo stack carries four of the tree's best rules ✓ and could not be given
 to a PDF editor ✓ — and the survey's question ("which parts are shared
 contracts?") is what asked ✓.
 
-| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
+| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/foundation/src/history.rs` | 1 mutation — §278 |
 
 ## 279. The control channel's own protocol section promised a field it never sent
 
@@ -32524,6 +32524,119 @@ check costs one test ✓ that reads a file the tree already owns ✓.
 every field in the tree's example was real ✓ — somewhere ✓.
 
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
+
+## 280. The undo stack lived above the model it was asking about
+
+### The finding
+
+**§278 made the stack generic, and left it in the crate that owns the
+document.**
+
+```text
+// before
+crates/engine/src/history.rs   -- the stack, the budget, the model's limit table
+crates/model/src/document.rs   -- the Snapshot impl
+crates/foundation/src/snapshot.rs -- the trait the stack asks
+```
+
+The trait the stack asks its subject about was in the **foundation** ✓ — the
+crate with no workspace dependency at all ✓ — and the stack that asked it was
+three layers above ✓.
+
+**So the stack could not be lifted out of craftkit** ✓ — not even by copying
+it ✓ — because everything above the foundation is craftkit's ✓. **The one
+mechanism every application needs was the one mechanism no other application
+could have** ✓.
+
+And the tree said so, in the tree's own words ✓:
+
+```text
+crates/engine/src/history.rs -- the stack
+crates/engine/src/history.rs -- MAX_HISTORY_BYTES = the model's document size
+```
+
+**The budget was in the same file as the stack** ✓ — the model's number and
+the generic mechanism ✓ — so the two could not be separated without choosing
+which one the file was about ✓.
+
+### Measured
+
+After — the stack is with the trait it asks ✓, and the budget is with the
+caller ✓:
+
+```text
+crates/foundation/src/history.rs   -- the stack, the count of steps, the tests
+crates/engine/src/history.rs       -- the tree's budget, derived from the model
+```
+
+And the stack's own tests **no longer use the model** ✓ — they use a page ✓:
+
+```text
+test history::tests::the_stack_holds_snapshots_and_not_documents ... ok
+test history::tests::the_history_keeps_its_memory_within_a_budget ... ok
+```
+
+**One MiB of budget, sixteen 64 KiB pages** ✓ — the numbers are the test's own
+✓, not the model's ✓.
+
+### Why nothing else would have caught it
+
+- **Nothing was broken.** The stack did exactly what the tree needed ✓, and
+  every rule about it was kept ✓ (§52's budget ✓, §68's shared budget ✓,
+  §84's trimming ✓). The defect was again **what it could not do** ✓.
+- **The generic half of a thing is not the whole thing.** §278 made the
+  *type* generic ✓; the *crate* stayed where the type's first user was ✓.
+  A generic type in a domain crate is still a domain crate's type ✓.
+- **The layers table could not see it.** The foundation is L0 ✓ and the
+  engine is L4 ✓, and both are above the model ✓ — a stack at L4 that asks
+  a question at L0 is *legal* ✓ and *not liftable* ✓.
+
+### The fix
+
+**The stack moved down to the crate that holds the trait it asks.**
+
+`craftkit_foundation::history` is the stack ✓ — the budget, the trimming
+order, the redo branch ✓, the count of steps ✓ — and it depends on nothing
+in the tree ✓. The tree's own budget stayed with the tree's own caller ✓
+(`craftkit_engine::history::MAX_HISTORY_BYTES` ✓, still derived from the
+model's limit table ✓, still checked by §144's gate ✓).
+
+And the engine re-exports the stack ✓, so no caller moved ✓.
+
+### What is not claimed
+
+- **The session is still craftkit's.** `Session` still holds a
+  `craftkit_model::Document` ✓, and the crash report still embeds a document
+  ✓ — this is the second increment, not the whole seam ✓.
+- **The foundation cannot depend on anything.** The tree's layers make that
+  a fact ✓ — and cargo refuses any dependency at all ✓, because every other
+  crate already depends on the foundation ✓. So the rule for this crate is
+  enforced by the build ✓, and the layers gate has nothing left to say about
+  it ✓.
+- **The stack's rules did not change.** The budget, the trimming, the redo
+  branch and the labels are the same ✓ — the tests moved with the code ✓.
+
+### The lesson
+
+**A generic type is not yet a reusable one.**
+
+§278 made the undo stack generic ✓, and the survey's question ("which parts
+are shared contracts?") was still answered "no" ✓ — because the stack sat in
+the crate that owns the domain ✓. **A type that is generic but lives in a
+domain crate is still the domain crate's type** ✓.
+
+**And the home of a type follows the thing it asks, not the thing it holds.**
+The stack asks its snapshots what they cost ✓; the trait that answers lives
+at the bottom ✓; so the stack belongs at the bottom ✓, and the budget —
+which is about *this* application's document — belongs at the top ✓.
+
+**And the tests are part of the home.** The stack's tests used the model's
+document ✓, so moving the code without moving the tests would have left a
+foundation crate whose tests need the model ✓. The tests moved too ✓, and
+they use a page ✓.
+
+| **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the stack's own tests, in the crate that holds it | 1 mutation — §280 |
+
 
 ## What enforces what
 
@@ -33135,7 +33248,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The generic half of the tree is its own crate** | `cargo xtask layers` — `craftkit-foundation` is L0 with no workspace dependency | 1 mutation — §276 |
 | **Every CLI door that prints a failure carries the kind** | `a_failure_the_cli_prints_carries_the_kind` in `apps/craftkit-cli/tests/script.rs` | 1 mutation — §275 |
 | **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
-| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/engine/src/history.rs` | 1 mutation — §278 |
+| **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/foundation/src/history.rs` | 1 mutation — §278 |
+| **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the foundation's own suite, which runs the stack's tests without the model | 1 mutation — §280 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

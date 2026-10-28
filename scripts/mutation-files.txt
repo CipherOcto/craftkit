@@ -54,6 +54,7 @@ crates/eval/src/evaluate.rs
 crates/eval/src/plan.rs
 crates/foundation/Cargo.toml
 crates/foundation/src/atomic.rs
+crates/foundation/src/history.rs
 crates/foundation/src/lib.rs
 crates/foundation/src/params.rs
 crates/foundation/src/readers.rs

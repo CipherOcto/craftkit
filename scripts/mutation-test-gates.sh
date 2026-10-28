@@ -1430,14 +1430,14 @@ expect_catch "model: the limits table grows a limit nobody enforces" \
 
 # The undo stack's memory budget. Both halves of it: the loop that drops the
 # oldest steps, and the check that refuses a step that does not fit.
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '        while self.bytes + bytes > self.budget {' \
     '        while false {'
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '        if self.bytes + bytes > self.budget {' \
     '        if false {'
-expect_catch "engine: the undo stack ignores its memory budget" \
-    "cargo test -p craftkit-engine --profile ci the_history_keeps_its_memory_within_a_budget"
+expect_catch "foundation: the undo stack ignores its memory budget" \
+    "cargo test -p craftkit-foundation --profile ci the_history_keeps_its_memory_within_a_budget"
 
 # `run` and `snapshot` take a script, and the shape was documented only in this
 # file's module comment — which nobody reading `--help`, or an error message,
@@ -2323,7 +2323,7 @@ expect_catch "web: the worker precaches a bundle that does not exist" \
 # unreachable, and its memory is gone. The budget kept counting it, so every
 # edit after an undo added a phantom, and the budget trimmed the undo stack
 # against it: on a full-size document, undo stopped working. §68.
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '    fn clear_redo(&mut self) {
         for entry in self.redo.drain(..) {
             self.bytes = self.bytes.saturating_sub(entry.bytes);
@@ -2332,12 +2332,12 @@ swap crates/engine/src/history.rs \
     '    fn clear_redo(&mut self) {
         self.redo.clear();
     }'
-expect_catch "engine: the undo budget counts the memory it has just freed" \
-    "cargo test -p craftkit-engine --profile ci the_budget_counts_the_memory_the_stacks_hold"
+expect_catch "foundation: the undo budget counts the memory it has just freed" \
+    "cargo test -p craftkit-foundation --profile ci the_budget_counts_the_memory_the_stacks_hold"
 
 # The same mistake, seen as the person who meets it: the undo stack is trimmed
 # against a phantom until it is empty, and undo stops doing anything.
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '    fn clear_redo(&mut self) {
         for entry in self.redo.drain(..) {
             self.bytes = self.bytes.saturating_sub(entry.bytes);
@@ -2346,8 +2346,8 @@ swap crates/engine/src/history.rs \
     '    fn clear_redo(&mut self) {
         self.redo.clear();
     }'
-expect_catch "engine: undo stops working once the redo branches pile up" \
-    "cargo test -p craftkit-engine --profile ci undo_still_works_after_many_edits_that_discard_a_redo_branch"
+expect_catch "foundation: undo stops working once the redo branches pile up" \
+    "cargo test -p craftkit-foundation --profile ci undo_still_works_after_many_edits_that_discard_a_redo_branch"
 
 # The command log is a bounded ring of the last 256 commands, and the failure
 # count was taken over the ring while its own doc said "since the session
@@ -2503,7 +2503,7 @@ expect_catch "engine: two commands advertise the same chord" \
 # budget and the undo path did not, so an undo that moved a bigger document
 # into the redo stack left the two stacks holding more than the budget allows
 # — measured at 67 936 429 bytes against a 67 108 864-byte budget.
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '        self.trim_to_budget();
         Some(entry.doc)
     }
@@ -2513,8 +2513,8 @@ swap crates/engine/src/history.rs \
     }
 
     /// Take the state to restore, moving it to the undo stack.'
-expect_catch "engine: an undo does not trim the history to its budget" \
-    "cargo test -p craftkit-engine --profile ci undoing_does_not_take_the_history_over_its_budget"
+expect_catch "foundation: an undo does not trim the history to its budget" \
+    "cargo test -p craftkit-foundation --profile ci undoing_does_not_take_the_history_over_its_budget"
 
 # A property is named by a path, and a path is at most `MAX_PATH_SEGMENTS`
 # segments long. The property tree was allowed to be deeper than that — it was
@@ -7250,13 +7250,13 @@ expect_catch "engine: the published note name is refused" \
 # Section 278. The stack held documents -- the entry held a Document and the
 # budget was the model's document size -- so a PDF editor's undo stack, which
 # holds pages, could not have it.
-swap crates/engine/src/history.rs \
+swap crates/foundation/src/history.rs \
     '    pub fn new(budget: usize) -> Self {
         Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget }' \
     '    pub fn new(_budget: usize) -> Self {
-        Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget: MAX_HISTORY_BYTES }'
-expect_catch "engine: the undo stack keeps the model's budget, not the caller's" \
-    "cargo test -p craftkit-engine --profile ci the_stack_holds_snapshots_and_not_documents"
+        Self { undo: Vec::new(), redo: Vec::new(), bytes: 0, budget: usize::MAX }'
+expect_catch "foundation: the undo stack keeps the caller's budget, not a constant" \
+    "cargo test -p craftkit-foundation --profile ci the_stack_holds_snapshots_and_not_documents"
 
 # --------------------------------------- the documented reply is the wire's reply ----
 # Section 279. The control crate's protocol section showed an error reply
@@ -7267,6 +7267,17 @@ swap crates/control/src/lib.rs \
     '"ok":false,"kind":"bad-parameter","command":"node.add"'
 expect_catch "control: the documented reply carries a field the channel never sends" \
     "cargo test -p craftkit-control --profile ci the_documented_replies_carry_exactly_the_fields_the_channel_sends"
+
+# --------------------------------------- the undo stack lives with its trait ----
+# Section 280. The stack was in the engine, above the model, so the one
+# mechanism every application needs could not be lifted out of craftkit at
+# all. It lives in the foundation now, and the foundation's own tests hold
+# it to what it does: it asks each snapshot what it costs.
+swap crates/foundation/src/history.rs \
+    '        let bytes = doc.estimated_bytes();' \
+    '        let bytes = 0;'
+expect_catch "foundation: the undo stack counts what it holds" \
+    "cargo test -p craftkit-foundation --profile ci the_history_keeps_its_memory_within_a_budget"
 
 restore
 finish

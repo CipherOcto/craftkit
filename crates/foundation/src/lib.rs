@@ -54,6 +54,7 @@
 #![forbid(unsafe_code)]
 
 pub mod atomic;
+pub mod history;
 pub mod measure;
 pub mod params;
 pub mod readers;
