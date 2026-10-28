@@ -3620,7 +3620,7 @@ swap crates/engine/src/commands.rs \
     '                serde_json::json!({
                     "time": k.time.as_text(),
                     "seconds": k.time.seconds_f64(),
-                    "value": k.value,
+                    "value": k.value.as_parameter(),
                     "ease": k.ease.name(),
                 })' \
     '                serde_json::json!({
@@ -7141,6 +7141,36 @@ swap crates/engine/src/crash.rs \
     '    let report_json = serde_json::to_string_pretty(&report).map_err(|e| format!("could not serialize: {e}"))?;'
 expect_catch "engine: the report was not written with the tree's one writer" \
     "cargo test -p craftkit-engine --profile ci the_crash_folder_holds_a_report_whose_design_is_a_document"
+
+# --------------------------------------- the engine publishes a value the command takes back ----
+# Section 272. `prop.set`, `key.set` and `key.list` published a value the way
+# the *file* spells it -- a tagged object -- and the command that takes a
+# value refused it: "an object cannot be a property value". The tree
+# published a value and could not read it back.
+swap crates/engine/src/commands.rs \
+    '                    "value": k.value.as_parameter(),' \
+    '                    "value": k.value,'
+expect_catch "engine: the keyframe's value is published in the file's spelling" \
+    "cargo test -p craftkit-engine --profile ci the_engine_publishes_a_value_the_command_takes_back"
+
+swap crates/engine/src/commands.rs \
+    'serde_json::json!({ "id": id.get(), "path": path, "value": value.as_parameter() }),' \
+    'serde_json::json!({ "id": id.get(), "path": path, "value": value }),'
+expect_catch "engine: the property's value is published in the file's spelling" \
+    "cargo test -p craftkit-engine --profile ci the_engine_publishes_a_value_the_command_takes_back"
+
+# And the door that takes it back: the file's tagged spelling.
+swap crates/core/src/value.rs \
+    '                    Ok(value) => {
+                        value.check(what)?;
+                        Ok(value)
+                    }' \
+    '                    Ok(_value) => Err(crate::CoreError::BadData(format!(
+                        "{} cannot be a property value",
+                        json_kind(json)
+                    ))),'
+expect_catch "core: the file's tagged value is not read back" \
+    "cargo test -p craftkit-core --profile ci the_files_tagged_value_is_read_back"
 
 restore
 finish

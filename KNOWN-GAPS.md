@@ -31654,6 +31654,108 @@ honest is to make the tree assert it.**
 
 | **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
 
+## 272. The engine published a value the way the file spells it, and the command that takes values refused it
+
+### The finding
+
+**§269 fixed the plan and the MCP's resource. The engine's own three
+replies were publishing the same value in the same wrong spelling, and
+nothing caught them.**
+
+```rust
+// crates/engine/src/commands.rs — key.list's reply
+"value": k.value,          // <- the *file*'s tagged spelling
+```
+
+```rust
+// crates/engine/src/commands.rs — prop.set's reply
+serde_json::json!({ "id": id.get(), "path": path, "value": value }),   // <- the same
+```
+
+The door on the other side took only the **plain** spelling ✓ — a number ✓, a
+boolean ✓, a string ✓ — because §269 moved the reader into the core ✓ and
+the core refuses an object ✓.
+
+So `key.list` published a value ✓ and `key.set` — the command that keys a
+property — refused it ✓.
+
+### Measured
+
+Before — the tree's own commands, on the tree's own sample design:
+
+```text
+key.set reply value  = {"t":"num","v":1.0}
+key.list keyframe[0] = {"ease":"linear","seconds":1.0,"time":"254016000000t","value":{"t":"num","v":1.0}}
+ROUND TRIP: REFUSED -> `key.set` rejected its parameters: `value` an object cannot be a property value
+REPLY ROUND TRIP: REFUSED -> `key.set` rejected its parameters: `value` an object cannot be a property value
+```
+
+After:
+
+```text
+key.set reply value  = 1.0
+key.list keyframe[0] = {"ease":"linear","seconds":1.0,"time":"254016000000t","value":1.0}
+ROUND TRIP: accepted
+REPLY ROUND TRIP: accepted
+```
+
+### Why nothing else would have caught it
+
+- **§269's test asked the plan.** It took the **plan's** published value ✓
+  and gave it to `prop.set` ✓ — and the plan was one of the two publishers
+  §269 fixed ✓. The engine's own replies were never asked ✓, so fixing the
+  plan left the engine exactly as it was ✓.
+- **A test agreed with the bug.** `key.list`'s value was pinned in the
+  tree's own tests ✓ — `assert_eq!(keys[0]["value"]["v"], json!(0.25))` ✓ —
+  so the suite **required** the tagged form ✓. A test that pins the wrong
+  spelling is not a small mistake ✓: it is the thing that makes the wrong
+  spelling permanent ✓.
+- **The form was right where it was written.** The file's tagged spelling is
+  the **file door's** spelling ✓ — so `k.value` serialized into a document
+  was correct ✓, and only the copy in a **command reply** was wrong ✓ — and
+  nothing compared the two ✓.
+
+### The fix
+
+**The engine publishes the plain spelling, and the door takes the file's
+spelling back.**
+
+The three replies — `prop.set` ✓, `key.set` ✓ and `key.list` ✓ — publish
+`Value::as_parameter()` ✓, which is the spelling the command door takes ✓.
+
+And the core's `from_parameter` **reads the file's tagged spelling back** ✓
+— `{"t": "num", "v": 1}` ✓ — because a value with **no plain spelling** (a
+list ✓) keeps the file's form ✓, and the door has to take back what the tree
+published ✓. Any other object is still refused ✓, and says so ✓.
+
+### What is not claimed
+
+- **The file's spelling is unchanged.** The file door keeps its own
+  spelling ✓ — §267's decision ✓ — and a `.craftkit` file still reads ✓.
+- **The command door publishes one spelling.** The plain one ✓ — what
+  `as_parameter` writes ✓ — and the tagged one is only *read back* ✓, for
+  the values that have no plain spelling ✓.
+- **§269 was not wrong.** It fixed two publishers ✓ and the family it named
+  was real ✓ — this section is the rest of that family ✓.
+
+### The lesson
+
+**A fix to one publisher is not a fix to the family.**
+
+§269 found "a published value is a value a command accepts" ✓ and fixed the
+plan ✓ and the MCP's resource ✓. **The engine's own three replies were
+publishing the same value in the same wrong spelling ✓**, and the family was
+not closed ✓. **The general form: *when a rule names a family, count the
+members — the one you fixed is not the one you counted*.**
+
+**And a test that pins the wrong spelling is what makes it permanent.** The
+tree's test required `["value"]["v"]` ✓ — the tagged form ✓ — so the suite
+was not silent ✓; it was **holding the door shut** ✓. **A test is not a
+witness unless it witnesses the rule; a test that pins the bug is a lock on
+the bug.**
+
+| **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -32258,6 +32360,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The word for a JSON type is the tree's one word** | `the_word_for_a_json_type_is_the_core_s_word` in `crates/control/src/protocol.rs` | 1 mutation — §270 |
 | **The crash folder holds one report, whose design is a document** | `the_crash_folder_holds_a_report_whose_design_is_a_document` in `crates/engine/src/crash.rs` | 2 mutations — §271 |
 | **A published value is a value the command accepts** | `a_published_value_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §269 |
+| **The engine publishes a value the command takes back** | `the_engine_publishes_a_value_the_command_takes_back` in `crates/engine/src/commands.rs` | 3 mutations — §272 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
 | **A published easing is a value the command accepts** | `a_published_easing_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §267 |

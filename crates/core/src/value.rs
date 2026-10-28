@@ -378,6 +378,10 @@ impl Value {
     /// number, a boolean is a boolean, and a string is a colour, a number or
     /// text — in that order, so `#8caad2` is a colour and `42` is a number.
     /// Anything else is not a property value, and says so. §269.
+    ///
+    /// **The file's tagged spelling is read too** — `{"t": "num", "v": 1}` —
+    /// because a value with no plain spelling (a list) keeps it, and the door
+    /// takes back what the tree published. §272.
     pub fn from_parameter(what: &str, json: &serde_json::Value) -> Result<Self, crate::CoreError> {
         match json {
             serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
@@ -397,6 +401,29 @@ impl Value {
                 // A NaN, which `Value::num` then refuses.
                 let v = n.as_f64().unwrap_or(f64::NAN);
                 Value::num(what, v)
+            }
+            serde_json::Value::Object(_) => {
+                // **The file's tagged spelling** — `{"t": "num", "v": 1}`.
+                //
+                // §272: the engine published a keyframe's value in this form
+                // and the command that takes values refused it — "an object
+                // cannot be a property value". A value with **no plain
+                // spelling** (a list) keeps the file's form, so the door has
+                // to take that form back too: *a published value is a value
+                // the command accepts*.
+                //
+                // Only a **tagged value** is accepted; any other object is
+                // still refused, and says so.
+                match serde_json::from_value::<Value>(json.clone()) {
+                    Ok(value) => {
+                        value.check(what)?;
+                        Ok(value)
+                    }
+                    Err(_) => Err(crate::CoreError::BadData(format!(
+                        "{} cannot be a property value",
+                        json_kind(json)
+                    ))),
+                }
             }
             other => {
                 Err(crate::CoreError::BadData(format!("{} cannot be a property value", json_kind(other))))
@@ -463,8 +490,39 @@ fn a_published_value_is_a_value_a_command_accepts() {
         );
     }
     // And the shapes the commands do not take are refused.
-    assert!(Value::from_parameter("value", &serde_json::json!({"t": "num", "v": 1.0})).is_err());
+    //
+    // §272: the **tagged** shape used to be refused, and that was the bug —
+    // the engine published a keyframe's value in the file's tagged spelling
+    // and the command that takes a value refused it. The tagged spelling is
+    // read back now; an object that is **not** a tagged value is still
+    // refused, and says so.
+    assert!(Value::from_parameter("value", &serde_json::json!({"a": 1})).is_err());
     assert!(Value::from_parameter("value", &serde_json::json!([1, 2])).is_err());
+}
+
+/// The file's tagged spelling is read back.
+///
+/// §272: a value with **no plain spelling** — a list — keeps the file's
+/// tagged form, so the command door has to take that form back too: *a
+/// published value is a value the command accepts*.
+#[test]
+fn the_files_tagged_value_is_read_back() {
+    let list = Value::List(vec![Value::Num(1.0), Value::Text("two".to_string())]);
+    let published = list.as_parameter();
+    assert!(published.is_object(), "the list did not keep the file's spelling: {published}");
+    assert_eq!(
+        Value::from_parameter("value", &published).expect("the tagged value reads back"),
+        list,
+        "the tagged value is another value"
+    );
+    // And a number's tagged form is read back as that number.
+    assert_eq!(
+        Value::from_parameter("value", &serde_json::json!({"t": "num", "v": 1.0})).expect("the number"),
+        Value::Num(1.0),
+        "the tagged number is another value"
+    );
+    // And an object that is not a tagged value is still refused.
+    assert!(Value::from_parameter("value", &serde_json::json!({"a": 1})).is_err());
 }
 
 #[cfg(test)]

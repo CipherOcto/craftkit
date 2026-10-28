@@ -487,7 +487,7 @@ pub static PROP_SET: CommandSpec = CommandSpec {
         };
         Ok(Outcome::with(
             format!("`{path}` = {}", value.display()),
-            serde_json::json!({ "id": id.get(), "path": path, "value": value }),
+            serde_json::json!({ "id": id.get(), "path": path, "value": value.as_parameter() }),
         )
         .unchanged_if(!changed))
     },
@@ -619,7 +619,7 @@ pub static KEY_SET: CommandSpec = CommandSpec {
                 "id": id.get(),
                 "path": path,
                 "time": time.as_text(),
-                "value": value,
+                "value": value.as_parameter(),
                 // Whether the instant is one the design has. §119.
                 "outside_range": is_outside,
                 "keys": prop.keys.len(),
@@ -830,7 +830,7 @@ pub static KEY_LIST: CommandSpec = CommandSpec {
                 serde_json::json!({
                     "time": k.time.as_text(),
                     "seconds": k.time.seconds_f64(),
-                    "value": k.value,
+                    "value": k.value.as_parameter(),
                     "ease": k.ease.name(),
                 })
             })
@@ -1683,6 +1683,50 @@ mod tests {
         );
     }
 
+    /// The engine's own replies publish values the commands take back.
+    ///
+    /// §272: `prop.set`, `key.set` and `key.list` published a value the way
+    /// the *file* spells it — a tagged object — and the command that takes a
+    /// value refused it: "an object cannot be a property value". So the tree
+    /// published a value and could not read it back.
+    #[test]
+    fn the_engine_publishes_a_value_the_command_takes_back() {
+        let mut s = session();
+
+        // `prop.set`'s own reply, given back to `prop.set`.
+        let set = s.execute("prop.set", &json!({ "node": 1, "path": "amount", "value": 2.5 })).expect("set");
+        assert_eq!(set.data["value"], json!(2.5), "the reply published a value: {:?}", set.data);
+        ok(&mut s, "prop.set", json!({ "node": 1, "path": "amount", "value": set.data["value"].clone() }));
+
+        // `key.set`'s own reply, given back to `key.set`.
+        let keyed = s
+            .execute("key.set", &json!({ "node": 1, "path": "amount", "value": 3.5, "time": 1.0 }))
+            .expect("keyed");
+        assert_eq!(keyed.data["value"], json!(3.5), "the reply published a value: {:?}", keyed.data);
+        ok(
+            &mut s,
+            "key.set",
+            json!({ "node": 1, "path": "amount", "value": keyed.data["value"].clone(), "time": 2.0 }),
+        );
+
+        // And `key.list`'s keyframes, given back to `key.set`.
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("listed");
+        let keys = listed.data["keyframes"].as_array().expect("the keyframes").clone();
+        assert!(!keys.is_empty(), "no keyframe was published");
+        for key in keys {
+            ok(
+                &mut s,
+                "key.set",
+                json!({ "node": 1, "path": "amount", "value": key["value"].clone(), "time": 3.0 }),
+            );
+        }
+
+        // And the values are still the values.
+        let listed = s.execute("key.list", &json!({ "node": 1, "path": "amount" })).expect("listed");
+        let keys = listed.data["keyframes"].as_array().expect("the keyframes");
+        assert_eq!(keys[0]["value"], json!(3.5), "{listed:?}");
+    }
+
     /// A published instant is a value the command accepts.
     ///
     /// §268: the tree published its instants as bare tick counts, and the
@@ -2151,7 +2195,7 @@ mod tests {
         assert_eq!(keys.len(), 2, "{outcome:?}");
         assert_eq!(keys[0]["seconds"], json!(1.0), "{outcome:?}");
         assert_eq!(keys[1]["seconds"], json!(2.0), "{outcome:?}");
-        assert_eq!(keys[0]["value"]["v"], json!(0.25), "{outcome:?}");
+        assert_eq!(keys[0]["value"], json!(0.25), "{outcome:?}");
         assert_eq!(keys[0]["ease"], json!("linear"), "{outcome:?}");
     }
 
