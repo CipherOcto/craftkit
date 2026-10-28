@@ -202,7 +202,8 @@ jobs:
   # It is now its own workflow, `.github/workflows/mutation.yml`, and the
   # reason is a measurement rather than a taste: this workflow's eight other
   # jobs finish in five minutes and sixteen seconds, and the instrument needs
-  # about sixty-one. The concurrency rule below — "a new push supersedes an
+  # about seventy-five (measured: 1 hour 14 minutes 49 seconds, §251–§255).
+  # The concurrency rule below — "a new push supersedes an
   # in-flight run" — is right for a job that takes minutes and wrong for a job
   # that takes an hour, so every push cancelled the instrument and with it the
   # whole run. Eight consecutive runs were cancelled, and the tree had no

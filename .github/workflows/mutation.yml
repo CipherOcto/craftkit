@@ -7,7 +7,7 @@
 # gates, under a concurrency rule that cancels a run when a new push arrives.
 # That rule is right for a job that takes minutes and wrong for a job that
 # takes an hour: measured on the runner, the eight fast jobs finish in five
-# minutes and sixteen seconds, and the instrument needs about sixty-one. So
+# minutes and sixteen seconds, and the instrument needs about seventy-five. So
 # every push cancelled the instrument, and with it the whole run — eight
 # consecutive runs, and no green verdict for the tree between eleven o'clock
 # and ten past ten at night.
@@ -76,9 +76,13 @@ jobs:
     # **sixty-one** minutes. The job was therefore cancelled on every run, and
     # nobody had seen it, because the job had never finished.
     #
-    # Ninety minutes fits the measured sixty-one with room for a slower
-    # runner, and the script's own budget says ninety too — a gate holds the
-    # two numbers together, so lowering one without the other is reported.
+    # **The measurement is re-measured when the tree changes** (§228), and the
+    # tree has changed: the run that carried §251 to §255 — seven new cases,
+    # a new crate's worth of checks — took **1 hour 14 minutes 49 seconds**,
+    # which is **seventy-five** minutes. Ninety still fits it, with fifteen
+    # minutes of room for a slower runner, and the script's own budget says
+    # ninety too — a gate holds the two numbers together, so lowering one
+    # without the other is reported.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

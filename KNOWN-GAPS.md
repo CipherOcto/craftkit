@@ -29165,6 +29165,11 @@ The two kinds of job, from one run (`40584129065`, the run before this one):
 **Eight jobs finish in five minutes and sixteen seconds. The ninth takes an
 hour.** One rule covered both.
 
+**And the instrument's own length is re-measured when the tree changes**
+(§228's rule): the run that carried §251 to §255 — seven new cases — took
+**1 hour 14 minutes 49 seconds**, which is **seventy-five** minutes. The
+budget of ninety still fits it, with fifteen minutes of room.
+
 And the history of the runs says what that cost:
 
 | the run | the commit | what happened |
