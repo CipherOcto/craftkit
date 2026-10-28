@@ -28669,6 +28669,11 @@ before every frame on the native path as well as the web one), and
 the tree already used, and a fix that needed **no new dependency, no Java,
 no JNI and no second unsafe exception**.
 
+**And the mechanism was measured again on a second phone** — a 64-bit one,
+with a hole-punch camera and Android 16 — where it held with different
+numbers: the platform's rectangle on that phone is 186 px at the top, and
+the tree's pixels agree with it exactly. §256.
+
 ## 248. The warning the local compiler does not emit
 
 ### The finding
@@ -29646,6 +29651,144 @@ are the caller's, and neither is a template.**
 whatever it looks like. The tree reads its *own* template for placeholders
 and never the text it was given.
 
+## 256. The 64-bit device, and the safe area on a second phone
+
+### The finding
+
+**The aarch64 library has run for the first time**, and the safe area was
+measured on a **different phone** — a different shape, a different platform
+version, and a different kind of camera cutout.
+
+The tree's own pending item had said, since §236:
+
+> *"**But no 64-bit phone has been attached**, so that library has never been
+> **run**, and a library that has never run is not a library that works."*
+
+A 64-bit phone was attached. The dual-ABI package (235 241 924 bytes, with
+`lib/armeabi-v7a/libcraftkit_android.so` and
+`lib/arm64-v8a/libcraftkit_android.so` in it) installed and ran, and the
+application drew.
+
+The phone is a **Xiaomi 25078PC3EG**: `arm64-v8a`, **Android 16**, 720 × 1600,
+320 dpi, and a **hole-punch camera** — the cutout is
+`Rect(319, 0 - 401, 74)`, a circle in the middle of the top edge, where the
+32-bit phone had a notch.
+
+### Measured: portrait
+
+The tree asks the platform for its rectangle and lays itself out inside it
+(§247). On this phone the platform's answer is:
+
+```text
+SAFEAREA content=(0,186,720,1506) viewport=[[0.0 0.0] - [360.0 800.0]] ppp=2
+          insets=Some(SafeAreaInsets(MarginF32 { left: 0.0, right: 0.0, top: 93.0, bottom: 47.0 }))
+```
+
+— **186 px** at the top and **94 px** at the bottom, which is **93** and **47**
+points at this phone's scale of two.
+
+And the pixels agree with the platform, which is the only thing that counts:
+
+| what | rows |
+|---|---|
+| the status row a person can see (the clock, the battery) | **31..57** |
+| the tree's content | **186..1505** |
+| the navigation bar's buttons | **1533..1572** |
+
+The tree's content starts at **186** — the platform's number — and ends at
+**1505**, the platform's bottom. The window manager's own answer agrees at the
+bottom (`mAppBounds=Rect(0, 74 - 720, 1506)`) and not at the top, where the
+platform reserves 186 px for a status area whose visible row ends at 57.
+
+### Measured: landscape
+
+```text
+SAFEAREA content=(0,186,1432,720) viewport=[[0.0 0.0] - [763.0 360.0]] ppp=2
+          insets=Some(SafeAreaInsets(MarginF32 { left: 0.0, right: 47.0, top: 93.0, bottom: 0.0 }))
+```
+
+— the same 186 px at the top, and the navigation bar now on the **right**
+(94 px). In pixels:
+
+| what | where |
+|---|---|
+| the tree's content | rows **185..719**, columns **74..1505** |
+| the navigation bar's buttons | columns **1532..1573** |
+
+The window's frame starts at screen column 74 (the cutout's side), so the
+platform's rectangle — `(0, 186, 1432, 720)` in the window's own
+coordinates — is columns 74..1506 on the screen, and the tree's content is
+exactly there.
+
+**So the same mechanism, on a second phone, with different numbers, holds:
+the tree is laid out inside the rectangle the platform reports, in both
+orientations.**
+
+### The band, and why it is different here
+
+§247 measured a band on the 32-bit phone: the platform reserved 167 px while
+the visible clock row ended at 55. **This phone reserves 186 px while the
+visible row ends at 57** — a band of **129 px**, against the 32-bit phone's
+112.
+
+The cause is the same and the number is the phone's own: **the platform
+reserves the whole camera-and-status region, and the visible clock row is
+only part of it.** The hole-punch camera is at `y = 0..74`, in the middle of
+the top edge, and the status bar's own row is inside that. **The tree follows
+the platform's number** (§247's decision), so the band appears on both phones
+and is documented on both.
+
+### Two facts about this device that cost time
+
+Both of them are **the device's**, not the tree's, and both would have cost
+the same to anybody measuring on it:
+
+- **The shell may not inject events.** `adb shell input tap` and `input text`
+  both fail with *"Injecting input events requires the caller … to have the
+  INJECT_EVENTS permission"* — so nothing could be tapped on this phone, and
+  **the tree's own keyboard could not be re-measured here.**
+- **The shell may not write settings.** `settings put system user_rotation`
+  fails with *"com.android.shell was not granted … WRITE_SETTINGS"*, so the
+  phone cannot be rotated the way the 32-bit one was. **`wm user-rotation
+  lock 1`** does it, and the measurement was taken that way.
+- And the **incremental install** was refused outright:
+  `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. The streamed
+  install (`adb install --no-incremental -r`) succeeded.
+
+### What is not claimed
+
+- **The tree's own keyboard was not re-measured on this phone**, because
+  nothing could be tapped. It was measured on the 32-bit one (§246), and
+  nothing about the phone changes the tree's keyboard — but this phone has
+  not confirmed it, and this section does not claim it.
+- **Nothing here is a statement about the 32-bit phone.** It was not attached
+  during this measurement.
+- **The library's size is not what §236's "896 KiB" says.** The debug
+  aarch64 library on disk today is **132 360 800 bytes**, and the number
+  `896` is what `cargo apk`'s own verification line prints for it. The
+  release build is a different library; nothing was measured of it here, so
+  the "896 KiB" in §236 is left as it was and this section does not repeat
+  it.
+- **The platform's IME is still not measured on this phone**, and this
+  section does not pretend otherwise.
+
+### The lesson
+
+**A second phone is a second set of numbers, and the mechanism that survived
+the first one survived the second.** §247's fix was not "reserve 167 px at
+the top" — it was "ask the platform, and lay yourself out inside what it
+says". On a phone with a different camera, a different platform version and
+a different status bar, the same sentence produced 186 px, and the tree
+obeyed it. **A number copied from a phone is a fact about that phone; a
+mechanism that reads the number is a fact about the tree.**
+
+**And a device can refuse the tools a measurement uses.** The 32-bit phone
+let the shell tap; this one does not, and the tree's own keyboard could not
+be touched here. **The instruments of a measurement are the device's, not
+the tree's** — and a measurement that needs a tool the device refuses is a
+measurement that does not happen, which is worth saying out loud rather than
+quietly skipping.
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -30226,6 +30369,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A path the tree publishes is a path a command accepts** | `a_path_the_tree_publishes_fits_in_the_path_budget` in `crates/model/src/property.rs` | 2 mutations — §253 |
 | **A colour is hex digits and nothing else** | `a_colour_is_hex_digits_and_nothing_else` in `crates/core/src/value.rs` | 2 mutations — §254 |
 | **A caller's value is not re-scanned for placeholders** | `a_value_that_looks_like_a_placeholder_is_left_alone` in `crates/mcp/src/prompts.rs` | 1 mutation — §255 |
+| **The tree is laid out inside the rectangle the platform reports, on a 64-bit phone too** | the device's own run — the platform's rectangle and the pixels | the second phone's own run — §256 |
 | **A file the tree writes is written through one home** | `the_tree_writes_its_files_through_one_home` | 1 mutation — §215 |
 | **A write that fails leaves the file that was there alone** | `the_file_that_was_there_survives_a_write_that_fails` | 1 mutation — §215 |
 | **A file the tree writes private is private** | engine and control tests | 2 mutations — §215 |
@@ -32583,11 +32727,14 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
     measured on the phone; the platform's half is still open, and it comes
     with Java and with a decision about the tree's one unsafe exception.
 
-    **The 64-bit device.** The package declares both ABIs, the aarch64
-    library is built (896 KiB, and `nm -D` shows `T android_main`), and the
-    dual-ABI APK still installs and runs on the 32-bit phone. What is missing
-    is the **run**: no 64-bit phone has been attached, so that library has
-    never been executed. It is one attached phone and one `adb install`.
+    **The 64-bit device. Done in §256.** The package declares both ABIs, the
+    aarch64 library is built (896 KiB, and `nm -D` shows `T android_main`),
+    and the dual-ABI APK installs and runs on the 32-bit phone. A 64-bit
+    phone was attached — a Xiaomi 25078PC3EG, `arm64-v8a`, Android 16, with
+    a hole-punch camera — the package installed, the aarch64 library **ran**
+    for the first time, and the safe area was measured there in both
+    orientations: the platform's rectangle (186 px at the top on that phone)
+    and the tree's pixels agree exactly.
 
     **And a third end, now closed: the window in landscape.** §239 wrote it
     off — *"the status bar overlap is fixed in portrait and not in landscape"*
