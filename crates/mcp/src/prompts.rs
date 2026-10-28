@@ -632,7 +632,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(suggestions.total as usize, distinct.len(), "the count is not the number of paths");
+        assert_eq!(suggestions.total, distinct.len(), "the count is not the number of paths");
     }
 
     /// The suggestions are filtered by what the caller has typed.
