@@ -326,10 +326,11 @@ The ecosystem checks the chain at start-up, and refuses:
 - **a version with no step out of it** — a file of that version would have
   nowhere to go.
 
-There are **four** versions of the format here, and each step adds one
+There are **five** versions of the format here, and each step adds one
 thing: the second writes a `muted` flag on every node, the third lets a node
-hold other nodes (§14), and the fourth lets a node have **no place** and
-gives the document a payload of its own (§19). Each step adds what the new
+hold other nodes (§14), the fourth lets a node have **no place** and gives
+the document a payload of its own (§19), and the fifth gives the document
+the **relations** between its nodes (§20.1). Each step adds what the new
 version writes to a file that does not have it. A file written by the current
 program round-trips to the same document; a file written by an older one is
 migrated and read.
@@ -722,8 +723,8 @@ A node may hold other nodes, so what a file holds changed, so the format
 has a **third version** — `craftkit/3` — and the step from the second:
 
 ```text
-craftkit/1  →  craftkit/2  →  craftkit/3  →  craftkit/4
-   muted        children      no place, a payload
+craftkit/1  →  craftkit/2  →  craftkit/3  →  craftkit/4  →  craftkit/5
+   muted        children      no place, a payload   relations
 ```
 
 The step gives every node the empty group it would have had. A file of the
@@ -797,7 +798,10 @@ different commands with one id.
 
 - `crates/craftkit-sdk` — the whole surface a plugin needs: the typed
   readers, the one registry, the command, the seams, the ecosystem, the
-  projection, the session, the document and the file format.
+  projection, the session, the document and the file format. The
+  **relations** between the nodes (§20.1), the **journal** of what ran
+  (§20.2) and the **menu tree** (§20.3) are in here too, because they
+  belong to the document and the session and not to an application.
 - `crates/craftkit-derive` — **eight** derives (`Command`, `NodeKind`,
   `Tool`, `Panel`, `Layer`, `Evaluator`, `Format`, `Migration`), with tests
   on the rules they hold.
@@ -818,14 +822,15 @@ different commands with one id.
   contributes nothing and the linker does not wire it in.
 - `crates/craftkit-plugin-sound` — the **sound battery**: a port of a sound
   application's document into v2's seams, and the three things it found
-  (§19). It is optional, like the vector one.
+  (§19), and the mixer that the relations made possible (§20). It is
+  optional, like the vector one.
 - `crates/craftkit-sound-time` — the **time model**: samples, ticks, a
   tempo map and the three timebases (§19). A library, not a plugin, for
   the same reason the geometry is.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**167 tests.**
+**193 tests.**
 
 ### Not built
 
@@ -901,7 +906,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 167 tests
+cargo test          # 193 tests
 cargo run -p craftkit-studio
 ```
 
@@ -954,9 +959,9 @@ run time and runs that too.
   answer "operation not supported on this platform". On that target the
   doors are the linked plugin and a catalogue across the JavaScript
   boundary (§11).
-- **The document model is still small.** There are four versions of the
-  format, and they differ by a flag, a tree, a place that may be absent
-  and a payload of the document's own. The *seam* is the thing being
+- **The document model is still small.** There are five versions of the
+  format, and they differ by a flag, a tree, a place that may be absent,
+  a payload of the document's own and the relations between the nodes. The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and
   the chain is checked. A document worth versioning is a different piece of
   work.
@@ -1120,3 +1125,185 @@ and it is the same rule the vector battery follows.
   more — the closed enums, the menu catalog, the real-time rules, the
   plugin hosts — and they are listed above as blockers rather than
   answered.
+
+---
+
+## 20. The stressors: what the sound tree has and v2 did not
+
+The sound tree was surveyed before anything was written, and the survey
+listed what it has. Most of it is a thing v2 already had. Some of it was
+a thing v2 had **no equivalent for**, and those are the interesting
+ones: they are the places where a document model built for pictures
+breaks, and where a *universal* kit has to be built differently.
+
+### What was answered
+
+| Stressor | What the sound tree has | What v2 does now |
+|---|---|---|
+| the mixer is a **graph** | tracks feed buses, sends go to buses, a track is under a controller — a graph of typed ids | the document has **relations**: typed edges between nodes, and the kind of an edge is a string (§20.1) |
+| a **journal** of what ran | every command and its values, for macro recording | the session keeps a **journal** and can **replay** it, as one undo step (§20.2) |
+| a **menu** is a tree | five hundred and twelve leaf paths, from a catalog file | a command says where it goes, and the projection builds the **tree** (§20.3) |
+| **automation** | lanes of breakpoints on a mixer parameter | a lane is a node and the parameter is a **string** (§20.4) |
+| **inserts** | ten plugin slots per strip, a plugin id and a parameter map | an insert is a node and the plugin is a **string** (§20.4) |
+| the kinds of a thing are **closed** | `TrackKind`, `ClipContent`, `AutoParam`, `Route`, `ChannelFormat` — all enums, all matched in the mixer | every one of them is a **string in a payload**, and the core matches on none of them (§19) |
+
+### 20.1 Relations: the document is a graph
+
+The document was a **tree**: a node holds other nodes, and that is
+containment. A tree says what holds what. It cannot say what is
+*attached* to what — and a mixer is attached, not contained: a clip plays
+a source and is not in it, a track feeds a bus and is not in it, a track
+is under a controller and is not in it either.
+
+So the document grew **relations**:
+
+```rust
+pub struct Relation { pub from: u64, pub to: u64, pub kind: String }
+```
+
+The kind is a **string** — `source`, `route`, `send`, `vca`, `loop`,
+`asset`, `symbol` — because the kinds of relation are as open as the
+kinds of node. The relations are in the **document** and not in the node,
+because a relation is between two nodes and a node does not know what it
+is attached to.
+
+The commands are in the SDK, because they belong to the document and
+every front end should have them: `link.add`, `link.remove` and
+`link.list`. The file format grew a version for them (`craftkit/5`), and
+the step from the fourth gives a document that has none the none it has.
+
+**What it cost:** a field on the document, a version, a step, and three
+commands. **What it bought:** the mixer became possible, and with it the
+idea that a document may hold a graph as well as a tree.
+
+### 20.2 The journal: what the session was asked to do
+
+The session had a **log** of strings for a person to read and a
+**history** of documents for a person to undo. Neither can be run again.
+
+It now has a **journal**: every command that ran, with the values it was
+given, exactly as they were given. It is a program:
+
+```text
+sound.track.add   { "name": "drums" }
+sound.clip.add    { "track": 3, "start": 0, "length": 48000 }
+```
+
+and `journal.replay` runs it again, as **one undo step**, with the same
+promise every command makes: a step that fails puts the document back the
+way it was.
+
+A command may say `no_journal` — the commands that are *about* the
+journal say it, because a journal that lists the command that cleared it
+is a journal that was not cleared. The sound tree has the same flag on
+its command spec, for the same reason.
+
+**What it cost:** a vector, a limit of a thousand entries, three
+commands, and a flag. **What it bought:** macro recording, a script an
+agent can hand back to the program, and a way to reproduce a failure.
+
+### 20.3 The menu is a tree
+
+A command had an **area**, and the projection made a flat list of them.
+One level is not enough: the sound tree's menu bar is five hundred and
+twelve leaf paths, and a bar that can only say `area` cannot draw them.
+
+So a command may say where it goes:
+
+```rust
+#[command(id = "sound.track.add", menu("Track", "New"), …)]
+```
+
+and the projection builds the **tree**. The path names the parts, and
+the command sits in the last one; a command that names no path sits
+under its area, which is where it sat before. A part with nothing in it
+is dropped: a battery that is not linked in leaves a hole, and a hole is
+not a menu.
+
+**What it cost:** a field, an attribute, and a tree in the projection.
+**What it bought:** a menu bar that can be drawn, and a front end that
+does not have to invent its own hierarchy.
+
+### 20.4 The mixer, in payloads
+
+The second slice of the sound battery is the mixer, and it is where the
+relations earn their keep:
+
+- a **bus** is a node, and the tracks that feed it say so with a
+  relation of the kind `route`;
+- a **send** is a node under a track, and the bus it goes to is a
+  relation of the kind `send` — the node says *what the send is* and the
+  relation says *where it goes*;
+- an **insert** is a node under a track, and the plugin is a **string**:
+  the sound tree has thirty built-in plugins in a static table and a
+  hard-coded match on the id, so a plugin that is not in the table
+  cannot be created at all;
+- an **automation lane** is a node under a track, and it says which
+  parameter it moves — `volume`, `pan`, `mute`, or anything a payload
+  names. The sound tree has a closed enum of mixer parameters with one
+  escape for plugin parameters, so a lane can automate only what the
+  enum knows.
+
+And the **routing** is derived: the evaluator reads the relations and
+works out the order the buses are fed in. The document holds the edges;
+the evaluator works out what they mean.
+
+### What was not answered
+
+These are the stressors that are still open, and each one says what it
+would cost:
+
+- **Real time.** The sound tree's plugin trait splits the work into
+  `process` (the audio thread), `PluginEditor` and `PluginStateReader`
+  (the control thread), and the audio callback never blocks and never
+  allocates. v2 has **no real-time door**: a command runs on the caller's
+  thread. A real-time seam needs its own rules, its own guards and its
+  own tests, and it is a piece of work, not a flag.
+- **Media that travels.** A source is a path, and the path is relative
+  to the document. The sound tree saves a **bundle**: the document and
+  the audio files in one archive. v2 has no assets and no bundle, and a
+  document that references a file it cannot carry is a document that
+  breaks when it moves.
+- **A selection of spans.** The selection is **ids**. The sound tree
+  also has an edit *range* — a span of time on a track — and half of
+  its editing commands are about a range and not about a node. A
+  universal selection would carry spans as well as ids, and a span needs
+  a domain: a time range, a rectangle, a range of characters.
+- **View state.** Zoom, scroll and the tool in the hand are the
+  **session's** state in the sound tree and not the document's, and v2
+  keeps the selection that way but has nowhere for the rest.
+- **The plugin formats.** CLAP, VST3 and AU binaries are genuinely open
+  in the sound tree: a user installs one and it is in the session, with
+  no source change. Porting that needs a host crate per format, a
+  format to host them in, and a decision about what a plugin's state is
+  in a document whose payload is JSON.
+- **The menu catalog.** The sound tree's menu is generated from a
+  **file** of five hundred and twelve paths, and a command whose path is
+  not in the file never appears in the bar. v2's menu is generated from
+  the registry, which is better, and it has no catalog — and that is the
+  point: a catalog is a second source, and the tree this ports has two
+  sources and the drift between them.
+
+### What a universal kit is, after three ports
+
+Every port asked for the same things, and they are the list:
+
+- **open data** — the payload, so that a kind can say what it is
+  without the core knowing (§12);
+- **containment** — the tree, so that a document can hold a group, a
+  layer, a track's playlist (§14);
+- **attachment** — the relations, so that a document can hold a graph
+  and not only a tree (§20.1);
+- **no assumption of space** — a node may have no place, so a document
+  that is not a picture is a document (§19);
+- **derived state** — the evaluator, so that what a document *means* is
+  worked out and not stored (§8, §20.4);
+- **a machine record** — the journal, so that what happened is a
+  program and not a string (§20.2);
+- **one projection** — the menu tree, the schema and the manifest, all
+  made of the registry (§4, §20.3).
+
+What is still missing from that list is the one thing no port has needed
+yet: **a real-time door**, and **assets that travel with the document**.
+Both are named above, with what they would cost, and both are the next
+thing to build.
