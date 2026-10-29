@@ -841,7 +841,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**283 tests.**
+**295 tests.**
 
 ### Not built
 
@@ -917,7 +917,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 283 tests
+cargo test          # 295 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1875,12 +1875,20 @@ There are two commands now:
 Three tests: the bytes come back byte for byte, a missing file is refused
 by name, and the assets travel as well as the streams.
 
-What is still not there is a bundle that a **plugin** fills. The files
-come from the document's assets and from the nodes' streams, and a plugin
-that keeps its media in its own payload has no way to say which files
-those are. That is the next thing this seam asks for, and it is a
-question about how a plugin says "these are my files", not about the
-container.
+What is still not there is a bundle that a **plugin** fills with files
+the document does not name. And the answer turned out to be a
+**convention**, not a seam: the document's **asset list** is how a
+document says what files it needs, so a plugin that points at a file
+adds an asset. The sound battery does exactly that — `sound.source.add`
+puts the file in the asset list as well as in the payload — and the
+bundle then carries it.
+
+That is worth saying plainly, because the first answer to this question
+was "the kit needs a way for a plugin to declare its files", and the
+honest answer is that the kit already had one: the asset list, and the
+rule that a plugin that points at a file adds an asset. A seam that
+would have said the same thing twice is worse than a convention that
+says it once.
 
 ---
 
@@ -2020,3 +2028,59 @@ A host that wants both has both, and the rule that keeps them apart is
 the same rule the lane and the pool have always had: the lane is for
 work that must finish, the pool is for work that may take a while, and a
 task is for work that may not finish at all.
+
+---
+
+## 29. One camera, with its own caps
+
+Every application with a canvas has a camera: a zoom, a scroll, and the
+rules that keep them sane. Without one, each canvas invents its own, and
+two canvases in the same program scroll differently, zoom differently,
+and fight over the wheel.
+
+The tree beside this one has a rule about it — **one set of camera
+controls**, one module that owns them, with its own caps, and every
+canvas goes through that module — and v2 had no camera at all, so the
+rule had nothing to hold. This is the seam that gives the rule
+something to hold.
+
+### What a camera is
+
+A **zoom** and an **offset**, and two ways of saying where a place is:
+
+```rust
+let screen = camera.to_screen(world_point);   // where to draw it
+let world  = camera.to_world(screen_point);   // where the click was
+let visible = camera.visible(half_width, half_height);
+```
+
+That is all. What is selected, what is hovered and what the panels show
+are the front end's business.
+
+### The rules
+
+- The zoom is **capped** — between a hundredth and a hundred times — and
+  a zoom outside that is **clamped**, not refused. A wheel event can
+  send anything, and a camera that refuses to move feels broken.
+- The offset is **not** capped: a document may be scrolled anywhere, and
+  the cap that matters is the zoom's.
+- The camera is **not** part of what the undo restores. Scrolling is not
+  an edit, and an undo that scrolls the view is a surprise. It is the
+  session's state, the way the selection and the tool are — just not
+  the undoable part of it.
+
+### What it needed next to it
+
+`Rect::intersects`, which the camera wants and every front end that
+draws a thousand nodes wants: the ones that are off screen are not
+drawn. Touching is not overlapping — two rectangles that share an edge
+have shared no area, and a front end that drew both of them has drawn a
+seam rather than an overlap.
+
+### What this says about the kit
+
+This is the smallest seam in the tree and the one every domain with a
+picture needs, and it took nothing from the core: a camera is a value,
+and the SDK hands it to whoever draws. The tree's rule — one set of
+camera controls — is now a rule the code can keep, and not only a rule
+the README can state.
