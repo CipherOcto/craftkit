@@ -50,6 +50,22 @@ pub enum Doc {
 }
 
 impl Doc {
+    /// The kind a name says, if the name is one of ours.
+    ///
+    /// The way back from a schema to a type, which is what a plugin in
+    /// another process needs: it is sent a name, not a Rust type.
+    pub fn from_json_name(name: &str) -> Option<Doc> {
+        match name {
+            "number" => Some(Doc::Number),
+            "text" => Some(Doc::Text),
+            "bool" => Some(Doc::Bool),
+            "node-ref" => Some(Doc::NodeRef),
+            "node-kind" => Some(Doc::NodeKind),
+            "json" => Some(Doc::Json),
+            _ => None,
+        }
+    }
+
     /// The name used in a schema and in a generated document.
     pub fn json_name(self) -> &'static str {
         match self {
@@ -76,6 +92,15 @@ impl<'a> Params<'a> {
     /// A view of a caller's values.
     pub fn new(value: &'a Json) -> Self {
         Params { value }
+    }
+
+    /// The whole value the caller sent.
+    ///
+    /// The one place a raw value leaves: a plugin in another process is
+    /// sent the caller's values as they are, and the SDK's own door out is
+    /// [`Doc::Json`].
+    pub fn value(&self) -> &Json {
+        self.value
     }
 
     /// The value at a name, if there is one.

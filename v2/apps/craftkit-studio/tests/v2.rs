@@ -657,3 +657,237 @@ fn a_node_of_an_unknown_kind_is_not_in_the_plan() {
     let plan = craftkit_sdk::plan::evaluate(&document, &crate::ecosystem().kinds);
     assert!(plan.items.is_empty(), "{:?}", plan.to_json());
 }
+
+// ------------------------------------------------------------- the third door --
+
+/// A plugin that is a separate program says hello with a catalogue, and
+/// the host reads it.
+#[test]
+fn a_plugins_catalogue_is_read() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.greet",
+                "label": "Greet",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "hello",
+                "doc": "Say hello from another process.",
+                "params": [{
+                    "name": "name",
+                    "kind": "text",
+                    "required": true,
+                    "help": "Who to greet.",
+                    "alternative": null,
+                }],
+                "mutates": false,
+            }],
+        })
+        .to_string(),
+    ]);
+    let plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    assert_eq!(plugin.ids(), vec!["remote.greet"]);
+    let command = &plugin.catalogue().commands[0];
+    assert_eq!(command.label, "Greet");
+    assert_eq!(command.params.len(), 1);
+    assert_eq!(command.params[0].kind, Doc::Text);
+    assert!(command.params[0].required);
+}
+
+/// A plugin that says nothing is refused, before any of its commands are
+/// registered.
+#[test]
+fn a_plugin_that_says_nothing_is_refused() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(Vec::new());
+    let refused = craftkit_sdk::LoadedPlugin::over(Box::new(transport));
+    assert!(refused.is_err(), "the silent plugin was accepted");
+}
+
+/// A plugin that says something that is not a catalogue is refused.
+#[test]
+fn a_plugin_that_says_something_else_is_refused() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({ "kind": "hello" }).to_string(),
+    ]);
+    let refused = craftkit_sdk::LoadedPlugin::over(Box::new(transport));
+    assert!(refused.is_err(), "the confused plugin was accepted");
+}
+
+/// A plugin's commands are **the same thing** as a linked plugin's: they go
+/// in the same registry, and the session runs them the same way.
+#[test]
+fn a_plugins_commands_are_in_the_registry() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.greet",
+                "label": "Greet",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "hello",
+                "doc": "Say hello from another process.",
+                "params": [],
+                "mutates": false,
+            }],
+        })
+        .to_string(),
+    ]);
+    let mut plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    let mut ecosystem = ecosystem();
+    plugin.register(&mut ecosystem.commands).expect("the commands are registered");
+    assert!(ecosystem.commands.get("remote.greet").is_some());
+    // The manifest knows about it, because the manifest is a view of the
+    // registry and the command is in the registry.
+    let manifest = ecosystem.projection().manifest();
+    assert!(manifest.iter().any(|line| line.contains("remote.greet")), "{manifest:?}");
+}
+
+/// A plugin's command is refused a parameter it does not have, exactly like
+/// a linked one.
+#[test]
+fn a_plugins_command_is_refused_an_unknown_parameter() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.greet",
+                "label": "Greet",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "hello",
+                "doc": "Say hello from another process.",
+                "params": [{ "name": "name", "kind": "text", "required": true, "help": "Who." }],
+                "mutates": false,
+            }],
+        })
+        .to_string(),
+    ]);
+    let mut plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    let mut ecosystem = ecosystem();
+    plugin.register(&mut ecosystem.commands).expect("the commands are registered");
+    let mut session = ecosystem.session();
+    let refused = session.execute("remote.greet", &json!({ "nope": 1 }));
+    assert!(refused.is_err(), "the unknown parameter was accepted");
+}
+
+/// A plugin's command runs, and its answer comes back over the wire.
+#[test]
+fn a_plugins_command_runs_over_the_wire() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.greet",
+                "label": "Greet",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "hello",
+                "doc": "Say hello from another process.",
+                "params": [],
+                "mutates": false,
+            }],
+        })
+        .to_string(),
+        craftkit_sdk::serde_json::json!({
+            "kind": "result",
+            "ok": true,
+            "message": "Hello from another process.",
+            "data": null,
+        })
+        .to_string(),
+    ]);
+    let mut plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    let mut ecosystem = ecosystem();
+    plugin.register(&mut ecosystem.commands).expect("the commands are registered");
+    let mut session = ecosystem.session();
+    let outcome = session.execute("remote.greet", &json!({})).expect("the command ran");
+    assert_eq!(outcome.message, "Hello from another process.");
+}
+
+/// A plugin that refuses is refused here too, and the error says what the
+/// plugin said.
+#[test]
+fn a_plugins_refusal_is_a_refusal() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.greet",
+                "label": "Greet",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "hello",
+                "doc": "Say hello from another process.",
+                "params": [],
+                "mutates": false,
+            }],
+        })
+        .to_string(),
+        craftkit_sdk::serde_json::json!({
+            "kind": "result",
+            "ok": false,
+            "error": "not today",
+        })
+        .to_string(),
+    ]);
+    let mut plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    let mut ecosystem = ecosystem();
+    plugin.register(&mut ecosystem.commands).expect("the commands are registered");
+    let mut session = ecosystem.session();
+    let refused = session.execute("remote.greet", &json!({})).expect_err("the refusal is a refusal");
+    assert!(refused.to_string().contains("not today"), "{refused}");
+}
+
+/// A plugin's command that changes the document changes **the host's**
+/// document: the document travels with the request and comes back.
+#[test]
+fn a_plugins_command_can_change_the_document() {
+    let transport = craftkit_sdk::plugin::MemoryTransport::saying(vec![
+        craftkit_sdk::serde_json::json!({
+            "kind": "catalogue",
+            "commands": [{
+                "id": "remote.add",
+                "label": "Add",
+                "area": "remote",
+                "capability": "command",
+                "layer": "core",
+                "icon": "plus",
+                "doc": "Add a node, in another process.",
+                "params": [],
+                "mutates": true,
+            }],
+        })
+        .to_string(),
+        craftkit_sdk::serde_json::json!({
+            "kind": "result",
+            "ok": true,
+            "message": "added one",
+            "data": null,
+            "document": {
+                "name": "untitled",
+                "nodes": [{
+                    "id": 1,
+                    "name": "from the plugin",
+                    "kind": "geometry.rect",
+                    "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 },
+                    "muted": false,
+                }],
+            },
+        })
+        .to_string(),
+    ]);
+    let mut plugin = craftkit_sdk::LoadedPlugin::over(Box::new(transport)).expect("the catalogue is read");
+    let mut ecosystem = ecosystem();
+    plugin.register(&mut ecosystem.commands).expect("the commands are registered");
+    let mut session = ecosystem.session();
+    session.execute("remote.add", &json!({})).expect("the command ran");
+    assert_eq!(session.document().nodes.len(), 1, "the node arrived");
+    assert_eq!(session.document().nodes[0].name, "from the plugin");
+}

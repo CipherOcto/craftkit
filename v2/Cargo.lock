@@ -13,6 +13,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-hello-server"
+version = "0.2.0"
+dependencies = [
+ "craftkit-plugin-hello",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-plugin-hello"
 version = "0.2.0"
 dependencies = [

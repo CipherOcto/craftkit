@@ -1,0 +1,13 @@
+[package]
+name = "craftkit-hello-server"
+description = "A plugin that is a separate program: it serves its commands over a wire."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+# The plugin whose commands are served. The server is a **program** that
+# happens to contain a plugin; the program is what the host starts.
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }

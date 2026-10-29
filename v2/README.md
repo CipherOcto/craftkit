@@ -220,16 +220,42 @@ source and refuses to find the word `craftkit_plugin` in it.
 |---|---|---|
 | **the linked plugin** | a crate that is a dependency; its contributions are there from the first instruction | **built** |
 | **the run-time command** | a `CommandSpec` written by hand and registered while the program runs | **built** |
-| **the loaded plugin** | a **separate program**, started while the program runs | **not built** |
+| **the loaded plugin** | a **separate program**, started while the program runs; its commands arrive over a wire | **built** |
 
-The third door is the one that needs the most thought, and v2 has not
-thought about it yet. A dynamically loaded plugin has to hand its commands
-over explicitly, because a plugin loaded with `dlopen` has its own copy of
-the SDK unless the SDK is a shared library — and if it is, then the registry
-is shared state that two copies of the program could disagree about. The
-honest shape is probably a **hand-off**: the plugin exports a function that
-fills a registry the host owns, and the host calls it after loading. That is
-what the run-time door already does, one step further on.
+The third door is a **subprocess**, and the wire is newline-delimited JSON.
+It has three messages:
+
+```text
+plugin → host   {"kind":"catalogue","commands":[ … ]}
+host → plugin   {"kind":"run","id":"hello.greet","params":{ … },"document":{ … }}
+plugin → host   {"kind":"result","ok":true,"message":"…","document":{ … }}
+```
+
+The **catalogue** is the plugin's commands, with their ids, their labels and
+their parameters. The host turns each one into a command in its **own**
+registry, so a command from a subprocess is the same thing as a command from
+a linked plugin: the same door, the same metadata, the same refusal of an
+unknown parameter.
+
+The **document travels with the request**, and the answer may bring a new one
+back. That is what lets a plugin in another process change the document: the
+host hands it the document, the plugin hands back the document it would
+have. The host's session judges the change exactly as it judges a linked
+plugin's — by comparing before and after.
+
+Why the document travels, rather than being shared: shared memory between
+two processes that do not know each other is a protocol with no rules. A
+document that is written down and read back has one rule — it is the same
+shape on both sides, and the shape is the file format.
+
+`apps/craftkit-hello-server` is the plugin program. It is a **full craftkit
+program**: it has its own ecosystem, its own commands and its own session,
+and it serves them. The host does not link it.
+
+What this door does **not** buy: a subprocess plugin is **not checked by the
+compiler**. Its catalogue is data, and a catalogue with a mistake in it is
+refused when the plugin is loaded, not when it is compiled. That is the
+price of the door, and it is why the other two exist.
 
 ---
 
@@ -355,13 +381,14 @@ hole.
   projection, the session, the document and the file format.
 - `crates/craftkit-derive` — eight derives, with tests on the rules they
   hold.
+- `apps/craftkit-hello-server` — a plugin that is a **separate program**.
 - `crates/craftkit-plugin-hello` — a plugin that adds commands.
 - `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
   node, a tool, a panel, a command and an evaluator**.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**67 tests.**
+**79 tests.**
 
 ### Not built
 
@@ -377,7 +404,6 @@ hole.
 - **The old tree's front ends.** No toolbar, no MCP server, no control
   channel. v2 has one door — `Session::execute` — and the projection that
   every front end would read.
-- **The loaded plugin** (the third door above).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -426,7 +452,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 67 tests
+cargo test          # 79 tests
 cargo run -p craftkit-studio
 ```
 
@@ -454,6 +480,18 @@ run time and runs that too.
   not read the source at all, so there is no second reader to keep in step.
   This is the problem phase one had, and it is *gone* in v2: the compiler is
   the only reader.
+- **A subprocess plugin's metadata is leaked, once.** A command's labels are
+  `&'static str`, and a subprocess plugin's labels arrive at run time. They
+  are leaked when the plugin is loaded — bounded by the number of commands
+  the plugin has, and once each. The alternative is a `Cow`/`factory`
+  refactor of every command's metadata, which is a wider change than this
+  spike should make. It is a real leak, and it is written down here rather
+  than left to be discovered.
+- **The wire protocol is a decision, not a derivation.** Newline-delimited
+  JSON was chosen because it is trivial to write in any language and easy to
+  read in a log. A different wire would fit the same shape.
+- **A subprocess plugin is not checked by the compiler.** Its catalogue is
+  data, and a mistake in it is refused when the plugin is loaded.
 - **The plan is a value, not a drawing.** Nothing renders it, and nothing
   checks it against a rule. The old tree's `craftkit-eval` had a plan with
   a shape and a kernel behind it; what is here is the **place a plan comes

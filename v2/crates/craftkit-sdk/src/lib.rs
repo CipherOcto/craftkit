@@ -64,6 +64,7 @@ pub mod evaluator;
 pub mod format;
 pub mod params;
 pub mod plan;
+pub mod plugin;
 pub mod seams;
 pub mod session;
 
@@ -76,6 +77,7 @@ pub use evaluator::EvaluatorSpec;
 pub use format::{FormatSpec, FormatValue, MigrationSpec};
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
 pub use plan::{Plan, PlanItem};
+pub use plugin::{Catalogue, LoadedPlugin, PluginCommand, PluginError, PluginParam};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use session::{HistoryEntry, Session};
 
