@@ -837,7 +837,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**254 tests.**
+**262 tests.**
 
 ### Not built
 
@@ -913,7 +913,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 254 tests
+cargo test          # 262 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1720,3 +1720,135 @@ were all found by pointing the kit at somebody else's application:
 None of them asked for a bigger core. Each asked for the core to stop
 discarding something, and each of those three somethings turned out to be a
 seam that the next domain needed as well.
+
+---
+
+## 25. The second payload field: a node has a dictionary and a stream
+
+§23 named three gaps. §24 closed two of them. The third was **the second
+payload field**: a document that carries a lot of bytes.
+
+A node has a **dictionary** — its payload — and it may also have a
+**stream**: bytes that belong to the node and are not JSON. That is the
+shape of a PDF object, and of most of the formats that grew out of
+PostScript.
+
+### Where the bytes go
+
+They do **not** go in the document. JSON cannot hold arbitrary bytes, and
+the answer that was there before — base64 in the payload — works and costs
+a **third more space**: a document that carries fifty megabytes of streams
+carries sixty-seven megabytes of text, and every reader has to parse the
+text.
+
+So the bytes travel **beside** the document, in the bundle, and the node
+says which file is its stream:
+
+```json
+{
+  "id": 1,
+  "name": "page one",
+  "kind": "pdf.page",
+  "data": { "media_box": [0, 0, 595, 842] },
+  "stream": "streams/page-1.bin"
+}
+```
+
+The document stays small, the bytes come back **byte for byte**, and a
+program can say what is missing before it starts editing: a bundle whose
+document names a file it does not carry says so, streams included.
+
+### What it cost
+
+Less than the survey expected. §23 said the bigger answer "would cost a
+field, a format version and base64 in the file anyway". It cost a field
+and a format version — **and no base64 at all**, because the bundle was
+already carrying files. The base64 door stays for the small things.
+
+| | |
+|---|---|
+| the field | `Node.stream`: the file a node's bytes are in |
+| the version | `craftkit/7`, and the step that gives every node the field |
+| the commands | `node.stream.set`, `node.stream.clear`, `node.stream` |
+| the bundle | says what is missing, streams included |
+| the old writers | take the field off again: a file of the sixth version must not carry a field the sixth version does not know |
+
+Eight tests, including one that says the document does not grow by the
+size of its bytes, and one that says the bytes come back byte for byte.
+
+---
+
+## 26. A fourth survey: artcraft, the IDE for artists
+
+The three surveys of §23 were of Rust applications. This one is not: it is
+a **Tauri shell over a TypeScript and React monorepo** — a video editor, a
+3D scene, a 2D canvas, and a feed of generations — with a Rust side of 67
+Tauri commands, provider API clients and a SQLite task schema.
+
+That makes it the most different domain yet, and it is worth asking what
+it would take.
+
+### What mapped, and what did not
+
+| artcraft | the seam | verdict |
+|---|---|---|
+| scenes → tracks → elements | the tree of nodes | fits |
+| the element variants as a closed union | the **open kind** | v2 wins: the closed union is the thing the open kind exists to avoid |
+| `mediaId`, `objectUuid`, a clip bound to an object | the **relations** | fits exactly: these are edges, not containment |
+| params, effects, masks, keyframes and easing | the node and document **payloads** | fits |
+| the timeline range, the trim, the ripple | the **span selection** | fits |
+| move, rotate, scale, the pose mode | the **tool in the hand** | fits |
+| the linear undo of the 2D canvas | the **branching history** | satisfied, not strained |
+
+So the document-shaped half — the video editor and the 2D canvas — maps
+onto the tree, the relations, the payload and the span selection **without
+a change**, and the 3D timeline's keyframes with their cubic-bezier easing
+are a payload like any other.
+
+### The three things that do not fit
+
+- **The 3D scene is a document that refuses to be one.** The engine owns
+  the scene and saves it as **one opaque JSON string**, and the front end
+  keeps a *view* of it. Making that a v2 document means re-expressing the
+  engine's scene graph as nodes with contributed kinds, and giving the
+  engine a way to build itself *from* the document instead of from its own
+  JSON. That is a rewrite of the 3D half, not a seam change, and it is
+  the largest single piece of work in the list.
+- **A job that lives outside the process.** A generation is enqueued, gets
+  a provider id, is polled, is written to SQLite so that it survives the
+  app being closed, and is finished by an **event that arrives from
+  outside**. The job pool is in-process: a queue, workers, a cancellation
+  flag, results the caller collects. There is no durable handle and no
+  completion from outside, and **that is a new seam, not a domain thing**.
+- **Assets that are pointers, not files.** The media are cloud tokens and
+  CDN URLs, resolved lazily and cached. A list of URLs in the asset list
+  would be a small change, but the **bundle is simply wrong here**:
+  bundling that media means downloading the library. Those assets belong in
+  a payload under a namespaced key, not in the document's asset list.
+
+And one thing that is **not** a gap in the kit: the language. v2 is Rust
+and wasm, and artcraft is a TypeScript application. That is a gap between
+the kit and the port, and it is better said plainly than discovered later.
+
+### What artcraft would not need
+
+The file format machinery (it persists to a server, so there is no
+versioned local file to bite on yet), the bundle, the real-time lane (its
+must-finish work is a browser render loop), the branching history (its
+histories are linear), the journal (it has no agent or macro surface), and
+base64 in the payload (the bytes it has are media it does not own).
+
+### The verdict, and the one thing to learn
+
+The kit survives this domain **for the document-shaped half**, and the
+closed unions in artcraft's timeline are an argument *for* the open kind.
+It does not survive artcraft **as it is**, because artcraft's centre of
+gravity is a cloud media library and a remote generation queue rather than
+a document.
+
+The one thing the kit would have to learn is that **a job may live outside
+the process**: enqueued, persisted, polled, and finished by an event hours
+later. If v2 grows a seam for that — a durable handle, a provider id, a
+completion that arrives from outside — the rest of artcraft's shape
+follows. Without it, artcraft is a consumer of v2's *front end* — the
+registry, the commands, the plan — and not a document that lives in one.
