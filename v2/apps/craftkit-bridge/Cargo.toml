@@ -13,6 +13,15 @@ craftkit-sdk = { workspace = true }
 # same registry.
 craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
 craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+# The **battery**: an optional plugin. With the `vector` feature on, it is
+# linked in and its commands are in the ecosystem; with it off, the crate is
+# not there at all and the program does not know it exists.
+craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optional = true }
+
+[features]
+default = []
+# The vector battery. Off by default: a program that wants paths says so.
+vector = ["dep:craftkit-plugin-vector"]
 
 [build-dependencies]
 craftkit-link = { path = "../../crates/craftkit-link" }

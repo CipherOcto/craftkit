@@ -1,0 +1,15 @@
+[package]
+name = "craftkit-plugin-vector"
+description = "The vector battery: paths, shapes and colour, as plugins."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. **Nothing else** — and in particular, not the
+# application. That is the whole point of a plugin: it is a dependency of
+# the application, not the other way round, and the application never names
+# a symbol of it.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }

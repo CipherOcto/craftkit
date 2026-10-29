@@ -9,6 +9,7 @@ dependencies = [
  "craftkit-link",
  "craftkit-plugin-hello",
  "craftkit-plugin-shapes",
+ "craftkit-plugin-vector",
  "craftkit-sdk",
 ]
 
@@ -51,6 +52,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-vector"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-sdk"
 version = "0.2.0"
 dependencies = [
@@ -67,6 +76,7 @@ dependencies = [
  "craftkit-link",
  "craftkit-plugin-hello",
  "craftkit-plugin-shapes",
+ "craftkit-plugin-vector",
  "craftkit-sdk",
 ]
 

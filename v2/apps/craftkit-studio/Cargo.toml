@@ -16,6 +16,15 @@ craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
 # A second plugin, and it is the interesting one: it adds a layer, a kind of
 # node, a tool and a command.
 craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+# The **battery**: an optional plugin. With the `vector` feature on, it is
+# linked in and its commands are in the ecosystem; with it off, the crate is
+# not there at all and the program does not know it exists.
+craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optional = true }
+
+[features]
+default = []
+# The vector battery. Off by default: a program that wants paths says so.
+vector = ["dep:craftkit-plugin-vector"]
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
