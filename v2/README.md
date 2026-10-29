@@ -688,7 +688,103 @@ battery now draws a shape with a hole, and the file carries it.
 
 ---
 
-## 14. What is here, and what is not
+## 14. The document grows a tree, and the session remembers the selection
+
+Two things the port kept saying were missing, and they are the same two
+things a person editing a document needs first: **a place to put things in
+other things**, and **a way to say which things you mean**.
+
+### The tree
+
+A node has **children** now, and a node with children is a **group**. That
+is structural rather than a kind: the core walks into a group and draws
+what is in it, and the group's own kind says what the group *means*.
+
+The core contributes one plain kind of group, `core.group`, because a
+node's kind has to be in the registry — the document may only hold kinds
+the program knows how to draw — and a plugin may add kinds of group: a
+layer, a frame, a symbol.
+
+The document's API grew with it: `walk` (every node, in the order they are
+drawn), `roots`, `node` and `node_mut` (wherever the node is),
+`add_node_under`, `take_node`, `remove_node`.
+
+### The format grew a version
+
+A node may hold other nodes, so what a file holds changed, so the format
+has a **third version** — `craftkit/3` — and the step from the second:
+
+```text
+craftkit/1  →  craftkit/2  →  craftkit/3
+   muted        children
+```
+
+The step gives every node the empty group it would have had. A file of the
+second version is a list, and a list is a tree whose nodes have nothing in
+them. That is the format seam doing its job: a change to what is saved is
+a new version and a step, and the ecosystem checks the chain.
+
+### The selection
+
+The **session** holds what is selected: the ids of the nodes that are
+picked out. It is the session's own state, the way the document is, and a
+node does not know whether it is selected.
+
+The commands that change it are in the **SDK** rather than in an
+application, because the selection belongs to the session and every front
+end should have the same commands: `select.all`, `select.none`,
+`select.node`.
+
+And a command that acts on "the selection" reads it — which is how the
+battery's path operations work now:
+
+```rust
+// two ids, or two selected shapes: the same thing said two ways
+session.execute("vector.path.unite", &json!({ "first": 1, "second": 2 }))?;
+session.execute("select.all", &json!({}))?;
+session.execute("vector.path.unite", &json!({}))?;
+```
+
+The selection is restored when a command that changed the document is
+undone — the undo puts the document back, and the selection goes with it.
+Selecting is **not** an undo step of its own: it does not change the
+document, so it leaves no history.
+
+### The finding: a plugin program is a whole program
+
+The SDK's commands went into every plugin's catalogue, and the host
+refused them: *"two contributions are called `select.none`"*.
+
+That is not a bug in the refusal — it is the right refusal, for the
+**linked** door, where two crates contributing one id is a mistake. But a
+plugin program is a **whole craftkit program**: it has the core's commands
+as well as its own, and so does the host. The two copies are the same
+commands.
+
+So the **host** changed: a catalogue command the host already has, with
+the same capability, is **skipped** — the host keeps its own — and one
+with a *different* capability is still refused, because that is two
+different commands with one id.
+
+### What this does not do
+
+- **A layer is not a group.** A group is a container; a layer is a group
+  with a meaning of its own (it holds other things and it can be locked
+  and hidden), and that meaning is a **kind** a plugin contributes. The
+  document does not know what a layer is.
+- **There is still no appearance stack** — and that is not a gap in v2 but
+  a decision the payload made: a fill and a stroke are the *kind's* data,
+  so they live in the node's payload (§12) and the core never has an
+  `Appearance` enum to close.
+- **The selection is ids.** A person picks a shape by clicking it; the
+  selection is still a list of ids underneath, and nothing here knows
+  about a pointer.
+- **No text, no images, no symbols.** The document is still nodes, a
+  payload and a tree.
+
+---
+
+## 15. What is here, and what is not
 
 ### Built
 
@@ -716,7 +812,7 @@ battery now draws a shape with a hole, and the file carries it.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**124 tests.**
+**131 tests.**
 
 ### Not built
 
@@ -734,9 +830,11 @@ battery now draws a shape with a hole, and the file carries it.
   one front end built on it as a proof.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
-  the port showed is missing: a typed body, a layer and group hierarchy, a
-  selection, an appearance stack, text, and images. The **geometry** is
-  not missing any more: it has a home (§13).
+  the port showed is missing: a typed body, text, and images. The
+  **geometry** has a home (§13), the document is a **tree** (§14), and the
+  **selection** is the session's state (§14). What is still missing is the
+  rest of a document model: layers with a meaning of their own, an
+  appearance that is not a plugin's payload, text, and images.
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -750,7 +848,7 @@ each one is not.
 
 ---
 
-## 15. What the redesign would do to the rest of the tree
+## 16. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -786,7 +884,7 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 16. Running it
+## 17. Running it
 
 ```bash
 cd v2
@@ -801,7 +899,7 @@ another plugin, draws the document **through the kinds**, hit-tests it
 **through the kinds**, prints the **plan**, and finally makes a command at
 run time and runs that too.
 
-## 17. Honest notes
+## 18. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
