@@ -581,7 +581,16 @@ fn a_nodes_payload_survives_the_file() {
         "path",
         "vector.path",
         craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0),
-        json!({ "path": { "start": { "x": 1.0, "y": 2.0 }, "segments": [], "closed": true } }),
+        json!({
+            "path": {
+                "rule": "non-zero",
+                "subpaths": [{
+                    "start": { "x": 1.0, "y": 2.0 },
+                    "segments": [],
+                    "closed": true,
+                }],
+            }
+        }),
     );
     let format =
         craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");

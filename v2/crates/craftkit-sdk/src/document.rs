@@ -94,19 +94,31 @@ pub enum Segment {
     },
 }
 
-/// A path: segments in order, and whether it is closed.
+/// How a path's insides are decided.
 ///
-/// The path is **the shape**, and it is the SDK's: a plugin that draws a
-/// curve builds one of these, and the backend decides how to draw it — a
-/// rasteriser flattens it, a PDF writer writes it as a bezier, a recorder
-/// counts its segments.
+/// A path can have more than one contour, and a contour can be inside
+/// another one. The rule is what says which parts are inside the shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FillRule {
+    /// Inside where the winding number is not zero.
+    ///
+    /// The default: a contour inside another one makes a hole when the two
+    /// run in opposite directions.
+    #[default]
+    NonZero,
+    /// Inside where the winding number is odd.
+    ///
+    /// The rule that does not care which way round a contour runs: every
+    /// contour inside another one is a hole, however deep.
+    EvenOdd,
+}
+
+/// One contour of a path.
 ///
-/// The path is flat: a path with a hole in it is two paths, and the fill
-/// rule says how they combine. That is a limitation, and it is written
-/// down rather than hidden.
+/// A contour is a start point, some segments, and whether it closes.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Path {
-    /// Where the path starts.
+pub struct SubPath {
+    /// Where it starts.
     pub start: Point,
     /// The segments, in order.
     pub segments: Vec<Segment>,
@@ -114,17 +126,8 @@ pub struct Path {
     pub closed: bool,
 }
 
-impl Path {
-    /// A path of straight lines through the points.
-    pub fn polygon(points: &[Point]) -> Path {
-        let mut segments = Vec::with_capacity(points.len());
-        for point in points.iter().skip(1) {
-            segments.push(Segment::Line { to: *point });
-        }
-        Path { start: points.first().copied().unwrap_or_default(), segments, closed: true }
-    }
-
-    /// The path's points: where it starts, and where each segment ends.
+impl SubPath {
+    /// The contour's points: where it starts, and where each segment ends.
     pub fn points(&self) -> Vec<Point> {
         let mut points = Vec::with_capacity(self.segments.len() + 1);
         points.push(self.start);
@@ -132,6 +135,57 @@ impl Path {
             points.push(segment.end());
         }
         points
+    }
+
+    /// The contour's last point.
+    pub fn end(&self) -> Point {
+        self.segments.last().map(|segment| segment.end()).unwrap_or(self.start)
+    }
+}
+
+/// A path: contours, and the rule that says which parts are inside.
+///
+/// The path is **the shape**, and it is the SDK's: a plugin that draws a
+/// curve builds one of these, and the backend decides how to draw it — a
+/// rasteriser flattens it, a PDF writer writes it as a bezier, a recorder
+/// counts its segments.
+///
+/// A path has more than one contour because a shape can have a hole, and a
+/// hole is a contour inside another one. That is not a theory: it is what
+/// a boolean operation produces, and the port of a real application is
+/// what found it (§12).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Path {
+    /// The contours, in order.
+    pub subpaths: Vec<SubPath>,
+    /// Which parts are inside.
+    pub rule: FillRule,
+}
+
+impl Path {
+    /// A path of one contour: straight lines through the points.
+    pub fn polygon(points: &[Point]) -> Path {
+        let mut segments = Vec::with_capacity(points.len());
+        for point in points.iter().skip(1) {
+            segments.push(Segment::Line { to: *point });
+        }
+        let start = points.first().copied().unwrap_or_default();
+        Path { subpaths: vec![SubPath { start, segments, closed: true }], rule: FillRule::default() }
+    }
+
+    /// A path of one contour.
+    pub fn single(subpath: SubPath) -> Path {
+        Path { subpaths: vec![subpath], rule: FillRule::default() }
+    }
+
+    /// Whether the path has anything in it.
+    pub fn is_empty(&self) -> bool {
+        self.subpaths.iter().all(|subpath| subpath.segments.is_empty())
+    }
+
+    /// The path's points, contour by contour.
+    pub fn points(&self) -> Vec<Vec<Point>> {
+        self.subpaths.iter().map(|subpath| subpath.points()).collect()
     }
 }
 
@@ -206,9 +260,10 @@ impl Canvas for RecordingCanvas {
     }
 
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {
-        let mut drawn = format!("path({} segment(s)", path.segments.len());
-        if path.closed {
-            drawn.push_str(", closed");
+        let segments: usize = path.subpaths.iter().map(|subpath| subpath.segments.len()).sum();
+        let mut drawn = format!("path({segments} segment(s), {} contour(s)", path.subpaths.len());
+        if path.rule == FillRule::EvenOdd {
+            drawn.push_str(", even-odd");
         }
         if fill != Colour::NONE {
             drawn.push_str(", filled");
@@ -293,7 +348,27 @@ impl FormatValue for Segment {
     }
 }
 
-impl FormatValue for Path {
+impl FormatValue for FillRule {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::Value::String(
+            match self {
+                FillRule::NonZero => "non-zero",
+                FillRule::EvenOdd => "even-odd",
+            }
+            .to_string(),
+        )
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        match value.as_str() {
+            Some("non-zero") | Some("nonzero") | None => Ok(FillRule::NonZero),
+            Some("even-odd") | Some("evenodd") => Ok(FillRule::EvenOdd),
+            Some(other) => Err(format!("`{other}` is not a fill rule")),
+        }
+    }
+}
+
+impl FormatValue for SubPath {
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "start": self.start.to_json(),
@@ -303,18 +378,44 @@ impl FormatValue for Path {
     }
 
     fn from_json(value: &serde_json::Value) -> Result<Self, String> {
-        let start = value.get("start").ok_or_else(|| "a path has no start".to_string())?;
+        let start = value.get("start").ok_or_else(|| "a contour has no start".to_string())?;
         let segments = match value.get("segments") {
             Some(segments) => segments
                 .as_array()
-                .ok_or_else(|| "a path's segments are a list".to_string())?
+                .ok_or_else(|| "a contour's segments are a list".to_string())?
                 .iter()
                 .map(Segment::from_json)
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
         let closed = value.get("closed").and_then(|closed| closed.as_bool()).unwrap_or(false);
-        Ok(Path { start: Point::from_json(start)?, segments, closed })
+        Ok(SubPath { start: Point::from_json(start)?, segments, closed })
+    }
+}
+
+impl FormatValue for Path {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "rule": self.rule.to_json(),
+            "subpaths": self.subpaths.iter().map(|subpath| subpath.to_json()).collect::<Vec<_>>(),
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let rule = match value.get("rule") {
+            Some(rule) => FillRule::from_json(rule)?,
+            None => FillRule::NonZero,
+        };
+        let subpaths = match value.get("subpaths") {
+            Some(subpaths) => subpaths
+                .as_array()
+                .ok_or_else(|| "a path's contours are a list".to_string())?
+                .iter()
+                .map(SubPath::from_json)
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        };
+        Ok(Path { subpaths, rule })
     }
 }
 
