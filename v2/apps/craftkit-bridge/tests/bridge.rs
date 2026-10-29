@@ -167,3 +167,20 @@ fn the_menu_is_over_the_wire() {
     let names: Vec<&str> = menu.iter().filter_map(|part| part["name"].as_str()).collect();
     assert!(names.contains(&"geometry"), "{names:?}");
 }
+/// The journal is over the wire.
+///
+/// It is what the session was asked to do, and an agent that drove the
+/// program can read it back.
+#[test]
+fn the_journal_is_over_the_wire() {
+    let mut bridge = bridge();
+    let _ = ask(
+        &mut bridge,
+        "tools/call",
+        json!({ "name": "geometry.rectangle", "arguments": { "x": 1, "y": 2, "width": 3, "height": 4 } }),
+    );
+    let answer = ask(&mut bridge, "journal", Json::Null);
+    let entries = answer["result"]["entries"].as_array().expect("there are entries");
+    assert!(!entries.is_empty(), "{answer}");
+    assert_eq!(entries[0]["id"], json!("geometry.rectangle"), "{answer}");
+}

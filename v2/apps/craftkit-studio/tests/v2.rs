@@ -379,7 +379,8 @@ fn a_contribution_in_a_missing_layer_is_refused() {
             params: &[],
             mutates: false,
             undoable: false,
-                enabled: craftkit_sdk::always,
+            journal: true,
+            enabled: craftkit_sdk::always,
             run: CommandRun::Static(|_session, _params| Ok(Outcome::new("never"))),
         })
         .expect("the command is registered");
@@ -493,6 +494,7 @@ fn panicking_command() -> CommandSpec {
         params: &[],
         mutates: true,
         undoable: false,
+        journal: true,
         enabled: craftkit_sdk::always,
         run: CommandRun::Static(|_session, _params| panic!("on purpose")),
     }
@@ -512,6 +514,7 @@ fn lying_command() -> CommandSpec {
         params: &[],
         mutates: false,
         undoable: false,
+        journal: true,
         enabled: craftkit_sdk::always,
         run: CommandRun::Static(|session, _params| {
             session.document_mut().add_node(
@@ -1315,6 +1318,78 @@ fn a_fourth_version_file_is_migrated_to_the_fifth() {
     assert!(document.relations.is_empty(), "the step gives the document its links");
 }
 
+// ----------------------------------------------------------------- the journal --
+
+/// The journal is what the session was asked to do.
+///
+/// It is a program: the command and the values it was given, exactly as
+/// they were given.
+#[test]
+fn the_journal_records_what_ran() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "one", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.execute("node.mute", &json!({ "node_name": "one" })).expect("the node is muted");
+    let entries = session.journal();
+    assert_eq!(entries.len(), 2, "both commands are in the journal: {entries:?}");
+    assert_eq!(entries[0].id, "node.add");
+    assert_eq!(entries[0].params.get("name"), Some(&json!("one")));
+    assert_eq!(entries[1].id, "node.mute");
+}
+
+/// A command that was refused is not in the journal: it changed nothing,
+/// so there is nothing to replay.
+#[test]
+fn a_refused_command_is_not_in_the_journal() {
+    let mut session = ecosystem().session();
+    let _ = session.execute("node.add", &json!({ "name": "one", "kind": "not.a.kind" }));
+    assert!(session.journal().is_empty(), "nothing ran: {:?}", session.journal());
+}
+
+/// The journal can be run again.
+#[test]
+fn the_journal_can_be_run_again() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "one", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let steps = craftkit_sdk::journal::steps(session.journal());
+    let mut replay = ecosystem().session();
+    replay.execute("journal.replay", &json!({ "steps": steps })).expect("the journal is run again");
+    assert_eq!(replay.document().nodes.len(), 1, "the node is there again");
+    assert_eq!(replay.document().nodes[0].name, "one");
+}
+
+/// A replay is one undo step.
+#[test]
+fn a_replay_is_one_undo_step() {
+    let ecosystem = ecosystem();
+    let mut session = ecosystem.session();
+    session
+        .execute("node.add", &json!({ "name": "one", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "two", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let steps = craftkit_sdk::journal::steps(session.journal());
+    let mut replay = ecosystem.session();
+    replay.execute("journal.replay", &json!({ "steps": steps })).expect("the journal is run again");
+    assert_eq!(replay.document().nodes.len(), 2);
+    replay.undo().expect("the replay is undone");
+    assert!(replay.document().nodes.is_empty(), "both nodes went at once: {:?}", replay.document().nodes);
+}
+
+/// The journal can be forgotten.
+#[test]
+fn the_journal_can_be_forgotten() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "one", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.execute("journal.clear", &json!({})).expect("the journal is cleared");
+    assert!(session.journal().is_empty());
+}
 // ------------------------------------------------------------------- the menus --
 
 /// The menu is a tree, and a command says where in it it goes.

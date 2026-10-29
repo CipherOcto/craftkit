@@ -509,6 +509,7 @@ impl LoadedPlugin {
             params,
             mutates,
             undoable: mutates,
+            journal: true,
             enabled: crate::always,
             run,
         })

@@ -146,6 +146,7 @@ impl Bridge {
             "tools/call" => self.call(request),
             "resources/list" => Ok(self.resources()),
             "plan" => Ok(self.plan()),
+            "journal" => Ok(self.journal()),
             "menu" => Ok(self.menu()),
             "shutdown" => Ok(json!({ "stopping": true })),
             other => Err(format!(
@@ -235,6 +236,15 @@ impl Bridge {
     /// What the document means right now.
     fn plan(&self) -> Json {
         self.session.evaluate().to_json()
+    }
+
+    /// The **journal**: what this session was asked to do.
+    ///
+    /// It is a program, and it can be run again: an agent that drove the
+    /// program can hand the journal to `journal.replay` and have it done
+    /// again.
+    fn journal(&self) -> Json {
+        json!({ "entries": self.session.journal().iter().map(|entry| entry.to_json()).collect::<Vec<_>>() })
     }
 
     /// The **menu**, as a tree.

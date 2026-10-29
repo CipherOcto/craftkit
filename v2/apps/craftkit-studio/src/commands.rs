@@ -186,6 +186,7 @@ pub fn runtime_echo() -> CommandSpec {
         params: ECHO_PARAMS,
         mutates: false,
         undoable: false,
+        journal: false,
         enabled: craftkit_sdk::always,
         run: CommandRun::Dynamic(std::sync::Arc::new(|_session, params| {
             let text = params.get("text").and_then(|value| value.as_str()).unwrap_or_default();

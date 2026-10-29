@@ -104,6 +104,15 @@ pub struct CommandSpec {
     pub mutates: bool,
     /// Whether a successful run pushes an undo entry.
     pub undoable: bool,
+    /// Whether a successful run is written in the **journal**.
+    ///
+    /// It is, by default: the journal is what the session was asked to
+    /// do, and a command that ran is a command that ran. A command may
+    /// say no — the commands that are *about* the journal say no, because
+    /// a journal that lists the command that cleared it is a journal that
+    /// was not cleared.
+    pub journal: bool,
+
     /// Whether it is available right now.
     pub enabled: fn(&Session) -> bool,
     /// How to run it.

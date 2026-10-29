@@ -44,6 +44,7 @@ use crate::document::{Document, NodeKindSpec};
 use crate::error::{EngineError, Outcome};
 use crate::evaluator::EvaluatorSpec;
 use crate::format::{FormatSpec, MigrationSpec};
+use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
 
@@ -70,6 +71,7 @@ pub struct Session {
     selection: Vec<u64>,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
+    journal: Vec<JournalEntry>,
     depth: usize,
 }
 
@@ -86,6 +88,7 @@ impl Session {
             selection: Vec::new(),
             history: Vec::new(),
             log: Vec::new(),
+            journal: Vec::new(),
             depth: 0,
         }
     }
@@ -182,6 +185,33 @@ impl Session {
         plan
     }
 
+    /// The **journal**: the commands that ran, with the values they were
+    /// given.
+    ///
+    /// It is a program, and it can be run again: see
+    /// [`crate::journal`]. It is bounded, and the oldest entries go when
+    /// it is full.
+    pub fn journal(&self) -> &[JournalEntry] {
+        &self.journal
+    }
+
+    /// Forget the journal.
+    pub fn clear_journal(&mut self) {
+        self.journal.clear();
+    }
+
+    /// Write an entry in the journal.
+    ///
+    /// The limit is here and not in the caller: a session that grows a
+    /// journal for ever is a leak, and the limit is what makes it bounded.
+    fn journal_entry(&mut self, id: &str, params: &Json) {
+        self.journal.push(JournalEntry { id: id.to_string(), params: params.clone() });
+        if self.journal.len() > crate::journal::JOURNAL_LIMIT {
+            let excess = self.journal.len() - crate::journal::JOURNAL_LIMIT;
+            self.journal.drain(0..excess);
+        }
+    }
+
     /// The history.
     pub fn history(&self) -> &[HistoryEntry] {
         &self.history
@@ -191,7 +221,6 @@ impl Session {
     pub fn log(&self) -> &[String] {
         &self.log
     }
-
 
     /// Run a command.
     pub fn execute(&mut self, id: &str, raw: &Json) -> Result<Outcome, EngineError> {
@@ -245,6 +274,9 @@ impl Session {
                     });
                 }
                 self.log.push(format!("{id}: {}", outcome.message));
+                if spec.journal {
+                    self.journal_entry(id, params.value());
+                }
                 Ok(outcome)
             }
             Err(error) => {

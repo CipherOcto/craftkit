@@ -24,6 +24,8 @@ pub struct CommandArgs {
     pub mutates: bool,
     pub undoable: bool,
     pub no_prefix: bool,
+    /// `no_journal`: the command is not written in the journal.
+    pub no_journal: bool,
 }
 
 impl Parse for CommandArgs {
@@ -80,13 +82,14 @@ impl Parse for CommandArgs {
                 "mutates" => args.mutates = true,
                 "undoable" => args.undoable = true,
                 "no_prefix" => args.no_prefix = true,
+                "no_journal" => args.no_journal = true,
                 other => {
                     return Err(Error::new(
                         field.span(),
                         format!(
                             "unknown command field `{other}`: a command has `id`, and optionally \
                              `label`, `area`, `icon`, `shortcut`, `capability`, `layer`, \
-                             `enabled`, `menu`, `mutates`, `undoable` and `no_prefix`"
+                             `enabled`, `menu`, `mutates`, `undoable`, `no_journal` and `no_prefix`"
                         ),
                     ));
                 }
@@ -353,6 +356,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
     let menu_names: Vec<LitStr> = args.menu.clone();
     let mutates = args.mutates;
     let undoable = args.undoable;
+    let journal = !args.no_journal;
     let doc_literal = LitStr::new(&doc, id.span());
     let label_literal = LitStr::new(&label, id.span());
     let area_literal = LitStr::new(&area, id.span());
@@ -399,6 +403,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
             ],
             mutates: #mutates,
             undoable: #undoable,
+            journal: #journal,
             enabled: #enabled,
             run: #sdk::CommandRun::Static(#run_ident),
         };
