@@ -634,6 +634,117 @@ impl AddClip {
     }
 }
 
+/// Trim a clip.
+///
+/// A trim is about a **range**, and not about a node: the clip keeps its
+/// place on the track and its place in the source, and what changes is
+/// how much of it is heard. The range may be given, or it may come from
+/// the selection — the selection holds a **part** of a node as well as
+/// whole nodes, and a part of a clip is exactly what a trim is about.
+///
+/// The range is in **samples on the track's timeline**, and it is half
+/// open: `from` is in the clip and `to` is not.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.trim",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Trim"),
+    mutates,
+    undoable
+)]
+pub struct TrimClip {
+    /// The clip to trim, if the caller names one.
+    pub clip: Option<NodeRef>,
+    /// Where the clip starts, in samples.
+    pub from: Option<Number>,
+    /// Where the clip ends, in samples.
+    pub to: Option<Number>,
+}
+
+impl TrimClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        // The clip: named, or the one that is selected.
+        let (clip_id, span) = match (self.clip, selection_span(session)) {
+            (Some(clip), Some((_, span))) => (clip.0, Some(span)),
+            (Some(clip), None) => (clip.0, None),
+            (None, Some((node, span))) => (node, Some(span)),
+            (None, None) => {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: "which clip, and which part of it?".to_string(),
+                });
+            }
+        };
+        let (from, to) = match (self.from, self.to) {
+            (Some(from), Some(to)) => (from.0, to.0),
+            (None, None) => match span {
+                Some((from, to)) => (from, to),
+                None => {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.trim".to_string(),
+                        message: "which part of the clip?".to_string(),
+                    });
+                }
+            },
+            _ => {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: "a range has a start and an end".to_string(),
+                });
+            }
+        };
+        if !from.is_finite() || !to.is_finite() {
+            return Err(EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: "a range is made of numbers".to_string(),
+            });
+        }
+        if to <= from {
+            return Err(EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: format!("the range ends at {to} and starts at {from}"),
+            });
+        }
+        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.trim".to_string(),
+            message: format!("there is no node `{clip_id}`"),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.clip.trim".to_string(), message: error })?;
+        if from < payload.start as f64 {
+            return Err(EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: format!("the clip starts at {} and cannot be trimmed before it", payload.start),
+            });
+        }
+        let mut trimmed = payload.clone();
+        trimmed.start = from as i64;
+        trimmed.length = (to - from) as i64;
+        // The content moves with the start: a clip trimmed at its head
+        // starts later in the source.
+        trimmed.offset = payload.offset + (from as i64 - payload.start);
+        if let Some(node) = session.document_mut().node_mut(clip_id) {
+            node.data = trimmed.to_json();
+        }
+        Ok(Outcome::changed(format!("trimmed the clip `{clip_id}` to {from}..{to}")).with_data(
+            serde_json::json!({
+                "id": clip_id,
+                "from": from,
+                "to": to,
+                "offset": trimmed.offset,
+            }),
+        ))
+    }
+}
+
 /// Set the tempo.
 ///
 /// The tempo map is a **list of events** and not a single number, so this
@@ -1081,6 +1192,19 @@ fn playlist_of(session: &Session, track: u64, name: Option<String>) -> Result<u6
     }
 }
 
+/// The part of a node that is selected, if a part is selected.
+///
+/// The selection holds whole nodes and **parts** of nodes, and a part is
+/// a range in the node's own units. A sound document's units are
+/// samples, so a part of a clip is a range of samples.
+fn selection_span(session: &Session) -> Option<(u64, (f64, f64))> {
+    session.selection().iter().find_map(|item| {
+        let from = item.from?;
+        let to = item.to?;
+        Some((item.node, (from, to)))
+    })
+}
+
 /// A number of samples, from a number a caller sent.
 ///
 /// A number from outside is hostile: it may not be a number at all, and it
@@ -1333,5 +1457,108 @@ mod tests {
         let track = document.nodes[0].clone();
         let payload = TrackPayload::from_json(&track.data).expect("the payload is read");
         assert_eq!(payload.track_kind, "quantum");
+    }
+}
+
+#[cfg(test)]
+mod trim_tests {
+    use super::*;
+
+    use craftkit_sdk::Ecosystem;
+    use craftkit_sdk::serde_json::json;
+
+    /// The ecosystem of this plugin alone.
+    fn ecosystem() -> Ecosystem {
+        Ecosystem::from_inventory().expect("the ecosystem is built")
+    }
+
+    /// A session over the plugin's own contributions.
+    fn session() -> Session {
+        let ecosystem = ecosystem();
+        Session::with_formats(
+            ecosystem.commands,
+            ecosystem.kinds,
+            ecosystem.formats,
+            ecosystem.migrations,
+            ecosystem.evaluators,
+        )
+    }
+
+    /// A track with one clip on it, and the clip's id.
+    fn with_clip(session: &mut Session) -> u64 {
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 48000 }))
+            .expect("the clip is added");
+        session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip").id
+    }
+
+    /// A trim with an explicit range shortens the clip.
+    #[test]
+    fn a_trim_shortens_the_clip() {
+        let mut session = session();
+        let clip = with_clip(&mut session);
+        session
+            .execute("sound.clip.trim", &json!({ "clip": clip, "from": 0, "to": 24000 }))
+            .expect("the clip is trimmed");
+        let node = session.document().node(clip).expect("the clip is there");
+        let payload = ClipPayload::from_json(&node.data).expect("the payload is read");
+        assert_eq!(payload.start, 0);
+        assert_eq!(payload.length, 24000);
+    }
+
+    /// A trim with a range that starts later moves the content with it.
+    #[test]
+    fn a_trim_moves_the_content_with_it() {
+        let mut session = session();
+        let clip = with_clip(&mut session);
+        session
+            .execute("sound.clip.trim", &json!({ "clip": clip, "from": 12000, "to": 24000 }))
+            .expect("the clip is trimmed");
+        let node = session.document().node(clip).expect("the clip is there");
+        let payload = ClipPayload::from_json(&node.data).expect("the payload is read");
+        assert_eq!(payload.start, 12000);
+        assert_eq!(payload.length, 12000);
+        assert_eq!(payload.offset, 12000, "the content starts later in the source");
+    }
+
+    /// A trim takes its range from the **selection**.
+    ///
+    /// The selection holds a part of a node as well as whole nodes, and a
+    /// part of a clip is what a trim is about.
+    #[test]
+    fn a_trim_takes_its_range_from_the_selection() {
+        let mut session = session();
+        let clip = with_clip(&mut session);
+        session
+            .execute("select.span", &json!({ "node": clip, "from": 0.0, "to": 24000.0 }))
+            .expect("the part is selected");
+        session.execute("sound.clip.trim", &json!({})).expect("the clip is trimmed");
+        let node = session.document().node(clip).expect("the clip is there");
+        let payload = ClipPayload::from_json(&node.data).expect("the payload is read");
+        assert_eq!(payload.length, 24000, "the clip was trimmed to the selection");
+    }
+
+    /// A trim before the clip's own start is refused.
+    #[test]
+    fn a_trim_before_the_clip_is_refused() {
+        let mut session = session();
+        let clip = with_clip(&mut session);
+        let error = session
+            .execute("sound.clip.trim", &json!({ "clip": clip, "from": -100.0, "to": 24000.0 }))
+            .expect_err("the trim is refused");
+        assert!(error.to_string().contains("cannot be trimmed before"), "{error}");
+    }
+
+    /// A range that ends before it starts is refused.
+    #[test]
+    fn a_range_that_ends_first_is_refused() {
+        let mut session = session();
+        let clip = with_clip(&mut session);
+        let error = session
+            .execute("sound.clip.trim", &json!({ "clip": clip, "from": 100.0, "to": 100.0 }))
+            .expect_err("the trim is refused");
+        assert!(error.to_string().contains("starts at"), "{error}");
     }
 }

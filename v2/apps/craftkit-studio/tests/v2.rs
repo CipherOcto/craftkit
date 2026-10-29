@@ -848,7 +848,8 @@ fn the_session_remembers_what_is_selected() {
     assert!(session.selection().is_empty());
 
     session.execute("select.node", &json!({ "node": 1 })).expect("the node is selected");
-    assert_eq!(session.selection(), &[1]);
+    assert_eq!(session.selected_ids(), &[1]);
+    assert!(session.selection()[0].is_whole(), "the whole node is selected");
 }
 
 /// Selecting a node that is not there is refused.
@@ -1444,4 +1445,98 @@ fn an_empty_part_is_not_in_the_menu() {
     for node in &tree {
         assert!(!node.commands.is_empty() || !node.children.is_empty(), "{node:?}");
     }
+}
+
+// ------------------------------------------------------- the session's state --
+
+/// A **part** of a node can be selected.
+///
+/// A selection of ids cannot say "the first second of this clip", and a
+/// trim, a split and a nudge all want to. The part is a range in the
+/// node's own units.
+#[test]
+fn a_part_of_a_node_can_be_selected() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "clip", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let id = session.document().nodes[0].id;
+    session
+        .execute("select.span", &json!({ "node": id, "from": 0.0, "to": 24000.0 }))
+        .expect("the part is selected");
+    let selection = session.selection();
+    assert_eq!(selection.len(), 1, "one thing is selected");
+    assert_eq!(selection[0].node, id);
+    assert_eq!(selection[0].from, Some(0.0));
+    assert_eq!(selection[0].to, Some(24000.0));
+    assert!(!selection[0].is_whole(), "the node is not selected whole");
+    assert_eq!(session.selected_ids(), vec![id], "the node is selected");
+    assert!(session.selected_whole_ids().is_empty(), "and not selected whole");
+}
+
+/// A range that ends before it starts is refused.
+#[test]
+fn a_range_that_ends_first_is_refused() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "clip", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let id = session.document().nodes[0].id;
+    let error = session
+        .execute("select.span", &json!({ "node": id, "from": 100.0, "to": 10.0 }))
+        .expect_err("the range is refused");
+    assert!(error.to_string().contains("starts at"), "{error}");
+}
+
+/// The tool in the hand is the session's state.
+///
+/// It is not in the document: two people editing the same document may
+/// hold different tools, and neither of them has changed the document.
+#[test]
+fn the_tool_in_the_hand_is_the_sessions_state() {
+    let mut session = ecosystem().session();
+    assert_eq!(session.tool(), None, "there is no tool in the hand");
+    session.execute("tool.hold", &json!({ "tool": "tool.rect" })).expect("the tool is held");
+    assert_eq!(session.tool(), Some("tool.rect"));
+    session.execute("tool.release", &json!({})).expect("the tool is released");
+    assert_eq!(session.tool(), None);
+}
+
+/// Holding a tool does not change the document, so it leaves no history.
+#[test]
+fn holding_a_tool_leaves_no_history() {
+    let mut session = ecosystem().session();
+    session.execute("tool.hold", &json!({ "tool": "tool.rect" })).expect("the tool is held");
+    assert!(session.history().is_empty(), "the document did not change");
+}
+
+/// The tool in the hand comes back with the undo.
+#[test]
+fn the_tool_comes_back_with_the_undo() {
+    let mut session = ecosystem().session();
+    session.execute("tool.hold", &json!({ "tool": "tool.rect" })).expect("the tool is held");
+    session
+        .execute("node.add", &json!({ "name": "rect", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.undo().expect("the node is undone");
+    assert_eq!(session.tool(), Some("tool.rect"), "the tool is still in the hand");
+}
+
+/// A selection of parts survives an undo.
+#[test]
+fn a_selection_of_parts_survives_an_undo() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "clip", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let id = session.document().nodes[0].id;
+    session
+        .execute("select.span", &json!({ "node": id, "from": 0.0, "to": 100.0 }))
+        .expect("the part is selected");
+    session
+        .execute("node.add", &json!({ "name": "other", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.undo().expect("the node is undone");
+    assert_eq!(session.selection().len(), 1, "the part is still selected");
+    assert_eq!(session.selection()[0].to, Some(100.0));
 }

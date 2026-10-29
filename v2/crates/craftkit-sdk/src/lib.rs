@@ -66,6 +66,7 @@ pub mod error;
 pub mod evaluator;
 pub mod format;
 pub mod group;
+pub mod hand;
 pub mod journal;
 pub mod link;
 pub mod params;
@@ -94,6 +95,7 @@ pub use plan::{Plan, PlanItem};
 pub use plugin::{Catalogue, LoadedPlugin, PluginCommand, PluginError, PluginParam};
 pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
+pub use select::Selected;
 pub use session::{HistoryEntry, Session};
 
 /// The link-time registry, re-exported so a plugin does not have to depend

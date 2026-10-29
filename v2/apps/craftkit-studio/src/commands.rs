@@ -212,7 +212,7 @@ pub struct NodeGroup {}
 
 impl NodeGroup {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let selected = session.selection().to_vec();
+        let selected = session.selected_ids();
         if selected.len() < 2 {
             return Err(EngineError::Failed {
                 id: "node.group".to_string(),

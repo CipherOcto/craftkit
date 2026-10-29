@@ -529,7 +529,9 @@ fn two_of(
     first: Option<NodeRef>,
     second: Option<NodeRef>,
 ) -> Result<(u64, u64), EngineError> {
-    let selected: Vec<u64> = session.selection().to_vec();
+    // A path operation works on whole paths: a boolean of half a path is
+    // not a thing this battery does.
+    let selected: Vec<u64> = session.selected_whole_ids();
     let need = |what: &str| {
         Err(EngineError::Failed {
             id: "vector.path".to_string(),

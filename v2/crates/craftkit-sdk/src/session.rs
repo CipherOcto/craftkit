@@ -47,6 +47,7 @@ use crate::format::{FormatSpec, MigrationSpec};
 use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
+use crate::select::Selected;
 
 /// One step of the history.
 #[derive(Debug, Clone)]
@@ -56,7 +57,9 @@ pub struct HistoryEntry {
     /// The document as it was before.
     pub document: Document,
     /// What was selected, before.
-    pub selection: Vec<u64>,
+    pub selection: Vec<Selected>,
+    /// The tool in the hand, before.
+    pub tool: Option<String>,
 }
 
 /// The document, the commands, and the history of what happened.
@@ -68,10 +71,12 @@ pub struct Session {
     migrations: Registry<MigrationSpec>,
     evaluators: Registry<EvaluatorSpec>,
     document: Document,
-    selection: Vec<u64>,
+    selection: Vec<Selected>,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
     journal: Vec<JournalEntry>,
+    /// The tool in the hand, if any.
+    tool: Option<String>,
     depth: usize,
 }
 
@@ -89,6 +94,7 @@ impl Session {
             history: Vec::new(),
             log: Vec::new(),
             journal: Vec::new(),
+            tool: None,
             depth: 0,
         }
     }
@@ -137,16 +143,26 @@ impl Session {
     /// The selection is the session's own state: what a person has picked
     /// out, or what an agent has named. A command that acts on "the
     /// selection" reads it here.
-    pub fn selection(&self) -> &[u64] {
+    ///
+    /// A selected thing is a node, and it may be picked out whole or in
+    /// part: see [`Selected`].
+    pub fn selection(&self) -> &[Selected] {
         &self.selection
     }
 
-    /// Select these nodes.
+    /// Select these things.
     ///
     /// A node that is not in the document is not selected: the selection
     /// is of the document, and the document is the truth.
-    pub fn select(&mut self, ids: &[u64]) {
-        self.selection = ids.iter().copied().filter(|id| self.document.node(*id).is_some()).collect();
+    pub fn select(&mut self, items: &[Selected]) {
+        self.selection =
+            items.iter().filter(|item| self.document.node(item.node).is_some()).cloned().collect();
+    }
+
+    /// Select these nodes, whole.
+    pub fn select_ids(&mut self, ids: &[u64]) {
+        let items: Vec<Selected> = ids.iter().map(|id| Selected::node(*id)).collect();
+        self.select(&items);
     }
 
     /// Select nothing.
@@ -154,9 +170,40 @@ impl Session {
         self.selection.clear();
     }
 
+    /// The ids of the selected nodes, whole or in part.
+    ///
+    /// A command that wants whole nodes asks for this, and a command
+    /// that can work on a part asks for the selection itself.
+    pub fn selected_ids(&self) -> Vec<u64> {
+        self.selection.iter().map(|item| item.node).collect()
+    }
+
+    /// The ids of the selected nodes that are selected **whole**.
+    pub fn selected_whole_ids(&self) -> Vec<u64> {
+        self.selection.iter().filter(|item| item.is_whole()).map(|item| item.node).collect()
+    }
+
     /// The nodes that are selected, in the order they are in the document.
     pub fn selected_nodes(&self) -> Vec<&crate::document::Node> {
-        self.document.walk().filter(|node| self.selection.contains(&node.id)).collect()
+        self.document.walk().filter(|node| self.selected_ids().contains(&node.id)).collect()
+    }
+
+    /// The tool in the hand, if any.
+    ///
+    /// It is the session's state, the way the selection is: a tool is
+    /// something a person is holding, not something the document holds.
+    pub fn tool(&self) -> Option<&str> {
+        self.tool.as_deref()
+    }
+
+    /// Put a tool in the hand.
+    pub fn hold(&mut self, tool: impl Into<String>) {
+        self.tool = Some(tool.into());
+    }
+
+    /// Take the tool out of the hand.
+    pub fn release(&mut self) {
+        self.tool = None;
     }
 
     /// The document, to change.
@@ -249,6 +296,7 @@ impl Session {
         // the restore is below it.
         let snapshot = self.document.clone();
         let selection_snapshot = self.selection.clone();
+        let tool_snapshot = self.tool.clone();
         let result = self.run_guarded(&spec, &params);
         match result {
             Ok(outcome) => {
@@ -271,6 +319,7 @@ impl Session {
                         id: id.to_string(),
                         document: snapshot,
                         selection: selection_snapshot,
+                        tool: self.tool.clone(),
                     });
                 }
                 self.log.push(format!("{id}: {}", outcome.message));
@@ -282,6 +331,7 @@ impl Session {
             Err(error) => {
                 self.document = snapshot;
                 self.selection = selection_snapshot;
+                self.tool = tool_snapshot;
                 self.log.push(format!("{id}: refused ({error})"));
                 Err(error)
             }
@@ -321,6 +371,7 @@ impl Session {
     ) -> Result<T, EngineError> {
         let snapshot = self.document.clone();
         let selection_snapshot = self.selection.clone();
+        let tool_snapshot = self.tool.clone();
         let depth = self.depth;
         self.depth = depth + 1;
         let result = body(self);
@@ -333,12 +384,15 @@ impl Session {
                         id: "batch".to_string(),
                         document: snapshot,
                         selection: selection_snapshot,
+                        tool: tool_snapshot,
                     });
                 }
                 Ok(value)
             }
             Err(error) => {
                 self.document = snapshot;
+                self.selection = selection_snapshot;
+                self.tool = tool_snapshot;
                 Err(error)
             }
         }
@@ -354,6 +408,7 @@ impl Session {
         };
         self.document = entry.document;
         self.selection = entry.selection;
+        self.tool = entry.tool;
         Ok(Outcome::new(format!("undid `{}`", entry.id)))
     }
 }
