@@ -2004,6 +2004,93 @@ pub fn the_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, Str
     Ok(problems)
 }
 
+/// The scaffolding section, and the crates it has to name. §281.
+///
+/// The README tells a reader how to turn this tree into another
+/// application, and that promise is true only if the section names every
+/// crate that carries the domain. A reader who follows it and replaces
+/// `crates/model` — the only domain crate it named — is left with an
+/// `eval`, an `io`, an `mcp`, a `ui` and an `engine` that all name a
+/// document that is no longer there.
+///
+/// So two rules:
+///
+/// - every crate that **depends on the model** is named in the section;
+/// - `crates/foundation` — the generic half, the one crate a new
+///   application keeps — is named in it too.
+///
+/// The rule is checked against the **tree**, not against a list in the
+/// prose: the crates are found by reading their `Cargo.toml`, so a crate
+/// that starts depending on the model has to be added to the section or the
+/// gate says so.
+pub fn the_scaffolding_section_names_every_crate_the_domain_touches(
+    root: &Path,
+) -> Result<Vec<String>, String> {
+    let readme = match crate::tree::read_text(root.join("README.md")) {
+        Ok(text) => text,
+        Err(e) => return Err(format!("README.md: {e}")),
+    };
+    let Some(section) = markdown_section(&readme, "## Using it as a scaffold") else {
+        return Err("README.md has no \"Using it as a scaffold\" section".to_string());
+    };
+    let mut problems = Vec::new();
+    for name in crates_depending_on(root, "craftkit-model")? {
+        if !section.contains(&format!("crates/{name}")) {
+            problems.push(format!(
+                "README.md: the scaffolding section does not name `crates/{name}`, and that crate \
+                 depends on `craftkit-model`; a reader who follows the section replaces the model \
+                 and leaves this one behind."
+            ));
+        }
+    }
+    if !section.contains("crates/foundation") {
+        problems.push(
+            "README.md: the scaffolding section does not name `crates/foundation`, and that is the \
+             crate a new application keeps."
+                .to_string(),
+        );
+    }
+    Ok(problems)
+}
+
+/// One section of a Markdown file: the text under a heading, up to the next
+/// heading of the same level.
+fn markdown_section(text: &str, heading: &str) -> Option<String> {
+    let start = text.find(heading)? + heading.len();
+    let rest = &text[start..];
+    // The next heading of the same level, found as the byte offset of its
+    // line — a line *number* would be a different thing, and a section cut
+    // at the wrong place is a section that says nothing.
+    let end = rest.find("\n## ").unwrap_or(rest.len());
+    Some(rest[..end].to_string())
+}
+
+/// The crates under `crates/` whose `Cargo.toml` names a dependency.
+fn crates_depending_on(root: &Path, dependency: &str) -> Result<Vec<String>, String> {
+    let mut names = Vec::new();
+    let entries = match std::fs::read_dir(root.join("crates")) {
+        Ok(entries) => entries,
+        Err(e) => return Err(format!("crates/: {e}")),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("crates/: {e}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let manifest = path.join("Cargo.toml");
+        let Ok(text) = crate::tree::read_text(&manifest) else { continue };
+        if !text.contains(dependency) {
+            continue;
+        }
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
 /// The bounds in a file of Rust whose names say bytes, memory or steps.
 ///
 /// Three kinds of bound, and the rule is the same for all of them: a bound a
@@ -7713,6 +7800,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
     );
 
+    // The scaffolding section, and the crates it has to name. §281.
+    problems.extend(
+        the_scaffolding_section_names_every_crate_the_domain_touches(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     A promise a reader cannot follow is not a promise.")),
+    );
+
     // The trace's byte budget, and the memory budget it comes from. §207.
     problems.extend(
         the_trace_budget_is_derived_from_its_memory_budget(root)?
@@ -9162,6 +9256,51 @@ mod tests {
         // The gate looks for three budgets; this tree has none of them in
         // code, so what matters is that the fabricated one is among them.
         assert!(problems.iter().any(|p| p.contains("MAX_HISTORY_BYTES")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The scaffolding section names every crate that carries the domain.
+    ///
+    /// §281: the README told a reader to replace `crates/core` and
+    /// `crates/model`, and five more crates depend on the model — so the
+    /// section was a promise a reader could not follow.
+    #[test]
+    fn the_scaffolding_section_names_the_crates_the_domain_touches() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_scaffolding_section_names_every_crate_the_domain_touches(&root).expect("runs");
+        assert!(problems.is_empty(), "the section names the crates the domain touches: {problems:#?}");
+    }
+
+    /// A section that forgets a crate that depends on the model is caught.
+    ///
+    /// The fabricated tree has one crate that depends on the model, and a
+    /// section that does not name it.
+    #[test]
+    fn a_scaffolding_section_that_forgets_a_domain_crate_is_caught() {
+        let dir = crate::temp::dir("scaffold-forget").expect("a temporary folder");
+        let demo = dir.join("crates/demo");
+        std::fs::create_dir_all(&demo).expect("the fabricated tree");
+        std::fs::write(
+            demo.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\n[dependencies]\ncraftkit-model = { workspace = true }\n",
+        )
+        .expect("the fabricated manifest");
+        std::fs::write(
+            dir.join("README.md"),
+            "# a tree\n\n## Using it as a scaffold\n\n1. Replace `crates/model`.\n\n## Licence\n",
+        )
+        .expect("the fabricated README");
+
+        let problems = the_scaffolding_section_names_every_crate_the_domain_touches(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("crates/demo")),
+            "a crate the section forgets is not reported: {problems:#?}"
+        );
+        // And the crate it *does* name is not reported a second time.
+        assert!(
+            !problems.iter().any(|p| p.contains("crates/model")),
+            "a crate the section names is reported: {problems:#?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

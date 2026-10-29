@@ -174,10 +174,17 @@ looks missing.
 1. Copy the tree.
 2. Rename `craftkit` to your project (`craftkit-*` crates, `craftkit/N` format
    tag, `CRAFTKIT_*` environment variables, the control-channel folder).
-3. Replace `crates/core` and `crates/model` with your domain. Keep the layer
-   names, the error discipline and the deny attribute.
-4. Keep `crates/engine`'s boundary, `xtask`, `skills/` and `docs/recipes/`.
-   Those are the parts that keep working as the domain gets stranger.
+3. Replace the crates that carry craftkit's domain with yours: `crates/model`,
+   `crates/eval`, `crates/io`'s format, `crates/mcp`'s vocabulary, `crates/ui`,
+   and `crates/engine`'s command set and session. Those are the crates that
+   depend on `craftkit-model`, and the gate
+   `the_scaffolding_section_names_every_crate_the_domain_touches` checks that
+   this list keeps naming all of them.
+4. Keep `crates/foundation` — the generic half: the bounded readers, the
+   typed values, the parameter reader, the atomic writer, the temporary
+   folder and the undo stack — and `crates/core`'s time base. Keep `xtask`,
+   `skills/`, `docs/recipes/`, the agent doors and the crash reporter's
+   shape. Keep the layer names, the error discipline and the deny attribute.
 5. Delete what you do not need — but read `AGENTS.md` first, because most of it
    is about the mistakes you have not made yet.
 

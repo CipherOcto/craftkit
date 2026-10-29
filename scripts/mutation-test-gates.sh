@@ -7279,5 +7279,15 @@ swap crates/foundation/src/history.rs \
 expect_catch "foundation: the undo stack counts what it holds" \
     "cargo test -p craftkit-foundation --profile ci the_history_keeps_its_memory_within_a_budget"
 
+# --------------------------------------- the scaffolding section names the crates ----
+# Section 281. The README told a reader to replace two crates and keep the
+# engine's boundary, and five more crates depend on the model -- so the
+# section was a promise a reader could not follow.
+swap README.md \
+    "   \`crates/eval\`, \`crates/io\`'s format" \
+    "   \`crates/io\`'s format"
+expect_catch "docs: the scaffolding section forgets a crate the domain touches" \
+    "cargo xtask lists"
+
 restore
 finish

@@ -32638,6 +32638,131 @@ they use a page ✓.
 | **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the stack's own tests, in the crate that holds it | 1 mutation — §280 |
 
 
+## 281. The README promised a scaffolder a promise the tree cannot keep
+
+### The finding
+
+**The tree's own front door told a new application the wrong thing.**
+
+```text
+// README.md — before
+3. Replace `crates/core` and `crates/model` with your domain. Keep the layer
+   names, the error discipline and the deny attribute.
+4. Keep `crates/engine`'s boundary, `xtask`, `skills/` and `docs/recipes/`.
+   Those are the parts that keep working as the domain gets stranger.
+```
+
+**Six crates depend on `craftkit-model`** ✓ — and the step named **two** ✓, of
+which **one no longer even holds the domain** ✓ (the generic half left
+`craftkit-core` in §276 ✓, so what is left there is the time base and the
+identifiers ✓).
+
+So the section told a reader to replace the model and keep the engine — and
+the engine, the evaluator, the file format, the MCP vocabulary and the UI
+all name the document the reader had just replaced ✓. **A reader who
+followed the README exactly ended with a tree that does not compile** ✓.
+
+### Measured
+
+```text
+crates that depend on craftkit-model: engine, eval, io, mcp, model, ui
+crates the README named:            core, model
+crates the README named that carry the domain: model
+crates it missed:                   engine, eval, io, mcp, ui
+```
+
+And the coupling behind "keep the engine's boundary" ✓:
+
+```text
+crates/engine/src/commands.rs   26 mentions of craftkit_model
+crates/engine/src/crash.rs      19
+crates/engine/src/session.rs    23
+crates/engine/src/params.rs     10
+```
+
+**And the seam the survey proposed, measured** ✓ — a `Document` trait written
+in craftkit would have **31 methods** ✓ whose signatures name **nine of
+craftkit's own domain types** ✓ (`Node`, `NodeId`, `NodeKind`, `FrameRate`,
+`Tick`, `DocError`, `CoreError`, `RangeInclusive` ✓), and the evaluator's
+**18 functions** ✓ name `Document`, `NodeId`, `NodeState`, `Plan` and
+`Diagnostic` ✓.
+
+**So the trait cannot be craftkit's** ✓: implementing it for a PDF document
+means inventing a `Node` and a `NodeKind` ✓ — which is the domain ✓, not the
+seam ✓. **The trait has to be the application's own** ✓, and what craftkit
+can offer is the **mechanisms that are generic over it** ✓ — the undo stack
+(§278, §280 ✓), the transport ✓, the control protocol ✓, the log ✓, the
+crash reporter's shape ✓.
+
+### Why nothing else would have caught it
+
+- **The README was written before the tree moved.** `crates/core` held the
+  readers, the values and the writer when step 3 was written ✓, and the
+  model was one crate ✓ — so naming two crates was right **then** ✓ (§276
+  and §280 moved it ✓).
+- **Nothing reads the README's promises.** The gates read the tree ✓ — the
+  commands, the limits, the layers ✓ — and the README's scaffolding list is
+  prose about the tree ✓, so it drifted ✓ the way every other prose did ✓
+  (§145's bound-naming gate is the exception ✓, and it is about bounds ✓).
+- **The survey found it by reading** ✓ — the knowledge base's survey noticed
+  that the README "understates the work" ✓, and the tree's own record had no
+  row for it ✓.
+
+### The fix
+
+**The section says what a reader actually has to do, and a gate holds it
+there.**
+
+The steps now name **every crate that depends on the model** ✓ — and say
+which part of each one is craftkit's ✓ (`crates/io`'s format ✓,
+`crates/mcp`'s vocabulary ✓, `crates/engine`'s command set and session ✓) —
+and name the crate to **keep** ✓: `crates/foundation` ✓, the generic half ✓.
+
+And the gate `the_scaffolding_section_names_every_crate_the_domain_touches`
+checks it ✓ — against the **tree**, not against a list in the prose ✓: the
+crates are found by reading their `Cargo.toml` ✓, so a crate that starts
+depending on the model has to be added to the section ✓ or the gate says so ✓.
+
+The promise about the engine's boundary is gone ✓ — because it was the one
+promise the measurement does not support ✓.
+
+### What is not claimed
+
+- **The tree still cannot be scaffolded into a PDF editor by copying two
+  crates.** It cannot be ✓ — the measurement above is why ✓ — and the README
+  now says so ✓ instead of promising otherwise ✓.
+- **The gate does not say which crate to replace and which to keep.** It
+  says a crate the domain touches must be **named** ✓ — the judgement is
+  still prose ✓, and the numbers behind it are in the survey ✓.
+- **No mechanism moved.** This is a promise and a gate ✓ — the generic half
+  of the tree did not grow ✓ (§280 did that ✓, and it is measured ✓).
+
+### The lesson
+
+**A promise in a README is a promise in a README.**
+
+The tree had a rule for this before ✓ — *a limit in prose is the constant's
+value* ✓, *a bound is named in the prose* ✓ — and the scaffolding list was
+the one promise with **no rule behind it** ✓, so it drifted ✓ while every
+gate stayed green ✓.
+
+**And the rule for a promise about the tree is that it is checked against
+the tree.** Not against a list in the prose ✓ — the list is what drifted ✓.
+The crates are found by reading `Cargo.toml` ✓, so the check cannot drift
+with the prose ✓.
+
+**And a promise to keep something is the most expensive kind.** "Keep the
+engine's boundary" costs a reader **six crates of rewriting** ✓, and the
+measurement that shows it is cheap ✓: six `Cargo.toml` files ✓.
+
+**And the seam's size is a measurement, not an opinion.** A `Document`
+trait with 31 methods naming nine of craftkit's own types ✓ is not a seam ✓
+— it is the domain with another name ✓ — and that is worth knowing before
+anyone spends a month writing it ✓.
+
+| **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33250,6 +33375,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A published name is a name the command takes** | `a_published_name_is_a_name_the_command_takes` in `crates/engine/src/commands.rs` | 2 mutations — §277 |
 | **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/foundation/src/history.rs` | 1 mutation — §278 |
 | **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the foundation's own suite, which runs the stack's tests without the model | 1 mutation — §280 |
+| **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
