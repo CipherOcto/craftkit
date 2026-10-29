@@ -841,7 +841,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**268 tests.**
+**283 tests.**
 
 ### Not built
 
@@ -917,7 +917,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 268 tests
+cargo test          # 283 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1959,3 +1959,64 @@ missing.
 
 The file format is now eight versions long, and every one of them is a
 field that some port needed.
+
+---
+
+## 28. A task may outlive the process
+
+The job pool (§21.1) is for work that runs **here**: a queue, workers, a
+cancellation flag, and results the caller collects when the work is
+done. Everything about it is in-process, and the work is over when the
+worker returns.
+
+Not every job is like that. A generation is enqueued with a provider,
+gets the provider's own id, is polled, is written to a database so that
+it survives the application being closed, and is finished by an **event
+that arrives from outside** — hours later, in a process that has nothing
+to do with the one that asked for it.
+
+There was no way to say that with a pool: the pool owns its work.
+
+### What a task is
+
+A **task** is work with a **durable handle**:
+
+| | |
+|---|---|
+| it is registered here | and it may be registered by a process that is **not** the one that finishes it |
+| it has a state | pending, running, done, failed, cancelled — and the state moves in one direction |
+| it may carry a handle | the other end's own id: the provider's job id, the thing to ask about it with |
+| it is durable | the registry is written down and read back, so the list survives the process that made it |
+
+The rule that makes it worth having: **whoever gets there first finishes
+it**. This process may not have started the task at all.
+
+### The commands
+
+`task.add`, `task.list`, `task.start`, `task.attach`, `task.progress`,
+`task.complete`, `task.fail`, `task.cancel`, `task.save`, `task.load`.
+
+The registry is the session's own state, the way the selection and the
+tool are: a task is something the program is doing, not something the
+document holds. A host that wants the tasks to travel with the document
+writes them into the payload — the registry is JSON, and reading it back
+is a command.
+
+### The test that matters
+
+A task is started, written down, and the process ends. Another program
+reads the list back, and **finishes the task from outside**. That is
+the whole point, and it is a test rather than a claim.
+
+### What this says about the kit
+
+The survey of the artist's IDE called this "a new seam, and not a domain
+thing", and it was right. The seam is not about generations or about
+providers: it is about **work whose lifetime is not the program's**.
+
+It also says something about the job pool: the two are not rivals. A
+pool is for work that finishes here, and a task is for work that may not.
+A host that wants both has both, and the rule that keeps them apart is
+the same rule the lane and the pool have always had: the lane is for
+work that must finish, the pool is for work that may take a while, and a
+task is for work that may not finish at all.
