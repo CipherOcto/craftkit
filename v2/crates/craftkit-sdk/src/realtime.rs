@@ -55,7 +55,7 @@
 use std::cell::Cell;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 /// What a block did.
@@ -251,10 +251,7 @@ pub struct LaneRunner {
 
 impl std::fmt::Debug for LaneRunner {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("LaneRunner")
-            .field("report", &self.report())
-            .finish()
+        formatter.debug_struct("LaneRunner").field("report", &self.report()).finish()
     }
 }
 
@@ -413,10 +410,10 @@ mod tests {
         }
 
         fn run(&mut self, _frames: usize) -> Block {
-            if let Some(value) = self.mailbox.take() {
-                if let Ok(mut seen) = self.seen.lock() {
-                    seen.push(value);
-                }
+            if let Some(value) = self.mailbox.take()
+                && let Ok(mut seen) = self.seen.lock()
+            {
+                seen.push(value);
             }
             Block::Played
         }
