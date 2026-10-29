@@ -673,12 +673,23 @@ impl<'a> Shell<'a> {
                     }
                     craftkit_foundation::Value::Num(n) => {
                         let mut value = *n;
-                        let response = ui.add_enabled(
-                            enabled,
-                            egui::Slider::new(&mut value, -100.0..=100.0)
-                                .text(path.clone())
-                                .clamping(egui::SliderClamping::Never),
-                        );
+                        // The slider's range is the **property's own** range.
+                        //
+                        // §286: the UI used a hard-coded ±100 for every
+                        // number, and the model publishes the range in the
+                        // hint — so a property whose declared maximum is 1.0
+                        // had a rail that wrote 100, a hundred times what
+                        // the property says. The hint is the model's own
+                        // statement of the range, and the UI and the model
+                        // are meant to agree about it.
+                        let (min, max, step) = slider_range(&prop.hint);
+                        let mut slider = egui::Slider::new(&mut value, min..=max)
+                            .text(path.clone())
+                            .clamping(egui::SliderClamping::Never);
+                        if let Some(step) = step {
+                            slider = slider.step_by(step);
+                        }
+                        let response = ui.add_enabled(enabled, slider);
                         automation.publish(widget, response.rect, enabled);
                         if response.changed() {
                             edits.push((path.clone(), serde_json::Value::from(value)));
@@ -1241,6 +1252,26 @@ pub fn playhead_readout(frame: i64, seconds: f64) -> String {
 }
 
 /// Whether a widget is present and clickable at `name`.
+/// The range a number's editor draws, and the step it moves by.
+///
+/// **The property's own range** ✓ — the one the model publishes in its hint ✓
+/// — and the hard-coded ±100 only for a property that has no range to say ✓.
+/// §286.
+///
+/// A range that is not a range (the hint says `min > max` ✓) is refused here
+/// ✓ rather than handed to a widget that would panic on it ✓.
+fn slider_range(hint: &craftkit_model::PropHint) -> (f64, f64, Option<f64>) {
+    let range = match hint {
+        craftkit_model::PropHint::Slider { min, max } => Some((*min, *max, None)),
+        craftkit_model::PropHint::Scaled { min, max, step } => Some((*min, *max, Some(*step))),
+        _ => None,
+    };
+    match range {
+        Some((min, max, step)) if min <= max => (min, max, step),
+        _ => (-100.0, 100.0, None),
+    }
+}
+
 pub fn clickable(registry: &Automation, name: &str) -> bool {
     matches!(registry.known(name), Widget::Found { enabled: true, .. })
 }
@@ -2211,6 +2242,80 @@ mod tests {
             ratio < 8.0,
             "the properties panel took {ratio:.1}x as long with 64 KiB keyframe values as with 1 byte: \
              it is copying the keyframe values it does not draw"
+        );
+    }
+
+    /// The number editor's rail is the property's own range.
+    ///
+    /// §286: the UI drew every number on a hard-coded ±100 rail, and the
+    /// model publishes the range in the hint — so a property whose declared
+    /// maximum is 1.0 had a rail that wrote **100**, a hundred times what the
+    /// property says. The test clicks the far end of the rail and asks what
+    /// the document says afterwards.
+    #[test]
+    fn a_number_editor_draws_the_range_the_property_declares() {
+        let mut session = Session::sample();
+        let id = session.document().nodes[0].id;
+        // The sample's `amount` property is published with a slider hint of
+        // 0.0 ..= 1.0.
+        let hint = session
+            .node(id)
+            .and_then(|n| n.props.flatten().into_iter().find(|(path, _)| path.to_string() == "amount"))
+            .map(|(_, prop)| prop.hint)
+            .expect("the sample has an `amount` property");
+        let (min, max) = match hint {
+            craftkit_model::PropHint::Slider { min, max } => (min, max),
+            other => panic!("the sample's `amount` has no slider hint: {other:?}"),
+        };
+
+        let ctx = Context::default();
+        let tokens = Tokens::dark();
+        let mut shell = Shell::new(&mut session);
+        shell.state.selected = Some(id);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 600.0));
+        let input = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        for _ in 0..crate::raster::FRAMES {
+            let _ = ctx.run(input.clone(), |ctx| shell.show(ctx, &tokens));
+        }
+
+        // The handle is dragged to the far end of the rail, which is where a
+        // slider writes its **maximum** -- so the value that lands there is
+        // the range's own maximum, and nothing else.
+        let name = AutomationId::property(id, "amount").as_str().to_string();
+        let rect = shell.automation.rect(&name).expect("the editor is on the screen");
+        let start = rect.center();
+        let end = egui::Pos2::new(rect.right() + 200.0, rect.center().y);
+        let mut tap = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        tap.events.push(egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        let _ = ctx.run(tap, |ctx| shell.show(ctx, &tokens));
+        let mut dragged = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        dragged.events.push(egui::Event::PointerMoved(end));
+        let _ = ctx.run(dragged, |ctx| shell.show(ctx, &tokens));
+        let mut release = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+        release.events.push(egui::Event::PointerButton {
+            pos: end,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let _ = ctx.run(release, |ctx| shell.show(ctx, &tokens));
+
+        let value = session
+            .node(id)
+            .and_then(|n| n.props.flatten().into_iter().find(|(path, _)| path.to_string() == "amount"))
+            .map(|(_, prop)| match &prop.value {
+                craftkit_foundation::Value::Num(v) => *v,
+                other => panic!("the amount is not a number: {other:?}"),
+            })
+            .expect("the amount is still there");
+        assert!(
+            value >= min - f64::EPSILON && value <= max + f64::EPSILON,
+            "the editor wrote {value}, outside the property's own range {min}..={max}"
         );
     }
 

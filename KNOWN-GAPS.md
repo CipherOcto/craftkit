@@ -33249,6 +33249,189 @@ sharing one wording ✓.
 | **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
 
 
+## 286. The properties panel drew every number on a rail the model never declared
+
+### The finding
+
+**The model publishes each property's range. The UI never read it.**
+
+```rust
+// crates/model/src/property.rs — the model's own statement
+pub enum PropHint {
+    /// A number with a slider; carries the range so the UI and any validator
+    /// agree instead of drifting apart.
+    Slider { min: f64, max: f64 },
+    ...
+}
+```
+
+**And the panel drew every number on the same rail** ✓:
+
+```rust
+// crates/ui/src/shell.rs — before
+egui::Slider::new(&mut value, -100.0..=100.0)
+    .text(path.clone())
+    .clamping(egui::SliderClamping::Never),
+```
+
+**So a property whose declared maximum is 1.0 had a rail that wrote 100** ✓
+— a hundred times what the property says ✓. The sample's `amount` property
+is published with `Slider { min: 0.0, max: 1.0 }` ✓ (`crates/model/src/document.rs:150`)
+✓, and the panel's rail ended at **+100** ✓.
+
+**The hint was never read anywhere in `crates/ui`** ✓ — `grep` finds no
+`prop.hint` in the crate ✓.
+
+### Measured
+
+The handle dragged to the far end of the rail — where a slider writes its
+**maximum** ✓:
+
+```text
+the editor wrote 100, outside the property's own range 0..=1
+```
+
+And the value 100 is a *real* level ✓: the plan reported `level_out=100` ✓
+for a property whose declared maximum is 1.0 ✓.
+
+### Why nothing else would have caught it
+
+- **The hint is advisory.** The model's own doc calls it *"advisory"* ✓ —
+  and no validator enforces it ✓, so nothing complained when the UI wrote
+  outside it ✓.
+- **The panel's tests counted editors, not ranges.**
+  `the_panel_publishes_one_editor_for_each_property_and_no_other` ✓,
+  `every_property_of_the_selected_node_has_an_editor` ✓ and
+  `a_locked_property_is_drawn_greyed` ✓ — all of them ask *whether* an
+  editor is there ✓, never *what range* it has ✓.
+- **Nothing in the tree read `PropHint` for editing** ✓ — the model and the
+  io crate mention it ✓, the UI never did ✓.
+
+### The fix
+
+**The rail is the property's own rail.**
+
+`slider_range` reads the hint ✓ — `Slider { min, max }` ✓ and
+`Scaled { min, max, step }` ✓ — and falls back to the old ±100 only for a
+property that has **no** range to say ✓.
+
+A range that is not a range (the hint says `min > max` ✓) is refused ✓
+rather than handed to a widget that would panic on it ✓.
+
+And the test **drags the handle** ✓ to the far end of the rail ✓ — where a
+slider writes its maximum ✓ — and asks what the document says afterwards ✓.
+With the old rail the answer is **100** ✓; with the property's own rail it
+is **1.0** ✓.
+
+### What is not claimed
+
+- **The hint is still advisory.** The model does not refuse a value outside
+  the range ✓ — it publishes the range ✓ and the UI now draws it ✓.
+- **A property with no hint still draws ±100** ✓ — the fallback is
+  unchanged ✓, and it is the only range such a property has ✓.
+- **The tree's other editors are untouched** ✓ — the checkbox ✓, the colour
+  button ✓, the text field ✓.
+
+### The lesson
+
+**A model that publishes a range and a UI that invents one are two
+answers to one question.**
+
+The hint's own doc says what it is for ✓ — *"carries the range so the UI
+and any validator agree instead of drifting apart"* ✓ — and the UI never
+read it ✓, so the agreement it promised was with nobody ✓.
+
+**And a widget's range is part of what the widget publishes.** The panel
+published an editor for every property ✓ and the registry recorded *that*
+✓ — but not the range ✓, so an agent asking "what can this editor write?"
+had no answer ✓.
+
+**And the test has to move the widget, not count it.** Counting editors ✓
+passed with a rail a hundred times too wide ✓; dragging the handle ✓ is
+what makes the range visible ✓.
+
+| **The number editor draws the range the property declares** | `a_number_editor_draws_the_range_the_property_declares` in `crates/ui/src/shell.rs` | 1 mutation — §286 |
+
+## 287. The writer writes files the tree's own reader refuses — **open**
+
+### The finding
+
+**The tree promises that the writer never writes a file its reader would
+refuse. It does.**
+
+```text
+crates/io/src/format.rs: "The text is written **through a limit**, so this
+build never produces a file its own reader would refuse."
+crates/io/src/store.rs: "The writer must not write what the reader refuses."
+```
+
+**The writer's only limit is size** ✓ (`MAX_FILE_BYTES` ✓); the reader's
+real limit is **serde's JSON nesting depth** ✓ — 128 levels ✓ — and the
+writer does not know it ✓.
+
+### Measured
+
+Eight nested property groups ✓ (the model allows sixteen path segments ✓)
+and a value nested forty-eight levels ✓ (the tree's own maximum ✓):
+
+```text
+model validate : Ok(())
+craftkit_io::save_text: Ok (4866 bytes)
+craftkit_io::load_text: Err(the file is not valid JSON: recursion limit exceeded at line 212 column 14)
+```
+
+**The file the writer produced is refused by the tree's own CLI door** ✓:
+
+```text
+craftkit-cli: the file is not valid JSON: recursion limit exceeded at line 212 column 14
+```
+
+And the boundaries, measured one dimension at a time ✓:
+
+| groups | value depth | round-trips |
+|---:|---:|---|
+| 7 | 48 | yes |
+| 8 | 48 | **no** |
+| 15 | 36 | yes |
+| 15 | 37 | **no** |
+
+A group costs three JSON levels ✓ and a value level two ✓ — so the reader's
+cap is hit at about 120 ✓.
+
+### Why nothing else would have caught it
+
+- **The two limits are in different crates.** The size limit is the tree's
+  ✓ (`MAX_FILE_BYTES` ✓) and the depth limit is **serde's** ✓ — nothing in
+  the tree knew they were the same question ✓.
+- **The tests kept the two dimensions apart.**
+  `the_deepest_value_the_tree_accepts_round_trips` ✓ writes the deepest
+  legal value ✓ but in a **default** group ✓ (depth 1 ✓), and
+  `a_designs_file_is_bounded_by_the_design_it_holds` ✓ nests groups fifteen
+  deep ✓ but with scalar values ✓. Neither combines them ✓.
+- **The refusal is reported as "not valid JSON"** ✓ — and the file **is**
+  valid JSON ✓; the tree refuses its own depth ✓. That is §260's complaint
+  recurring ✓.
+
+### What a fix would touch
+
+**Not done yet.** Two ways, and the tree's own rules point at the first:
+
+- **The writer refuses a document it cannot write** ✓ — §51's rule ✓ (*"the
+  writer will not write a file the reader would refuse, and it will not
+  build the text to find out"*) ✓ — by measuring the **JSON depth** of the
+  document it is about to write ✓, against a limit the tree owns ✓, below
+  serde's ✓.
+- **The reader says what it refused** ✓ — a depth refusal in the tree's own
+  words ✓, not "not valid JSON" ✓.
+
+**And the deeper question is the model's** ✓: the model accepts a design
+that cannot be saved ✓, so the trap stays until the model's own limits
+account for the format's expansion ✓ — the same shape as §231's decision ✓
+(*the cap is the worst case over the expansions* ✓).
+
+| **The writer never writes a file the reader refuses** | **nothing** — this is open: the finding is measured and reproduced, and no gate holds it yet | — §287 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33866,6 +34049,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
 | **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
 | **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
+| **The number editor draws the range the property declares** | `a_number_editor_draws_the_range_the_property_declares` in `crates/ui/src/shell.rs` | 1 mutation — §286 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

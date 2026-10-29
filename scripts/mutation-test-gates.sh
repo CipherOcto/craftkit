@@ -3854,17 +3854,8 @@ expect_catch "ui: the panel publishes a locked property's editor as enabled" \
 # The panel drew a locked property's editor in full colour, which is what the
 # model says it does not do. §124.
 swap crates/ui/src/shell.rs \
-    '                        let response = ui.add_enabled(
-                            enabled,
-                            egui::Slider::new(&mut value, -100.0..=100.0)
-                                .text(path.clone())
-                                .clamping(egui::SliderClamping::Never),
-                        );' \
-    '                        let response = ui.add(
-                            egui::Slider::new(&mut value, -100.0..=100.0)
-                                .text(path.clone())
-                                .clamping(egui::SliderClamping::Never),
-                        );'
+    '                        let response = ui.add_enabled(enabled, slider);' \
+    '                        let response = ui.add(slider);'
 expect_catch "ui: the panel draws a locked property's editor in full colour" \
     "cargo test -p craftkit-ui --profile ci a_locked_property_is_drawn_greyed"
 
@@ -7330,6 +7321,16 @@ swap crates/eval/src/evaluate.rs \
     '                format!("`amount` is a {}, not a number; using 1.0", r.value.type_name()),'
 expect_catch "eval: the diagnostic promises a value the code never uses" \
     "cargo test -p craftkit-eval --profile ci a_wrong_amount_leaves_the_level_as_it_was"
+
+# --------------------------------------- a number editor draws the property's range ----
+# Section 286. The properties panel drew every number on a hard-coded +-100
+# rail, and the model publishes the range in the hint -- so a property whose
+# declared maximum is 1.0 had a rail that wrote 100.
+swap crates/ui/src/shell.rs \
+    '                        let (min, max, step) = slider_range(&prop.hint);' \
+    '                        let (min, max, step) = (-100.0, 100.0, None);'
+expect_catch "ui: the number editor draws a range the property never declared" \
+    "cargo test -p craftkit-ui --profile ci a_number_editor_draws_the_range_the_property_declares"
 
 restore
 finish
