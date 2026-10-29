@@ -57,7 +57,7 @@ contribution is the same shape:
 | | |
 |---|---|
 | **id** | unique, and well formed |
-| **capability** | what sort of thing it is — `command`, `node kind`, `tool`, `panel`, `format` |
+| **capability** | what sort of thing it is — `command`, `node kind`, `tool`, `panel`, `evaluator`, `format` |
 | **layer** | which group of contributions it belongs to |
 
 ```rust
@@ -89,12 +89,13 @@ checks to drift, and the drift is invisible until two of them disagree.
 | **tool** | a gesture that runs a command | that the command exists |
 | **panel** | a window's worth of commands | that the commands exist |
 | **layer** | a group of contributions that depend on each other | that the graph is acyclic and complete |
+| **evaluator** | what a whole document means | that the layer exists |
 | **format** | one version of the file format | that the layer exists |
 | **migration** | one step from one version to the next | that it is a step, and that the chain has no hole |
 
-Seven seams, **one** registry, **one** check on each, **one** manifest, **one**
-projection. A tree that has seven kinds of extension has seven registries
-written by hand — seven copies of the same four things, and the drift is
+Eight seams, **one** registry, **one** check on each, **one** manifest, **one**
+projection. A tree that has eight kinds of extension has eight registries
+written by hand — eight copies of the same four things, and the drift is
 invisible until two of them disagree.
 
 The **node kind** is the seam that changes the shape of a tree. A node names
@@ -286,7 +287,53 @@ migrated and read.
 
 ---
 
-## 8. The raw door
+## 8. The evaluator: a kind knows what its nodes mean
+
+The old tree's `NodeKind` is an enum, and every place that matches on it has
+to be updated when it grows. v2's node names a **kind**, and the kind is
+contributed — and the kind carries its **own evaluation**:
+
+```rust
+#[derive(NodeKind)]
+#[node_kind(kind = "geometry.rect", label = "Rectangle", layer = "geometry", evaluates)]
+pub struct RectKind;
+
+impl RectKind {
+    fn paint(node: &Node, canvas: &mut dyn Canvas) { … }
+    fn hit(node: &Node, point: Point) -> bool { … }
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> { … }
+}
+```
+
+So "add a kind" is "write the kind", not "edit an enum and six matches".
+
+There is a second kind of evaluator, because a kind can only speak about
+**its own nodes** and sometimes the question is about the whole document. An
+**evaluator** is a contribution like every other — an id, a layer, and the
+ecosystem checks the layer is there:
+
+```rust
+#[derive(Evaluator)]
+#[evaluator(id = "geometry.totalarea", label = "Total area", layer = "geometry")]
+pub struct AreaEvaluator;
+
+impl AreaEvaluator {
+    fn evaluate(document: &Document) -> Plan { … }
+}
+```
+
+The **plan** is the sum: what the kinds say about their nodes, then what the
+evaluators say about the document. It is a **value**, not a drawing — what to
+do with it is the front end's business.
+
+What this is **not**: a kernel. The old tree's `craftkit-kernel` has a panic
+guard, a numeric core and a plan of its own shape, and none of that is
+rebuilt here. What is rebuilt is the **seam**: where a kind's evaluation
+comes from, and the fact that the core never matches on a kind.
+
+---
+
+## 9. The raw door
 
 Every parameter in v2 is a **type**, and a type is checked. One is not: a
 value of any shape, for the contributions that cannot offer a type — a
@@ -299,29 +346,30 @@ hole.
 
 ---
 
-## 9. What is here, and what is not
+## 10. What is here, and what is not
 
 ### Built
 
 - `crates/craftkit-sdk` — the whole surface a plugin needs: the typed
   readers, the one registry, the command, the seams, the ecosystem, the
   projection, the session, the document and the file format.
-- `crates/craftkit-derive` — seven derives, with tests on the rules they
+- `crates/craftkit-derive` — eight derives, with tests on the rules they
   hold.
 - `crates/craftkit-plugin-hello` — a plugin that adds commands.
 - `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
-  node, a tool, a panel and a command**.
+  node, a tool, a panel, a command and an evaluator**.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**63 tests.**
+**67 tests.**
 
 ### Not built
 
-- **The evaluator.** v2's document has nodes and a rectangle; it has no
-  geometry, no plan and no kernel. The old tree's `craftkit-eval` and
-  `craftkit-kernel` are untouched, and the redesign says nothing about them
-  yet.
+- **The kernel.** v2's document has nodes and a rectangle; it has no numeric
+  core, no panic guard and no geometry engine. The old tree's
+  `craftkit-kernel` is untouched. What v2 has is the **seam** the kernel
+  would plug into: a kind carries its own evaluation, and the plan is a
+  value.
 - **The old tree's format.** The old tree's versioned `.craftkit` format,
   with its one-file-per-change discipline, is untouched. What v2 has is a
   format that is a **contribution**, with migrations that are contributions,
@@ -338,7 +386,7 @@ around it.
 
 ---
 
-## 10. What the redesign would do to the rest of the tree
+## 11. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -374,22 +422,22 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 11. Running it
+## 12. Running it
 
 ```bash
 cd v2
-cargo test          # 63 tests
+cargo test          # 67 tests
 cargo run -p craftkit-studio
 ```
 
 The application prints the ecosystem (the layers, kinds, tools, panels,
-formats), the manifest an agent would be told, the menu by
+formats and evaluators), the manifest an agent would be told, the menu by
 capability, then runs a command from a plugin, adds a **kind of node** from
 another plugin, draws the document **through the kinds**, hit-tests it
 **through the kinds**, prints the **plan**, and finally makes a command at
 run time and runs that too.
 
-## 12. Honest notes
+## 13. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
@@ -406,6 +454,10 @@ run time and runs that too.
   not read the source at all, so there is no second reader to keep in step.
   This is the problem phase one had, and it is *gone* in v2: the compiler is
   the only reader.
+- **The plan is a value, not a drawing.** Nothing renders it, and nothing
+  checks it against a rule. The old tree's `craftkit-eval` had a plan with
+  a shape and a kernel behind it; what is here is the **place a plan comes
+  from**, which is the part the enum made hard.
 - **The document model is still small.** Two versions of the format differ
   by one flag, because the document has one kind of node and a rectangle.
   The *seam* is the thing being demonstrated: a version is a contribution,

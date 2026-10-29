@@ -487,6 +487,7 @@ fn unused_kind() -> NodeKindSpec {
         layer: "core",
         paint: |_node, _canvas| {},
         hit: |_node, _point| false,
+        evaluate: None,
     }
 }
 
@@ -592,4 +593,67 @@ fn a_document_is_saved_and_opened() {
     assert_eq!(other.document().nodes[0].name, "rect");
 
     let _ = std::fs::remove_file(&path);
+}
+
+// ----------------------------------------------------------- the evaluator --
+
+/// A node kind carries its own evaluation.
+///
+/// The core does not know what a rectangle is, so it asks the kind, and
+/// gets an area back.
+#[test]
+fn a_kind_evaluates_its_own_nodes() {
+    let ecosystem = ecosystem();
+    let mut session = ecosystem.session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 3.0, "height": 4.0 }))
+        .expect("the rectangle is added");
+    let plan = session.evaluate();
+    let item = plan.item(1).expect("the node is in the plan");
+    assert_eq!(item.kind, "geometry.rect");
+    assert_eq!(item.value["area"], json!(12.0), "{:?}", plan.to_json());
+}
+
+/// The evaluator is a contribution, and a plugin's evaluator is in the
+/// registry.
+#[test]
+fn an_evaluator_is_a_contribution() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.evaluators.get("core.nodecount").is_some(), "{:?}", ecosystem.evaluators.ids());
+    assert!(ecosystem.evaluators.get("geometry.totalarea").is_some(), "{:?}", ecosystem.evaluators.ids());
+    assert!(ecosystem.evaluators.capabilities().contains(&"evaluator"));
+}
+
+/// An evaluator says something about the whole document, which a kind
+/// cannot.
+#[test]
+fn an_evaluator_speaks_about_the_whole_document() {
+    let ecosystem = ecosystem();
+    let mut session = ecosystem.session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 3.0, "height": 4.0 }))
+        .expect("the rectangle is added");
+    let plan = session.evaluate();
+    let area = plan
+        .items
+        .iter()
+        .find(|item| item.kind == "geometry.totalarea")
+        .expect("the plugin's evaluator said something");
+    assert_eq!(area.value["area"], json!(12.0), "{:?}", plan.to_json());
+    let count = plan
+        .items
+        .iter()
+        .find(|item| item.kind == "core.count")
+        .expect("the core's evaluator said something");
+    assert_eq!(count.value["nodes"], json!(1));
+}
+
+/// A node whose kind is not linked in is not in the plan, and the core does
+/// not know or care which kinds those are.
+#[test]
+fn a_node_of_an_unknown_kind_is_not_in_the_plan() {
+    let mut document = craftkit_sdk::Document::new("stranger");
+    document.add_node("mystery", "not.a.kind", craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0));
+    let plan = craftkit_sdk::plan::evaluate(&document, &crate::ecosystem().kinds);
+    assert!(plan.items.is_empty(), "{:?}", plan.to_json());
 }

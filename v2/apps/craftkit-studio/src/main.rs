@@ -21,6 +21,7 @@ fn main() {
     println!("   tools:  {}", ecosystem.tools.ids().join(", "));
     println!("   panels: {}", ecosystem.panels.ids().join(", "));
     println!("   formats: {}", ecosystem.formats.ids().join(", "));
+    println!("   evaluators: {}", ecosystem.evaluators.ids().join(", "));
 
     println!("\n── the manifest (what an agent is told)");
     for line in ecosystem.projection().manifest() {
@@ -67,6 +68,11 @@ fn main() {
     match hit {
         Some(node) => println!("   the point is inside `{}`", node.name),
         None => println!("   the point is in nothing"),
+    }
+
+    println!("\n── the plan: what the document means, as the kinds say it");
+    for item in session.evaluate().items {
+        println!("   {} {} {}", item.kind, item.node, item.value);
     }
 
     println!("\n── a command made while the program runs");

@@ -245,6 +245,11 @@ pub struct NodeKindSpec {
     pub paint: fn(&Node, &mut dyn Canvas),
     /// Whether a point is inside it.
     pub hit: fn(&Node, Point) -> bool,
+    /// What the node **means**, in the plan.
+    ///
+    /// The kind's own evaluation: it turns a node into a value, or says
+    /// nothing, and the core never matches on a kind to work it out.
+    pub evaluate: Option<fn(&Node, &Document) -> Option<serde_json::Value>>,
 }
 
 // The link collects node kinds here.

@@ -20,8 +20,15 @@
 //! contains one can be saved, loaded and edited by a program that has never
 //! heard of it.
 
-use craftkit_derive::{Command, Layer, NodeKind, Panel, Tool};
-use craftkit_sdk::{Canvas, Colour, EngineError, Node, Number, Outcome, Point, Rect, Session, Text};
+use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
+use craftkit_sdk::{
+    Canvas, Colour, Document, EngineError, Node, Number, Outcome, Point, Rect, Session, Text,
+};
+
+// The plugin's own JSON value type. It uses the SDK's re-export, so its
+// dependency list is the SDK and the macro — and nothing else.
+use craftkit_sdk::serde_json;
+use craftkit_sdk::{Plan, PlanItem};
 
 /// The geometry layer.
 ///
@@ -33,7 +40,7 @@ pub struct GeometryLayer;
 
 /// A rectangle.
 #[derive(NodeKind)]
-#[node_kind(kind = "geometry.rect", label = "Rectangle", layer = "geometry")]
+#[node_kind(kind = "geometry.rect", label = "Rectangle", layer = "geometry", evaluates)]
 pub struct RectKind;
 
 impl RectKind {
@@ -46,6 +53,18 @@ impl RectKind {
     /// Whether a point is inside a rectangle.
     fn hit(node: &Node, point: Point) -> bool {
         node.rect.contains(point)
+    }
+
+    /// What a rectangle **means**, in the plan.
+    ///
+    /// The kind's own evaluation: the core does not know what a rectangle
+    /// is, so it asks, and gets an area and a size back.
+    fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "area": node.rect.w * node.rect.h,
+            "width": node.rect.w,
+            "height": node.rect.h,
+        }))
     }
 }
 
@@ -99,3 +118,32 @@ impl AddRectangle {
 #[derive(Panel)]
 #[panel(id = "panel.shapes", label = "Shapes", layer = "geometry", commands("geometry.rectangle"))]
 pub struct ShapesPanel;
+
+/// The evaluator that measures the document's rectangles.
+///
+/// An **evaluator** is a contribution like every other: it has an id, it
+/// has a layer, and the ecosystem checks the layer is there. It says
+/// something about the **whole document**, which is what a kind cannot do:
+/// a kind may only speak about its own nodes.
+#[derive(Evaluator)]
+#[evaluator(id = "geometry.totalarea", label = "Total area", layer = "geometry")]
+pub struct AreaEvaluator;
+
+impl AreaEvaluator {
+    /// Add up the area of every rectangle.
+    fn evaluate(document: &Document) -> Plan {
+        let mut plan = Plan::new();
+        let area: f64 = document
+            .nodes
+            .iter()
+            .filter(|node| node.kind == "geometry.rect")
+            .map(|node| node.rect.w * node.rect.h)
+            .sum();
+        plan.items.push(PlanItem {
+            node: 0,
+            kind: "geometry.totalarea".to_string(),
+            value: serde_json::json!({ "area": area }),
+        });
+        plan
+    }
+}

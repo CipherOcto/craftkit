@@ -60,8 +60,10 @@ pub mod contribution;
 pub mod document;
 pub mod ecosystem;
 pub mod error;
+pub mod evaluator;
 pub mod format;
 pub mod params;
+pub mod plan;
 pub mod seams;
 pub mod session;
 
@@ -70,8 +72,10 @@ pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{Canvas, Colour, Document, Node, NodeKindSpec, Point, RecordingCanvas, Rect};
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
+pub use evaluator::EvaluatorSpec;
 pub use format::{FormatSpec, FormatValue, MigrationSpec};
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
+pub use plan::{Plan, PlanItem};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use session::{HistoryEntry, Session};
 

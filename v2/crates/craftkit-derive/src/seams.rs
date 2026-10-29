@@ -23,6 +23,8 @@ pub struct SeamArgs {
     pub kind: Option<LitStr>,
     pub name: Option<LitStr>,
     pub list: Vec<LitStr>,
+    /// A flag: the kind has an evaluation of its own.
+    pub evaluates: bool,
 }
 
 impl Parse for SeamArgs {
@@ -62,6 +64,10 @@ impl Parse for SeamArgs {
                 "name" => {
                     input.parse::<Token![=]>()?;
                     args.name = Some(input.parse::<LitStr>()?);
+                }
+                "evaluates" => {
+                    // A flag: the kind brings its own evaluation.
+                    args.evaluates = true;
                 }
                 other => {
                     // A list: `requires("core")` or `commands("a", "b")`.
@@ -134,6 +140,18 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, kind.span());
 
+    // The evaluation, if the kind has one. A kind that does not evaluate
+    // says nothing in the plan, and the node is simply not in it.
+    let evaluate = if args.evaluates {
+        quote! {
+            evaluate: Some(|node, document| #name::evaluate(node, document)),
+        }
+    } else {
+        quote! {
+            evaluate: None,
+        }
+    };
+
     Ok(quote! {
         #[doc = #doc_literal]
         pub static #static_ident: #sdk::NodeKindSpec = #sdk::NodeKindSpec {
@@ -142,6 +160,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             layer: #layer,
             paint: |node, canvas| #name::paint(node, canvas),
             hit: |node, point| #name::hit(node, point),
+            #evaluate
         };
 
         #sdk::inventory::submit! {
@@ -217,6 +236,40 @@ pub fn expand_panel(input: syn::DeriveInput) -> Result<TokenStream2> {
             label: #label,
             layer: #layer,
             commands: &[#(#commands),*],
+        };
+
+        #sdk::inventory::submit! {
+            #sdk::Registration { item: &#static_ident }
+        }
+    })
+}
+
+/// Write an evaluator.
+///
+/// The evaluator's own `evaluate` method is the evaluation, and the macro
+/// writes the spec and the registration.
+pub fn expand_evaluator(input: syn::DeriveInput) -> Result<TokenStream2> {
+    let sdk = sdk_root();
+    let name = input.ident.clone();
+    let args = args_of(&input, "evaluator")?;
+    let id = the_id(&args, "evaluator")?;
+    let label = match &args.label {
+        Some(label) => LitStr::new(&label.value(), label.span()),
+        None => LitStr::new(&id.value(), id.span()),
+    };
+    let layer = the_layer(&args);
+    let static_ident = screaming(&name);
+    let doc = doc_of(&input.attrs);
+    let doc_literal = LitStr::new(&doc, id.span());
+
+    Ok(quote! {
+        #[doc = #doc_literal]
+        pub static #static_ident: #sdk::EvaluatorSpec = #sdk::EvaluatorSpec {
+            id: #id,
+            label: #label,
+            layer: #layer,
+            doc: #doc_literal,
+            evaluate: |document| #name::evaluate(document),
         };
 
         #sdk::inventory::submit! {

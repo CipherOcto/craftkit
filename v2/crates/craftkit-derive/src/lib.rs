@@ -126,6 +126,16 @@ pub fn derive_panel(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Declare an evaluator: something that says what a whole document means.
+#[proc_macro_derive(Evaluator, attributes(evaluator))]
+pub fn derive_evaluator(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    match seams::expand_evaluator(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
 /// Declare a layer: a group of contributions that depend on each other.
 #[proc_macro_derive(Layer, attributes(layer))]
 pub fn derive_layer(input: TokenStream) -> TokenStream {

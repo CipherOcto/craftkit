@@ -24,6 +24,7 @@
 use crate::command::CommandSpec;
 use crate::contribution::{Contribution, Registry, RegistryError};
 use crate::document::NodeKindSpec;
+use crate::evaluator::EvaluatorSpec;
 use crate::format::{FormatSpec, MigrationSpec};
 use crate::seams::{LayerSpec, PanelSpec, ToolSpec};
 use crate::session::Session;
@@ -121,6 +122,8 @@ pub struct Ecosystem {
     pub formats: Registry<FormatSpec>,
     /// The steps between them.
     pub migrations: Registry<MigrationSpec>,
+    /// The evaluators: what a whole document means.
+    pub evaluators: Registry<EvaluatorSpec>,
 }
 
 impl Ecosystem {
@@ -134,6 +137,7 @@ impl Ecosystem {
             panels: Registry::new(),
             formats: Registry::new(),
             migrations: Registry::new(),
+            evaluators: Registry::new(),
         }
     }
 
@@ -150,6 +154,7 @@ impl Ecosystem {
             panels: Registry::from_inventory()?,
             formats: Registry::from_inventory()?,
             migrations: Registry::from_inventory()?,
+            evaluators: Registry::from_inventory()?,
         };
         ecosystem.validate()?;
         Ok(ecosystem)
@@ -286,6 +291,7 @@ impl Ecosystem {
         check_layers(&self.panels, &self.layers)?;
         check_layers(&self.formats, &self.layers)?;
         check_layers(&self.migrations, &self.layers)?;
+        check_layers(&self.evaluators, &self.layers)?;
         Ok(())
     }
 
@@ -319,6 +325,7 @@ impl Ecosystem {
             self.kinds.clone(),
             self.formats.clone(),
             self.migrations.clone(),
+            self.evaluators.clone(),
         )
     }
 
@@ -461,6 +468,9 @@ impl<'a> Projection<'a> {
         }
         for tool in self.ecosystem.tools.all() {
             lines.push(format!("tool {} in {} — runs {}", tool.id, tool.layer, tool.command));
+        }
+        for evaluator in self.ecosystem.evaluators.all() {
+            lines.push(format!("evaluator {} in {} — {}", evaluator.id, evaluator.layer, evaluator.doc));
         }
         for panel in self.ecosystem.panels.all() {
             lines.push(format!(

@@ -42,8 +42,10 @@ use crate::command::CommandSpec;
 use crate::contribution::Registry;
 use crate::document::{Document, NodeKindSpec};
 use crate::error::{EngineError, Outcome};
+use crate::evaluator::EvaluatorSpec;
 use crate::format::{FormatSpec, MigrationSpec};
 use crate::params::Params;
+use crate::plan::{self, Plan};
 
 /// One step of the history.
 #[derive(Debug, Clone)]
@@ -61,6 +63,7 @@ pub struct Session {
     kinds: Registry<NodeKindSpec>,
     formats: Registry<FormatSpec>,
     migrations: Registry<MigrationSpec>,
+    evaluators: Registry<EvaluatorSpec>,
     document: Document,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
@@ -75,6 +78,7 @@ impl Session {
             kinds,
             formats: Registry::new(),
             migrations: Registry::new(),
+            evaluators: Registry::new(),
             document: Document::new("untitled"),
             history: Vec::new(),
             log: Vec::new(),
@@ -91,8 +95,9 @@ impl Session {
         kinds: Registry<NodeKindSpec>,
         formats: Registry<FormatSpec>,
         migrations: Registry<MigrationSpec>,
+        evaluators: Registry<EvaluatorSpec>,
     ) -> Self {
-        Session { formats, migrations, ..Session::new(commands, kinds) }
+        Session { formats, migrations, evaluators, ..Session::new(commands, kinds) }
     }
 
     /// The versions of the format this session knows.
@@ -127,6 +132,23 @@ impl Session {
     /// here, inside the snapshot the engine took.
     pub fn document_mut(&mut self) -> &mut Document {
         &mut self.document
+    }
+
+    /// What the document means, as the kinds say it.
+    ///
+    /// The core does not evaluate: it asks each node's kind, and the plan
+    /// is what comes back. A node whose kind is not linked in is not in the
+    /// plan.
+    pub fn evaluate(&self) -> Plan {
+        let mut plan = plan::evaluate(&self.document, &self.kinds);
+        // The evaluators speak about the whole document, so their items
+        // come after the kinds' ones: the document's own nodes first, then
+        // what is said about the document as a whole.
+        for evaluator in self.evaluators.all() {
+            let theirs = (evaluator.evaluate)(&self.document);
+            plan.items.extend(theirs.items);
+        }
+        plan
     }
 
     /// The history.
