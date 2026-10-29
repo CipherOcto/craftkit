@@ -107,6 +107,19 @@ pub enum FormatError {
 
     #[error("the document in this file is not valid: {0}")]
     InvalidDocument(String),
+
+    /// The file nests deeper than this build reads.
+    ///
+    /// §287: the reader's real limit was `serde_json`'s own — 128 containers
+    /// — and it said so in words that read like a malformed file. The writer
+    /// bounded the **size** and knew nothing of the depth, so it produced
+    /// files the tree's own reader refused.
+    ///
+    /// So the depth is a limit the tree owns ✓ — [`craftkit_foundation::MAX_JSON_DEPTH`]
+    /// ✓, below the parser's ✓ — and both doors measure it with the same
+    /// scanner ✓.
+    #[error("the file nests {depth} deep, and this build reads at most {limit}")]
+    TooDeep { depth: usize, limit: usize },
 }
 
 impl FormatError {
@@ -416,7 +429,19 @@ impl File {
         // The newline is part of the file, so it counts towards the limit.
         std::io::Write::write_all(&mut out, b"\n")
             .map_err(|_| FormatError::TooLargeToWrite { bytes: out.seen, limit: max })?;
-        String::from_utf8(out.out).map_err(|e| FormatError::Meta(e.to_string()))
+        let text = String::from_utf8(out.out).map_err(|e| FormatError::Meta(e.to_string()))?;
+        // The depth, checked with the reader's own rule. §287: the writer
+        // bounded the size and knew nothing of the depth, so it wrote files
+        // the tree's own reader refused — a design that saved and then could
+        // not be opened again.
+        //
+        // The text is already built and already bounded by the size limit
+        // above, so measuring it costs a walk and nothing more.
+        let depth = craftkit_foundation::json_depth::json_depth(&text);
+        if depth > craftkit_foundation::MAX_JSON_DEPTH {
+            return Err(FormatError::TooDeep { depth, limit: craftkit_foundation::MAX_JSON_DEPTH });
+        }
+        Ok(text)
     }
 
     /// Read a file, refusing anything this build cannot interpret.
@@ -436,6 +461,15 @@ impl File {
         // small enough to bound the parse.
         if text.len() > MAX_FILE_BYTES {
             return Err(FormatError::TooLarge { bytes: text.len(), limit: MAX_FILE_BYTES });
+        }
+        // The depth, checked **before** the parse. §287: the parser's own
+        // limit refused a deep file in words that read like a malformed one
+        // ("not valid JSON"), and the file *was* valid JSON — the tree
+        // refused its own depth. So the tree measures the depth itself and
+        // says what it refused.
+        let depth = craftkit_foundation::json_depth::json_depth(text);
+        if depth > craftkit_foundation::MAX_JSON_DEPTH {
+            return Err(FormatError::TooDeep { depth, limit: craftkit_foundation::MAX_JSON_DEPTH });
         }
         let mut file: Self = serde_json::from_str(text).map_err(|e| FormatError::NotJson(e.to_string()))?;
         file.check_with(&File::known_changes(steps))?;

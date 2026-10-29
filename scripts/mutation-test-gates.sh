@@ -7332,5 +7332,19 @@ swap crates/ui/src/shell.rs \
 expect_catch "ui: the number editor draws a range the property never declared" \
     "cargo test -p craftkit-ui --profile ci a_number_editor_draws_the_range_the_property_declares"
 
+# --------------------------------------- the writer never writes what the reader refuses ----
+# Section 287. The writer bounded the size of a design file and the reader
+# bounded the depth, and the two limits lived in different crates -- so the
+# writer produced files the tree's own reader refused.
+swap crates/io/src/format.rs \
+    '        let depth = craftkit_foundation::json_depth::json_depth(&text);
+        if depth > craftkit_foundation::MAX_JSON_DEPTH {
+            return Err(FormatError::TooDeep { depth, limit: craftkit_foundation::MAX_JSON_DEPTH });
+        }
+        Ok(text)' \
+    '        Ok(text)'
+expect_catch "io: the writer writes a file the reader refuses" \
+    "cargo test -p craftkit-io --profile ci a_design_that_is_too_deep_to_read_is_not_written"
+
 restore
 finish

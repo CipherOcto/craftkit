@@ -33352,7 +33352,7 @@ what makes the range visible ✓.
 
 | **The number editor draws the range the property declares** | `a_number_editor_draws_the_range_the_property_declares` in `crates/ui/src/shell.rs` | 1 mutation — §286 |
 
-## 287. The writer writes files the tree's own reader refuses — **open**
+## 287. The writer wrote files the tree's own reader refused
 
 ### The finding
 
@@ -33412,24 +33412,54 @@ cap is hit at about 120 ✓.
   valid JSON ✓; the tree refuses its own depth ✓. That is §260's complaint
   recurring ✓.
 
-### What a fix would touch
+### The fix
 
-**Not done yet.** Two ways, and the tree's own rules point at the first:
+**The depth is a limit the tree owns, and both doors measure it the same
+way.**
 
-- **The writer refuses a document it cannot write** ✓ — §51's rule ✓ (*"the
-  writer will not write a file the reader would refuse, and it will not
-  build the text to find out"*) ✓ — by measuring the **JSON depth** of the
-  document it is about to write ✓, against a limit the tree owns ✓, below
-  serde's ✓.
-- **The reader says what it refused** ✓ — a depth refusal in the tree's own
-  words ✓, not "not valid JSON" ✓.
+`craftkit_foundation::MAX_JSON_DEPTH` is **120** ✓ — measured ✓: `serde_json`
+accepts a text nested **127** containers deep and refuses **128** ✓, so the
+tree's limit is below the parser's ✓ and the tree's refusal is the one that
+happens ✓.
 
-**And the deeper question is the model's** ✓: the model accepts a design
-that cannot be saved ✓, so the trap stays until the model's own limits
-account for the format's expansion ✓ — the same shape as §231's decision ✓
-(*the cap is the worst case over the expansions* ✓).
+And one scanner measures it ✓ — `craftkit_foundation::json_depth::json_depth`
+✓ — a string-aware walk ✓ (a bracket inside a string is not a container ✓,
+and an escaped quote does not end a string early ✓).
 
-| **The writer never writes a file the reader refuses** | **nothing** — this is open: the finding is measured and reproduced, and no gate holds it yet | — §287 |
+**The writer refuses** ✓ — after the size limit ✓ and before the file is
+written ✓ — and the reader refuses the same way ✓, in the tree's own words ✓
+("the file nests 129 deep, and this build reads at most 120" ✓) instead of
+"not valid JSON" ✓.
+
+### What is not claimed
+
+- **The model still accepts a design that cannot be saved.** The deepest
+  legal document (sixteen path segments ✓ and a forty-eight-deep value ✓)
+  is deeper than the reader accepts ✓ — so the writer refuses it ✓, with a
+  reason ✓. **The trap is smaller and honest, not gone** ✓: until the
+  model's own limits account for the format's expansion ✓ — §231's shape ✓
+  — a design at the model's edge cannot be written ✓.
+- **The scanner is a scanner, not a parser.** It counts containers ✓; a
+  malformed text still gets the parser's error ✓.
+- **The depth is measured on the built text** ✓ — which is bounded by the
+  size limit above ✓, so the measurement costs a walk and no more ✓.
+
+### The lesson
+
+**Two limits in two crates are one limit nobody owns.**
+
+The writer bounded the **size** ✓ and the reader bounded the **depth** ✓ —
+and each was right ✓ and the promise between them was broken ✓. The general
+form: *a promise about what one door may produce is only kept if both ends
+measure it the same way* ✓.
+
+**And the parser's limit is not the tree's limit.** `serde_json`'s refusal
+read like a malformed file ✓, and the file was valid JSON ✓ — the tree
+refused its own depth ✓ and said so in someone else's words ✓. **A limit the
+tree owns has to be the tree's number** ✓, lower than the parser's ✓, so
+that the tree's refusal comes first ✓.
+
+| **The writer never writes a file the reader refuses** | `a_design_that_is_too_deep_to_read_is_not_written` in `crates/io/tests/value_depth.rs` | 1 mutation — §287 |
 
 
 ## What enforces what
@@ -34050,6 +34080,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
 | **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
 | **The number editor draws the range the property declares** | `a_number_editor_draws_the_range_the_property_declares` in `crates/ui/src/shell.rs` | 1 mutation — §286 |
+| **The writer never writes a file the reader refuses** | `a_design_that_is_too_deep_to_read_is_not_written` in `crates/io/tests/value_depth.rs` | 1 mutation — §287 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

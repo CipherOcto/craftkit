@@ -55,6 +55,7 @@
 
 pub mod atomic;
 pub mod history;
+pub mod json_depth;
 pub mod measure;
 pub mod params;
 pub mod paths;
@@ -147,6 +148,20 @@ pub const MAX_JSON_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 /// exception: its text is not a raw JSON tree but a document, so its limit is
 /// the model's own budget for one rather than this number. §64, §141.
 pub const MAX_JSON_TEXT_BYTES: usize = MAX_JSON_MEMORY_BYTES / JSON_EXPANSION;
+
+/// How deep a JSON text may nest.
+///
+/// **The tree's own limit, below the parser's.** `serde_json` refuses a text
+/// nested more than 128 containers deep ✓ — and it says so in words that read
+/// like a malformed file ✓ rather than a file that is too deep ✓.
+///
+/// So the tree keeps its own limit ✓ — lower ✓, so that the tree's refusal
+/// is the one that happens ✓ — and the writer and the reader measure the
+/// depth with the same scanner ✓ (`crate::json_depth::json_depth` ✓). §287:
+/// the writer bounded the size of a design file and the reader bounded the
+/// depth ✓, and the two limits lived in different crates ✓, so the writer
+/// produced files the tree's own reader refused ✓.
+pub const MAX_JSON_DEPTH: usize = 120;
 
 /// Check a number that is about to be stored.
 ///
