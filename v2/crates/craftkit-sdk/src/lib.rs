@@ -68,6 +68,7 @@ pub mod params;
 pub mod plan;
 pub mod plugin;
 pub mod seams;
+pub mod select;
 pub mod session;
 
 pub use anchor::{Anchored, PluginAnchor};

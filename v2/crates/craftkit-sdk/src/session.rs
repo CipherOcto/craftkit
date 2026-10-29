@@ -54,6 +54,8 @@ pub struct HistoryEntry {
     pub id: String,
     /// The document as it was before.
     pub document: Document,
+    /// What was selected, before.
+    pub selection: Vec<u64>,
 }
 
 /// The document, the commands, and the history of what happened.
@@ -65,6 +67,7 @@ pub struct Session {
     migrations: Registry<MigrationSpec>,
     evaluators: Registry<EvaluatorSpec>,
     document: Document,
+    selection: Vec<u64>,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
     depth: usize,
@@ -80,6 +83,7 @@ impl Session {
             migrations: Registry::new(),
             evaluators: Registry::new(),
             document: Document::new("untitled"),
+            selection: Vec::new(),
             history: Vec::new(),
             log: Vec::new(),
             depth: 0,
@@ -123,6 +127,33 @@ impl Session {
     /// The document, to read.
     pub fn document(&self) -> &Document {
         &self.document
+    }
+
+    /// What is selected.
+    ///
+    /// The selection is the session's own state: what a person has picked
+    /// out, or what an agent has named. A command that acts on "the
+    /// selection" reads it here.
+    pub fn selection(&self) -> &[u64] {
+        &self.selection
+    }
+
+    /// Select these nodes.
+    ///
+    /// A node that is not in the document is not selected: the selection
+    /// is of the document, and the document is the truth.
+    pub fn select(&mut self, ids: &[u64]) {
+        self.selection = ids.iter().copied().filter(|id| self.document.node(*id).is_some()).collect();
+    }
+
+    /// Select nothing.
+    pub fn clear_selection(&mut self) {
+        self.selection.clear();
+    }
+
+    /// The nodes that are selected, in the order they are in the document.
+    pub fn selected_nodes(&self) -> Vec<&crate::document::Node> {
+        self.document.walk().filter(|node| self.selection.contains(&node.id)).collect()
     }
 
     /// The document, to change.
@@ -187,6 +218,7 @@ impl Session {
         // and so does one that panics — the unwind crosses this boundary and
         // the restore is below it.
         let snapshot = self.document.clone();
+        let selection_snapshot = self.selection.clone();
         let result = self.run_guarded(&spec, &params);
         match result {
             Ok(outcome) => {
@@ -205,13 +237,18 @@ impl Session {
                 let mut outcome = outcome;
                 outcome.changed = changed;
                 if spec.undoable && changed && self.depth == 0 {
-                    self.history.push(HistoryEntry { id: id.to_string(), document: snapshot });
+                    self.history.push(HistoryEntry {
+                        id: id.to_string(),
+                        document: snapshot,
+                        selection: selection_snapshot,
+                    });
                 }
                 self.log.push(format!("{id}: {}", outcome.message));
                 Ok(outcome)
             }
             Err(error) => {
                 self.document = snapshot;
+                self.selection = selection_snapshot;
                 self.log.push(format!("{id}: refused ({error})"));
                 Err(error)
             }
@@ -250,6 +287,7 @@ impl Session {
         body: impl FnOnce(&mut Session) -> Result<T, EngineError>,
     ) -> Result<T, EngineError> {
         let snapshot = self.document.clone();
+        let selection_snapshot = self.selection.clone();
         let depth = self.depth;
         self.depth = depth + 1;
         let result = body(self);
@@ -258,7 +296,11 @@ impl Session {
             Ok(value) => {
                 if self.document != snapshot && self.history.is_empty() {
                     // A batch that changed the document is one history entry.
-                    self.history.push(HistoryEntry { id: "batch".to_string(), document: snapshot });
+                    self.history.push(HistoryEntry {
+                        id: "batch".to_string(),
+                        document: snapshot,
+                        selection: selection_snapshot,
+                    });
                 }
                 Ok(value)
             }
@@ -278,6 +320,7 @@ impl Session {
             });
         };
         self.document = entry.document;
+        self.selection = entry.selection;
         Ok(Outcome::new(format!("undid `{}`", entry.id)))
     }
 }
