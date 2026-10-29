@@ -16,6 +16,16 @@
 //! attribute, a doc comment and a `run` method. There is no registration
 //! code here, no list to add to, and no call into the application.
 
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
 use craftkit_derive::Command;
 use craftkit_sdk::{Bool, EngineError, Outcome, Session, Text};
 

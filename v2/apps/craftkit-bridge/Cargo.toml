@@ -1,0 +1,18 @@
+[package]
+name = "craftkit-bridge"
+description = "A second front end: the same registry, a JSON-RPC door."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+# The plugins. They are here for the same reason the studio has them: a
+# plugin has to be *linked in*, and this program is a front end over the
+# same registry.
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
+craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+
+[build-dependencies]
+craftkit-link = { path = "../../crates/craftkit-link" }

@@ -359,7 +359,35 @@ comes from, and the fact that the core never matches on a kind.
 
 ---
 
-## 9. The raw door
+## 9. The second front end
+
+A front end is a **view**, and the registry is what it views. The studio has
+a window; `apps/craftkit-bridge` has none — it is a **server** that speaks
+JSON-RPC over its standard input and output, and an agent drives it.
+
+Both read the **same projection** and call the **same door**:
+
+| | the studio | the bridge |
+|---|---|---|
+| the commands | `projection.menu(&[…])` | `projection.schema(id)` |
+| running one | `Session::execute` | `Session::execute` |
+| the plan | `session.evaluate()` | `session.evaluate()` |
+
+So a command that a plugin adds is in the studio's menu **and** in the
+bridge's tool list, without anybody writing it down twice — because it is in
+the **registry**, and both front ends are views of the registry.
+
+The bridge's methods are `initialize`, `tools/list`, `tools/call`,
+`resources/list`, `plan` and `shutdown`. An unknown method says which
+methods there are, because an agent that asks for the wrong thing should be
+told what the right things are.
+
+This is the cheapest of the four additions, and that is the point: a second
+front end costs **one file** and no changes anywhere else.
+
+---
+
+## 10. The raw door
 
 Every parameter in v2 is a **type**, and a type is checked. One is not: a
 value of any shape, for the contributions that cannot offer a type — a
@@ -372,23 +400,28 @@ hole.
 
 ---
 
-## 10. What is here, and what is not
+## 11. What is here, and what is not
 
 ### Built
 
 - `crates/craftkit-sdk` — the whole surface a plugin needs: the typed
   readers, the one registry, the command, the seams, the ecosystem, the
   projection, the session, the document and the file format.
-- `crates/craftkit-derive` — eight derives, with tests on the rules they
-  hold.
+- `crates/craftkit-derive` — **eight** derives (`Command`, `NodeKind`,
+  `Tool`, `Panel`, `Layer`, `Evaluator`, `Format`, `Migration`), with tests
+  on the rules they hold.
+- `crates/craftkit-link` — the wiring between an application and its plugins:
+  the dependency list is the plugin list.
 - `apps/craftkit-hello-server` — a plugin that is a **separate program**.
+- `apps/craftkit-bridge` — a **second front end**: the same registry, a
+  JSON-RPC door.
 - `crates/craftkit-plugin-hello` — a plugin that adds commands.
 - `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
   node, a tool, a panel, a command and an evaluator**.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**79 tests.**
+**91 tests.**
 
 ### Not built
 
@@ -402,17 +435,22 @@ hole.
   format that is a **contribution**, with migrations that are contributions,
   and a version chain the ecosystem checks.
 - **The old tree's front ends.** No toolbar, no MCP server, no control
-  channel. v2 has one door — `Session::execute` — and the projection that
-  every front end would read.
+  channel. What v2 has is the **projection** every front end would read, and
+  one front end built on it as a proof.
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
 change: the registry, the parameters, the extension seam and the seams
 around it.
 
+The four gaps this README listed as "not built" — the file format, the
+evaluator, the loaded plugin and a second front end — are now built. The
+sections above are what each one is, and the honest notes below are what
+each one is not.
+
 ---
 
-## 11. What the redesign would do to the rest of the tree
+## 12. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -448,11 +486,11 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 12. Running it
+## 13. Running it
 
 ```bash
 cd v2
-cargo test          # 79 tests
+cargo test          # 91 tests
 cargo run -p craftkit-studio
 ```
 
@@ -463,7 +501,7 @@ another plugin, draws the document **through the kinds**, hit-tests it
 **through the kinds**, prints the **plan**, and finally makes a command at
 run time and runs that too.
 
-## 13. Honest notes
+## 14. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
@@ -492,6 +530,10 @@ run time and runs that too.
   read in a log. A different wire would fit the same shape.
 - **A subprocess plugin is not checked by the compiler.** Its catalogue is
   data, and a mistake in it is refused when the plugin is loaded.
+- **The bridge is a proof, not a product.** It speaks JSON-RPC over stdio
+  because that is the cheapest way to show a second front end over the
+  same projection. The old tree's MCP server has a schema, a transport and
+  an authorisation story, and none of that is here.
 - **The plan is a value, not a drawing.** Nothing renders it, and nothing
   checks it against a rule. The old tree's `craftkit-eval` had a plan with
   a shape and a kernel behind it; what is here is the **place a plan comes

@@ -16,3 +16,9 @@ craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
 # A second plugin, and it is the interesting one: it adds a layer, a kind of
 # node, a tool and a command.
 craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+
+[build-dependencies]
+# The wiring: the dependency list is the plugin list. It is a build
+# dependency, so it is compiled for the build script and is not in the
+# application's own dependency list.
+craftkit-link = { path = "../../crates/craftkit-link" }

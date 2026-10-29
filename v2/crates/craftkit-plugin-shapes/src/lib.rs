@@ -20,6 +20,16 @@
 //! contains one can be saved, loaded and edited by a program that has never
 //! heard of it.
 
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
     Canvas, Colour, Document, EngineError, Node, Number, Outcome, Point, Rect, Session, Text,
