@@ -1,0 +1,14 @@
+[package]
+name = "craftkit-sdk"
+description = "The whole surface a plugin needs: parameters, commands, the registry and the session."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+# The link-time registry. The derive macro writes the registration and the
+# SDK re-exports `inventory`, so a plugin's dependency list is the SDK and
+# the macro — and nothing else.
+inventory = { workspace = true }

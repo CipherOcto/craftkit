@@ -1,0 +1,15 @@
+[package]
+name = "craftkit-studio"
+description = "An application that knows its commands because they were linked in."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+# A plugin. The application lists it because a plugin has to be *linked in*,
+# and for no other reason: no module of this crate names a symbol of it, and
+# a test says so.
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }

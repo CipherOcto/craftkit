@@ -7,6 +7,12 @@ members = [
     "crates/*",
     "xtask",
 ]
+# `v2/` is a **separate workspace**: the metaprogramming-centric redesign.
+# It has its own crates, its own rules and its own build, and it is not part
+# of this workspace's layering, its gates or its deny attributes. It is
+# excluded rather than a member, so that it can disagree with everything
+# here without either side having to pretend otherwise.
+exclude = ["v2"]
 
 [workspace.package]
 version = "0.1.0"

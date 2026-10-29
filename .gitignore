@@ -1,6 +1,7 @@
 # Build output. Never committed; never in a crash report either.
 /target/
 /target-*/
+/v2/target/
 /apps/craftkit-web/dist/
 /apps/craftkit-web/pkg/
 
