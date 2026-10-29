@@ -72,7 +72,9 @@ pub mod session;
 pub use anchor::{Anchored, PluginAnchor};
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
-pub use document::{Canvas, Colour, Document, Node, NodeKindSpec, Point, RecordingCanvas, Rect};
+pub use document::{
+    Canvas, Colour, Document, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Segment, Stroke,
+};
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
 pub use evaluator::EvaluatorSpec;

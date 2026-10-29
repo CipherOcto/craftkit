@@ -568,6 +568,36 @@ fn a_current_file_is_read_as_it_is() {
     assert_eq!(read, document, "a round trip is the same document");
 }
 
+/// A node's payload survives the file.
+///
+/// The payload is the kind's own data. The core carries it, does not read
+/// it, and the file carries it too — so a document written by a program
+/// that had a plugin is still a document that program can read.
+#[test]
+fn a_nodes_payload_survives_the_file() {
+    let ecosystem = ecosystem();
+    let mut document = craftkit_sdk::Document::new("payload");
+    document.add_node_with(
+        "path",
+        "vector.path",
+        craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0),
+        json!({ "path": { "start": { "x": 1.0, "y": 2.0 }, "segments": [], "closed": true } }),
+    );
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    assert!(
+        value
+            .get("nodes")
+            .and_then(|nodes| nodes.get(0))
+            .is_some_and(|node| { node.get("data").and_then(|data| data.get("path")).is_some() }),
+        "the payload is not in the file: {value}"
+    );
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read, document, "a round trip is the same document");
+}
+
 /// A file from a program that is newer than this one is refused.
 #[test]
 fn a_file_from_the_future_is_refused() {
