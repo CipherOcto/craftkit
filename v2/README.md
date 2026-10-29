@@ -171,13 +171,17 @@ before and after, so the answer is a fact:
 
 - a command that says `mutates: false` and changes the document is **refused
   and rolled back** — the promise was a promise;
-- an undo entry is pushed when the command mutates, the command is
-  undoable, **and** the document really changed. A command that sets a value
-  to what it already was leaves no history;
+- a **state** is pushed when the command mutates, the command is undoable,
+  **and** the document really changed. A command that sets a value to what it
+  already was leaves no state;
 - a command that **panics** leaves the document as it was and is reported as
   an internal error, because a crash is not a result;
 - a **batch** is one undo step, so three commands that belong together can
   be undone together.
+
+The history is a **tree** of those states, not a line of them: undo walks to
+the parent, redo walks to a child, and a change made after an undo starts a
+branch instead of throwing the old work away (§24).
 
 ---
 
@@ -833,7 +837,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**237 tests.**
+**254 tests.**
 
 ### Not built
 
@@ -909,7 +913,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 237 tests
+cargo test          # 254 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1572,6 +1576,9 @@ without being changed.
 - **The second payload field** for a document that carries a lot of
   bytes, as above.
 
+Two of the three were built after this survey was written, and §24 says how
+and what they cost. The third is still open.
+
 Everything else the three surveys named is a **domain** thing and lives
 in a payload: the proxy and the offline flag of a media item, the
 environment-resolved font, the render queue, the output templates, the
@@ -1591,3 +1598,125 @@ What is missing is not a domain thing. It is a **history that branches**
 and a **reader that keeps what it does not understand** — and both are
 about the kit being right for the *next* program, and not only for this
 one.
+
+---
+
+## 24. The two gaps closed: a history that branches, and a reader that keeps
+
+§23 ended with three things missing. Two of them were about the kit being
+right for the *next* program rather than this one, and both are now built.
+
+### The history is a tree
+
+The history was a **stack**: a line of documents, walked backwards one at a
+time. That is fine until a person undoes three steps, changes something
+else, and wants the three steps to still be there — one undo away, on the
+other side of the change they just made. A line cannot hold that; a **tree**
+can.
+
+The history is now a tree of states. A state is a whole session state: the
+document, the selection, and what was in the hand. Undo walks to the parent,
+redo walks to a child, and a change made after an undo adds a child to the
+state that was undone to. The old work is not thrown away; it is on its own
+branch.
+
+| | |
+|---|---|
+| `history.undo` | walk to the parent of the current state |
+| `history.redo` | walk to a child — the newest one, or the one that is named |
+| `history.go` | go to any state in the tree, and the work after it is kept |
+| `history.tree` | the tree: the states, the current one, the branches, the path |
+
+The tree is **bounded** at 256 states: the oldest one goes when it is full,
+and what came from it takes its place. The cost is that the history forgets
+how far back it goes, which is what a bound is.
+
+Two bugs came out of the change, and both were found by the tests rather than
+by reading:
+
+- a **batch** only pushed an undo step when the history was empty, so a
+  batch after any other command was not undoable at all;
+- a command that ran a batch pushed a **second** step on top of the batch's
+  own, so a journal replay was two undo steps rather than one.
+
+The survey that found the gap is the compositing one, whose history is a tree
+of snapshots. It is the only gap in §23 that was about the *session* and not
+about the document, and it is the one that would have bitten the first real
+person to use the thing.
+
+### The reader keeps what it does not understand
+
+A file written by a newer program used to come back **smaller**. The reader
+read the fields it knew and dropped the rest, so the next program to open
+the file would find the work gone.
+
+Now the fields the reader does not understand are **kept**, and written back
+as they were:
+
+- the **document** and the **node** each carry the fields the reader did not
+  understand, and the writers merge them back into the file, so the file
+  keeps the shape it had;
+- the derive macro learned a **merging field**: written by merging, read as
+  what is left over;
+- a file from a **newer** program is read rather than refused. It is read
+  with the newest reader this program has, what that reader does not
+  understand is kept, and the reader **says** that the file was newer, so
+  that the program says so out loud: *"opened `song.craftkit` (written by a
+  newer program, version 9; the parts this program does not understand were
+  kept)"*;
+- a file of a **family** this program does not know is still refused: there
+  is nothing there it could keep.
+
+The rule that makes the kept fields safe is that **a step must not overwrite
+a field that is already there**. The steps use `or_insert` and never
+`insert`, and there is a test for it: a file of the fifth version that
+already has the assets the sixth version writes keeps them.
+
+### What this cost, said plainly
+
+- A program that reads a file from the future **cannot know** that a field it
+  *does* know has not changed its meaning. It reads the fields whose meaning
+  has not changed, and it keeps the rest. That is the price of reading
+  forward, and it is not a small one.
+- The file is written back in **this program's own version**, so the version
+  number of the file is lost. The data is not. A program that wants to keep
+  the version has to keep it in the payload.
+- The kept fields are a **liability as well as an asset**: a document that
+  went through a program that did not understand it carries fields that no
+  program in the tree has ever looked at.
+
+### What is still missing
+
+One of the three is still there, and it is the smallest:
+
+- **The second payload field** for a document that carries a lot of bytes: a
+  dictionary *and* a stream, which is exactly a PDF object's shape. The
+  answer for now is base64 in the payload (§23), and the answer costs a
+  third more space and a format version when it arrives.
+
+And the things that were never in the list, still not in it: zoom and scroll
+(they need a camera module, and this tree has no camera), the transport
+(which belongs to the lane), the CLAP, VST3 and AU plugin formats (they are
+FFI, and this tree forbids unsafe), and the allocation measurement of the
+lane (it needs a counting global allocator, and that is unsafe too).
+
+### What this says about the kit
+
+The two gaps were the same shape, and that is the finding. Both were about a
+program meeting a program it did not know: a person who undoes and does
+differently, and a file written by a newer build. In both cases the answer
+was the same — **do not throw the old thing away**. The history keeps the
+branch; the document keeps the fields.
+
+That is the third time a port has found the same kind of gap, and the three
+were all found by pointing the kit at somebody else's application:
+
+| the port | what it found |
+|---|---|
+| the vector application | a node needs a **payload** |
+| the sound application | a node may have **no place**, and the document needs **relations** |
+| the compositing application | the history needs to **branch** |
+
+None of them asked for a bigger core. Each asked for the core to stop
+discarding something, and each of those three somethings turned out to be a
+seam that the next domain needed as well.
