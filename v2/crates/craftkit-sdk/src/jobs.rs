@@ -580,6 +580,11 @@ mod tests {
             0,
         );
         wait_for("the job to start", || pool.stats().running == 1);
+        // The job is running, but it may not have said anything yet: wait
+        // for the progress itself, not for the job to be picked up.
+        wait_for("the job to say something", || {
+            pool.progress(id).map(|progress| progress.percent() > 0).unwrap_or(false)
+        });
         let progress = pool.progress(id).expect("the job is known");
         assert!(progress.percent() > 0, "the job said something: {}", progress.percent());
         collect(&pool, 1);
