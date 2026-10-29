@@ -834,10 +834,14 @@ different commands with one id.
 - `crates/craftkit-sound-time` — the **time model**: samples, ticks, a
   tempo map and the three timebases (§19). A library, not a plugin, for
   the same reason the geometry is.
+- `crates/craftkit-plugin-pdf` — the **PDF battery**: the object model of
+  a PDF document — indirect objects, dictionaries, streams and
+  references — ported into v2's seams, and the three things it found
+  (§27). It is optional, like the other two.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**265 tests.**
+**268 tests.**
 
 ### Not built
 
@@ -913,7 +917,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 265 tests
+cargo test          # 268 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1877,3 +1881,81 @@ that keeps its media in its own payload has no way to say which files
 those are. That is the next thing this seam asks for, and it is a
 question about how a plugin says "these are my files", not about the
 container.
+
+---
+
+## 27. The third battery: the object model of a PDF document
+
+Two ports so far: a vector application (§12) and a sound application
+(§19). Both were *document* ports. This one is a **graph** port, and it
+is the first whose document is not a tree at all.
+
+### What was ported
+
+A PDF file is not a tree. It is an **object graph**: a set of indirect
+objects, each one a **dictionary** of key and value pairs, some of which
+are **streams** of bytes, and some of which are **references** to other
+objects. Two objects may refer to the same object, and an object may
+refer to one that is defined *later* in the file.
+
+What is ported is the **object model** (ISO 32000-2 §7.3) and not the
+**file**: the cross-reference table, the filters, the incremental save
+and the parser are the file, and a v2 document is not a PDF file.
+
+| the object model | v2 |
+|---|---|
+| an indirect object | a **node**, of the kind `pdf.object` or `pdf.stream` |
+| its dictionary | the node's **payload** |
+| its stream | the node's **stream** — the bytes, beside the document (§25) |
+| a reference to another object | a **relation** of the kind `ref` |
+| the object number | the payload's `object`, because the ids are the core's |
+
+### The three things the port found
+
+- **An edge has to be able to say something.** The kind of a relation is
+  the *name* of the edge, and two edges of the same kind say different
+  things: a PDF's `/Resources 12 0 R` says which **key** the reference
+  is under and which **generation** of the object it names. There was
+  nowhere to put that — a plugin had to squeeze it into the kind, which
+  made the kind mean two things at once. So the relation grew a
+  **payload** (§339), and the reference puts the key and the generation
+  in it.
+- **A dictionary is ordered, and JSON is not.** A JSON object does not
+  keep the order of its keys, and a PDF dictionary does: the port that
+  reads and writes a PDF keeps the order so that a rewritten file is
+  byte-stable and its diff is readable. So the dictionary is a **list of
+  pairs** — `[["Type", "Page"], ["MediaBox", [0, 0, 595, 842]]]` — and
+  the pairs are in the order the file had them. This one needed no core
+  change: it is the payload's shape, and the payload is the plugin's.
+- **A reference may point forward.** A relation names two nodes that are
+  *in the document*, and a PDF may refer to an object that is defined
+  later. So the graph is built in **two passes**: the objects first, and
+  the references after. That is the price of the core's rule, and it is
+  a plugin's business.
+
+And one that is a fact rather than a finding: a PDF **name** and a PDF
+**string** are *bytes*, and the payload is JSON. A name that is not text
+is base64 in the payload — the door is the SDK's (§22) — and the port
+says so rather than pretending otherwise.
+
+### What it says about the kit
+
+The port cost **one core change** — the relation's payload — and the
+other two findings were answered by the seams that were already there:
+the payload for the dictionary's order, and the two passes for the
+forward reference.
+
+That is a better result than the sound port had, and it is the fourth
+port to say the same thing: the seams carry a *document*, and what each
+port finds is a seam that says too little rather than a seam that is
+missing.
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+
+The file format is now eight versions long, and every one of them is a
+field that some port needed.
