@@ -562,21 +562,21 @@ The point of a port is the list of what it hits.
   and every addition is a change to the SDK. A vector document needs
   strokes, gradients, clips, transforms and images. Each one is a fifth
   argument somewhere.
-- **There is nowhere to put geometry.** The battery carries its own path
-  building, its own flattening and its own area. Two plugins that both
-  drew paths would each carry their own. And path **operations** — union,
-  offset, simplify — have no home at all: the SDK's `Path` is a *shape*,
-  not an operation. The application this was ported from has a geometry
-  crate and a path-operations crate for exactly this; v2 has no place for
-  them.
+- **There was nowhere to put geometry.** The battery carried its own path
+  building, its own flattening and its own area, and two plugins that both
+  drew paths would each carry their own. Path **operations** — union,
+  offset, simplify — had no home at all: the SDK's `Path` is a *shape*,
+  not an operation. **Fixed in the next slice** (§13): the operations have
+  a home, and it is a library rather than a plugin.
 - **Colour is not a value type.** v2's parameters are numbers, texts,
   booleans, documents and node references. The battery reads a colour from
   a text (`#rrggbb`) and parses it itself, which is what a plugin should
   do — but a colour *model*, with conversions and a colour space, has no
   seam: `Colour` is an RGBA tuple the SDK owns.
-- **A path with a hole is two paths.** The SDK's path is flat and has no
-  fill rule, so a shape with a hole is two paths and a rule that is not
-  there.
+- **A path with a hole was two paths.** The SDK's path was flat and had no
+  fill rule, so a shape with a hole was two paths and a rule that was not
+  there. **Fixed in the next slice** (§13): the path has contours and a
+  rule.
 - **Hit testing is the plugin's, and it is approximate.** A curve is hit
   by its samples: right for a polygon, wrong near an edge.
 - **The document is still small.** No layers, no groups, no selection, no
@@ -599,7 +599,96 @@ and none of them is in the core.
 
 ---
 
-## 13. What is here, and what is not
+## 13. The path operations, and the home they needed
+
+The last section left a list of what the port did not fix, and the first
+item on it was: **there is nowhere to put geometry**. Path operations —
+union, difference, intersection, offset, simplification — had no home,
+because the SDK's `Path` is a *shape* and not an *operation*.
+
+### The answer: a library, not a plugin
+
+`crates/craftkit-vector-geom` is that home, and it is deliberately **not a
+plugin**:
+
+- it contributes **nothing** to the registry: no command, no kind, no
+  tool, no panel;
+- the linker does **not** wire it in — the wiring is for plugins, and this
+  is not one;
+- a plugin that wants it depends on it the way it depends on the SDK.
+
+That changes one rule, and the change is worth making explicitly:
+
+> A plugin depends on the SDK, the macro, and any library it needs. A
+> **library** is not a plugin: it adds nothing, and the linker does not
+> wire it in.
+
+The rule it replaces was *a plugin depends on the SDK and the macro, and on
+nothing else*. That rule was about **plugins** — the application's are
+named by nobody and the application does not change when one is added — and
+a library is not one of those. The battery depends on the SDK, the macro
+and the geometry, and the geometry adds nothing to the ecosystem.
+
+### What is in it
+
+| Operation | What it is |
+|---|---|
+| `boolean` | union, intersection, difference and exclusive-or of two paths |
+| `area` | the area a path covers, **from the curves** — the integrand is a polynomial and three-point Gauss-Legendre integrates it exactly |
+| `bounds` | where a path is |
+| `simplify` | the path without the points a flat line would serve |
+| `offset` | the path pushed out, or in — **curve-preserving**: the curves are offset as curves |
+| `flatten` | a contour as a polygon, for the things that need one |
+
+The **types** are the SDK's. A file never carries a `kurbo` type, the SDK
+never depends on `kurbo`, and the conversion happens at the edge of the
+library — which is the point of the SDK owning the *shape* of a path and
+the library owning the *operations* on it.
+
+The geometry itself is two dependencies rather than copied code: `kurbo`
+for the beziers and `linesweeper` for a robust sweep-line boolean
+operation. Both are permissively licensed.
+
+### What the operations changed in the core
+
+One thing, and it was forced: **a boolean result can have a hole, and a
+hole is a contour**.
+
+The SDK's path was one contour: a start, some segments, and whether it
+closed. That cannot hold the difference of a square and a smaller square
+inside it — the result is a shape with a hole, and the hole is a contour
+of its own. So the path grew:
+
+```text
+Path   { subpaths: Vec<SubPath>, rule: FillRule }
+SubPath { start: Point, segments: Vec<Segment>, closed: bool }
+```
+
+and the rule — non-zero or even-odd — says which parts are inside. The
+battery now draws a shape with a hole, and the file carries it.
+
+### What the operations do not do
+
+- **The offset joins corners with a straight line.** A square's offset is
+  exact (144 for a 10×10 square offset by 1, and the test says so); a
+  curve's corner is approximated, and a corner whose join would be longer
+  than four times the distance is cut off rather than spiked out.
+- **An offset can meet itself.** A shape with a narrow neck, offset far
+  enough, overlaps its own outline. The operation offsets; it does not
+  clean up.
+- **Simplification keeps the sharp corners.** A polygon with 32 sides
+  still has 32 sides: they are corners, and a corner is not a point a
+  flat line would serve.
+- **Hit testing is still the plugin's, and still by sampling.** The
+  geometry library knows the area exactly; the hit test flattens.
+- **One path, one fill rule.** A shape with two holes of different
+  depths is two contours and one rule, and the even-odd rule handles it;
+  the non-zero rule handles it only if the contours run in opposite
+  directions.
+
+---
+
+## 14. What is here, and what is not
 
 ### Built
 
@@ -621,10 +710,13 @@ and none of them is in the core.
 - `crates/craftkit-plugin-vector` — the **vector battery**: a port of a real
   application's shape into v2's seams, and the list of what it found (§12).
   It is optional: a program that wants paths says so.
+- `crates/craftkit-vector-geom` — the **path operations**: booleans, area,
+  bounds, simplification and offset (§13). A library, not a plugin: it
+  contributes nothing and the linker does not wire it in.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**104 tests.**
+**124 tests.**
 
 ### Not built
 
@@ -643,8 +735,8 @@ and none of them is in the core.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
   the port showed is missing: a typed body, a layer and group hierarchy, a
-  selection, an appearance stack, text, images, and **geometry** — a place
-  for path operations, which the SDK's `Path` is not.
+  selection, an appearance stack, text, and images. The **geometry** is
+  not missing any more: it has a home (§13).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -658,7 +750,7 @@ each one is not.
 
 ---
 
-## 14. What the redesign would do to the rest of the tree
+## 15. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -694,7 +786,7 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 15. Running it
+## 16. Running it
 
 ```bash
 cd v2
@@ -709,7 +801,7 @@ another plugin, draws the document **through the kinds**, hit-tests it
 **through the kinds**, prints the **plan**, and finally makes a command at
 run time and runs that too.
 
-## 16. Honest notes
+## 17. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
