@@ -9,6 +9,29 @@ use craftkit_sdk::{
     RecordingCanvas, Registry, Session, ToolSpec,
 };
 
+/// The sound battery is linked in when the feature is on.
+///
+/// A battery is optional: the crate is not there at all unless a feature
+/// asks for it, and the program does not know it exists.
+#[cfg(feature = "sound")]
+#[test]
+fn the_sound_battery_is_linked_in() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.commands.get("sound.track.add").is_some(), "the battery is in");
+    assert!(ecosystem.commands.get("sound.clip.add").is_some());
+    assert!(ecosystem.kinds.get("sound.track").is_some());
+    assert!(ecosystem.evaluators.get("sound.timeline").is_some());
+}
+
+/// And it is not there when the feature is off.
+#[cfg(not(feature = "sound"))]
+#[test]
+fn the_sound_battery_is_not_linked_in() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.commands.get("sound.track.add").is_none(), "the battery is out");
+    assert!(ecosystem.kinds.get("sound.track").is_none());
+}
+
 // ---------------------------------------------------------------- the seams --
 
 /// A plugin's commands are in the ecosystem.
@@ -662,7 +685,10 @@ fn the_next_id_walks_the_tree() {
     let group = document.add_node("group", "core.group", None);
     let child = document.add_node_under(Some(group), "clip", "sound.clip", None);
     let sibling = document.add_node("after", "sound.clip", None);
-    assert!(sibling > child, "the child took an id and the next node did not take it again: {child} {sibling}");
+    assert!(
+        sibling > child,
+        "the child took an id and the next node did not take it again: {child} {sibling}"
+    );
 }
 
 /// A file of the third version is migrated to the fourth.

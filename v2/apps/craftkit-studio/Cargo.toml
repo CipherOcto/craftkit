@@ -20,11 +20,17 @@ craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
 # linked in and its commands are in the ecosystem; with it off, the crate is
 # not there at all and the program does not know it exists.
 craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optional = true }
+# The **second battery**: the sound document. Off by default as well: a
+# program that wants a tempo map says so.
+craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", optional = true }
 
 [features]
 default = []
 # The vector battery. Off by default: a program that wants paths says so.
 vector = ["dep:craftkit-plugin-vector"]
+# The sound battery. Off by default: a program that wants tracks and a
+# tempo map says so.
+sound = ["dep:craftkit-plugin-sound"]
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build

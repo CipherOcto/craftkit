@@ -24,6 +24,7 @@ dependencies = [
  "craftkit-link",
  "craftkit-plugin-hello",
  "craftkit-plugin-shapes",
+ "craftkit-plugin-sound",
  "craftkit-plugin-vector",
  "craftkit-sdk",
 ]
@@ -67,6 +68,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-sound"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+ "craftkit-sound-time",
+]
+
+[[package]]
 name = "craftkit-plugin-vector"
 version = "0.2.0"
 dependencies = [
@@ -96,6 +106,7 @@ dependencies = [
  "craftkit-link",
  "craftkit-plugin-hello",
  "craftkit-plugin-shapes",
+ "craftkit-plugin-sound",
  "craftkit-plugin-vector",
  "craftkit-sdk",
 ]

@@ -1,0 +1,19 @@
+[package]
+name = "craftkit-plugin-sound"
+description = "The sound battery: tracks, clips, a tempo map, and the commands that make them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. **Nothing else** — and in particular, not the
+# application. That is the whole point of a plugin: it is a dependency of
+# the application, not the other way round, and the application never names
+# a symbol of it.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+# The time model. It is a **library**, not a plugin: it contributes nothing
+# to the registry and the linker does not wire it in. A plugin may depend
+# on a library; the host never names one.
+craftkit-sound-time = { workspace = true }
