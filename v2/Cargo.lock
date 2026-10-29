@@ -85,6 +85,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-sound-time"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-studio"
 version = "0.2.0"
 dependencies = [
