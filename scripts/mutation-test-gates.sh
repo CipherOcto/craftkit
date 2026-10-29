@@ -908,8 +908,8 @@ expect_catch "eval: the chain stops starting at unity" "cargo test -p craftkit-e
 # the machine, and its default was untested: the loopback test passed a hardcoded
 # `false` instead of the real default, so flipping it left all 41 tests green.
 swap crates/control/src/server.rs \
-    'Self { port, token, allow_remote: false, ui: None, after: None, token_dir: None }' \
-    'Self { port, token, allow_remote: true, ui: None, after: None, token_dir: None }'
+    'Self { port, auth: Auth::Token(token), allow_remote: false, ui: None, after: None, token_dir: None }' \
+    'Self { port, auth: Auth::Token(token), allow_remote: true, ui: None, after: None, token_dir: None }'
 expect_catch "control: the default stops being loopback-only" \
     "cargo test -p craftkit-control --profile ci"
 
@@ -3192,10 +3192,10 @@ expect_catch "ui: a click by name looks for the widget on the empty screen" \
 # The channel was handed a state of its own instead of the window's, so the
 # screen it described was not the screen the window was showing. §106.
 swap apps/craftkit/src/lib.rs \
-    '            let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            ui_request(session, request, &guard)' \
-    '            let _guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            ui_request(session, request, &craftkit_ui::shell::ShellState::default())'
+    '        let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        ui_request(session, request, &guard)' \
+    '        let _guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        ui_request(session, request, &craftkit_ui::shell::ShellState::default())'
 expect_catch "ui: the channel reports a screen of its own" \
     "cargo test -p craftkit --profile ci the_channel_reports_the_windows_screen_over_the_socket"
 
@@ -7369,6 +7369,23 @@ swap crates/engine/src/commands.rs \
     '    // the design does not remember the file it was saved to'
 expect_catch "engine: a design does not remember the file it was saved to" \
     "cargo test -p craftkit-engine --profile ci a_save_as_writes_the_design_and_remembers_the_file"
+
+# ------------------------------------------- §289: how a channel authenticates ----
+# A server that asks for a token refuses a connection that presents none.
+# Without this check every peer on the machine could drive the application.
+swap crates/control/src/server.rs \
+    '                if !token.matches(presented) {' \
+    '                if !token.matches(presented) && !presented.is_empty() {'
+expect_catch "control: a server with a token accepts a peer that presents none" \
+    "cargo test -p craftkit-control --profile ci a_connection_without_the_token_is_closed_with_no_reply"
+
+# And a server that asks for no token writes no token file: the file is the
+# promise that this port answers to this token.
+swap crates/control/src/server.rs \
+    '        None => None,' \
+    '        None => Some(std::path::PathBuf::new()),'
+expect_catch "control: a server without a token writes a token file" \
+    "cargo test -p craftkit-control --profile ci a_server_without_a_token_writes_no_token_file"
 
 restore
 finish

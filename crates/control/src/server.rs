@@ -22,7 +22,7 @@ use craftkit_engine::Session;
 use serde_json::{Value as Json, json};
 
 use crate::protocol::{MAX_LINE, Method, ProtocolError, Request, Response, parse_request};
-use crate::token::{self, Token};
+use crate::token::{self, Auth, Token};
 
 /// How many connections may be open at once.
 ///
@@ -68,8 +68,13 @@ pub struct ServerOptions {
     /// The port. `0` asks the operating system for a free one, which is what a
     /// test or a script should use.
     pub port: u16,
-    /// The token every connection must present.
-    pub token: Token,
+    /// How the callers are authenticated.
+    ///
+    /// **The token is the default.** `ServerOptions::new` asks for one, and
+    /// every connection has to present it before anything is interpreted.
+    /// `Auth::None` is the other mode: no token is asked for, and none is
+    /// written. §289.
+    pub auth: Auth,
     /// Whether to bind beyond loopback. **Off by default and there is no reason
     /// to turn it on**: a control channel on a routable interface is remote
     /// code execution with a JSON syntax.
@@ -106,7 +111,20 @@ pub struct ServerOptions {
 
 impl ServerOptions {
     pub fn new(port: u16, token: Token) -> Self {
-        Self { port, token, allow_remote: false, ui: None, after: None, token_dir: None }
+        Self { port, auth: Auth::Token(token), allow_remote: false, ui: None, after: None, token_dir: None }
+    }
+
+    /// A server that asks for **no token**.
+    ///
+    /// Every connection on the loopback is accepted, and no token file is
+    /// written — a file that promised a port answers to a token would be a
+    /// promise about nothing.
+    ///
+    /// This is the tree's other mode, and it is a **choice**: the channel is
+    /// still loopback-only, so what it opens is the machine, not the network.
+    /// A host that wants it says so. §289.
+    pub fn unauthenticated(port: u16) -> Self {
+        Self { port, auth: Auth::None, allow_remote: false, ui: None, after: None, token_dir: None }
     }
 
     /// Write the token file in `dir` rather than in the usual place.
@@ -229,11 +247,13 @@ pub fn serve(session: Arc<Mutex<Session>>, options: ServerOptions) -> Result<(u1
 
     let stop = Arc::new(AtomicBool::new(false));
     let open = Arc::new(AtomicU64::new(0));
-    let token = Arc::new(options.token);
+    // `None` is the mode that asks for no token: the connection thread has
+    // nothing to check, and there is nothing to write. §289.
+    let token = options.auth.token().cloned().map(Arc::new);
 
     let worker_stop = Arc::clone(&stop);
     let worker_session = Arc::clone(&session);
-    let worker_token = Arc::clone(&token);
+    let worker_token = token.clone();
     let worker = std::thread::spawn(move || {
         accept_loop(listener, worker_stop, worker_session, worker_token, open, ui, after);
     });
@@ -260,7 +280,7 @@ fn accept_loop(
     listener: TcpListener,
     stop: Arc<AtomicBool>,
     session: Arc<Mutex<Session>>,
-    token: Arc<Token>,
+    token: Option<Arc<Token>>,
     open: Arc<AtomicU64>,
     ui: Option<SharedUiHandler>,
     after: Option<SharedChangeHandler>,
@@ -278,7 +298,7 @@ fn accept_loop(
                 }
                 open.fetch_add(1, Ordering::SeqCst);
                 let session = Arc::clone(&session);
-                let token = Arc::clone(&token);
+                let token = token.clone();
                 let open_for_thread = Arc::clone(&open);
                 let stop_for_thread = Arc::clone(&stop);
                 let ui_for_thread = ui.clone();
@@ -326,7 +346,7 @@ fn blocking(stream: &TcpStream) {
 fn handle(
     stream: TcpStream,
     session: Arc<Mutex<Session>>,
-    token: Arc<Token>,
+    token: Option<Arc<Token>>,
     stop: &AtomicBool,
     ui: Option<&UiHandler>,
     after: Option<&ChangeHandler>,
@@ -422,10 +442,14 @@ fn handle(
         // connection, and a failure closes the connection with no reply: an
         // unauthenticated peer learns only that the port is open.
         if !authenticated {
-            let presented = request.token.as_deref().unwrap_or("");
-            if !token.matches(presented) {
-                log::warn!("control channel: rejected a connection with a bad token");
-                break;
+            // A server that asks for no token has nothing to check, and a
+            // connection is authenticated by being accepted. §289.
+            if let Some(token) = token.as_deref() {
+                let presented = request.token.as_deref().unwrap_or("");
+                if !token.matches(presented) {
+                    log::warn!("control channel: rejected a connection with a bad token");
+                    break;
+                }
             }
             authenticated = true;
         }
@@ -625,13 +649,19 @@ pub fn publish_token(port: u16, token: &Token) -> Result<std::path::PathBuf, Str
 pub fn serve_published(
     session: Arc<Mutex<Session>>,
     options: ServerOptions,
-) -> Result<(Server, std::path::PathBuf), String> {
-    let token = options.token.clone();
+) -> Result<(Server, Option<std::path::PathBuf>), String> {
+    let token = options.auth.token().cloned();
     let dir = options.token_dir.clone();
     let requested = options.port;
     // Bind first. If this fails, the token file is never touched.
     let (port, server) = serve(session, options)?;
-    let path = write_token_file(dir.as_deref(), port, &token)?;
+    // A server that asks for no token writes **no file**: the file is the
+    // promise that this port answers to this token, and there is no token to
+    // promise. §289.
+    let path = match token {
+        Some(token) => Some(write_token_file(dir.as_deref(), port, &token)?),
+        None => None,
+    };
     // A caller that asked for a specific port and did not get it would be
     // reading a file for a port it does not own.
     if port != requested && requested != 0 {
@@ -1000,6 +1030,87 @@ mod tests {
         drop(server);
     }
 
+    /// A server that asks for no token accepts a connection that presents
+    /// none.
+    ///
+    /// The other mode, and the one the owner asked for (§289): the host says
+    /// this machine is its own, and the channel stops asking. The reply is
+    /// the same reply — the mode changes who may knock, not what the door
+    /// does.
+    #[test]
+    fn a_server_without_a_token_accepts_a_connection_that_presents_none() {
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let opts = ServerOptions::unauthenticated(0);
+        let (port, server) = serve(session, opts).expect("bind");
+        let replies = round_trip(
+            port,
+            &[
+                r#"{"id":1,"method":"engine.execute","params":{"command":"node.add","params":{"name":"Via socket","kind":"filter"}}}"#,
+            ],
+        );
+        assert_eq!(replies.len(), 1, "{replies:?}");
+        assert!(replies[0].contains("\"ok\":true"), "{}", replies[0]);
+        assert!(replies[0].contains("Via socket"), "{}", replies[0]);
+        drop(server);
+    }
+
+    /// A server that asks for a token still refuses one that presents none.
+    ///
+    /// The other mode did not become the mode: this is the promise the
+    /// default makes, and the test is the promise. §289.
+    #[test]
+    fn a_server_with_a_token_still_refuses_a_connection_that_presents_none() {
+        let session = Arc::new(Mutex::new(Session::sample()));
+        let opts = ServerOptions::new(0, Token::from_text("0123456789abcdef0123").expect("valid"));
+        let (port, server) = serve(session, opts).expect("bind");
+        let replies = round_trip(port, &[r#"{"id":1,"method":"ping"}"#]);
+        assert!(replies.is_empty(), "a peer with no token was answered: {replies:?}");
+        drop(server);
+    }
+
+    /// A server that asks for no token writes **no token file**.
+    ///
+    /// The file is the promise that this port answers to this token; a port
+    /// that asks for no token has no such promise to make, and a file that
+    /// says otherwise would send a script looking for a token that is not
+    /// asked for. §289.
+    #[test]
+    fn a_server_without_a_token_writes_no_token_file() {
+        let dir = craftkit_foundation::temp::dir("no-token-file").expect("a folder");
+        let (server, path) = serve_published(
+            Arc::new(Mutex::new(Session::sample())),
+            ServerOptions::unauthenticated(0).with_token_dir(dir.clone()),
+        )
+        .expect("the server");
+        assert!(path.is_none(), "a token file was published: {path:?}");
+        let written: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the folder")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(written.is_empty(), "the folder holds {written:?}");
+        drop(server);
+    }
+
+    /// A server that asks for a token still writes its file.
+    ///
+    /// The default is the default: the other mode must not have changed this
+    /// one. §289.
+    #[test]
+    fn a_server_with_a_token_still_writes_its_token_file() {
+        let dir = craftkit_foundation::temp::dir("token-file").expect("a folder");
+        let token = Token::from_text("0123456789abcdef0123").expect("valid");
+        let (server, path) = serve_published(
+            Arc::new(Mutex::new(Session::sample())),
+            ServerOptions::new(0, token.clone()).with_token_dir(dir.clone()),
+        )
+        .expect("the server");
+        let path = path.expect("a token file");
+        let written = std::fs::read_to_string(&path).expect("the token");
+        assert_eq!(written, token.as_str());
+        drop(server);
+    }
+
     #[test]
     fn a_connection_without_the_token_is_closed_with_no_reply() {
         let session = Arc::new(Mutex::new(Session::sample()));
@@ -1311,6 +1422,7 @@ mod tests {
             ServerOptions::new(0, first_token.clone()).with_token_dir(dir.clone()),
         )
         .expect("the first instance");
+        let path = path.expect("the first instance's token file");
         let written = std::fs::read_to_string(&path).expect("the first token");
         assert_eq!(written, first_token.as_str(), "the file must hold the token");
         assert!(

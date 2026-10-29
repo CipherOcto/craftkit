@@ -37,6 +37,43 @@ use std::path::{Path, PathBuf};
 /// The bytes in a generated token.
 pub const BYTES: usize = 32;
 
+/// How a server authenticates the callers that reach it.
+///
+/// **Two modes, and the strict one is the default.** A token turns "can reach
+/// the port" into "was told the token", and the port is loopback — which stops
+/// the network and not the machine: on a shared build box any local process
+/// can connect to any port. §289.
+///
+/// The other mode asks for no token. That is a **choice**, and the tree makes
+/// it a choice rather than a default: a loopback channel with no token is a
+/// door every process on the machine can open, and a host that opens it is
+/// saying "this machine is mine".
+#[derive(Clone, Debug)]
+pub enum Auth {
+    /// Every connection must present this token.
+    Token(Token),
+    /// Every connection is accepted.
+    ///
+    /// No token is asked for, and **no token file is written**: a file that
+    /// promised a port answers to a token would be a promise about nothing.
+    None,
+}
+
+impl Auth {
+    /// The token, if there is one.
+    pub fn token(&self) -> Option<&Token> {
+        match self {
+            Auth::Token(token) => Some(token),
+            Auth::None => None,
+        }
+    }
+
+    /// Whether this mode asks for a token at all.
+    pub fn requires_token(&self) -> bool {
+        self.token().is_some()
+    }
+}
+
 /// A launch token.
 #[derive(Clone)]
 pub struct Token(String);

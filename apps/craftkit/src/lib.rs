@@ -61,6 +61,8 @@ use craftkit_engine::Session;
 pub struct Flags {
     sample: bool,
     control: Option<u16>,
+    /// Whether the control channel asks for **no token**. §289.
+    control_no_token: bool,
     file: Option<PathBuf>,
     headless_help: bool,
 }
@@ -102,6 +104,10 @@ OPTIONS:
                       The token is written to
                       ~/.local/share/craftkit/control/<PORT>.token
                       unless CRAFTKIT_CONTROL_TOKEN is set.
+    --control-no-token
+                      Serve the control channel without a token: every
+                      process on this machine may drive the application.
+                      Needs --control.
     -h, --help        Print this message.
     -V, --version     Print the version.
 
@@ -248,14 +254,20 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     let control = match flags.control {
         None => None,
         Some(port) => {
-            let token = match craftkit_control::Token::resolve() {
-                Ok(token) => token,
-                Err(e) => {
-                    eprintln!("control channel: {e}");
-                    return std::process::ExitCode::FAILURE;
+            // The token is the default; `--control-no-token` is the other
+            // mode, and it does not even generate one. §289.
+            let auth = if flags.control_no_token {
+                craftkit_control::Auth::None
+            } else {
+                match craftkit_control::Token::resolve() {
+                    Ok(token) => craftkit_control::Auth::Token(token),
+                    Err(e) => {
+                        eprintln!("control channel: {e}");
+                        return std::process::ExitCode::FAILURE;
+                    }
                 }
             };
-            match start_control(port, &session, &ctx_slot, &state, token, token_dir.as_deref()) {
+            match start_control(port, &session, &ctx_slot, &state, auth, token_dir.as_deref()) {
                 Ok((server, _path)) => Some(server),
                 Err(e) => {
                     eprintln!("control channel: {e}");
@@ -353,6 +365,7 @@ pub fn parse_flags(args: &[String]) -> Result<Option<Flags>, String> {
                 return Ok(None);
             }
             "--sample" => flags.sample = true,
+            "--control-no-token" => flags.control_no_token = true,
             "--control" => {
                 let port = args.get(i + 1).ok_or_else(|| "`--control` needs a port".to_string())?;
                 flags.control =
@@ -365,6 +378,11 @@ pub fn parse_flags(args: &[String]) -> Result<Option<Flags>, String> {
             other => flags.file = Some(PathBuf::from(other)),
         }
         i += 1;
+    }
+    // The flag that turns the token off is about the channel, so it needs the
+    // channel. §289.
+    if flags.control_no_token && flags.control.is_none() {
+        return Err("`--control-no-token` needs `--control`".to_string());
     }
     Ok(Some(flags))
 }
@@ -450,21 +468,26 @@ fn start_control(
     session: &Arc<Mutex<Session>>,
     ctx_slot: &ContextSlot,
     state: &SharedState,
-    token: craftkit_control::Token,
+    auth: craftkit_control::Auth,
     token_dir: Option<&Path>,
-) -> Result<(craftkit_control::Server, PathBuf), String> {
+) -> Result<(craftkit_control::Server, Option<PathBuf>), String> {
     // Cloned rather than borrowed: the handler outlives this function, and the
     // slot outlives it in turn because `main` holds it for the window's life.
     let slot = Arc::clone(ctx_slot);
     // The shell's memory, shared with the window: the channel reports the
     // screen the window is showing, not a screen of its own. §106.
     let ui_state = Arc::clone(state);
-    let mut options = ServerOptions::new(port, token)
-        .with_ui(move |session, request| {
-            let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            ui_request(session, request, &guard)
-        })
-        .with_after(move || request_repaint(&slot));
+    // The two modes are two constructors, so the mode is chosen in one place
+    // and cannot be half-set. §289.
+    let mut options = match &auth {
+        craftkit_control::Auth::Token(token) => ServerOptions::new(port, token.clone()),
+        craftkit_control::Auth::None => ServerOptions::unauthenticated(port),
+    }
+    .with_ui(move |session, request| {
+        let guard = ui_state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        ui_request(session, request, &guard)
+    })
+    .with_after(move || request_repaint(&slot));
     if let Some(dir) = token_dir {
         options = options.with_token_dir(dir);
     }
@@ -475,8 +498,18 @@ fn start_control(
     // token". §54.
     let (server, path) = craftkit_control::serve_published(Arc::clone(session), options)?;
     println!("control channel listening on 127.0.0.1:{}", server.port());
-    println!("token in {}", path.display());
-    println!("try: {{\"id\":1,\"token\":\"…\",\"method\":\"engine.describe\"}}");
+    match &path {
+        Some(path) => {
+            println!("token in {}", path.display());
+            println!("try: {{\"id\":1,\"token\":\"…\",\"method\":\"engine.describe\"}}");
+        }
+        // No token, so no file and no token in the example: the channel is
+        // loopback, and this machine is the one it opens. §289.
+        None => {
+            println!("no token: every process on this machine may drive this application");
+            println!("try: {{\"id\":1,\"method\":\"engine.describe\"}}");
+        }
+    }
     Ok((server, path))
 }
 
@@ -1520,8 +1553,15 @@ mod tests {
         let dir = craftkit_foundation::temp::dir("control").expect("a directory for the token");
 
         let token = craftkit_control::Token::from_text("0123456789abcdef0123").expect("a valid token");
-        let (server, _path) =
-            start_control(0, &session, &ctx_slot, &state, token.clone(), Some(&dir)).expect("binds");
+        let (server, _path) = start_control(
+            0,
+            &session,
+            &ctx_slot,
+            &state,
+            craftkit_control::Auth::Token(token.clone()),
+            Some(&dir),
+        )
+        .expect("binds");
 
         let mut stream = std::net::TcpStream::connect(("127.0.0.1", server.port())).expect("connects");
         // The read is bounded: a test that waits without a bound cannot catch
@@ -1568,6 +1608,32 @@ mod tests {
         let flags = parse_flags(&args(&["--sample"])).expect("ok").expect("not help");
         assert!(flags.sample);
         assert_eq!(open(&flags).document().nodes.len(), 3);
+    }
+
+    /// The flag that turns the token off needs the channel it turns off.
+    ///
+    /// §289: the flag is about the control channel, so a launch that asks
+    /// for no token and no channel is a launch that says nothing.
+    #[test]
+    fn the_no_token_flag_needs_the_control_flag() {
+        let err = parse_flags(&args(&["--control-no-token"])).expect_err("the flag needs a channel");
+        assert!(err.contains("--control"), "{err}");
+    }
+
+    /// The flag is remembered, and it does not disturb the port.
+    #[test]
+    fn the_no_token_flag_is_remembered() {
+        let flags =
+            parse_flags(&args(&["--control", "4711", "--control-no-token"])).expect("ok").expect("not help");
+        assert!(flags.control_no_token);
+        assert_eq!(flags.control, Some(4711));
+    }
+
+    /// The default is the token.
+    #[test]
+    fn the_default_asks_for_a_token() {
+        let flags = parse_flags(&args(&["--control", "4711"])).expect("ok").expect("not help");
+        assert!(!flags.control_no_token);
     }
 
     #[test]

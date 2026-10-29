@@ -280,6 +280,10 @@ Never describe a UI change. Look at it.
 cargo run --release -p craftkit -- --sample --control PORT
 # the token is in ~/.local/share/craftkit/control/PORT.token,
 # or set CRAFTKIT_CONTROL_TOKEN yourself
+#
+# --control-no-token serves the same channel with no token at all: no token
+# file is written, and every process on this machine may drive the app. It
+# needs --control, and it is a choice, not a default. §289.
 
 # drive it with JSON lines on 127.0.0.1:PORT
 {"id":1,"token":"…","method":"engine.execute","params":{"command":"node.add","params":{"name":"Gate","kind":"filter"}}}

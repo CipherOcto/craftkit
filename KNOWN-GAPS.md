@@ -33575,6 +33575,82 @@ rather than left standing ✓ as a promise the tree had stopped keeping ✓.
 | **A path a caller names does not climb out of the folder it names** | `a_save_as_refuses_a_path_that_climbs_out_of_its_folder` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
 
 
+## 289. The control channel had exactly one way in, and the owner wanted two
+
+### The finding
+
+**The channel asked for a token, and there was no other way to run it.**
+
+That is not a defect by itself — a token per launch is the right default ✓ —
+but it made a *decision* impossible: on a machine with one user (a phone, a
+build box that belongs to one person, a laptop with one account), the token
+costs something and buys nothing ✓. The token guards the **port** ✓, and the
+port is loopback ✓ — so what it actually guards is the **machine** ✓: on a
+shared build box every local process can connect to every local port ✓, and the
+token is the only thing between "a process on this box" and "this
+application's designs" ✓.
+
+The owner was asked and chose ✓: **an option — token (default) or none — with
+the tree's current behaviour as the default** (option (b) ✓).
+
+### What landed
+
+- **`Auth`** ✓ — `Auth::Token(Token)` ✓ and `Auth::None` ✓ — and the server
+  carries it in `ServerOptions::auth` ✓.
+- **The default did not move** ✓: `ServerOptions::new(port, token)` is
+  unchanged ✓ and still asks for the token ✓, and
+  `ServerOptions::unauthenticated(port)` is the other mode ✓. Two
+  constructors, so the mode is chosen in one place ✓ and cannot be half-set
+  ✓.
+- **The accept loop asks only when there is a token to ask for** ✓. A server
+  with a token still closes a connection that presents none ✓, with no reply
+  ✓, so a port scanner learns nothing ✓ — that did not change ✓.
+- **No token means no token file** ✓. The file is the promise that this port
+  answers to this token ✓; a port that asks for no token has no such promise
+  to make ✓, and a file that said otherwise would send a script looking for a
+  token that is not asked for ✓. `serve_published` therefore returns
+  `Option<PathBuf>` ✓.
+- **The application can choose** ✓: `--control-no-token` ✓, which needs
+  `--control` ✓, and the usage says what it means ✓ — *"every process on this
+  machine may drive the application"* ✓.
+- **Rule 2 in the control crate is now conditional** ✓: *"a token per launch —
+  unless the host asks for none"* ✓.
+
+### Why nothing else would have caught it
+
+- **There was only one mode** ✓, so there was nothing to choose ✓ and nothing
+  to measure ✓. A gap that is a missing *option* looks exactly like a
+  decision that was never written down ✓.
+- **The token file was the only way to learn the token** ✓ — so a host that
+  did not want a token had no way to say so ✓, and the tree never learned
+  that the mode was wanted ✓.
+
+### What is not claimed
+
+- **The channel is still loopback-only** ✓. `allow_remote` is still false by
+  default ✓ and nothing in this arc touches it ✓: the change opens the
+  *machine*, not the network ✓.
+- **The token mode still writes its file** ✓, with the platform's own
+  permissions ✓ — that test is still there ✓, and the mutation proves it ✓.
+- **A server with no token accepts every local peer** ✓. That is a door
+  opened on purpose ✓, and the flag says so in words ✓.
+
+### The lesson
+
+**A mode nobody can choose is not a choice; it is a default with a name.** The
+owner's answer was not "remove the token" — it was *"make it an option, and
+keep the default"* — and that is the shape a careful tree answers with: the
+strict mode stays the default ✓, the other mode is a named choice ✓, and the
+thing the choice *costs* is written down where a host will read it ✓.
+
+**And the guard is worth naming for what it guards.** The token stops a
+neighbour on the machine ✓, not a neighbour on the network ✓ — and a rule
+whose scope is not written down is a rule whose cost is not known ✓.
+
+| **A server that asks for a token refuses a peer that presents none** | `a_connection_without_the_token_is_closed_with_no_reply` in `crates/control/src/server.rs` | 1 mutation — §289 |
+| **A server that asks for no token writes no token file** | `a_server_without_a_token_writes_no_token_file` in `crates/control/src/server.rs` | 1 mutation — §289 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -34198,6 +34274,8 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A path a caller names does not climb out of the folder it names** | `a_save_as_refuses_a_path_that_climbs_out_of_its_folder` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
 | **The design is saved to the file it came from** | `a_save_writes_the_design_to_the_file_it_came_from` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
 | **The file a design was saved to is the file the next Save writes to** | `a_save_as_writes_the_design_and_remembers_the_file` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+| **A server that asks for a token refuses a peer that presents none** | `a_connection_without_the_token_is_closed_with_no_reply` in `crates/control/src/server.rs` | 1 mutation — §289 |
+| **A server that asks for no token writes no token file** | `a_server_without_a_token_writes_no_token_file` in `crates/control/src/server.rs` | 1 mutation — §289 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

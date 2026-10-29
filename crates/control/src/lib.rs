@@ -34,11 +34,16 @@
 //! 1. **Loopback only.** The listener binds `127.0.0.1`. A control channel that
 //!    accepts a remote connection is a remote code execution surface wearing a
 //!    friendly name.
-//! 2. **A token per launch.** Written to a `0600` file — where the platform
+//! 2. **A token per launch — unless the host asks for none.** Written to a
+//!    `0600` file — where the platform
 //!    has POSIX permissions, and with the process's own default where it does
 //!    not — or supplied in
 //!    `CRAFTKIT_CONTROL_TOKEN`. A connection that does not present it is
 //!    closed without a reply, so a port scanner learns nothing.
+//!    [`Auth::None`] is the other mode: the host says this machine is its
+//!    own, and no token is asked for and none is written. **The token is the
+//!    default**, and the other mode is a choice a host makes on purpose.
+//!    §289.
 //! 3. **Nothing reaches past the engine.** Every method maps onto something the
 //!    engine already does. There is no method that opens a file, spawns a
 //!    process, or evaluates arbitrary code. **One command writes a file** —
@@ -66,7 +71,7 @@ pub mod token;
 
 pub use protocol::{Method, ProtocolError, Request, Response, UiAction};
 pub use server::{Server, ServerOptions, dispatch, publish_token, serve, serve_published, serve_with};
-pub use token::{Token, token_path, token_path_in, write_token};
+pub use token::{Auth, Token, token_path, token_path_in, write_token};
 
 /// The environment variable that supplies the token instead of generating one.
 pub const TOKEN_ENV: &str = "CRAFTKIT_CONTROL_TOKEN";
