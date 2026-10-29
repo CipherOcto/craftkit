@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-vector-geom"
+description = "Path operations for v2's batteries: a library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK: the shape of a path is the SDK's, so the operations work on the
+# SDK's types and a file never carries a library's types.
+craftkit-sdk = { workspace = true }
+# The geometry. `kurbo` is the bezier library and `linesweeper` is a robust
+# sweep-line boolean operation; both are permissively licensed, and both are
+# dependencies rather than copied code.
+kurbo = { workspace = true }
+linesweeper = { workspace = true }

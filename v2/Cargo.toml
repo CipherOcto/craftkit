@@ -12,9 +12,18 @@ license = "MIT OR Apache-2.0"
 # The SDK is the only thing a plugin depends on.
 craftkit-sdk = { path = "crates/craftkit-sdk", version = "0.2.0" }
 craftkit-derive = { path = "crates/craftkit-derive", version = "0.2.0" }
+# The geometry: a **library**, not a plugin. It contributes nothing to the
+# registry and the linker does not wire it in.
+craftkit-vector-geom = { path = "crates/craftkit-vector-geom", version = "0.2.0" }
 
 serde_json = "1"
 inventory = "0.3"
+
+# The geometry the batteries' path operations use. Both are permissively
+# licensed and both are dependencies, not copied code: `kurbo` is the bezier
+# library and `linesweeper` is a robust sweep-line boolean operation.
+kurbo = "0.13"
+linesweeper = "0.5"
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
