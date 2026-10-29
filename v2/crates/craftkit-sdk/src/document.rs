@@ -56,6 +56,18 @@ impl Rect {
     pub fn contains(&self, point: Point) -> bool {
         point.x >= self.x && point.x <= self.x + self.w && point.y >= self.y && point.y <= self.y + self.h
     }
+
+    /// Whether two rectangles overlap.
+    ///
+    /// Touching is not overlapping: a rectangle that ends where another
+    /// begins shares no area, and a front end that draws both of them
+    /// has drawn a seam rather than an overlap.
+    pub fn intersects(&self, other: Rect) -> bool {
+        self.x < other.x + other.w
+            && other.x < self.x + self.w
+            && self.y < other.y + other.h
+            && other.y < self.y + self.h
+    }
 }
 
 /// A colour, at paint time.

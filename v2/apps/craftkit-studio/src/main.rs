@@ -152,6 +152,17 @@ fn main() {
         println!("   {} {}", entry.id, entry.params);
     }
 
+    println!("\n── the camera: one set of controls");
+    // The camera is the session's state, the way the selection and the
+    // tool are. It has its own caps, and the undo does not move it.
+    session.camera_mut().set_zoom(2.0);
+    session.camera_mut().look_at(craftkit_sdk::Point::new(3.0, 4.0));
+    println!(
+        "   zoom {}, and the middle of the screen is at {:?}",
+        session.camera().zoom(),
+        session.camera().offset()
+    );
+
     println!("\n── the history: a tree, not a line");
     // An edit, undone, and then done differently: the work that was
     // undone is still there, on its own branch.

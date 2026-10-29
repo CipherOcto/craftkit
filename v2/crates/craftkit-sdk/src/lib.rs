@@ -59,6 +59,7 @@ pub mod anchor;
 pub mod assets;
 pub mod bundle;
 pub mod bytes;
+pub mod camera;
 pub mod command;
 pub mod contribution;
 pub mod document;
@@ -85,6 +86,7 @@ pub mod tasks;
 
 pub use anchor::{Anchored, PluginAnchor};
 pub use bundle::{Bundle, File};
+pub use camera::Camera;
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{

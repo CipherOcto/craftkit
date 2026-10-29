@@ -45,6 +45,7 @@
 
 use serde_json::Value as Json;
 
+use crate::camera::Camera;
 use crate::command::CommandSpec;
 use crate::contribution::Registry;
 use crate::document::{Document, NodeKindSpec};
@@ -75,6 +76,8 @@ pub struct Session {
     tool: Option<String>,
     /// The tasks: work that may outlive the process.
     tasks: TaskRegistry,
+    /// The camera: what is on screen.
+    camera: Camera,
     depth: usize,
     /// How many states the history has been given.
     ///
@@ -102,6 +105,7 @@ impl Session {
             journal: Vec::new(),
             tool: None,
             tasks: TaskRegistry::new(),
+            camera: Camera::new(),
             depth: 0,
             states_made: 0,
             running: None,
@@ -195,6 +199,23 @@ impl Session {
     /// The nodes that are selected, in the order they are in the document.
     pub fn selected_nodes(&self) -> Vec<&crate::document::Node> {
         self.document.walk().filter(|node| self.selected_ids().contains(&node.id)).collect()
+    }
+
+    /// The camera: what is on screen, and how much of it.
+    ///
+    /// It is the session's state, the way the selection and the tool are:
+    /// a camera is something a person is looking through, not something
+    /// the document holds.
+    ///
+    /// It is **not** part of what the undo restores: scrolling is not an
+    /// edit, and an undo that scrolls the view is a surprise.
+    pub fn camera(&self) -> &Camera {
+        &self.camera
+    }
+
+    /// The camera, to change.
+    pub fn camera_mut(&mut self) -> &mut Camera {
+        &mut self.camera
     }
 
     /// The tasks: work that may outlive the process.
