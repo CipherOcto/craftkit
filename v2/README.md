@@ -833,7 +833,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**214 tests.**
+**225 tests.**
 
 ### Not built
 
@@ -909,7 +909,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 214 tests
+cargo test          # 225 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1425,3 +1425,74 @@ fifth gives a document that names no files the none it has.
   bundle is not written.
 - **The rest of the §20 list**: a selection of spans rather than of
   ids, the view state, and the three plugin formats.
+
+---
+
+## 22. The selection holds parts, and there is a tool in the hand
+
+The last two items of the §20 list that are about the **session's** own
+state: a selection that can hold a *range*, and the tool the user is
+holding.
+
+### The selection was a list of ids, and a range is not a node
+
+A selection of ids can say "this clip". It cannot say "**the first
+second of** this clip", and half of the sound tree's editing commands
+are exactly that: a trim, a split, a nudge, a razor. They act on a
+**range**, and the range is not a node.
+
+So a selected thing is now a node **and the part of it that is picked
+out**:
+
+```rust
+pub struct Selected {
+    pub node: u64,
+    pub from: Option<f64>,   // in the node's own units
+    pub to: Option<f64>,
+}
+```
+
+The range is in the node's **own units** — samples for a clip, whatever
+a shape's axis is for a shape — because there is no universal axis. The
+core carries the numbers and the **kind** reads them: the same bargain
+the payload makes, one level down. A kit that pretended there was a
+universal axis would be right in exactly one domain.
+
+`select.span` selects a part; `select.node` selects a whole one; and the
+commands that want whole things ask for `selected_whole_ids()`, because a
+boolean of half a path is not a thing the vector battery does.
+
+### The first user: a trim
+
+The sound battery's `sound.clip.trim` takes its range from the caller
+**or from the selection**, and it is where the design is proved: a trim
+shortens the clip, moves its start, and — the part that is easy to get
+wrong — **moves the content with it**, so that a clip trimmed at its head
+starts later in the source.
+
+### The tool in the hand
+
+A **tool** is a contribution — a gesture that runs a command — but a
+tree of tools is not a person: a person holds **one** of them at a time.
+Which one is the **session's** state and not the document's, because two
+people editing the same document may hold different tools and neither of
+them has changed the document.
+
+So the session holds it (`tool.hold`, `tool.release`, `tool.held`), it
+comes back with an undo, and it leaves no history: holding a tool does
+not change the document.
+
+### What is still not here
+
+- **The zoom and the scroll.** They are view state, and a view needs a
+  **camera**, and this tree has none: the window draws a node graph, a
+  timeline and a properties panel. The tree's rule is that a canvas must
+  have **one** set of camera controls, one module that owns them, with
+  its own caps — so a zoom without a camera would be a number with
+  nothing to zoom, and a second place to grow a camera in.
+- **The transport.** Where the playhead is, and whether it is playing,
+  is **real-time** state, and it belongs to the lane (§21.1) and not to
+  the session's document state.
+- **The plugin formats.** CLAP, VST3 and AU are still not ported, and
+  they want a host crate each, a format to host them in, and a decision
+  about what a plugin's state is in a document whose payload is JSON.
