@@ -343,3 +343,111 @@ impl DocOpen {
             .with_data(craftkit_sdk::serde_json::json!({ "path": path, "name": name, "nodes": nodes })))
     }
 }
+
+/// Write the document and the files it needs into a **bundle**.
+///
+/// The bundle is the document and its files in one file: the assets the
+/// document names, and the streams of its nodes. The files are read from
+/// the directory they are relative to, and a file that is not there is
+/// refused by name — a bundle that is missing a file is not a bundle.
+#[derive(Command)]
+#[command(id = "doc.save.bundle", area = "doc", icon = "save", menu("File"), mutates, undoable)]
+pub struct DocSaveBundle {
+    /// Where to write the bundle.
+    pub path: Text,
+    /// The directory the files are relative to.
+    pub from: Text,
+}
+
+impl DocSaveBundle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let from = self.from.0.clone();
+        let mut files: Vec<craftkit_sdk::bundle::File> = Vec::new();
+        let mut wanted: Vec<String> =
+            session.document().assets.iter().map(|asset| asset.path.clone()).collect();
+        for node in session.document().walk() {
+            match node.stream.clone() {
+                Some(stream) if !wanted.contains(&stream) => wanted.push(stream),
+                _ => {}
+            }
+        }
+        for name in wanted {
+            let source = std::path::Path::new(&from).join(&name);
+            let bytes = std::fs::read(&source).map_err(|error| EngineError::Failed {
+                id: "doc.save.bundle".to_string(),
+                message: format!("`{name}` could not be read: {error}"),
+            })?;
+            files.push(craftkit_sdk::bundle::File::new(name, bytes));
+        }
+        let bytes =
+            craftkit_sdk::bundle::write(session.document(), files, session.formats()).map_err(|message| {
+                EngineError::Failed {
+                    id: "doc.save.bundle".to_string(),
+                    message: format!("the bundle could not be written: {message}"),
+                }
+            })?;
+        std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+            id: "doc.save.bundle".to_string(),
+            message: format!("`{path}` could not be written: {error}"),
+        })?;
+        let count = session.document().assets.len();
+        Ok(Outcome::changed(format!("wrote `{path}` ({count} file(s))"))
+            .with_data(craftkit_sdk::serde_json::json!({ "path": path, "assets": count })))
+    }
+}
+
+/// Open a **bundle**: the document and the files it needs.
+///
+/// The files are written into the directory they are relative to, so that
+/// the document's paths mean something on this machine as well.
+#[derive(Command)]
+#[command(id = "doc.open.bundle", area = "doc", icon = "open", menu("File"), mutates, undoable)]
+pub struct DocOpenBundle {
+    /// Where to read the bundle from.
+    pub path: Text,
+    /// The directory the files are relative to.
+    pub into: Text,
+}
+
+impl DocOpenBundle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let into = self.into.0.clone();
+        let bytes = std::fs::read(&path).map_err(|error| EngineError::Failed {
+            id: "doc.open.bundle".to_string(),
+            message: format!("`{path}` could not be read: {error}"),
+        })?;
+        let bundle = craftkit_sdk::bundle::read(&bytes, session.formats(), session.migrations()).map_err(
+            |message| EngineError::Failed {
+                id: "doc.open.bundle".to_string(),
+                message: format!("`{path}` was refused: {message}"),
+            },
+        )?;
+        for file in &bundle.files {
+            let target = std::path::Path::new(&into).join(&file.path);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| EngineError::Failed {
+                    id: "doc.open.bundle".to_string(),
+                    message: format!("`{}` could not be made: {error}", parent.display()),
+                })?;
+            }
+            std::fs::write(&target, &file.bytes).map_err(|error| EngineError::Failed {
+                id: "doc.open.bundle".to_string(),
+                message: format!("`{}` could not be written: {error}", target.display()),
+            })?;
+        }
+        let name = bundle.document.name.clone();
+        let nodes = bundle.document.nodes.len();
+        let files = bundle.files.len();
+        *session.document_mut() = bundle.document;
+        Ok(Outcome::changed(format!("opened `{path}` ({files} file(s))")).with_data(
+            craftkit_sdk::serde_json::json!({
+                "path": path,
+                "name": name,
+                "nodes": nodes,
+                "files": files,
+            }),
+        ))
+    }
+}
