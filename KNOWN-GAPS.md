@@ -33649,6 +33649,108 @@ whose scope is not written down is a rule whose cost is not known ✓.
 
 | **A server that asks for a token refuses a peer that presents none** | `a_connection_without_the_token_is_closed_with_no_reply` in `crates/control/src/server.rs` | 1 mutation — §289 |
 | **A server that asks for no token writes no token file** | `a_server_without_a_token_writes_no_token_file` in `crates/control/src/server.rs` | 1 mutation — §289 |
+| **A case that asks for a test the crate does not have is a bug in the script** | `a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported` in `xtask/src/anchors.rs` | 1 mutation — §290 |
+| **A build failure is not a catch, colour or not** | the self-test's "a coloured build failure is not a catch" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
+| **A gate that ran no test is not a missed gate** | the self-test's "a gate that ran no test is not a missed gate" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
+
+
+## 290. The instrument that measures the gates was itself broken, and it blamed the gates
+
+### The finding
+
+**The mutation suite — the run that breaks each rule on purpose and requires
+the gate to notice — was red on `main` twice** ✓ (2026-10-28 ✓ and
+2026-10-29 ✓), and nobody looked, because it runs on a schedule ✓ and the
+push gate does not run it ✓.
+
+**Eleven of its cases asked a question this tree cannot answer.** §276 moved
+the generic half of the tree into `craftkit-foundation` ✓; the cases' **swaps**
+were updated ✓ and their **questions** were not ✓. A case said *"run
+`cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused`"* ✓
+— and `craftkit-core` has no such test ✓, because the test lives in
+`craftkit-foundation` ✓ now.
+
+And **cargo reports a filter that matches nothing as a success** ✓: *"0
+passed; 0 failed"* ✓ and **exit 0** ✓. So the harness saw a case that did not
+fail, and wrote down the tree's own sentence about gates ✓ — *"a gate that
+cannot fail is worse than no gate"* ✓ — **about a gate that was never asked
+anything** ✓.
+
+**And the instrument's own protection against a false catch was dead.** §102
+says a **build failure is not a catch** ✓, and the check for it looked for
+the text `error: could not compile` ✓. The runner builds with
+`CARGO_TERM_COLOR=always` ✓, which puts **escape codes around the word
+"error"** ✓ — so that text is not in the output at all ✓ and the grep never
+matched ✓. **A swap that broke the build was counted as a catch** ✓, and two
+cases were "caught" exactly that way ✓: they never ran a test ✓.
+
+### What landed
+
+- **The instrument has a third verdict** ✓: a case whose gate ran **no test**
+  is `UNANSWERED` ✓ — *"the gate ran no test: the question has no answer in
+  this tree"* ✓ — and the run **fails** on it ✓, separately from a missed
+  gate ✓. A bug in the script is no longer reported as a fact about a gate ✓.
+- **The colour is stripped before the output is classified** ✓, so a build
+  failure is a build failure ✓ in the runner as well as on a laptop ✓.
+- **A gate in `cargo xtask anchors`** ✓ — *"every test the script asks for is
+  a test this tree has"* ✓ — checks the questions without running cargo ✓, so
+  this class of breakage is caught by the **fast** gate ✓ instead of by an
+  85-minute run ✓.
+- **Fifteen cases repaired** ✓ — fourteen questions pointed at the crate that
+  has the test ✓, one swap pointed the other way ✓ (the tick's range was
+  narrowed by the fix that publishes instants as **text** ✓, so a wider tick
+  is harmless now ✓, and the case that protects that rule is the one about
+  the published instant ✓) — and **each was verified by hand** ✓: the swap
+  applied, the test failed ✓.
+- **The mutation job no longer denies warnings** ✓. A denied warning is a
+  **build failure** ✓, and a build failure is not a catch ✓ — so denying
+  warnings in the instrument's own environment turned swaps into broken
+  builds ✓ and the run into a list of "no test ran" ✓. The `ci` job still
+  denies them ✓.
+
+### Why nothing else would have caught it
+
+- **The suite is not in the push gate** ✓ — it runs on a schedule ✓, on a
+  pull request ✓, or by hand ✓. A red scheduled run is a thing nobody sees ✓
+  until they go and look ✓.
+- **The instrument reported the failure as a fact about the *gate*** ✓, in
+  the tree's own words ✓, so a reader looked at the gate ✓ — and the gate was
+  fine ✓.
+- **Nothing checked the questions the script asks** ✓. The anchors gate
+  checked that every **anchor** is in the tree ✓; the question the case asks
+  was never checked ✓.
+
+### What is not claimed
+
+- **The whole suite has not been run end to end on this tree** ✓. The repair
+  was verified case by case ✓ — fifteen cases, each applied and each failing
+  the test it names ✓ — and the full run is the runner's job ✓.
+- **The new gate says a test *exists*** ✓; it does not say the swap **breaks**
+  it ✓. That is the suite's job ✓, and the two together are the tree's claim ✓.
+- **A case that runs no test is not a missed gate** ✓ — but it is still a
+  failure ✓: the run goes red ✓, because a case that tests nothing is a
+  hole in the instrument ✓.
+
+### The lesson
+
+**An instrument that reports its own mistakes as facts about the subject is
+worse than no instrument.** "The gate cannot fail" sent the reader to the
+gate ✓; the truth was in the script ✓, in a crate name ✓. The tree's own
+sentence about gates was turned against a gate that had never been asked
+anything ✓.
+
+**And a filter that matches nothing is a success to the tool and a silence to
+the reader.** Cargo says "0 passed" ✓ and exits 0 ✓ — so the instrument has
+to know what *"no test ran"* looks like ✓, and has to say it in a different
+voice ✓ from *"the gate did not notice"* ✓.
+
+**And the colours are not decoration.** A check that greps for text has to
+read the text the tool **prints** ✓, not the text it would print without
+colour ✓ — and the runner's colour is the one that counts ✓.
+
+| **A case that asks for a test the crate does not have is a bug in the script** | `a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported` in `xtask/src/anchors.rs` | 1 mutation — §290 |
+| **A build failure is not a catch, colour or not** | the self-test's "a coloured build failure is not a catch" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
+| **A gate that ran no test is not a missed gate** | the self-test's "a gate that ran no test is not a missed gate" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
 
 
 ## What enforces what

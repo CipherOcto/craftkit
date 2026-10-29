@@ -51,7 +51,14 @@ env:
   CARGO_TERM_COLOR: always
   # `--locked` everywhere. A build that quietly updates the lock file is a
   # build nobody has tested.
-  RUSTFLAGS: -D warnings
+  #
+  # **No `RUSTFLAGS: -D warnings` here**, and that is deliberate. §290: a
+  # warning denied is a **build failure**, and §102 says a build failure is
+  # not a catch — the rule was never tested. So denying warnings in the
+  # instrument's own environment turns half the swaps into broken builds,
+  # and the run reports them as "no test ran" instead of measuring the rule
+  # they were written to measure. The `ci` job still denies warnings; this
+  # job is about whether a **gate** can fail.
 
 jobs:
   # Does each gate still catch the thing it claims?

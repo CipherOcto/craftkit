@@ -1375,11 +1375,218 @@ pub fn the_anchors_are_in_the_tree_of(root: &Path, script_path: &Path) -> Result
     Ok(problems)
 }
 
-/// The gate.
+/// One question the script asks the tree.
+///
+/// A case in the script is *"break this rule and require the gate to notice"*.
+/// The gate is a command, and the command is usually *"run this test"* — so
+/// the case names a **test**. A case that names a test the crate does not
+/// have asks a question nothing answers, and the answer is "no test ran",
+/// which `cargo` reports as success: the case is then a **miss** that looks
+/// like a fact about the gate. §290.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Question {
+    /// The package the question is asked of.
+    pub package: String,
+    /// The test file, when the question names one (`--test`).
+    pub file: Option<String>,
+    /// The test, when the question names one.
+    pub test: Option<String>,
+    /// The line of the script that asks it.
+    pub line: usize,
+}
+
+/// Every question the script asks, in the order it asks them.
+///
+/// The reader is deliberately simple: it looks for `cargo test` inside a
+/// quoted word, because that is the only shape the script uses for a gate
+/// command. A shape it does not know is not a question it can check, and the
+/// gate says so rather than passing it in silence.
+pub fn questions(script: &str) -> Vec<Question> {
+    let mut found = Vec::new();
+    for (index, line) in script.lines().enumerate() {
+        let Some(at) = line.find("cargo test") else { continue };
+        let words: Vec<&str> = line[at..].split_whitespace().collect();
+        let Some(package_at) = words.iter().position(|w| *w == "-p") else { continue };
+        let Some(package) = words.get(package_at + 1) else { continue };
+        let rest = &words[package_at + 2..];
+        let mut file = None;
+        let mut test = None;
+        let mut cursor = 0usize;
+        while cursor < rest.len() {
+            let word = rest[cursor];
+            if word == "--test" {
+                file = rest.get(cursor + 1).map(|w| (*w).to_string());
+                cursor += 2;
+                continue;
+            }
+            if word.starts_with("--") {
+                // A flag that takes a value takes the word after it, and
+                // that word is not the test's name: `--profile ci` is a
+                // profile, not a test called `ci`.
+                let takes_a_value = matches!(word, "--profile" | "--features" | "--target");
+                cursor += if takes_a_value { 2 } else { 1 };
+                continue;
+            }
+            // The first word that is not a flag and not a flag's value is
+            // the test's name; anything after it is an argument cargo would
+            // reject, so the first one is the one that matters. The word
+            // carries the shell's closing quote, which is not part of it.
+            let name: String = word.trim_end_matches(['"', '\'', ';', ',']).to_string();
+            test = Some(name);
+            break;
+        }
+        found.push(Question { package: (*package).to_string(), file, test, line: index + 1 });
+    }
+    found
+}
+
+/// The directory of every package in the tree, by its package name.
+///
+/// The name and the directory are different things (`craftkit-foundation` is
+/// `crates/foundation`), and a gate that guessed would be a gate that lies
+/// about the tree it is reading.
+fn package_directories(root: &Path) -> std::collections::BTreeMap<String, PathBuf> {
+    let mut map = std::collections::BTreeMap::new();
+    // The crates in `crates/` and `apps/`, and the build tool itself, which
+    // is a package at the root rather than in a group.
+    let mut package_dirs = Vec::new();
+    for group in ["crates", "apps"] {
+        let dir = root.join(group);
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            package_dirs.push(entry.path());
+        }
+    }
+    package_dirs.push(root.join("xtask"));
+    for package_dir in package_dirs {
+        let manifest = package_dir.join("Cargo.toml");
+        let Ok(text) = crate::tree::read_text(&manifest) else { continue };
+        for line in text.lines() {
+            let line = line.trim();
+            if let Some(name) = line.strip_prefix("name = \"")
+                && let Some(name) = name.strip_suffix('"')
+            {
+                map.insert(name.to_string(), package_dir.clone());
+                break;
+            }
+        }
+    }
+    map
+}
+
+/// Every `fn` name a crate's Rust files declare.
+fn test_names(crate_dir: &Path) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    let mut files = Vec::new();
+    crate::tree::walk(crate_dir, crate_dir, &mut files, &|path| {
+        path.extension().and_then(|e| e.to_str()) == Some("rs")
+    });
+    for file in files {
+        // `walk` hands back paths relative to the root it was given, so the
+        // file is joined back onto the crate's own folder.
+        let Ok(text) = crate::tree::read_rust(crate_dir.join(&file), crate::tree::Subject::Everything) else {
+            continue;
+        };
+        for line in text.lines() {
+            let line = line.trim();
+            // A test's name is its function's name, and its **path** may
+            // name the module it lives in: cargo's filter matches the whole
+            // path, so `usage_tests` selects every test in that module.
+            let rest = line.strip_prefix("fn ").or_else(|| line.strip_prefix("mod "));
+            let Some(rest) = rest else { continue };
+            let name: String = rest.chars().take_while(|c| *c != '(' && *c != ' ' && *c != '<').collect();
+            if !name.is_empty() {
+                names.insert(name);
+            }
+        }
+    }
+    names
+}
+
+/// Every question the script asks that the tree cannot answer.
+///
+/// The rule: **a case may not ask a question the tree has no answer to.** The
+/// instrument's own report would call such a case a missed gate, and that is
+/// a lie about the gate — it is a fact about the script. §290.
+pub fn unanswered_questions(root: &Path, script_path: &Path) -> Vec<String> {
+    let script = match crate::tree::read_text(script_path) {
+        Ok(text) => text,
+        Err(_) => return Vec::new(),
+    };
+    let directories = package_directories(root);
+    let mut problems = Vec::new();
+    for question in questions(&script) {
+        let Some(test) = question.test.clone() else { continue };
+        let Some(crate_dir) = directories.get(&question.package) else {
+            problems.push(format!(
+                "{}: line {} asks `{}` for a test, and this tree has no package called `{}`",
+                script_path.display(),
+                question.line,
+                test,
+                question.package
+            ));
+            continue;
+        };
+        // A question that names a test file is about that file, and about
+        // nothing else: `cargo test --test` runs that file and no other.
+        let names = match question.file.as_deref() {
+            Some(file) => {
+                let path = crate_dir.join("tests").join(format!("{file}.rs"));
+                if !path.is_file() {
+                    problems.push(format!(
+                        "{}: line {} asks for the test file `{}` of `{}`, and that file is not in the \
+                         tree",
+                        script_path.display(),
+                        question.line,
+                        file,
+                        question.package
+                    ));
+                    continue;
+                }
+                let text =
+                    crate::tree::read_rust(&path, crate::tree::Subject::Everything).unwrap_or_default();
+                let mut names = std::collections::BTreeSet::new();
+                for line in text.lines() {
+                    let line = line.trim();
+                    let rest = line.strip_prefix("fn ").or_else(|| line.strip_prefix("mod "));
+                    if let Some(rest) = rest {
+                        let name: String =
+                            rest.chars().take_while(|c| *c != '(' && *c != ' ' && *c != '<').collect();
+                        if !name.is_empty() {
+                            names.insert(name);
+                        }
+                    }
+                }
+                names
+            }
+            None => test_names(crate_dir),
+        };
+        // Cargo's filter is a **substring** match, so a question may name
+        // the beginning of a test's name. The rule is the same one cargo
+        // applies: the crate must have a test the filter would select.
+        if !names.iter().any(|name| name.contains(&test)) {
+            problems.push(format!(
+                "{}: line {} asks `{}` for `{test}`, and `{}` has no such test — the case would run \
+                 nothing and be reported as a gate that cannot fail",
+                script_path.display(),
+                question.line,
+                question.package,
+                question.package
+            ));
+        }
+    }
+    problems
+}
+
 pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
     crate::step("anchors");
     let script = the_script_to_check(root, args)?;
-    let problems = the_anchors_are_in_the_tree_of(root, &script)?;
+    let mut problems = the_anchors_are_in_the_tree_of(root, &script)?;
+    // Every question the script asks has to have an answer in this tree.
+    // §290: a case that asks for a test the crate does not have runs nothing,
+    // and `cargo` reports that as success — so the case is reported as a
+    // missed gate, which is a lie about the gate.
+    problems.extend(unanswered_questions(root, &script));
     if !problems.is_empty() {
         let mut message = format!("{} problem(s) in {}:\n", problems.len(), script.display());
         for problem in &problems {
@@ -1390,14 +1597,14 @@ pub fn run(root: &Path, args: &[String]) -> Result<Outcome, String> {
     println!(
         "   ok: every anchor in {} is in the tree, each one names a single place, every label is \
          a literal the shell cannot change, the header names every way to run the script, the \
-         documents name the list of files, and every copy the script makes breaks the script in one place",
+         documents name the list of files, every copy the script makes breaks the script in one \
+         place, and every test the script asks for is a test this tree has",
         script.display()
     );
     Ok(Outcome::Ran)
 }
 
 /// The script the gate checks: the tree's own, unless another one is named.
-///
 /// §187. `--script PATH` is how a rule about the script's own text is broken
 /// on purpose: the script cannot be edited while it runs, so a copy is
 /// checked instead.
@@ -1428,6 +1635,81 @@ fn the_script_to_check(root: &Path, args: &[String]) -> Result<PathBuf, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A crate in a folder of its own, with one test in it.
+    fn a_crate_with_one_test(dir: &std::path::Path) {
+        let crate_dir = dir.join("crates/demo");
+        std::fs::create_dir_all(crate_dir.join("src")).expect("the crate");
+        std::fs::write(crate_dir.join("Cargo.toml"), "[package]\nname = \"demo\"\n").expect("the manifest");
+        std::fs::write(crate_dir.join("src/lib.rs"), "#[test]\nfn a_test_that_exists() {}\n")
+            .expect("the source");
+    }
+
+    /// A case that asks for a test the crate does not have is a **bug in the
+    /// script**, and the gate says so. §290.
+    ///
+    /// This is the class of breakage that made eleven cases in the runner's
+    /// report say "the gate cannot fail" when the truth was "the case asked
+    /// a crate that has no such test".
+    #[test]
+    fn a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported() {
+        let dir = crate::temp::dir("unanswered").expect("a folder");
+        a_crate_with_one_test(&dir);
+        let script = dir.join("script.sh");
+        std::fs::write(
+            &script,
+            "expect_catch \"a case\" \\\n    \"cargo test -p demo --profile ci a_test_that_is_not_there\"\n",
+        )
+        .expect("the script");
+
+        let problems = unanswered_questions(&dir, &script);
+        assert!(
+            problems.iter().any(|p| p.contains("a_test_that_is_not_there")),
+            "the unanswered question was not reported: {problems:#?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("demo")),
+            "the report does not name the package: {problems:#?}"
+        );
+    }
+
+    /// A case that asks for a test the crate **has** is not reported.
+    #[test]
+    fn a_case_that_asks_for_a_test_the_crate_has_is_not_reported() {
+        let dir = crate::temp::dir("answered").expect("a folder");
+        a_crate_with_one_test(&dir);
+        let script = dir.join("script.sh");
+        std::fs::write(
+            &script,
+            "expect_catch \"a case\" \\\n    \"cargo test -p demo --profile ci a_test_that_exists\"\n",
+        )
+        .expect("the script");
+
+        let problems = unanswered_questions(&dir, &script);
+        assert!(problems.is_empty(), "an answered question was reported: {problems:#?}");
+    }
+
+    /// The reader asks the question cargo would ask.
+    ///
+    /// A filter is a **substring** match, so a case may name the beginning of
+    /// a test's name, and a case may name a module.
+    #[test]
+    fn the_reader_understands_what_cargo_would_run() {
+        let script = concat!(
+            "expect_catch \"one\" \\\n    \"cargo test -p demo --profile ci a_test\"\n",
+            "expect_catch \"two\" \\\n    \"cargo test -p demo --profile ci --test other a_name\"\n",
+            "expect_catch \"three\" \\\n    \"cargo test -p demo --profile ci\"\n",
+        );
+        let asked = questions(script);
+        assert_eq!(asked.len(), 3);
+        assert_eq!(asked[0].package, "demo");
+        assert_eq!(asked[0].test.as_deref(), Some("a_test"));
+        assert_eq!(asked[0].file, None);
+        assert_eq!(asked[1].file.as_deref(), Some("other"));
+        assert_eq!(asked[1].test.as_deref(), Some("a_name"));
+        // A whole-crate run names no test, and so asks nothing in particular.
+        assert_eq!(asked[2].test, None);
+    }
 
     // ------------------------------------------------------- the reader ----
 

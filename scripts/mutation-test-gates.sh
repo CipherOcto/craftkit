@@ -338,6 +338,8 @@ declare -a CAUGHT=()
 declare -a MISSED=()
 declare -a BROKE=()
 declare -a SKIPPED=()
+# The cases that asked a question the tree cannot answer. §290.
+declare -a UNANSWERED=()
 CASES=0
 
 # Does the output say the tree did not compile?
@@ -351,8 +353,36 @@ CASES=0
 # The patterns are the ones cargo prints for a compilation failure, and not
 # the ones it prints for a failing test: a test failure says "error: test
 # failed, to rerun pass ...", which is a catch.
+# The output without its colour codes.
+#
+# §290: `CARGO_TERM_COLOR=always` puts escape codes around the word "error",
+# so the text `error: could not compile` is not in the output at all — and a
+# grep for it never matched. The protection §102 put here was therefore dead
+# on the runner, and a build failure was counted as a catch. The colour is
+# for people; the classification is for the script.
+strip_colour() {
+    printf '%s' "$1" | sed $'s/\033\\[[0-9;]*m//g'
+}
+
 did_not_compile() {
-    printf '%s' "$1" | grep -qE 'error\[E[0-9]+\]|error: could not compile|error: aborting due to'
+    strip_colour "$1" | grep -qE 'error\[E[0-9]+\]|error: could not compile|error: aborting due to'
+}
+
+# Whether the gate ran **no test at all**.
+#
+# §290: `cargo test` with a filter that matches nothing prints "0 passed; 0
+# failed" and **exits 0**. A case that asks for a test the crate does not
+# have therefore looks exactly like a gate that did not notice the mutation —
+# and the report blames the gate for the script's mistake. The rule here is
+# the same one cargo applies: a run that ran no test has tested nothing.
+ran_no_test() {
+    local out
+    out="$(strip_colour "$1")"
+    # No summary at all: the command was not a test run.
+    printf '%s' "$out" | grep -q 'test result:' || return 1
+    # A summary with a test in it: a test passed or failed, so something ran.
+    printf '%s' "$out" | grep -qE '[1-9][0-9]* (passed|failed)' && return 1
+    return 0
 }
 
 # Expect a gate to REJECT the mutated tree.
@@ -396,6 +426,13 @@ expect_catch() {
             printf '          the tree did not compile, so no test ran: the rule is untested\n'
             BROKE+=("$label")
         fi
+    elif ran_no_test "$out"; then
+        # The case ran nothing. That is a fact about **this script**, not
+        # about the gate: the question names a test this tree does not have,
+        # or the gate is not a test run at all. §290.
+        printf '  %sUNANSWERED%s  %s\n' "$YELLOW" "$RESET" "$label"
+        printf '          the gate ran no test: the question has no answer in this tree\n'
+        UNANSWERED+=("$label")
     else
         printf '  %sMISSED%s  %s\n' "$RED" "$RESET" "$label"
         printf '          %s\n' "$(printf '%s' "$out" | tail -1 | cut -c1-88)"
@@ -445,7 +482,7 @@ finished, so the number in the workflow needs to move with it.\n' "$RED" "$RESET
         # dark room. §173.
         printf '%sno case ran.%s Every case was skipped; nothing was tested.\n' "$YELLOW" "$RESET"
         status=1
-    elif [[ ${#MISSED[@]} -eq 0 && ${#BROKE[@]} -eq 0 ]]; then
+    elif [[ ${#MISSED[@]} -eq 0 && ${#BROKE[@]} -eq 0 && ${#UNANSWERED[@]} -eq 0 ]]; then
         printf '%s%d/%d caught.%s The `known` line is a limit of wasm32 itself, not a gate that passed.\n' \
             "$GREEN" "${#CAUGHT[@]}" "$CASES" "$RESET"
     else
@@ -461,6 +498,14 @@ finished, so the number in the workflow needs to move with it.\n' "$RED" "$RESET
             for f in "${BROKE[@]}"; do printf '   • %s\n' "$f"; done
             printf '\n%sA mutation that does not compile tests nothing.%s Fix the mutation, so it compiles.\n' \
                 "$RED" "$RESET"
+        fi
+        if [[ ${#UNANSWERED[@]} -gt 0 ]]; then
+            printf '%s%d of %d case(s) asked a question this tree cannot answer:%s\n' \
+                "$RED" "${#UNANSWERED[@]}" "$CASES" "$RESET"
+            for f in "${UNANSWERED[@]}"; do printf '   • %s\n' "$f"; done
+            printf '\n%sA case that ran no test is a bug in this script, not a fact about a gate.%s\n' \
+                "$RED" "$RESET"
+            printf 'Point it at a test the tree has; `cargo xtask anchors` says when it cannot.\n'
         fi
         status=1
     fi
@@ -526,6 +571,33 @@ if [[ "${1:-}" == "--self-test" ]]; then
         "bash -c 'echo \"error[E0308]: mismatched types\"; echo \"error: could not compile\"; exit 1'"
     if [[ ${#BROKE[@]} -eq 0 ]]; then
         printf '%sself-test FAILED: a broken build was counted as a caught mutation%s\n' "$RED" "$RESET"
+        exit 2
+    fi
+    # The sixth half, and it is §290: the protection above has to survive
+    # the colour. The runner builds with `CARGO_TERM_COLOR=always`, which
+    # puts escape codes around the word "error" — so the text the grep looks
+    # for is not in the output at all, and a build failure was counted as a
+    # catch. A synthetic gate that prints the coloured form has to be
+    # classified as a broken build and not as a catch.
+    echo
+    echo "-- self-test: a coloured build failure is not a catch"
+    expect_catch "synthetic: a gate that fails on a coloured broken build" \
+        "bash -c 'printf \"\\033[1m\\033[38;5;9merror\\033[0m: could not compile \\\"craftkit-foundation\\\" (lib)\\n\"; exit 1'"
+    if [[ ${#BROKE[@]} -eq 0 ]]; then
+        printf '%sself-test FAILED: a coloured build failure was counted as a caught mutation%s\n' "$RED" "$RESET"
+        exit 2
+    fi
+    # And the seventh half, and it is the same section: a case whose gate
+    # runs **no test** has tested nothing, and the report used to call that
+    # a gate that could not fail. A synthetic gate that prints cargo's own
+    # summary for a filter that matched nothing must be classified as a
+    # question this tree cannot answer.
+    echo
+    echo "-- self-test: a gate that ran no test is not a missed gate"
+    expect_catch "synthetic: a gate that ran no test" \
+        "bash -c 'echo \"test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.00s\"'"
+    if [[ ${#UNANSWERED[@]} -eq 0 ]]; then
+        printf '%sself-test FAILED: a gate that ran no test was reported as a missed gate%s\n' "$RED" "$RESET"
         exit 2
     fi
     # The fourth half: the snapshot has to cover the files a **build**
@@ -1155,7 +1227,7 @@ swap crates/foundation/src/readers.rs \
     '    reader.take(max as u64 + 1).read_to_string(&mut out).map_err(io_error)?;' \
     '    reader.take(u64::MAX).read_to_string(&mut out).map_err(io_error)?;'
 expect_catch "io: a bounded read is not bounded" \
-    "cargo test -p craftkit-core --profile ci a_bounded_read_never_asks_for_more_than_the_limit"
+    "cargo test -p craftkit-foundation --profile ci a_bounded_read_never_asks_for_more_than_the_limit"
 
 # The line reader keeps at most `max` bytes and drops the rest; without the
 # drop, one long line is one long allocation. The first version of this case
@@ -1164,9 +1236,10 @@ expect_catch "io: a bounded read is not bounded" \
 # memory. The mutation now moves the property the test can see.
 swap crates/foundation/src/readers.rs \
     '    let take = room.min(chunk.len());' \
-    '    let take = chunk.len();'
+    '    let take = chunk.len();
+    let _ = room;'
 expect_catch "io: a long line is kept instead of dropped" \
-    "cargo test -p craftkit-core --profile ci the_bytes_kept_never_exceed_the_limit"
+    "cargo test -p craftkit-foundation --profile ci the_bytes_kept_never_exceed_the_limit"
 
 # The engine's document and the file's document are the same thing. §50.
 #
@@ -1326,7 +1399,7 @@ swap crates/model/src/property.rs \
     '                .map(|k| std::mem::size_of::<Key>() + k.value.estimated_bytes())' \
     '                .map(|_k| 0)'
 expect_catch "model: the size estimate does not count the content" \
-    "cargo test -p craftkit-engine --profile ci the_history_keeps_its_memory_within_a_budget"
+    "cargo test -p craftkit-model --profile ci a_document_over_the_byte_limit_is_refused"
 
 # The property's own value, which the estimate did not count. §73.
 #
@@ -1870,9 +1943,9 @@ expect_catch "ui: a frame's area stops being bounded" \
 # inside the macro, where the lint that forbids `unwrap` cannot see it. §60.
 swap crates/core/src/tick.rs \
     '    pub const MAX: Tick = Tick(u64::MAX as i128);' \
-    '    pub const MAX: Tick = Tick(i128::MAX / 4);'
+    '    pub const MAX: Tick = Tick(u64::MAX as i128 + 1);'
 expect_catch "core: a tick can be wider than a reply can carry" \
-    "cargo test -p craftkit-engine --profile ci a_hostile_time_does_not_panic_the_command_that_reports_it"
+    "cargo test -p craftkit-core --profile ci a_tick_becomes_a_reply_number_exactly"
 
 # The reader has to refuse a file whose range no reply could carry.
 #
@@ -5404,13 +5477,13 @@ swap crates/foundation/src/readers.rs \
     '                    content_len = content_len.saturating_add(index);' \
     '                    content_len = content_len.saturating_add(index + 1);'
 expect_catch "reader: the line's length counts the newline" \
-    "cargo test -p craftkit-core --profile ci a_line_longer_than_the_limit_is_refused_with_its_true_length"
+    "cargo test -p craftkit-foundation --profile ci a_line_longer_than_the_limit_is_refused_with_its_true_length"
 
 swap crates/foundation/src/params.rs \
     '                if s.len() > max {' \
     '                if s.len() > max + 1 {'
 expect_catch "params: the text cap is one too large" \
-    "cargo test -p craftkit-core --profile ci a_text_parameter_never_exceeds_its_limit"
+    "cargo test -p craftkit-foundation --profile ci a_text_parameter_never_exceeds_its_limit"
 
 # And the suites stop running from a fixed seed, so a CI run can fail at
 # random. The rule is a test rather than a comment, so it can be caught.
@@ -5418,7 +5491,7 @@ swap crates/foundation/tests/properties.rs \
     '    Config { failure_persistence: None, rng_seed: RngSeed::Fixed(SEED), cases: CASES, ..Config::default() }' \
     '    Config { failure_persistence: None, rng_seed: RngSeed::Random, cases: CASES, ..Config::default() }'
 expect_catch "property: the suites stop running from a fixed seed" \
-    "cargo test -p craftkit-core --profile ci the_property_suites_run_from_a_fixed_seed_and_write_nothing_down"
+    "cargo test -p craftkit-foundation --profile ci the_property_suites_run_from_a_fixed_seed_and_write_nothing_down"
 
 # ------------------------------------------------- the MCP resources ----
 # Section 176. The server served tools and nothing else, so a client that
@@ -5870,7 +5943,7 @@ swap crates/foundation/src/temp.rs \
     '    let name = format!("{tag}-{}-{n}", std::process::id());' \
     '    let name = format!("{tag}-{}", std::process::id());'
 expect_catch "temp: two calls share one temporary folder" \
-    "cargo test -p craftkit-core --profile ci every_call_gets_a_folder_of_its_own"
+    "cargo test -p craftkit-foundation --profile ci every_call_gets_a_folder_of_its_own"
 
 # And the second takes the emptying away: a folder that is already there is
 # inherited instead of fresh.
@@ -5881,7 +5954,7 @@ swap crates/foundation/src/temp.rs \
     }' \
     ''
 expect_catch "temp: a temporary folder inherits the last run's files" \
-    "cargo test -p craftkit-core --profile ci every_call_gets_a_folder_of_its_own"
+    "cargo test -p craftkit-foundation --profile ci every_call_gets_a_folder_of_its_own"
 
 # Section 212. The rule has one home now, and a test that writes it again is
 # a test that can inherit the last run's files -- which is what the home was
@@ -6673,7 +6746,7 @@ swap crates/foundation/src/atomic.rs \
     '    let _ = temp_path(path)?;
     write_temp(path, bytes, visibility)'
 expect_catch "atomic: the home writes the file without a temporary name" \
-    "cargo test -p craftkit-core --profile ci the_file_that_was_there_survives_a_write_that_fails"
+    "cargo test -p craftkit-foundation --profile ci the_file_that_was_there_survives_a_write_that_fails"
 
 # The second break puts a writer outside the one home: the command line's
 # script writer goes back to writing the file itself. The gate holds up the
@@ -6760,14 +6833,14 @@ swap crates/foundation/src/value.rs \
     '                if depth + 1 > MAX_VALUE_DEPTH {' \
     '                if depth + 1 > usize::MAX {'
 expect_catch "core: a value nested past the depth limit is accepted" \
-    "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
+    "cargo test -p craftkit-foundation --profile ci a_value_nested_past_the_depth_limit_is_refused"
 
 # And the constructor that claims to keep the depth has to keep it too.
 swap crates/foundation/src/value.rs \
     '        if nesting(&items) > MAX_VALUE_DEPTH {' \
     '        if false {'
 expect_catch "core: the constructor accepts a value past the depth limit" \
-    "cargo test -p craftkit-core --profile ci a_value_nested_past_the_depth_limit_is_refused"
+    "cargo test -p craftkit-foundation --profile ci a_value_nested_past_the_depth_limit_is_refused"
 
 # ------------------------------------------- the instrument, and the push that cancelled it ----
 # Section 252. The instrument was a job in the fast workflow, under a rule that
@@ -6812,7 +6885,7 @@ swap crates/foundation/src/value.rs \
     '        if !h.bytes().all(|b| b.is_ascii_hexdigit()) {' \
     '        if false {'
 expect_catch "core: a colour is not hex digits and nothing else" \
-    "cargo test -p craftkit-core --profile ci a_colour_is_hex_digits_and_nothing_else"
+    "cargo test -p craftkit-foundation --profile ci a_colour_is_hex_digits_and_nothing_else"
 
 # And the same in the path's id spelling. The rule was "@ is hex digits" and
 # is now "@ is the spelling the tree writes" (§263): the segment has to come
@@ -7097,7 +7170,7 @@ swap crates/foundation/src/value.rs \
     '            Value::Color(c) => serde_json::Value::String(c.to_hex()),' \
     '            Value::Color(c) => serde_json::json!({ "t": "color", "v": c }),'
 expect_catch "core: a published value is not a value a command accepts" \
-    "cargo test -p craftkit-core --profile ci a_published_value_is_a_value_a_command_accepts"
+    "cargo test -p craftkit-foundation --profile ci a_published_value_is_a_value_a_command_accepts"
 
 # And the plan: the value the plan publishes is the one a command takes.
 swap crates/eval/src/plan.rs \
@@ -7164,7 +7237,7 @@ swap crates/foundation/src/value.rs \
                         json_kind(json)
                     ))),'
 expect_catch "core: the file's tagged value is not read back" \
-    "cargo test -p craftkit-core --profile ci the_files_tagged_value_is_read_back"
+    "cargo test -p craftkit-foundation --profile ci the_files_tagged_value_is_read_back"
 
 # --------------------------------------- the file's easing is read back ----
 # Section 273. The tree's files spell an easing the way serde spells it --
@@ -7386,6 +7459,16 @@ swap crates/control/src/server.rs \
     '        None => Some(std::path::PathBuf::new()),'
 expect_catch "control: a server without a token writes a token file" \
     "cargo test -p craftkit-control --profile ci a_server_without_a_token_writes_no_token_file"
+
+# ------------------------------------------- §290: the instrument's own questions ----
+# A case that asks for a test the crate does not have runs nothing, and the
+# instrument used to call that a gate that cannot fail. The gate that catches
+# it is the fast one: every test the script asks for is a test this tree has.
+swap xtask/src/anchors.rs \
+    '        if !names.iter().any(|name| name.contains(&test)) {' \
+    '        if false {'
+expect_catch "anchors: a case that asks for a test the crate does not have is not reported" \
+    "cargo test -p xtask --profile ci a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported"
 
 restore
 finish

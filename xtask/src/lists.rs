@@ -6058,6 +6058,18 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
 /// asking about the file as it is, and cutting the tests would answer a
 /// different question.
 const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
+    // The file as it is: the question is which **test** a crate has, and a
+    // test is not code the tree ships. §290.
+    (
+        "test_names",
+        Subject::Everything,
+        "the question is which tests a crate has, and a test is not code the tree ships",
+    ),
+    (
+        "unanswered_questions",
+        Subject::Everything,
+        "the question is which tests a crate has, and a test is not code the tree ships",
+    ),
     // The code the tree ships.
     (
         "area_variants",
