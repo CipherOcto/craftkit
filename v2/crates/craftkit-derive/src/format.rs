@@ -106,6 +106,7 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
     let mut idents: Vec<Ident> = Vec::new();
     let mut types: Vec<syn::Type> = Vec::new();
     let mut defaults: Vec<bool> = Vec::new();
+    let mut merges: Vec<bool> = Vec::new();
     for field in &fields {
         let Some(ident) = field.ident.clone() else {
             return Err(Error::new(Span::call_site(), "a format's fields are named"));
@@ -117,44 +118,102 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
         names.push(name);
         idents.push(ident);
         types.push(field.ty.clone());
-        defaults.push(has_default(&field.attrs)?);
+        let (default, merge) = format_flags(&field.attrs)?;
+        defaults.push(default);
+        merges.push(merge);
     }
 
-    let writes = idents.iter().zip(types.iter()).map(|(ident, ty)| {
-        let name = ident.to_string();
-        let key = LitStr::new(&name, ident.span());
-        quote! {
-            #key: <#ty as #sdk::FormatValue>::to_json(&self.#ident),
-        }
-    });
-    let reads = idents.iter().zip(types.iter()).zip(defaults.iter()).map(|((ident, ty), default)| {
-        let name = ident.to_string();
-        if *default {
-            // A field that may be **absent**: a file written before the
-            // field existed is read as the field's default rather than
-            // refused. That is what makes a new field a version and a
-            // step rather than a break.
-            quote! {
-                #ident: {
-                    let __field = value.get(#name).cloned()
-                        .unwrap_or_else(|| <#ty as #sdk::FormatValue>::default_value());
-                    <#ty as #sdk::FormatValue>::from_json(&__field)?
-                },
+    // A field that **merges** holds what the reader did not understand,
+    // and it is written back with the fields it knows.
+    let merged = idents
+        .iter()
+        .zip(merges.iter())
+        .filter(|(_, merge)| **merge)
+        .map(|(ident, _)| ident.clone())
+        .collect::<Vec<_>>();
+    if merged.len() > 1 {
+        return Err(Error::new(
+            merged[1].span(),
+            "a format has one merging field: the fields it did not understand",
+        ));
+    }
+    let merged_index = merged.first().and_then(|ident| idents.iter().position(|other| other == ident));
+    let merged_with_default = match (merged_index, merged.first()) {
+        (Some(index), Some(ident)) if defaults[index] => Some(ident.clone()),
+        _ => None,
+    };
+    if let Some(ident) = merged_with_default {
+        return Err(Error::new(
+            ident.span(),
+            "a merging field is read as what is left over: it cannot also have a default",
+        ));
+    }
+
+    // The names the reader knows, for the field that keeps the rest.
+    let known: Vec<&str> = names
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| Some(*index) != merged_index)
+        .map(|(_, name)| name.as_str())
+        .collect();
+
+    let writes =
+        idents.iter().zip(types.iter()).enumerate().filter(|(index, _)| Some(*index) != merged_index).map(
+            |(_, (ident, ty))| {
+                let name = ident.to_string();
+                let key = LitStr::new(&name, ident.span());
+                quote! {
+                    #key: <#ty as #sdk::FormatValue>::to_json(&self.#ident),
+                }
+            },
+        );
+    let reads = idents.iter().zip(types.iter()).zip(defaults.iter()).zip(merges.iter()).map(
+        |(((ident, ty), default), merge)| {
+            let name = ident.to_string();
+            if *merge {
+                // The field keeps what the reader did not understand: the
+                // fields of the file that are not the ones this type knows.
+                quote! {
+                    #ident: #sdk::format::keep_unknown(value, &[#(#known),*]),
+                }
+            } else if *default {
+                // A field that may be **absent**: a file written before the
+                // field existed is read as the field's default rather than
+                // refused. That is what makes a new field a version and a
+                // step rather than a break.
+                quote! {
+                    #ident: {
+                        let __field = value.get(#name).cloned()
+                            .unwrap_or_else(|| <#ty as #sdk::FormatValue>::default_value());
+                        <#ty as #sdk::FormatValue>::from_json(&__field)?
+                    },
+                }
+            } else {
+                quote! {
+                    #ident: <#ty as #sdk::FormatValue>::from_json(
+                        #sdk::format::field(value, #name)?
+                    )?,
+                }
             }
-        } else {
-            quote! {
-                #ident: <#ty as #sdk::FormatValue>::from_json(
-                    #sdk::format::field(value, #name)?
-                )?,
-            }
-        }
-    });
+        },
+    );
+    // The merged field is written by merging: the fields it holds are
+    // written with the ones this type knows, and the ones this type knows
+    // win.
+    let merge_write = match merged.first() {
+        Some(ident) => quote! {
+            #sdk::format::merge_unknown(&mut __value, &self.#ident);
+        },
+        None => quote! {},
+    };
 
     Ok(quote! {
         impl #name {
             /// The value as it is written.
             pub fn to_json(&self) -> #sdk::serde_json::Value {
-                #sdk::serde_json::json!({ #(#writes)* })
+                let mut __value = #sdk::serde_json::json!({ #(#writes)* });
+                #merge_write
+                __value
             }
 
             /// The value as it is read.
@@ -181,20 +240,31 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
 /// a file that does not have it is read as the field's default rather than
 /// refused. It is how a new field becomes a version and a step rather than
 /// a break in the chain.
-fn has_default(attrs: &[syn::Attribute]) -> Result<bool> {
+///
+/// The attribute is `#[format(merge)]`: the field holds what the reader
+/// did not understand, and it is written back with the fields the type
+/// knows. It is how a program keeps what it cannot read instead of
+/// dropping it.
+fn format_flags(attrs: &[syn::Attribute]) -> Result<(bool, bool)> {
+    let mut default = false;
+    let mut merge = false;
     for attribute in attrs {
         if !attribute.path().is_ident("format") {
             continue;
         }
         attribute.parse_nested_meta(|meta| {
             if meta.path.is_ident("default") {
+                default = true;
                 return Ok(());
             }
-            Err(meta.error("a format field knows one thing: `default`"))
+            if meta.path.is_ident("merge") {
+                merge = true;
+                return Ok(());
+            }
+            Err(meta.error("a format field knows two things: `default` and `merge`"))
         })?;
-        return Ok(true);
     }
-    Ok(false)
+    Ok((default, merge))
 }
 
 /// Write a migration.

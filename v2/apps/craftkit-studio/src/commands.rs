@@ -300,9 +300,10 @@ impl DocSave {
 /// Open a document from a file.
 ///
 /// The file says which format wrote it. If this program knows that version,
-/// the file is read as it is; if it knows a newer one, the file is
-/// **migrated forward** first; if it knows an older one, the file is
-/// refused, because this program does not know what it is.
+/// the file is read as it is; if it knows an older one, the file is
+/// **migrated forward** first; if the file is from a **newer** program,
+/// it is read with the newest reader here, the fields this program does
+/// not understand are **kept**, and the program says so out loud.
 #[derive(Command)]
 #[command(id = "doc.open", area = "doc", icon = "open", menu("File"), mutates, undoable)]
 pub struct DocOpen {
@@ -322,15 +323,23 @@ impl DocOpen {
                 id: "doc.open".to_string(),
                 message: format!("`{path}` is not a document: {error}"),
             })?;
-        let document = craftkit_sdk::format::read_document(&value, session.formats(), session.migrations())
-            .map_err(|message| EngineError::Failed {
-            id: "doc.open".to_string(),
-            message: format!("`{path}` was refused: {message}"),
-        })?;
+        let (document, forward) =
+            craftkit_sdk::format::read_document_noting(&value, session.formats(), session.migrations())
+                .map_err(|message| EngineError::Failed {
+                    id: "doc.open".to_string(),
+                    message: format!("`{path}` was refused: {message}"),
+                })?;
         let name = document.name.clone();
         let nodes = document.nodes.len();
         *session.document_mut() = document;
-        Ok(Outcome::changed(format!("opened `{path}`"))
+        let message = match forward {
+            Some(version) => format!(
+                "opened `{path}` (written by a newer program, version {version}; the parts this \
+                 program does not understand were kept)"
+            ),
+            None => format!("opened `{path}`"),
+        };
+        Ok(Outcome::changed(message)
             .with_data(craftkit_sdk::serde_json::json!({ "path": path, "name": name, "nodes": nodes })))
     }
 }

@@ -161,6 +161,50 @@ pub fn field<'a>(value: &'a Json, name: &str) -> Result<&'a Json, String> {
     }
 }
 
+/// The fields of a value that the reader does **not** understand.
+///
+/// This is what a forward-compatible reader is: the fields it knows are
+/// read, and the fields it does not know are **kept**, so that a file
+/// written by a newer program does not come back smaller.
+///
+/// The **envelope** is not one of them: the format and the version belong
+/// to the file and not to the document, so they are never kept as
+/// content.
+pub fn keep_unknown(value: &Json, known: &[&str]) -> Json {
+    let Some(object) = value.as_object() else { return Json::Null };
+    let mut kept = serde_json::Map::new();
+    for (name, field) in object {
+        if known.contains(&name.as_str()) || name == "format" || name == "version" {
+            continue;
+        }
+        kept.insert(name.clone(), field.clone());
+    }
+    // Nothing kept is **nothing**: an empty object and a null are two
+    // shapes for the same fact, and a document that went through a
+    // program that keeps nothing must not look different from one that
+    // did not.
+    if kept.is_empty() {
+        return Json::Null;
+    }
+    Json::Object(kept)
+}
+
+/// Write the fields a reader did not understand back into a value.
+///
+/// The fields the writer knows win: a kept field is by definition one the
+/// writer does not know, and a file that has both is a file whose known
+/// field is the truth.
+pub fn merge_unknown(value: &mut Json, unknown: &Json) {
+    let Some(kept) = unknown.as_object() else { return };
+    let Some(object) = value.as_object_mut() else { return };
+    for (name, field) in kept {
+        if object.contains_key(name) {
+            continue;
+        }
+        object.insert(name.clone(), field.clone());
+    }
+}
+
 /// One version of the format.
 ///
 /// The tag is what a file carries: `craftkit/2`. The version is what the
@@ -291,12 +335,14 @@ pub fn write_v1(document: &Document) -> Json {
             }
         }
     }
-    serde_json::json!({
+    let mut written = serde_json::json!({
         "format": "craftkit/1",
         "version": 1,
         "name": value.get("name").cloned().unwrap_or(Json::Null),
         "nodes": value.get("nodes").cloned().unwrap_or(Json::Array(Vec::new())),
-    })
+    });
+    merge_unknown(&mut written, &document.unknown);
+    written
 }
 
 /// Write a document in the second version: every node says whether it is
@@ -315,6 +361,7 @@ pub fn write_v2(document: &Document) -> Json {
             }
         }
     }
+    merge_unknown(&mut value, &document.unknown);
     value
 }
 
@@ -324,25 +371,29 @@ pub fn write_v2(document: &Document) -> Json {
 /// the step below gives a file that does not have it the empty group each
 /// node would have had.
 pub fn write_v3(document: &Document) -> Json {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "format": "craftkit/3",
         "version": 3,
         "name": document.name,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
 }
 
 /// The fourth version of the document format.
 ///
 /// A node may have no place, and the document carries a payload.
 pub fn write_v4(document: &Document) -> Json {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "format": "craftkit/4",
         "version": 4,
         "name": document.name,
         "data": document.data,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
 }
 
 /// The fifth version of the document format.
@@ -351,14 +402,16 @@ pub fn write_v4(document: &Document) -> Json {
 /// the things a tree cannot say — a clip that plays a source, a track
 /// that feeds a bus, a track that is under a controller.
 pub fn write_v5(document: &Document) -> Json {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "format": "craftkit/5",
         "version": 5,
         "name": document.name,
         "data": document.data,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
 }
 
 /// The sixth version of the document format.
@@ -368,7 +421,7 @@ pub fn write_v5(document: &Document) -> Json {
 /// says so in one place, so that a program can tell what is missing
 /// before it starts editing.
 pub fn write_v6(document: &Document) -> Json {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "format": "craftkit/6",
         "version": 6,
         "name": document.name,
@@ -376,7 +429,9 @@ pub fn write_v6(document: &Document) -> Json {
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
 }
 
 /// The first version of the document format.
@@ -566,13 +621,34 @@ pub fn write_document(document: &Document, format: &FormatSpec) -> Json {
 /// The file carries the tag of the version it was written with, and the
 /// steps that bridge it are contributions. A file whose version is the
 /// newest one is read as it is; a file whose version is older is
-/// **migrated first**; a file whose version is newer than anything here is
-/// refused, because this program does not know what it is.
+/// **migrated first**; a file whose version is **newer** is read with the
+/// newest reader this program has, and the fields that reader does not
+/// understand are **kept** — see [`read_document_noting`].
 pub fn read_document(
     value: &Json,
     formats: &Registry<FormatSpec>,
     migrations: &Registry<MigrationSpec>,
 ) -> Result<Document, String> {
+    read_document_noting(value, formats, migrations).map(|(document, _)| document)
+}
+
+/// Read a document, and say what the reader had to say about it.
+///
+/// The second value is the **version the file was written with**, when
+/// that version is newer than anything this program knows. A program that
+/// reads a file from the future is doing something it should say out
+/// loud: it read the fields it knows, and it kept the rest, but it cannot
+/// know that a field it *does* know has not changed its meaning.
+///
+/// The steps that bridge the versions run **only** for a file that is
+/// older than this program: a file from the future is not brought
+/// forward, because bringing it forward would need steps this program
+/// does not have.
+pub fn read_document_noting(
+    value: &Json,
+    formats: &Registry<FormatSpec>,
+    migrations: &Registry<MigrationSpec>,
+) -> Result<(Document, Option<u32>), String> {
     let tag = value
         .get("format")
         .and_then(|tag| tag.as_str())
@@ -581,17 +657,25 @@ pub fn read_document(
     let Some(newest) = newest_format(formats, family) else {
         return Err(format!("this program does not know the format `{family}`"));
     };
-    let written = formats
-        .all()
-        .iter()
-        .find(|format| format.tag == tag)
-        .map(|format| format.version)
-        .ok_or_else(|| format!("this program does not know the format `{tag}`"))?;
+    let known = formats.all().iter().find(|format| format.tag == tag).map(|format| format.version);
+    let written = match known {
+        Some(version) => version,
+        // A tag this program has not seen. The number in the tag says how
+        // far ahead the file is.
+        None => {
+            let version =
+                version_of(tag).ok_or_else(|| format!("this program does not know the format `{tag}`"))?;
+            if version <= newest.version {
+                return Err(format!("this program does not know the format `{tag}`"));
+            }
+            version
+        }
+    };
     if written > newest.version {
-        return Err(format!(
-            "the file is version {written} and this program knows version {}",
-            newest.version
-        ));
+        // A file from a newer program. It is read with the newest reader
+        // here, and what that reader does not understand is kept.
+        let document = (newest.read)(value)?;
+        return Ok((document, Some(written)));
     }
 
     // The steps, in order. Each one is a version forward, and the ecosystem
@@ -607,5 +691,14 @@ pub fn read_document(
         (step.apply)(&mut value)?;
         version = step.to;
     }
-    (newest.read)(&value)
+    Ok(((newest.read)(&value)?, None))
+}
+
+/// The version a tag says, if the tag says one.
+///
+/// The tag is `<family>/<version>`, and the version is a number. A tag
+/// that does not say one is not a tag of a format this program knows.
+pub fn version_of(tag: &str) -> Option<u32> {
+    let (_, version) = tag.split_once('/')?;
+    version.parse::<u32>().ok()
 }

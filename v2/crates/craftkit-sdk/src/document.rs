@@ -437,7 +437,7 @@ impl FormatValue for Rect {
 
 impl FormatValue for Node {
     fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut value = serde_json::json!({
             "id": self.id,
             "name": self.name,
             "kind": self.kind,
@@ -445,7 +445,10 @@ impl FormatValue for Node {
             "muted": self.muted,
             "data": self.data,
             "children": self.children.iter().map(|child| child.to_json()).collect::<Vec<_>>(),
-        })
+        });
+        // The fields this program does not understand are written back.
+        crate::format::merge_unknown(&mut value, &self.unknown);
+        value
     }
 
     fn from_json(value: &serde_json::Value) -> Result<Self, String> {
@@ -478,7 +481,9 @@ impl FormatValue for Node {
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
-        Ok(Node { id, name, kind, rect, muted, data, children })
+        let unknown =
+            crate::format::keep_unknown(value, &["id", "name", "kind", "rect", "muted", "data", "children"]);
+        Ok(Node { id, name, kind, rect, muted, data, children, unknown })
     }
 }
 
@@ -547,6 +552,12 @@ pub struct Node {
     /// group, a layer, or anything else that holds other things. The port
     /// of a real application found that, the way it found the payload.
     pub children: Vec<Node>,
+    /// The fields of this node that the reader did **not** understand.
+    ///
+    /// A program that writes a node with a field this one does not know
+    /// would have that field dropped, and the node would come back
+    /// smaller. So the fields are **kept**, and written back as they were.
+    pub unknown: serde_json::Value,
 }
 
 /// A **relation** between two nodes.
@@ -660,6 +671,18 @@ pub struct Document {
     /// meant.
     #[format(default)]
     pub assets: Vec<Asset>,
+    /// The fields of the file that the reader did **not** understand.
+    ///
+    /// A file written by a newer program may carry fields this one has
+    /// never heard of. Dropping them would make the document come back
+    /// **smaller** than it was, and the next program to open it would
+    /// find the work gone. So they are kept, and written back as they
+    /// were.
+    ///
+    /// The field is **merged** rather than written under its own name: the
+    /// file keeps the shape it had.
+    #[format(merge)]
+    pub unknown: serde_json::Value,
 }
 
 impl Document {
@@ -671,6 +694,7 @@ impl Document {
             nodes: Vec::new(),
             relations: Vec::new(),
             assets: Vec::new(),
+            unknown: serde_json::Value::Null,
         }
     }
 
@@ -714,8 +738,16 @@ impl Document {
         data: serde_json::Value,
     ) -> u64 {
         let id = self.next_id();
-        let node =
-            Node { id, name: name.into(), kind: kind.into(), rect, muted: false, data, children: Vec::new() };
+        let node = Node {
+            id,
+            name: name.into(),
+            kind: kind.into(),
+            rect,
+            muted: false,
+            data,
+            children: Vec::new(),
+            unknown: serde_json::Value::Null,
+        };
         match parent.and_then(|parent| self.node_mut(parent)) {
             Some(parent) => parent.children.push(node),
             None => self.nodes.push(node),
@@ -786,6 +818,7 @@ impl Document {
             muted: false,
             data,
             children: Vec::new(),
+            unknown: serde_json::Value::Null,
         });
         id
     }

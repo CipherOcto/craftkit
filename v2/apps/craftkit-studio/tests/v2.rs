@@ -860,18 +860,28 @@ fn selecting_a_node_that_is_not_there_is_refused() {
     assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
 }
 
-/// A file from a program that is newer than this one is refused.
+/// A file from a program that is newer than this one is **read**, not
+/// refused.
+///
+/// It is read with the newest reader this program has, and the fields
+/// that reader does not understand are kept: a file written by a newer
+/// program must not come back smaller. The reader says that the file was
+/// newer, so that the program can say so out loud.
 #[test]
-fn a_file_from_the_future_is_refused() {
+fn a_file_from_the_future_is_read_and_what_is_not_understood_is_kept() {
     let ecosystem = ecosystem();
     let future = json!({
         "format": "craftkit/9",
         "version": 9,
         "name": "future",
+        "views": ["one", "two"],
         "nodes": [],
     });
-    let refused = craftkit_sdk::format::read_document(&future, &ecosystem.formats, &ecosystem.migrations);
-    assert!(refused.is_err(), "the file from the future was read");
+    let (document, forward) =
+        craftkit_sdk::format::read_document_noting(&future, &ecosystem.formats, &ecosystem.migrations)
+            .expect("the file from the future is read");
+    assert_eq!(forward, Some(9), "the reader knows the file was newer");
+    assert_eq!(document.unknown["views"], json!(["one", "two"]), "the views were kept");
 }
 
 /// A file that does not say what it is, is refused.
