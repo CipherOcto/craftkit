@@ -87,7 +87,7 @@ pub fn evaluate(
     kinds: &crate::contribution::Registry<crate::document::NodeKindSpec>,
 ) -> Plan {
     let mut plan = Plan::new();
-    for node in document.nodes() {
+    for node in document.walk() {
         let Some(kind) = kinds.get(&node.kind) else { continue };
         let Some(evaluate) = kind.evaluate else { continue };
         let Some(value) = evaluate(node, document) else { continue };

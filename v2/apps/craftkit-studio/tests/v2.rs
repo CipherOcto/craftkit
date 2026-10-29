@@ -524,7 +524,9 @@ fn the_format_is_a_contribution() {
     let ecosystem = ecosystem();
     assert!(ecosystem.formats.get("craftkit/1").is_some(), "{:?}", ecosystem.formats.ids());
     assert!(ecosystem.formats.get("craftkit/2").is_some());
+    assert!(ecosystem.formats.get("craftkit/3").is_some());
     assert!(ecosystem.migrations.get("craftkit.1to2").is_some());
+    assert!(ecosystem.migrations.get("craftkit.2to3").is_some());
 }
 
 /// A file is read with the version it was written with, and then migrated
@@ -605,6 +607,104 @@ fn a_nodes_payload_survives_the_file() {
     let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
         .expect("the file is read");
     assert_eq!(read, document, "a round trip is the same document");
+}
+
+/// A node can hold other nodes.
+///
+/// The document is a tree: a node with children is a group, and the core
+/// walks into it. A list cannot hold a group, and a vector document is
+/// full of them.
+#[test]
+fn a_node_can_hold_other_nodes() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "group", "kind": "core.group" }))
+        .expect("the group is added");
+    let group = session.document().nodes.last().expect("there is a node").id;
+    session
+        .execute("node.add", &json!({ "name": "inside", "kind": "geometry.rect", "parent": group }))
+        .expect("the node is added inside the group");
+
+    let names: Vec<&str> = session.document().walk().map(|node| node.name.as_str()).collect();
+    assert_eq!(names, vec!["group", "inside"], "the tree is walked in order");
+    let inside = session.document().node_by_name("inside").expect("the node is there");
+    assert_eq!(inside.kind, "geometry.rect");
+}
+
+/// The plan walks the tree.
+///
+/// A node inside a group is in the document, so it is in the plan: the
+/// core asks the kinds of every node, wherever the node is.
+#[test]
+fn the_plan_walks_the_tree() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "group", "kind": "core.group" }))
+        .expect("the group is added");
+    let group = session.document().nodes.last().expect("there is a node").id;
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 4, "height": 3, "name": "inside" }))
+        .expect("the rectangle is added");
+    let rectangle = session.document().node_by_name("inside").expect("the node is there").id;
+    // Put it in the group: the tree is the document's, and a command may
+    // put a node in one.
+    let taken = session.document_mut().take_node(rectangle);
+    if let (Some(taken), Some(parent)) = (taken, session.document_mut().node_mut(group)) {
+        parent.children.push(taken);
+    }
+
+    let plan = session.evaluate();
+    assert!(
+        plan.items.iter().any(|item| item.node == rectangle),
+        "the node in the group is not in the plan: {plan:?}"
+    );
+}
+
+/// A file with a group in it survives the round trip.
+#[test]
+fn a_file_with_a_group_in_it_survives_the_round_trip() {
+    let ecosystem = ecosystem();
+    let mut document = craftkit_sdk::Document::new("grouped");
+    let group = document.add_node("group", "core.group", craftkit_sdk::Rect::new(0.0, 0.0, 10.0, 10.0));
+    document.add_node_under(
+        Some(group),
+        "inside",
+        "geometry.rect",
+        craftkit_sdk::Rect::new(1.0, 1.0, 2.0, 2.0),
+    );
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    assert!(value.to_string().contains("children"), "the group is not in the file: {value}");
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read, document, "a round trip is the same document");
+}
+
+/// A file of the second version is migrated forward into the third.
+///
+/// The second version had no groups, so the step gives every node the
+/// empty group it would have had.
+#[test]
+fn an_old_flat_file_is_migrated_into_the_tree() {
+    let ecosystem = ecosystem();
+    let old = json!({
+        "format": "craftkit/2",
+        "version": 2,
+        "name": "flat",
+        "nodes": [{
+            "id": 1,
+            "name": "rect",
+            "kind": "geometry.rect",
+            "rect": { "x": 1.0, "y": 2.0, "w": 3.0, "h": 4.0 },
+            "muted": false,
+            "data": null,
+        }],
+    });
+    let document = craftkit_sdk::format::read_document(&old, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the old file is read");
+    assert_eq!(document.nodes.len(), 1);
+    assert!(document.nodes[0].children.is_empty(), "the step gives the node its group");
 }
 
 /// A file from a program that is newer than this one is refused.

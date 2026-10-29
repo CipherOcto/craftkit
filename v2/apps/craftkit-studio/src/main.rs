@@ -49,7 +49,7 @@ fn main() {
 
     println!("\n── drawing the document, through the kinds");
     let mut canvas = RecordingCanvas::default();
-    for node in session.document().nodes() {
+    for node in session.document().walk() {
         // A node whose kind is not linked in is **not drawn**: the core
         // does not know which kinds those are, and it asks the registry.
         let Some(kind) = session.kinds().get(&node.kind) else { continue };
@@ -61,10 +61,13 @@ fn main() {
 
     println!("\n── hitting the document, through the kinds");
     let point = craftkit_sdk::Point::new(4.0, 5.0);
+    // The **deepest** hit wins: a thing in a group is in front of the
+    // group that holds it.
     let hit = session
         .document()
-        .nodes()
-        .find(|node| session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false));
+        .walk()
+        .filter(|node| session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false))
+        .last();
     match hit {
         Some(node) => println!("   the point is inside `{}`", node.name),
         None => println!("   the point is in nothing"),

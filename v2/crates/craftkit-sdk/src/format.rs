@@ -256,6 +256,7 @@ pub fn write_v1(document: &Document) -> Json {
         for node in nodes.iter_mut() {
             if let Some(object) = node.as_object_mut() {
                 object.remove("muted");
+                object.remove("children");
             }
         }
     }
@@ -270,9 +271,31 @@ pub fn write_v1(document: &Document) -> Json {
 /// Write a document in the second version: every node says whether it is
 /// muted.
 pub fn write_v2(document: &Document) -> Json {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "format": "craftkit/2",
         "version": 2,
+        "name": document.name,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+    });
+    if let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) {
+        for node in nodes.iter_mut() {
+            if let Some(object) = node.as_object_mut() {
+                object.remove("children");
+            }
+        }
+    }
+    value
+}
+
+/// Write a document in the third version: a node may hold other nodes.
+///
+/// The version before had a list and no groups. This one has a tree, and
+/// the step below gives a file that does not have it the empty group each
+/// node would have had.
+pub fn write_v3(document: &Document) -> Json {
+    serde_json::json!({
+        "format": "craftkit/3",
+        "version": 3,
         "name": document.name,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     })
@@ -290,12 +313,23 @@ pub static FORMAT_V1: FormatSpec =
 pub static FORMAT_V2: FormatSpec =
     FormatSpec { tag: "craftkit/2", version: 2, layer: "core", read: Document::from_json, write: write_v2 };
 
+/// The third version of the document format.
+///
+/// It lets a node hold other nodes: the document is a tree, and a node
+/// with children is a group.
+pub static FORMAT_V3: FormatSpec =
+    FormatSpec { tag: "craftkit/3", version: 3, layer: "core", read: Document::from_json, write: write_v3 };
+
 inventory::submit! {
     crate::contribution::Registration { item: &FORMAT_V1 }
 }
 
 inventory::submit! {
     crate::contribution::Registration { item: &FORMAT_V2 }
+}
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V3 }
 }
 
 /// The step from the first version to the second.
@@ -314,6 +348,30 @@ impl V1ToV2 {
         for node in nodes.iter_mut() {
             if let Some(object) = node.as_object_mut() {
                 object.entry("muted").or_insert(Json::Bool(false));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The step from the second version to the third.
+///
+/// It gives every node the children the third version writes. A file of
+/// the second version is a list, and a list is a tree whose nodes have
+/// nothing in them.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.2to3", family = "craftkit", from = 2, to = 3, layer = "core")]
+pub struct V2ToV3;
+
+impl V2ToV3 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+            return Ok(());
+        };
+        for node in nodes.iter_mut() {
+            if let Some(object) = node.as_object_mut() {
+                object.entry("children").or_insert(Json::Array(Vec::new()));
             }
         }
         Ok(())

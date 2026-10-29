@@ -444,6 +444,7 @@ impl FormatValue for Node {
             "rect": self.rect.to_json(),
             "muted": self.muted,
             "data": self.data,
+            "children": self.children.iter().map(|child| child.to_json()).collect::<Vec<_>>(),
         })
     }
 
@@ -462,7 +463,16 @@ impl FormatValue for Node {
         let rect = value.get("rect").ok_or_else(|| "a node has no rectangle".to_string())?;
         let muted = value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false);
         let data = value.get("data").cloned().unwrap_or(serde_json::Value::Null);
-        Ok(Node { id, name, kind, rect: Rect::from_json(rect)?, muted, data })
+        let children = match value.get("children") {
+            Some(children) => children
+                .as_array()
+                .ok_or_else(|| "a node's children are a list".to_string())?
+                .iter()
+                .map(Node::from_json)
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        };
+        Ok(Node { id, name, kind, rect: Rect::from_json(rect)?, muted, data, children })
     }
 }
 
@@ -510,6 +520,16 @@ pub struct Node {
     ///
     /// `null` when the kind has no payload. The core never looks inside it.
     pub data: serde_json::Value,
+    /// The nodes under this one.
+    ///
+    /// A node with children is a **group**, and that is a structural fact
+    /// rather than a kind: the core draws a group by drawing what is in
+    /// it, and the group's own kind says what the group *means*.
+    ///
+    /// Before this, the document was a list — and a list cannot hold a
+    /// group, a layer, or anything else that holds other things. The port
+    /// of a real application found that, the way it found the payload.
+    pub children: Vec<Node>,
 }
 
 /// The document.
@@ -535,9 +555,84 @@ impl Document {
         self.nodes.iter().map(|node| node.id).max().unwrap_or(0) + 1
     }
 
-    /// Add a node, and give back its id.
+    /// Add a node at the top level, and give back its id.
     pub fn add_node(&mut self, name: impl Into<String>, kind: impl Into<String>, rect: Rect) -> u64 {
         self.add_node_with(name, kind, rect, serde_json::Value::Null)
+    }
+
+    /// Add a node under another one, and give back its id.
+    ///
+    /// The parent is a node's id. `None` means the top level.
+    pub fn add_node_under(
+        &mut self,
+        parent: Option<u64>,
+        name: impl Into<String>,
+        kind: impl Into<String>,
+        rect: Rect,
+    ) -> u64 {
+        self.add_node_with_under(parent, name, kind, rect, serde_json::Value::Null)
+    }
+
+    /// Add a node with a payload under another one, and give back its id.
+    pub fn add_node_with_under(
+        &mut self,
+        parent: Option<u64>,
+        name: impl Into<String>,
+        kind: impl Into<String>,
+        rect: Rect,
+        data: serde_json::Value,
+    ) -> u64 {
+        let id = self.next_id();
+        let node =
+            Node { id, name: name.into(), kind: kind.into(), rect, muted: false, data, children: Vec::new() };
+        match parent.and_then(|parent| self.node_mut(parent)) {
+            Some(parent) => parent.children.push(node),
+            None => self.nodes.push(node),
+        }
+        id
+    }
+
+    /// Take a node out of the document, and give it back.
+    ///
+    /// The node goes wherever it is — at the top level or under another
+    /// one — and it comes back whole, with whatever is in it.
+    pub fn take_node(&mut self, id: u64) -> Option<Node> {
+        if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
+            return Some(self.nodes.remove(index));
+        }
+        for node in self.nodes.iter_mut() {
+            if let Some(taken) = node.take_child(id) {
+                return Some(taken);
+            }
+        }
+        None
+    }
+
+    /// The nodes at the top level.
+    pub fn roots(&self) -> &[Node] {
+        &self.nodes
+    }
+
+    /// Every node, in the order they are drawn: a node, then what is in it.
+    pub fn walk(&self) -> Descendants<'_> {
+        Descendants { stack: self.nodes.iter().rev().collect() }
+    }
+
+    /// Take a node out of the document, and say whether it was there.
+    ///
+    /// The node goes wherever it is — at the top level or under another
+    /// one — and its children go with it.
+    pub fn remove_node(&mut self, id: u64) -> bool {
+        if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
+            self.nodes.remove(index);
+            return true;
+        }
+        for node in self.nodes.iter_mut() {
+            if node.remove_child(id) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Add a node with a payload, and give back its id.
@@ -552,7 +647,15 @@ impl Document {
         data: serde_json::Value,
     ) -> u64 {
         let id = self.next_id();
-        self.nodes.push(Node { id, name: name.into(), kind: kind.into(), rect, muted: false, data });
+        self.nodes.push(Node {
+            id,
+            name: name.into(),
+            kind: kind.into(),
+            rect,
+            muted: false,
+            data,
+            children: Vec::new(),
+        });
         id
     }
 
@@ -561,19 +664,84 @@ impl Document {
         self.nodes.iter()
     }
 
-    /// The node with an id.
+    /// The node with an id, wherever it is.
     pub fn node(&self, id: u64) -> Option<&Node> {
-        self.nodes.iter().find(|node| node.id == id)
+        self.walk().find(|node| node.id == id)
     }
 
-    /// The node with an id, to change.
+    /// The node with an id, wherever it is, to change.
     pub fn node_mut(&mut self, id: u64) -> Option<&mut Node> {
-        self.nodes.iter_mut().find(|node| node.id == id)
+        fn find(nodes: &mut [Node], id: u64) -> Option<&mut Node> {
+            for node in nodes.iter_mut() {
+                if node.id == id {
+                    return Some(node);
+                }
+                if let Some(found) = find(&mut node.children, id) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find(&mut self.nodes, id)
     }
 
-    /// The node with a name.
+    /// The node with a name, wherever it is.
     pub fn node_by_name(&self, name: &str) -> Option<&Node> {
-        self.nodes.iter().find(|node| node.name == name)
+        self.walk().find(|node| node.name == name)
+    }
+}
+
+/// Every node under another one, in the order they are drawn.
+///
+/// A node comes before what is in it, and what is in a node comes before
+/// what is in that.
+pub struct Descendants<'a> {
+    stack: Vec<&'a Node>,
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = &'a Node;
+
+    fn next(&mut self) -> Option<&'a Node> {
+        let node = self.stack.pop()?;
+        for child in node.children.iter().rev() {
+            self.stack.push(child);
+        }
+        Some(node)
+    }
+}
+
+impl Node {
+    /// Take a child out of this node, and give it back.
+    pub fn take_child(&mut self, id: u64) -> Option<Node> {
+        if let Some(index) = self.children.iter().position(|node| node.id == id) {
+            return Some(self.children.remove(index));
+        }
+        for node in self.children.iter_mut() {
+            if let Some(taken) = node.take_child(id) {
+                return Some(taken);
+            }
+        }
+        None
+    }
+
+    /// Take a child out of this node, and say whether it was there.
+    pub fn remove_child(&mut self, id: u64) -> bool {
+        if let Some(index) = self.children.iter().position(|node| node.id == id) {
+            self.children.remove(index);
+            return true;
+        }
+        for node in self.children.iter_mut() {
+            if node.remove_child(id) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The node and everything under it, in the order they are drawn.
+    pub fn descendants(&self) -> Descendants<'_> {
+        Descendants { stack: vec![self] }
     }
 }
 

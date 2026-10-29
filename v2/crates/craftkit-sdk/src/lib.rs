@@ -63,6 +63,7 @@ pub mod ecosystem;
 pub mod error;
 pub mod evaluator;
 pub mod format;
+pub mod group;
 pub mod params;
 pub mod plan;
 pub mod plugin;
