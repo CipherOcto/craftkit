@@ -47,9 +47,11 @@
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
-    Canvas, Colour, Document, EngineError, FormatValue, Node, Number, Outcome, Path, Plan, PlanItem, Point,
-    Rect, Segment, Session, Stroke, Text,
+    Canvas, Colour, Document, EngineError, FormatValue, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
+    Point, Rect, Segment, Session, Stroke, SubPath, Text,
 };
+
+use craftkit_vector_geom as geom;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -122,16 +124,17 @@ impl VectorPathKind {
     /// it is written down rather than hidden.
     fn hit(node: &Node, point: Point) -> bool {
         let Ok(vector) = VectorNode::from_json(&node.data) else { return false };
-        polygon_contains(&flatten(&vector.path), point)
+        vector.path.subpaths.iter().any(|subpath| polygon_contains(&geom::flatten(subpath, 0.05), point))
     }
 
     /// What a path **means**, in the plan.
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
         let vector = VectorNode::from_json(&node.data).ok()?;
+        let segments: usize = vector.path.subpaths.iter().map(|subpath| subpath.segments.len()).sum();
         Some(serde_json::json!({
-            "area": polygon_area(&flatten(&vector.path)),
-            "segments": vector.path.segments.len(),
-            "closed": vector.path.closed,
+            "area": geom::area(&vector.path),
+            "segments": segments,
+            "contours": vector.path.subpaths.len(),
         }))
     }
 }
@@ -258,7 +261,16 @@ impl AddPolygon {
     id = "panel.vector",
     label = "Vector",
     layer = "vector",
-    commands("vector.rectangle", "vector.ellipse", "vector.polygon")
+    commands(
+        "vector.rectangle",
+        "vector.ellipse",
+        "vector.polygon",
+        "vector.path.unite",
+        "vector.path.subtract",
+        "vector.path.intersect",
+        "vector.path.simplify",
+        "vector.path.offset"
+    )
 )]
 pub struct VectorPanel;
 
@@ -277,7 +289,7 @@ impl TotalAreaEvaluator {
                 continue;
             }
             let Ok(vector) = VectorNode::from_json(&node.data) else { continue };
-            total += polygon_area(&flatten(&vector.path));
+            total += geom::area(&vector.path);
         }
         plan.items.push(PlanItem {
             node: 0,
@@ -288,7 +300,171 @@ impl TotalAreaEvaluator {
     }
 }
 
+/// Combine two paths into one.
+///
+/// The **union**: everything either path covers. The result is one node,
+/// and the second node is gone.
+#[derive(Command)]
+#[command(id = "vector.path.unite", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+pub struct UnitePaths {
+    /// The first path.
+    pub first: NodeRef,
+    /// The second path.
+    pub second: NodeRef,
+}
+
+impl UnitePaths {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        combine(session, "vector.path.unite", self.first.0, self.second.0, geom::BoolOp::Union)
+    }
+}
+
+/// Take one path from another.
+///
+/// The **difference**: what the first path covers and the second does not.
+/// The result may have a hole, and a hole is a contour of its own.
+#[derive(Command)]
+#[command(id = "vector.path.subtract", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+pub struct SubtractPaths {
+    /// The path to take from.
+    pub first: NodeRef,
+    /// The path to take away.
+    pub second: NodeRef,
+}
+
+impl SubtractPaths {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        combine(session, "vector.path.subtract", self.first.0, self.second.0, geom::BoolOp::Difference)
+    }
+}
+
+/// Keep what both paths cover.
+///
+/// The **intersection**: what the two paths share.
+#[derive(Command)]
+#[command(id = "vector.path.intersect", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+pub struct IntersectPaths {
+    /// The first path.
+    pub first: NodeRef,
+    /// The second path.
+    pub second: NodeRef,
+}
+
+impl IntersectPaths {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        combine(session, "vector.path.intersect", self.first.0, self.second.0, geom::BoolOp::Intersect)
+    }
+}
+
+/// Take the points a path does not need.
+///
+/// The path is simplified: the points that a flat line would serve are
+/// removed and the rest are left alone.
+#[derive(Command)]
+#[command(id = "vector.path.simplify", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+pub struct SimplifyPath {
+    /// The path.
+    pub node: NodeRef,
+    /// How far the result may be from the original.
+    pub tolerance: Option<Number>,
+}
+
+impl SimplifyPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let tolerance = match &self.tolerance {
+            Some(tolerance) => tolerance.0,
+            None => 0.05,
+        };
+        if !tolerance.is_finite() || tolerance < 0.0 {
+            return Err(EngineError::Failed {
+                id: "vector.path.simplify".to_string(),
+                message: "the tolerance is not a distance".to_string(),
+            });
+        }
+        let mut vector = vector_of(session, self.node.0)?;
+        vector.path = geom::simplify(&vector.path, tolerance);
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path is simpler").with_data(serde_json::json!({ "id": self.node.0 })))
+    }
+}
+
+/// Push a path out, or in.
+///
+/// The path is offset by a distance: out for a positive one, in for a
+/// negative one. The curves stay curves.
+#[derive(Command)]
+#[command(id = "vector.path.offset", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+pub struct OffsetPath {
+    /// The path.
+    pub node: NodeRef,
+    /// How far to push it.
+    pub distance: Number,
+}
+
+impl OffsetPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.node.0)?;
+        vector.path = geom::offset(&vector.path, self.distance.0).map_err(|error| EngineError::Failed {
+            id: "vector.path.offset".to_string(),
+            message: error.to_string(),
+        })?;
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path is offset").with_data(serde_json::json!({ "id": self.node.0 })))
+    }
+}
+
 // ------------------------------------------------------------- the helpers --
+
+/// The path a node carries.
+fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
+    let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no node `{id}`"),
+    })?;
+    VectorNode::from_json(&node.data).map_err(|reason| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("the node `{id}` has no path: {reason}"),
+    })
+}
+
+/// Put a path back into a node, and move the node's box to where it is.
+fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(), EngineError> {
+    let rect = geom::bounds(&vector.path);
+    let document = session.document_mut();
+    let node = document.node_mut(id).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no node `{id}`"),
+    })?;
+    node.data = vector.to_json();
+    node.rect = rect;
+    Ok(())
+}
+
+/// Combine two paths into the first one, and take the second away.
+fn combine(
+    session: &mut Session,
+    id: &str,
+    first: u64,
+    second: u64,
+    op: geom::BoolOp,
+) -> Result<Outcome, EngineError> {
+    let one = vector_of(session, first)?;
+    let two = vector_of(session, second)?;
+    if one.path.is_empty() || two.path.is_empty() {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "one of the paths is empty".to_string(),
+        });
+    }
+    let path = geom::boolean(&one.path, &two.path, op)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })?;
+    let mut result = one.clone();
+    result.path = path;
+    write_back(session, first, &result)?;
+    session.document_mut().nodes.retain(|node| node.id != second);
+    Ok(Outcome::changed("the paths are one now")
+        .with_data(serde_json::json!({ "id": first, "removed": second })))
+}
 
 /// Put a path in the document, and give back its id.
 fn add_path(
@@ -363,7 +539,7 @@ fn ellipse(x: f64, y: f64, width: f64, height: f64) -> Path {
             to: Point::new(cx + rx, cy),
         },
     ];
-    Path { start, segments, closed: true }
+    Path::single(SubPath { start, segments, closed: true })
 }
 
 /// A regular polygon, as straight lines.
@@ -374,43 +550,6 @@ fn polygon(x: f64, y: f64, radius: f64, sides: usize) -> Path {
         points.push(Point::new(x + radius * angle.cos(), y + radius * angle.sin()));
     }
     Path::polygon(&points)
-}
-
-/// How many samples a curve is flattened with.
-const CURVE_SAMPLES: usize = 16;
-
-/// A path as a polygon: its points, with every curve sampled.
-fn flatten(path: &Path) -> Vec<Point> {
-    let mut points = Vec::new();
-    let mut current = path.start;
-    points.push(current);
-    for segment in &path.segments {
-        match segment {
-            Segment::Line { to } => {
-                current = *to;
-                points.push(current);
-            }
-            Segment::Cubic { c1, c2, to } => {
-                for step in 1..=CURVE_SAMPLES {
-                    let t = step as f64 / CURVE_SAMPLES as f64;
-                    let point = cubic(current, *c1, *c2, *to, t);
-                    points.push(point);
-                }
-                current = *to;
-            }
-        }
-    }
-    points
-}
-
-/// A point on a cubic curve.
-fn cubic(from: Point, c1: Point, c2: Point, to: Point, t: f64) -> Point {
-    let u = 1.0 - t;
-    let a = u * u * u;
-    let b = 3.0 * u * u * t;
-    let c = 3.0 * u * t * t;
-    let d = t * t * t;
-    Point::new(a * from.x + b * c1.x + c * c2.x + d * to.x, a * from.y + b * c1.y + c * c2.y + d * to.y)
 }
 
 /// Whether a point is inside a polygon.
@@ -439,41 +578,9 @@ fn polygon_contains(points: &[Point], point: Point) -> bool {
     inside
 }
 
-/// The area of a polygon, by the shoelace formula.
-fn polygon_area(points: &[Point]) -> f64 {
-    if points.len() < 3 {
-        return 0.0;
-    }
-    let mut total = 0.0;
-    let mut index = 0;
-    let mut previous = points.len() - 1;
-    while index < points.len() {
-        let a = points[previous];
-        let b = points[index];
-        total += a.x * b.y - b.x * a.y;
-        previous = index;
-        index += 1;
-    }
-    (total / 2.0).abs()
-}
-
 /// The bounding box of a path.
 fn bounds(path: &Path) -> Rect {
-    let points = flatten(path);
-    let mut min_x = f64::INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    for point in &points {
-        min_x = min_x.min(point.x);
-        min_y = min_y.min(point.y);
-        max_x = max_x.max(point.x);
-        max_y = max_y.max(point.y);
-    }
-    if !min_x.is_finite() || !min_y.is_finite() {
-        return Rect::default();
-    }
-    Rect::new(min_x, min_y, max_x - min_x, max_y - min_y)
+    geom::bounds(path)
 }
 
 // The plugin's anchor.
@@ -488,6 +595,11 @@ craftkit_sdk::plugin_anchor!(
     AddRectangle,
     AddEllipse,
     AddPolygon,
+    UnitePaths,
+    SubtractPaths,
+    IntersectPaths,
+    SimplifyPath,
+    OffsetPath,
     VectorPanel,
     TotalAreaEvaluator
 );
@@ -522,6 +634,11 @@ mod tests {
         assert!(ecosystem.commands.get("vector.rectangle").is_some());
         assert!(ecosystem.commands.get("vector.ellipse").is_some());
         assert!(ecosystem.commands.get("vector.polygon").is_some());
+        assert!(ecosystem.commands.get("vector.path.unite").is_some());
+        assert!(ecosystem.commands.get("vector.path.subtract").is_some());
+        assert!(ecosystem.commands.get("vector.path.intersect").is_some());
+        assert!(ecosystem.commands.get("vector.path.simplify").is_some());
+        assert!(ecosystem.commands.get("vector.path.offset").is_some());
         assert!(ecosystem.kinds.get("vector.path").is_some());
         assert!(ecosystem.evaluators.get("vector.totalarea").is_some());
     }
@@ -536,8 +653,9 @@ mod tests {
         let node = session.document().nodes.first().expect("there is a node");
         assert_eq!(node.kind, "vector.path");
         let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
-        assert_eq!(vector.path.segments.len(), 3, "a rectangle is three sides and a closing one");
-        assert!(vector.path.closed);
+        assert_eq!(vector.path.subpaths.len(), 1, "a rectangle is one contour");
+        assert_eq!(vector.path.subpaths[0].segments.len(), 3, "a rectangle is three sides and a closing one");
+        assert!(vector.path.subpaths[0].closed);
         assert_eq!(node.rect, Rect::new(0.0, 0.0, 10.0, 5.0), "the node knows where it is");
     }
 
@@ -550,9 +668,9 @@ mod tests {
             .expect("the ellipse is added");
         let node = session.document().nodes.first().expect("there is a node");
         let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
-        assert_eq!(vector.path.segments.len(), 4);
+        assert_eq!(vector.path.subpaths[0].segments.len(), 4);
         assert!(
-            vector.path.segments.iter().all(|segment| segment.controls().is_some()),
+            vector.path.subpaths[0].segments.iter().all(|segment| segment.controls().is_some()),
             "an ellipse is made of curves"
         );
     }
@@ -612,9 +730,9 @@ mod tests {
         let document = session.document().clone();
         let written = document.to_json();
         let read = craftkit_sdk::Document::from_json(&written).expect("the document is read");
-        assert_eq!(read, document, "a round trip is the same document: {read:?} vs {document:?}");
+        assert_eq!(read, document, "a round trip is the same document");
         let vector = VectorNode::from_json(&read.nodes[0].data).expect("the payload is the plugin's own");
-        assert_eq!(vector.path.segments.len(), 3);
+        assert_eq!(vector.path.subpaths[0].segments.len(), 3);
     }
 
     /// A point inside a path is inside it, and a point outside is outside.
@@ -627,5 +745,102 @@ mod tests {
         let node = session.document().nodes.first().expect("there is a node");
         assert!(VectorPathKind::hit(node, Point::new(5.0, 5.0)), "the middle is inside");
         assert!(!VectorPathKind::hit(node, Point::new(50.0, 5.0)), "the far side is outside");
+    }
+
+    /// Two paths can be united, and the second one is gone.
+    #[test]
+    fn two_paths_can_be_united() {
+        let mut session = session();
+        session
+            .execute("vector.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the first rectangle is added");
+        session
+            .execute("vector.rectangle", &json!({ "x": 5.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the second rectangle is added");
+        session
+            .execute("vector.path.unite", &json!({ "first": 1, "second": 2 }))
+            .expect("the paths are united");
+        assert_eq!(session.document().nodes.len(), 1, "the two paths are one now");
+        let node = &session.document().nodes[0];
+        let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+        let area = geom::area(&vector.path);
+        assert!((area - 150.0).abs() < 0.1, "the area is {area}, not 150");
+    }
+
+    /// A hole is a contour of its own.
+    ///
+    /// This is the thing a flat path could not hold, and the reason the
+    /// path grew contours and a rule.
+    #[test]
+    fn a_hole_is_a_contour_of_its_own() {
+        let mut session = session();
+        session
+            .execute("vector.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the outer rectangle is added");
+        session
+            .execute("vector.rectangle", &json!({ "x": 3.0, "y": 3.0, "width": 4.0, "height": 4.0 }))
+            .expect("the inner rectangle is added");
+        session
+            .execute("vector.path.subtract", &json!({ "first": 1, "second": 2 }))
+            .expect("the inner rectangle is taken away");
+        let node = &session.document().nodes[0];
+        let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+        assert!(vector.path.subpaths.len() > 1, "the shape has {} contour(s)", vector.path.subpaths.len());
+        let area = geom::area(&vector.path);
+        assert!((area - 84.0).abs() < 0.1, "the area is {area}, not 84");
+    }
+
+    /// A path can be pushed out, and the curves stay curves.
+    #[test]
+    fn a_path_can_be_pushed_out() {
+        let mut session = session();
+        session
+            .execute("vector.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the rectangle is added");
+        session
+            .execute("vector.path.offset", &json!({ "node": 1, "distance": 1.0 }))
+            .expect("the path is offset");
+        let node = &session.document().nodes[0];
+        let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+        let area = geom::area(&vector.path);
+        assert!((area - 144.0).abs() < 0.5, "the area is {area}, not 144");
+        assert_eq!(node.rect, Rect::new(-1.0, -1.0, 12.0, 12.0), "the node knows where it is");
+    }
+
+    /// Making a path simpler does not change what it covers.
+    ///
+    /// A simplification may drop the points a flat line would serve and
+    /// keep the rest: a polygon with sharp corners keeps its corners, and
+    /// what it covers is the same either way.
+    #[test]
+    fn making_a_path_simpler_does_not_change_what_it_covers() {
+        let mut session = session();
+        session
+            .execute("vector.ellipse", &json!({ "x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0 }))
+            .expect("the ellipse is added");
+        let before = {
+            let node = &session.document().nodes[0];
+            let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+            geom::area(&vector.path)
+        };
+        session
+            .execute("vector.path.simplify", &json!({ "node": 1, "tolerance": 0.05 }))
+            .expect("the path is simpler");
+        let after = {
+            let node = &session.document().nodes[0];
+            let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+            geom::area(&vector.path)
+        };
+        assert!((before - after).abs() / before < 0.01, "the area went from {before} to {after}");
+    }
+
+    /// A command on a node that is not there is refused.
+    #[test]
+    fn a_command_on_a_node_that_is_not_there_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute("vector.path.simplify", &json!({ "node": 99 }))
+            .expect_err("the node is not there");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
     }
 }

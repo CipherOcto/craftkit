@@ -13,3 +13,6 @@ license.workspace = true
 # a symbol of it.
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
+# The geometry. A **library**, not a plugin: it adds no command and no
+# kind, and the linker does not know about it.
+craftkit-vector-geom = { workspace = true }
