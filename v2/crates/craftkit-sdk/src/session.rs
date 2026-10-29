@@ -35,6 +35,13 @@
 //! runs three commands that belong together should be able to undo them
 //! together, and the alternative — three undo entries — is a thing a person
 //! has to know about.
+//!
+//! # The history is a tree
+//!
+//! The history is not a stack: it is a **tree** of states, and a state can
+//! have several children. Undo walks to the parent, redo walks to a child,
+//! and a change made after an undo starts a **branch** instead of throwing
+//! the old work away. See [`crate::history`].
 
 use serde_json::Value as Json;
 
@@ -44,23 +51,11 @@ use crate::document::{Document, NodeKindSpec};
 use crate::error::{EngineError, Outcome};
 use crate::evaluator::EvaluatorSpec;
 use crate::format::{FormatSpec, MigrationSpec};
+use crate::history::History;
 use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
 use crate::select::Selected;
-
-/// One step of the history.
-#[derive(Debug, Clone)]
-pub struct HistoryEntry {
-    /// The command that ran.
-    pub id: String,
-    /// The document as it was before.
-    pub document: Document,
-    /// What was selected, before.
-    pub selection: Vec<Selected>,
-    /// The tool in the hand, before.
-    pub tool: Option<String>,
-}
 
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
@@ -72,12 +67,20 @@ pub struct Session {
     evaluators: Registry<EvaluatorSpec>,
     document: Document,
     selection: Vec<Selected>,
-    history: Vec<HistoryEntry>,
+    history: History,
     log: Vec<String>,
     journal: Vec<JournalEntry>,
     /// The tool in the hand, if any.
     tool: Option<String>,
     depth: usize,
+    /// How many states the history has been given.
+    ///
+    /// A command that runs a batch makes its own state, and the command
+    /// itself must not make a second one on top of it: a replay is one
+    /// undo step, not two.
+    states_made: usize,
+    /// The command that is running, if any.
+    running: Option<String>,
 }
 
 impl Session {
@@ -91,11 +94,13 @@ impl Session {
             evaluators: Registry::new(),
             document: Document::new("untitled"),
             selection: Vec::new(),
-            history: Vec::new(),
+            history: History::new(Document::new("untitled")),
             log: Vec::new(),
             journal: Vec::new(),
             tool: None,
             depth: 0,
+            states_made: 0,
+            running: None,
         }
     }
 
@@ -259,9 +264,35 @@ impl Session {
         }
     }
 
-    /// The history.
-    pub fn history(&self) -> &[HistoryEntry] {
+    /// The history: a **tree** of states.
+    ///
+    /// It is not a stack: a state can have several children, and undoing
+    /// and then changing something makes a branch instead of throwing the
+    /// old work away. See [`crate::history`].
+    pub fn history(&self) -> &History {
         &self.history
+    }
+
+    /// The history, to change.
+    ///
+    /// The commands that move along the tree use it, and nothing else
+    /// does: the tree is the session's own business.
+    pub fn history_mut(&mut self) -> &mut History {
+        &mut self.history
+    }
+
+    /// Put the session back into a state of the history.
+    ///
+    /// The document, the selection and the tool all go back: a person who
+    /// undoes an edit expects the selection to be what it was.
+    pub fn restore_state(&mut self, id: u64) {
+        let Some(node) = self.history.node(id) else { return };
+        let document = node.document.clone();
+        let selection = node.selection.clone();
+        let tool = node.tool.clone();
+        self.document = document;
+        self.selection = selection;
+        self.tool = tool;
     }
 
     /// What the session has been asked to do.
@@ -297,7 +328,10 @@ impl Session {
         let snapshot = self.document.clone();
         let selection_snapshot = self.selection.clone();
         let tool_snapshot = self.tool.clone();
+        let states_before = self.states_made;
+        self.running = Some(id.to_string());
         let result = self.run_guarded(&spec, &params);
+        self.running = None;
         match result {
             Ok(outcome) => {
                 let changed = self.document != snapshot;
@@ -314,13 +348,28 @@ impl Session {
                 }
                 let mut outcome = outcome;
                 outcome.changed = changed;
-                if spec.undoable && changed && self.depth == 0 {
-                    self.history.push(HistoryEntry {
-                        id: id.to_string(),
-                        document: snapshot,
-                        selection: selection_snapshot,
-                        tool: self.tool.clone(),
-                    });
+                if changed {
+                    if spec.undoable && self.depth == 0 && self.states_made == states_before {
+                        // The state the command came from keeps the
+                        // selection and the tool as they were **before**
+                        // it, and the new state holds the document as it
+                        // is now.
+                        self.history.set_current_selection(&selection_snapshot, &tool_snapshot);
+                        self.history.push(
+                            id,
+                            self.document.clone(),
+                            self.selection.clone(),
+                            self.tool.clone(),
+                        );
+                    } else {
+                        // The document changed and no new state was made:
+                        // the current state is now this document.
+                        self.history.set_current(
+                            self.document.clone(),
+                            self.selection.clone(),
+                            self.tool.clone(),
+                        );
+                    }
                 }
                 self.log.push(format!("{id}: {}", outcome.message));
                 if spec.journal {
@@ -378,18 +427,24 @@ impl Session {
         self.depth = depth;
         match result {
             Ok(value) => {
-                if self.document != snapshot && self.history.is_empty() {
-                    // A batch that changed the document is one history entry.
-                    self.history.push(HistoryEntry {
-                        id: "batch".to_string(),
-                        document: snapshot,
-                        selection: selection_snapshot,
-                        tool: tool_snapshot,
-                    });
+                if self.document != snapshot {
+                    // A batch that changed the document is one state: the
+                    // state it came from keeps the document as it was, and
+                    // the new state holds the document as it is now.
+                    self.history.set_current(snapshot.clone(), selection_snapshot, tool_snapshot);
+                    let name = self.running.clone().unwrap_or_else(|| "batch".to_string());
+                    self.states_made += 1;
+                    self.history.push(
+                        &name,
+                        self.document.clone(),
+                        self.selection.clone(),
+                        self.tool.clone(),
+                    );
                 }
                 Ok(value)
             }
             Err(error) => {
+                self.history.set_current(snapshot.clone(), selection_snapshot.clone(), tool_snapshot.clone());
                 self.document = snapshot;
                 self.selection = selection_snapshot;
                 self.tool = tool_snapshot;
@@ -399,16 +454,17 @@ impl Session {
     }
 
     /// Put the document back one step.
+    ///
+    /// It is a move along the tree of states: to the parent of the state
+    /// that is current. The branch that was left is still there.
     pub fn undo(&mut self) -> Result<Outcome, EngineError> {
-        let Some(entry) = self.history.pop() else {
-            return Err(EngineError::Failed {
-                id: "history.undo".to_string(),
-                message: "there is nothing to undo".to_string(),
-            });
-        };
-        self.document = entry.document;
-        self.selection = entry.selection;
-        self.tool = entry.tool;
-        Ok(Outcome::new(format!("undid `{}`", entry.id)))
+        crate::history::undo(self)
+    }
+
+    /// Go forward into a branch of the history.
+    ///
+    /// Without a branch, the newest one is taken.
+    pub fn redo(&mut self, branch: Option<u64>) -> Result<Outcome, EngineError> {
+        crate::history::redo(self, branch)
     }
 }

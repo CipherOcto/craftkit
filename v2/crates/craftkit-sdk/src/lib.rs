@@ -68,6 +68,7 @@ pub mod evaluator;
 pub mod format;
 pub mod group;
 pub mod hand;
+pub mod history;
 pub mod jobs;
 pub mod journal;
 pub mod link;
@@ -91,6 +92,7 @@ pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, MenuNode, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
 pub use evaluator::EvaluatorSpec;
 pub use format::{FormatSpec, FormatValue, MigrationSpec};
+pub use history::{History, HistoryNode};
 pub use jobs::{Cancel, Job, JobId, JobPool, JobResult};
 pub use journal::JournalEntry;
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
@@ -99,7 +101,7 @@ pub use plugin::{Catalogue, LoadedPlugin, PluginCommand, PluginError, PluginPara
 pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use select::Selected;
-pub use session::{HistoryEntry, Session};
+pub use session::Session;
 
 /// The link-time registry, re-exported so a plugin does not have to depend
 /// on `inventory` itself.

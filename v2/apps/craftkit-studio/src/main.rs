@@ -152,6 +152,26 @@ fn main() {
         println!("   {} {}", entry.id, entry.params);
     }
 
+    println!("\n── the history: a tree, not a line");
+    // An edit, undone, and then done differently: the work that was
+    // undone is still there, on its own branch.
+    let _ = session.execute("node.add", &json!({ "name": "branch", "kind": "geometry.rect" }));
+    match session.undo() {
+        Ok(outcome) => println!("   {}", outcome.message),
+        Err(error) => println!("   refused: {error}"),
+    }
+    let _ = session.execute("node.add", &json!({ "name": "other branch", "kind": "geometry.rect" }));
+    let history = session.history();
+    let point = history.parent().and_then(|parent| history.node(parent));
+    println!(
+        "   {} branch(es) at the point where the work was undone",
+        point.map(|node| node.children.len()).unwrap_or(0)
+    );
+    match session.execute("history.tree", &json!({})) {
+        Ok(outcome) => println!("   {}", outcome.message),
+        Err(error) => println!("   refused: {error}"),
+    }
+
     println!("\n── a command made while the program runs");
     let mut commands = ecosystem.commands.clone();
     match commands.register(craftkit_studio::commands::runtime_echo()) {
