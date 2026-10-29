@@ -1,0 +1,14 @@
+[package]
+name = "craftkit-plugin-pdf"
+description = "A plugin that adds the object model of a PDF document: dictionaries, streams and references."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. **Nothing else** — the application never names a
+# symbol of this crate, and this crate never names a symbol of the
+# application. That is the whole point of a plugin.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }

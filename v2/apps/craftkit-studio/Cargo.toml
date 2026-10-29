@@ -23,6 +23,9 @@ craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optiona
 # The **second battery**: the sound document. Off by default as well: a
 # program that wants a tempo map says so.
 craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", optional = true }
+# The **third battery**: the object model of a PDF document. Off by default
+# as well: a program that wants dictionaries and references says so.
+craftkit-plugin-pdf = { path = "../../crates/craftkit-plugin-pdf", optional = true }
 
 [features]
 default = []
@@ -31,6 +34,9 @@ vector = ["dep:craftkit-plugin-vector"]
 # The sound battery. Off by default: a program that wants tracks and a
 # tempo map says so.
 sound = ["dep:craftkit-plugin-sound"]
+# The PDF battery. Off by default: a program that wants the object model
+# of a PDF document says so.
+pdf = ["dep:craftkit-plugin-pdf"]
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
