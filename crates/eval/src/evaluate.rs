@@ -277,8 +277,11 @@ fn eval_node(node: &Node, level_in: f64, at: Tick) -> (NodeState, Vec<Diagnostic
 
     if !node.muted && !node.kind.is_passive() {
         match node.kind {
-            // A source *sets* the level, so a missing or wrong `amount` leaves
-            // it exactly as it was rather than multiplying by a guess.
+            // A source *sets* the level. A **missing** `amount` is 1.0 — the
+            // level a source emits when it has nothing to say — and a
+            // **wrong** one leaves the level exactly as it was, rather than
+            // multiplying by a guess. §285: the message used to say "using
+            // 1.0" on the wrong path too, and the code never used 1.0 there.
             NodeKind::Source => {
                 // The amount is in range because every number the tree stores
                 // is — the model checks a file's values when it reads them,
@@ -376,7 +379,7 @@ fn amount_of(
             diag.push(Diagnostic::error(
                 Some(node.id),
                 &node.name,
-                format!("`amount` is {v}, which is not a number; using 1.0"),
+                format!("`amount` is {v}, which is not a number; the level is left as it was"),
             ));
             Err(())
         }
@@ -384,7 +387,7 @@ fn amount_of(
             diag.push(Diagnostic::error(
                 Some(node.id),
                 &node.name,
-                format!("`amount` is a {}, not a number; using 1.0", r.value.type_name()),
+                format!("`amount` is a {}, not a number; the level is left as it was", r.value.type_name()),
             ));
             Err(())
         }
@@ -716,6 +719,59 @@ mod tests {
         assert!(plan.diagnostics.has_errors());
         assert_eq!(plan.nodes.len(), 2, "evaluation must continue past a bad node");
         assert!(plan.diagnostics.items[0].render().contains("amount"));
+    }
+
+    /// A wrong `amount` leaves the level as it was — and says so.
+    ///
+    /// §285: the diagnostic said *"using 1.0"* and the code never used 1.0
+    /// there — a wrong amount returned an error and the caller kept the
+    /// incoming level. The message was true for a filter (a gain of one) and
+    /// **false for a source**, which *sets* the level.
+    ///
+    /// The test puts a node **before** the broken one, so the incoming level
+    /// is not 1.0 and the two behaviours cannot be confused.
+    #[test]
+    fn a_wrong_amount_leaves_the_level_as_it_was() {
+        let mut d = doc_with(&[
+            (NodeKind::Filter, "gain", 3.0),
+            (NodeKind::Source, "src", 1.0),
+            (NodeKind::Sink, "out", 1.0),
+        ]);
+        // Force the type mismatch a hand-edited file would produce.
+        let node = d.get_mut(NodeId(2)).expect("node");
+        node.props.nodes[0] = PropNode::Prop(Property::new(1, "amount", Value::Bool(true)));
+        let plan = evaluate_once(&d, Tick::ZERO).expect("the plan still evaluates");
+        assert!(plan.diagnostics.has_errors());
+        let rendered = plan.diagnostics.items[0].render();
+        assert!(
+            !rendered.contains("using 1.0"),
+            "the message promises a value the code never uses: {rendered}"
+        );
+        assert!(rendered.contains("left as it was"), "the message does not say what happens: {rendered}");
+        let src = plan.nodes.iter().find(|n| n.name == "src").expect("the source");
+        assert_eq!(src.level_in, 3.0, "the level the filter left");
+        assert_eq!(src.level_out, 3.0, "a wrong amount changed the level");
+    }
+
+    /// A **missing** `amount` on a source is 1.0 — not the level that came
+    /// in.
+    ///
+    /// §285: the code's own comment said a missing or a wrong amount "leaves
+    /// it exactly as it was", and only the wrong one does. A source *sets*
+    /// the level, so a source with nothing to say emits 1.0 ✓ — and the
+    /// warning says so ✓.
+    #[test]
+    fn a_missing_amount_on_a_source_is_one() {
+        let mut d = doc_with(&[(NodeKind::Filter, "gain", 3.0), (NodeKind::Sink, "out", 1.0)]);
+        let src = d.add_node("bare", NodeKind::Source).expect("id");
+        // The source has no `amount` at all.
+        let plan = evaluate_once(&d, Tick::ZERO).expect("the plan still evaluates");
+        assert_eq!(plan.diagnostics.error_count(), 0);
+        let state = plan.nodes.iter().find(|n| n.id == src).expect("the source");
+        assert_eq!(state.level_in, 3.0, "the level that came in");
+        assert_eq!(state.level_out, 1.0, "a source with no amount emits 1.0");
+        let rendered = plan.diagnostics.items[0].render();
+        assert!(rendered.contains("using 1.0"), "the warning does not say what it used: {rendered}");
     }
 
     #[test]

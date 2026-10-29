@@ -33126,6 +33126,129 @@ was checked by its own gate ✓, which was green ✓ on both days ✓.
 | **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
 
 
+## 285. A diagnostic promised a value the code never used
+
+### The finding
+
+**The evaluator's wrong-`amount` diagnostic said *"using 1.0"* — and the
+code never used 1.0 there.**
+
+```rust
+// crates/eval/src/evaluate.rs — before
+match r.value.as_num() {
+    Some(v) if v.is_finite() => Ok(v),
+    Some(v) => {
+        diag.push(Diagnostic::error(
+            Some(node.id),
+            &node.name,
+            format!("`amount` is {v}, which is not a number; using 1.0"),
+        ));
+        Err(())
+    }
+    None => {
+        diag.push(Diagnostic::error(
+            Some(node.id),
+            &node.name,
+            format!("`amount` is a {}, not a number; using 1.0", r.value.type_name()),
+        ));
+        Err(())
+    }
+}
+```
+
+**The `Err` is the whole story** ✓: the caller ignores it ✓ and the level
+stays as it was ✓ — so 1.0 was **never** used ✓.
+
+And the code's own comment said the same thing about the *other* case:
+
+```rust
+// A source *sets* the level, so a missing or wrong `amount` leaves
+// it exactly as it was rather than multiplying by a guess.
+```
+
+**Which is true for the wrong amount ✓ and false for the missing one** ✓ —
+a missing amount returns `Ok(1.0)` ✓, and a source *sets* its level ✓, so
+a source with no amount **resets** the level to 1.0 ✓ rather than leaving it
+✓.
+
+### Measured
+
+Two nodes, so the level that comes in is **3.0** ✓ and not 1.0 ✓:
+
+```text
+node "gain" kind=Filter level_in=1  level_out=3
+node "src"  kind=Source level_in=3  level_out=3      <-- 3.0, not 1.0
+diag: error: src `2`: `amount` is a boolean, not a number; using 1.0
+```
+
+**So one message said "using 1.0" for two different behaviours** ✓ — and
+for a *source* it was false ✓ (a source sets the level ✓, so keeping the
+incoming level is not a gain of one ✓).
+
+### Why nothing else would have caught it
+
+- **The existing tests could not tell the two apart.** The bad amount in
+  `a_non_numeric_amount_is_reported_and_does_not_stop_the_plan` is on the
+  **first** node ✓, so `level_in` is 1.0 ✓ — and "using 1.0" and "keep the
+  level" are the same number ✓ there ✓. `a_missing_amount_warns_rather_than_failing`
+  is a **single** node ✓ — the same coincidence ✓.
+- **The message was true often enough to look true.** For a *filter* ✓ — a
+  wrong amount is a gain of one ✓ — so the wording was right half the time
+  ✓.
+- **§264 pinned the wording for the *missing* path** ✓ — where "using 1.0"
+  **is** true ✓ — and the two paths share the sentence ✓.
+
+### The fix
+
+**The message says what the code does, and the comment says what the code
+does.**
+
+The two error messages now say **"the level is left as it was"** ✓ — true
+for a filter ✓ (the level passes through ✓) and for a source ✓ (the source
+sets nothing ✓ and the level passes through ✓).
+
+And the comment now says the two cases apart ✓: a **missing** amount is 1.0
+✓ — the level a source emits when it has nothing to say ✓ — and a **wrong**
+one leaves the level exactly as it was ✓.
+
+**The test puts a node before the broken one** ✓ — so the incoming level is
+3.0 ✓ and the two behaviours cannot be confused ✓ — and it asserts the
+**message** ✓, not just the level ✓.
+
+### What is not claimed
+
+- **The behaviour did not change.** A wrong amount still leaves the level
+  ✓ and a missing one is still 1.0 ✓ — the diagnostics and the comment now
+  match the code ✓, and the code was not wrong ✓.
+- **§264's wording is untouched.** The *missing* amount still says "using
+  1.0" ✓ — and there it is true ✓.
+- **Nothing else in the tree quotes the old sentence** ✓ — the gate found
+  no prose quoting it ✓.
+
+### The lesson
+
+**A message that says what the code does is worth a test of its own.**
+
+The message was wrong ✓ and the *level* was right ✓ — so a test that
+asserted the level would have passed ✓ on the wrong message ✓ too ✓. **The
+test has to assert the message** ✓, because the message is what a person
+reads ✓.
+
+**And a test that cannot tell two behaviours apart is not a test of
+either.** Both existing tests put the broken node where the incoming level
+was 1.0 ✓ — so "reset to 1.0" and "leave it alone" were the same number ✓,
+and neither test could fail ✓. **Put the broken thing after something that
+changes the number** ✓ — then the two behaviours are different numbers ✓
+and the test can tell them apart ✓.
+
+**And a sentence shared by two paths is a sentence one of them will get
+wrong.** "Using 1.0" was true for the missing path ✓ and false for the
+wrong one ✓ — because they are different paths ✓ with different behaviour ✓,
+sharing one wording ✓.
+
+| **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33742,6 +33865,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
 | **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
 | **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
+| **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

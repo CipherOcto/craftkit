@@ -7322,5 +7322,14 @@ swap crates/ui/src/automation.rs \
 expect_catch "ui: the application's name is written in a second place" \
     "cargo xtask lists"
 
+# --------------------------------------- a message says what the code does ----
+# Section 285. The diagnostic said "using 1.0" for a wrong amount, and the
+# code never used 1.0 there -- it kept the level that came in.
+swap crates/eval/src/evaluate.rs \
+    '                format!("`amount` is a {}, not a number; the level is left as it was", r.value.type_name()),' \
+    '                format!("`amount` is a {}, not a number; using 1.0", r.value.type_name()),'
+expect_catch "eval: the diagnostic promises a value the code never uses" \
+    "cargo test -p craftkit-eval --profile ci a_wrong_amount_leaves_the_level_as_it_was"
+
 restore
 finish
