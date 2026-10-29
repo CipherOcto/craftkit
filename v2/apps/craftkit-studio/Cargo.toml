@@ -13,3 +13,6 @@ craftkit-derive = { workspace = true }
 # and for no other reason: no module of this crate names a symbol of it, and
 # a test says so.
 craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
+# A second plugin, and it is the interesting one: it adds a layer, a kind of
+# node, a tool and a command.
+craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }

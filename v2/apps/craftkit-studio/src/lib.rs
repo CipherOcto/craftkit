@@ -2,17 +2,22 @@
 //!
 //! # What it shows
 //!
-//! Four things, in the order they happen:
+//! Five things, in the order they happen:
 //!
-//! 1. **The registry is built from what was linked in.** There is no list
-//!    here. [`Registry::from_inventory`] collects the registrations the
-//!    linker put there, and the catalogue is whatever comes out.
-//! 2. **A plugin's commands are in it.** `craftkit-plugin-hello` is a
-//!    dependency of this crate, and this crate names no symbol of it: the
-//!    build script writes the reference from the dependency list.
-//! 3. **A command can be made while the program runs.** The registry is a
+//! 1. **The ecosystem is built from what was linked in.** There is no list
+//!    here. Every contribution the linker put there is collected, and the
+//!    checks that only make sense across them — a tool that runs a command
+//!    that is not there, a contribution in a layer that is not there — are
+//!    made **before** anybody draws anything.
+//! 2. **A plugin's commands are in it.** `craftkit-plugin-hello` and
+//!    `craftkit-plugin-shapes` are dependencies of this crate, and this
+//!    crate names no symbol of either: the build script writes the
+//!    references from the dependency list.
+//! 3. **A plugin can add document semantics.** The shapes plugin adds a
+//!    **kind of node**, and the core draws it by asking the kind.
+//! 4. **A command can be made while the program runs.** The registry is a
 //!    value, and a command can be added to it at any moment.
-//! 4. **One way to run a command.** Everything above — the toolbar, an
+//! 5. **One way to run a command.** Everything above — the toolbar, an
 //!    agent, a script, a test — calls [`Session::execute`] and nothing else.
 
 pub mod commands;
@@ -21,15 +26,15 @@ pub mod commands;
 // this crate names no plugin and does not have to change when one is added.
 include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
 
-use craftkit_sdk::Registry;
+use craftkit_sdk::Ecosystem;
 
-/// The commands this application knows.
+/// The ecosystem of this application.
 ///
-/// Every command that was linked in: the application's own, and every
+/// Every contribution that was linked in: the application's own, and every
 /// plugin's.
-pub fn catalogue() -> Registry {
-    match Registry::from_inventory() {
-        Ok(registry) => registry,
-        Err(error) => panic!("the registry could not be built: {error}"),
+pub fn ecosystem() -> Ecosystem {
+    match Ecosystem::from_inventory() {
+        Ok(ecosystem) => ecosystem,
+        Err(error) => panic!("the ecosystem could not be built: {error}"),
     }
 }

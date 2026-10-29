@@ -37,6 +37,16 @@ pub enum Doc {
     Bool,
     NodeRef,
     NodeKind,
+    /// A value of any shape.
+    ///
+    /// **The door out.** Every other kind is a type, and a type is checked.
+    /// This one is not checked, and it exists because a plugin that was
+    /// loaded at run time cannot offer a Rust type: it offers a schema and a
+    /// value, and the schema says `json`.
+    ///
+    /// It is named, and it is not the default: a command that wants the raw
+    /// value says so, and the person reading the declaration sees it.
+    Json,
 }
 
 impl Doc {
@@ -48,6 +58,7 @@ impl Doc {
             Doc::Bool => "bool",
             Doc::NodeRef => "node-ref",
             Doc::NodeKind => "node-kind",
+            Doc::Json => "json",
         }
     }
 }
@@ -182,6 +193,24 @@ impl ParamKind for NodeRef {
             Some(id) => Ok(NodeRef(id)),
             None => Err(ParamError::new("", "expected a node id")),
         }
+    }
+}
+
+/// The raw door.
+///
+/// A value of any shape: a command that takes one can read anything the
+/// caller sent. It is here for the contributions that cannot offer a type —
+/// a command from a subprocess, a command from a script — and it is
+/// **named** in the declaration, so that a caller knows.
+///
+/// The implementation is on [`serde_json::Value`] itself, so a plugin that
+/// wants the raw value asks for the value and gets it.
+impl ParamKind for serde_json::Value {
+    const DOC: Doc = Doc::Json;
+    const REQUIRED: bool = true;
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, ParamError> {
+        Ok(value.clone())
     }
 }
 

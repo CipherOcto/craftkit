@@ -52,6 +52,12 @@ pub enum EngineError {
     Param { id: String, source: ParamError },
     /// The command failed on purpose.
     Failed { id: String, message: String },
+    /// The command panicked.
+    ///
+    /// A crash is not a result: the document was put back and the failure
+    /// is reported as what it is. §94 of the tree this replaces says the
+    /// same thing about a panic in code craftkit does not own.
+    Internal { id: String, message: String },
 }
 
 impl EngineError {
@@ -62,6 +68,7 @@ impl EngineError {
             EngineError::Disabled { id, .. } => Some(id),
             EngineError::Param { id, .. } => Some(id),
             EngineError::Failed { id, .. } => Some(id),
+            EngineError::Internal { id, .. } => Some(id),
         }
     }
 }
@@ -73,6 +80,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Disabled { id, reason } => write!(f, "`{id}` is not available: {reason}"),
             EngineError::Param { id, source } => write!(f, "`{id}` was refused: {source}"),
             EngineError::Failed { id, message } => write!(f, "`{id}` failed: {message}"),
+            EngineError::Internal { id, message } => write!(f, "`{id}` failed inside: {message}"),
         }
     }
 }

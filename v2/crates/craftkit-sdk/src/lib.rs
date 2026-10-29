@@ -20,6 +20,19 @@
 //!   from the crates that made them, and a crate that is linked in
 //!   contributes its commands without anybody naming them.
 //!
+//! # The seams
+//!
+//! The same registry holds every kind of contribution, so a plugin can add
+//! more than commands:
+//!
+//! | Contribution | What it is | Where it is checked |
+//! |---|---|---|
+//! | [`CommandSpec`] | something a person or an agent can do | the ecosystem |
+//! | [`NodeKindSpec`] | a kind of thing in the document | the ecosystem |
+//! | [`ToolSpec`] | a gesture that runs a command | the ecosystem |
+//! | [`PanelSpec`] | a window's worth of commands | the ecosystem |
+//! | [`LayerSpec`] | a group of contributions that depend on each other | the ecosystem |
+//!
 //! # The five things in here
 //!
 //! | | |
@@ -27,24 +40,28 @@
 //! | [`Params`] | the caller's values, read by name and never indexed |
 //! | [`ParamKind`] | a **type** that knows how to read itself and what it is |
 //! | [`CommandSpec`] | one command: its id, its parameters, how to run it |
-//! | [`Registry`] | the commands, at run time, in any order, from any crate |
+//! | [`Registry`] | the contributions, at run time, in any order, from any crate |
 //! | [`Session`] | the document, the history and the one way to run a command |
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+pub mod command;
+pub mod contribution;
 pub mod document;
+pub mod ecosystem;
 pub mod error;
 pub mod params;
-pub mod registry;
+pub mod seams;
 pub mod session;
-pub mod spec;
 
-pub use document::{Document, Node};
+pub use command::{CommandRun, CommandSpec, DynamicRun};
+pub use contribution::{Contribution, Registration, Registry, RegistryError};
+pub use document::{Canvas, Colour, Document, Node, NodeKindSpec, Point, RecordingCanvas, Rect};
+pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
-pub use registry::{CommandRegistration, Registry, RegistryError};
-pub use session::Session;
-pub use spec::CommandSpec;
+pub use seams::{LayerSpec, PanelSpec, ToolSpec};
+pub use session::{HistoryEntry, Session};
 
 /// The link-time registry, re-exported so a plugin does not have to depend
 /// on `inventory` itself.
@@ -54,22 +71,23 @@ pub use spec::CommandSpec;
 /// dependency list should be the SDK and the macro, and nothing else.
 pub use inventory;
 
-/// A predicate that says a command is always available.
-///
-/// The default for a command that does not say otherwise. It takes the
-/// session so that a command which *does* have a condition can write one:
-///
-/// ```ignore
-/// #[command(id = "node.mute", enabled = has_nodes)]
-/// struct NodeMute { … }
-/// ```
-pub fn always(_session: &Session) -> bool {
-    true
-}
-
 /// The JSON value type, re-exported.
 ///
 /// A plugin should not have to depend on `serde_json` to hand a value back:
 /// the SDK owns the shape of the values, so it re-exports the crate that
 /// makes them.
 pub use serde_json;
+
+/// A predicate that says a command is always available.
+///
+/// The default for a command that does not say otherwise. It takes the
+/// session so that a command which *does* have a condition can write one:
+///
+/// ```ignore
+/// #[derive(Command)]
+/// #[command(id = "node.mute", enabled = has_nodes)]
+/// struct NodeMute { … }
+/// ```
+pub fn always(_session: &Session) -> bool {
+    true
+}

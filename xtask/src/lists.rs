@@ -202,6 +202,40 @@ pub fn command_ids_in(text: &str) -> Vec<String> {
     found
 }
 
+/// The directories the root manifest excludes.
+///
+/// Another workspace, with its own rules and its own gates. The manifest
+/// says so once, and the gates that walk the tree honour it: a rule that
+/// reaches into another workspace is a rule about a tree that is not this
+/// one.
+fn excluded_directories(root: &Path) -> Vec<String> {
+    let Ok(text) = read_text(root.join("Cargo.toml")) else { return Vec::new() };
+    let mut excluded: Vec<String> = Vec::new();
+    let mut in_workspace = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_workspace = line == "[workspace]";
+            continue;
+        }
+        if !in_workspace {
+            continue;
+        }
+        // `exclude = ["v2", "other"]`, inside the workspace's own table.
+        let Some((key, rest)) = line.split_once('=') else { continue };
+        if key.trim() != "exclude" {
+            continue;
+        }
+        for part in rest.split('"').skip(1).step_by(2) {
+            let part = part.trim().trim_end_matches(',');
+            if !part.is_empty() {
+                excluded.push(part.to_string());
+            }
+        }
+    }
+    excluded
+}
+
 /// The boundaries that catch a panic, and the document that declares them.
 ///
 /// The pattern document says: **two boundaries, with distinct jobs, and no
@@ -224,8 +258,16 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
     ];
     const DOCUMENT: &str = "docs/patterns/one-trust-boundary.md";
 
+    let excluded = excluded_directories(root);
     let mut problems = Vec::new();
     for path in rust_files(root) {
+        // A directory the manifest excludes is another workspace, with its
+        // own rules and its own gates. This tree's gates do not reach into
+        // it — and that tree declares and tests its own boundaries.
+        let relative = relative_name(root, &path);
+        if excluded.iter().any(|directory| relative.starts_with(directory)) {
+            continue;
+        }
         let Ok(text) = read_rust(&path, Subject::Production) else { continue };
         // The tests are not the production code: a test may catch a panic to
         // assert that it was caught, and that is not a boundary. The cut has
@@ -234,7 +276,6 @@ pub fn panic_boundaries_are_declared(root: &Path) -> Result<Vec<String>, String>
         if !code_lines_kept(&text).contains("catch_unwind(") {
             continue;
         }
-        let relative = relative_name(root, &path);
         if !DECLARED.contains(&relative.as_str()) {
             problems.push(format!(
                 "{relative}: catches a panic, and the pattern document does not declare it a boundary"

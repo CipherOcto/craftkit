@@ -9,18 +9,40 @@
 //! 1. the command has to exist;
 //! 2. it has to be available right now;
 //! 3. the caller's keys have to be ones the command has;
-//! 4. the document is snapshotted, the command runs, and a failure puts the
-//!    document back.
+//! 4. the document is snapshotted, the command runs, and the outcome is
+//!    judged against the snapshot.
 //!
 //! Nothing else can change the document, because the session's mutable
 //! accessor is not public and the commands run inside it.
+//!
+//! # The session judges
+//!
+//! The old tree asked the **command** whether it had changed anything, and
+//! the command answered honestly if it felt like it. Here the session
+//! **compares the document** before and after, so the answer is a fact:
+//!
+//! - a command that says `mutates: false` and changes the document is
+//!   **refused and rolled back** — the promise was a promise;
+//! - an undo entry is pushed when the command mutates, the command is
+//!   undoable, **and** the document really changed. A command that sets a
+//!   value to what it already was leaves no history;
+//! - a command that **panics** leaves the document as it was and is
+//!   reported as an internal error, because a crash is not a result.
+//!
+//! # A batch is one step
+//!
+//! [`Session::batch`] runs several commands as one undo step. An agent that
+//! runs three commands that belong together should be able to undo them
+//! together, and the alternative — three undo entries — is a thing a person
+//! has to know about.
 
 use serde_json::Value as Json;
 
-use crate::document::Document;
+use crate::command::CommandSpec;
+use crate::contribution::Registry;
+use crate::document::{Document, NodeKindSpec};
 use crate::error::{EngineError, Outcome};
 use crate::params::Params;
-use crate::registry::Registry;
 
 /// One step of the history.
 #[derive(Debug, Clone)]
@@ -34,21 +56,35 @@ pub struct HistoryEntry {
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
 pub struct Session {
-    registry: Registry,
+    commands: Registry<CommandSpec>,
+    kinds: Registry<NodeKindSpec>,
     document: Document,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
+    depth: usize,
 }
 
 impl Session {
-    /// A session over a registry.
-    pub fn new(registry: Registry) -> Self {
-        Session { registry, document: Document::new("untitled"), history: Vec::new(), log: Vec::new() }
+    /// A session over a registry of commands and of node kinds.
+    pub fn new(commands: Registry<CommandSpec>, kinds: Registry<NodeKindSpec>) -> Self {
+        Session {
+            commands,
+            kinds,
+            document: Document::new("untitled"),
+            history: Vec::new(),
+            log: Vec::new(),
+            depth: 0,
+        }
     }
 
     /// The commands this session knows.
-    pub fn registry(&self) -> &Registry {
-        &self.registry
+    pub fn registry(&self) -> &Registry<CommandSpec> {
+        &self.commands
+    }
+
+    /// The node kinds this session knows.
+    pub fn kinds(&self) -> &Registry<NodeKindSpec> {
+        &self.kinds
     }
 
     /// The document, to read.
@@ -77,7 +113,7 @@ impl Session {
 
     /// Run a command.
     pub fn execute(&mut self, id: &str, raw: &Json) -> Result<Outcome, EngineError> {
-        let Some(spec) = self.registry.get(id).copied() else {
+        let Some(spec) = self.commands.get(id).cloned() else {
             let error = EngineError::Unknown(id.to_string());
             self.log.push(format!("{id}: refused ({error})"));
             return Err(error);
@@ -100,21 +136,84 @@ impl Session {
         // The snapshot. A command that fails leaves the document as it was,
         // and so does one that panics — the unwind crosses this boundary and
         // the restore is below it.
-        let snapshot = spec.mutates.then(|| self.document.clone());
-        let result = (spec.run)(self, &params);
+        let snapshot = self.document.clone();
+        let result = self.run_guarded(&spec, &params);
         match result {
             Ok(outcome) => {
-                if let (true, Some(document)) = (spec.mutates, snapshot) {
-                    self.history.push(HistoryEntry { id: id.to_string(), document });
+                let changed = self.document != snapshot;
+                if changed && !spec.mutates {
+                    // The command promised not to change the document and
+                    // changed it. The promise is a promise.
+                    self.document = snapshot;
+                    let error = EngineError::Failed {
+                        id: id.to_string(),
+                        message: "the command changed the document but does not mutate".to_string(),
+                    };
+                    self.log.push(format!("{id}: refused ({error})"));
+                    return Err(error);
+                }
+                let mut outcome = outcome;
+                outcome.changed = changed;
+                if spec.undoable && changed && self.depth == 0 {
+                    self.history.push(HistoryEntry { id: id.to_string(), document: snapshot });
                 }
                 self.log.push(format!("{id}: {}", outcome.message));
                 Ok(outcome)
             }
             Err(error) => {
-                if let Some(document) = snapshot {
-                    self.document = document;
-                }
+                self.document = snapshot;
                 self.log.push(format!("{id}: refused ({error})"));
+                Err(error)
+            }
+        }
+    }
+
+    /// Run a command with a panic guard.
+    ///
+    /// A panic in a command is a crash, not a result. The document is put
+    /// back and the error is reported, so that the thing that was being
+    /// built is still there afterwards.
+    fn run_guarded(&mut self, spec: &CommandSpec, params: &Params<'_>) -> Result<Outcome, EngineError> {
+        let run = spec.run.clone();
+        let session = std::panic::AssertUnwindSafe(self);
+        // The guard is deliberate: the run may hold interior mutability —
+        // a plugin's closure does — and a `&mut Session` is not unwind-safe
+        // either. The document is put back below, and that is the whole of
+        // the promise.
+        let outcome =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || run.call(session.0, params)));
+        match outcome {
+            Ok(result) => result,
+            Err(_) => Err(EngineError::Internal {
+                id: spec.id.to_string(),
+                message: "the command panicked; the document was put back".to_string(),
+            }),
+        }
+    }
+
+    /// Run several commands as one undo step.
+    ///
+    /// The commands inside run as they would outside; what changes is the
+    /// history: the batch is one entry, so one undo takes all of it back.
+    pub fn batch<T>(
+        &mut self,
+        body: impl FnOnce(&mut Session) -> Result<T, EngineError>,
+    ) -> Result<T, EngineError> {
+        let snapshot = self.document.clone();
+        let depth = self.depth;
+        self.depth = depth + 1;
+        let result = body(self);
+        self.depth = depth;
+        match result {
+            Ok(value) => {
+                if self.document != snapshot && self.history.is_empty() {
+                    // A batch that changed the document is one history entry.
+                    self.history.push(HistoryEntry { id: "batch".to_string(), document: snapshot });
+                }
+                Ok(value)
+            }
+            Err(error) => {
+                self.document = snapshot;
                 Err(error)
             }
         }

@@ -2,28 +2,30 @@
 //!
 //! Everything interesting is in the library: this is the part a person sees.
 
-use craftkit_sdk::Session;
 use craftkit_sdk::serde_json::json;
-use craftkit_studio::catalogue;
+use craftkit_sdk::{RecordingCanvas, Session};
+use craftkit_studio::ecosystem;
 
 fn main() {
-    let registry = catalogue();
+    let ecosystem = ecosystem();
 
-    println!("── the catalogue");
-    for spec in registry.all() {
-        let parameters: Vec<String> =
-            spec.params.iter().map(|param| format!("{}: {}", param.name, param.kind.json_name())).collect();
-        println!(
-            "   {:<14} {:<8} {:<40} {}",
-            spec.id,
-            spec.area,
-            spec.doc,
-            if parameters.is_empty() { "no parameters".to_string() } else { parameters.join(", ") }
-        );
+    println!("── the ecosystem");
+    println!("   layers:  {}", ecosystem.layers.ids().join(", "));
+    println!("   kinds:  {}", ecosystem.kinds.ids().join(", "));
+    println!("   tools:  {}", ecosystem.tools.ids().join(", "));
+    println!("   panels: {}", ecosystem.panels.ids().join(", "));
+
+    println!("\n── the manifest (what an agent is told)");
+    for line in ecosystem.projection().manifest() {
+        println!("   {line}");
     }
-    println!("   areas: {}", registry.areas().join(", "));
 
-    let mut session = Session::new(registry);
+    println!("\n── the menu, by capability");
+    for entry in ecosystem.projection().menu(&["command", "effect"]) {
+        println!("   {:<8} {:<22} {:<40} {}", entry.area, entry.id, entry.label, entry.doc);
+    }
+
+    let mut session = ecosystem.session();
 
     println!("\n── a command from a plugin");
     match session.execute("hello.greet", &json!({ "name": "world", "loudly": true })) {
@@ -31,21 +33,38 @@ fn main() {
         Err(error) => println!("   refused: {error}"),
     }
 
-    println!("\n── a command of this application's own");
-    match session.execute("node.add", &json!({ "name": "filter" })) {
-        Ok(outcome) => println!("   {}", outcome.message),
-        Err(error) => println!("   refused: {error}"),
-    }
-    match session.execute("node.mute", &json!({ "node_name": "filter" })) {
+    println!("\n── a kind of node, added by a plugin");
+    match session.execute("geometry.rectangle", &json!({ "x": 3, "y": 4, "width": 5, "height": 6 })) {
         Ok(outcome) => println!("   {}", outcome.message),
         Err(error) => println!("   refused: {error}"),
     }
 
+    println!("\n── drawing the document, through the kinds");
+    let mut canvas = RecordingCanvas::default();
+    for node in session.document().nodes() {
+        let kind = session.kinds().get(&node.kind).expect("the kind is linked in");
+        (kind.paint)(node, &mut canvas);
+    }
+    for drawn in &canvas.drawn {
+        println!("   {drawn}");
+    }
+
+    println!("\n── hitting the document, through the kinds");
+    let point = craftkit_sdk::Point::new(4.0, 5.0);
+    let hit = session
+        .document()
+        .nodes()
+        .find(|node| session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false));
+    match hit {
+        Some(node) => println!("   the point is inside `{}`", node.name),
+        None => println!("   the point is in nothing"),
+    }
+
     println!("\n── a command made while the program runs");
-    let mut registry = session.registry().clone();
-    match registry.register(craftkit_studio::commands::runtime_echo()) {
+    let mut commands = ecosystem.commands.clone();
+    match commands.register(craftkit_studio::commands::runtime_echo()) {
         Ok(()) => {
-            let mut session = Session::new(registry);
+            let mut session = Session::new(commands, ecosystem.kinds.clone());
             match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
                 Ok(outcome) => println!("   {}", outcome.message),
                 Err(error) => println!("   refused: {error}"),

@@ -21,6 +21,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-shapes"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-sdk"
 version = "0.2.0"
 dependencies = [
@@ -34,6 +42,7 @@ version = "0.2.0"
 dependencies = [
  "craftkit-derive",
  "craftkit-plugin-hello",
+ "craftkit-plugin-shapes",
  "craftkit-sdk",
 ]
 

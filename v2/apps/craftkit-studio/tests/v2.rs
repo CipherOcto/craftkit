@@ -4,22 +4,39 @@
 //! hold them.
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Session};
-use craftkit_studio::catalogue;
+use craftkit_sdk::{
+    CommandRun, CommandSpec, Doc, Ecosystem, EngineError, LayerSpec, NodeKindSpec, Outcome, PanelSpec,
+    RecordingCanvas, Registry, Session, ToolSpec,
+};
 
-/// A plugin's commands are in the catalogue.
+// ---------------------------------------------------------------- the seams --
+
+/// A plugin's commands are in the ecosystem.
 ///
 /// The plugin crate is a dependency of the application and the application
 /// names no symbol of it. Its commands are here because it was linked in.
 #[test]
-fn a_plugins_commands_are_in_the_catalogue() {
-    let registry = catalogue();
+fn a_plugins_commands_are_in_the_ecosystem() {
+    let ecosystem = ecosystem();
     assert!(
-        registry.get("hello.greet").is_some(),
-        "the plugin's command is not in the catalogue: {:?}",
-        registry.ids()
+        ecosystem.commands.get("hello.greet").is_some(),
+        "the plugin's command is not there: {:?}",
+        ecosystem.commands.ids()
     );
-    assert!(registry.get("hello.count").is_some());
+    assert!(ecosystem.commands.get("hello.count").is_some());
+}
+
+/// A plugin can add **document semantics**: a kind, a tool and a layer.
+///
+/// This is the seam the greeting plugin does not have. The core never
+/// matches on a kind, so a kind that a plugin adds is drawn by the plugin.
+#[test]
+fn a_plugin_can_add_a_kind_a_tool_and_a_layer() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.kinds.get("geometry.rect").is_some());
+    assert!(ecosystem.tools.get("tool.rect").is_some());
+    assert!(ecosystem.layers.get("geometry").is_some());
+    assert!(ecosystem.panels.get("panel.shapes").is_some());
 }
 
 /// The application names no plugin.
@@ -37,17 +54,15 @@ fn the_application_names_no_plugin() {
     );
 }
 
-/// The areas are derived from the commands, not written down.
-///
-/// The plugin has an area of its own — `hello` — and no list anywhere says
-/// that it exists.
+/// The capabilities are derived from the commands, not written down.
 #[test]
-fn the_areas_are_derived_from_the_commands() {
-    let registry = catalogue();
-    let areas = registry.areas();
-    assert!(areas.contains(&"hello"), "{areas:?}");
-    assert!(areas.contains(&"node"), "{areas:?}");
-    assert!(areas.contains(&"doc"), "{areas:?}");
+fn the_capabilities_are_derived_from_the_contributions() {
+    let ecosystem = ecosystem();
+    let capabilities = ecosystem.commands.capabilities();
+    assert!(capabilities.contains(&"command"), "{capabilities:?}");
+    assert!(ecosystem.kinds.capabilities().contains(&"node kind"));
+    assert!(ecosystem.tools.capabilities().contains(&"tool"));
+    assert!(ecosystem.panels.capabilities().contains(&"panel"));
 }
 
 /// A command's parameters are declared from its types.
@@ -56,30 +71,52 @@ fn the_areas_are_derived_from_the_commands() {
 /// a mute flag that may be left out. All three facts come from the fields.
 #[test]
 fn a_commands_parameters_are_declared_from_its_types() {
-    let registry = catalogue();
-    let spec = registry.get("node.mute").expect("the command is registered");
+    let ecosystem = ecosystem();
+    let spec = ecosystem.commands.get("node.mute").expect("the command is registered");
     assert_eq!(spec.params.len(), 2, "{:?}", spec.params);
 
     let node = spec.params[0];
     assert_eq!(node.name, "node");
-    assert_eq!(node.kind, craftkit_sdk::Doc::NodeRef);
+    assert_eq!(node.kind, Doc::NodeRef);
     assert_eq!(node.alternative, Some("node_name"));
     assert!(!node.required, "the pair is required; neither half is");
 
     let muted = spec.params[1];
     assert_eq!(muted.name, "muted");
-    assert_eq!(muted.kind, craftkit_sdk::Doc::Bool);
+    assert_eq!(muted.kind, Doc::Bool);
     assert!(!muted.required, "an `Option` is optional");
 }
 
 /// A command's documentation is its doc comment.
 #[test]
 fn a_commands_documentation_is_its_doc_comment() {
-    let registry = catalogue();
-    let spec = registry.get("hello.greet").expect("the command is registered");
+    let ecosystem = ecosystem();
+    let spec = ecosystem.commands.get("hello.greet").expect("the command is registered");
     assert_eq!(spec.doc, "Say hello to somebody.");
     assert_eq!(spec.label, "Greet");
 }
+
+/// The manifest is what an agent is told about the program it is driving.
+#[test]
+fn the_manifest_names_every_contribution() {
+    let ecosystem = ecosystem();
+    let manifest = ecosystem.projection().manifest();
+    assert!(manifest.iter().any(|line| line.contains("hello.greet")), "{manifest:?}");
+    assert!(manifest.iter().any(|line| line.contains("node kind geometry.rect")), "{manifest:?}");
+    assert!(manifest.iter().any(|line| line.contains("tool tool.rect")), "{manifest:?}");
+}
+
+/// The menu is a view of the registry, and it filters by capability.
+#[test]
+fn the_menu_is_a_view_of_the_registry() {
+    let ecosystem = ecosystem();
+    let menu = ecosystem.projection().menu(&["command"]);
+    assert!(menu.iter().any(|entry| entry.id == "hello.greet"), "{menu:?}");
+    let effects = ecosystem.projection().menu(&["effect"]);
+    assert!(effects.is_empty(), "there are no effects: {effects:?}");
+}
+
+// ------------------------------------------------------------- the boundary --
 
 /// A parameter the command does not have is refused.
 ///
@@ -88,7 +125,7 @@ fn a_commands_documentation_is_its_doc_comment() {
 /// the compiler.
 #[test]
 fn a_parameter_the_command_does_not_have_is_refused() {
-    let mut session = Session::new(catalogue());
+    let mut session = ecosystem().session();
     let error = session
         .execute("hello.greet", &json!({ "name": "world", "colour": "red" }))
         .expect_err("the extra parameter is refused");
@@ -98,7 +135,7 @@ fn a_parameter_the_command_does_not_have_is_refused() {
 /// A parameter the command needs and was not given is refused.
 #[test]
 fn a_required_parameter_that_is_missing_is_refused() {
-    let mut session = Session::new(catalogue());
+    let mut session = ecosystem().session();
     let error = session.execute("hello.greet", &json!({})).expect_err("the missing parameter is refused");
     assert!(matches!(error, EngineError::Param { .. }), "{error:?}");
 }
@@ -109,35 +146,39 @@ fn a_required_parameter_that_is_missing_is_refused() {
 /// parameter, and neither spelling is an unknown key.
 #[test]
 fn the_other_spelling_of_a_parameter_is_accepted() {
-    let mut session = Session::new(catalogue());
-    session.execute("node.add", &json!({ "name": "filter" })).expect("the node is added");
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 1, "y": 2, "width": 3, "height": 4 }))
+        .expect("the rectangle is added");
 
     let outcome = session
-        .execute("node.mute", &json!({ "node_name": "filter" }))
+        .execute("node.mute", &json!({ "node_name": "rectangle 3" }))
         .expect("the node is muted by its name");
     assert!(outcome.changed);
 
-    let node = session.document().node_by_name("filter").expect("the node is there");
+    let node = session.document().node_by_name("rectangle 3").expect("the node is there");
     assert!(node.muted);
 }
 
 /// A command that does not exist is refused.
 #[test]
 fn a_command_that_does_not_exist_is_refused() {
-    let mut session = Session::new(catalogue());
+    let mut session = ecosystem().session();
     let error = session.execute("hello.nonexistent", &json!({})).expect_err("the command is refused");
     assert!(matches!(error, EngineError::Unknown(_)), "{error:?}");
 }
 
-/// Two commands with one id are refused.
+// -------------------------------------------------------------- the session --
+
+/// Two contributions with one id are refused.
 ///
-/// The registry is built at run time, so this cannot be a compile error;
-/// it is a refusal when the registry is made.
+/// The registry is built at run time, so this cannot be a compile error; it
+/// is a refusal when the registry is made.
 #[test]
 fn two_commands_with_one_id_are_refused() {
-    let mut registry = catalogue();
-    let spec = registry.get("hello.greet").copied().expect("the command is registered");
-    let error = registry.register(spec).expect_err("the second one is refused");
+    let mut commands = ecosystem().commands;
+    let spec = commands.get("hello.greet").cloned().expect("the command is registered");
+    let error = commands.register(spec).expect_err("the second one is refused");
     assert!(error.to_string().contains("hello.greet"), "{error}");
 }
 
@@ -146,10 +187,10 @@ fn two_commands_with_one_id_are_refused() {
 /// The registry is a value, and it is open.
 #[test]
 fn a_command_made_at_run_time_can_be_run() {
-    let mut registry = catalogue();
-    registry.register(craftkit_studio::commands::runtime_echo()).expect("the command is registered");
+    let mut commands = ecosystem().commands;
+    commands.register(craftkit_studio::commands::runtime_echo()).expect("the command is registered");
 
-    let mut session = Session::new(registry);
+    let mut session = Session::new(commands, ecosystem().kinds);
     let outcome = session.execute("runtime.echo", &json!({ "text": "hello" })).expect("the command runs");
     assert_eq!(outcome.message, "hello");
 }
@@ -158,8 +199,10 @@ fn a_command_made_at_run_time_can_be_run() {
 /// leaves no entry.
 #[test]
 fn a_command_that_changes_the_document_can_be_undone() {
-    let mut session = Session::new(catalogue());
-    session.execute("node.add", &json!({ "name": "filter" })).expect("the node is added");
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 1, "height": 1 }))
+        .expect("the rectangle is added");
     assert_eq!(session.document().nodes.len(), 1);
 
     session.undo().expect("there is something to undo");
@@ -169,12 +212,285 @@ fn a_command_that_changes_the_document_can_be_undone() {
 /// A command that fails leaves the document as it was.
 #[test]
 fn a_command_that_fails_leaves_the_document_as_it_was() {
-    let mut session = Session::new(catalogue());
-    session.execute("node.add", &json!({ "name": "filter" })).expect("the node is added");
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 1, "height": 1 }))
+        .expect("the rectangle is added");
 
     let error = session
         .execute("node.mute", &json!({ "node_name": "nothing" }))
         .expect_err("there is no node with that name");
     assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
     assert_eq!(session.document().nodes.len(), 1, "the document is as it was");
+}
+
+/// A command that **panics** leaves the document as it was.
+///
+/// A crash is not a result. The document is put back and the failure is
+/// reported as what it is.
+#[test]
+fn a_command_that_panics_leaves_the_document_as_it_was() {
+    let mut commands = ecosystem().commands;
+    commands.register(panicking_command()).expect("the command is registered");
+    let mut session = Session::new(commands, ecosystem().kinds);
+
+    let error = session.execute("test.panic", &json!({})).expect_err("the command panics");
+    assert!(matches!(error, EngineError::Internal { .. }), "{error:?}");
+    assert_eq!(session.document().nodes.len(), 0, "the document is as it was");
+}
+
+/// A command that changes the document but says it does not is refused.
+///
+/// The promise is a promise, and the **session** judges it: the command's
+/// own claim is not asked.
+#[test]
+fn a_command_that_lies_about_mutating_is_refused() {
+    let mut commands = ecosystem().commands;
+    commands.register(lying_command()).expect("the command is registered");
+    let mut session = Session::new(commands, ecosystem().kinds);
+
+    let error = session.execute("test.lie", &json!({})).expect_err("the command is refused");
+    assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    assert_eq!(session.document().nodes.len(), 0, "the document was put back");
+}
+
+/// A batch is one undo step.
+#[test]
+fn a_batch_is_one_undo_step() {
+    let mut session = ecosystem().session();
+    session
+        .batch(|session| {
+            session.execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 1, "height": 1 }))?;
+            session.execute("geometry.rectangle", &json!({ "x": 2, "y": 0, "width": 1, "height": 1 }))?;
+            Ok(())
+        })
+        .expect("the batch runs");
+
+    assert_eq!(session.document().nodes.len(), 2);
+    session.undo().expect("there is something to undo");
+    assert_eq!(session.document().nodes.len(), 0, "one undo took both back");
+}
+
+// ------------------------------------------------------------- the ecosystem --
+
+/// A tool that runs a command that is not there is refused.
+///
+/// The check is made when the ecosystem is built, which is before anybody
+/// has drawn anything.
+#[test]
+fn a_tool_that_runs_a_missing_command_is_refused() {
+    let mut ecosystem = ecosystem();
+    ecosystem.tools = Registry::new();
+    ecosystem
+        .tools
+        .register(ToolSpec {
+            id: "tool.broken",
+            label: "Broken",
+            layer: "core",
+            icon: "broken",
+            shortcut: None,
+            command: "nothing.like.this",
+        })
+        .expect("the tool is registered");
+
+    let error = ecosystem.validate().expect_err("the ecosystem is refused");
+    assert!(error.to_string().contains("nothing.like.this"), "{error}");
+}
+
+/// A panel that shows a command that is not there is refused.
+#[test]
+fn a_panel_that_shows_a_missing_command_is_refused() {
+    let mut ecosystem = ecosystem();
+    ecosystem.panels = Registry::new();
+    ecosystem
+        .panels
+        .register(PanelSpec {
+            id: "panel.broken",
+            label: "Broken",
+            layer: "core",
+            commands: &["nothing.like.this"],
+        })
+        .expect("the panel is registered");
+
+    let error = ecosystem.validate().expect_err("the ecosystem is refused");
+    assert!(error.to_string().contains("nothing.like.this"), "{error}");
+}
+
+/// A contribution in a layer that is not there is refused.
+#[test]
+fn a_contribution_in_a_missing_layer_is_refused() {
+    let mut ecosystem = ecosystem();
+    ecosystem.commands = Registry::new();
+    ecosystem
+        .commands
+        .register(CommandSpec {
+            id: "orphan.command",
+            label: "Orphan",
+            area: "orphan",
+            capability: "command",
+            layer: "nowhere",
+            icon: "orphan",
+            doc: "In a layer that is not there.",
+            shortcut: None,
+            params: &[],
+            mutates: false,
+            undoable: false,
+            enabled: craftkit_sdk::always,
+            run: CommandRun::Static(|_session, _params| Ok(Outcome::new("never"))),
+        })
+        .expect("the command is registered");
+
+    let error = ecosystem.validate().expect_err("the ecosystem is refused");
+    assert!(error.to_string().contains("nowhere"), "{error}");
+}
+
+/// A layer that requires itself is refused.
+#[test]
+fn a_layer_that_requires_itself_is_refused() {
+    let mut ecosystem = ecosystem();
+    ecosystem.layers = Registry::new();
+    ecosystem
+        .layers
+        .register(LayerSpec { id: "loop", name: "Loop", requires: &["loop"] })
+        .expect("the layer is registered");
+
+    let error = ecosystem.validate().expect_err("the ecosystem is refused");
+    assert!(error.to_string().contains("requires itself"), "{error}");
+}
+
+/// Two layers that require each other are refused.
+#[test]
+fn layers_that_require_each_other_are_refused() {
+    let mut ecosystem = ecosystem();
+    ecosystem.layers = Registry::new();
+    ecosystem
+        .layers
+        .register(LayerSpec { id: "one", name: "One", requires: &["two"] })
+        .expect("the layer is registered");
+    ecosystem
+        .layers
+        .register(LayerSpec { id: "two", name: "Two", requires: &["one"] })
+        .expect("the layer is registered");
+
+    let error = ecosystem.validate().expect_err("the ecosystem is refused");
+    assert!(error.to_string().contains("circle"), "{error}");
+}
+
+/// The core draws a node by asking its kind.
+///
+/// The core does not know what a rectangle is. It asks the registry, and the
+/// kind's own method draws it.
+#[test]
+fn the_core_draws_a_node_by_asking_its_kind() {
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 3, "y": 4, "width": 5, "height": 6 }))
+        .expect("the rectangle is added");
+
+    let mut canvas = RecordingCanvas::default();
+    for node in session.document().nodes() {
+        let kind = session.kinds().get(&node.kind).expect("the kind is there");
+        (kind.paint)(node, &mut canvas);
+    }
+    assert_eq!(canvas.drawn, vec!["rect(3, 4, 5, 6)".to_string()]);
+}
+
+/// The core hit-tests a node by asking its kind.
+#[test]
+fn the_core_hit_tests_a_node_by_asking_its_kind() {
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 3, "y": 4, "width": 5, "height": 6 }))
+        .expect("the rectangle is added");
+
+    let point = craftkit_sdk::Point::new(4.0, 5.0);
+    let hit = session.document().nodes().find(|node| {
+        let kind = session.kinds().get(&node.kind).expect("the kind is there");
+        (kind.hit)(node, point)
+    });
+    assert!(hit.is_some());
+}
+
+/// A kind is a contribution like any other: it has an id and a layer.
+#[test]
+fn a_kind_is_a_contribution() {
+    let ecosystem = ecosystem();
+    let kind = ecosystem.kinds.get("geometry.rect").expect("the kind is there");
+    assert_eq!(kind.kind, "geometry.rect");
+    assert_eq!(kind.layer, "geometry");
+}
+
+/// The raw door is there, and it is named.
+///
+/// A plugin that was loaded at run time cannot offer a Rust type, so the
+/// JSON value is a kind too — and the declaration says `json`, so a caller
+/// knows it is holding something unchecked.
+#[test]
+fn the_raw_door_is_a_kind() {
+    assert_eq!(Doc::Json.json_name(), "json");
+    let value: craftkit_sdk::serde_json::Value = json!({ "anything": true });
+    let read = <craftkit_sdk::serde_json::Value as craftkit_sdk::ParamKind>::from_json(&value)
+        .expect("the value is read");
+    assert_eq!(read, value);
+}
+
+/// The helpers the tests need: a command that panics, and one that lies.
+fn panicking_command() -> CommandSpec {
+    CommandSpec {
+        id: "test.panic",
+        label: "Panic",
+        area: "test",
+        capability: "command",
+        layer: "core",
+        icon: "panic",
+        doc: "Panics on purpose.",
+        shortcut: None,
+        params: &[],
+        mutates: true,
+        undoable: false,
+        enabled: craftkit_sdk::always,
+        run: CommandRun::Static(|_session, _params| panic!("on purpose")),
+    }
+}
+
+fn lying_command() -> CommandSpec {
+    CommandSpec {
+        id: "test.lie",
+        label: "Lie",
+        area: "test",
+        capability: "command",
+        layer: "core",
+        icon: "lie",
+        doc: "Changes the document and says it does not.",
+        shortcut: None,
+        params: &[],
+        mutates: false,
+        undoable: false,
+        enabled: craftkit_sdk::always,
+        run: CommandRun::Static(|session, _params| {
+            session.document_mut().add_node(
+                "sneaky",
+                "geometry.rect",
+                craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0),
+            );
+            Ok(Outcome::new("changed"))
+        }),
+    }
+}
+
+/// A kind that is never used, to keep the import honest.
+#[allow(dead_code)]
+fn unused_kind() -> NodeKindSpec {
+    NodeKindSpec {
+        kind: "test.kind",
+        label: "Test",
+        layer: "core",
+        paint: |_node, _canvas| {},
+        hit: |_node, _point| false,
+    }
+}
+
+/// The ecosystem, as the application builds it.
+fn ecosystem() -> Ecosystem {
+    craftkit_studio::ecosystem()
 }

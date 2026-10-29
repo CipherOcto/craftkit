@@ -44,128 +44,155 @@ the attribute, and the catalogue, the schema and the documentation are
 
 ---
 
-## 2. The ten rules
+## 2. The seams
 
-| | Rule | Where it is held |
-|---|---|---|
-| 1 | A command is a struct whose fields are its parameters. | the type |
-| 2 | The parameter's **kind** is its type. | `ParamKind` |
-| 3 | A parameter is **required** when its type is not an `Option`. | `Option<T>: ParamKind` |
-| 4 | A parameter with two spellings is an `Either`. | `Either<A, B>` |
-| 5 | A command's body never sees a parameter object. | the generated `run` |
-| 6 | A command's documentation is its doc comment. | the derive macro |
-| 7 | The registry is a **value**, built at run time. | `Registry` |
-| 8 | A crate that is linked in contributes its commands. | `inventory` + the derive macro |
-| 9 | The areas are **derived** from the commands, not listed. | `Registry::areas` |
-| 10 | One way to run a command: `Session::execute`. | the SDK |
+A tree that has commands, node kinds, tools, panels and layers has five
+registries. Written by hand, that is five copies of the same four things: a
+vector, a lookup, a duplicate check and a malformed-id check. Five copies is
+five places for the checks to drift.
 
-Rules 2 to 4 are the ones that do the work. They turn a **table** into a
-**type**, and a table is something a person can get wrong.
+So there is **one** registry, generic over what it holds, and every
+contribution is the same shape:
 
----
-
-## 3. What a command looks like
+| | |
+|---|---|
+| **id** | unique, and well formed |
+| **capability** | what sort of thing it is — `command`, `node kind`, `tool`, `panel` |
+| **layer** | which group of contributions it belongs to |
 
 ```rust
-/// Mute or unmute a node.
-///
-/// The node may be given as an **id** or as a **name**: one parameter, two
-/// spellings, and the type says so.
-#[derive(Command)]
-#[command(
-    id = "node.mute",
-    area = "node",
-    icon = "mute",
-    mutates,
-    undoable,
-    enabled = has_nodes
-)]
-pub struct NodeMute {
-    /// The node's id, or its name.
-    #[param(or = "node_name")]
-    pub node: Either<NodeRef, Text>,
-    /// True to mute, false to unmute. The opposite of the node's own state
-    /// when it is not given.
-    pub muted: Option<Bool>,
-}
-
-impl NodeMute {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // …
-    }
+pub trait Contribution: Clone + Send + Sync + 'static {
+    fn id(&self) -> &'static str;
+    fn capability(&self) -> &'static str;
+    fn layer(&self) -> &'static str { "core" }
+    fn malformed_id(id: &str) -> Option<String> { malformed_dotted_id(id) }
 }
 ```
 
-The macro writes:
+and the registry is generic:
 
-- the **declaration** — the id, the area, the label (from the id), the
-  documentation (from the doc comment) and the parameter table (from the
-  fields and their types);
-- the **reader** — `NodeMute::read(&params)`, which reads each field by its
-  own name and with its own kind;
-- the **entry point** — a function that reads the parameters and then calls
-  `run`;
-- the **registration** — a link-time registration, so the linker puts the
-  command in the registry.
+```rust
+pub struct Registry<T: Contribution> { items: Vec<T> }
+```
 
-The body gets `&self` and `&mut Session`. It does not get a `Params`, so it
-cannot read an undeclared parameter, cannot index one, and cannot reach the
-raw JSON. **That is the whole of rule 5**, and it is a compile-time fact
-rather than a rule somebody has to remember.
+A tree that has seven kinds of extension has seven registries. Written by
+hand, that is seven copies of the same four things — a vector, a lookup, a
+duplicate check, a malformed-id check. Seven copies is seven places for the
+checks to drift, and the drift is invisible until two of them disagree.
 
-### What the compiler knows now
+### The five seams
 
-| Fact | In the old tree | In v2 |
+| Seam | What it is | What the ecosystem checks |
 |---|---|---|
-| the parameter's name | a table | the field's name |
-| the parameter's kind | a table | the field's type |
-| whether it is required | a table | whether the type is an `Option` |
-| the other spelling | a table | `Either` + `#[param(or = …)]` |
-| what it does | a hand-written sentence | the doc comment |
-| what the button says | a hand-written string | the id, capitalised |
-| the id and the area agree | a gate reading the source | a compile error |
-| `undoable` without `mutates` | a gate reading the source | a compile error |
-| two parameters with one name | a gate reading the source | a compile error |
-| a parameter read but not declared | a gate reading the source | **impossible** |
-| a parameter declared but not read | a gate reading the source | **impossible** |
+| **command** | something a person or an agent can do | its id, and its layer |
+| **node kind** | a kind of thing in the document | that the layer exists |
+| **tool** | a gesture that runs a command | that the command exists |
+| **panel** | a window's worth of commands | that the commands exist |
+| **layer** | a group of contributions that depend on each other | that the graph is acyclic and complete |
 
-The last two are the expensive ones. The old tree needed a *text scanner*
-to compare a declaration with a body, and the scanner had five documented
-defects, each of them a false green. v2 has nothing to compare.
+The **node kind** is the seam that changes the shape of a tree. A node names
+a kind, and the kind knows how it is painted and what is inside it. The core
+never matches on a kind: it asks the registry. So a plugin can add a kind of
+thing to a document that was written before the plugin existed.
+
+```rust
+/// A rectangle.
+#[derive(NodeKind)]
+#[node_kind(kind = "geometry.rect", label = "Rectangle", layer = "geometry")]
+pub struct RectKind;
+
+impl RectKind {
+    fn paint(node: &Node, canvas: &mut dyn Canvas) { … }
+    fn hit(node: &Node, point: Point) -> bool { … }
+}
+```
+
+The **layer** is the answer to a tree whose layers are a `const` in a build
+tool. A `const` can say what the tree knows at compile time, and it cannot
+say anything about a crate that was linked in later. A layer is a
+contribution too: it names what it needs, and the ecosystem checks the graph
+when the program starts.
 
 ---
 
-## 4. A plugin
+## 3. The ecosystem: one check, not five
 
-`crates/craftkit-plugin-hello` depends on the SDK and the macro. **That is
+Each registry checks its own ids. But some mistakes are only visible when the
+registries are read **together**:
+
+- a tool names a command that is not there;
+- a panel names a command that is not there;
+- a contribution is in a layer that was not linked in;
+- a layer requires a layer that is not there, or requires itself, or the
+  requirements have a cycle.
+
+None of these belongs to one registry, so none of them can be checked by one
+registry. They are checked by the **ecosystem**, when it is built — which is
+before anybody has drawn anything. And it does not fix anything: a missing
+command is a refusal, not a warning. A program that starts with a tool that
+cannot run is a program that will fail later, in front of a person, instead
+of now, in front of a log.
+
+---
+
+## 4. The projection: one source for every front end
+
+A menu, a toolbar, a schema, a chord map and a document are five views of the
+same registry. The projection is where they are made, so a command added by a
+plugin appears in all five without anybody writing it down five times.
+
+```rust
+let projection = ecosystem.projection();
+projection.menu(&["command", "effect"]);   // grouped by area
+projection.schema("node.mute");            // what an agent is told
+projection.manifest();                     // one line per contribution
+```
+
+The **capability** is what makes this work. A toolbar wants `tool` and
+`command`; a file menu wants `exporter` and `importer`; an agent wants
+everything with a schema. There is no list of "the commands in the toolbar"
+to keep in step — the list is *derived* from the registry.
+
+---
+
+## 5. The session judges
+
+The old tree asked the **command** whether it had changed anything, and the
+command answered honestly if it felt like it. v2 compares the document
+before and after, so the answer is a fact:
+
+- a command that says `mutates: false` and changes the document is **refused
+  and rolled back** — the promise was a promise;
+- an undo entry is pushed when the command mutates, the command is
+  undoable, **and** the document really changed. A command that sets a value
+  to what it already was leaves no history;
+- a command that **panics** leaves the document as it was and is reported as
+  an internal error, because a crash is not a result;
+- a **batch** is one undo step, so three commands that belong together can
+  be undone together.
+
+---
+
+## 6. A plugin
+
+`crates/craftkit-plugin-shapes` depends on the SDK and the macro. **That is
 its whole dependency list**, and it does not depend on the application.
 
-```rust
-/// Say hello to somebody.
-#[derive(Command)]
-#[command(id = "hello.greet", area = "hello", icon = "hello")]
-pub struct HelloGreet {
-    /// Who to greet.
-    pub name: Text,
-    /// Whether to shout.
-    pub loudly: Option<Bool>,
-}
-```
+It contributes a **layer**, a **node kind**, a **tool**, a **panel** and a
+**command** — and the application, which names no symbol of it, gets all
+five.
 
-No registration code. No list to add to. No call into the application.
-
-The application lists the plugin in `Cargo.toml` — that is the whole of the
-wiring — and a **build script** turns the dependency list into the
-references:
+The wiring is generated from the dependency list:
 
 ```rust
 // generated by build.rs, from the manifest
 use craftkit_plugin_hello as _;
+use craftkit_plugin_shapes as _;
 ```
 
-The reference is not decoration. Rust drops a dependency that nothing
-refers to, and a dropped dependency takes its registrations with it: before
-the build script existed, the plugin's commands were **not in the catalogue**,
+The reference is not decoration. Rust drops a dependency that nothing refers
+to, and a dropped dependency takes its registrations with it: before the
+build script existed, the plugin's commands were **not in the catalogue**,
 and the failure was silent. That is worth writing down, because it is the
 sort of thing that looks like a bug in the plugin and is really a fact about
 the linker.
@@ -183,7 +210,7 @@ source and refuses to find the word `craftkit_plugin` in it.
 
 | Door | What it is | State |
 |---|---|---|
-| **the linked plugin** | a crate that is a dependency; its commands are in the registry from the first instruction | **built** |
+| **the linked plugin** | a crate that is a dependency; its contributions are there from the first instruction | **built** |
 | **the run-time command** | a `CommandSpec` written by hand and registered while the program runs | **built** |
 | **the loaded plugin** | a `.so` loaded with `dlopen` while the program runs | **not built** |
 
@@ -198,63 +225,61 @@ what the run-time door already does, one step further on.
 
 ---
 
-## 5. The registry is a value
+## 7. The raw door
 
-```rust
-let registry = Registry::from_inventory()?;   // every command that was linked in
-registry.areas();                              // derived: doc, hello, node
-registry.ids();                                // derived
-```
+Every parameter in v2 is a **type**, and a type is checked. One is not: a
+value of any shape, for the contributions that cannot offer a type — a
+command from a subprocess, a command from a script.
 
-The old tree's registry was a `static` with a hand-written length, and the
-length was a number that a gate compared with the prose. v2 has no length to
-write down: the catalogue is whatever was registered, and the areas are
-computed from it — which is why the plugin's own area, `hello`, is in the
-list without anybody having said so.
-
-Registration is **open at run time**:
-
-```rust
-registry.register(runtime_echo())?;   // a command that exists only now
-```
-
-and the registry **refuses** a duplicate id, which is the one thing that has
-to be checked at run time rather than by the compiler.
+It is named in the declaration (`kind: json`), so a caller knows it is
+holding something unchecked, and it is not the default. A door that is
+closed by default and open on purpose is a door; a door that is open is a
+hole.
 
 ---
 
-## 6. What is here, and what is not
+## 8. What is here, and what is not
 
 ### Built
 
 - `crates/craftkit-sdk` — the whole surface a plugin needs: the typed
-  readers, the command shape, the registry, the session and the document.
-  **2307 lines** of Rust in the whole of v2, 39 tests.
-- `crates/craftkit-derive` — the macro, with eleven tests on the rules it
-  holds.
-- `crates/craftkit-plugin-hello` — a plugin that depends on the SDK and the
-  macro, and on nothing else.
+  readers, the one registry, the command, the five seams, the ecosystem, the
+  projection, the session and the document.
+- `crates/craftkit-derive` — five derives, with fifteen tests on the rules
+  they hold.
+- `crates/craftkit-plugin-hello` — a plugin that adds commands.
+- `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
+  node, a tool, a panel and a command**.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
+**57 tests.**
+
 ### Not built
 
-- **The evaluator.** v2's document has nodes and names; it has no geometry,
-  no plan and no kernel. The old tree's `craftkit-eval` and `craftkit-kernel`
-  are untouched, and the redesign says nothing about them yet.
-- **The file format.** The old tree's versioned `.craftkit` format, with
-  its one-file-per-change discipline, is untouched.
+- **The evaluator.** v2's document has nodes and a rectangle; it has no
+  geometry, no plan and no kernel. The old tree's `craftkit-eval` and
+  `craftkit-kernel` are untouched, and the redesign says nothing about them
+  yet.
+- **The file format.** The old tree's versioned `.craftkit` format, with its
+  one-file-per-change discipline, is untouched. A `#[derive(Format)]` and a
+  chain of `#[derive(Migration)]` would make the format's versions a fact
+  about the types rather than a number somebody remembers to bump — that is
+  the next seam, and it is the one the old tree's four-place ceremony points
+  at.
 - **The front ends.** No toolbar, no MCP server, no control channel. v2 has
-  one door — `Session::execute` — and nothing else to reach it.
+  one door — `Session::execute` — and the projection that every front end
+  would read.
 - **The loaded plugin** (the third door above).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
-change: the registry, the parameters and the extension seam.
+change: the registry, the parameters, the extension seam and the seams
+around it.
 
 ---
 
-## 7. What the redesign would do to the rest of the tree
+## 9. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -263,11 +288,10 @@ part that is a plan rather than a build.
 hand-written structs with hand-written readers, and the format's version
 number is a constant that a file records in its header. A `#[derive(Format)]`
 would write the reader and the writer from the struct, and a
-`#[derive(Version)]` would make the version a fact about the types rather
-than a number somebody remembers to bump. The old tree's pending-change
-ceremony — one file per change, wired in four places — exists because the
-format is hand-written; a derived format has a different problem, and
-probably a smaller one.
+`#[derive(Migration)]` would make the version chain a list of contributions
+rather than a ceremony wired in four places. The old tree's pending-change
+discipline exists because the format is hand-written; a derived format has a
+different problem, and probably a smaller one.
 
 **The evaluator.** The old tree's `NodeKind` is an enum, and every place
 that matches on it has to be updated when it grows. A kind that carries its
@@ -291,24 +315,26 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 8. Running it
+## 10. Running it
 
 ```bash
 cd v2
-cargo test          # 39 tests
+cargo test          # 57 tests
 cargo run -p craftkit-studio
 ```
 
-The application prints the catalogue — the application's own commands and
-the plugin's — runs one of each, and then makes a command at run time and
-runs that too.
+The application prints the ecosystem (the layers, kinds, tools and panels),
+the manifest an agent would be told, the menu by capability, then runs a
+command from a plugin, adds a **kind of node** from another plugin, draws the
+document **through the kinds**, hit-tests it **through the kinds**, and
+finally makes a command at run time and runs that too.
 
-## 9. Honest notes
+## 11. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
-  commands are missing and nothing says so.
-- **The run-time command is written out by hand.** A command made while the
+  contributions are missing and nothing says so.
+- **A run-time command is written out by hand.** A command made while the
   program runs has no struct to derive from, so it reads its own parameter.
   That is the price of the third door.
 - **The `Either` is a compromise.** One parameter with two spellings of
@@ -316,10 +342,9 @@ runs that too.
   whichever half arrived and decides what to do with it. The old tree had
   the same pair and the same awkwardness; here at least the *declaration*
   and the *reading* are written once.
-- **The plugin's crate is linked, not loaded.** A plugin that is a
-  dependency is checked by the compiler and is there from the first
-  instruction; a plugin that is loaded can arrive at any moment, and needs
-  the hand-off that v2 has not built.
+- **The document model is small and local.** The node names a kind and
+  carries a rectangle. A tree that wants a real document needs a real
+  document, and that is design work, not a seam.
 - **The derive's grammar is in one place** — the macro — and the gates do
   not read the source at all, so there is no second reader to keep in step.
   This is the problem phase one had, and it is *gone* in v2: the compiler is

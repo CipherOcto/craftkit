@@ -4,8 +4,10 @@
 //! as a plugin declares them — a struct, an attribute, a doc comment and a
 //! `run` method — because the macro does not care which crate it is in.
 
-use craftkit_derive::Command;
-use craftkit_sdk::{Bool, CommandSpec, Doc, Either, EngineError, NodeRef, Outcome, ParamDoc, Session, Text};
+use craftkit_derive::{Command, Panel};
+use craftkit_sdk::{
+    Bool, CommandRun, CommandSpec, Doc, Either, EngineError, NodeRef, Outcome, ParamDoc, Rect, Session, Text,
+};
 
 /// Give the document a name.
 ///
@@ -30,19 +32,32 @@ impl DocRename {
 }
 
 /// Add a node to the document.
+///
+/// The node's **kind** is a parameter, and the command refuses a kind that
+/// is not linked in: the kinds are a registry, and the document may only
+/// hold kinds the program knows how to draw.
 #[derive(Command)]
 #[command(id = "node.add", area = "node", icon = "plus", mutates, undoable)]
 pub struct NodeAdd {
     /// The node's name.
     pub name: Text,
+    /// The kind of thing it is.
+    pub kind: Text,
 }
 
 impl NodeAdd {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let kind = self.kind.0.clone();
+        if session.kinds().get(&kind).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.add".to_string(),
+                message: format!("there is no kind called `{kind}`"),
+            });
+        }
         let name = self.name.0.clone();
-        let id = session.document_mut().add_node(name.clone());
-        Ok(Outcome::changed(format!("added `{name}`"))
-            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "name": name })))
+        let id = session.document_mut().add_node(name.clone(), kind.clone(), Rect::new(0.0, 0.0, 10.0, 10.0));
+        Ok(Outcome::changed(format!("added a {kind} `{name}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": kind })))
     }
 }
 
@@ -127,6 +142,8 @@ pub fn runtime_echo() -> CommandSpec {
         id: "runtime.echo",
         label: "Echo",
         area: "runtime",
+        capability: "command",
+        layer: "core",
         icon: "echo",
         doc: "Say the text back.",
         shortcut: None,
@@ -134,7 +151,7 @@ pub fn runtime_echo() -> CommandSpec {
         mutates: false,
         undoable: false,
         enabled: craftkit_sdk::always,
-        run: |_session, params| {
+        run: CommandRun::Dynamic(std::sync::Arc::new(|_session, params| {
             let text = params.get("text").and_then(|value| value.as_str()).unwrap_or_default();
             match text {
                 "" => Err(EngineError::Failed {
@@ -143,6 +160,15 @@ pub fn runtime_echo() -> CommandSpec {
                 }),
                 text => Ok(Outcome::new(text.to_string())),
             }
-        },
+        })),
     }
 }
+
+/// The panel that shows the document's nodes.
+///
+/// A panel is **data**: an id, a label and the commands it shows. The
+/// ecosystem checks that every command it names is there, so a panel cannot
+/// point at a command that does not exist.
+#[derive(Panel)]
+#[panel(id = "panel.nodes", label = "Nodes", layer = "core", commands("node.add", "node.mute"))]
+pub struct NodesPanel;
