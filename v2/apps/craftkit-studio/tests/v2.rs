@@ -491,7 +491,7 @@ fn lying_command() -> CommandSpec {
             session.document_mut().add_node(
                 "sneaky",
                 "geometry.rect",
-                craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0),
+                Some(craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0)),
             );
             Ok(Outcome::new("changed"))
         }),
@@ -561,7 +561,7 @@ fn a_current_file_is_read_as_it_is() {
     let ecosystem = ecosystem();
     let document = craftkit_sdk::Document::new("current");
     let mut document = document;
-    document.add_node("rect", "geometry.rect", craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0));
+    document.add_node("rect", "geometry.rect", Some(craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0)));
     let format =
         craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
     let value = craftkit_sdk::format::write_document(&document, format);
@@ -582,7 +582,7 @@ fn a_nodes_payload_survives_the_file() {
     document.add_node_with(
         "path",
         "vector.path",
-        craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0),
+        Some(craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0)),
         json!({
             "path": {
                 "rule": "non-zero",
@@ -607,6 +607,93 @@ fn a_nodes_payload_survives_the_file() {
     let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
         .expect("the file is read");
     assert_eq!(read, document, "a round trip is the same document");
+}
+
+/// A node may have **no place**.
+///
+/// The port of a sound application found this: a clip in a sound document
+/// is at a time, and a time is not a place. Before, every node had a box
+/// and the core said so.
+#[test]
+fn a_node_may_have_no_place() {
+    let ecosystem = ecosystem();
+    let mut document = craftkit_sdk::Document::new("no place");
+    document.add_node("clip", "sound.clip", None);
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    assert!(
+        value
+            .get("nodes")
+            .and_then(|nodes| nodes.get(0))
+            .is_some_and(|node| node.get("rect").is_some_and(|rect| rect.is_null())),
+        "the node has no place in the file: {value}"
+    );
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read.nodes[0].rect, None, "the node still has no place");
+}
+
+/// The document carries a payload of its own.
+///
+/// The node has one, and the document has one too: a sound session's
+/// sample rate belongs to the session and not to any one node.
+#[test]
+fn the_document_carries_a_payload() {
+    let ecosystem = ecosystem();
+    let mut document = craftkit_sdk::Document::new("session");
+    document.data = json!({ "sound": { "sample_rate": 48000 } });
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read.data, document.data, "the payload survives the file");
+}
+
+/// The next free id walks the **tree**.
+///
+/// A child has an id too, and an id a child holds is not free. The tree
+/// was a list when this was written, and the list was one level deep, and
+/// the count was right by accident.
+#[test]
+fn the_next_id_walks_the_tree() {
+    let mut document = craftkit_sdk::Document::new("ids");
+    let group = document.add_node("group", "core.group", None);
+    let child = document.add_node_under(Some(group), "clip", "sound.clip", None);
+    let sibling = document.add_node("after", "sound.clip", None);
+    assert!(sibling > child, "the child took an id and the next node did not take it again: {child} {sibling}");
+}
+
+/// A file of the third version is migrated to the fourth.
+///
+/// The third version had a place on every node and no payload; the fourth
+/// says a node may have none and the document carries a payload.
+#[test]
+fn a_third_version_file_is_migrated_to_the_fourth() {
+    let ecosystem = ecosystem();
+    let old = json!({
+        "format": "craftkit/3",
+        "version": 3,
+        "name": "old",
+        "nodes": [{
+            "id": 1,
+            "name": "rect",
+            "kind": "geometry.rect",
+            "rect": { "x": 1.0, "y": 2.0, "w": 3.0, "h": 4.0 },
+            "muted": false,
+            "data": null,
+            "children": [],
+        }],
+    });
+    let document = craftkit_sdk::format::read_document(&old, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(document.data, json!(null), "the step gives the document its payload");
+    assert_eq!(
+        document.nodes[0].rect,
+        Some(craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0)),
+        "the place the node had is still the place it has"
+    );
 }
 
 /// A node can hold other nodes.
@@ -665,12 +752,12 @@ fn the_plan_walks_the_tree() {
 fn a_file_with_a_group_in_it_survives_the_round_trip() {
     let ecosystem = ecosystem();
     let mut document = craftkit_sdk::Document::new("grouped");
-    let group = document.add_node("group", "core.group", craftkit_sdk::Rect::new(0.0, 0.0, 10.0, 10.0));
+    let group = document.add_node("group", "core.group", Some(craftkit_sdk::Rect::new(0.0, 0.0, 10.0, 10.0)));
     document.add_node_under(
         Some(group),
         "inside",
         "geometry.rect",
-        craftkit_sdk::Rect::new(1.0, 1.0, 2.0, 2.0),
+        Some(craftkit_sdk::Rect::new(1.0, 1.0, 2.0, 2.0)),
     );
     let format =
         craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
@@ -845,7 +932,7 @@ fn an_evaluator_speaks_about_the_whole_document() {
 #[test]
 fn a_node_of_an_unknown_kind_is_not_in_the_plan() {
     let mut document = craftkit_sdk::Document::new("stranger");
-    document.add_node("mystery", "not.a.kind", craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0));
+    document.add_node("mystery", "not.a.kind", Some(craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0)));
     let plan = craftkit_sdk::plan::evaluate(&document, &crate::ecosystem().kinds);
     assert!(plan.items.is_empty(), "{:?}", plan.to_json());
 }

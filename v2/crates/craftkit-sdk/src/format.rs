@@ -119,6 +119,21 @@ impl<T: FormatValue> FormatValue for Option<T> {
     }
 }
 
+/// A **JSON value** is its own format.
+///
+/// The payload of a node is a JSON value, and the document's payload is a
+/// JSON value, and the file carries them as they are: the core does not
+/// read them and does not write them in any other shape.
+impl FormatValue for Json {
+    fn to_json(&self) -> Json {
+        self.clone()
+    }
+
+    fn from_json(value: &Json) -> Result<Self, String> {
+        Ok(value.clone())
+    }
+}
+
 /// The value at a name, or the reason there is none.
 ///
 /// The reader the derive macro writes needs this: a field that is not in the
@@ -301,6 +316,19 @@ pub fn write_v3(document: &Document) -> Json {
     })
 }
 
+/// The fourth version of the document format.
+///
+/// A node may have no place, and the document carries a payload.
+pub fn write_v4(document: &Document) -> Json {
+    serde_json::json!({
+        "format": "craftkit/4",
+        "version": 4,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+    })
+}
+
 /// The first version of the document format.
 pub static FORMAT_V1: FormatSpec =
     FormatSpec { tag: "craftkit/1", version: 1, layer: "core", read: Document::from_json, write: write_v1 };
@@ -330,6 +358,24 @@ inventory::submit! {
 
 inventory::submit! {
     crate::contribution::Registration { item: &FORMAT_V3 }
+}
+
+/// The fourth version of the document format.
+///
+/// Two things changed, and both of them were found by the port of a sound
+/// application:
+///
+/// - a node may have **no place**. The first three versions said that
+///   every node has a rectangle, and a node in a sound document is at a
+///   time rather than at a point in a picture;
+/// - the document carries a **payload** of its own, because a sound
+///   session's sample rate and timecode belong to the session and not to
+///   any one node.
+pub static FORMAT_V4: FormatSpec =
+    FormatSpec { tag: "craftkit/4", version: 4, layer: "core", read: Document::from_json, write: write_v4 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V4 }
 }
 
 /// The step from the first version to the second.
@@ -373,6 +419,26 @@ impl V2ToV3 {
             if let Some(object) = node.as_object_mut() {
                 object.entry("children").or_insert(Json::Array(Vec::new()));
             }
+        }
+        Ok(())
+    }
+}
+
+/// The step from the third version to the fourth.
+///
+/// It says what the fourth version says: a node may have no place, and
+/// the document carries a payload. A file of the third version has a place
+/// on every node and no payload, so the step gives the document an empty
+/// payload and leaves the places where they are.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.3to4", family = "craftkit", from = 3, to = 4, layer = "core")]
+pub struct V3ToV4;
+
+impl V3ToV4 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        if let Some(object) = value.as_object_mut() {
+            object.entry("data").or_insert(Json::Null);
         }
         Ok(())
     }

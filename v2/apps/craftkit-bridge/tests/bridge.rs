@@ -89,7 +89,7 @@ fn the_resources_are_the_rest_of_the_registry() {
     let answer = ask(&mut bridge, "resources/list", Json::Null);
     let kinds = answer["result"]["kinds"].as_array().expect("there are kinds");
     assert!(kinds.iter().any(|kind| kind["kind"] == "geometry.rect"), "{answer}");
-    assert_eq!(answer["result"]["formats"], json!(["craftkit/1", "craftkit/2", "craftkit/3"]));
+    assert_eq!(answer["result"]["formats"], json!(["craftkit/1", "craftkit/2", "craftkit/3", "craftkit/4"]));
     assert!(answer["result"]["evaluators"].as_array().expect("there are evaluators").len() >= 2);
 }
 

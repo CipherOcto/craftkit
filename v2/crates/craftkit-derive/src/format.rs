@@ -105,6 +105,7 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
     let mut names: Vec<String> = Vec::new();
     let mut idents: Vec<Ident> = Vec::new();
     let mut types: Vec<syn::Type> = Vec::new();
+    let mut defaults: Vec<bool> = Vec::new();
     for field in &fields {
         let Some(ident) = field.ident.clone() else {
             return Err(Error::new(Span::call_site(), "a format's fields are named"));
@@ -116,6 +117,7 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
         names.push(name);
         idents.push(ident);
         types.push(field.ty.clone());
+        defaults.push(has_default(&field.attrs)?);
     }
 
     let writes = idents.iter().zip(types.iter()).map(|(ident, ty)| {
@@ -125,12 +127,25 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
             #key: <#ty as #sdk::FormatValue>::to_json(&self.#ident),
         }
     });
-    let reads = idents.iter().zip(types.iter()).map(|(ident, ty)| {
+    let reads = idents.iter().zip(types.iter()).zip(defaults.iter()).map(|((ident, ty), default)| {
         let name = ident.to_string();
-        quote! {
-            #ident: <#ty as #sdk::FormatValue>::from_json(
-                #sdk::format::field(value, #name)?
-            )?,
+        if *default {
+            // A field that may be **absent**: a file written before the
+            // field existed is read as the field's default rather than
+            // refused. That is what makes a new field a version and a
+            // step rather than a break.
+            quote! {
+                #ident: {
+                    let __field = value.get(#name).cloned().unwrap_or(#sdk::serde_json::Value::Null);
+                    <#ty as #sdk::FormatValue>::from_json(&__field)?
+                },
+            }
+        } else {
+            quote! {
+                #ident: <#ty as #sdk::FormatValue>::from_json(
+                    #sdk::format::field(value, #name)?
+                )?,
+            }
         }
     });
 
@@ -157,6 +172,28 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
             }
         }
     })
+}
+
+/// Whether a field may be **absent** from a file.
+///
+/// The attribute is `#[format(default)]`: the field is still written, and
+/// a file that does not have it is read as the field's default rather than
+/// refused. It is how a new field becomes a version and a step rather than
+/// a break in the chain.
+fn has_default(attrs: &[syn::Attribute]) -> Result<bool> {
+    for attribute in attrs {
+        if !attribute.path().is_ident("format") {
+            continue;
+        }
+        attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("default") {
+                return Ok(());
+            }
+            Err(meta.error("a format field knows one thing: `default`"))
+        })?;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 /// Write a migration.

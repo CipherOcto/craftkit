@@ -57,12 +57,12 @@ impl RectKind {
     /// How a rectangle is drawn.
     fn paint(node: &Node, canvas: &mut dyn Canvas) {
         let fill = if node.muted { Colour::NONE } else { Colour::WHITE };
-        canvas.rect(node.rect, fill);
+        canvas.rect(node.rect.unwrap_or_default(), fill);
     }
 
     /// Whether a point is inside a rectangle.
     fn hit(node: &Node, point: Point) -> bool {
-        node.rect.contains(point)
+        node.rect.is_some_and(|rect| rect.contains(point))
     }
 
     /// What a rectangle **means**, in the plan.
@@ -70,10 +70,11 @@ impl RectKind {
     /// The kind's own evaluation: the core does not know what a rectangle
     /// is, so it asks, and gets an area and a size back.
     fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
+        let rect = node.rect.unwrap_or_default();
         Some(serde_json::json!({
-            "area": node.rect.w * node.rect.h,
-            "width": node.rect.w,
-            "height": node.rect.h,
+            "area": rect.w * rect.h,
+            "width": rect.w,
+            "height": rect.h,
         }))
     }
 }
@@ -116,7 +117,7 @@ impl AddRectangle {
             Some(name) => name.0.clone(),
             None => format!("rectangle {}", rect.w),
         };
-        let id = session.document_mut().add_node(name.clone(), "geometry.rect", rect);
+        let id = session.document_mut().add_node(name.clone(), "geometry.rect", Some(rect));
         Ok(Outcome::changed(format!("added a rectangle `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": "geometry.rect" })))
     }
@@ -144,10 +145,9 @@ impl AreaEvaluator {
     fn evaluate(document: &Document) -> Plan {
         let mut plan = Plan::new();
         let area: f64 = document
-            .nodes
-            .iter()
+            .walk()
             .filter(|node| node.kind == "geometry.rect")
-            .map(|node| node.rect.w * node.rect.h)
+            .map(|node| node.rect.map(|rect| rect.w * rect.h).unwrap_or(0.0))
             .sum();
         plan.items.push(PlanItem {
             node: 0,

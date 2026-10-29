@@ -45,6 +45,17 @@ pub struct NodeAdd {
     pub kind: Text,
     /// The node to put it in, if it goes in one.
     pub parent: Option<NodeRef>,
+    /// Where the node is, if it is somewhere.
+    ///
+    /// A rectangle: `{"x": 0, "y": 0, "w": 10, "h": 10}`. A node in a
+    /// document that has no space — a clip in a sound document — has none,
+    /// and the command does not invent one.
+    pub rect: Option<craftkit_sdk::serde_json::Value>,
+    /// The kind's own data.
+    ///
+    /// The payload: what the kind means, in the kind's own shape. The
+    /// command does not read it.
+    pub data: Option<craftkit_sdk::serde_json::Value>,
 }
 
 impl NodeAdd {
@@ -66,12 +77,20 @@ impl NodeAdd {
                 message: format!("there is no node `{parent}`"),
             });
         }
-        let id = session.document_mut().add_node_under(
-            parent,
-            name.clone(),
-            kind.clone(),
-            Rect::new(0.0, 0.0, 10.0, 10.0),
-        );
+        let rect: Option<Rect> = match &self.rect {
+            Some(value) => match craftkit_sdk::FormatValue::from_json(value) {
+                Ok(rect) => Some(rect),
+                Err(message) => {
+                    return Err(EngineError::Failed {
+                        id: "node.add".to_string(),
+                        message: format!("the node's place is not a rectangle: {message}"),
+                    });
+                }
+            },
+            None => None,
+        };
+        let data = self.data.clone().unwrap_or(craftkit_sdk::serde_json::Value::Null);
+        let id = session.document_mut().add_node_with_under(parent, name.clone(), kind.clone(), rect, data);
         Ok(Outcome::changed(format!("added a {kind} `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": kind })))
     }
@@ -198,21 +217,24 @@ impl NodeGroup {
                 message: "select two nodes or more, and then group them".to_string(),
             });
         }
-        // The group's box is the box of what is in it.
+        // The group's box is the box of what is in it — and a node that
+        // has no place contributes nothing to it. A group of sound clips
+        // is a group with no box, and that is right: a clip is at a time.
         let mut bounds: Option<Rect> = None;
         for id in &selected {
             let Some(node) = session.document().node(*id) else { continue };
+            let Some(rect) = node.rect else { continue };
             bounds = Some(match bounds {
-                None => node.rect,
+                None => rect,
                 Some(bounds) => Rect::new(
-                    bounds.x.min(node.rect.x),
-                    bounds.y.min(node.rect.y),
-                    (bounds.w + bounds.x).max(node.rect.x + node.rect.w) - bounds.x,
-                    (bounds.h + bounds.y).max(node.rect.y + node.rect.h) - bounds.y,
+                    bounds.x.min(rect.x),
+                    bounds.y.min(rect.y),
+                    (bounds.w + bounds.x).max(rect.x + rect.w) - bounds.x,
+                    (bounds.h + bounds.y).max(rect.y + rect.h) - bounds.y,
                 ),
             });
         }
-        let rect = bounds.unwrap_or_default();
+        let rect = bounds;
         let group = session.document_mut().add_node("group", "core.group", rect);
         let mut moved = 0;
         for id in selected {

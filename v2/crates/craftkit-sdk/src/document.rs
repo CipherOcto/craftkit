@@ -460,7 +460,13 @@ impl FormatValue for Node {
             .and_then(|kind| kind.as_str())
             .ok_or_else(|| "a node has no kind".to_string())?
             .to_string();
-        let rect = value.get("rect").ok_or_else(|| "a node has no rectangle".to_string())?;
+        // A node may have **no place**: a clip in a sound document is at a
+        // time, not at a point in a picture. A file that says nothing about
+        // a node's place, or says `null`, is read as a node with none.
+        let rect = match value.get("rect") {
+            Some(rect) => Option::<Rect>::from_json(rect)?,
+            None => None,
+        };
         let muted = value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false);
         let data = value.get("data").cloned().unwrap_or(serde_json::Value::Null);
         let children = match value.get("children") {
@@ -472,7 +478,7 @@ impl FormatValue for Node {
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
-        Ok(Node { id, name, kind, rect: Rect::from_json(rect)?, muted, data, children })
+        Ok(Node { id, name, kind, rect, muted, data, children })
     }
 }
 
@@ -512,8 +518,19 @@ pub struct Node {
     pub name: String,
     /// The kind of thing it is.
     pub kind: String,
-    /// Where it is.
-    pub rect: Rect,
+    /// Where it is, if it is anywhere.
+    ///
+    /// A node in a picture is somewhere: it has a box. A node in a sound
+    /// document is **at a time**, and a time is not a place — so the place
+    /// is **optional**, and a node that has none says so.
+    ///
+    /// Before this, every node had a box, and the core said so: the field
+    /// was not optional and a node had to have one. A host that added a node
+    /// of a kind it did not know had to invent a box for it — a tenth of a
+    /// unit square at the origin — and that invention was in the file. The
+    /// port of a sound application is what found this, the way the port of
+    /// a vector application found the payload.
+    pub rect: Option<Rect>,
     /// Whether it is muted.
     pub muted: bool,
     /// The kind's own data.
@@ -540,6 +557,18 @@ pub struct Node {
 pub struct Document {
     /// The document's name.
     pub name: String,
+    /// The document's own payload.
+    ///
+    /// The **node** has a payload, and the document has one too: the same
+    /// idea, one level up. A sound document's sample rate and timecode
+    /// belong to the session rather than to any one node, and before this
+    /// there was nowhere to put them that was not some node's data.
+    ///
+    /// The core carries it and does not read it, and a plugin owns the
+    /// keys it writes: the sound battery keeps its session settings under
+    /// one name, so two plugins cannot collide by accident.
+    #[format(default)]
+    pub data: serde_json::Value,
     /// Its nodes.
     pub nodes: Vec<Node>,
 }
@@ -547,16 +576,28 @@ pub struct Document {
 impl Document {
     /// An empty document with a name.
     pub fn new(name: impl Into<String>) -> Self {
-        Document { name: name.into(), nodes: Vec::new() }
+        Document { name: name.into(), data: serde_json::Value::Null, nodes: Vec::new() }
     }
 
     /// The next free id.
+    ///
+    /// It walks the **whole tree**, not only the top level: a child has an
+    /// id too, and an id that a child already holds is not free. Before
+    /// this, the tree was a list, and a list is one level deep, and the
+    /// count was right by accident. The port of a sound document found it:
+    /// a track holds a playlist, a playlist holds a clip, and the clip
+    /// took the id the next top-level node was going to have.
     pub fn next_id(&self) -> u64 {
-        self.nodes.iter().map(|node| node.id).max().unwrap_or(0) + 1
+        self.walk().map(|node| node.id).max().unwrap_or(0) + 1
     }
 
     /// Add a node at the top level, and give back its id.
-    pub fn add_node(&mut self, name: impl Into<String>, kind: impl Into<String>, rect: Rect) -> u64 {
+    pub fn add_node(
+        &mut self,
+        name: impl Into<String>,
+        kind: impl Into<String>,
+        rect: Option<Rect>,
+    ) -> u64 {
         self.add_node_with(name, kind, rect, serde_json::Value::Null)
     }
 
@@ -568,7 +609,7 @@ impl Document {
         parent: Option<u64>,
         name: impl Into<String>,
         kind: impl Into<String>,
-        rect: Rect,
+        rect: Option<Rect>,
     ) -> u64 {
         self.add_node_with_under(parent, name, kind, rect, serde_json::Value::Null)
     }
@@ -579,7 +620,7 @@ impl Document {
         parent: Option<u64>,
         name: impl Into<String>,
         kind: impl Into<String>,
-        rect: Rect,
+        rect: Option<Rect>,
         data: serde_json::Value,
     ) -> u64 {
         let id = self.next_id();
@@ -643,7 +684,7 @@ impl Document {
         &mut self,
         name: impl Into<String>,
         kind: impl Into<String>,
-        rect: Rect,
+        rect: Option<Rect>,
         data: serde_json::Value,
     ) -> u64 {
         let id = self.next_id();

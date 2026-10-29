@@ -451,7 +451,7 @@ fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(),
         message: format!("there is no node `{id}`"),
     })?;
     node.data = vector.to_json();
-    node.rect = rect;
+    node.rect = Some(rect);
     Ok(())
 }
 
@@ -530,7 +530,7 @@ fn add_path(
     };
     let vector = VectorNode { path: path.clone(), fill: colour, stroke: None };
     let rect = bounds(&path);
-    let id = session.document_mut().add_node_with(name, "vector.path", rect, vector.to_json());
+    let id = session.document_mut().add_node_with(name, "vector.path", Some(rect), vector.to_json());
     Ok(id)
 }
 
@@ -707,7 +707,7 @@ mod tests {
         assert_eq!(vector.path.subpaths.len(), 1, "a rectangle is one contour");
         assert_eq!(vector.path.subpaths[0].segments.len(), 3, "a rectangle is three sides and a closing one");
         assert!(vector.path.subpaths[0].closed);
-        assert_eq!(node.rect, Rect::new(0.0, 0.0, 10.0, 5.0), "the node knows where it is");
+        assert_eq!(node.rect, Some(Rect::new(0.0, 0.0, 10.0, 5.0)), "the node knows where it is");
     }
 
     /// An ellipse is four curves, not four sides.
@@ -878,7 +878,7 @@ mod tests {
         let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
         let area = geom::area(&vector.path);
         assert!((area - 144.0).abs() < 0.5, "the area is {area}, not 144");
-        assert_eq!(node.rect, Rect::new(-1.0, -1.0, 12.0, 12.0), "the node knows where it is");
+        assert_eq!(node.rect, Some(Rect::new(-1.0, -1.0, 12.0, 12.0)), "the node knows where it is");
     }
 
     /// Making a path simpler does not change what it covers.
