@@ -592,12 +592,7 @@ impl Document {
     }
 
     /// Add a node at the top level, and give back its id.
-    pub fn add_node(
-        &mut self,
-        name: impl Into<String>,
-        kind: impl Into<String>,
-        rect: Option<Rect>,
-    ) -> u64 {
+    pub fn add_node(&mut self, name: impl Into<String>, kind: impl Into<String>, rect: Option<Rect>) -> u64 {
         self.add_node_with(name, kind, rect, serde_json::Value::Null)
     }
 
