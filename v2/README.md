@@ -326,11 +326,18 @@ The ecosystem checks the chain at start-up, and refuses:
 - **a version with no step out of it** — a file of that version would have
   nowhere to go.
 
-There are two versions of the format here, and they differ by one thing: the
-second writes a `muted` flag on every node and the first does not. The step
-adds the flag to a file that does not have it. A file written by the current
+There are **four** versions of the format here, and each step adds one
+thing: the second writes a `muted` flag on every node, the third lets a node
+hold other nodes (§14), and the fourth lets a node have **no place** and
+gives the document a payload of its own (§19). Each step adds what the new
+version writes to a file that does not have it. A file written by the current
 program round-trips to the same document; a file written by an older one is
 migrated and read.
+
+A field that may be **absent** is written as `#[format(default)]`, and the
+derive reads a file that does not have it as the field's default rather than
+refusing it. That is what makes a new field a version and a step rather
+than a break in the chain.
 
 ---
 
@@ -715,8 +722,8 @@ A node may hold other nodes, so what a file holds changed, so the format
 has a **third version** — `craftkit/3` — and the step from the second:
 
 ```text
-craftkit/1  →  craftkit/2  →  craftkit/3
-   muted        children
+craftkit/1  →  craftkit/2  →  craftkit/3  →  craftkit/4
+   muted        children      no place, a payload
 ```
 
 The step gives every node the empty group it would have had. A file of the
@@ -809,15 +816,21 @@ different commands with one id.
 - `crates/craftkit-vector-geom` — the **path operations**: booleans, area,
   bounds, simplification and offset (§13). A library, not a plugin: it
   contributes nothing and the linker does not wire it in.
+- `crates/craftkit-plugin-sound` — the **sound battery**: a port of a sound
+  application's document into v2's seams, and the three things it found
+  (§19). It is optional, like the vector one.
+- `crates/craftkit-sound-time` — the **time model**: samples, ticks, a
+  tempo map and the three timebases (§19). A library, not a plugin, for
+  the same reason the geometry is.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**131 tests.**
+**167 tests.**
 
 ### Not built
 
-- **The kernel.** v2's document has nodes and a rectangle; it has no numeric
-  core, no panic guard and no geometry engine. The old tree's
+- **The kernel.** v2's document has nodes, and a node may have a place; it
+  has no numeric core, no panic guard and no geometry engine. The old tree's
   `craftkit-kernel` is untouched. What v2 has is the **seam** the kernel
   would plug into: a kind carries its own evaluation, and the plan is a
   value.
@@ -888,7 +901,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 91 tests
+cargo test          # 167 tests
 cargo run -p craftkit-studio
 ```
 
@@ -941,8 +954,169 @@ run time and runs that too.
   answer "operation not supported on this platform". On that target the
   doors are the linked plugin and a catalogue across the JavaScript
   boundary (§11).
-- **The document model is still small.** Two versions of the format differ
-  by one flag, because the document has one kind of node and a rectangle.
-  The *seam* is the thing being demonstrated: a version is a contribution,
-  a step is a contribution, and the chain is checked. A document worth
-  versioning is a different piece of work.
+- **The document model is still small.** There are four versions of the
+  format, and they differ by a flag, a tree, a place that may be absent
+  and a payload of the document's own. The *seam* is the thing being
+  demonstrated: a version is a contribution, a step is a contribution, and
+  the chain is checked. A document worth versioning is a different piece of
+  work.
+
+---
+
+## 19. The sound port: a document with no place in it
+
+The third port. The first was a vector editor (§12), the second was its
+path operations (§13), and this one is a **sound editor**: tracks, clips
+on them, a tempo map, markers and the media the clips point at.
+
+The tree it comes from is the owner's own: a digital audio workstation
+with **482 commands**, a mixer, three plugin hosts and a web target. It
+was surveyed read-only before anything was written, and the survey is
+what the design below answers to.
+
+### What was ported
+
+A **battery**, optional like the vector one:
+
+- `crates/craftkit-plugin-sound` — seven kinds (`sound.track`,
+  `sound.playlist`, `sound.clip`, `sound.tempo`, `sound.meter`,
+  `sound.marker`, `sound.source`), seven commands, a tool, a panel and an
+  evaluator.
+- `crates/craftkit-sound-time` — the **time model**, and it is a
+  **library** and not a plugin, for the same reason the geometry is
+  (§13): it contributes nothing to the registry and the linker does not
+  wire it in. A plugin may depend on a library; the host never names one.
+
+### The mapping
+
+| In the sound tree | In v2 |
+|---|---|
+| a session | the document, plus a **payload** for the session's own settings |
+| a track | a node of kind `sound.track`, with **playlists** under it |
+| a playlist (an alternative take) | a node of kind `sound.playlist`, with **clips** under it |
+| a clip | a node of kind `sound.clip`, with its span and its content in the payload |
+| a tempo or meter event | a node of kind `sound.tempo` or `sound.meter` |
+| a marker | a node of kind `sound.marker` |
+| a media file | a node of kind `sound.source` — a **reference**, never the audio |
+| `TrackKind` (eight variants) | a **string** in the track's payload |
+| `ClipContent` (three variants) | a **field** in the clip's payload |
+| the tempo map | **derived** from the events, by the evaluator |
+| the sample rate | the document's payload, under one name |
+
+Two of those rows are the port's real findings, and they are the next two
+paragraphs.
+
+### The finding: a sound document has no place in it
+
+Every node in v2 had a **rectangle**, and the field was not optional. A
+host that added a node of a kind it did not know had to invent a box for
+it — a tenth of a unit square at the origin — and that invention was in
+the file.
+
+A clip in a sound document is at a **time**, and a time is not a place.
+So the place became **optional**: a node may have one, and a node with
+none says so. The sound kinds have none, and the host no longer invents
+one: `node.add` takes a place if the caller wants it, the kind's own
+payload if it has one, and nothing at all otherwise.
+
+The file format grew a version for it — `craftkit/4` — and the step from
+the third version gives the document an empty payload and leaves the
+places where they are. The derive learned a field that may be **absent**,
+so a new field is a version and a step rather than a break in the chain.
+
+### The finding: the session had nowhere to live
+
+The **node** had a payload and the **document** did not. A sound session's
+sample rate and its timecode belong to the session and not to any one
+node, so there was nowhere to put them that was not some node's own data.
+
+So the document grew a payload of its own, one level up from the node's,
+and the sound battery keeps its settings under one name in it — so that
+two plugins cannot collide by accident.
+
+### The finding: a bug the port walked into
+
+The next free id counted only the nodes at the **top level**. The document
+was a list when that was written, and the list was one level deep, and the
+count was right by accident.
+
+A sound document is not one level deep: a track holds a playlist, a
+playlist holds a clip, and the clip took the id the next top-level node
+was going to have. The id walks the **whole tree** now.
+
+### What the kinds of a sound document are
+
+In the tree this ports, the kind of a track is a closed enum of eight
+variants and the kind of a clip is a closed enum of three, and the mixer
+matches on both of them: adding a kind is an edit in the model, in the
+mixer and in the user interface.
+
+Here a track's kind is a **string in the track's payload** and a clip's
+content is a **field in the clip's payload**. A third party can add a
+kind of track without touching the core — and the plugin's own test says
+so, by putting `quantum` in a track and reading it back.
+
+That is the whole of the open-kind seam, arrived at by a port rather than
+by an argument, and it is the third time this tree has been changed by
+one: the payload (§12), the tree (§14) and now the place.
+
+### The time model
+
+The sound tree's positions are absolute **sample indices**, and their
+musical meaning comes from a tempo map that is anchored in **ticks**
+rather than in samples, and a track may measure its clips in ticks rather
+than in samples.
+
+So the time model is a library of its own: `Samples`, a `TempoMap` with
+tempo and meter events, the conversions between ticks and samples (exact
+inverses at tick boundaries), bars and beats, and the three timebases a
+sound document is written in — bars and beats, minutes and seconds, and
+samples.
+
+The tempo map is **derived**: the document holds the *events*, and the
+map is what they mean. That is the evaluator's job and not the document's,
+and it is the same rule the vector battery follows.
+
+### The blockers, and what each one costs
+
+- **There is no timeline and no camera.** The sound kinds **draw
+  nothing**, and that is written in the plugin rather than hidden. A sound
+  document is not a picture, and a plugin that drew one would be the
+  second set of camera controls in the tree. The camera is a question for
+  the tree, not for a plugin: one module owns it, with its own caps, and
+  every canvas goes through it.
+- **There is no audio thread.** A command in v2 runs on the caller's
+  thread, which is the wrong thread for a block of audio: a real-time
+  door needs its own seam, its own rules about locking and allocation, and
+  its own tests. The sound tree has that seam already, and it is the
+  reason its plugin trait splits the work into `process` (audio thread),
+  `PluginEditor` (control thread) and `PluginStateReader` (control
+  thread). v2 has none of it, and this port does not pretend otherwise.
+- **The plugin formats are not ported.** The sound tree hosts CLAP, VST3
+  and AU binaries: a user installs a plugin and it is in the session, with
+  no source change. That is genuinely open there and it needs **three**
+  new crates here (or one with three modules), a format to host them in, and
+  the decision of what a plugin's state looks like in a document whose
+  payload is JSON.
+- **The mixer is not ported.** Ten insert slots and ten send slots per
+  strip, a routing graph over buses, and per-track automation are a
+  **model**, and the model is where the sound tree's closed enums live
+  (`Route`, `AutoParam`, `ChannelFormat`). In v2 they would all be
+  payload, which is possible and is not yet written.
+- **The menus are not ported.** The sound tree's menu bar is generated
+  from a **catalog file** of 512 leaf paths, and a command whose path is
+  not in the catalog never appears in the bar. v2's projection is a view
+  of the registry, and there is no catalog; a menu tree is a question for
+  the tree.
+
+### What this does not claim
+
+- **No sound was made.** Nothing here decodes audio, mixes it or plays
+  it. A source is a path and a length.
+- **The battery is not the sound tree.** It is a handful of kinds and
+  commands that show where a sound document fits in v2's seams. The tree
+  it comes from has 482 commands; this has seven.
+- **The three findings are not all of the findings.** The survey turned up
+  more — the closed enums, the menu catalog, the real-time rules, the
+  plugin hosts — and they are listed above as blockers rather than
+  answered.
