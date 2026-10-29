@@ -584,6 +584,40 @@ impl Relation {
     }
 }
 
+/// A file the document needs.
+///
+/// The document **references** files: a sound document points at audio,
+/// a vector document points at a font, a document that carries its
+/// pictures points at them. A reference is not the file — it is the
+/// document saying what it needs, so that a program can say "this
+/// document is missing two things" instead of failing later, in the
+/// middle of an edit.
+///
+/// The bytes are not in the document. They travel beside it, in a
+/// **bundle**: one file with the document and the files it names.
+#[derive(Debug, Clone, PartialEq, Format)]
+pub struct Asset {
+    /// Where the file is, relative to the document.
+    pub path: String,
+    /// What kind of file it is: `audio`, `font`, `image`, …
+    ///
+    /// A string, because the kinds are open.
+    pub kind: String,
+    /// How long it is, in bytes, if anybody knows.
+    ///
+    /// `None` when nobody does: a document that names a file it has not
+    /// read does not know how long the file is, and saying so is better
+    /// than guessing.
+    pub length: Option<u64>,
+}
+
+impl Asset {
+    /// A file the document needs.
+    pub fn new(path: impl Into<String>, kind: impl Into<String>, length: Option<u64>) -> Self {
+        Asset { path: path.into(), kind: kind.into(), length }
+    }
+}
+
 /// The document.
 ///
 /// The **compiler writes its format**: the two functions a file needs come
@@ -614,6 +648,18 @@ pub struct Document {
     /// it was built.
     #[format(default)]
     pub relations: Vec<Relation>,
+    /// The files the document needs.
+    ///
+    /// The **references**, and not the files: a document that holds a
+    /// sound says which sound it wants, and the bytes travel beside it in
+    /// a bundle (§ the SDK's `bundle` module).
+    ///
+    /// Before this there was nowhere to say it: the media was in the
+    /// nodes' payloads as paths, and a program that wanted to know what a
+    /// document needed had to look in every payload and know what a path
+    /// meant.
+    #[format(default)]
+    pub assets: Vec<Asset>,
 }
 
 impl Document {
@@ -624,6 +670,7 @@ impl Document {
             data: serde_json::Value::Null,
             nodes: Vec::new(),
             relations: Vec::new(),
+            assets: Vec::new(),
         }
     }
 
@@ -778,6 +825,39 @@ impl Document {
             .iter()
             .filter(|relation| relation.from == node)
             .filter(|relation| kind.is_none_or(|kind| relation.kind == kind))
+            .collect()
+    }
+
+    /// Say that the document needs a file.
+    ///
+    /// The same file twice is the same file: a document that names a
+    /// file twice is a document that says two things about one file.
+    pub fn add_asset(&mut self, asset: Asset) -> bool {
+        if self.assets.iter().any(|known| known.path == asset.path) {
+            return false;
+        }
+        self.assets.push(asset);
+        true
+    }
+
+    /// Say that the document does not need a file any more.
+    ///
+    /// It gives back how many there were, and a document that did not
+    /// need the file is not changed.
+    pub fn remove_assets(&mut self, matches: impl Fn(&Asset) -> bool) -> usize {
+        let before = self.assets.len();
+        self.assets.retain(|asset| !matches(asset));
+        before - self.assets.len()
+    }
+
+    /// The files the document needs that are not in `available`.
+    ///
+    /// The paths, in the order the document names them.
+    pub fn missing_assets(&self, available: &[String]) -> Vec<String> {
+        self.assets
+            .iter()
+            .filter(|asset| !available.contains(&asset.path))
+            .map(|asset| asset.path.clone())
             .collect()
     }
 

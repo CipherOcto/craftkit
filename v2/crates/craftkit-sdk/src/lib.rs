@@ -56,6 +56,8 @@
 pub use craftkit_derive::{Format, Migration};
 
 pub mod anchor;
+pub mod assets;
+pub mod bundle;
 pub mod command;
 pub mod contribution;
 pub mod document;
@@ -68,18 +70,19 @@ pub mod journal;
 pub mod link;
 pub mod params;
 pub mod plan;
-pub mod realtime;
 pub mod plugin;
+pub mod realtime;
 pub mod seams;
 pub mod select;
 pub mod session;
 
 pub use anchor::{Anchored, PluginAnchor};
+pub use bundle::{Bundle, File};
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{
-    Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Relation,
-    Segment, Stroke, SubPath,
+    Asset, Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect,
+    Relation, Segment, Stroke, SubPath,
 };
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, MenuNode, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
@@ -88,8 +91,8 @@ pub use format::{FormatSpec, FormatValue, MigrationSpec};
 pub use journal::JournalEntry;
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
 pub use plan::{Plan, PlanItem};
-pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
 pub use plugin::{Catalogue, LoadedPlugin, PluginCommand, PluginError, PluginParam};
+pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use session::{HistoryEntry, Session};
 

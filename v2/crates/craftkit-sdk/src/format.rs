@@ -361,6 +361,24 @@ pub fn write_v5(document: &Document) -> Json {
     })
 }
 
+/// The sixth version of the document format.
+///
+/// The document grew **assets**: the files it needs, by reference. A
+/// document that points at audio, or at a font, or at a picture, now
+/// says so in one place, so that a program can tell what is missing
+/// before it starts editing.
+pub fn write_v6(document: &Document) -> Json {
+    serde_json::json!({
+        "format": "craftkit/6",
+        "version": 6,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+        "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
+    })
+}
+
 /// The first version of the document format.
 pub static FORMAT_V1: FormatSpec =
     FormatSpec { tag: "craftkit/1", version: 1, layer: "core", read: Document::from_json, write: write_v1 };
@@ -418,6 +436,16 @@ pub static FORMAT_V5: FormatSpec =
 
 inventory::submit! {
     crate::contribution::Registration { item: &FORMAT_V5 }
+}
+
+/// The sixth version of the document format.
+///
+/// It adds the files the document needs.
+pub static FORMAT_V6: FormatSpec =
+    FormatSpec { tag: "craftkit/6", version: 6, layer: "core", read: Document::from_json, write: write_v6 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V6 }
 }
 
 /// The step from the first version to the second.
@@ -499,6 +527,24 @@ impl V4ToV5 {
     fn apply(value: &mut Json) -> Result<(), String> {
         if let Some(object) = value.as_object_mut() {
             object.entry("relations").or_insert(Json::Array(Vec::new()));
+        }
+        Ok(())
+    }
+}
+
+/// The step from the fifth version to the sixth.
+///
+/// It gives the document the assets the sixth version writes. A file of
+/// the fifth version names no files, and none is what it gets.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.5to6", family = "craftkit", from = 5, to = 6, layer = "core")]
+pub struct V5ToV6;
+
+impl V5ToV6 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        if let Some(object) = value.as_object_mut() {
+            object.entry("assets").or_insert(Json::Array(Vec::new()));
         }
         Ok(())
     }

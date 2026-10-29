@@ -821,6 +821,9 @@ impl AddSource {
         let payload =
             SourcePayload { path: path.clone(), channels, frames, sample_rate: session_settings.sample_rate };
         let id = session.document_mut().add_node_with(path.clone(), "sound.source", None, payload.to_json());
+        // The document now says that it needs this file. The bytes are
+        // not in the document: they travel beside it, in a bundle.
+        session.document_mut().add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
         Ok(Outcome::changed(format!("added a source `{path}`"))
             .with_data(serde_json::json!({ "id": id, "path": path })))
     }
@@ -1304,6 +1307,21 @@ mod tests {
         // At 48 kHz and 120 bpm a beat is 24000 samples, so the clip at
         // 48000 sits on the third beat of the first bar.
         assert_eq!(clips[0].get("position"), Some(&json!("1.3.0")));
+    }
+
+    /// A source is a file the document needs.
+    ///
+    /// The document says so in one place, so that a program can tell what
+    /// is missing before it starts editing.
+    #[test]
+    fn a_source_is_an_asset() {
+        let mut session = session();
+        session.execute("sound.source.add", &json!({ "path": "kit/kick.wav" })).expect("the source is added");
+        let assets = &session.document().assets;
+        assert_eq!(assets.len(), 1, "the document needs the file: {assets:?}");
+        assert_eq!(assets[0].path, "kit/kick.wav");
+        assert_eq!(assets[0].kind, "audio");
+        assert_eq!(assets[0].length, None, "nobody has read the file, so nobody knows its length");
     }
 
     /// The kinds of a sound document are open: a track whose kind the core
