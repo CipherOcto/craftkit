@@ -227,6 +227,16 @@ pub struct Session {
     /// was there when they ran. §47.
     trace_base: craftkit_model::Document,
     dirty: bool,
+    /// The file this design came from, if it came from one.
+    ///
+    /// **Not** part of the document: the design is the same whether it is on
+    /// disk or not, and a path in the document would be a path in every copy
+    /// of the design — in a crash report, in a file somebody else opens.
+    ///
+    /// It is the answer to "where does Save write?", and it is set by the
+    /// **host** — the app that opened the file, the CLI that read it — not by
+    /// a command. §288.
+    source: Option<std::path::PathBuf>,
 }
 
 impl Default for Session {
@@ -251,6 +261,7 @@ impl Session {
             trace_bytes: 0,
             trace_total: 0,
             dirty: false,
+            source: None,
         };
         s.reset_trace();
         s
@@ -321,6 +332,18 @@ impl Session {
 
     pub fn is_dirty(&self) -> bool {
         self.dirty
+    }
+
+    /// The file this design came from, if it came from one.
+    ///
+    /// This is the answer to *"where does Save write?"*. It is `None` for a
+    /// design that was never in a file — a new one, or one a host read from
+    /// somewhere it cannot name.
+    ///
+    /// A reader, and nothing more: it changes no design and pushes no undo
+    /// step, so it is not a second path into the document. §288.
+    pub fn source_path(&self) -> Option<&std::path::Path> {
+        self.source.as_deref()
     }
 
     pub fn can_undo(&self) -> bool {
@@ -794,6 +817,36 @@ impl Session {
         self.history.clear();
         self.log.clear();
         self.reset_trace();
+        // The design that just arrived is not the design that was here, and
+        // it has no file until the host says which one it read. Keeping the
+        // old path would mean a Save writing the **new** design over the
+        // **old** file — the one way this could destroy work. §288.
+        self.source = None;
+    }
+
+    /// Say which file this design came from.
+    ///
+    /// The host's business, like [`Session::load_document`]: the app that
+    /// opened a file, the CLI that read one, say which file it was, and the
+    /// `doc.save` command writes back to it.
+    ///
+    /// It changes **no design**: no node, no property, no undo step, no log
+    /// entry. It is a fact about where the session came from, and the session
+    /// is not the design. So it is not a second path into the document — it
+    /// is the way the session learns a fact the document cannot hold. §288.
+    pub fn set_source_path(&mut self, path: std::path::PathBuf) {
+        self.source = Some(path);
+    }
+
+    /// Record that the design was written to `path`.
+    ///
+    /// Two things change: the file the design comes from — a Save as makes
+    /// the new file the design's file — and the dirty flag, which is what
+    /// the status bar shows. Both are facts about the session, and neither
+    /// touches the design.
+    pub(crate) fn saved_to(&mut self, path: std::path::PathBuf) {
+        self.source = Some(path);
+        self.dirty = false;
     }
 
     /// Direct access to the document, for tests that need to build the
@@ -862,6 +915,10 @@ impl Session {
 fn disabled_reason(s: &Session, id: &str) -> String {
     match id {
         "history.undo" => "there is nothing to undo".to_string(),
+        // The design has no file, so there is nowhere for Save to write.
+        // The message names the command that does what the person meant.
+        // §288.
+        "doc.save" => "the design has no file yet; save it under a name with `doc.save.as`".to_string(),
         "history.redo" => "there is nothing to redo".to_string(),
         "playback.seek" if s.document().nodes.is_empty() => "the document is empty".to_string(),
         _ => format!("`{id}` needs a selection or a document state that does not exist yet"),
@@ -883,12 +940,26 @@ mod tests {
     /// The table is checked against the registry below, so a new read-only
     /// command has to be added here — which is the point: the list of read-only
     /// commands is the list of commands an agent may use as a probe.
-    const READ_ONLY_CASES: &[(&str, &str)] = &[
-        ("playback.seek", r#"{"frame": 48}"#),
-        ("diagnostics.list", "{}"),
-        ("key.list", r#"{"node": 1, "path": "amount"}"#),
-        ("plan.evaluate", "{}"),
-        ("session.stats", "{}"),
+    ///
+    /// **Each case says how to call it**, rather than carrying a JSON string,
+    /// because two of the commands write a file and the file is in a
+    /// temporary folder whose name the test makes up: a path written down
+    /// here would be a path in the tree's own directory. §288.
+    type ReadOnlyCall = fn(&mut Session, &std::path::Path) -> serde_json::Value;
+
+    const READ_ONLY_CASES: &[(&str, ReadOnlyCall)] = &[
+        ("playback.seek", |_s, _file| serde_json::json!({ "frame": 48 })),
+        ("diagnostics.list", |_s, _file| serde_json::json!({})),
+        ("key.list", |_s, _file| serde_json::json!({ "node": 1, "path": "amount" })),
+        ("plan.evaluate", |_s, _file| serde_json::json!({})),
+        ("session.stats", |_s, _file| serde_json::json!({})),
+        // A design that came from a file is saved back to it.
+        ("doc.save", |s, file| {
+            s.set_source_path(file.to_path_buf());
+            serde_json::json!({})
+        }),
+        // A design is saved to the file the caller names.
+        ("doc.save.as", |_s, file| serde_json::json!({ "file": file.to_string_lossy() })),
     ];
 
     /// Every read-only command leaves the document alone.
@@ -901,10 +972,14 @@ mod tests {
     /// before using a command as a probe.
     #[test]
     fn every_read_only_command_leaves_the_document_alone() {
-        for (id, params) in READ_ONLY_CASES {
+        for (id, call) in READ_ONLY_CASES {
             let mut s = sample();
             let before = s.document().clone();
-            let json: serde_json::Value = serde_json::from_str(params).expect("the table is JSON");
+            // A file of its own for the commands that write one, in the tree's
+            // one temporary folder (§212).
+            let folder = craftkit_foundation::temp::dir("read-only").expect("a temporary folder");
+            let file = folder.join("plan.craftkit");
+            let json = call(&mut s, &file);
             s.execute(id, &json).unwrap_or_else(|e| panic!("{id} refused its own parameters: {e}"));
             assert_eq!(s.document(), &before, "{id} changed the document");
             assert!(!s.is_dirty(), "{id} marked the document dirty");

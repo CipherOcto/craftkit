@@ -320,14 +320,24 @@ adding a variant without a dispatch arm is a compile error, which is the point.
 
 ### A method that reaches past the engine
 
-Rule 4 in `crates/control/src/lib.rs`: *"Nothing reaches past the engine. Every
+Rule 3 in `crates/control/src/lib.rs`: *"Nothing reaches past the engine. Every
 method maps onto something the engine already does. There is no method that
-opens a file, spawns a process, or evaluates arbitrary code."* A method that
+opens a file, spawns a process, or evaluates arbitrary code. **One command
+writes a file** — `doc.save` and `doc.save.as`, which write the design to a
+`.craftkit` file the caller names."* A method that
 opens a design file is remote arbitrary file access on a socket. A method that
 runs a command id from a parameter that was not validated is arbitrary code
 execution wearing a JSON body. If the capability is genuinely needed, it belongs
 in `craftkit-engine` behind a command, where it gets the deny list, the
 `deny_unknown` check and the panic recovery for free.
+
+**That is the way the one command that writes a file was built** (§288): the
+save is a command in the registry, so it is reached by `engine.execute` like
+every other thing, it is checked by `deny_unknown`, it is recovered by the
+panic boundary, and it is refused when it is asked for something impossible —
+a path that is not a `.craftkit` file, a path that climbs out of the folder it
+names, a disk that will not take the file. A channel method that wrote a file
+itself would have had none of that.
 
 ### An index in a place that thinks params are trusted
 

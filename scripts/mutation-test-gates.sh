@@ -1382,7 +1382,7 @@ expect_catch "docs: a boundary that catches a panic is not declared" \
 # the prose wrong — and the documents that say it are written by hand, with
 # nothing to notice when the count changes.
 swap docs/patterns/everything-is-a-command.md \
-    'The registry currently holds 23 commands across 7 areas' \
+    'The registry currently holds 25 commands across 7 areas' \
     'The registry currently holds 24 commands across 7 areas'
 expect_catch "prose: the number of commands is not the registry's number" \
     "cargo xtask lists"
@@ -6747,7 +6747,7 @@ expect_catch "lists: the never-crash table forgets a limit" "cargo xtask lists"
 # And a count in a hyphenated shape is a count: "the 21-command registry" was
 # two commands out of date, and the gate could not see the shape.
 swap skills/craftkit-editing/SKILL.md \
-    'the 23-command registry' \
+    'the 25-command registry' \
     'the 21-command registry'
 expect_catch "lists: a count in a hyphenated shape is a count" "cargo xtask lists"
 
@@ -7345,6 +7345,30 @@ swap crates/io/src/format.rs \
     '        Ok(text)'
 expect_catch "io: the writer writes a file the reader refuses" \
     "cargo test -p craftkit-io --profile ci a_design_that_is_too_deep_to_read_is_not_written"
+
+# ------------------------------------------- §288: writing a design to a file ----
+# A design is written to a `.craftkit` file, and only to one: a design written
+# under another name is a file the tree will not open, so saving to one is how
+# a save becomes a mystery.
+swap crates/engine/src/commands.rs \
+    '    if !text.ends_with(".craftkit") {' \
+    '    if false {'
+expect_catch "engine: a design is written to a file that is not a craftkit design" \
+    "cargo test -p craftkit-engine --profile ci a_save_as_refuses_a_file_that_is_not_a_craftkit_design"
+
+# And a path a caller names does not climb out of the folder it names.
+swap crates/engine/src/commands.rs \
+    '    if named_by_caller' \
+    '    if false && named_by_caller'
+expect_catch "engine: a path that climbs out of its folder is written" \
+    "cargo test -p craftkit-engine --profile ci a_save_as_refuses_a_path_that_climbs_out_of_its_folder"
+
+# And the file a design was saved to is the file the next Save writes to.
+swap crates/engine/src/commands.rs \
+    '    s.saved_to(path.clone());' \
+    '    // the design does not remember the file it was saved to'
+expect_catch "engine: a design does not remember the file it was saved to" \
+    "cargo test -p craftkit-engine --profile ci a_save_as_writes_the_design_and_remembers_the_file"
 
 restore
 finish

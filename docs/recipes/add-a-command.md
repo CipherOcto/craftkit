@@ -160,7 +160,7 @@ needs a new condition, add it there.
 the `ALL` list in `crates/engine/src/command.rs`:
 
 ```rust
-static ALL: [&CommandSpec; 23] = [
+static ALL: [&CommandSpec; 25] = [
     …
     &NODE_MUTE,
     &NODE_ENABLE,   // new
@@ -171,7 +171,7 @@ static ALL: [&CommandSpec; 23] = [
 
 Two things at once, both required:
 
-1. **Bump the declared length** from `23` to `24`. The array is a `static` with
+1. **Bump the declared length** from `25` to `26`. The array is a `static` with
    an explicit length so that `all()` returns `&'static [&'static CommandSpec]`
    rather than a reference to a temporary. The declared length is also what makes
    "added the spec, forgot the table" a compile error instead of a silently

@@ -41,7 +41,11 @@
 //!    closed without a reply, so a port scanner learns nothing.
 //! 3. **Nothing reaches past the engine.** Every method maps onto something the
 //!    engine already does. There is no method that opens a file, spawns a
-//!    process, or evaluates arbitrary code.
+//!    process, or evaluates arbitrary code. **One command writes a file** —
+//!    `doc.save` and `doc.save_as`, which write the design to a `.craftkit`
+//!    file the caller names. That is the same command the app's own Save
+//!    button runs, it is the tree's one writer, and it is the whole of what
+//!    this rule gives up. §288.
 //! 4. **Every reply carries the `id`.** Including errors, including a request
 //!    whose `id` was unparsable — in which case the id is `null` and the caller
 //!    can still tell what happened.

@@ -376,6 +376,10 @@ fn open(flags: &Flags) -> Session {
             Ok(doc) => {
                 let mut session = Session::new(doc.meta.name.clone());
                 session.load_document(doc);
+                // The design came from this file, and "Save" writes it back
+                // there. The session cannot know that on its own: it was
+                // handed a document, not a path. §288.
+                session.set_source_path(path.clone());
                 session
             }
             Err(e) => {
@@ -1780,9 +1784,20 @@ mod tests {
     #[test]
     fn a_ui_click_request_reaches_the_click_handler() {
         let mut session = Session::sample();
+        // **The point is found on the screen, not written down.** A
+        // hard-coded point stops being on a button the moment the toolbar
+        // changes — and it stopped being on one when the save commands
+        // joined it (§288) — and a click that hits nothing proves nothing
+        // about the handler.
+        let frame =
+            craftkit_ui::raster::render(&mut session, 800, 600, &craftkit_ui::shell::ShellState::default())
+                .expect("a frame");
+        let button = frame.automation.rect("toolbar.session.stats").expect("the button is on the screen");
+        let (x, y) = (button.center().x, button.center().y);
+
         let mut request = craftkit_control::Request::new(1, craftkit_control::Method::Ui);
         request.method = "ui.click".to_string();
-        request.params = serde_json::json!({ "x": 400.0, "y": 12.0 });
+        request.params = serde_json::json!({ "x": x, "y": y });
 
         let response = ui_request(&mut session, &request, &craftkit_ui::shell::ShellState::default());
         assert!(response.ok, "{:?}", response.message);

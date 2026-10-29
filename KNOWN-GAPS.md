@@ -808,11 +808,12 @@ CI.
 
 Stated so nobody discovers them as surprises:
 
-- **No `save`/`open` commands.** The engine registry has 21 commands and none of
-  them touch the filesystem; the desktop app calls `craftkit-io` directly, the
-  way the CLI does. Everything is a command applies to *behaviour*, and file I/O
-  is the host's business. The cost is that an agent cannot persist a plan through
-  the command registry — it must use the web stash or the CLI.
+- **Opening a file is the host's business; saving is a command.** `doc.save`
+  and `doc.save.as` write the design through the registry (§288), so an agent
+  can persist a plan through the command registry. The other half did not move:
+  `load_document` is still public, and the app and the CLI still open files
+  themselves. The cost that is left is that an agent cannot *open* a file
+  through the registry.
 - **No undo for `prop.reset` and friends beyond what `undoable` declares.** The
   distinction is documented in `AGENTS.md` and enforced by
   `every_read_only_command_leaves_the_document_alone`.
@@ -14956,10 +14957,12 @@ itself rather than running `sketch.rectangle` would pass every gate in the
 tree. §132's gate has the same shape and the same hole: it checks what the
 shell *names*, not what the shell *does*.
 
-**File I/O is still outside the registry**, by design (§18):
-`load_document` and `replace_document` are public, and the CLI's `open` is a
-subcommand. The owner question — *should `save`/`open` be commands?* — is
-still open, and it is in the suggested order.
+**File I/O is half inside the registry now** (§288): the save is a command —
+`doc.save` and `doc.save.as` — and opening is not. `load_document` and
+`replace_document` are still public, and the CLI's `open` is a subcommand. The
+owner answered the question that was open here — *should `save`/`open` be
+commands?* — with **yes for the save, no for the open** (§288), and the
+suggested order's item 6 is closed.
 
 ### The lesson
 
@@ -33462,6 +33465,116 @@ that the tree's refusal comes first ✓.
 | **The writer never writes a file the reader refuses** | `a_design_that_is_too_deep_to_read_is_not_written` in `crates/io/tests/value_depth.rs` | 1 mutation — §287 |
 
 
+## 288. The design could not be saved by anybody, and the registry could not save it either
+
+### The finding
+
+**The desktop application opens a design and cannot save it.**
+
+The shell's status bar says **"unsaved"** ✓, and there was nothing behind the
+word: the app has no Save button, and no command that writes a file ✓.
+`craftkit_io::save` had exactly one production caller ✓ — the CLI's `sample`
+door ✓ — and it wrote *the example* design, not the design in front of you.
+
+**And the registry could not do it either.** No command touched the filesystem
+✓, so an agent driving the app over the control channel — or over MCP — could
+change a design in every way the registry allows and had no way to persist any
+of it. The write path itself was finished and tested (§33); what was missing
+was the way in.
+
+The owner was asked and chose ✓: **a `doc.save` command with a path parameter,
+the app's menu calling the same command, and the control channel's rule 3
+amended to say what is true** (option (c) ✓).
+
+### What landed
+
+**Two commands, and not the one the owner named.** `doc.save` writes the design
+to the file it came from ✓; `doc.save.as` writes it to a file the caller names
+✓. Two reasons, and the first is the tree's own rule:
+
+- **An id is dotted lower case** ✓ — `doc.save_as` is not a name the registry
+  can hold ✓, and `doc.save.as` is ✓.
+- **A parameter that is sometimes there and sometimes not is two commands
+  wearing one name** ✓. `doc.save` with an optional `file` would be "save
+  where it came from" *and* "save somewhere else" ✓ — and the interactive path
+  would have to decide which one a click means ✓. The tree's rule is one
+  command per behaviour ✓, so the path lives on the command whose whole job is
+  to ask for a path ✓.
+
+**The session learned where the design came from.** `Session::source_path` ✓
+and `Session::set_source_path` ✓ — a reader and a fact, not a road into the
+design ✓ — and the host says it: the app when it opens a file ✓, the CLI when
+it reads one ✓. `load_document` **clears** it ✓, because a design that arrived
+from outside has no file until the host names one ✓ — and a stale path would
+have meant a Save writing the new design over the old file ✓.
+
+**The write goes through the tree's one writer.** `craftkit_io::save` ✓ →
+`craftkit_foundation::atomic::write_file` ✓ → a temporary name beside the
+target, renamed into place ✓. A save that fails leaves the file that was there
+alone ✓.
+
+**The rules a path has to satisfy** ✓: it is a `.craftkit` file ✓ (a design
+written under another name is a file the tree will not open ✓), it is not
+absurdly long ✓ (the model's own bound ✓), and it does not climb out of the
+folder it names ✓ — unless it is the file the design was opened from ✓, which
+is where the design already is ✓.
+
+**A save is not a change to the design.** Both commands declare
+`mutates: false` ✓ and `undoable: false` ✓, the document is unchanged by a
+save ✓, and the dirty flag — the one the status bar shows ✓ — is cleared by
+the save ✓ and set again by the next change ✓.
+
+**The surface shows it.** A `save` icon drawn in the tree's own code ✓ (an
+arrow into a tray ✓ — not a diskette ✓, which is one product's picture of
+saving ✓), a toolbar button for each command ✓ (the toolbar is built from the
+registry ✓, so the buttons came with the commands ✓), and the file's name in
+the status bar ✓, because "unsaved" on its own does not say which file ✓.
+
+### Why nothing else would have caught it
+
+- **Nothing in the tree could write a design** ✓ — the only production call to
+  `craftkit_io::save` wrote the *sample* ✓ — and no gate asked whether that
+  was a gap ✓. The registry's list of commands was complete ✓ and the product
+  was missing a whole verb ✓.
+- **The status bar said "unsaved"** ✓, so the app looked like it knew about
+  saving ✓ — and there was no way to save ✓. The word was true and the button
+  was missing ✓.
+- **The control channel's rule 3 was a promise about the whole tree** ✓:
+  *"there is no method that opens a file"* ✓ — and nothing checked it ✓,
+  because it was true ✓.
+
+### What is not claimed
+
+- **Opening a file is still the host's business** ✓. `load_document` is still
+  public ✓ and the app still reads the file itself ✓: opening is the host's
+  ✓, and the owner chose only the save half ✓.
+- **A save is not undoable** ✓ — it writes a file ✓, it does not change the
+  design ✓, and undoing it would mean re-writing a file ✓, which is a
+  different thing ✓.
+- **The web build still has no file system** ✓. `doc.save` there fails ✓, and
+  the browser's stash is unchanged ✓.
+- **The control channel can now write a file** ✓ — to a `.craftkit` path ✓,
+  under the rules above ✓, on a loopback socket ✓ that a token guards ✓. That
+  is what rule 3 now says ✓, in the crate's own words ✓.
+
+### The lesson
+
+**A verb nobody can say is a product with a hole in it, and the registry is
+where a verb goes.** The tree had a writer ✓, a reader ✓, a status line that
+said the design was unsaved ✓ — and no way to say "save" ✓. "Everything is a
+command" is not a slogan about tidiness ✓: it is the rule that makes a missing
+verb *visible* ✓, because a missing verb is a missing entry in a list ✓ and a
+list is something a gate can count ✓.
+
+**And the honest way to give up a rule is to say what is true.** Rule 3 said
+*"there is no method that opens a file"* ✓, and the save made that false ✓. The
+rule was amended in the crate's own words ✓, with the exception named ✓ —
+rather than left standing ✓ as a promise the tree had stopped keeping ✓.
+
+| **A design is written to a `.craftkit` file, and only to one** | `a_save_as_refuses_a_file_that_is_not_a_craftkit_design` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+| **A path a caller names does not climb out of the folder it names** | `a_save_as_refuses_a_path_that_climbs_out_of_its_folder` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -34081,6 +34194,10 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **A diagnostic says what the code does** | `a_wrong_amount_leaves_the_level_as_it_was` in `crates/eval/src/evaluate.rs` | 1 mutation — §285 |
 | **The number editor draws the range the property declares** | `a_number_editor_draws_the_range_the_property_declares` in `crates/ui/src/shell.rs` | 1 mutation — §286 |
 | **The writer never writes a file the reader refuses** | `a_design_that_is_too_deep_to_read_is_not_written` in `crates/io/tests/value_depth.rs` | 1 mutation — §287 |
+| **A design is written to a `.craftkit` file, and only to one** | `a_save_as_refuses_a_file_that_is_not_a_craftkit_design` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+| **A path a caller names does not climb out of the folder it names** | `a_save_as_refuses_a_path_that_climbs_out_of_its_folder` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+| **The design is saved to the file it came from** | `a_save_writes_the_design_to_the_file_it_came_from` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
+| **The file a design was saved to is the file the next Save writes to** | `a_save_as_writes_the_design_and_remembers_the_file` in `crates/engine/src/commands.rs` | 1 mutation — §288 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |
@@ -34142,26 +34259,16 @@ is the same gap the mutation script closed for `layers`, `assets`, `lists`, `web
    pixels; it exits 77 rather than 0 when there is no display, because a check
    that reports success where it could not run is the defect it was written to
    catch.
-6. **Decide whether `save`/`open` belongs in the command registry.** §18 is a
-   design question with a real cost either way, and it should be a decision
-   rather than an accident. §33 sharpens what it costs: **nothing in the tree can
-   write a design today.** The desktop app opens one and cannot save it, the
-   only caller of `craftkit_io::save` is a test, and the sole signal that work is
-   being lost is a line on stderr that a GUI launch shows nobody. The write path
-   itself is finished and tested — this is a wire-up, not a feature — so the
-   decision is about *where the call lives*, not about building anything.
-   §47 took the sting out of the *open* half of it: opening a file used to
-   leave the previous document's undo stack behind, so the first Ctrl+Z after
-   opening a file replaced the file with an empty document. `Session::load_document`
-   clears the undo stack, the log and the command trace now, and the crash
-   report replays onto the document it was made from. §50 took the sting out
-   of the *write* half: the writer now refuses a document the reader would
-   refuse, and the engine refuses to leave such a document behind in the first
-   place — so wiring `save` up is now safe rather than dangerous. §51 closed
-   the size half: the writer will not write a file the reader would refuse,
-   and it will not build the text to find out. The decision
-   about where `open` and `save` live is still open — it is a decision, not a
-   bug.
+6. ~~**Decide whether `save`/`open` belongs in the command registry.**~~
+   **Decided, and the save half is built** (§288). The owner chose **yes for
+   the save, no for the open**: `doc.save` and `doc.save.as` write the design
+   through the registry ✓, the app and the CLI still open files themselves ✓,
+   and `load_document` is still public ✓. What the decision was waiting for
+   had already landed: §47 gave the *open* half its undo stack, log and trace
+   ✓, §50 made the writer refuse a document the reader would refuse ✓, and §51
+   closed the size half ✓ — so the wire-up was safe rather than dangerous ✓.
+   What is left of the question is the *open* half, which is still the host's
+   business ✓ — and that is a decision too, not a bug ✓.
 7. **Decide whether the engine's per-command clone is worth a redesign.**
    §52 measured it: 205 µs for a clone of a 19 MiB document, and about
    1.9 ms of engine overhead per command — the price of being able to put

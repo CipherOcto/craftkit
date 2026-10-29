@@ -23,6 +23,10 @@ craftkit-core = { workspace = true }
 craftkit-model = { workspace = true }
 craftkit-eval = { workspace = true }
 craftkit-kernel = { workspace = true }
+# The commands that write a file write it through the tree's one writer.
+# `craftkit-io` is L3 and this crate is L4, so the dependency points the
+# right way. §288.
+craftkit-io = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

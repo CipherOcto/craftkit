@@ -4054,6 +4054,13 @@ const SESSION_PUBLIC_METHODS: &[&str] = &[
     "execute",
     "replace_document",
     "load_document",
+    // The file a design came from. A **reader** and a **fact**, not a road
+    // into the design: neither changes a node, a property, the undo stack or
+    // the log, so neither can be a second path around the registry. They are
+    // here because `doc.save` needs to know where to write, and the host is
+    // the only one that knows. §288.
+    "source_path",
+    "set_source_path",
 ];
 
 /// The session's public methods, and what they are allowed to be.

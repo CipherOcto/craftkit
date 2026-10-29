@@ -32,7 +32,7 @@ enforced.
 | L2 | `craftkit-model` | core, foundation |
 | L3 | `craftkit-eval` | core, foundation, model, kernel |
 | L3 | `craftkit-io` | core, foundation, model |
-| L4 | `craftkit-engine` | core, foundation, model, eval, kernel |
+| L4 | `craftkit-engine` | core, foundation, model, eval, kernel, io |
 | L5 | `craftkit-control` | core, foundation, engine |
 | L5 | `craftkit-mcp` | core, foundation, model, engine |
 | L6 | `craftkit-ui` | core, foundation, model, eval, engine |

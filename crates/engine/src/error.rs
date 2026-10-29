@@ -21,6 +21,16 @@ pub enum EngineError {
     #[error("`{id}` is not available right now: {reason}")]
     Disabled { id: String, reason: String },
 
+    /// A file could not be written.
+    ///
+    /// Its own variant rather than a `CoreError::BadPath`, because the two
+    /// are different facts: a bad path is a path the command would not use,
+    /// and this is a path the command *would* have used and the filesystem
+    /// would not take. An agent that reads `kind` can tell "you asked for
+    /// something impossible" from "the disk said no". §288.
+    #[error("`{id}` could not write `{path}`: {detail}")]
+    Save { id: String, path: String, detail: String },
+
     #[error("`{id}` rejected its parameters: {source}")]
     Param { id: String, source: ParamError },
 
@@ -60,6 +70,7 @@ impl EngineError {
         match self {
             EngineError::Unknown(_) => "unknown-command",
             EngineError::Disabled { .. } => "disabled",
+            EngineError::Save { .. } => "cannot-save",
             EngineError::Param { .. } => "bad-parameter",
             EngineError::Core(_) => "invalid-value",
             EngineError::Doc(_) => "invalid-document",
@@ -74,6 +85,7 @@ impl EngineError {
         match self {
             EngineError::Disabled { id, .. }
             | EngineError::Param { id, .. }
+            | EngineError::Save { id, .. }
             | EngineError::Internal { id, .. } => Some(id),
             _ => None,
         }
@@ -90,6 +102,7 @@ impl EngineError {
         match self {
             EngineError::Disabled { reason, .. } => EngineError::Disabled { id: id.to_string(), reason },
             EngineError::Param { source, .. } => EngineError::Param { id: id.to_string(), source },
+            EngineError::Save { path, detail, .. } => EngineError::Save { id: id.to_string(), path, detail },
             EngineError::Internal { detail, .. } => EngineError::Internal { id: id.to_string(), detail },
             other => other,
         }

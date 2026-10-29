@@ -47,6 +47,74 @@ pub static DOC_RENAME: CommandSpec = CommandSpec {
     },
 };
 
+/// Write the design to the file it came from.
+///
+/// The button in the toolbar, the entry in a script and the call from an
+/// agent all run this one command, so "Save" is the same act wherever it is
+/// asked for. §288.
+///
+/// It takes **no parameters**, which is not an oversight: the file a design
+/// belongs in is a fact about the design, not something a person should have
+/// to say every time. The command that takes a path is
+/// [`DOC_SAVE_AS`], and the two are two commands because a parameter that is
+/// sometimes there and sometimes not is two commands wearing one name.
+pub static DOC_SAVE: CommandSpec = CommandSpec {
+    id: "doc.save",
+    label: "Save plan",
+    area: Area::Document,
+    icon: Icon("save"),
+    shortcut: None,
+    doc: "Write the design to the file it was opened from.",
+    asks: &[],
+    params: &[],
+    mutates: false,
+    undoable: false,
+    enabled: has_a_file,
+    run: |s, _p| {
+        let Some(path) = s.source_path().map(std::path::Path::to_path_buf) else {
+            // `enabled` has already refused this, so the arm is unreachable
+            // through the registry — but a command that cannot fail is a
+            // command that panics when it is reached another way.
+            return Err(EngineError::Param {
+                id: String::new(),
+                source: craftkit_foundation::ParamError::new(
+                    "file",
+                    "the design has no file yet; save it under a name with `doc.save.as`",
+                ),
+            });
+        };
+        write_the_design(s, path, false)
+    },
+};
+
+/// Write the design to a file the caller names.
+///
+/// This is "Save as", and it is a command like every other thing the tree
+/// can do: the app's menu, the CLI, the control channel and an agent all ask
+/// for it the same way. §288.
+pub static DOC_SAVE_AS: CommandSpec = CommandSpec {
+    id: "doc.save.as",
+    label: "Save plan as",
+    area: Area::Document,
+    icon: Icon("save"),
+    shortcut: None,
+    doc: "Write the design to a file the caller names, and remember that file as the design's.",
+    asks: &["file"],
+    params: &[ParamDoc::req(
+        "file",
+        Doc::Text,
+        "The file to write to. A craftkit design is written to a `.craftkit` file.",
+    )],
+    mutates: false,
+    undoable: false,
+    enabled: always,
+    run: |s, p| {
+        let file = required_text_capped(p, "file", limits::MAX_PATH_BYTES)?;
+        let path = std::path::PathBuf::from(file);
+        write_the_design(s, path, true)
+    },
+};
+
 pub static DOC_NOTE: CommandSpec = CommandSpec {
     id: "doc.note",
     label: "Set note",
@@ -1084,6 +1152,92 @@ fn always(_s: &Session) -> bool {
 
 fn has_nodes(s: &Session) -> bool {
     !s.document().nodes.is_empty()
+}
+
+/// Whether the design came from a file, and so has somewhere to be saved to.
+///
+/// The gate for [`DOC_SAVE`]: a design with no file has nowhere to be written
+/// without being told where, and the button that says "Save" should be greyed
+/// out rather than refuse after the click. §288.
+fn has_a_file(s: &Session) -> bool {
+    s.source_path().is_some()
+}
+
+/// Write the design to `path`, and remember that file as the design's.
+///
+/// **The writer is the tree's**: `craftkit_io::save` writes through
+/// `craftkit_foundation::atomic::write_file`, which writes to a temporary name
+/// beside the target and renames it into place — so a save that fails leaves
+/// the file that was there alone, and there is exactly one place in the tree
+/// that writes a file. §288.
+///
+/// `named_by_caller` says whether the path came from the person asking
+/// (a `file` parameter) or from the file the design was opened from. It
+/// matters for one rule only — a path a caller names may not climb out of the
+/// folder it names, and the file the design came from is exempt, because it
+/// is where the design already is and refusing it would strand the user.
+fn write_the_design(
+    s: &mut Session,
+    path: std::path::PathBuf,
+    named_by_caller: bool,
+) -> Result<Outcome, EngineError> {
+    check_the_file_to_write(&path, named_by_caller)?;
+    let doc = s.document().clone();
+    craftkit_io::save(&path, &doc).map_err(|e| EngineError::Save {
+        id: String::new(),
+        path: path.display().to_string(),
+        detail: e.to_string(),
+    })?;
+    // The design is on disk now, and that file is where it lives from here
+    // on: the dirty flag is what the status bar shows, and the path is what
+    // the next Save writes to.
+    s.saved_to(path.clone());
+    Ok(Outcome::with(
+        format!("saved to {}", path.display()),
+        serde_json::json!({ "file": path.display().to_string() }),
+    ))
+}
+
+/// The rules the file a design is written to has to satisfy.
+///
+/// Three, and each of them is a rule somebody would otherwise break by
+/// accident:
+///
+/// - **It is a `.craftkit` file.** The format has one extension, and a
+///   design written under another name is a file the tree will not open —
+///   which is how a save becomes a mystery.
+/// - **It is not absurdly long.** A path is bounded like every other piece
+///   of input the tree takes; the bound is the model's own.
+/// - **It does not climb out of the folder it names** — unless it is the file
+///   the design was opened from, which is where the design already is.
+fn check_the_file_to_write(path: &std::path::Path, named_by_caller: bool) -> Result<(), EngineError> {
+    let text = path.to_string_lossy();
+    let refuse = |why: String| EngineError::Param {
+        id: String::new(),
+        source: craftkit_foundation::ParamError::new("file", why),
+    };
+    if text.is_empty() {
+        return Err(refuse("a design is written to a file, and the file has no name".to_string()));
+    }
+    if text.len() > limits::MAX_PATH_BYTES {
+        return Err(refuse(format!(
+            "the file's name is {} bytes, and the limit is {}",
+            text.len(),
+            limits::MAX_PATH_BYTES
+        )));
+    }
+    if !text.ends_with(".craftkit") {
+        return Err(refuse(format!(
+            "`{text}` is not a `.craftkit` file, and a design written under another name is a file \
+             the tree will not open"
+        )));
+    }
+    if named_by_caller && path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(refuse(format!(
+            "`{text}` climbs out of the folder it names; write the file inside it instead"
+        )));
+    }
+    Ok(())
 }
 
 fn required_text(p: &Params<'_>, key: &str) -> Result<String, EngineError> {
@@ -2602,5 +2756,168 @@ mod tests {
             s.document().get(craftkit_core::NodeId(1)).expect("node").kind,
             craftkit_model::NodeKind::Sink
         );
+    }
+
+    // --- §288: writing the design to a file -------------------------------
+
+    /// A temporary folder of its own.
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        craftkit_foundation::temp::dir(tag).expect("a temporary folder")
+    }
+
+    /// The design is written to the file it was opened from.
+    ///
+    /// This is the whole of "Save": the file the design came from is the file
+    /// it goes back to, and the design that comes back is the design that
+    /// went in. §288.
+    #[test]
+    fn a_save_writes_the_design_to_the_file_it_came_from() {
+        let path = scratch("save-in-place").join("plan.craftkit");
+        let mut s = session();
+        s.set_source_path(path.clone());
+
+        let before = s.document().clone();
+        ok(&mut s, "doc.save", json!({}));
+
+        assert!(path.is_file(), "the file was not written");
+        let back = craftkit_io::load(&path).expect("the file reads back");
+        assert_eq!(&back, &before, "the file holds another design");
+        // And the design in the session is the one that was written.
+        assert_eq!(s.document(), &back);
+    }
+
+    /// A save does not change the design.
+    ///
+    /// It writes a file; it does not edit the design. A command that said it
+    /// did not mutate the document and mutated it would be refused by the
+    /// engine — and one that changed the design would be a change nothing
+    /// could undo. §288.
+    #[test]
+    fn a_save_does_not_change_the_design() {
+        let path = scratch("save-unchanged").join("plan.craftkit");
+        let mut s = session();
+        s.set_source_path(path.clone());
+        let before = s.document().clone();
+        ok(&mut s, "doc.save", json!({}));
+        assert_eq!(s.document(), &before);
+    }
+
+    /// A design with no file has nowhere to be saved to, and says so.
+    ///
+    /// The refusal is not "there is no parameter called file": the person
+    /// pressed Save, and the answer they need is the name of the command that
+    /// does what they meant. §288.
+    #[test]
+    fn a_save_without_a_file_is_refused_with_a_way_forward() {
+        let mut s = session();
+        let err = s.execute("doc.save", &json!({})).expect_err("there is no file to save to");
+        let message = err.to_string();
+        assert!(message.contains("doc.save.as"), "{message}");
+    }
+
+    /// A save as writes the design to the file it was given.
+    ///
+    /// And the file it was given becomes the design's file: the next Save
+    /// writes there, without being told again. §288.
+    #[test]
+    fn a_save_as_writes_the_design_and_remembers_the_file() {
+        let path = scratch("save-as").join("plan.craftkit");
+        let mut s = session();
+        ok(&mut s, "doc.save.as", json!({ "file": path.to_string_lossy() }));
+
+        assert!(path.is_file(), "the file was not written");
+        assert_eq!(s.source_path(), Some(path.as_path()), "the design did not remember its file");
+
+        // And the next save needs no path at all.
+        let mut s2 = session();
+        s2.set_source_path(path.clone());
+        ok(&mut s2, "doc.save", json!({}));
+    }
+
+    /// A design is written to a `.craftkit` file, and only to one.
+    ///
+    /// A design written under another name is a file the tree will not open,
+    /// so saving to one is how a save becomes a mystery. §288.
+    #[test]
+    fn a_save_as_refuses_a_file_that_is_not_a_craftkit_design() {
+        let mut s = session();
+        // In a folder of its own, so that a tree where the rule is broken
+        // writes the file somewhere harmless rather than in the crate's own
+        // directory.
+        let file = scratch("save-not-a-design").join("plan.json");
+        let err = s
+            .execute("doc.save.as", &json!({ "file": file.to_string_lossy() }))
+            .expect_err("a design is not written to a .json file");
+        let message = err.to_string();
+        assert!(message.contains(".craftkit"), "{message}");
+    }
+
+    /// A path a caller names does not climb out of the folder it names.
+    ///
+    /// The file the design was opened from is exempt — it is where the
+    /// design already is — but a path somebody types is not. §288.
+    #[test]
+    fn a_save_as_refuses_a_path_that_climbs_out_of_its_folder() {
+        let mut s = session();
+        // A path that climbs out of a folder of its own, so that a tree where
+        // the rule is broken writes the file inside the temporary folder
+        // rather than outside the tree.
+        let file = scratch("save-climbing").join("sub").join("..").join("outside.craftkit");
+        let err = s
+            .execute("doc.save.as", &json!({ "file": file.to_string_lossy() }))
+            .expect_err("the path climbs out");
+        let message = err.to_string();
+        assert!(message.contains("climbs out"), "{message}");
+    }
+
+    /// A file the disk will not take is reported, not swallowed.
+    ///
+    /// The parent of the file is a **file**: the writer cannot make a
+    /// directory of it, and the design must not be lost to a refusal that
+    /// says nothing. §288.
+    #[test]
+    fn a_save_as_reports_a_file_the_disk_will_not_take() {
+        let dir = scratch("save-refused");
+        let blocker = dir.join("blocker");
+        std::fs::write(&blocker, b"x").expect("a file where a folder should be");
+        let mut s = session();
+        let err = s
+            .execute("doc.save.as", &json!({ "file": blocker.join("plan.craftkit").to_string_lossy() }))
+            .expect_err("the disk will not take it");
+        assert_eq!(err.kind(), "cannot-save", "{err}");
+        assert!(err.to_string().contains("blocker"), "{err}");
+    }
+
+    /// A saved design is a saved design.
+    ///
+    /// The flag the status bar shows is the engine's, and a save is the one
+    /// thing that clears it: the design on the disk is the design in the
+    /// session, so there is nothing unsaved about it. §288.
+    #[test]
+    fn a_save_clears_the_unsaved_flag_and_a_change_sets_it_again() {
+        let path = scratch("save-dirty").join("plan.craftkit");
+        let mut s = session();
+        s.set_source_path(path.clone());
+        // The sample opens clean, so there has to be something to save.
+        ok(&mut s, "node.add", json!({ "name": "Another", "kind": "filter" }));
+        assert!(s.is_dirty(), "the session has work in it");
+
+        ok(&mut s, "doc.save", json!({}));
+        assert!(!s.is_dirty(), "a saved design is not unsaved work");
+
+        ok(&mut s, "node.add", json!({ "name": "Another", "kind": "filter" }));
+        assert!(s.is_dirty(), "a change after a save is unsaved work");
+    }
+
+    /// The design is not changed by a save that failed.
+    ///
+    /// The engine's own promise, on the command that writes files: a refused
+    /// command leaves the design exactly as it was. §288.
+    #[test]
+    fn a_refused_save_leaves_the_design_alone() {
+        let mut s = session();
+        let before = s.document().clone();
+        let _ = s.execute("doc.save.as", &json!({ "file": "plan.json" }));
+        assert_eq!(s.document(), &before);
     }
 }

@@ -23,7 +23,7 @@ and expensive to notice later.
 | `crates/kernel` | L2 | the numeric ops, behind the panic guard |
 | `crates/eval` | L3 | document → `Plan` |
 | `crates/io` | L3 | the `.craftkit` file: `format.rs`, `format/pending/` |
-| `crates/engine` | L4 | `CommandSpec`, the 23-command registry, `Session::execute`, undo, crash reports |
+| `crates/engine` | L4 | `CommandSpec`, the 25-command registry, `Session::execute`, undo, crash reports |
 | `crates/control` | L5 | the loopback JSON-lines channel |
 | `crates/mcp` | L5 | MCP tools over stdio |
 | `crates/ui` | L6 | `shell`, `icons`, `automation`, `theme`, `raster` — the only crate that may name egui |
@@ -62,7 +62,7 @@ uppercase, no abbreviations borrowed from another product. Area prefixes come fr
 `session.stats` are cross-cutting, and a shared prefix would name them after the
 panel instead of after what they do.
 
-The 23 ids today, sorted by (area, id) — the registry's own order
+The 25 ids today, sorted by (area, id) — the registry's own order
 (`crates/engine/src/command.rs`):
 
 ```text
@@ -109,7 +109,7 @@ looks a shipped command up; `lookup` (same file) also resolves the test-only
    fails is worse than one that greys out.
 5. Add the icon **name** to `crates/ui/src/icons.rs` if the set has no such shape
    (section 6). `every_command_has_an_icon_this_set_can_draw`
-   (`icons.rs:252`) fails otherwise.
+   (in `crates/ui/src/icons.rs`) fails otherwise.
 6. Tests, in the same file: the happy path, a hostile parameter value, and one
    refusal. See `docs/recipes/add-a-command.md`.
 7. Re-run the gates (section 10).

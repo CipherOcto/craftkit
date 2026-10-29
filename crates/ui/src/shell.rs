@@ -985,6 +985,11 @@ impl<'a> Shell<'a> {
         let is_error = self.state.status_is_error;
         let dirty = self.session.is_dirty();
         let nodes = self.session.document().nodes.len();
+        // The file the design is in, if it is in one. A person about to press
+        // Save wants to know which file Save means, and "unsaved" on its own
+        // does not say. §288.
+        let file =
+            self.session.source_path().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
 
         ui.horizontal(|ui| {
             if message.is_empty() {
@@ -1000,6 +1005,9 @@ impl<'a> Shell<'a> {
                         .small(),
                 );
                 ui.label(RichText::new(format!("{nodes} nodes")).color(tokens.text_dim).small());
+                if let Some(file) = file {
+                    ui.label(RichText::new(file).color(tokens.text_dim).small());
+                }
             });
         });
     }

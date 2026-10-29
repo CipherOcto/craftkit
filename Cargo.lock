@@ -485,6 +485,7 @@ dependencies = [
  "craftkit-core",
  "craftkit-eval",
  "craftkit-foundation",
+ "craftkit-io",
  "craftkit-kernel",
  "craftkit-model",
  "log",

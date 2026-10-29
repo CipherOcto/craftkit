@@ -306,6 +306,9 @@ fn eval(file: &Path, at: Option<&str>) -> Result<(), String> {
     let doc = craftkit_io::load(file).map_err(|e| e.to_string())?;
     let mut session = Session::new(doc.meta.name.clone());
     session.load_document(doc);
+    // The design came from this file, so a `doc.save` in the same session
+    // writes it back here rather than refusing for want of a file. §288.
+    session.set_source_path(file.to_path_buf());
 
     let outcome = match at {
         Some(text) => session.execute("playback.seek", &json!({ "seconds": text })),

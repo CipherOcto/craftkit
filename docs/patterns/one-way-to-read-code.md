@@ -732,7 +732,7 @@ found something the subject had been hiding:
 
 | Gate | The subject said | What the reason says | Measured |
 |---|---|---|---|
-| `registry_command_ids` | the file as it is | the ids are the **shipped** registry's, and a command only a test declares is not one of them | the two views of the file are the same today — **23** ids and **23** `pub static` under either subject |
+| `registry_command_ids` | the file as it is | the ids are the **shipped** registry's, and a command only a test declares is not one of them | the two views of the file are the same today — **25** ids and **25** `pub static` under either subject |
 | `registry_commands` | the file as it is | the commands are the **shipped** registry's, and a command only a test declares is not one of them | the same |
 
 Both gates now read the code the tree ships, and both say why. Their own
@@ -741,7 +741,7 @@ defines"* — and the subject in the list disagreed with the gate's own words.
 
 **And the filter that was supposed to tell the test commands apart never
 fired.** `registry_command_ids` skipped every id that begins with `test.`,
-and there are **none**: **23** ids before the filter and **23** after it, under
+and there are **none**: **25** ids before the filter and **25** after it, under
 either subject. The filter was the residue of a rule that had nothing to do,
 and a filter that cannot fire is not a decision — it is a habit.
 

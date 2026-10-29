@@ -86,6 +86,8 @@ const NOT_IN_THE_FILE: &[(&str, &str)] = &[
     ("key.list", "reads a property's keyframes and changes nothing"),
     ("plan.evaluate", "computes the plan and changes nothing"),
     ("session.stats", "reports counters and changes nothing"),
+    ("doc.save", "writes the design to a file; it changes no part of the design itself"),
+    ("doc.save.as", "writes the design to a file; it changes no part of the design itself"),
 ];
 
 /// A document that went through `save_text` and `load_text`, as JSON.

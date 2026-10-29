@@ -28,7 +28,7 @@ use egui::{Color32, Rect, Stroke, Ui, Vec2};
 /// Every icon name this set can draw, sorted.
 pub const ALL: &[&str] = &[
     "arrows", "broom", "copy", "curve", "info", "key", "key-off", "keys", "mute", "pencil", "play", "plus",
-    "range", "redo", "swap", "trash", "undo", "value", "warning",
+    "range", "redo", "save", "swap", "trash", "undo", "value", "warning",
 ];
 
 /// Whether this set can draw `name`.
@@ -53,6 +53,7 @@ pub fn draw(ui: &mut Ui, name: &str, rect: Rect, tint: Color32) -> bool {
         "value" => p.value(),
         "undo" => p.undo(),
         "redo" => p.redo(),
+        "save" => p.save(),
         "key" => p.key(),
         "key-off" => p.key_off(),
         "keys" => p.keys(),
@@ -190,6 +191,17 @@ impl Painter<'_> {
     fn redo(&self) {
         self.path(&[(0.20, 0.40), (0.50, 0.26), (0.74, 0.40), (0.50, 0.54), (0.20, 0.54), (0.20, 0.70)]);
         self.path(&[(0.70, 0.70), (0.78, 0.78), (0.70, 0.86)]);
+    }
+
+    /// An arrow going down into a tray: "write it here".
+    ///
+    /// Not a diskette: the diskette is one product's picture of saving, and
+    /// this set draws its own shapes. An arrow into a tray says the same
+    /// thing and is drawn from coordinates here. §288.
+    fn save(&self) {
+        self.line((0.50, 0.18), (0.50, 0.60));
+        self.path(&[(0.36, 0.46), (0.50, 0.62), (0.64, 0.46)]);
+        self.path(&[(0.24, 0.60), (0.24, 0.84), (0.76, 0.84), (0.76, 0.60)]);
     }
 
     fn key(&self) {
