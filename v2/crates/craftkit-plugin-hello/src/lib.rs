@@ -69,3 +69,35 @@ impl HelloCount {
             .with_data(craftkit_sdk::serde_json::json!({ "nodes": nodes })))
     }
 }
+
+// The plugin's anchor.
+//
+// One name that keeps both commands in the program, on every target —
+// including `wasm32-unknown-unknown`, whose linker drops a crate that
+// nothing names. See the SDK's `anchor` module.
+craftkit_sdk::plugin_anchor!(HelloGreet, HelloCount);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The anchor names the plugin's items.
+    ///
+    /// The anchor is the one name the application gives this crate, and the
+    /// address it carries is the relocation that keeps the commands in the
+    /// program — on `wasm32-unknown-unknown`, where a crate nothing names is
+    /// dropped whole.
+    #[test]
+    fn the_anchor_names_both_commands() {
+        assert_eq!(CRAFTKIT_PLUGIN_ANCHOR.len(), 2);
+        let addresses: Vec<usize> = CRAFTKIT_PLUGIN_ANCHOR.iter().map(|anchor| anchor()).collect();
+        assert!(
+            addresses.contains(&(core::ptr::from_ref(&HELLO_GREET) as usize)),
+            "the anchor does not name the greeting command"
+        );
+        assert!(
+            addresses.contains(&(core::ptr::from_ref(&HELLO_COUNT) as usize)),
+            "the anchor does not name the counting command"
+        );
+    }
+}

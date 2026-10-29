@@ -15,7 +15,17 @@
 //!
 //! ```text
 //! use craftkit_plugin_hello as _;
+//!
+//! #[used]
+//! pub static CRAFTKIT_PLUGIN_ANCHOR_CRAFTKIT_PLUGIN_HELLO: &[fn() -> usize] =
+//!     craftkit_plugin_hello::CRAFTKIT_PLUGIN_ANCHOR;
 //! ```
+//!
+//! The first line keeps the crate in the program on the native targets. The
+//! second is the **anchor**: it carries a relocation to the plugin's items,
+//! and a linker cannot drop a relocation. It is needed because
+//! `wasm32-unknown-unknown` drops a crate that nothing names — measured, and
+//! the registry was empty there until this was added.
 //!
 //! So the wiring is **generated from the manifest**, and the manifest is
 //! the only place a plugin is written down. Adding a plugin is one line in
@@ -55,15 +65,43 @@ pub fn generate(manifest: &Path, out_dir: &Path) -> Result<(), String> {
     generated.push_str("// The plugins are the dependencies whose names begin with ");
     generated.push_str(PLUGIN_PREFIX);
     generated.push_str(".\n\n");
+    generated.push_str("//\n");
+    generated.push_str("// Each plugin is named by its **anchor**: a `#[used]` static that carries a\n");
+    generated.push_str("// relocation to the plugin's items. The relocation is what keeps them in the\n");
+    generated.push_str("// program on a target whose linker drops a crate that nothing names —\n");
+    generated.push_str("// `wasm32-unknown-unknown`, measured. See the SDK's `anchor` module.\n\n");
     for plugin in &plugins {
+        let name = plugin.replace('-', "_");
         // The reference that keeps the crate in the binary. Without it the
         // linker drops the crate, and the crate's registrations go with it.
         generated.push_str("use ");
-        generated.push_str(&plugin.replace('-', "_"));
+        generated.push_str(&name);
         generated.push_str(" as _;\n");
+        // The anchor: the one name that carries a relocation to the
+        // plugin's items. `#[used]` keeps the static itself.
+        generated.push_str("\n#[used]\n#[doc(hidden)]\npub static ");
+        generated.push_str(&anchor_name(plugin));
+        generated.push_str(": &[fn() -> usize] = ");
+        generated.push_str(&name);
+        generated.push_str("::CRAFTKIT_PLUGIN_ANCHOR;\n");
     }
     let out = out_dir.join("plugins.rs");
     std::fs::write(&out, generated).map_err(|error| format!("could not write {}: {error}", out.display()))
+}
+
+/// The name of the anchor static a plugin gets.
+///
+/// The plugin's own name, in screaming case, so two plugins never collide.
+fn anchor_name(plugin: &str) -> String {
+    let mut out = String::from("CRAFTKIT_PLUGIN_ANCHOR_");
+    for character in plugin.chars() {
+        if character == '-' {
+            out.push('_');
+        } else {
+            out.extend(character.to_uppercase());
+        }
+    }
+    out
 }
 
 /// The plugin dependencies of a manifest.
@@ -120,5 +158,37 @@ mod tests {
         std::fs::write(&manifest, "[dependencies]\nserde_json = \"1\"\n").expect("the manifest is written");
         assert!(plugin_dependencies(&manifest).is_empty());
         let _ = std::fs::remove_file(&manifest);
+    }
+
+    /// The generated file names every plugin's anchor.
+    ///
+    /// The anchor is what keeps a plugin in the program on a target whose
+    /// linker drops a crate that nothing names — `wasm32-unknown-unknown`,
+    /// measured. So the anchor is not a nicety: without it the program's
+    /// registry is empty there, and nothing says so.
+    #[test]
+    fn the_generated_file_anchors_every_plugin() {
+        let dir = std::env::temp_dir().join("craftkit-link-test-3");
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let manifest = dir.join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"thing\"\n\n[dependencies]\ncraftkit-plugin-hello = { path = \"../x\" }\n\
+             craftkit-plugin-shapes = { path = \"../y\" }\n",
+        )
+        .expect("the manifest is written");
+        generate(&manifest, &dir).expect("the wiring is written");
+        let generated = std::fs::read_to_string(dir.join("plugins.rs")).expect("the wiring is read");
+        assert!(
+            generated.contains("craftkit_plugin_hello::CRAFTKIT_PLUGIN_ANCHOR"),
+            "the hello plugin is not anchored:\n{generated}"
+        );
+        assert!(
+            generated.contains("craftkit_plugin_shapes::CRAFTKIT_PLUGIN_ANCHOR"),
+            "the shapes plugin is not anchored:\n{generated}"
+        );
+        assert!(generated.contains("#[used]"), "the anchor is not kept by the linker:\n{generated}");
+        let _ = std::fs::remove_file(&manifest);
+        let _ = std::fs::remove_file(dir.join("plugins.rs"));
     }
 }

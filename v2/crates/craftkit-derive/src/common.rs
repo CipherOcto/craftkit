@@ -8,6 +8,21 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::{Error, LitStr, Result};
 
+/// The `Anchored` implementation for one item.
+///
+/// The anchor is a function that returns the item's address: the address is
+/// a relocation, and a relocation is what keeps the item's object code in
+/// the program on a target whose linker drops a crate that nothing names
+/// (`wasm32-unknown-unknown`, measured — see the SDK's `anchor` module).
+pub fn anchored_impl(sdk: &TokenStream2, name: &syn::Ident, static_ident: &Ident) -> TokenStream2 {
+    quote! {
+        impl #sdk::Anchored for #name {
+            const ANCHOR: fn() -> usize =
+                || ::core::ptr::from_ref(&#static_ident) as usize;
+        }
+    }
+}
+
 /// The SDK's name, from the point of view of the crate using the macro.
 pub fn sdk_root() -> TokenStream2 {
     match proc_macro_crate::crate_name("craftkit-sdk") {

@@ -15,7 +15,16 @@
 //!
 //! ```text
 //! use <plugin> as _;
+//!
+//! #[used]
+//! pub static CRAFTKIT_PLUGIN_ANCHOR_<PLUGIN>: &[fn() -> usize] =
+//!     <plugin>::CRAFTKIT_PLUGIN_ANCHOR;
 //! ```
+//!
+//! The second part is the **anchor**: a relocation to the plugin's items,
+//! which a linker cannot drop. It is what keeps the plugin in the program
+//! on `wasm32-unknown-unknown`, where a crate that nothing names is
+//! dropped whole — measured, and the registry was empty there.
 //!
 //! So the wiring is **generated from the manifest**, and the manifest is the
 //! only place a plugin is written down. Adding a plugin is one line in

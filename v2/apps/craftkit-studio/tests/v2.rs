@@ -54,6 +54,26 @@ fn the_application_names_no_plugin() {
     );
 }
 
+/// Every plugin is anchored.
+///
+/// The anchor is the one name the application gives a plugin crate, and it
+/// is what keeps the plugin's items in the program on a target whose linker
+/// drops a crate that nothing names — `wasm32-unknown-unknown`, where the
+/// registry was empty until this was measured and fixed.
+#[test]
+fn every_plugin_is_anchored() {
+    assert_eq!(
+        craftkit_plugin_hello::CRAFTKIT_PLUGIN_ANCHOR.len(),
+        2,
+        "the greeting plugin's anchor does not name its two commands"
+    );
+    assert_eq!(
+        craftkit_plugin_shapes::CRAFTKIT_PLUGIN_ANCHOR.len(),
+        6,
+        "the shapes plugin's anchor does not name its six items"
+    );
+}
+
 /// The capabilities are derived from the commands, not written down.
 #[test]
 fn the_capabilities_are_derived_from_the_contributions() {

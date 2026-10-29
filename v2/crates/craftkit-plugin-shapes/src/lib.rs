@@ -157,3 +157,10 @@ impl AreaEvaluator {
         plan
     }
 }
+
+// The plugin's anchor.
+//
+// One name that keeps every item above in the program, on every target —
+// including `wasm32-unknown-unknown`, whose linker drops a crate that
+// nothing names. See the SDK's `anchor` module.
+craftkit_sdk::plugin_anchor!(GeometryLayer, RectKind, RectTool, AddRectangle, ShapesPanel, AreaEvaluator);

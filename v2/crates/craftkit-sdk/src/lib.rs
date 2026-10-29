@@ -55,6 +55,7 @@
 
 pub use craftkit_derive::{Format, Migration};
 
+pub mod anchor;
 pub mod command;
 pub mod contribution;
 pub mod document;
@@ -68,6 +69,7 @@ pub mod plugin;
 pub mod seams;
 pub mod session;
 
+pub use anchor::{Anchored, PluginAnchor};
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{Canvas, Colour, Document, Node, NodeKindSpec, Point, RecordingCanvas, Rect};

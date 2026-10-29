@@ -6,7 +6,7 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::{Error, Ident, LitStr, Result, Token};
 
-use crate::common::{check_id, doc_of, label_from_id, missing, screaming, sdk_root, snake};
+use crate::common::{anchored_impl, check_id, doc_of, label_from_id, missing, screaming, sdk_root, snake};
 
 /// The `#[command(...)]` attribute.
 #[derive(Default)]
@@ -323,6 +323,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
     }
 
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let run_ident = format_ident!("__craftkit_run_{}", snake(&name));
     let shortcut_expression = match &shortcut {
         Some(shortcut) => quote!(Some(#shortcut)),
@@ -380,6 +381,8 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
             enabled: #enabled,
             run: #sdk::CommandRun::Static(#run_ident),
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }

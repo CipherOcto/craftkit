@@ -22,7 +22,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Error, Ident, LitStr, Result, Token};
 
-use crate::common::{check_id, doc_of, screaming, sdk_root};
+use crate::common::{anchored_impl, check_id, doc_of, screaming, sdk_root};
 
 /// The `#[migration(...)]` attribute.
 #[derive(Default)]
@@ -195,6 +195,7 @@ pub fn expand_migration(input: syn::DeriveInput) -> Result<TokenStream2> {
         None => LitStr::new("core", Span::call_site()),
     };
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, id.span());
 
@@ -208,6 +209,8 @@ pub fn expand_migration(input: syn::DeriveInput) -> Result<TokenStream2> {
             layer: #layer,
             apply: |value| #name::apply(value),
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }

@@ -9,7 +9,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Error, Ident, LitStr, Result, Token};
 
-use crate::common::{check_id, check_layer_id, doc_of, screaming, sdk_root};
+use crate::common::{anchored_impl, check_id, check_layer_id, doc_of, screaming, sdk_root};
 
 /// The fields every seam's attribute has.
 #[derive(Default)]
@@ -137,6 +137,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
     };
     let layer = the_layer(&args);
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, kind.span());
 
@@ -162,6 +163,8 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             hit: |node, point| #name::hit(node, point),
             #evaluate
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }
@@ -193,6 +196,7 @@ pub fn expand_tool(input: syn::DeriveInput) -> Result<TokenStream2> {
         .clone()
         .ok_or_else(|| Error::new(Span::call_site(), "a tool needs the command it runs"))?;
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, id.span());
 
@@ -206,6 +210,8 @@ pub fn expand_tool(input: syn::DeriveInput) -> Result<TokenStream2> {
             shortcut: #shortcut,
             command: #command,
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }
@@ -226,6 +232,7 @@ pub fn expand_panel(input: syn::DeriveInput) -> Result<TokenStream2> {
     let layer = the_layer(&args);
     let commands = &args.list;
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, id.span());
 
@@ -237,6 +244,8 @@ pub fn expand_panel(input: syn::DeriveInput) -> Result<TokenStream2> {
             layer: #layer,
             commands: &[#(#commands),*],
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }
@@ -259,6 +268,7 @@ pub fn expand_evaluator(input: syn::DeriveInput) -> Result<TokenStream2> {
     };
     let layer = the_layer(&args);
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, id.span());
 
@@ -271,6 +281,8 @@ pub fn expand_evaluator(input: syn::DeriveInput) -> Result<TokenStream2> {
             doc: #doc_literal,
             evaluate: |document| #name::evaluate(document),
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }
@@ -291,6 +303,7 @@ pub fn expand_layer(input: syn::DeriveInput) -> Result<TokenStream2> {
     };
     let requires = &args.list;
     let static_ident = screaming(&name);
+    let anchor = anchored_impl(&sdk, &name, &static_ident);
     let doc = doc_of(&input.attrs);
     let doc_literal = LitStr::new(&doc, id.span());
 
@@ -301,6 +314,8 @@ pub fn expand_layer(input: syn::DeriveInput) -> Result<TokenStream2> {
             name: #layer_name,
             requires: &[#(#requires),*],
         };
+
+        #anchor
 
         #sdk::inventory::submit! {
             #sdk::Registration { item: &#static_ident }
