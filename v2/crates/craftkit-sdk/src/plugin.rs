@@ -383,9 +383,30 @@ impl LoadedPlugin {
     /// arrive at run time. The leak is bounded — one per command of one
     /// plugin — and it is the price of not making every command's metadata
     /// owned.
+    ///
+    /// # The command the host already has
+    ///
+    /// A plugin program is a **whole craftkit program**, so its catalogue
+    /// carries the core's own commands as well as its own. The host has
+    /// those commands too — they are the same commands — so a catalogue
+    /// command the host already has is **skipped**: the host keeps its
+    /// own, and the plugin's copy is not a second one.
+    ///
+    /// A catalogue command whose id the host has and whose **capability**
+    /// is different is refused: that is two different commands with one
+    /// id, and the registry is right to refuse it.
     pub fn register(&mut self, registry: &mut Registry<CommandSpec>) -> Result<(), PluginError> {
         for command in self.catalogue.commands.clone() {
             let spec = self.as_spec(&command)?;
+            if let Some(mine) = registry.get(spec.id) {
+                if mine.capability == spec.capability {
+                    continue;
+                }
+                return Err(PluginError::BadCommand(format!(
+                    "`{}` is a command here already, and not the same one",
+                    spec.id
+                )));
+            }
             registry.register(spec).map_err(|error| PluginError::BadCommand(error.to_string()))?;
         }
         Ok(())
