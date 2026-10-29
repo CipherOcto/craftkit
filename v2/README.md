@@ -833,7 +833,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**225 tests.**
+**237 tests.**
 
 ### Not built
 
@@ -909,7 +909,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 225 tests
+cargo test          # 237 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1496,3 +1496,98 @@ not change the document.
 - **The plugin formats.** CLAP, VST3 and AU are still not ported, and
   they want a host crate each, a format to host them in, and a decision
   about what a plugin's state is in a document whose payload is JSON.
+
+---
+
+## 23. Three more surveys: does what is here survive other domains?
+
+The sound port was one application. The question a universal kit has to
+answer is whether the seams survive **other** applications, and the only
+honest way to ask is to point them at three more and see what breaks.
+
+Three read-only surveys, of the owner's own projects:
+
+| Project | What it is | What it is to a kit |
+|---|---|---|
+| **pdfcraft** | a PDF editor: an object graph, a rasteriser, forms, annotations | a document whose nodes are **bytes** as much as JSON |
+| **filmcraft** | a video editor: a tree of bins, a flat registry of items, sequences, tracks | a document with **two clocks** per clip, and a mixer over the tree |
+| **effectcraft** | a compositing app: comps, layers, a property tree, keyframes | a document addressed by **property paths** and evaluated with **expressions** |
+
+### What was already served
+
+This is the interesting part, and it is the point of the exercise:
+
+- **A selection of parts** (§22) turned out to cover PDF's **glyph
+  ranges** and filmcraft's **gap selections** — a gap is a range on a
+  track with nothing in it, and a glyph range is a range on a page. Both
+  are a span of a node, which is what the span selection is.
+- **Relations** (§20.1) cover PDF's **shared and cyclic object graph**
+  and filmcraft's **flat registry** referenced from the tree: an object
+  that several places point at is a node with several relations to it.
+- **The payload** covers filmcraft's **two clocks per clip**, effectcraft's
+  **property trees** and **keyframes**, and PDF's **dictionaries**.
+- **Derived state** (§8) covers PDF's **object views**, which are computed
+  from the graph and never stored twice.
+- **Kinds as contributions** and **the command registry** cover PDF's
+  two-hundred-variant edit enum and its command list.
+
+So the span selection, the relations and the payload — three things that
+were built for the sound port — carried two of the three new domains
+without being changed.
+
+### What was not, and what changed
+
+- **A payload that cannot carry bytes.** A PDF stream is arbitrary binary
+  and must round-trip byte for byte, and JSON cannot hold it. So the SDK
+  has **base64** in the payload (`craftkit_sdk::bytes`), written out
+  because a plugin should not need a crate to put a picture in a
+  payload. The cost is written down: base64 is a third bigger, and a
+  document that carries fifty megabytes of streams carries sixty-seven
+  megabytes of text. The bigger answer — a node with a dictionary *and* a
+  stream, which is exactly a PDF object's shape — would cost a field, a
+  format version and base64 in the file anyway, and it is named as the
+  next thing to build if a document ever needs it.
+- **No background work that may take a while.** The lane is for work
+  that must **finish**; a page of a document takes far too long to draw
+  in the middle of a frame, and an export takes minutes. So there is a
+  **job pool**: a queue with priorities, workers, **cancellation** (a job
+  that has not started does not run at all, and a running job finds out
+  through its flag) and **progress** (a job says how far it has got and
+  the caller reads it). All three of the surveys asked for it — a render
+  pool, a background job list with progress, an export job.
+
+### What is still missing, and it is three things
+
+- **Branching undo.** effectcraft's history is a **tree** of snapshots,
+  not a line: an edit made in the past can be taken back and the work
+  after it kept. v2's history is a stack. This is the one gap that is
+  about the *session* and not the document, and it is the next thing to
+  build.
+- **Forward compatibility.** A file written by a newer program keeps the
+  fields this one does not know. v2's reader drops them, so a document
+  written by a program with a newer kind comes back **smaller**. The
+  payload survives because the core does not read it, and that is the
+  half that works; the half that does not is a reader that keeps what it
+  does not understand.
+- **The second payload field** for a document that carries a lot of
+  bytes, as above.
+
+Everything else the three surveys named is a **domain** thing and lives
+in a payload: the proxy and the offline flag of a media item, the
+environment-resolved font, the render queue, the output templates, the
+property paths, the keyframes with their eases, the cache on the disk
+beside the document. None of them wants a core that knows what it is.
+
+### What this says about the kit
+
+Three ports and three more surveys, and the shape is holding: the
+**payload** carries what is data, the **tree** carries what contains
+what, the **relations** carry what is attached to what, the **span
+selection** carries what part of what, the **evaluator** carries what
+is derived, the **lane** and the **job pool** carry the two kinds of
+work, and the **bundle** carries the files.
+
+What is missing is not a domain thing. It is a **history that branches**
+and a **reader that keeps what it does not understand** — and both are
+about the kit being right for the *next* program, and not only for this
+one.
