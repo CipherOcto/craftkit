@@ -508,7 +508,98 @@ something.
 
 ---
 
-## 12. What is here, and what is not
+## 12. The batteries: a real application, ported
+
+A spike proves that a seam *can* hold. It does not prove that it holds a
+**real application**. So the vector battery is here: the shape of a vector
+illustration program — a path in the document, shapes that make paths, a
+colour on a path, a plan that says what they add up to — written as v2
+plugins.
+
+`crates/craftkit-plugin-vector` is that port. It depends on the SDK and the
+macro, and on nothing else, and it adds a **layer**, a **node kind**, three
+**commands**, a **tool**, a **panel** and an **evaluator**. It is
+**optional**: the studio and the bridge have a `vector` feature, and with it
+off the crate is not there at all.
+
+```bash
+# the battery is in
+cargo run -p craftkit-bridge --features vector --bin craftkit-bridge
+
+# the battery is not
+cargo run -p craftkit-bridge --bin craftkit-bridge
+```
+
+### What the port changed in the core
+
+Three things, and each of them was a wall:
+
+1. **The node carries a payload.** A node was a name, a kind and a
+   rectangle, and a path is none of those. The node now carries the kind's
+   own data as JSON: the core carries it, does not read it, and the file
+   carries it too. A plugin's body type is the plugin's own.
+2. **The canvas draws a path.** `Canvas` had a rectangle and a line of
+   text. It now has a path — lines and cubic curves — with a fill and a
+   stroke.
+3. **The linker knows about optional plugins.** The wiring was generated
+   from the dependency list, so an optional dependency was wired in whether
+   or not its feature was on: a compile error. The linker now reads the
+   features and wires in what is there.
+
+### What the port found, and did not fix
+
+The point of a port is the list of what it hits.
+
+- **A payload is untyped.** The core carries JSON and the plugin parses it.
+  The plugin's own type is checked by the plugin's own code, and the core
+  cannot say whether a payload is well formed. The other answer is a
+  typed body — the vector PoC's `NodeBody` trait object, which the kind
+  parses from JSON and the core holds opaquely — and that is **not** in
+  v2. It is the shape of the decision, not the decision.
+- **The drawing vocabulary is the SDK's.** `Canvas` is a trait, so any
+  backend can implement it: open for **backends**. It is closed for
+  **kinds**: the set of things a kind may ask for is what the trait says,
+  and every addition is a change to the SDK. A vector document needs
+  strokes, gradients, clips, transforms and images. Each one is a fifth
+  argument somewhere.
+- **There is nowhere to put geometry.** The battery carries its own path
+  building, its own flattening and its own area. Two plugins that both
+  drew paths would each carry their own. And path **operations** — union,
+  offset, simplify — have no home at all: the SDK's `Path` is a *shape*,
+  not an operation. The application this was ported from has a geometry
+  crate and a path-operations crate for exactly this; v2 has no place for
+  them.
+- **Colour is not a value type.** v2's parameters are numbers, texts,
+  booleans, documents and node references. The battery reads a colour from
+  a text (`#rrggbb`) and parses it itself, which is what a plugin should
+  do — but a colour *model*, with conversions and a colour space, has no
+  seam: `Colour` is an RGBA tuple the SDK owns.
+- **A path with a hole is two paths.** The SDK's path is flat and has no
+  fill rule, so a shape with a hole is two paths and a rule that is not
+  there.
+- **Hit testing is the plugin's, and it is approximate.** A curve is hit
+  by its samples: right for a polygon, wrong near an edge.
+- **The document is still small.** No layers, no groups, no selection, no
+  appearance stack, no text, no images. The battery puts paths in a
+  document that is a list of nodes.
+
+### What the port did *not* need
+
+Worth as much as the list above: **the registry did not change**. The
+command registry, the projection, the typed parameters, the session's
+judging, the file format's versions and migrations, the ecosystem's
+start-up checks, the panel, tool and evaluator seams, the subprocess door
+and the second front end — all of it took a real plugin unchanged. The
+port needed the **document** and the **canvas**, and nothing else. That is
+the shape of the thesis, tested against something real.
+
+And the plugin's own type system stayed in the plugin: the payload type,
+the colour parsing, the geometry and the flattening are all the battery's,
+and none of them is in the core.
+
+---
+
+## 13. What is here, and what is not
 
 ### Built
 
@@ -527,10 +618,13 @@ something.
 - `crates/craftkit-plugin-hello` — a plugin that adds commands.
 - `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
   node, a tool, a panel, a command and an evaluator**.
+- `crates/craftkit-plugin-vector` — the **vector battery**: a port of a real
+  application's shape into v2's seams, and the list of what it found (§12).
+  It is optional: a program that wants paths says so.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**94 tests.**
+**104 tests.**
 
 ### Not built
 
@@ -546,6 +640,11 @@ something.
 - **The old tree's front ends.** No toolbar, no MCP server, no control
   channel. What v2 has is the **projection** every front end would read, and
   one front end built on it as a proof.
+- **A real document model.** The vector battery (§12) put paths, curves and
+  colours in a document that is still a list of nodes with rectangles. What
+  the port showed is missing: a typed body, a layer and group hierarchy, a
+  selection, an appearance stack, text, images, and **geometry** — a place
+  for path operations, which the SDK's `Path` is not.
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -559,7 +658,7 @@ each one is not.
 
 ---
 
-## 13. What the redesign would do to the rest of the tree
+## 14. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -595,7 +694,7 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 14. Running it
+## 15. Running it
 
 ```bash
 cd v2
@@ -610,7 +709,7 @@ another plugin, draws the document **through the kinds**, hit-tests it
 **through the kinds**, prints the **plan**, and finally makes a command at
 run time and runs that too.
 
-## 15. Honest notes
+## 16. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
