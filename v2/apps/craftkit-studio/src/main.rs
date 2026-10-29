@@ -126,6 +126,27 @@ fn main() {
     println!("   relations: {:?}", session.document().relations);
     println!("   needs: {:?}", session.document().assets);
 
+    println!("\n── a job: work that may take a while");
+    // The pool is for work that may take seconds and may be cancelled.
+    // The lane (§ the SDK's `realtime`) is for work that must finish.
+    let pool = craftkit_sdk::JobPool::new(2);
+    let nodes = session.document().nodes.len();
+    pool.spawn(
+        Box::new(craftkit_sdk::jobs::FnJob::new("measure", move |_cancel, progress| {
+            progress.set(50);
+            Ok(format!("{nodes} node(s)").into_bytes())
+        })),
+        0,
+    );
+    for _ in 0..100_000 {
+        let results = pool.drain();
+        if let Some(result) = results.first() {
+            println!("   {} -> {}", result.name, String::from_utf8_lossy(&result.outcome.outcome_bytes()));
+            break;
+        }
+        std::thread::yield_now();
+    }
+
     println!("\n── the journal: what the session was asked to do");
     for entry in session.journal() {
         println!("   {} {}", entry.id, entry.params);
