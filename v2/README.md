@@ -326,11 +326,12 @@ The ecosystem checks the chain at start-up, and refuses:
 - **a version with no step out of it** — a file of that version would have
   nowhere to go.
 
-There are **five** versions of the format here, and each step adds one
+There are **six** versions of the format here, and each step adds one
 thing: the second writes a `muted` flag on every node, the third lets a node
 hold other nodes (§14), the fourth lets a node have **no place** and gives
-the document a payload of its own (§19), and the fifth gives the document
-the **relations** between its nodes (§20.1). Each step adds what the new
+the document a payload of its own (§19), the fifth gives the document
+the **relations** between its nodes (§20.1), and the sixth gives it the
+**files it needs** (§21.2). Each step adds what the new
 version writes to a file that does not have it. A file written by the current
 program round-trips to the same document; a file written by an older one is
 migrated and read.
@@ -723,8 +724,8 @@ A node may hold other nodes, so what a file holds changed, so the format
 has a **third version** — `craftkit/3` — and the step from the second:
 
 ```text
-craftkit/1  →  craftkit/2  →  craftkit/3  →  craftkit/4  →  craftkit/5
-   muted        children      no place, a payload   relations
+craftkit/1  →  craftkit/2  →  craftkit/3  →  craftkit/4  →  craftkit/5  →  craftkit/6
+   muted        children      no place, a payload   relations   assets
 ```
 
 The step gives every node the empty group it would have had. A file of the
@@ -800,8 +801,10 @@ different commands with one id.
   readers, the one registry, the command, the seams, the ecosystem, the
   projection, the session, the document and the file format. The
   **relations** between the nodes (§20.1), the **journal** of what ran
-  (§20.2) and the **menu tree** (§20.3) are in here too, because they
-  belong to the document and the session and not to an application.
+  (§20.2), the **menu tree** (§20.3), the **real-time lane** (§21.1) and
+  the **assets** and the **bundle** (§21.2) are in here too, because
+  they belong to the document and the session and not to an
+  application.
 - `crates/craftkit-derive` — **eight** derives (`Command`, `NodeKind`,
   `Tool`, `Panel`, `Layer`, `Evaluator`, `Format`, `Migration`), with tests
   on the rules they hold.
@@ -830,7 +833,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**193 tests.**
+**214 tests.**
 
 ### Not built
 
@@ -906,7 +909,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 193 tests
+cargo test          # 214 tests
 cargo run -p craftkit-studio
 ```
 
@@ -959,9 +962,10 @@ run time and runs that too.
   answer "operation not supported on this platform". On that target the
   doors are the linked plugin and a catalogue across the JavaScript
   boundary (§11).
-- **The document model is still small.** There are five versions of the
+- **The document model is still small.** There are six versions of the
   format, and they differ by a flag, a tree, a place that may be absent,
-  a payload of the document's own and the relations between the nodes. The *seam* is the thing being
+  a payload of the document's own, the relations between the nodes and
+  the files the document needs. The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and
   the chain is checked. A document worth versioning is a different piece of
   work.
@@ -1307,3 +1311,117 @@ What is still missing from that list is the one thing no port has needed
 yet: **a real-time door**, and **assets that travel with the document**.
 Both are named above, with what they would cost, and both are the next
 thing to build.
+
+---
+
+## 21. The two doors that were missing: real time, and files
+
+The list at the end of §20 named two things a universal kit needs and
+that no port had asked for: a **real-time door** and **files that travel
+with the document**. Both are here now, and both are seams rather than
+implementations — which is what this tree is for.
+
+### 21.1 The real-time lane
+
+The sound tree's plugin trait is the rules of a real-time lane written
+down:
+
+| Rule | Where it comes from |
+|---|---|
+| `process` never allocates and never panics | the trait's contract |
+| the audio callback never blocks; it only ever **tries** a lock | the playback crate |
+| a panicking block **silences the output** instead of killing the app | the guarded block |
+| a plugin that outputs a NaN is taken out of the signal path | the failure containment |
+| instances are created on the control thread and **handed over** | the instance handover |
+
+None of those rules is about audio. They are about **work that must
+finish**, and a kit that is to be universal needs them for audio, for
+video, and for a solver's iteration.
+
+So there is a **lane**:
+
+```rust
+pub trait LaneJob: Send {
+    fn prepare(&mut self, block: usize) -> Result<(), String>;  // the control thread
+    fn run(&mut self, frames: usize) -> Block;                   // the lane
+}
+```
+
+- **prepare** runs where everything expensive may happen: buffers are
+  made here, state is read here, a plugin is created here. A job that
+  cannot be prepared is an error and there is no lane;
+- **run** runs on the lane and must do bounded work. A panic in it is
+  caught, the block is **silenced**, and the lane carries on — the
+  program still holds the user's document, because a crash in the
+  real-time work is not a crash of the program.
+
+Three details are the whole of the design:
+
+- the **counters are atomics**, and not a lock: a lock between the lane
+  and the control thread would be a lock *on the lane*;
+- the **mailbox is taken with `try_lock`** and never waited for: a
+  mailbox that made the lane wait would break the promise, so the newest
+  message wins and the lane moves on;
+- the **work is handed back** when the lane stops, so that it is freed
+  on the control thread and not on the lane.
+
+And `on_lane()` answers "am I on a lane right now?", so that work which
+must not be on one — anything that allocates, locks or reads a file —
+can say so instead of finding out the hard way.
+
+**What this does not do, and says so:** there is **no device**, so
+nothing here plays a sound, and a real host drives the lane from its
+device's callback instead. There is **no priority**: nothing asks the
+operating system for a scheduling class. And the **allocation rule is a
+rule and not a measurement** — the lane's own path allocates nothing per
+block, and the job is told not to allocate, but this tree does not claim
+a measurement it has not made. The measurement would take a counting
+global allocator, which is `unsafe` by definition, and v2 has no
+`unsafe` at all.
+
+### 21.2 The files a document needs
+
+A document that points at a file is **not finished**: it is a set of
+instructions that only work on the machine that has the files. Send it
+to somebody else and it opens with holes in it.
+
+So the document **says what it needs**. Its **assets** are the
+references — a path, a kind, and the length if anybody knows it:
+
+```rust
+pub struct Asset { pub path: String, pub kind: String, pub length: Option<u64> }
+```
+
+The bytes are **not** in the document, because a document that holds its
+media is a document that cannot be edited. And a **bundle** carries them:
+the document and the files it names, in one file, with a checksum, so
+that a bundle that was damaged on the way is **refused** rather than
+half-read. The format is small and written out in the SDK rather than
+pulled in, because a container that a document format depends on is
+worth owning.
+
+The commands are in the SDK, because the list belongs to the document:
+`doc.asset.add`, `doc.asset.remove` and `doc.assets`.
+
+The sound battery is the first user, and it is what makes the list worth
+having: a **source is a file**, and adding a source now says so in the
+document's list. The document says what it needs in one place, instead
+of in every payload that happens to hold a path.
+
+The file format grew a version — `craftkit/6` — and the step from the
+fifth gives a document that names no files the none it has.
+
+### What is still missing
+
+- **A device.** The lane has no sound and no clock. A host that wants
+  one drives the lane from the device's callback, and that is the
+  host's business.
+- **The measurement of the allocation rule.** It wants a counting
+  global allocator, which is `unsafe` by definition. v2 has no
+  `unsafe` at all, and that is worth more than the measurement until
+  somebody decides otherwise.
+- **A bundle that the application writes.** The container is here; the
+  studio has no media to put in one, so the command that writes a
+  bundle is not written.
+- **The rest of the §20 list**: a selection of spans rather than of
+  ids, the view state, and the three plugin formats.
