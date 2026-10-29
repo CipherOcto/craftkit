@@ -89,7 +89,7 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
 /// that has nothing to do with the code. §236.
 #[cfg(target_os = "android")]
 fn control_port(app: &winit::platform::android::activity::AndroidApp) -> Option<u16> {
-    let folder = app.internal_data_path()?.join("craftkit");
+    let folder = app.internal_data_path()?.join(craftkit_foundation::paths::APP_NAME);
     let text = std::fs::read_to_string(folder.join("control.port")).ok()?;
     let port: u16 = text.trim().parse().ok()?;
     Some(port)

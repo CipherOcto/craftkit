@@ -2055,32 +2055,18 @@ pub fn the_applications_data_folder_is_built_in_one_place(root: &Path) -> Result
 /// tree ships, without the comments and without the tests — and asks where
 /// the name is written down.
 pub fn the_servers_name_is_written_in_one_place(root: &Path) -> Result<Vec<String>, String> {
-    let home = "crates/mcp/src/lib.rs";
     let mut problems = Vec::new();
-    let mut homes = 0;
     for path in mcp_sources(root) {
         let Ok(text) = crate::tree::read_rust(&path, Subject::Production) else { continue };
         let written = text.matches("\"craftkit").count();
         if written == 0 {
             continue;
         }
-        if crate::tree::relative_name(root, &path) == home {
-            homes += written;
-            continue;
-        }
         problems.push(format!(
-            "{}: the server's name is written here {written} time(s), and its one home is `{home}`; \
-             a name written in two places is a name that changes in one of them.",
+            "{}: the application's name is written here {written} time(s); every name the server \
+             publishes is built from `craftkit_foundation::app_name!()`, and a name written by \
+             hand is a name a fork does not rename.",
             crate::tree::relative_name(root, &path)
-        ));
-    }
-    if homes == 0 {
-        problems.push(format!(
-            "{home}: the server's name is written nowhere; the one home has to say what it is."
-        ));
-    } else if homes > 1 {
-        problems.push(format!(
-            "{home}: the server's name is written {homes} times; the one home writes it once."
         ));
     }
     Ok(problems)
@@ -2094,6 +2080,55 @@ fn mcp_sources(root: &Path) -> Vec<PathBuf> {
         path.extension().and_then(|x| x.to_str()) == Some("rs")
     });
     found.into_iter().map(|relative| dir.join(relative)).collect()
+}
+
+/// The application's own name, and the one place it is written. §284.
+///
+/// The tree publishes the application's name in a dozen places — the data
+/// folder ✓, the window's title ✓, the server's name ✓, the design file's
+/// tag ✓ — and every one of them is built from one literal ✓.
+///
+/// The gate reads the tree's **production** code and asks where that literal
+/// is written ✓: once ✓, in the foundation ✓, which is the crate every
+/// crate can reach ✓.
+pub fn the_applications_name_is_written_in_one_place(root: &Path) -> Result<Vec<String>, String> {
+    let home = "crates/foundation/src/paths.rs";
+    let mut problems = Vec::new();
+    let mut homes = 0;
+    for path in rust_files(root) {
+        // The tree's own crates and applications. **Not `xtask`**: it depends
+        // on nothing of the tree, so it cannot read the name, and it names
+        // the crates it builds — which is its job. §284.
+        let name = crate::tree::relative_name(root, &path);
+        if !name.starts_with("crates/") && !name.starts_with("apps/") {
+            continue;
+        }
+        let Ok(text) = crate::tree::read_rust(&path, Subject::Production) else { continue };
+        // The **whole** name, quotes and all: `craftkit-control` is another
+        // name (a thread's), and `craftkit/1` is the design file's tag.
+        let written = text.matches("\"craftkit\"").count();
+        if written == 0 {
+            continue;
+        }
+        if name == home {
+            homes += written;
+            continue;
+        }
+        problems.push(format!(
+            "{name}: the application's name is written here {written} time(s), and its one home is \
+             `{home}`; a name written in two places is a name that changes in one of them."
+        ));
+    }
+    if homes == 0 {
+        problems.push(format!(
+            "{home}: the application's name is written nowhere; the one home has to say what it is."
+        ));
+    } else if homes > 1 {
+        problems.push(format!(
+            "{home}: the application's name is written {homes} times; the one home writes it once."
+        ));
+    }
+    Ok(problems)
 }
 
 /// The scaffolding section, and the crates it has to name. §281.
@@ -6113,6 +6148,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the name is a string the tree ships, and a name in a comment is not one",
     ),
     (
+        "the_applications_name_is_written_in_one_place",
+        Subject::Production,
+        "the name is a string the tree ships, and a name in a comment is not one",
+    ),
+    (
         "the_applications_data_folder_is_built_in_one_place",
         Subject::Production,
         "the platform's rule is code the tree ships, and a copy of it in a comment is not a builder",
@@ -7909,6 +7949,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     The application's data lives in one place.")),
     );
 
+    // The application's own name, and the one place it is written. §284.
+    problems.extend(
+        the_applications_name_is_written_in_one_place(root)?.into_iter().map(|p| {
+            format!("{p}\n     A name written in two places is a name that changes in one of them.")
+        }),
+    );
+
     // The MCP server's name, and the one place it is written. §282.
     problems.extend(
         the_servers_name_is_written_in_one_place(root)?.into_iter().map(|p| {
@@ -9438,14 +9485,48 @@ mod tests {
         let dir = crate::temp::dir("name-second-home").expect("a temporary folder");
         let src = dir.join("crates/mcp/src");
         std::fs::create_dir_all(&src).expect("the fabricated tree");
-        std::fs::write(src.join("lib.rs"), "pub const SERVER_NAME: &str = \"craftkit\";\n")
-            .expect("the fabricated source");
         std::fs::write(src.join("tools.rs"), "pub fn name() -> &'static str { \"craftkit_status\" }\n")
             .expect("the fabricated source");
 
         let problems = the_servers_name_is_written_in_one_place(&dir).expect("runs");
         assert!(
             problems.iter().any(|p| p.contains("tools.rs")),
+            "a name written by hand is not reported: {problems:#?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The application's name is written in one place in the whole tree.
+    ///
+    /// §284: the name was written in the MCP crate and in the foundation's
+    /// path, so a fork that renamed the application renamed half of what it
+    /// publishes.
+    #[test]
+    fn the_applications_name_is_written_in_one_home() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_applications_name_is_written_in_one_place(&root).expect("runs");
+        assert!(problems.is_empty(), "the name has one home: {problems:#?}");
+    }
+
+    /// A second home for the application's name is caught.
+    ///
+    /// The fabricated tree writes the name in the one home and once more in
+    /// a crate that publishes it.
+    #[test]
+    fn a_second_home_for_the_applications_name_is_caught() {
+        let dir = crate::temp::dir("app-name-second-home").expect("a temporary folder");
+        let home = dir.join("crates/foundation/src");
+        let other = dir.join("crates/app/src");
+        std::fs::create_dir_all(&home).expect("the fabricated tree");
+        std::fs::create_dir_all(&other).expect("the fabricated tree");
+        std::fs::write(home.join("paths.rs"), "macro_rules! app_name { () => { \"craftkit\" }; }\n")
+            .expect("the fabricated source");
+        std::fs::write(other.join("lib.rs"), "pub fn title() -> &'static str { \"craftkit\" }\n")
+            .expect("the fabricated source");
+
+        let problems = the_applications_name_is_written_in_one_place(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("crates/app")),
             "a second home is not reported: {problems:#?}"
         );
         let _ = std::fs::remove_dir_all(&dir);

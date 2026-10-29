@@ -171,7 +171,7 @@ impl AutomationId {
         // Hashed by *contents*, so the widget keeps its identity across frames
         // even though the string behind the name is a fresh allocation each
         // time. §66.
-        Id::new(("craftkit", self.0.as_str()))
+        Id::new((craftkit_foundation::paths::APP_NAME, self.0.as_str()))
     }
 
     pub fn as_str(&self) -> &str {

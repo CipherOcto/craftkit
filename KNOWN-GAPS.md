@@ -33007,6 +33007,125 @@ behaviour ✓.
 | **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
 
 
+## 284. The application's name had two homes, in two crates
+
+### The finding
+
+**§282 gave the MCP server's name a home ✓ — and §283 gave the
+application's name a different one ✓ — and they are the same name.**
+
+```rust
+// crates/mcp/src/lib.rs — after §282
+macro_rules! server_name { () => { "craftkit" }; }
+
+// crates/foundation/src/paths.rs — after §283
+pub const APP_NAME: &str = "craftkit";
+```
+
+**So the tree wrote its own name down twice** ✓, in two crates ✓, and a fork
+that renamed one of them renamed half the application ✓ — the server's
+names ✓ on one side and the data folder ✓ on the other ✓.
+
+And the name was written in **six files** ✓ before this section:
+
+```text
+crates/mcp/src/lib.rs            the server's name
+crates/foundation/src/paths.rs    the application's name
+crates/io/src/format.rs          the design file's tag
+crates/ui/src/automation.rs      the automation id's namespace
+apps/craftkit/src/lib.rs         the window's title, the app id, the phone's folder
+apps/craftkit-android/src/lib.rs the phone's folder
+```
+
+### Measured
+
+After — **one literal, in one place** ✓:
+
+```text
+crates/foundation/src/paths.rs   macro_rules! app_name { () => { "craftkit" }; }
+```
+
+And everything that publishes the name is built from it ✓:
+
+```rust
+pub const APP_NAME: &str = app_name!();                     // the foundation
+pub const SERVER_NAME: &str = craftkit_foundation::app_name!();  // the MCP
+pub const TAG_PREFIX: &str = craftkit_foundation::app_name!();   // the design file's tag
+```
+
+**And the tree's gates ask two questions** ✓:
+
+```text
+cargo xtask lists
+   ok: ... the application's name is written in one place ...
+   ok: ... the server's name is written in one place ...
+```
+
+### Why nothing else would have caught it
+
+- **Both spellings were right.** `craftkit` is the name ✓, in both places ✓
+  — and the tree's name does not change ✓, so nothing noticed ✓.
+- **§282's rule was a crate's rule.** "The name is written in one place" ✓
+  was checked **in the MCP crate** ✓ — and the MCP's one place was its own
+  ✓, so the check was green ✓ while the tree had two ✓.
+- **The two homes were introduced a day apart, by two good fixes.** §282
+  gave the server's name a home ✓; §283 gave the application's name one ✓;
+  and neither asked whether the *other* name was the same name ✓.
+
+### The fix
+
+**One literal, in the crate every crate can reach.**
+
+The foundation's `app_name!` is the tree's one literal ✓ — and the constant
+is derived from it ✓, because `concat!` takes literals ✓ and a `const` is
+not one ✓.
+
+So the MCP's server name ✓, the design file's tag ✓, the window's title ✓,
+the app's id ✓, the phone's folder ✓, the UI's automation ids ✓ and the
+data folder ✓ are all built from it ✓.
+
+And there are **two gates** now ✓, because there are two questions ✓:
+
+- `the_applications_name_is_written_in_one_place` ✓ — the tree's crates and
+  applications write the whole name once ✓, in the foundation ✓;
+- `the_servers_name_is_written_in_one_place` ✓ — the MCP writes **no** name
+  by hand ✓, because every name it publishes is derived ✓.
+
+### What is not claimed
+
+- **The package names are Cargo's.** `name = "craftkit"` in a manifest ✓ is
+  the package's identity ✓ — the README's step 2 says to rename them ✓ —
+  and the gate reads Rust code ✓, not manifests ✓.
+- **The other names are untouched.** The file extension `plan.craftkit` ✓,
+  the environment variables `CRAFTKIT_*` ✓, the thread's name
+  `craftkit-control` ✓, the log's name `craftkit.log` ✓ and the stash key
+  `craftkit/plan` ✓ are **other names** ✓ — each with its own home ✓, and
+  the extension's is still several ✓ — each is its own piece of work ✓.
+- **`xtask` is not covered.** It depends on nothing of the tree ✓, so it
+  cannot read the name ✓, and it names the crates it builds ✓ — which is
+  its job ✓.
+
+### The lesson
+
+**One home per name is a tree-wide property, not a crate's.**
+
+§282's rule — *the server's name is written in one place* ✓ — was checked
+in the MCP crate ✓, and the MCP's one place was its own ✓. A rule about a
+name has to say **which** name ✓ and **where** its home is ✓ — otherwise
+"one home" means "one home in every crate that uses it" ✓, which is one
+home per crate ✓ and none at all ✓.
+
+**And the home has to be somewhere everyone can reach.** The MCP is layer
+5 ✓ and the foundation is layer 0 ✓, so the foundation is the only place
+where a name can be written once ✓ and used by everything ✓.
+
+**And two good fixes can add the same defect twice.** §282 and §283 each
+gave a name a home ✓, and the two homes were the same name ✓ — and each fix
+was checked by its own gate ✓, which was green ✓ on both days ✓.
+
+| **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33622,6 +33741,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
 | **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
 | **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
+| **The application's name is written in one place** | `the_applications_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §284 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

@@ -58,26 +58,26 @@ pub struct Resource {
 /// cannot disagree about which resources exist. §176.
 pub static RESOURCES: &[Resource] = &[
     Resource {
-        uri: concat!(crate::server_name!(), "://design"),
+        uri: concat!(craftkit_foundation::app_name!(), "://design"),
         name: "Active design",
         description: concat!(
             "The open design: its name and note, its frame rate and range, its nodes, \
              the playhead, whether it has unsaved changes, how deep the undo stack is, \
              the last commands that ran and the plan. The same content as the ",
-            crate::server_name!(),
+            craftkit_foundation::app_name!(),
             "_status tool."
         ),
         mime: "application/json",
         read: design,
     },
     Resource {
-        uri: concat!(crate::server_name!(), "://commands"),
+        uri: concat!(craftkit_foundation::app_name!(), "://commands"),
         name: "Command catalogue",
         description: concat!(
             "Every command with its parameters documented, for when a tool call is \
              refused and the client wants to see what the command actually takes. The \
              same content as the ",
-            crate::server_name!(),
+            craftkit_foundation::app_name!(),
             "_commands tool."
         ),
         mime: "application/json",
@@ -109,7 +109,7 @@ pub struct Template {
 ///
 /// **One list**, like [`RESOURCES`]. §176.
 pub static TEMPLATES: &[Template] = &[Template {
-    uri: concat!(crate::server_name!(), "://node/{id}"),
+    uri: concat!(craftkit_foundation::app_name!(), "://node/{id}"),
     name: "node",
     description: "One node of the open design: its id, name, kind, whether it is muted and \
                       its properties. The id is the one the design prints, `n12`.",
@@ -369,7 +369,7 @@ mod tests {
         };
         for template in TEMPLATES {
             let value = match template.uri {
-                concat!(crate::server_name!(), "://node/{id}") => format!("n{id}"),
+                concat!(craftkit_foundation::app_name!(), "://node/{id}") => format!("n{id}"),
                 other => panic!("{other} has no value in this test"),
             };
             let uri = template.uri.replace("{id}", &value);
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn the_variable_is_one_segment_of_the_uri() {
-        let template = concat!(crate::server_name!(), "://node/{id}");
+        let template = concat!(craftkit_foundation::app_name!(), "://node/{id}");
         assert_eq!(variable(template, &format!("{SERVER_NAME}://node/n12")), Some("n12"));
         assert_eq!(variable(template, &format!("{SERVER_NAME}://node/")), None);
         assert_eq!(variable(template, &format!("{SERVER_NAME}://node/n12/x")), None);

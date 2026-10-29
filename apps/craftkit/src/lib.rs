@@ -171,7 +171,7 @@ pub fn run_android(flags: Flags, app: AndroidApp) -> std::process::ExitCode {
 /// binary. §240.
 #[cfg(target_os = "android")]
 fn phone_folder(app: &AndroidApp) -> Option<std::path::PathBuf> {
-    app.internal_data_path().map(|p| p.join("craftkit"))
+    app.internal_data_path().map(|p| p.join(craftkit_foundation::paths::APP_NAME))
 }
 
 #[cfg(not(target_os = "android"))]
@@ -265,8 +265,9 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
         }
     };
 
-    let viewport =
-        eframe::egui::ViewportBuilder::default().with_title("craftkit").with_inner_size([1180.0, 720.0]);
+    let viewport = eframe::egui::ViewportBuilder::default()
+        .with_title(craftkit_foundation::paths::APP_NAME)
+        .with_inner_size([1180.0, 720.0]);
 
     // Android builds the event loop from the activity's handle, and `eframe`
     // refuses to start without it — *"NativeOptions is missing required
@@ -281,7 +282,7 @@ fn run_with(flags: Flags, app: Option<AndroidApp>) -> std::process::ExitCode {
     let _ = app;
 
     let run = eframe::run_native(
-        "craftkit",
+        craftkit_foundation::paths::APP_NAME,
         options,
         Box::new(|_cc| {
             Ok(Box::new(Application {

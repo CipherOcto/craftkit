@@ -109,7 +109,11 @@ pub fn negotiate(requested: Option<&str>) -> &str {
     }
 }
 
-/// What this server calls itself — **the one home of that name**.
+/// What this server calls itself.
+///
+/// **The application's own name** ✓ — [`craftkit_foundation::paths::APP_NAME`]
+/// ✓ — because the server publishes the application's name ✓, and a fork
+/// that renames the application renames the server with it ✓. §284.
 ///
 /// The name appears in what the server publishes: the tool names, the
 /// resource URIs, and the descriptions that name a tool. §282: the tool
@@ -117,15 +121,7 @@ pub fn negotiate(requested: Option<&str>) -> &str {
 /// **literals**, so a fork that renamed the server renamed half of what it
 /// publishes and left the rest craftkit's.
 ///
-/// So the name is one literal, in one place, and everything else is built
-/// from it: the tool names with [`crate::tools::tool_name`], and the URIs
-/// with `concat!` — which needs a literal, and a `const` is not one.
-#[macro_export]
-macro_rules! server_name {
-    () => {
-        "craftkit"
-    };
-}
-
-/// What this server calls itself.
-pub const SERVER_NAME: &str = server_name!();
+/// So everything is built from the one literal ✓ — the tool names with
+/// [`crate::tools::tool_name`] ✓, and the URIs with `concat!` ✓, which
+/// needs a literal ✓ and a `const` is not one ✓.
+pub const SERVER_NAME: &str = craftkit_foundation::app_name!();

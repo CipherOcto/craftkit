@@ -14,12 +14,28 @@
 
 use std::path::PathBuf;
 
+/// The application's own name — **the one literal of it in the tree**.
+///
+/// **A macro, not a constant.** §284: the name has to be built into strings
+/// that are compiled in — a resource URI ✓, a tool name ✓, a format tag ✓
+/// — and `concat!` takes literals ✓, not constants ✓. So the literal is in
+/// the macro ✓ and the constant is derived from it ✓.
+///
+/// A fork renames the application in this one place ✓, and everything the
+/// tree publishes with the application's name moves with it ✓.
+#[macro_export]
+macro_rules! app_name {
+    () => {
+        "craftkit"
+    };
+}
+
 /// The application's own name.
 ///
-/// **The one home of that name** in the tree's own code ✓ — the folder its
-/// data lives in ✓, the folder its tests write to ✓ — so a fork renames
-/// the application in one place ✓.
-pub const APP_NAME: &str = "craftkit";
+/// The folder its data lives in ✓, the folder its tests write to ✓, the
+/// window's title ✓, the server's name ✓ and the design file's tag ✓ are
+/// all built from it ✓.
+pub const APP_NAME: &str = app_name!();
 
 /// The folder the application's data lives in.
 ///

@@ -3445,8 +3445,8 @@ expect_catch "ui: the browser panel ignores what it knows about the stash" \
 # The crash reports were written for an agent to read, and the front end whose
 # reader is an agent could not read them. §113.
 swap crates/mcp/src/tools.rs \
-    '        name: concat!(crate::server_name!(), "_crashes"),' \
-    '        name: concat!(crate::server_name!(), "_crashs"),'
+    '        name: concat!(craftkit_foundation::app_name!(), "_crashes"),' \
+    '        name: concat!(craftkit_foundation::app_name!(), "_crashs"),'
 expect_catch "mcp: the crash reports are published under a name nobody calls" \
     "cargo test -p craftkit-mcp --profile ci the_crash_reports_are_a_tool"
 
@@ -7294,7 +7294,7 @@ expect_catch "docs: the scaffolding section forgets a crate the domain touches" 
 # three built-ins were literals, so a fork that renamed the server published
 # two spellings of its own name in the same tool list.
 swap crates/mcp/src/tools.rs \
-    '        name: concat!(crate::server_name!(), "_status"),' \
+    '        name: concat!(craftkit_foundation::app_name!(), "_status"),' \
     '        name: "craftkit_status",'
 expect_catch "mcp: the server's name is written in a second place" \
     "cargo xtask lists"
@@ -7310,6 +7310,16 @@ swap crates/control/src/token.rs \
     }
     std::env::temp_dir().join("craftkit")'
 expect_catch "control: the data folder is built in a second place" \
+    "cargo xtask lists"
+
+# --------------------------------------- the application's name has one home ----
+# Section 284. The name was written in the MCP crate and in the foundation's
+# path, so a fork that renamed the application renamed half of what it
+# publishes.
+swap crates/ui/src/automation.rs \
+    'Id::new((craftkit_foundation::paths::APP_NAME, self.0.as_str()))' \
+    'Id::new(("craftkit", self.0.as_str()))'
+expect_catch "ui: the application's name is written in a second place" \
     "cargo xtask lists"
 
 restore

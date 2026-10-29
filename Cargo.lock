@@ -431,6 +431,7 @@ name = "craftkit-android"
 version = "0.1.0"
 dependencies = [
  "craftkit",
+ "craftkit-foundation",
  "eframe",
  "jni",
  "winit",

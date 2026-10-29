@@ -41,7 +41,7 @@ pub mod pending;
 use serde::{Deserialize, Serialize};
 
 /// The tag written into every file.
-pub const TAG_PREFIX: &str = "craftkit";
+pub const TAG_PREFIX: &str = craftkit_foundation::app_name!();
 
 /// The version this build writes.
 pub const CURRENT: u32 = 1;

@@ -35,6 +35,8 @@ jni = { workspace = true, optional = true }
 # The application itself — the window, the session and the shell are the same
 # code the desktop application runs.
 craftkit = { workspace = true }
+# The application's own name, so the phone's folder carries it. §284.
+craftkit-foundation = { workspace = true }
 # The handle the platform hands the application, and the feature that turns on
 # the platform's event loop and the glue crate that carries the activity's
 # events. The version is the one `egui-winit` already uses, so there is one

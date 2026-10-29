@@ -74,7 +74,7 @@ pub struct BuiltIn {
 /// was wrong about the one thing it was explaining. §113.
 pub const BUILT_INS: &[BuiltIn] = &[
     BuiltIn {
-        name: concat!(crate::server_name!(), "_status"),
+        name: concat!(craftkit_foundation::app_name!(), "_status"),
         description: "The running session: the document's name, its note, its frame rate and \
                       its range, its nodes, the playhead, whether the document has unsaved \
                       changes, how deep the undo stack is and how much memory it holds, the \
@@ -83,14 +83,14 @@ pub const BUILT_INS: &[BuiltIn] = &[
         call: status,
     },
     BuiltIn {
-        name: concat!(crate::server_name!(), "_commands"),
+        name: concat!(craftkit_foundation::app_name!(), "_commands"),
         description: "The full command catalogue with every parameter documented, for when \
                       a command refuses and you want to see what the command actually takes.",
         schema: no_arguments,
         call: commands,
     },
     BuiltIn {
-        name: concat!(crate::server_name!(), "_crashes"),
+        name: concat!(craftkit_foundation::app_name!(), "_crashes"),
         description: "The crash reports this machine has written. `action` is list, show or \
                       replay; `show` and `replay` need the report's `id`. A report holds the \
                       design that crashed and the commands that ran, and `replay` runs those \
