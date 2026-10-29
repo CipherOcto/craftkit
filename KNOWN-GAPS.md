@@ -32763,6 +32763,131 @@ anyone spends a month writing it ✓.
 | **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
 
 
+## 282. The MCP published its own name in two spellings
+
+### The finding
+
+**The server had one name and wrote it down nine times.**
+
+```rust
+// crates/mcp/src/tools.rs — before
+pub const BUILT_INS: &[BuiltIn] = &[
+    BuiltIn { name: "craftkit_status", ... },
+    BuiltIn { name: "craftkit_commands", ... },
+    BuiltIn { name: "craftkit_crashes", ... },
+];
+
+// crates/mcp/src/resources.rs — before
+Resource { uri: "craftkit://design", ... },
+Resource { uri: "craftkit://commands", ... },
+Template { uri: "craftkit://node/{id}", ... },
+```
+
+**And the command tools were not literals** — they were **derived** ✓:
+
+```rust
+// crates/mcp/src/tools.rs
+pub fn tool_name(id: &str) -> String {
+    format!("{}_{}", crate::SERVER_NAME, id.replace('.', "_"))
+}
+```
+
+**So the same crate published the name two ways** ✓ — `craftkit_node_add` was
+derived ✓ and `craftkit_status` was written by hand ✓ — and a fork that
+renamed the server would have published `solidcraft_node_add` and
+`craftkit_status` **in the same tool list** ✓.
+
+The name is what a client sees ✓, what a client's script names ✓, and what
+the resource URIs carry ✓ — and the tree had it in nine places ✓:
+
+| file | sites |
+|---|---:|
+| `crates/mcp/src/tools.rs` (the three built-ins) | 3 |
+| `crates/mcp/src/resources.rs` (two URIs, one template, two messages) | 5 |
+| `crates/mcp/src/lib.rs` (the constant) | 1 |
+
+### Measured
+
+After — the name is **one literal in one place** ✓, and everything the
+server publishes is built from it ✓:
+
+```text
+crates/mcp/src/lib.rs:    macro_rules! server_name { () => { "craftkit" }; }
+crates/mcp/src/tools.rs:  name: concat!(crate::server_name!(), "_status")
+crates/mcp/src/resources.rs: uri: concat!(crate::server_name!(), "://design")
+```
+
+**And the tree's own gate asks where the name is written** ✓ — reading the
+crate's **production** code ✓, so a comment and a test are not homes ✓:
+
+```text
+cargo xtask lists
+   ok: ... the server's name is written in one place ...
+```
+
+### Why nothing else would have caught it
+
+- **Both spellings were right.** `craftkit_status` **is** the name ✓, today
+  ✓ — the defect is only visible when the name changes ✓, and nothing in
+  the tree changes it ✓.
+- **The tools' names were checked for their prefix, not their home.**
+  `command_for` refuses a name that does not start with the server's prefix
+  ✓ — which is a rule about the **namespace** ✓, not about where the name is
+  written ✓.
+- **The tree's one-home rules were about *functions*, not names.** The
+  parameter reader ✓, the temporary folder ✓, the file writer ✓ — all
+  homes for *code* ✓. A name is not code ✓, so no gate looked ✓.
+
+### The fix
+
+**One literal, in one place, and everything published is built from it.**
+
+`server_name!` is a macro ✓ — because `concat!` needs a literal and a
+`const` is not one ✓ — and the constant, the tool names, the resource URIs,
+the template URIs, the descriptions that name a tool and the error messages
+are all built from it ✓.
+
+And the gate `the_servers_name_is_written_in_one_place` holds it there ✓: it
+reads the MCP crate's production code ✓ and reports every place the name is
+written ✓ but its one home ✓.
+
+The tree's own test also checks the **published surface** ✓ — every tool
+name and every resource URI has to start with the server's name ✓ — so a
+name written by hand is caught the moment the name changes ✓.
+
+### What is not claimed
+
+- **The name is still a literal.** §4.5 of the survey wants names as
+  *configuration* ✓, and this is the step before that ✓: one place instead
+  of nine ✓, not a runtime option ✓.
+- **The other names are not touched.** The format tag ✓, the token
+  environment variable ✓, the file extension ✓, the stash key ✓ and the
+  URI scheme of the *other* protocols ✓ are still literals ✓ — each in its
+  own crate ✓, and each is its own piece of work ✓.
+- **Nothing about the protocol changed.** The names the server publishes
+  are the same names ✓ — they are now written once ✓.
+
+### The lesson
+
+**A name published in two ways is published in two ways forever.**
+
+The tree's rule — *one home per spelling* ✓ — had never been applied to the
+tree's **own name** ✓, because the name is a string and the rules were about
+functions ✓.
+
+**And a derived name next to a written one is worse than two written
+ones.** The command tools were derived ✓ and the built-ins were literals ✓
+— so the crate looked consistent ✓ and was not ✓, and the inconsistency was
+invisible until somebody renamed it ✓.
+
+**And the home has to be a literal, not a constant.** `concat!` is what
+builds a `&'static str` at compile time ✓, and it takes literals ✓ — so
+the one home is a macro ✓ and the constant is derived from it ✓. The other
+way round is impossible ✓, and knowing that is what the fix is built on ✓.
+
+| **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33376,6 +33501,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The undo stack holds snapshots, not documents** | `the_stack_holds_snapshots_and_not_documents` in `crates/foundation/src/history.rs` | 1 mutation — §278 |
 | **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the foundation's own suite, which runs the stack's tests without the model | 1 mutation — §280 |
 | **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
+| **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

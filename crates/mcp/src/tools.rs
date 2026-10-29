@@ -74,7 +74,7 @@ pub struct BuiltIn {
 /// was wrong about the one thing it was explaining. §113.
 pub const BUILT_INS: &[BuiltIn] = &[
     BuiltIn {
-        name: "craftkit_status",
+        name: concat!(crate::server_name!(), "_status"),
         description: "The running session: the document's name, its note, its frame rate and \
                       its range, its nodes, the playhead, whether the document has unsaved \
                       changes, how deep the undo stack is and how much memory it holds, the \
@@ -83,14 +83,14 @@ pub const BUILT_INS: &[BuiltIn] = &[
         call: status,
     },
     BuiltIn {
-        name: "craftkit_commands",
+        name: concat!(crate::server_name!(), "_commands"),
         description: "The full command catalogue with every parameter documented, for when \
                       a command refuses and you want to see what the command actually takes.",
         schema: no_arguments,
         call: commands,
     },
     BuiltIn {
-        name: "craftkit_crashes",
+        name: concat!(crate::server_name!(), "_crashes"),
         description: "The crash reports this machine has written. `action` is list, show or \
                       replay; `show` and `replay` need the report's `id`. A report holds the \
                       design that crashed and the commands that ran, and `replay` runs those \
@@ -354,6 +354,39 @@ fn property_for(kind: Doc, help: &str) -> Json {
 mod tests {
     use super::*;
     use craftkit_model::NodeKind;
+
+    /// Every name the server publishes is spelled from the one home.
+    ///
+    /// §282: the command tools were **derived** from the server's name and
+    /// the three built-ins were **literals** — so a fork that renamed the
+    /// server published `solidcraft_node_add` and `craftkit_status` in the
+    /// same tool list, and the resource URIs were literals too.
+    ///
+    /// The check is on the **published surface**: every tool name and every
+    /// resource URI has to start with the server's name. A name written by
+    /// hand is caught the moment the name changes.
+    #[test]
+    fn every_published_name_is_spelled_from_the_one_home() {
+        for built_in in BUILT_INS {
+            assert!(
+                built_in.name.starts_with(crate::SERVER_NAME),
+                "the built-in `{}` is not spelled from the server's name",
+                built_in.name
+            );
+        }
+        for spec in command::all() {
+            let name = tool_name(spec.id);
+            assert!(name.starts_with(crate::SERVER_NAME), "the tool `{name}` is not");
+        }
+        for resource in crate::resources::RESOURCES {
+            let scheme = format!("{}://", crate::SERVER_NAME);
+            assert!(resource.uri.starts_with(&scheme), "the resource `{}` is not", resource.uri);
+        }
+        for template in crate::resources::TEMPLATES {
+            let scheme = format!("{}://", crate::SERVER_NAME);
+            assert!(template.uri.starts_with(&scheme), "the template `{}` is not", template.uri);
+        }
+    }
 
     /// The colour the schema publishes is the colour the core reads.
     ///

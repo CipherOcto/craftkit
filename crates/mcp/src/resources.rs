@@ -33,6 +33,7 @@
 
 use std::sync::Mutex;
 
+use crate::SERVER_NAME;
 use craftkit_core::NodeId;
 use craftkit_engine::Session;
 use serde_json::{Value as Json, json};
@@ -57,21 +58,28 @@ pub struct Resource {
 /// cannot disagree about which resources exist. §176.
 pub static RESOURCES: &[Resource] = &[
     Resource {
-        uri: "craftkit://design",
+        uri: concat!(crate::server_name!(), "://design"),
         name: "Active design",
-        description: "The open design: its name and note, its frame rate and range, its nodes, \
-                      the playhead, whether it has unsaved changes, how deep the undo stack is, \
-                      the last commands that ran and the plan. The same content as the \
-                      craftkit_status tool.",
+        description: concat!(
+            "The open design: its name and note, its frame rate and range, its nodes, \
+             the playhead, whether it has unsaved changes, how deep the undo stack is, \
+             the last commands that ran and the plan. The same content as the ",
+            crate::server_name!(),
+            "_status tool."
+        ),
         mime: "application/json",
         read: design,
     },
     Resource {
-        uri: "craftkit://commands",
+        uri: concat!(crate::server_name!(), "://commands"),
         name: "Command catalogue",
-        description: "Every command with its parameters documented, for when a tool call is \
-                      refused and the client wants to see what the command actually takes. The \
-                      same content as the craftkit_commands tool.",
+        description: concat!(
+            "Every command with its parameters documented, for when a tool call is \
+             refused and the client wants to see what the command actually takes. The \
+             same content as the ",
+            crate::server_name!(),
+            "_commands tool."
+        ),
         mime: "application/json",
         read: commands,
     },
@@ -101,7 +109,7 @@ pub struct Template {
 ///
 /// **One list**, like [`RESOURCES`]. §176.
 pub static TEMPLATES: &[Template] = &[Template {
-    uri: "craftkit://node/{id}",
+    uri: concat!(crate::server_name!(), "://node/{id}"),
     name: "node",
     description: "One node of the open design: its id, name, kind, whether it is muted and \
                       its properties. The id is the one the design prints, `n12`.",
@@ -254,11 +262,11 @@ fn commands(_session: &Mutex<Session>) -> Result<Json, ReadError> {
 /// One node of the open design.
 fn node(session: &Mutex<Session>, value: &str) -> Result<Json, ReadError> {
     let Some(id) = node_id(value) else {
-        return Err(ReadError::NotFound(format!("craftkit://node/{value}")));
+        return Err(ReadError::NotFound(format!("{SERVER_NAME}://node/{value}")));
     };
     let guard = session.lock().map_err(|_| ReadError::Session)?;
     let Some(node) = guard.node(id) else {
-        return Err(ReadError::NotFound(format!("craftkit://node/{value}")));
+        return Err(ReadError::NotFound(format!("{SERVER_NAME}://node/{value}")));
     };
     // The properties are flattened the way the plan flattens them — by the
     // model's own `flatten`, so the path a client reads is the path a
@@ -337,12 +345,16 @@ mod tests {
     #[test]
     fn a_node_uri_spellings_the_tree_does_not_publish_are_refused() {
         let s = session();
-        for uri in ["craftkit://node/n+1", "craftkit://node/n01", "craftkit://node/n 1"] {
-            assert!(read(uri, &s).is_err(), "{uri} was served");
+        for uri in [
+            format!("{SERVER_NAME}://node/n+1"),
+            format!("{SERVER_NAME}://node/n01"),
+            format!("{SERVER_NAME}://node/n 1"),
+        ] {
+            assert!(read(&uri, &s).is_err(), "{uri} was served");
         }
         // And the spelling the tree prints is served.
-        let uri = "craftkit://node/n1";
-        let (_mime, json) = read(uri, &s).expect("the tree's own spelling reads");
+        let uri = format!("{SERVER_NAME}://node/n1");
+        let (_mime, json) = read(&uri, &s).expect("the tree's own spelling reads");
         assert_eq!(json.get("id").and_then(|v| v.as_u64()), Some(1));
     }
 
@@ -357,7 +369,7 @@ mod tests {
         };
         for template in TEMPLATES {
             let value = match template.uri {
-                "craftkit://node/{id}" => format!("n{id}"),
+                concat!(crate::server_name!(), "://node/{id}") => format!("n{id}"),
                 other => panic!("{other} has no value in this test"),
             };
             let uri = template.uri.replace("{id}", &value);
@@ -375,8 +387,8 @@ mod tests {
     #[test]
     fn a_resource_holds_what_its_tool_holds() {
         let s = session();
-        let (_, design_json) = read("craftkit://design", &s).expect("the design reads");
-        let (_, commands_json) = read("craftkit://commands", &s).expect("the catalogue reads");
+        let (_, design_json) = read(&format!("{SERVER_NAME}://design"), &s).expect("the design reads");
+        let (_, commands_json) = read(&format!("{SERVER_NAME}://commands"), &s).expect("the catalogue reads");
 
         let tool = |name: &str| {
             let response = crate::server::handle_line(
@@ -389,10 +401,14 @@ mod tests {
             parsed["result"]["structuredContent"].clone()
         };
 
-        assert_eq!(design_json, tool("craftkit_status"), "the design resource and the status tool differ");
+        assert_eq!(
+            design_json,
+            tool(&format!("{SERVER_NAME}_status")),
+            "the design resource and the status tool differ"
+        );
         assert_eq!(
             commands_json,
-            tool("craftkit_commands"),
+            tool(&format!("{SERVER_NAME}_commands")),
             "the catalogue resource and the commands tool differ"
         );
     }
@@ -404,20 +420,24 @@ mod tests {
     fn a_uri_that_names_nothing_is_refused() {
         let s = session();
         assert_eq!(
-            read("craftkit://nope", &s),
-            Err(ReadError::NotFound("craftkit://nope".to_string())),
+            read(&format!("{SERVER_NAME}://nope"), &s),
+            Err(ReadError::NotFound(format!("{SERVER_NAME}://nope"))),
             "an unknown uri was not refused"
         );
-        assert!(read("craftkit://node/", &s).is_err(), "an empty variable names nothing");
-        assert!(read("craftkit://node/n12/extra", &s).is_err(), "a variable is one segment");
-        assert!(read("craftkit://node/12", &s).is_err(), "a bare number is not the tree's spelling");
+        assert!(read(&format!("{SERVER_NAME}://node/"), &s).is_err(), "an empty variable names nothing");
+        assert!(read(&format!("{SERVER_NAME}://node/n12/extra"), &s).is_err(), "a variable is one segment");
+        assert!(
+            read(&format!("{SERVER_NAME}://node/12"), &s).is_err(),
+            "a bare number is not the tree's spelling"
+        );
     }
 
     #[test]
     fn the_variable_is_one_segment_of_the_uri() {
-        assert_eq!(variable("craftkit://node/{id}", "craftkit://node/n12"), Some("n12"));
-        assert_eq!(variable("craftkit://node/{id}", "craftkit://node/"), None);
-        assert_eq!(variable("craftkit://node/{id}", "craftkit://node/n12/x"), None);
-        assert_eq!(variable("craftkit://node/{id}", "craftkit://other/n12"), None);
+        let template = concat!(crate::server_name!(), "://node/{id}");
+        assert_eq!(variable(template, &format!("{SERVER_NAME}://node/n12")), Some("n12"));
+        assert_eq!(variable(template, &format!("{SERVER_NAME}://node/")), None);
+        assert_eq!(variable(template, &format!("{SERVER_NAME}://node/n12/x")), None);
+        assert_eq!(variable(template, &format!("{SERVER_NAME}://other/n12")), None);
     }
 }

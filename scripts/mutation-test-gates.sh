@@ -3445,8 +3445,8 @@ expect_catch "ui: the browser panel ignores what it knows about the stash" \
 # The crash reports were written for an agent to read, and the front end whose
 # reader is an agent could not read them. §113.
 swap crates/mcp/src/tools.rs \
-    '        name: "craftkit_crashes",' \
-    '        name: "craftkit_crashs",'
+    '        name: concat!(crate::server_name!(), "_crashes"),' \
+    '        name: concat!(crate::server_name!(), "_crashs"),'
 expect_catch "mcp: the crash reports are published under a name nobody calls" \
     "cargo test -p craftkit-mcp --profile ci the_crash_reports_are_a_tool"
 
@@ -7287,6 +7287,16 @@ swap README.md \
     "   \`crates/eval\`, \`crates/io\`'s format" \
     "   \`crates/io\`'s format"
 expect_catch "docs: the scaffolding section forgets a crate the domain touches" \
+    "cargo xtask lists"
+
+# --------------------------------------- the server's name has one home ----
+# Section 282. The command tools were derived from the server's name and the
+# three built-ins were literals, so a fork that renamed the server published
+# two spellings of its own name in the same tool list.
+swap crates/mcp/src/tools.rs \
+    '        name: concat!(crate::server_name!(), "_status"),' \
+    '        name: "craftkit_status",'
+expect_catch "mcp: the server's name is written in a second place" \
     "cargo xtask lists"
 
 restore

@@ -2004,6 +2004,60 @@ pub fn the_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, Str
     Ok(problems)
 }
 
+/// The MCP server's name, and the one place it is written. §282.
+///
+/// The server publishes its name in what a client sees: the tool names, the
+/// resource URIs, the descriptions that name a tool. The command tools were
+/// **derived** from the server's name and the three built-ins were
+/// **literals** — so a fork that renamed the server published
+/// `solidcraft_node_add` and `craftkit_status` in the same tool list.
+///
+/// So the name is one literal, in one place, and everything else is built
+/// from it. The gate reads the crate's **production** code — the code the
+/// tree ships, without the comments and without the tests — and asks where
+/// the name is written down.
+pub fn the_servers_name_is_written_in_one_place(root: &Path) -> Result<Vec<String>, String> {
+    let home = "crates/mcp/src/lib.rs";
+    let mut problems = Vec::new();
+    let mut homes = 0;
+    for path in mcp_sources(root) {
+        let Ok(text) = crate::tree::read_rust(&path, Subject::Production) else { continue };
+        let written = text.matches("\"craftkit").count();
+        if written == 0 {
+            continue;
+        }
+        if crate::tree::relative_name(root, &path) == home {
+            homes += written;
+            continue;
+        }
+        problems.push(format!(
+            "{}: the server's name is written here {written} time(s), and its one home is `{home}`; \
+             a name written in two places is a name that changes in one of them.",
+            crate::tree::relative_name(root, &path)
+        ));
+    }
+    if homes == 0 {
+        problems.push(format!(
+            "{home}: the server's name is written nowhere; the one home has to say what it is."
+        ));
+    } else if homes > 1 {
+        problems.push(format!(
+            "{home}: the server's name is written {homes} times; the one home writes it once."
+        ));
+    }
+    Ok(problems)
+}
+
+/// The MCP crate's Rust files.
+fn mcp_sources(root: &Path) -> Vec<PathBuf> {
+    let dir = root.join("crates/mcp/src");
+    let mut found: Vec<PathBuf> = Vec::new();
+    crate::tree::walk(&dir, &dir, &mut found, &|path| {
+        path.extension().and_then(|x| x.to_str()) == Some("rs")
+    });
+    found.into_iter().map(|relative| dir.join(relative)).collect()
+}
+
 /// The scaffolding section, and the crates it has to name. §281.
 ///
 /// The README tells a reader how to turn this tree into another
@@ -6016,6 +6070,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the budgets are constants the tree ships, and a literal in a comment is not one",
     ),
     (
+        "the_servers_name_is_written_in_one_place",
+        Subject::Production,
+        "the name is a string the tree ships, and a name in a comment is not one",
+    ),
+    (
         "a_reply_asks_the_tick",
         Subject::Production,
         "the reply sites are the code that runs, and a call in a comment builds no reply",
@@ -7800,6 +7859,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
     );
 
+    // The MCP server's name, and the one place it is written. §282.
+    problems.extend(
+        the_servers_name_is_written_in_one_place(root)?.into_iter().map(|p| {
+            format!("{p}\n     A name written in two places is a name that changes in one of them.")
+        }),
+    );
+
     // The scaffolding section, and the crates it has to name. §281.
     problems.extend(
         the_scaffolding_section_names_every_crate_the_domain_touches(root)?
@@ -9256,6 +9322,40 @@ mod tests {
         // The gate looks for three budgets; this tree has none of them in
         // code, so what matters is that the fabricated one is among them.
         assert!(problems.iter().any(|p| p.contains("MAX_HISTORY_BYTES")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The MCP server's name is written in one place.
+    ///
+    /// §282: the command tools were derived from the server's name and the
+    /// three built-ins were literals, so a fork that renamed the server
+    /// published two spellings of its own name in the same tool list.
+    #[test]
+    fn the_servers_name_is_written_in_one_home() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_servers_name_is_written_in_one_place(&root).expect("runs");
+        assert!(problems.is_empty(), "the name has one home: {problems:#?}");
+    }
+
+    /// A second home for the name is caught.
+    ///
+    /// The fabricated crate writes the name once where it belongs and once
+    /// where it does not.
+    #[test]
+    fn a_second_home_for_the_servers_name_is_caught() {
+        let dir = crate::temp::dir("name-second-home").expect("a temporary folder");
+        let src = dir.join("crates/mcp/src");
+        std::fs::create_dir_all(&src).expect("the fabricated tree");
+        std::fs::write(src.join("lib.rs"), "pub const SERVER_NAME: &str = \"craftkit\";\n")
+            .expect("the fabricated source");
+        std::fs::write(src.join("tools.rs"), "pub fn name() -> &'static str { \"craftkit_status\" }\n")
+            .expect("the fabricated source");
+
+        let problems = the_servers_name_is_written_in_one_place(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("tools.rs")),
+            "a second home is not reported: {problems:#?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
