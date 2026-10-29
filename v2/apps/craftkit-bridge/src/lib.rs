@@ -69,7 +69,7 @@
 include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Ecosystem, EngineError, Session};
+use craftkit_sdk::{Ecosystem, EngineError, MenuNode, Session};
 use std::io::BufRead;
 
 /// The name this server calls itself.
@@ -146,10 +146,11 @@ impl Bridge {
             "tools/call" => self.call(request),
             "resources/list" => Ok(self.resources()),
             "plan" => Ok(self.plan()),
+            "menu" => Ok(self.menu()),
             "shutdown" => Ok(json!({ "stopping": true })),
             other => Err(format!(
                 "there is no method `{other}`: the methods are initialize, tools/list, tools/call, \
-                 resources/list, plan and shutdown"
+                 resources/list, plan, journal, menu and shutdown"
             )),
         };
         match result {
@@ -234,6 +235,16 @@ impl Bridge {
     /// What the document means right now.
     fn plan(&self) -> Json {
         self.session.evaluate().to_json()
+    }
+
+    /// The **menu**, as a tree.
+    ///
+    /// The same view the studio's menu is made of, so the two cannot
+    /// disagree.
+    fn menu(&self) -> Json {
+        let projection = self.ecosystem.projection();
+        let tree = projection.menu_tree(&["command", "effect", "tool"]);
+        json!({ "menu": tree.iter().map(MenuNode::to_json).collect::<Vec<_>>() })
     }
 }
 

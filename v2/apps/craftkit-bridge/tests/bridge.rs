@@ -89,7 +89,10 @@ fn the_resources_are_the_rest_of_the_registry() {
     let answer = ask(&mut bridge, "resources/list", Json::Null);
     let kinds = answer["result"]["kinds"].as_array().expect("there are kinds");
     assert!(kinds.iter().any(|kind| kind["kind"] == "geometry.rect"), "{answer}");
-    assert_eq!(answer["result"]["formats"], json!(["craftkit/1", "craftkit/2", "craftkit/3", "craftkit/4"]));
+    assert_eq!(
+        answer["result"]["formats"],
+        json!(["craftkit/1", "craftkit/2", "craftkit/3", "craftkit/4", "craftkit/5"])
+    );
     assert!(answer["result"]["evaluators"].as_array().expect("there are evaluators").len() >= 2);
 }
 
@@ -152,4 +155,15 @@ fn the_bridge_program_answers_over_its_stdin() {
     assert_eq!(lines.len(), 2, "{text}");
     let first: Json = craftkit_sdk::serde_json::from_str(lines[0]).expect("the answer is JSON");
     assert_eq!(first["result"]["content"][0]["text"], "Hello, world.");
+}
+
+/// The menu is over the wire, and it is a tree.
+#[test]
+fn the_menu_is_over_the_wire() {
+    let mut bridge = bridge();
+    let answer = ask(&mut bridge, "menu", Json::Null);
+    let menu = answer["result"]["menu"].as_array().expect("there is a menu");
+    assert!(!menu.is_empty(), "{answer}");
+    let names: Vec<&str> = menu.iter().filter_map(|part| part["name"].as_str()).collect();
+    assert!(names.contains(&"geometry"), "{names:?}");
 }

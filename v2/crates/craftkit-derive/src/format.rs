@@ -136,7 +136,8 @@ pub fn expand_format(input: syn::DeriveInput) -> Result<TokenStream2> {
             // step rather than a break.
             quote! {
                 #ident: {
-                    let __field = value.get(#name).cloned().unwrap_or(#sdk::serde_json::Value::Null);
+                    let __field = value.get(#name).cloned()
+                        .unwrap_or_else(|| <#ty as #sdk::FormatValue>::default_value());
                     <#ty as #sdk::FormatValue>::from_json(&__field)?
                 },
             }

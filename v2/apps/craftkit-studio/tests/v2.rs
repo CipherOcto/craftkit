@@ -375,10 +375,11 @@ fn a_contribution_in_a_missing_layer_is_refused() {
             icon: "orphan",
             doc: "In a layer that is not there.",
             shortcut: None,
+            menu: &["test"],
             params: &[],
             mutates: false,
             undoable: false,
-            enabled: craftkit_sdk::always,
+                enabled: craftkit_sdk::always,
             run: CommandRun::Static(|_session, _params| Ok(Outcome::new("never"))),
         })
         .expect("the command is registered");
@@ -488,6 +489,7 @@ fn panicking_command() -> CommandSpec {
         icon: "panic",
         doc: "Panics on purpose.",
         shortcut: None,
+        menu: &["test"],
         params: &[],
         mutates: true,
         undoable: false,
@@ -506,6 +508,7 @@ fn lying_command() -> CommandSpec {
         icon: "lie",
         doc: "Changes the document and says it does not.",
         shortcut: None,
+        menu: &["test"],
         params: &[],
         mutates: false,
         undoable: false,
@@ -1195,4 +1198,175 @@ fn a_plugins_command_can_change_the_document() {
     session.execute("remote.add", &json!({})).expect("the command ran");
     assert_eq!(session.document().nodes.len(), 1, "the node arrived");
     assert_eq!(session.document().nodes[0].name, "from the plugin");
+}
+
+// ------------------------------------------------------------- the relations --
+
+/// A link joins two nodes, and it is in the document.
+///
+/// The tree says what holds what; a relation says what is attached to
+/// what. A mixer is a graph, and a tree cannot be a mixer.
+#[test]
+fn a_link_is_between_two_nodes() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "to", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let ids: Vec<u64> = session.document().nodes.iter().map(|node| node.id).collect();
+    session
+        .execute("link.add", &json!({ "from": ids[0], "to": ids[1], "kind": "symbol" }))
+        .expect("the link is added");
+    assert_eq!(session.document().relations.len(), 1, "the link is in the document");
+    assert_eq!(session.document().relations[0].from, ids[0]);
+    assert_eq!(session.document().relations[0].to, ids[1]);
+    assert_eq!(session.document().relations[0].kind, "symbol");
+}
+
+/// A link to a node that is not there is a link to nothing.
+#[test]
+fn a_link_to_nothing_is_refused() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let id = session.document().nodes[0].id;
+    let error = session
+        .execute("link.add", &json!({ "from": id, "to": 9999, "kind": "symbol" }))
+        .expect_err("the link is refused");
+    assert!(error.to_string().contains("no node"), "{error}");
+}
+
+/// The same link twice is the same link.
+#[test]
+fn a_link_twice_is_refused() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "to", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let ids: Vec<u64> = session.document().nodes.iter().map(|node| node.id).collect();
+    let link = json!({ "from": ids[0], "to": ids[1], "kind": "symbol" });
+    session.execute("link.add", &link).expect("the link is added");
+    let error = session.execute("link.add", &link).expect_err("the second link is refused");
+    assert!(error.to_string().contains("already linked"), "{error}");
+}
+
+/// A link can be taken away, and the nodes stay.
+#[test]
+fn a_link_can_be_taken_away() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "to", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let ids: Vec<u64> = session.document().nodes.iter().map(|node| node.id).collect();
+    session
+        .execute("link.add", &json!({ "from": ids[0], "to": ids[1], "kind": "symbol" }))
+        .expect("the link is added");
+    session.execute("link.remove", &json!({ "from": ids[0] })).expect("the link is removed");
+    assert!(session.document().relations.is_empty(), "the link is gone");
+    assert_eq!(session.document().nodes.len(), 2, "the nodes are still there");
+}
+
+/// The links survive the file.
+#[test]
+fn the_links_survive_the_file() {
+    let ecosystem = ecosystem();
+    let mut document = craftkit_sdk::Document::new("linked");
+    let first = document.add_node("from", "geometry.rect", None);
+    let second = document.add_node("to", "geometry.rect", None);
+    document.add_relation(craftkit_sdk::Relation::new(first, second, "symbol"));
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read.relations, document.relations, "the links survive the file");
+}
+
+/// A file of the fourth version has no links, and it is given none.
+#[test]
+fn a_fourth_version_file_is_migrated_to_the_fifth() {
+    let ecosystem = ecosystem();
+    let old = json!({
+        "format": "craftkit/4",
+        "version": 4,
+        "name": "old",
+        "data": null,
+        "nodes": [{
+            "id": 1,
+            "name": "rect",
+            "kind": "geometry.rect",
+            "rect": null,
+            "muted": false,
+            "data": null,
+            "children": [],
+        }],
+    });
+    let document = craftkit_sdk::format::read_document(&old, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert!(document.relations.is_empty(), "the step gives the document its links");
+}
+
+// ------------------------------------------------------------------- the menus --
+
+/// The menu is a tree, and a command says where in it it goes.
+///
+/// One level is not enough: the sound application this port comes from
+/// has five hundred and twelve leaf paths.
+#[test]
+fn the_menu_is_a_tree() {
+    let ecosystem = ecosystem();
+    let tree = ecosystem.projection().menu_tree(&["command"]);
+    assert!(!tree.is_empty(), "the menu has something in it");
+    let file = tree.iter().find(|node| node.name == "File").expect("there is a File menu");
+    let names: Vec<&str> = file.commands.iter().map(|command| command.id).collect();
+    assert!(names.contains(&"doc.save"), "{names:?}");
+    assert!(names.contains(&"doc.open"), "{names:?}");
+}
+
+/// A command that names no path sits under its area.
+#[test]
+fn a_command_without_a_path_sits_under_its_area() {
+    let ecosystem = ecosystem();
+    let tree = ecosystem.projection().menu_tree(&["command"]);
+    let select = tree.iter().find(|node| node.name == "select").expect("there is a select menu");
+    assert!(select.commands.iter().any(|command| command.id == "select.all"), "{:?}", select.commands);
+}
+
+/// The menu has parts inside parts.
+///
+/// A command says where it goes, and the path is as deep as it needs to
+/// be: the sound battery puts its new things under Track and New, and the
+/// vector battery puts its booleans under Path and Combine.
+#[cfg(feature = "sound")]
+#[test]
+fn the_menu_has_parts_inside_parts() {
+    let ecosystem = ecosystem();
+    let tree = ecosystem.projection().menu_tree(&["command"]);
+    let track = tree.iter().find(|node| node.name == "Track").expect("there is a Track menu");
+    let new = track.children.iter().find(|node| node.name == "New").expect("there is a New part");
+    let ids: Vec<&str> = new.commands.iter().map(|command| command.id).collect();
+    assert!(ids.contains(&"sound.track.add"), "{ids:?}");
+    assert!(ids.contains(&"sound.clip.add"), "{ids:?}");
+}
+
+/// A part with nothing in it is not in the menu.
+///
+/// A battery that is not linked in leaves a hole, and a hole is not a
+/// menu.
+#[test]
+fn an_empty_part_is_not_in_the_menu() {
+    let ecosystem = ecosystem();
+    let tree = ecosystem.projection().menu_tree(&["command"]);
+    for node in &tree {
+        assert!(!node.commands.is_empty() || !node.children.is_empty(), "{node:?}");
+    }
 }

@@ -87,6 +87,14 @@ pub struct CommandSpec {
     pub doc: &'static str,
     /// The chord it is advertised with.
     pub shortcut: Option<&'static str>,
+    /// Where the command goes in the **menu bar**: a path.
+    ///
+    /// The names are the path from the bar down to the command, and the
+    /// first one is the area unless the command says otherwise. A menu is
+    /// a **tree**, and one level of it is not enough: the sound
+    /// application this port comes from has five hundred and twelve leaf
+    /// paths, and a menu bar that can only say `area` cannot draw them.
+    pub menu: &'static [&'static str],
     /// What it takes. Written from the command's fields.
     pub params: &'static [ParamDoc],
     /// Whether it is supposed to change the document.

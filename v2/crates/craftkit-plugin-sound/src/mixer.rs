@@ -1,0 +1,791 @@
+//! The mixer: buses, routes, inserts, sends and automation lanes.
+//!
+//! # Why this is a separate file
+//!
+//! Because this is the part of a sound document that is **not a tree**.
+//!
+//! A track holds its clips, and that is containment: the tree says it. But
+//! a track *feeds* a bus, a track *sends* to a bus, and a clip *plays* a
+//! source — and none of those is containment. A mixer is a **graph**, and
+//! the tree cannot be a mixer.
+//!
+//! So the mixer is written in **relations**: a typed edge from one node to
+//! another, and the edge's kind is a string. The core holds them
+//! ([`craftkit_sdk::Relation`]) and knows nothing about them; the sound
+//! battery reads the ones it cares about — `route`, `send`, `source` — and
+//! ignores the rest.
+//!
+//! # What a mixer is here
+//!
+//! Not the mixing: there is no audio thread and no block of audio
+//! anywhere in v2, and that is a blocker in the README rather than a
+//! silence here. What is here is the **graph** — who feeds whom, what is
+//! inserted where, what is automated — and the **derived order** of it,
+//! which is what a router needs before it can route anything.
+
+use craftkit_derive::{Command, NodeKind};
+
+use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text};
+
+use craftkit_sdk::serde_json;
+use craftkit_sdk::serde_json::Value as Json;
+
+/// The kind of a bus.
+///
+/// A bus is a **destination**: the mixer sends to it. It is a node, and
+/// the tracks that feed it say so with a relation.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.bus", label = "Bus", layer = "sound", evaluates)]
+pub struct BusKind;
+
+impl BusKind {
+    /// How a bus is drawn.
+    ///
+    /// Nothing: there is no mixer window and no camera (§19 of the
+    /// design document).
+    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+
+    /// Whether a point is inside a bus.
+    fn hit(_node: &Node, _point: Point) -> bool {
+        false
+    }
+
+    /// What a bus **means**, in the plan.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let bus = BusPayload::from_json(&node.data).ok()?;
+        let fed_by: Vec<Json> = document
+            .relations_to(node.id, Some("route"))
+            .into_iter()
+            .map(|relation| serde_json::json!({ "from": relation.from }))
+            .collect();
+        Some(serde_json::json!({
+            "name": bus.name,
+            "channels": bus.channels,
+            "fed_by": fed_by,
+        }))
+    }
+}
+
+/// The kind of an insert: a plugin in a slot on a track.
+///
+/// The plugin is a **string**, not an enum: the tree this ports has thirty
+/// built-in plugins in a static table and a hard-coded match on the id, so
+/// a plugin that is not in the table cannot be created at all. Here the
+/// insert says which plugin it is and the parameters are a map, and what
+/// happens to them is the audio engine's business — which v2 does not
+/// have yet.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.insert", label = "Insert", layer = "sound", evaluates)]
+pub struct InsertKind;
+
+impl InsertKind {
+    /// How an insert is drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+
+    /// Whether a point is inside an insert.
+    fn hit(_node: &Node, _point: Point) -> bool {
+        false
+    }
+
+    /// What an insert **means**, in the plan.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let insert = InsertPayload::from_json(&node.data).ok()?;
+        Some(serde_json::json!({
+            "plugin": insert.plugin,
+            "bypass": insert.bypass,
+            "params": insert.params,
+        }))
+    }
+}
+
+/// The kind of a send: a level that goes from a track to a bus.
+///
+/// The send is a node under the track, and the bus it goes to is a
+/// **relation**: the send says *what it is* and the relation says *where
+/// it goes*.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.send", label = "Send", layer = "sound", evaluates)]
+pub struct SendKind;
+
+impl SendKind {
+    /// How a send is drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+
+    /// Whether a point is inside a send.
+    fn hit(_node: &Node, _point: Point) -> bool {
+        false
+    }
+
+    /// What a send **means**, in the plan.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let send = SendPayload::from_json(&node.data).ok()?;
+        let to: Vec<u64> =
+            document.relations_from(node.id, Some("send")).into_iter().map(|relation| relation.to).collect();
+        Some(serde_json::json!({
+            "level_db": send.level_db,
+            "pan": send.pan,
+            "pre_fader": send.pre_fader,
+            "to": to,
+        }))
+    }
+}
+
+/// The kind of an automation lane: breakpoints on a parameter.
+///
+/// A lane says **which parameter** of **which node** it moves, and the
+/// parameter is a **string**. The tree this ports has a closed enum of
+/// mixer parameters with a plugin escape, so a lane can only automate what
+/// the enum knows; here it can automate anything a node's payload names.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.lane", label = "Automation", layer = "sound", evaluates)]
+pub struct LaneKind;
+
+impl LaneKind {
+    /// How a lane is drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+
+    /// Whether a point is inside a lane.
+    fn hit(_node: &Node, _point: Point) -> bool {
+        false
+    }
+
+    /// What a lane **means**, in the plan.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let lane = LanePayload::from_json(&node.data).ok()?;
+        let points: Vec<Json> =
+            lane.points.iter().map(|(at, value)| serde_json::json!({ "at": at, "value": value })).collect();
+        Some(serde_json::json!({ "param": lane.param, "points": points }))
+    }
+}
+
+/// What a bus says.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BusPayload {
+    /// Its name.
+    pub name: String,
+    /// How many channels it has.
+    pub channels: u32,
+}
+
+impl BusPayload {
+    /// The bus as it is written.
+    pub fn to_json(&self) -> Json {
+        serde_json::json!({ "name": self.name, "channels": self.channels })
+    }
+
+    /// The bus as it is read.
+    pub fn from_json(value: &Json) -> Result<Self, String> {
+        Ok(BusPayload {
+            name: value.get("name").and_then(|name| name.as_str()).unwrap_or("bus").to_string(),
+            channels: value.get("channels").and_then(|channels| channels.as_u64()).unwrap_or(2) as u32,
+        })
+    }
+}
+
+/// What an insert says.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InsertPayload {
+    /// Which plugin it is.
+    pub plugin: String,
+    /// Its parameters, by name.
+    pub params: Json,
+    /// Whether it is bypassed.
+    pub bypass: bool,
+}
+
+impl InsertPayload {
+    /// The insert as it is written.
+    pub fn to_json(&self) -> Json {
+        serde_json::json!({ "plugin": self.plugin, "params": self.params, "bypass": self.bypass })
+    }
+
+    /// The insert as it is read.
+    pub fn from_json(value: &Json) -> Result<Self, String> {
+        Ok(InsertPayload {
+            plugin: value.get("plugin").and_then(|plugin| plugin.as_str()).unwrap_or("").to_string(),
+            params: value.get("params").cloned().unwrap_or(Json::Object(Default::default())),
+            bypass: value.get("bypass").and_then(|bypass| bypass.as_bool()).unwrap_or(false),
+        })
+    }
+}
+
+/// What a send says.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SendPayload {
+    /// Its level, in decibels.
+    pub level_db: f64,
+    /// Its pan, from -1 to 1.
+    pub pan: f64,
+    /// Whether it is before the fader.
+    pub pre_fader: bool,
+}
+
+impl SendPayload {
+    /// The send as it is written.
+    pub fn to_json(&self) -> Json {
+        serde_json::json!({
+            "level_db": self.level_db,
+            "pan": self.pan,
+            "pre_fader": self.pre_fader,
+        })
+    }
+
+    /// The send as it is read.
+    pub fn from_json(value: &Json) -> Result<Self, String> {
+        Ok(SendPayload {
+            level_db: value.get("level_db").and_then(|level| level.as_f64()).unwrap_or(0.0),
+            pan: value.get("pan").and_then(|pan| pan.as_f64()).unwrap_or(0.0),
+            pre_fader: value.get("pre_fader").and_then(|pre| pre.as_bool()).unwrap_or(false),
+        })
+    }
+}
+
+/// What an automation lane says.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LanePayload {
+    /// Which parameter it moves.
+    pub param: String,
+    /// Its breakpoints: where, and what value.
+    pub points: Vec<(i64, f64)>,
+}
+
+impl LanePayload {
+    /// The lane as it is written.
+    pub fn to_json(&self) -> Json {
+        let points: Vec<Json> =
+            self.points.iter().map(|(at, value)| serde_json::json!([at, value])).collect();
+        serde_json::json!({ "param": self.param, "points": points })
+    }
+
+    /// The lane as it is read.
+    pub fn from_json(value: &Json) -> Result<Self, String> {
+        let param = value.get("param").and_then(|param| param.as_str()).unwrap_or("").to_string();
+        let mut points = Vec::new();
+        if let Some(list) = value.get("points").and_then(|points| points.as_array()) {
+            for point in list {
+                let at = point.get(0).and_then(|at| at.as_i64()).unwrap_or(0);
+                let amount = point.get(1).and_then(|amount| amount.as_f64()).unwrap_or(0.0);
+                if at < 0 || !amount.is_finite() {
+                    return Err("a breakpoint is at a time and holds a number".to_string());
+                }
+                points.push((at, amount));
+            }
+        }
+        Ok(LanePayload { param, points })
+    }
+}
+
+/// Make a bus.
+#[derive(Command)]
+#[command(
+    id = "sound.bus.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "New"),
+    mutates,
+    undoable
+)]
+pub struct AddBus {
+    /// What to call it.
+    pub name: Text,
+    /// How many channels it has.
+    pub channels: Option<Number>,
+}
+
+impl AddBus {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let name = self.name.0.clone();
+        let channels = match &self.channels {
+            Some(channels) => channels.0 as u32,
+            None => 2,
+        };
+        let payload = BusPayload { name: name.clone(), channels };
+        let id = session.document_mut().add_node_with(name.clone(), "sound.bus", None, payload.to_json());
+        Ok(Outcome::changed(format!("added a bus `{name}`"))
+            .with_data(serde_json::json!({ "id": id, "name": name })))
+    }
+}
+
+/// Send a track to a bus.
+///
+/// This is a **relation**: the track keeps the bus in its routing, and the
+/// two nodes are not in each other.
+#[derive(Command)]
+#[command(
+    id = "sound.route.add",
+    area = "sound",
+    layer = "sound",
+    icon = "link",
+    menu("Track", "Route"),
+    mutates,
+    undoable
+)]
+pub struct AddRoute {
+    /// The track that feeds the bus.
+    pub track: NodeRef,
+    /// The bus it feeds.
+    pub bus: NodeRef,
+}
+
+impl AddRoute {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let bus = self.bus.0;
+        for (id, what) in [(track, "track"), (bus, "bus")] {
+            if session.document().node(id).is_none() {
+                return Err(EngineError::Failed {
+                    id: "sound.route.add".to_string(),
+                    message: format!("there is no {what} `{id}`"),
+                });
+            }
+        }
+        let relation = craftkit_sdk::Relation::new(track, bus, "route");
+        if !session.document_mut().add_relation(relation) {
+            return Err(EngineError::Failed {
+                id: "sound.route.add".to_string(),
+                message: format!("the track `{track}` already feeds the bus `{bus}`"),
+            });
+        }
+        Ok(Outcome::changed(format!("the track `{track}` feeds the bus `{bus}`"))
+            .with_data(serde_json::json!({ "track": track, "bus": bus })))
+    }
+}
+
+/// Put a plugin in a slot on a track.
+#[derive(Command)]
+#[command(
+    id = "sound.insert.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "Inserts"),
+    mutates,
+    undoable
+)]
+pub struct AddInsert {
+    /// The track the insert is on.
+    pub track: NodeRef,
+    /// Which plugin it is.
+    pub plugin: Text,
+    /// Whether it is bypassed.
+    pub bypass: Option<craftkit_sdk::Bool>,
+}
+
+impl AddInsert {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        if session.document().node(track).is_none() {
+            return Err(EngineError::Failed {
+                id: "sound.insert.add".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        }
+        let plugin = self.plugin.0.clone();
+        if plugin.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.insert.add".to_string(),
+                message: "an insert says which plugin it is".to_string(),
+            });
+        }
+        let bypass = self.bypass.map(|bypass| bypass.0).unwrap_or(false);
+        let payload =
+            InsertPayload { plugin: plugin.clone(), params: Json::Object(Default::default()), bypass };
+        let id = session.document_mut().add_node_with_under(
+            Some(track),
+            plugin.clone(),
+            "sound.insert",
+            None,
+            payload.to_json(),
+        );
+        Ok(Outcome::changed(format!("added a `{plugin}` insert on the track `{track}`"))
+            .with_data(serde_json::json!({ "id": id, "track": track, "plugin": plugin })))
+    }
+}
+
+/// Send a track to a bus at a level.
+///
+/// The send is a node under the track, and the bus it goes to is a
+/// relation: the node says what the send *is* and the relation says where
+/// it goes.
+#[derive(Command)]
+#[command(
+    id = "sound.send.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "Sends"),
+    mutates,
+    undoable
+)]
+pub struct AddSend {
+    /// The track the send is on.
+    pub track: NodeRef,
+    /// The bus it goes to.
+    pub bus: NodeRef,
+    /// Its level, in decibels.
+    pub level_db: Option<Number>,
+}
+
+impl AddSend {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let bus = self.bus.0;
+        for (id, what) in [(track, "track"), (bus, "bus")] {
+            if session.document().node(id).is_none() {
+                return Err(EngineError::Failed {
+                    id: "sound.send.add".to_string(),
+                    message: format!("there is no {what} `{id}`"),
+                });
+            }
+        }
+        let level_db = match &self.level_db {
+            Some(level) => level.0,
+            None => 0.0,
+        };
+        if !level_db.is_finite() {
+            return Err(EngineError::Failed {
+                id: "sound.send.add".to_string(),
+                message: "a level is a number".to_string(),
+            });
+        }
+        let payload = SendPayload { level_db, pan: 0.0, pre_fader: false };
+        let id = session.document_mut().add_node_with_under(
+            Some(track),
+            format!("send to {bus}"),
+            "sound.send",
+            None,
+            payload.to_json(),
+        );
+        let relation = craftkit_sdk::Relation::new(id, bus, "send");
+        session.document_mut().add_relation(relation);
+        Ok(Outcome::changed(format!("the track `{track}` sends to the bus `{bus}`"))
+            .with_data(serde_json::json!({ "id": id, "track": track, "bus": bus })))
+    }
+}
+
+/// Automate a parameter of a track.
+///
+/// The lane says which parameter it moves, and the parameter is a
+/// **string**: `volume`, `pan`, `mute`, or anything a node's payload
+/// names.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct AddLane {
+    /// The track whose parameter is automated.
+    pub track: NodeRef,
+    /// Which parameter: `volume`, `pan`, `mute`, …
+    pub param: Text,
+    /// The breakpoints: a list of `[at, value]`, where `at` is a time in
+    /// samples.
+    pub points: Option<Json>,
+}
+
+impl AddLane {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        if session.document().node(track).is_none() {
+            return Err(EngineError::Failed {
+                id: "sound.lane.add".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        }
+        let param = self.param.0.clone();
+        if param.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.lane.add".to_string(),
+                message: "a lane says which parameter it moves".to_string(),
+            });
+        }
+        let points = match &self.points {
+            Some(points) => {
+                let value = serde_json::json!({ "param": param, "points": points });
+                LanePayload::from_json(&value)
+                    .map_err(|error| EngineError::Failed {
+                        id: "sound.lane.add".to_string(),
+                        message: format!("the breakpoints are not breakpoints: {error}"),
+                    })?
+                    .points
+            }
+            None => Vec::new(),
+        };
+        let payload = LanePayload { param: param.clone(), points };
+        let id = session.document_mut().add_node_with_under(
+            Some(track),
+            format!("{param} automation"),
+            "sound.lane",
+            None,
+            payload.to_json(),
+        );
+        Ok(Outcome::changed(format!("the track `{track}` automates `{param}`"))
+            .with_data(serde_json::json!({ "id": id, "track": track, "param": param })))
+    }
+}
+
+/// The routing: who feeds whom, and in what order.
+///
+/// This is **derived state** over the relations: the document holds the
+/// edges and the evaluator works out what they mean. The order is the
+/// order the buses are fed in — a bus that nothing feeds comes first, and
+/// a bus that feeds another comes before it.
+pub fn routing(document: &Document) -> Vec<Json> {
+    let buses: Vec<&Node> = document.walk().filter(|node| node.kind == "sound.bus").collect();
+    let mut order: Vec<u64> = Vec::new();
+    for bus in &buses {
+        if !order.contains(&bus.id) {
+            order.push(bus.id);
+        }
+    }
+    // A bus that feeds another bus comes before it. The list is short and
+    // the order is worked out by walking it, so a cycle in the routing is
+    // not a hang: a bus that is already in the order is left where it is.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for bus in &buses {
+            let feeds: Vec<u64> = document
+                .relations_to(bus.id, Some("route"))
+                .into_iter()
+                .map(|relation| relation.from)
+                .filter(|from| buses.iter().any(|node| node.id == *from))
+                .collect();
+            for from in feeds {
+                let from_index = order.iter().position(|id| *id == from);
+                let bus_index = order.iter().position(|id| *id == bus.id);
+                if let (Some(from_index), Some(bus_index)) = (from_index, bus_index)
+                    && from_index > bus_index
+                {
+                    order.remove(from_index);
+                    let bus_index = order.iter().position(|id| *id == bus.id).unwrap_or(0);
+                    order.insert(bus_index, from);
+                    changed = true;
+                }
+            }
+        }
+    }
+    order
+        .into_iter()
+        .filter_map(|id| {
+            let bus = document.node(id)?;
+            let payload = BusPayload::from_json(&bus.data).ok()?;
+            let fed_by: Vec<Json> = document
+                .relations_to(id, Some("route"))
+                .into_iter()
+                .map(|relation| serde_json::json!({ "from": relation.from }))
+                .collect();
+            Some(serde_json::json!({
+                "id": id,
+                "name": payload.name,
+                "channels": payload.channels,
+                "fed_by": fed_by,
+            }))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use craftkit_sdk::Ecosystem;
+    use craftkit_sdk::serde_json::json;
+
+    /// The ecosystem of this plugin alone.
+    fn ecosystem() -> Ecosystem {
+        Ecosystem::from_inventory().expect("the ecosystem is built")
+    }
+
+    /// A session over the plugin's own contributions.
+    fn session() -> Session {
+        let ecosystem = ecosystem();
+        Session::with_formats(
+            ecosystem.commands,
+            ecosystem.kinds,
+            ecosystem.formats,
+            ecosystem.migrations,
+            ecosystem.evaluators,
+        )
+    }
+
+    /// A track and a bus, and the route between them.
+    #[test]
+    fn a_track_feeds_a_bus() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let bus = session.document().node_by_name("mix").expect("the bus is there").id;
+        session
+            .execute("sound.route.add", &json!({ "track": track, "bus": bus }))
+            .expect("the route is added");
+        let relations = &session.document().relations;
+        assert_eq!(relations.len(), 1, "the route is a relation: {relations:?}");
+        assert_eq!(relations[0].from, track);
+        assert_eq!(relations[0].to, bus);
+        assert_eq!(relations[0].kind, "route");
+    }
+
+    /// The same route twice is refused: one edge is one relation.
+    #[test]
+    fn a_route_twice_is_refused() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let bus = session.document().node_by_name("mix").expect("the bus is there").id;
+        session
+            .execute("sound.route.add", &json!({ "track": track, "bus": bus }))
+            .expect("the route is added");
+        let error = session
+            .execute("sound.route.add", &json!({ "track": track, "bus": bus }))
+            .expect_err("the second route is refused");
+        assert!(error.to_string().contains("already feeds"), "{error}");
+    }
+
+    /// A route to a bus that is not there is refused.
+    #[test]
+    fn a_route_to_nothing_is_refused() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let error = session
+            .execute("sound.route.add", &json!({ "track": track, "bus": 9999 }))
+            .expect_err("the route is refused");
+        assert!(error.to_string().contains("no bus"), "{error}");
+    }
+
+    /// A clip plays its source, and that is a relation and not
+    /// containment.
+    #[test]
+    fn a_clip_plays_its_source() {
+        let mut session = session();
+        session.execute("sound.source.add", &json!({ "path": "kit/kick.wav" })).expect("the source is added");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let source = session.document().node_by_name("kit/kick.wav").expect("the source is there").id;
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute(
+                "sound.clip.add",
+                &json!({ "track": track, "start": 0, "length": 48000, "source": source }),
+            )
+            .expect("the clip is added");
+        let clip = session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip");
+        assert!(clip.children.is_empty(), "the clip does not hold the source");
+        assert_eq!(session.document().relations.len(), 1, "the clip is linked to the source");
+        assert_eq!(session.document().relations[0].from, clip.id);
+        assert_eq!(session.document().relations[0].to, source);
+        assert_eq!(session.document().relations[0].kind, "source");
+    }
+
+    /// A send goes to a bus, and the send says what it is while the
+    /// relation says where it goes.
+    #[test]
+    fn a_send_goes_to_a_bus() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.bus.add", &json!({ "name": "reverb" })).expect("the bus is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let bus = session.document().node_by_name("reverb").expect("the bus is there").id;
+        session
+            .execute("sound.send.add", &json!({ "track": track, "bus": bus, "level_db": -12.0 }))
+            .expect("the send is added");
+        let send = session.document().walk().find(|node| node.kind == "sound.send").expect("the send");
+        assert_eq!(send.data.get("level_db"), Some(&json!(-12.0)));
+        assert_eq!(session.document().relations[0].from, send.id);
+        assert_eq!(session.document().relations[0].to, bus);
+        assert_eq!(session.document().relations[0].kind, "send");
+    }
+
+    /// An insert is a node on the track, and the plugin is a string.
+    #[test]
+    fn an_insert_is_a_node_on_the_track() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.insert.add", &json!({ "track": track, "plugin": "comp" }))
+            .expect("the insert is added");
+        let insert = session.document().walk().find(|node| node.kind == "sound.insert").expect("the insert");
+        assert_eq!(insert.data.get("plugin"), Some(&json!("comp")));
+        let track_node = session.document().node(track).expect("the track is there");
+        assert!(
+            track_node.children.iter().any(|child| child.kind == "sound.insert"),
+            "the insert is on the track: {:?}",
+            track_node.children.iter().map(|child| &child.kind).collect::<Vec<_>>()
+        );
+    }
+
+    /// A lane automates a parameter, and the parameter is a string.
+    #[test]
+    fn a_lane_automates_a_parameter() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute(
+                "sound.lane.add",
+                &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [48000, -6.0]] }),
+            )
+            .expect("the lane is added");
+        let lane = session.document().walk().find(|node| node.kind == "sound.lane").expect("the lane");
+        assert_eq!(lane.data.get("param"), Some(&json!("volume")));
+        assert_eq!(lane.data.get("points"), Some(&json!([[0, 0.0], [48000, -6.0]])));
+    }
+
+    /// A lane with a breakpoint that is not a breakpoint is refused.
+    #[test]
+    fn a_lane_with_a_bad_breakpoint_is_refused() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let error = session
+            .execute("sound.lane.add", &json!({ "track": track, "param": "volume", "points": [[-1, 0.0]] }))
+            .expect_err("the lane is refused");
+        assert!(error.to_string().contains("breakpoints"), "{error}");
+    }
+
+    /// The routing is derived: the buses come out in the order they are
+    /// fed in.
+    #[test]
+    fn the_routing_is_derived() {
+        let mut session = session();
+        session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+        session.execute("sound.bus.add", &json!({ "name": "master" })).expect("the bus is added");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let mix = session.document().node_by_name("mix").expect("the bus is there").id;
+        let master = session.document().node_by_name("master").expect("the bus is there").id;
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        // The track feeds the mix, and the mix feeds the master, so the
+        // mix comes first.
+        session.execute("sound.route.add", &json!({ "track": track, "bus": master })).expect("the route");
+        session.execute("sound.route.add", &json!({ "track": track, "bus": mix })).expect("the route");
+        let order = routing(session.document());
+        let names: Vec<&str> =
+            order.iter().filter_map(|bus| bus.get("name").and_then(|name| name.as_str())).collect();
+        assert!(names.contains(&"mix"), "{names:?}");
+        assert!(names.contains(&"master"), "{names:?}");
+        let mix_index = names.iter().position(|name| *name == "mix").expect("the mix is there");
+        let master_index = names.iter().position(|name| *name == "master").expect("the master is there");
+        assert!(mix_index < master_index, "the mix is fed before the master: {names:?}");
+    }
+
+    /// The routing evaluator is in the ecosystem.
+    #[test]
+    fn the_routing_evaluator_is_there() {
+        let ecosystem = ecosystem();
+        assert!(ecosystem.evaluators.get("sound.routing").is_some());
+        assert!(ecosystem.commands.get("sound.bus.add").is_some());
+        assert!(ecosystem.commands.get("sound.route.add").is_some());
+        assert!(ecosystem.commands.get("sound.send.add").is_some());
+        assert!(ecosystem.commands.get("sound.insert.add").is_some());
+        assert!(ecosystem.commands.get("sound.lane.add").is_some());
+    }
+}

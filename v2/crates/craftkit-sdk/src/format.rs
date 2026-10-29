@@ -47,6 +47,17 @@ pub trait FormatValue: Sized {
     fn to_json(&self) -> Json;
     /// The value as it is read.
     fn from_json(value: &Json) -> Result<Self, String>;
+    /// The value a field that may be **absent** takes when it is absent.
+    ///
+    /// A field is marked absent-tolerant by `#[format(default)]`, and the
+    /// derive reads the file with this value in place of a missing one.
+    ///
+    /// It is `null` for most things and an **empty list** for a list,
+    /// because a document that does not have a list of relations has no
+    /// relations and a document that does not have a name has no name.
+    fn default_value() -> Json {
+        Json::Null
+    }
 }
 
 impl FormatValue for String {
@@ -100,6 +111,11 @@ impl<T: FormatValue> FormatValue for Vec<T> {
     fn from_json(value: &Json) -> Result<Self, String> {
         let array = value.as_array().ok_or_else(|| "expected a list".to_string())?;
         array.iter().map(T::from_json).collect()
+    }
+
+    /// A list that is not there is an empty list.
+    fn default_value() -> Json {
+        Json::Array(Vec::new())
     }
 }
 
@@ -329,6 +345,22 @@ pub fn write_v4(document: &Document) -> Json {
     })
 }
 
+/// The fifth version of the document format.
+///
+/// The document grew **relations**: typed edges between the nodes, for
+/// the things a tree cannot say — a clip that plays a source, a track
+/// that feeds a bus, a track that is under a controller.
+pub fn write_v5(document: &Document) -> Json {
+    serde_json::json!({
+        "format": "craftkit/5",
+        "version": 5,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+    })
+}
+
 /// The first version of the document format.
 pub static FORMAT_V1: FormatSpec =
     FormatSpec { tag: "craftkit/1", version: 1, layer: "core", read: Document::from_json, write: write_v1 };
@@ -376,6 +408,16 @@ pub static FORMAT_V4: FormatSpec =
 
 inventory::submit! {
     crate::contribution::Registration { item: &FORMAT_V4 }
+}
+
+/// The fifth version of the document format.
+///
+/// It adds the relations between the nodes.
+pub static FORMAT_V5: FormatSpec =
+    FormatSpec { tag: "craftkit/5", version: 5, layer: "core", read: Document::from_json, write: write_v5 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V5 }
 }
 
 /// The step from the first version to the second.
@@ -439,6 +481,24 @@ impl V3ToV4 {
     fn apply(value: &mut Json) -> Result<(), String> {
         if let Some(object) = value.as_object_mut() {
             object.entry("data").or_insert(Json::Null);
+        }
+        Ok(())
+    }
+}
+
+/// The step from the fourth version to the fifth.
+///
+/// It gives the document the relations the fifth version writes. A file
+/// of the fourth version has none, and none is what it gets.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.4to5", family = "craftkit", from = 4, to = 5, layer = "core")]
+pub struct V4ToV5;
+
+impl V4ToV5 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        if let Some(object) = value.as_object_mut() {
+            object.entry("relations").or_insert(Json::Array(Vec::new()));
         }
         Ok(())
     }

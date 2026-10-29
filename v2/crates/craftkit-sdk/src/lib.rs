@@ -64,6 +64,7 @@ pub mod error;
 pub mod evaluator;
 pub mod format;
 pub mod group;
+pub mod link;
 pub mod params;
 pub mod plan;
 pub mod plugin;
@@ -75,10 +76,10 @@ pub use anchor::{Anchored, PluginAnchor};
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{
-    Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Segment,
-    Stroke, SubPath,
+    Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Relation,
+    Segment, Stroke, SubPath,
 };
-pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, Projection};
+pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, MenuNode, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
 pub use evaluator::EvaluatorSpec;
 pub use format::{FormatSpec, FormatValue, MigrationSpec};

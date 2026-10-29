@@ -502,6 +502,10 @@ impl LoadedPlugin {
             icon,
             doc,
             shortcut: None,
+            // The menu path of a plugin's command is its area: a
+            // subprocess plugin's catalogue says what area a command is
+            // in, and the path is leaked with the rest of its metadata.
+            menu: Box::leak(Box::new([area])),
             params,
             mutates,
             undoable: mutates,

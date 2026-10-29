@@ -66,8 +66,18 @@
 #![forbid(unsafe_code)]
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
+
+// The mixer: buses, routes, inserts, sends and automation lanes. It is
+// the part of a sound document that is a **graph** and not a tree, so it
+// is written in relations.
+pub mod mixer;
+
 use craftkit_sdk::{
     Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
+};
+pub use mixer::{
+    AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
+    LanePayload, SendKind, SendPayload,
 };
 
 use craftkit_sdk::serde_json;
@@ -517,7 +527,15 @@ impl SourcePayload {
 /// A track comes with one playlist, because a track with no takes is not a
 /// track yet: it is a row with nothing in it.
 #[derive(Command)]
-#[command(id = "sound.track.add", area = "sound", layer = "sound", icon = "plus", mutates, undoable)]
+#[command(
+    id = "sound.track.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "New"),
+    mutates,
+    undoable
+)]
 pub struct AddTrack {
     /// What to call it.
     pub name: Text,
@@ -552,7 +570,15 @@ impl AddTrack {
 /// The track may be given as an id, and the playlist as a name: a track
 /// holds playlists, and a clip goes in one of them.
 #[derive(Command)]
-#[command(id = "sound.clip.add", area = "sound", layer = "sound", icon = "plus", mutates, undoable)]
+#[command(
+    id = "sound.clip.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "New"),
+    mutates,
+    undoable
+)]
 pub struct AddClip {
     /// The track the clip goes on.
     pub track: NodeRef,
@@ -597,6 +623,11 @@ impl AddClip {
             None,
             payload.to_json(),
         );
+        // The clip plays the source: that is a **relation**, not
+        // containment. The clip is not in the source.
+        if let Some(source) = self.source {
+            session.document_mut().add_relation(craftkit_sdk::Relation::new(id, source.0, "source"));
+        }
         Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
             serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
         ))
@@ -609,7 +640,15 @@ impl AddClip {
 /// command sets the tempo at a tick: a second call at the same tick
 /// changes the one that is there.
 #[derive(Command)]
-#[command(id = "sound.tempo.set", area = "sound", layer = "sound", icon = "music", mutates, undoable)]
+#[command(
+    id = "sound.tempo.set",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Event", "Tempo"),
+    mutates,
+    undoable
+)]
 pub struct SetTempo {
     /// How fast, in beats a minute.
     pub bpm: Number,
@@ -656,7 +695,15 @@ impl SetTempo {
 /// The meter is a list of events too: a bar may be three beats long from
 /// here on.
 #[derive(Command)]
-#[command(id = "sound.meter.set", area = "sound", layer = "sound", icon = "music", mutates, undoable)]
+#[command(
+    id = "sound.meter.set",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Event", "Meter"),
+    mutates,
+    undoable
+)]
 pub struct SetMeter {
     /// How many beats a bar has.
     pub numerator: Number,
@@ -703,7 +750,15 @@ impl SetMeter {
 
 /// Put a marker in the document.
 #[derive(Command)]
-#[command(id = "sound.marker.add", area = "sound", layer = "sound", icon = "plus", mutates, undoable)]
+#[command(
+    id = "sound.marker.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Marker"),
+    mutates,
+    undoable
+)]
 pub struct AddMarker {
     /// What to call it.
     pub name: Text,
@@ -733,7 +788,15 @@ impl AddMarker {
 /// The path is **relative to the document**, because a document that
 /// travels carries its media with it. Nothing here reads the file.
 #[derive(Command)]
-#[command(id = "sound.source.add", area = "sound", layer = "sound", icon = "plus", mutates, undoable)]
+#[command(
+    id = "sound.source.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("File", "Import"),
+    mutates,
+    undoable
+)]
 pub struct AddSource {
     /// Where the media is.
     pub path: Text,
@@ -768,7 +831,15 @@ impl AddSource {
 /// These are the settings that belong to the session and not to any one
 /// node, and they live in the document's own payload.
 #[derive(Command)]
-#[command(id = "sound.session.set", area = "sound", layer = "sound", icon = "music", mutates, undoable)]
+#[command(
+    id = "sound.session.set",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Options"),
+    mutates,
+    undoable
+)]
 pub struct SetSession {
     /// The sample rate, in samples a second.
     pub sample_rate: Option<Number>,
@@ -913,6 +984,27 @@ impl TimelineEvaluator {
     }
 }
 
+/// The evaluator that works out the routing.
+///
+/// The buses, in the order they are fed in. It is **derived state**: the
+/// document holds the edges and this works out what they mean.
+#[derive(Evaluator)]
+#[evaluator(id = "sound.routing", label = "Routing", layer = "sound")]
+pub struct RoutingEvaluator;
+
+impl RoutingEvaluator {
+    /// The routing, in order.
+    fn evaluate(_document: &Document) -> Plan {
+        let mut plan = Plan::new();
+        plan.items.push(PlanItem {
+            node: 0,
+            kind: "sound.routing".to_string(),
+            value: serde_json::json!({ "buses": mixer::routing(_document) }),
+        });
+        plan
+    }
+}
+
 // ---------------------------------------------------------------------- the helpers --
 
 /// The tempo map, read from the document's events.
@@ -1042,7 +1134,17 @@ craftkit_sdk::plugin_anchor!(
     SetSession,
     ClipTool,
     SoundPanel,
-    TimelineEvaluator
+    TimelineEvaluator,
+    RoutingEvaluator,
+    BusKind,
+    InsertKind,
+    SendKind,
+    LaneKind,
+    AddBus,
+    AddRoute,
+    AddInsert,
+    AddSend,
+    AddLane
 );
 
 #[cfg(test)]

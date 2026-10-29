@@ -14,7 +14,7 @@ use craftkit_sdk::{
 /// A required parameter, read from a field, and the body never sees the
 /// caller's values.
 #[derive(Command)]
-#[command(id = "doc.rename", area = "doc", icon = "pencil", mutates, undoable)]
+#[command(id = "doc.rename", area = "doc", icon = "pencil", menu("File"), mutates, undoable)]
 pub struct DocRename {
     /// The new name.
     pub name: Text,
@@ -37,7 +37,7 @@ impl DocRename {
 /// is not linked in: the kinds are a registry, and the document may only
 /// hold kinds the program knows how to draw.
 #[derive(Command)]
-#[command(id = "node.add", area = "node", icon = "plus", mutates, undoable)]
+#[command(id = "node.add", area = "node", icon = "plus", menu("Node"), mutates, undoable)]
 pub struct NodeAdd {
     /// The node's name.
     pub name: Text,
@@ -182,6 +182,7 @@ pub fn runtime_echo() -> CommandSpec {
         icon: "echo",
         doc: "Say the text back.",
         shortcut: None,
+        menu: &["runtime"],
         params: ECHO_PARAMS,
         mutates: false,
         undoable: false,
@@ -205,7 +206,7 @@ pub fn runtime_echo() -> CommandSpec {
 /// does with it: pick two things, and put them in a box. The group is a
 /// node, and the nodes go into it.
 #[derive(Command)]
-#[command(id = "node.group", area = "node", icon = "group", mutates, undoable)]
+#[command(id = "node.group", area = "node", icon = "group", menu("Node"), mutates, undoable)]
 pub struct NodeGroup {}
 
 impl NodeGroup {
@@ -264,7 +265,7 @@ pub struct NodesPanel;
 /// it, so a program that only knows an older one can still read it — after
 /// the steps.
 #[derive(Command)]
-#[command(id = "doc.save", area = "doc", icon = "save", mutates, undoable)]
+#[command(id = "doc.save", area = "doc", icon = "save", menu("File"), mutates, undoable)]
 pub struct DocSave {
     /// Where to write it.
     pub path: Text,
@@ -301,7 +302,7 @@ impl DocSave {
 /// **migrated forward** first; if it knows an older one, the file is
 /// refused, because this program does not know what it is.
 #[derive(Command)]
-#[command(id = "doc.open", area = "doc", icon = "open", mutates, undoable)]
+#[command(id = "doc.open", area = "doc", icon = "open", menu("File"), mutates, undoable)]
 pub struct DocOpen {
     /// Where to read it from.
     pub path: Text,

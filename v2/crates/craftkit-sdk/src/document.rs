@@ -549,6 +549,41 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
+/// A **relation** between two nodes.
+///
+/// The document is a **tree**: a node holds other nodes, and that is
+/// containment. A tree cannot say everything a real document has to say:
+/// a clip plays a source and is not *in* the source, a track feeds a bus
+/// and is not *in* the bus, a track is under a controller and is not *in*
+/// it either.
+///
+/// Those are **relations**: a typed edge from one node to another. The
+/// kind of the relation is a **string**, and not a variant, because the
+/// kinds of relation are as open as the kinds of node: a sound document
+/// has sources and routes and loops, a vector document has symbols and
+/// instances, a document that carries its media has assets.
+///
+/// The relation is in the **document** and not in the node, because it is
+/// between two nodes and a node does not know what it is attached to.
+/// The port of a sound application is what found this: a mixer is a
+/// graph, and a tree cannot be a mixer.
+#[derive(Debug, Clone, PartialEq, Format)]
+pub struct Relation {
+    /// The node the relation goes **from**.
+    pub from: u64,
+    /// The node the relation goes **to**.
+    pub to: u64,
+    /// What the relation is: `source`, `route`, `vca`, `loop`, …
+    pub kind: String,
+}
+
+impl Relation {
+    /// A relation from one node to another.
+    pub fn new(from: u64, to: u64, kind: impl Into<String>) -> Self {
+        Relation { from, to, kind: kind.into() }
+    }
+}
+
 /// The document.
 ///
 /// The **compiler writes its format**: the two functions a file needs come
@@ -571,12 +606,25 @@ pub struct Document {
     pub data: serde_json::Value,
     /// Its nodes.
     pub nodes: Vec<Node>,
+    /// The relations between the nodes.
+    ///
+    /// The tree says what **holds** what; the relations say what is
+    /// **attached** to what. A list, and not a map, because the order is
+    /// the order they were made in and a document is written in the order
+    /// it was built.
+    #[format(default)]
+    pub relations: Vec<Relation>,
 }
 
 impl Document {
     /// An empty document with a name.
     pub fn new(name: impl Into<String>) -> Self {
-        Document { name: name.into(), data: serde_json::Value::Null, nodes: Vec::new() }
+        Document {
+            name: name.into(),
+            data: serde_json::Value::Null,
+            nodes: Vec::new(),
+            relations: Vec::new(),
+        }
     }
 
     /// The next free id.
@@ -698,6 +746,48 @@ impl Document {
     /// The nodes, in order.
     pub fn nodes(&self) -> impl Iterator<Item = &Node> {
         self.nodes.iter()
+    }
+
+    /// Add a relation between two nodes, and say whether it was new.
+    ///
+    /// A relation is **not** added twice: the same edge with the same
+    /// kind is the same relation, and a document that says it twice is a
+    /// document that says two things about one edge.
+    pub fn add_relation(&mut self, relation: Relation) -> bool {
+        if self.relations.contains(&relation) {
+            return false;
+        }
+        self.relations.push(relation);
+        true
+    }
+
+    /// Take the relations that match away, and say how many there were.
+    ///
+    /// The matcher is a closure, so a caller may leave out any part of the
+    /// relation it does not care about: remove every relation of a kind,
+    /// or every relation from a node, or one exact edge.
+    pub fn remove_relations(&mut self, matches: impl Fn(&Relation) -> bool) -> usize {
+        let before = self.relations.len();
+        self.relations.retain(|relation| !matches(relation));
+        before - self.relations.len()
+    }
+
+    /// The relations from a node, of a kind if one is named.
+    pub fn relations_from(&self, node: u64, kind: Option<&str>) -> Vec<&Relation> {
+        self.relations
+            .iter()
+            .filter(|relation| relation.from == node)
+            .filter(|relation| kind.is_none_or(|kind| relation.kind == kind))
+            .collect()
+    }
+
+    /// The relations to a node, of a kind if one is named.
+    pub fn relations_to(&self, node: u64, kind: Option<&str>) -> Vec<&Relation> {
+        self.relations
+            .iter()
+            .filter(|relation| relation.to == node)
+            .filter(|relation| kind.is_none_or(|kind| relation.kind == kind))
+            .collect()
     }
 
     /// The node with an id, wherever it is.

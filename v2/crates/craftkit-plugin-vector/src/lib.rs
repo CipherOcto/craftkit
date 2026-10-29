@@ -150,7 +150,15 @@ pub struct VectorTool;
 
 /// Put a rectangle in the document.
 #[derive(Command)]
-#[command(id = "vector.rectangle", area = "vector", layer = "vector", icon = "rect", mutates, undoable)]
+#[command(
+    id = "vector.rectangle",
+    area = "vector",
+    layer = "vector",
+    icon = "rect",
+    menu("Create"),
+    mutates,
+    undoable
+)]
 pub struct AddRectangle {
     /// Where it starts, across.
     pub x: Number,
@@ -190,7 +198,15 @@ impl AddRectangle {
 /// drawn on a screen: the control points are the corner of the square the
 /// circle is inscribed in, pulled in by the circle's constant.
 #[derive(Command)]
-#[command(id = "vector.ellipse", area = "vector", layer = "vector", icon = "ellipse", mutates, undoable)]
+#[command(
+    id = "vector.ellipse",
+    area = "vector",
+    layer = "vector",
+    icon = "ellipse",
+    menu("Create"),
+    mutates,
+    undoable
+)]
 pub struct AddEllipse {
     /// Its centre, across.
     pub x: Number,
@@ -220,7 +236,15 @@ impl AddEllipse {
 
 /// Put a regular polygon in the document.
 #[derive(Command)]
-#[command(id = "vector.polygon", area = "vector", layer = "vector", icon = "polygon", mutates, undoable)]
+#[command(
+    id = "vector.polygon",
+    area = "vector",
+    layer = "vector",
+    icon = "polygon",
+    menu("Create"),
+    mutates,
+    undoable
+)]
 pub struct AddPolygon {
     /// Its centre, across.
     pub x: Number,
@@ -305,7 +329,15 @@ impl TotalAreaEvaluator {
 /// The **union**: everything either path covers. The result is one node,
 /// and the second node is gone.
 #[derive(Command)]
-#[command(id = "vector.path.unite", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+#[command(
+    id = "vector.path.unite",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Combine"),
+    mutates,
+    undoable
+)]
 pub struct UnitePaths {
     /// The first path.
     ///
@@ -329,7 +361,15 @@ impl UnitePaths {
 /// The **difference**: what the first path covers and the second does not.
 /// The result may have a hole, and a hole is a contour of its own.
 #[derive(Command)]
-#[command(id = "vector.path.subtract", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+#[command(
+    id = "vector.path.subtract",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Combine"),
+    mutates,
+    undoable
+)]
 pub struct SubtractPaths {
     /// The path to take from.
     ///
@@ -352,7 +392,15 @@ impl SubtractPaths {
 ///
 /// The **intersection**: what the two paths share.
 #[derive(Command)]
-#[command(id = "vector.path.intersect", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+#[command(
+    id = "vector.path.intersect",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Combine"),
+    mutates,
+    undoable
+)]
 pub struct IntersectPaths {
     /// The first path.
     ///
@@ -376,7 +424,15 @@ impl IntersectPaths {
 /// The path is simplified: the points that a flat line would serve are
 /// removed and the rest are left alone.
 #[derive(Command)]
-#[command(id = "vector.path.simplify", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+#[command(
+    id = "vector.path.simplify",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
 pub struct SimplifyPath {
     /// The path.
     pub node: NodeRef,
@@ -408,7 +464,15 @@ impl SimplifyPath {
 /// The path is offset by a distance: out for a positive one, in for a
 /// negative one. The curves stay curves.
 #[derive(Command)]
-#[command(id = "vector.path.offset", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
+#[command(
+    id = "vector.path.offset",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
 pub struct OffsetPath {
     /// The path.
     pub node: NodeRef,

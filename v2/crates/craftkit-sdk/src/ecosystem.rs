@@ -341,6 +341,37 @@ impl Default for Ecosystem {
     }
 }
 
+/// Put a command into the tree, at the end of its path.
+fn insert_command(nodes: &mut Vec<MenuNode>, path: &[&'static str], entry: MenuEntry) {
+    let Some((name, rest)) = path.split_first() else { return };
+    let index = match nodes.iter().position(|node| node.name == *name) {
+        Some(index) => index,
+        None => {
+            nodes.push(MenuNode { name, commands: Vec::new(), children: Vec::new() });
+            nodes.len() - 1
+        }
+    };
+    if rest.is_empty() {
+        nodes[index].commands.push(entry);
+    } else {
+        insert_command(&mut nodes[index].children, rest, entry);
+    }
+}
+
+/// Sort a level of the menu: the parts by name, the commands by id.
+///
+/// And drop the parts that have nothing in them: a menu bar with an empty
+/// part in it is a menu bar with a hole in it, and a hole is there
+/// because a plugin was not linked in.
+fn sort_nodes(nodes: &mut Vec<MenuNode>) {
+    nodes.sort_by(|left, right| left.name.cmp(right.name));
+    for node in nodes.iter_mut() {
+        node.commands.sort_by(|left, right| left.id.cmp(right.id));
+        sort_nodes(&mut node.children);
+    }
+    nodes.retain(|node| !node.commands.is_empty() || !node.children.is_empty());
+}
+
 /// Every contribution in a registry is in a layer that exists.
 ///
 /// One generic function for every kind of contribution: that is the point of
@@ -387,7 +418,71 @@ pub struct MenuEntry {
     pub shortcut: Option<&'static str>,
 }
 
+/// One part of a menu.
+///
+/// A menu is a **tree**: the bar holds parts, a part holds parts and
+/// commands, and a command is at the end of a path. The sound application
+/// this port comes from has five hundred and twelve leaf paths, so one
+/// level is not enough to draw its menu bar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MenuNode {
+    /// The part's name.
+    pub name: &'static str,
+    /// The commands that are directly in this part.
+    pub commands: Vec<MenuEntry>,
+    /// The parts inside this one.
+    pub children: Vec<MenuNode>,
+}
+
+impl MenuNode {
+    /// The part, as it is written.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name,
+            "commands": self.commands.iter().map(|command| serde_json::json!({
+                "id": command.id,
+                "label": command.label,
+                "doc": command.doc,
+                "shortcut": command.shortcut,
+                "capability": command.capability,
+            })).collect::<Vec<_>>(),
+            "children": self.children.iter().map(MenuNode::to_json).collect::<Vec<_>>(),
+        })
+    }
+}
+
 impl<'a> Projection<'a> {
+    /// The menu bar, as a tree.
+    ///
+    /// A command's path is its **area** unless it says otherwise, so a
+    /// command that names no path is directly under the part named after
+    /// its area, and a command that names one is at the end of it.
+    ///
+    /// The parts are sorted by name and the commands by id, so the menu is
+    /// the same every time: a menu that reorders itself between two runs
+    /// is a menu nobody can learn.
+    pub fn menu_tree(&self, capabilities: &[&str]) -> Vec<MenuNode> {
+        let mut roots: Vec<MenuNode> = Vec::new();
+        for command in self.ecosystem.commands.all() {
+            if !capabilities.contains(&command.capability) {
+                continue;
+            }
+            let entry = MenuEntry {
+                area: command.area,
+                id: command.id,
+                label: command.label,
+                doc: command.doc,
+                capability: command.capability,
+                shortcut: command.shortcut,
+            };
+            let path: Vec<&'static str> =
+                if command.menu.is_empty() { vec![command.area] } else { command.menu.to_vec() };
+            insert_command(&mut roots, &path, entry);
+        }
+        sort_nodes(&mut roots);
+        roots
+    }
+
     /// The commands, grouped into a menu by area.
     ///
     /// Only the capabilities asked for: a toolbar wants `tool` and

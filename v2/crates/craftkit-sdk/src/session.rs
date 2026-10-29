@@ -192,6 +192,7 @@ impl Session {
         &self.log
     }
 
+
     /// Run a command.
     pub fn execute(&mut self, id: &str, raw: &Json) -> Result<Outcome, EngineError> {
         let Some(spec) = self.commands.get(id).cloned() else {

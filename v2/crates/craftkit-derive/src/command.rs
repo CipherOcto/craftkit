@@ -19,6 +19,8 @@ pub struct CommandArgs {
     pub capability: Option<LitStr>,
     pub layer: Option<LitStr>,
     pub enabled: Option<syn::Path>,
+    /// Where the command goes in the menu: `menu("Edit", "Trim")`.
+    pub menu: Vec<LitStr>,
     pub mutates: bool,
     pub undoable: bool,
     pub no_prefix: bool,
@@ -62,6 +64,19 @@ impl Parse for CommandArgs {
                     input.parse::<Token![=]>()?;
                     args.enabled = Some(input.parse::<syn::Path>()?);
                 }
+                "menu" => {
+                    // A path: `menu("Edit", "Trim")`. The names are the
+                    // path from the menu bar down to the command.
+                    let content;
+                    syn::parenthesized!(content in input);
+                    while !content.is_empty() {
+                        args.menu.push(content.parse::<LitStr>()?);
+                        if content.is_empty() {
+                            break;
+                        }
+                        content.parse::<Token![,]>()?;
+                    }
+                }
                 "mutates" => args.mutates = true,
                 "undoable" => args.undoable = true,
                 "no_prefix" => args.no_prefix = true,
@@ -71,7 +86,7 @@ impl Parse for CommandArgs {
                         format!(
                             "unknown command field `{other}`: a command has `id`, and optionally \
                              `label`, `area`, `icon`, `shortcut`, `capability`, `layer`, \
-                             `enabled`, `mutates`, `undoable` and `no_prefix`"
+                             `enabled`, `menu`, `mutates`, `undoable` and `no_prefix`"
                         ),
                     ));
                 }
@@ -333,11 +348,16 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
         Some(enabled) => quote!(#enabled),
         None => quote!(#sdk::always),
     };
+    // The menu path. An empty path means the command sits under its area,
+    // which is where it sat before the path existed.
+    let menu_names: Vec<LitStr> = args.menu.clone();
     let mutates = args.mutates;
     let undoable = args.undoable;
     let doc_literal = LitStr::new(&doc, id.span());
     let label_literal = LitStr::new(&label, id.span());
     let area_literal = LitStr::new(&area, id.span());
+    let menu_expression =
+        if menu_names.is_empty() { quote!(&[#area_literal]) } else { quote!(&[#(#menu_names),*]) };
     let icon_literal = LitStr::new(&icon, id.span());
     let capability_literal = LitStr::new(&capability, id.span());
     let layer_literal = LitStr::new(&layer, id.span());
@@ -373,6 +393,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
             icon: #icon_literal,
             doc: #doc_literal,
             shortcut: #shortcut_expression,
+            menu: #menu_expression,
             params: &[
                 #(#declarations),*
             ],
