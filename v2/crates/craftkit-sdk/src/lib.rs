@@ -43,13 +43,24 @@
 //! | [`Registry`] | the contributions, at run time, in any order, from any crate |
 //! | [`Session`] | the document, the history and the one way to run a command |
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
+pub use craftkit_derive::{Format, Migration};
 
 pub mod command;
 pub mod contribution;
 pub mod document;
 pub mod ecosystem;
 pub mod error;
+pub mod format;
 pub mod params;
 pub mod seams;
 pub mod session;
@@ -59,6 +70,7 @@ pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{Canvas, Colour, Document, Node, NodeKindSpec, Point, RecordingCanvas, Rect};
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};
+pub use format::{FormatSpec, FormatValue, MigrationSpec};
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use session::{HistoryEntry, Session};

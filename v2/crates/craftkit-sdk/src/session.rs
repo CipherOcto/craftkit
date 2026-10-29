@@ -42,6 +42,7 @@ use crate::command::CommandSpec;
 use crate::contribution::Registry;
 use crate::document::{Document, NodeKindSpec};
 use crate::error::{EngineError, Outcome};
+use crate::format::{FormatSpec, MigrationSpec};
 use crate::params::Params;
 
 /// One step of the history.
@@ -58,6 +59,8 @@ pub struct HistoryEntry {
 pub struct Session {
     commands: Registry<CommandSpec>,
     kinds: Registry<NodeKindSpec>,
+    formats: Registry<FormatSpec>,
+    migrations: Registry<MigrationSpec>,
     document: Document,
     history: Vec<HistoryEntry>,
     log: Vec<String>,
@@ -70,11 +73,36 @@ impl Session {
         Session {
             commands,
             kinds,
+            formats: Registry::new(),
+            migrations: Registry::new(),
             document: Document::new("untitled"),
             history: Vec::new(),
             log: Vec::new(),
             depth: 0,
         }
+    }
+
+    /// A session that also knows the file format.
+    ///
+    /// The formats and the migrations are what make a document writable and
+    /// an old file readable, so a session that can save has to have them.
+    pub fn with_formats(
+        commands: Registry<CommandSpec>,
+        kinds: Registry<NodeKindSpec>,
+        formats: Registry<FormatSpec>,
+        migrations: Registry<MigrationSpec>,
+    ) -> Self {
+        Session { formats, migrations, ..Session::new(commands, kinds) }
+    }
+
+    /// The versions of the format this session knows.
+    pub fn formats(&self) -> &Registry<FormatSpec> {
+        &self.formats
+    }
+
+    /// The steps between the versions.
+    pub fn migrations(&self) -> &Registry<MigrationSpec> {
+        &self.migrations
     }
 
     /// The commands this session knows.

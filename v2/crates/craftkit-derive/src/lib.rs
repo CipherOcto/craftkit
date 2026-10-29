@@ -63,12 +63,21 @@
 //! That the contribution's **body** is right. A macro writes the edges; the
 //! middle is still the programmer's.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
 
 use proc_macro::TokenStream;
 
 mod command;
 mod common;
+mod format;
 mod seams;
 
 /// Declare a command.
@@ -122,6 +131,33 @@ pub fn derive_panel(input: TokenStream) -> TokenStream {
 pub fn derive_layer(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     match seams::expand_layer(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Declare a type that can be written to a file and read back.
+///
+/// The compiler writes the reader and the writer from the fields, and the
+/// type implements the SDK's `FormatValue`, so it can be a field of
+/// another type that is.
+#[proc_macro_derive(Format, attributes(format))]
+pub fn derive_format(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    match format::expand_format(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Declare a step of the file format.
+///
+/// The step moves a document one version forward, and it is a contribution:
+/// the list of steps is the list the link fills.
+#[proc_macro_derive(Migration, attributes(migration))]
+pub fn derive_migration(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    match format::expand_migration(input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }

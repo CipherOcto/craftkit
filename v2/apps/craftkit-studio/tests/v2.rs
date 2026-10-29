@@ -492,5 +492,104 @@ fn unused_kind() -> NodeKindSpec {
 
 /// The ecosystem, as the application builds it.
 fn ecosystem() -> Ecosystem {
-    craftkit_studio::ecosystem()
+    craftkit_studio::ecosystem().expect("the ecosystem is built")
+}
+
+// ------------------------------------------------------------- the format --
+
+/// The format is a contribution, and there are two versions of it.
+#[test]
+fn the_format_is_a_contribution() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.formats.get("craftkit/1").is_some(), "{:?}", ecosystem.formats.ids());
+    assert!(ecosystem.formats.get("craftkit/2").is_some());
+    assert!(ecosystem.migrations.get("craftkit.1to2").is_some());
+}
+
+/// A file is read with the version it was written with, and then migrated
+/// forward.
+///
+/// The v1 file has no `muted` flag; the step adds it; the v2 reader reads
+/// it. A file that was never migrated would lose the flag.
+#[test]
+fn an_old_file_is_migrated_forward() {
+    let ecosystem = ecosystem();
+    let old = json!({
+        "format": "craftkit/1",
+        "version": 1,
+        "name": "old",
+        "nodes": [{
+            "id": 1,
+            "name": "rect",
+            "kind": "geometry.rect",
+            "rect": { "x": 1.0, "y": 2.0, "w": 3.0, "h": 4.0 },
+        }],
+    });
+    let document = craftkit_sdk::format::read_document(&old, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the old file is read");
+    assert_eq!(document.name, "old");
+    assert_eq!(document.nodes.len(), 1);
+    assert!(!document.nodes[0].muted, "the step gives the node the flag the v2 format writes");
+}
+
+/// A file written by the current program is read as it is.
+#[test]
+fn a_current_file_is_read_as_it_is() {
+    let ecosystem = ecosystem();
+    let document = craftkit_sdk::Document::new("current");
+    let mut document = document;
+    document.add_node("rect", "geometry.rect", craftkit_sdk::Rect::new(1.0, 2.0, 3.0, 4.0));
+    let format =
+        craftkit_sdk::format::newest_format(&ecosystem.formats, "craftkit").expect("there is a format");
+    let value = craftkit_sdk::format::write_document(&document, format);
+    let read = craftkit_sdk::format::read_document(&value, &ecosystem.formats, &ecosystem.migrations)
+        .expect("the file is read");
+    assert_eq!(read, document, "a round trip is the same document");
+}
+
+/// A file from a program that is newer than this one is refused.
+#[test]
+fn a_file_from_the_future_is_refused() {
+    let ecosystem = ecosystem();
+    let future = json!({
+        "format": "craftkit/9",
+        "version": 9,
+        "name": "future",
+        "nodes": [],
+    });
+    let refused = craftkit_sdk::format::read_document(&future, &ecosystem.formats, &ecosystem.migrations);
+    assert!(refused.is_err(), "the file from the future was read");
+}
+
+/// A file that does not say what it is, is refused.
+#[test]
+fn a_file_that_does_not_say_its_format_is_refused() {
+    let ecosystem = ecosystem();
+    let refused = craftkit_sdk::format::read_document(
+        &json!({ "name": "nameless" }),
+        &ecosystem.formats,
+        &ecosystem.migrations,
+    );
+    assert!(refused.is_err(), "the nameless file was read");
+}
+
+/// The document is saved and opened, through the commands.
+#[test]
+fn a_document_is_saved_and_opened() {
+    let ecosystem = ecosystem();
+    let mut session = ecosystem.session();
+    let path = std::env::temp_dir().join("craftkit-v2-format-test.craftkit");
+    let path = path.to_string_lossy().to_string();
+
+    session
+        .execute("node.add", &json!({ "name": "rect", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.execute("doc.save", &json!({ "path": path })).expect("the document is saved");
+
+    let mut other = ecosystem.session();
+    other.execute("doc.open", &json!({ "path": path })).expect("the document is opened");
+    assert_eq!(other.document().nodes.len(), 1, "the node came back");
+    assert_eq!(other.document().nodes[0].name, "rect");
+
+    let _ = std::fs::remove_file(&path);
 }

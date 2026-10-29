@@ -172,3 +172,77 @@ pub fn runtime_echo() -> CommandSpec {
 #[derive(Panel)]
 #[panel(id = "panel.nodes", label = "Nodes", layer = "core", commands("node.add", "node.mute"))]
 pub struct NodesPanel;
+
+/// Save the document to a file.
+///
+/// The **newest** format writes it, and the file says which format wrote
+/// it, so a program that only knows an older one can still read it — after
+/// the steps.
+#[derive(Command)]
+#[command(id = "doc.save", area = "doc", icon = "save", mutates, undoable)]
+pub struct DocSave {
+    /// Where to write it.
+    pub path: Text,
+}
+
+impl DocSave {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let Some(format) = craftkit_sdk::format::newest_format(session.formats(), "craftkit") else {
+            return Err(EngineError::Failed {
+                id: "doc.save".to_string(),
+                message: "this program has no format to write".to_string(),
+            });
+        };
+        let value = craftkit_sdk::format::write_document(session.document(), format);
+        let text =
+            craftkit_sdk::serde_json::to_string_pretty(&value).map_err(|error| EngineError::Failed {
+                id: "doc.save".to_string(),
+                message: format!("the document could not be written: {error}"),
+            })?;
+        std::fs::write(&path, text).map_err(|error| EngineError::Failed {
+            id: "doc.save".to_string(),
+            message: format!("`{path}` could not be written: {error}"),
+        })?;
+        Ok(Outcome::changed(format!("wrote `{path}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "path": path, "format": format.tag })))
+    }
+}
+
+/// Open a document from a file.
+///
+/// The file says which format wrote it. If this program knows that version,
+/// the file is read as it is; if it knows a newer one, the file is
+/// **migrated forward** first; if it knows an older one, the file is
+/// refused, because this program does not know what it is.
+#[derive(Command)]
+#[command(id = "doc.open", area = "doc", icon = "open", mutates, undoable)]
+pub struct DocOpen {
+    /// Where to read it from.
+    pub path: Text,
+}
+
+impl DocOpen {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let text = std::fs::read_to_string(&path).map_err(|error| EngineError::Failed {
+            id: "doc.open".to_string(),
+            message: format!("`{path}` could not be read: {error}"),
+        })?;
+        let value: craftkit_sdk::serde_json::Value =
+            craftkit_sdk::serde_json::from_str(&text).map_err(|error| EngineError::Failed {
+                id: "doc.open".to_string(),
+                message: format!("`{path}` is not a document: {error}"),
+            })?;
+        let document = craftkit_sdk::format::read_document(&value, session.formats(), session.migrations())
+            .map_err(|message| EngineError::Failed {
+            id: "doc.open".to_string(),
+            message: format!("`{path}` was refused: {message}"),
+        })?;
+        let name = document.name.clone();
+        let nodes = document.nodes.len();
+        *session.document_mut() = document;
+        Ok(Outcome::changed(format!("opened `{path}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "path": path, "name": name, "nodes": nodes })))
+    }
+}

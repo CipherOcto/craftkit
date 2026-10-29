@@ -8,6 +8,9 @@ license.workspace = true
 
 [dependencies]
 serde_json = { workspace = true }
+# The macro the SDK uses for its own format types: the document's shape and
+# the step between two versions of it are written by the compiler.
+craftkit-derive = { workspace = true }
 # The link-time registry. The derive macro writes the registration and the
 # SDK re-exports `inventory`, so a plugin's dependency list is the SDK and
 # the macro — and nothing else.

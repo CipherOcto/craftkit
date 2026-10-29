@@ -32,9 +32,6 @@ use craftkit_sdk::Ecosystem;
 ///
 /// Every contribution that was linked in: the application's own, and every
 /// plugin's.
-pub fn ecosystem() -> Ecosystem {
-    match Ecosystem::from_inventory() {
-        Ok(ecosystem) => ecosystem,
-        Err(error) => panic!("the ecosystem could not be built: {error}"),
-    }
+pub fn ecosystem() -> Result<Ecosystem, craftkit_sdk::EcosystemError> {
+    Ecosystem::from_inventory()
 }

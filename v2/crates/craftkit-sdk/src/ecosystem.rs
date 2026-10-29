@@ -24,6 +24,7 @@
 use crate::command::CommandSpec;
 use crate::contribution::{Contribution, Registry, RegistryError};
 use crate::document::NodeKindSpec;
+use crate::format::{FormatSpec, MigrationSpec};
 use crate::seams::{LayerSpec, PanelSpec, ToolSpec};
 use crate::session::Session;
 
@@ -44,6 +45,14 @@ pub enum EcosystemError {
     MissingCommand { tool: String, command: String },
     /// A panel names a command that is not there.
     MissingPanelCommand { panel: String, command: String },
+    /// A migration is not a step: it does not move one version forward.
+    MigrationStep { id: String, from: u32, to: u32 },
+    /// Two migrations start at the same version.
+    AmbiguousMigration { from: u32, family: String },
+    /// A version of a format has no step out of it.
+    MissingMigration { family: String, version: u32 },
+    /// A migration goes past the newest format.
+    MigrationPastTheFormat { id: String, version: u32 },
 }
 
 impl std::fmt::Display for EcosystemError {
@@ -67,6 +76,18 @@ impl std::fmt::Display for EcosystemError {
             }
             EcosystemError::MissingPanelCommand { panel, command } => {
                 write!(f, "the panel `{panel}` shows `{command}`, which is not linked in")
+            }
+            EcosystemError::MigrationStep { id, from, to } => {
+                write!(f, "the migration `{id}` goes from {from} to {to}: a step is one version")
+            }
+            EcosystemError::AmbiguousMigration { from, family } => {
+                write!(f, "two migrations of `{family}` start at version {from}")
+            }
+            EcosystemError::MissingMigration { family, version } => {
+                write!(f, "version {version} of `{family}` has no step out of it")
+            }
+            EcosystemError::MigrationPastTheFormat { id, version } => {
+                write!(f, "the migration `{id}` writes version {version}, which no format has")
             }
         }
     }
@@ -96,6 +117,10 @@ pub struct Ecosystem {
     pub tools: Registry<ToolSpec>,
     /// The panels.
     pub panels: Registry<PanelSpec>,
+    /// The versions of the format.
+    pub formats: Registry<FormatSpec>,
+    /// The steps between them.
+    pub migrations: Registry<MigrationSpec>,
 }
 
 impl Ecosystem {
@@ -107,6 +132,8 @@ impl Ecosystem {
             kinds: Registry::new(),
             tools: Registry::new(),
             panels: Registry::new(),
+            formats: Registry::new(),
+            migrations: Registry::new(),
         }
     }
 
@@ -121,6 +148,8 @@ impl Ecosystem {
             kinds: Registry::from_inventory()?,
             tools: Registry::from_inventory()?,
             panels: Registry::from_inventory()?,
+            formats: Registry::from_inventory()?,
+            migrations: Registry::from_inventory()?,
         };
         ecosystem.validate()?;
         Ok(ecosystem)
@@ -131,6 +160,72 @@ impl Ecosystem {
         self.validate_layers()?;
         self.validate_layers_of_contributions()?;
         self.validate_references()?;
+        self.validate_migrations()?;
+        Ok(())
+    }
+
+    /// The migrations are steps, and the chain has no hole in it.
+    ///
+    /// A migration is one version to the next: a step that skipped a version
+    /// would leave a file that nothing can read, and two steps from the same
+    /// version would make the answer a matter of order. And every version
+    /// between the oldest and the newest has a step, because a file of that
+    /// version would otherwise have nowhere to go.
+    fn validate_migrations(&self) -> Result<(), EcosystemError> {
+        let mut families: Vec<&'static str> =
+            self.formats.all().iter().map(|format| crate::format::family_of(format.tag)).collect();
+        families.sort_unstable();
+        families.dedup();
+        for family in families {
+            self.validate_one_family(family)?;
+        }
+        Ok(())
+    }
+
+    /// One family's chain.
+    fn validate_one_family(&self, family: &str) -> Result<(), EcosystemError> {
+        let versions: Vec<u32> = self
+            .formats
+            .all()
+            .iter()
+            .filter(|format| crate::format::family_of(format.tag) == family)
+            .map(|format| format.version)
+            .collect();
+        let newest = versions.iter().copied().max().unwrap_or(0);
+        let oldest = versions.iter().copied().min().unwrap_or(0);
+        let mut starts: Vec<u32> = Vec::new();
+        for migration in self.migrations.all() {
+            if migration.family != family {
+                continue;
+            }
+            if migration.to != migration.from + 1 {
+                return Err(EcosystemError::MigrationStep {
+                    id: migration.id.to_string(),
+                    from: migration.from,
+                    to: migration.to,
+                });
+            }
+            if migration.to > newest {
+                return Err(EcosystemError::MigrationPastTheFormat {
+                    id: migration.id.to_string(),
+                    version: migration.to,
+                });
+            }
+            if starts.contains(&migration.from) {
+                return Err(EcosystemError::AmbiguousMigration {
+                    from: migration.from,
+                    family: family.to_string(),
+                });
+            }
+            starts.push(migration.from);
+        }
+        // Every version between the oldest and the newest has a step out of
+        // it: a file of that version has to be able to reach the newest one.
+        for version in oldest..newest {
+            if !starts.contains(&version) {
+                return Err(EcosystemError::MissingMigration { family: family.to_string(), version });
+            }
+        }
         Ok(())
     }
 
@@ -189,6 +284,8 @@ impl Ecosystem {
         check_layers(&self.kinds, &self.layers)?;
         check_layers(&self.tools, &self.layers)?;
         check_layers(&self.panels, &self.layers)?;
+        check_layers(&self.formats, &self.layers)?;
+        check_layers(&self.migrations, &self.layers)?;
         Ok(())
     }
 
@@ -217,7 +314,12 @@ impl Ecosystem {
 
     /// A session over this ecosystem.
     pub fn session(&self) -> Session {
-        Session::new(self.commands.clone(), self.kinds.clone())
+        Session::with_formats(
+            self.commands.clone(),
+            self.kinds.clone(),
+            self.formats.clone(),
+            self.migrations.clone(),
+        )
     }
 
     /// The views of this ecosystem.

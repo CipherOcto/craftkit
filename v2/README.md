@@ -57,12 +57,12 @@ contribution is the same shape:
 | | |
 |---|---|
 | **id** | unique, and well formed |
-| **capability** | what sort of thing it is — `command`, `node kind`, `tool`, `panel` |
+| **capability** | what sort of thing it is — `command`, `node kind`, `tool`, `panel`, `format` |
 | **layer** | which group of contributions it belongs to |
 
 ```rust
 pub trait Contribution: Clone + Send + Sync + 'static {
-    fn id(&self) -> &'static str;
+    fn id(&self) -> &str;
     fn capability(&self) -> &'static str;
     fn layer(&self) -> &'static str { "core" }
     fn malformed_id(id: &str) -> Option<String> { malformed_dotted_id(id) }
@@ -80,7 +80,7 @@ hand, that is seven copies of the same four things — a vector, a lookup, a
 duplicate check, a malformed-id check. Seven copies is seven places for the
 checks to drift, and the drift is invisible until two of them disagree.
 
-### The five seams
+### The seams
 
 | Seam | What it is | What the ecosystem checks |
 |---|---|---|
@@ -89,6 +89,13 @@ checks to drift, and the drift is invisible until two of them disagree.
 | **tool** | a gesture that runs a command | that the command exists |
 | **panel** | a window's worth of commands | that the commands exist |
 | **layer** | a group of contributions that depend on each other | that the graph is acyclic and complete |
+| **format** | one version of the file format | that the layer exists |
+| **migration** | one step from one version to the next | that it is a step, and that the chain has no hole |
+
+Seven seams, **one** registry, **one** check on each, **one** manifest, **one**
+projection. A tree that has seven kinds of extension has seven registries
+written by hand — seven copies of the same four things, and the drift is
+invisible until two of them disagree.
 
 The **node kind** is the seam that changes the shape of a tree. A node names
 a kind, and the kind knows how it is painted and what is inside it. The core
@@ -212,7 +219,7 @@ source and refuses to find the word `craftkit_plugin` in it.
 |---|---|---|
 | **the linked plugin** | a crate that is a dependency; its contributions are there from the first instruction | **built** |
 | **the run-time command** | a `CommandSpec` written by hand and registered while the program runs | **built** |
-| **the loaded plugin** | a `.so` loaded with `dlopen` while the program runs | **not built** |
+| **the loaded plugin** | a **separate program**, started while the program runs | **not built** |
 
 The third door is the one that needs the most thought, and v2 has not
 thought about it yet. A dynamically loaded plugin has to hand its commands
@@ -225,7 +232,61 @@ what the run-time door already does, one step further on.
 
 ---
 
-## 7. The raw door
+## 7. The file format: versions are contributions
+
+The old tree changes its format by adding **one file per change**, and the
+change has to be wired in **four places**: the file, the table of pending
+changes, the `mod` declaration, and the match that says which step applies.
+The ceremony is deliberate — it is what lets two people change the format at
+once without a merge conflict — and it exists because the format is
+**hand-written**.
+
+Here the format is contributions:
+
+- a **format** says what a document of that version looks like, and how to
+  read and write it;
+- a **migration** says how to move a document from one version to the next.
+
+So a change is one file and one derive, and the wiring is the list of
+contributions — which the link fills.
+
+```rust
+/// The step from the first version to the second.
+#[derive(Migration)]
+#[migration(id = "craftkit.1to2", family = "craftkit", from = 1, to = 2, layer = "core")]
+pub struct V1ToV2;
+
+impl V1ToV2 {
+    fn apply(value: &mut Json) -> Result<(), String> { … }
+}
+```
+
+The rule that matters:
+
+> **A file is read with the version it was written with, and then migrated
+> forward.**
+
+Never with the current version: a file written by an old program has to be
+readable by a new one, and the only way to know that is to carry the version
+and to have the steps that bridge it.
+
+The ecosystem checks the chain at start-up, and refuses:
+
+- a step that is not one version forward;
+- two steps out of the same version (the answer would be a matter of order);
+- a step past the newest format;
+- **a version with no step out of it** — a file of that version would have
+  nowhere to go.
+
+There are two versions of the format here, and they differ by one thing: the
+second writes a `muted` flag on every node and the first does not. The step
+adds the flag to a file that does not have it. A file written by the current
+program round-trips to the same document; a file written by an older one is
+migrated and read.
+
+---
+
+## 8. The raw door
 
 Every parameter in v2 is a **type**, and a type is checked. One is not: a
 value of any shape, for the contributions that cannot offer a type — a
@@ -238,22 +299,22 @@ hole.
 
 ---
 
-## 8. What is here, and what is not
+## 9. What is here, and what is not
 
 ### Built
 
 - `crates/craftkit-sdk` — the whole surface a plugin needs: the typed
-  readers, the one registry, the command, the five seams, the ecosystem, the
-  projection, the session and the document.
-- `crates/craftkit-derive` — five derives, with fifteen tests on the rules
-  they hold.
+  readers, the one registry, the command, the seams, the ecosystem, the
+  projection, the session, the document and the file format.
+- `crates/craftkit-derive` — seven derives, with tests on the rules they
+  hold.
 - `crates/craftkit-plugin-hello` — a plugin that adds commands.
 - `crates/craftkit-plugin-shapes` — a plugin that adds a **layer, a kind of
   node, a tool, a panel and a command**.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**57 tests.**
+**63 tests.**
 
 ### Not built
 
@@ -261,15 +322,13 @@ hole.
   geometry, no plan and no kernel. The old tree's `craftkit-eval` and
   `craftkit-kernel` are untouched, and the redesign says nothing about them
   yet.
-- **The file format.** The old tree's versioned `.craftkit` format, with its
-  one-file-per-change discipline, is untouched. A `#[derive(Format)]` and a
-  chain of `#[derive(Migration)]` would make the format's versions a fact
-  about the types rather than a number somebody remembers to bump — that is
-  the next seam, and it is the one the old tree's four-place ceremony points
-  at.
-- **The front ends.** No toolbar, no MCP server, no control channel. v2 has
-  one door — `Session::execute` — and the projection that every front end
-  would read.
+- **The old tree's format.** The old tree's versioned `.craftkit` format,
+  with its one-file-per-change discipline, is untouched. What v2 has is a
+  format that is a **contribution**, with migrations that are contributions,
+  and a version chain the ecosystem checks.
+- **The old tree's front ends.** No toolbar, no MCP server, no control
+  channel. v2 has one door — `Session::execute` — and the projection that
+  every front end would read.
 - **The loaded plugin** (the third door above).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
@@ -279,7 +338,7 @@ around it.
 
 ---
 
-## 9. What the redesign would do to the rest of the tree
+## 10. What the redesign would do to the rest of the tree
 
 The rules of §2 reach further than the command registry, and this is the
 part that is a plan rather than a build.
@@ -315,37 +374,40 @@ the sentence the whole of phase one was about.
 
 ---
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 cd v2
-cargo test          # 57 tests
+cargo test          # 63 tests
 cargo run -p craftkit-studio
 ```
 
-The application prints the ecosystem (the layers, kinds, tools and panels),
-the manifest an agent would be told, the menu by capability, then runs a
-command from a plugin, adds a **kind of node** from another plugin, draws the
-document **through the kinds**, hit-tests it **through the kinds**, and
-finally makes a command at run time and runs that too.
+The application prints the ecosystem (the layers, kinds, tools, panels,
+formats), the manifest an agent would be told, the menu by
+capability, then runs a command from a plugin, adds a **kind of node** from
+another plugin, draws the document **through the kinds**, hit-tests it
+**through the kinds**, prints the **plan**, and finally makes a command at
+run time and runs that too.
 
-## 11. Honest notes
+## 12. Honest notes
 
 - **The linker is part of the design.** The build script's generated
   reference is what keeps a plugin in the binary. Without it, the plugin's
   contributions are missing and nothing says so.
 - **A run-time command is written out by hand.** A command made while the
   program runs has no struct to derive from, so it reads its own parameter.
-  That is the price of the third door.
+  That is the price of the run-time door.
 - **The `Either` is a compromise.** One parameter with two spellings of
   different kinds cannot be a single typed value, so the command is handed
   whichever half arrived and decides what to do with it. The old tree had
   the same pair and the same awkwardness; here at least the *declaration*
   and the *reading* are written once.
-- **The document model is small and local.** The node names a kind and
-  carries a rectangle. A tree that wants a real document needs a real
-  document, and that is design work, not a seam.
 - **The derive's grammar is in one place** — the macro — and the gates do
   not read the source at all, so there is no second reader to keep in step.
   This is the problem phase one had, and it is *gone* in v2: the compiler is
   the only reader.
+- **The document model is still small.** Two versions of the format differ
+  by one flag, because the document has one kind of node and a rectangle.
+  The *seam* is the thing being demonstrated: a version is a contribution,
+  a step is a contribution, and the chain is checked. A document worth
+  versioning is a different piece of work.

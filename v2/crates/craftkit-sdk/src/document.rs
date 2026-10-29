@@ -13,7 +13,9 @@
 //! plugin can add a kind of thing to a document that was written before the
 //! plugin existed.
 
+use crate::Format;
 use crate::contribution::Contribution;
+use crate::format::FormatValue;
 
 /// A point.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -101,6 +103,63 @@ impl Canvas for RecordingCanvas {
     }
 }
 
+impl FormatValue for Rect {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({ "x": self.x, "y": self.y, "w": self.w, "h": self.h })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let number = |name: &str| {
+            value
+                .get(name)
+                .and_then(|value| value.as_f64())
+                .ok_or_else(|| format!("a rectangle has no `{name}`"))
+        };
+        Ok(Rect::new(number("x")?, number("y")?, number("w")?, number("h")?))
+    }
+}
+
+impl FormatValue for Node {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "name": self.name,
+            "kind": self.kind,
+            "rect": self.rect.to_json(),
+            "muted": self.muted,
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let id = value.get("id").and_then(|id| id.as_u64()).ok_or_else(|| "a node has no id".to_string())?;
+        let name = value
+            .get("name")
+            .and_then(|name| name.as_str())
+            .ok_or_else(|| "a node has no name".to_string())?
+            .to_string();
+        let kind = value
+            .get("kind")
+            .and_then(|kind| kind.as_str())
+            .ok_or_else(|| "a node has no kind".to_string())?
+            .to_string();
+        let rect = value.get("rect").ok_or_else(|| "a node has no rectangle".to_string())?;
+        let muted = value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false);
+        Ok(Node { id, name, kind, rect: Rect::from_json(rect)?, muted })
+    }
+}
+
+impl Node {
+    /// The node as it is written.
+    pub fn to_json(&self) -> serde_json::Value {
+        <Self as FormatValue>::to_json(self)
+    }
+
+    /// The node as it is read.
+    pub fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        <Self as FormatValue>::from_json(value)
+    }
+}
+
 /// A node in the document.
 ///
 /// The node names a **kind**. What that kind means — how it is drawn, what
@@ -120,7 +179,10 @@ pub struct Node {
 }
 
 /// The document.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// The **compiler writes its format**: the two functions a file needs come
+/// from the fields, so a field that is added is a field that is written.
+#[derive(Debug, Clone, PartialEq, Format)]
 pub struct Document {
     /// The document's name.
     pub name: String,

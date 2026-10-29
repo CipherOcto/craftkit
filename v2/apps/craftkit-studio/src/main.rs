@@ -7,13 +7,20 @@ use craftkit_sdk::{RecordingCanvas, Session};
 use craftkit_studio::ecosystem;
 
 fn main() {
-    let ecosystem = ecosystem();
+    let ecosystem = match ecosystem() {
+        Ok(ecosystem) => ecosystem,
+        Err(error) => {
+            eprintln!("the ecosystem could not be built: {error}");
+            std::process::exit(1);
+        }
+    };
 
     println!("── the ecosystem");
     println!("   layers:  {}", ecosystem.layers.ids().join(", "));
     println!("   kinds:  {}", ecosystem.kinds.ids().join(", "));
     println!("   tools:  {}", ecosystem.tools.ids().join(", "));
     println!("   panels: {}", ecosystem.panels.ids().join(", "));
+    println!("   formats: {}", ecosystem.formats.ids().join(", "));
 
     println!("\n── the manifest (what an agent is told)");
     for line in ecosystem.projection().manifest() {
@@ -42,7 +49,9 @@ fn main() {
     println!("\n── drawing the document, through the kinds");
     let mut canvas = RecordingCanvas::default();
     for node in session.document().nodes() {
-        let kind = session.kinds().get(&node.kind).expect("the kind is linked in");
+        // A node whose kind is not linked in is **not drawn**: the core
+        // does not know which kinds those are, and it asks the registry.
+        let Some(kind) = session.kinds().get(&node.kind) else { continue };
         (kind.paint)(node, &mut canvas);
     }
     for drawn in &canvas.drawn {
