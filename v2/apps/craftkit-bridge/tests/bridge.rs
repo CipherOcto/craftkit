@@ -91,7 +91,15 @@ fn the_resources_are_the_rest_of_the_registry() {
     assert!(kinds.iter().any(|kind| kind["kind"] == "geometry.rect"), "{answer}");
     assert_eq!(
         answer["result"]["formats"],
-        json!(["craftkit/1", "craftkit/2", "craftkit/3", "craftkit/4", "craftkit/5", "craftkit/6"])
+        json!([
+            "craftkit/1",
+            "craftkit/2",
+            "craftkit/3",
+            "craftkit/4",
+            "craftkit/5",
+            "craftkit/6",
+            "craftkit/7"
+        ])
     );
     assert!(answer["result"]["evaluators"].as_array().expect("there are evaluators").len() >= 2);
 }

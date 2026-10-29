@@ -79,6 +79,7 @@ pub mod realtime;
 pub mod seams;
 pub mod select;
 pub mod session;
+pub mod stream;
 
 pub use anchor::{Anchored, PluginAnchor};
 pub use bundle::{Bundle, File};

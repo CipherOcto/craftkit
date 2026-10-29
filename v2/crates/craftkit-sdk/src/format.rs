@@ -322,6 +322,23 @@ pub fn malformed_tag_id(id: &str) -> Option<String> {
     None
 }
 
+/// Take the **stream** off every node in a value.
+///
+/// A version that does not know about streams must not write them: the
+/// stream is the seventh version's field, and a file of the sixth version
+/// that has one is a file of the sixth version with something in it that
+/// the sixth version does not know.
+fn without_streams(value: &mut Json) {
+    let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+        return;
+    };
+    for node in nodes.iter_mut() {
+        if let Some(object) = node.as_object_mut() {
+            object.remove("stream");
+        }
+    }
+}
+
 /// Write a document in the first version: no `muted` flag on a node.
 ///
 /// A node was either there or not, and there was nothing to say about it.
@@ -335,6 +352,7 @@ pub fn write_v1(document: &Document) -> Json {
             }
         }
     }
+    without_streams(&mut value);
     let mut written = serde_json::json!({
         "format": "craftkit/1",
         "version": 1,
@@ -361,6 +379,7 @@ pub fn write_v2(document: &Document) -> Json {
             }
         }
     }
+    without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -377,6 +396,7 @@ pub fn write_v3(document: &Document) -> Json {
         "name": document.name,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
+    without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -392,6 +412,7 @@ pub fn write_v4(document: &Document) -> Json {
         "data": document.data,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
+    without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -410,6 +431,7 @@ pub fn write_v5(document: &Document) -> Json {
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
     });
+    without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -424,6 +446,30 @@ pub fn write_v6(document: &Document) -> Json {
     let mut value = serde_json::json!({
         "format": "craftkit/6",
         "version": 6,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+        "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
+    });
+    without_streams(&mut value);
+    merge_unknown(&mut value, &document.unknown);
+    value
+}
+
+/// The seventh version of the document format.
+///
+/// A node may have a **stream**: bytes that belong to the node and are
+/// not JSON. The bytes travel beside the document, in a bundle, and the
+/// node says which file is its stream.
+///
+/// This is the second payload field, and it is cheaper than it was
+/// expected to be: the bundle already carried files, so the cost is one
+/// field and one version, and **no base64 in the file at all**.
+pub fn write_v7(document: &Document) -> Json {
+    let mut value = serde_json::json!({
+        "format": "craftkit/7",
+        "version": 7,
         "name": document.name,
         "data": document.data,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
@@ -600,6 +646,39 @@ impl V5ToV6 {
     fn apply(value: &mut Json) -> Result<(), String> {
         if let Some(object) = value.as_object_mut() {
             object.entry("assets").or_insert(Json::Array(Vec::new()));
+        }
+        Ok(())
+    }
+}
+
+/// The seventh version of the document format.
+///
+/// It adds the **stream** of a node: the file its bytes are in.
+pub static FORMAT_V7: FormatSpec =
+    FormatSpec { tag: "craftkit/7", version: 7, layer: "core", read: Document::from_json, write: write_v7 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V7 }
+}
+
+/// The step from the sixth version to the seventh.
+///
+/// It gives every node the stream the seventh version writes. A file of
+/// the sixth version has no stream on any node, and none is what it gets.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.6to7", family = "craftkit", from = 6, to = 7, layer = "core")]
+pub struct V6ToV7;
+
+impl V6ToV7 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+            return Ok(());
+        };
+        for node in nodes.iter_mut() {
+            if let Some(object) = node.as_object_mut() {
+                object.entry("stream").or_insert(Json::Null);
+            }
         }
         Ok(())
     }

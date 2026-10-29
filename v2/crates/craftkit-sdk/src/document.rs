@@ -445,6 +445,7 @@ impl FormatValue for Node {
             "muted": self.muted,
             "data": self.data,
             "children": self.children.iter().map(|child| child.to_json()).collect::<Vec<_>>(),
+            "stream": self.stream,
         });
         // The fields this program does not understand are written back.
         crate::format::merge_unknown(&mut value, &self.unknown);
@@ -481,9 +482,14 @@ impl FormatValue for Node {
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
-        let unknown =
-            crate::format::keep_unknown(value, &["id", "name", "kind", "rect", "muted", "data", "children"]);
-        Ok(Node { id, name, kind, rect, muted, data, children, unknown })
+        let unknown = crate::format::keep_unknown(
+            value,
+            &["id", "name", "kind", "rect", "muted", "data", "children", "stream"],
+        );
+        // A node may have a **stream**: the file its bytes are in. A node
+        // that does not have one says so.
+        let stream = value.get("stream").and_then(|stream| stream.as_str()).map(|path| path.to_string());
+        Ok(Node { id, name, kind, rect, muted, data, children, unknown, stream })
     }
 }
 
@@ -558,6 +564,23 @@ pub struct Node {
     /// would have that field dropped, and the node would come back
     /// smaller. So the fields are **kept**, and written back as they were.
     pub unknown: serde_json::Value,
+    /// Where this node's **stream** is, if it has one.
+    ///
+    /// A node has a **dictionary** — its payload — and it may also have a
+    /// **stream**: bytes that belong to the node and are not JSON. That
+    /// is the shape of a PDF object, and of a great many other formats
+    /// that grew out of PostScript.
+    ///
+    /// The bytes are **not** in the document: JSON cannot hold them
+    /// without making them a third bigger, and a document that carries
+    /// fifty megabytes of streams would carry sixty-seven megabytes of
+    /// text. They travel beside the document, in the **bundle**, and this
+    /// field says which file is this node's stream.
+    ///
+    /// Before this there was nowhere to say it: the only answer was to
+    /// put the bytes in the payload as text, or to leave them out and
+    /// lose them.
+    pub stream: Option<String>,
 }
 
 /// A **relation** between two nodes.
@@ -747,6 +770,7 @@ impl Document {
             data,
             children: Vec::new(),
             unknown: serde_json::Value::Null,
+            stream: None,
         };
         match parent.and_then(|parent| self.node_mut(parent)) {
             Some(parent) => parent.children.push(node),
@@ -819,6 +843,7 @@ impl Document {
             data,
             children: Vec::new(),
             unknown: serde_json::Value::Null,
+            stream: None,
         });
         id
     }
@@ -892,6 +917,24 @@ impl Document {
             .filter(|asset| !available.contains(&asset.path))
             .map(|asset| asset.path.clone())
             .collect()
+    }
+
+    /// The files the nodes' streams need that are not among the ones
+    /// that are there.
+    ///
+    /// A node's stream is a file, and a document that names a file it has
+    /// not got is a document that is not finished. This is the same
+    /// question the assets answer, asked about the streams.
+    pub fn missing_streams(&self, available: &[String]) -> Vec<String> {
+        let mut missing: Vec<String> = Vec::new();
+        for node in self.walk() {
+            let Some(path) = node.stream.clone() else { continue };
+            if available.contains(&path) || missing.contains(&path) {
+                continue;
+            }
+            missing.push(path);
+        }
+        missing
     }
 
     /// The relations to a node, of a kind if one is named.

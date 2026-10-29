@@ -51,7 +51,7 @@ fn what_was_kept_is_written_back() {
     let written = craftkit_sdk::format::write_document(&document, &newest(&ecosystem));
     assert_eq!(written["views"], json!(["one", "two"]), "the views were written back");
     // And the file is still a file of this program's version.
-    assert_eq!(written["format"], "craftkit/6");
+    assert_eq!(written["format"], "craftkit/7", "the newest version writes it");
 }
 
 /// A field of a **node** the reader does not understand is kept too.

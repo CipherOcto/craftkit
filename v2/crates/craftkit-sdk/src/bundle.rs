@@ -89,8 +89,18 @@ impl Bundle {
     }
 
     /// The files the document needs that are not in the bundle.
+    ///
+    /// The assets and the nodes' streams: both are files the document
+    /// names, and both have to be there for the document to be finished.
     pub fn missing(&self) -> Vec<String> {
-        self.document.missing_assets(&self.paths())
+        let paths = self.paths();
+        let mut missing = self.document.missing_assets(&paths);
+        for path in self.document.missing_streams(&paths) {
+            if !missing.contains(&path) {
+                missing.push(path);
+            }
+        }
+        missing
     }
 }
 
