@@ -53,7 +53,9 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let out = std::env::var("OUT_DIR").unwrap_or_default();
-    if let Err(error) = craftkit_link::generate(&manifest, std::path::Path::new(&out)) {
+    // The features that are on decide which optional plugins are wired in.
+    let features = craftkit_link::enabled_features();
+    if let Err(error) = craftkit_link::generate(&manifest, std::path::Path::new(&out), &features) {
         panic!("{error}");
     }
 }
