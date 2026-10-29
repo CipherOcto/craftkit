@@ -335,17 +335,30 @@ pub fn report(violations: &[Violation]) -> Result<(), String> {
     Err(message)
 }
 
-/// `cargo check` every library crate for `wasm32-unknown-unknown`.
+/// Every package the wasm gate compiles.
 ///
-/// The apps are exempt on purpose: the desktop app is native code and the CLI
-/// rasterises, and neither has any business in a browser. Everything the web
-/// build actually uses is below them.
-pub fn check_wasm(root: &Path) -> Result<(), String> {
-    let mut libraries: Vec<&str> =
+/// The library crates ✓, **and the browser app** ✓. §291: the gate's own
+/// message says the web app builds for the browser ✓, and the app was
+/// filtered out with the other apps ✓ — so the message was a claim about a
+/// crate nothing compiled ✓. The browser app is the one app that belongs
+/// here ✓: its whole job is to be a browser ✓.
+///
+/// The other apps are exempt on purpose ✓: the desktop app is a window ✓ and
+/// the CLI rasterises ✓, and neither has any business in a browser ✓.
+pub fn wasm_packages() -> Vec<&'static str> {
+    let mut packages: Vec<&'static str> =
         TABLE.iter().filter(|(_, class)| matches!(class, Class::Layer(_))).map(|(name, _)| *name).collect();
-    libraries.sort_unstable();
+    packages.push(wasm::WEB_PACKAGE);
+    packages.sort_unstable();
+    packages
+}
+
+/// `cargo check` every library crate — and the browser app — for
+/// `wasm32-unknown-unknown`.
+pub fn check_wasm(root: &Path) -> Result<(), String> {
+    let packages = wasm_packages();
     let mut args: Vec<&str> = vec!["check", "--target", wasm::TARGET, "--profile", "ci"];
-    args.extend(libraries.iter().flat_map(|name| ["-p", name]));
+    args.extend(packages.iter().flat_map(|name| ["-p", name]));
     cargo(&args, root)
 }
 

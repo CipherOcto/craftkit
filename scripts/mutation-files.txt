@@ -111,6 +111,7 @@ xtask/src/cleanroom.rs
 xtask/src/deny.rs
 xtask/src/doctor.rs
 xtask/src/fuzz.rs
+xtask/src/layers.rs
 xtask/src/lib.rs
 xtask/src/lists.rs
 xtask/src/temp.rs

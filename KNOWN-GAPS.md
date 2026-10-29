@@ -33652,6 +33652,7 @@ whose scope is not written down is a rule whose cost is not known ✓.
 | **A case that asks for a test the crate does not have is a bug in the script** | `a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported` in `xtask/src/anchors.rs` | 1 mutation — §290 |
 | **A build failure is not a catch, colour or not** | the self-test's "a coloured build failure is not a catch" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
 | **A gate that ran no test is not a missed gate** | the self-test's "a gate that ran no test is not a missed gate" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
+| **The wasm gate checks the browser app it says it checks** | `the_wasm_check_covers_every_layered_crate_plus_the_web_app` in `xtask/src/wasm.rs` | 1 mutation — §292 |
 
 
 ## 290. The instrument that measures the gates was itself broken, and it blamed the gates
@@ -33751,6 +33752,93 @@ colour ✓ — and the runner's colour is the one that counts ✓.
 | **A case that asks for a test the crate does not have is a bug in the script** | `a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported` in `xtask/src/anchors.rs` | 1 mutation — §290 |
 | **A build failure is not a catch, colour or not** | the self-test's "a coloured build failure is not a catch" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
 | **A gate that ran no test is not a missed gate** | the self-test's "a gate that ran no test is not a missed gate" half in `scripts/mutation-test-gates.sh` | 1 mutation — §290 |
+
+
+## 292. The wasm gate said it checked the browser app, and never did
+
+### The finding
+
+**The gate that keeps the tree buildable in a browser promised something it
+did not do.**
+
+```text
+xtask/src/wasm.rs: "`craftkit-web` is *checked*, because it is the one app
+whose whole job is to be a browser."
+xtask/src/wasm.rs: "ok: every library crate and craftkit-web build for
+wasm32-unknown-unknown"
+```
+
+**And the app was never in the check.** The list of packages comes from the
+layering table ✓, filtered to the crates that are **layers** ✓ — and
+`craftkit-web` is **exempt** ✓ (it is an app ✓), so it was filtered out with
+the other apps ✓. The command that ran was:
+
+```text
+cargo check --target wasm32-unknown-unknown --profile ci
+  -p craftkit-foundation -p craftkit-core -p craftkit-kernel -p craftkit-model
+  -p craftkit-eval -p craftkit-io -p craftkit-engine -p craftkit-control
+  -p craftkit-mcp -p craftkit-ui
+```
+
+**Eleven crates, and not the one the sentence names** ✓. A wasm-only break
+in the browser app would have passed every gate in `ci` ✓.
+
+**And the test that covered it covered something else.** The test named
+`the_wasm_check_covers_every_layered_crate_plus_the_web_app` ✓ asserted only
+that the web crate is **exempt** ✓ — which is true ✓ and says nothing about
+whether it is checked ✓. A test whose name says "covers the web app" and
+whose body never mentions the check is a name, not a test ✓.
+
+### Measured
+
+```text
+$ cargo xtask wasm
+   ok: every library crate and craftkit-web build for wasm32-unknown-unknown
+```
+
+and the command behind it, with `-p craftkit-web` **absent** ✓. The app does
+build ✓ (`cargo check -p craftkit-web --target wasm32-unknown-unknown` ✓), so
+nothing was broken — the defect is that the gate's **sentence** was false ✓
+and its **coverage** was smaller than it said ✓.
+
+### What landed
+
+- **The browser app is in the check** ✓ — `layers::wasm_packages` ✓ names it ✓,
+  and `check_wasm` ✓ compiles it ✓ — so the sentence the gate prints is now
+  true ✓.
+- **The message and the check have one source** ✓: the package list is a
+  function ✓ and the test asserts against that function ✓, so a future edit
+  that drops the app fails the test ✓ rather than the sentence ✓.
+- **The test says what it checks** ✓: the web app is in the list ✓, and
+  every layered crate is in the list ✓.
+
+### Why nothing else would have caught it
+
+- **The gate is green** ✓ and its message is a sentence a reader trusts ✓.
+  Nothing compared the message with the command ✓.
+- **The test's name was the promise** ✓, and the tree's own rule says a name
+  is not a run ✓ — here the name was not even a test of the thing it named ✓.
+
+### What is not claimed
+
+- **The bundle is still not built here** ✓: `wasm-bindgen-cli` on this machine
+  is 0.2.89 ✓ and the crate is 0.2.129 ✓, so the page's JavaScript does not
+  exist ✓ (§13 ✓).
+- **The check is a compile check** ✓, not a run ✓: the rule it enforces is
+  *"everything below the apps still builds for a browser"* ✓.
+
+### The lesson
+
+**A gate's sentence is part of the gate.** The tree has a rule for that ✓ —
+*"a promise about the tree is checked against the tree"* ✓ — and this gate
+broke it ✓: the sentence named a crate ✓ and the command did not ✓.
+
+**And a test's name is not its body.** `the_wasm_check_covers_..._plus_the_web_app`
+✓ asserted a fact about the **layering table** ✓ and said nothing about the
+**check** ✓ — so the one test that could have caught this ✓ looked like it
+did ✓.
+
+| **The wasm gate checks the browser app it says it checks** | `the_wasm_check_covers_every_layered_crate_plus_the_web_app` in `xtask/src/wasm.rs` | 1 mutation — §292 |
 
 
 ## What enforces what

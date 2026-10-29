@@ -60,6 +60,15 @@ pub const TARGET: &str = "wasm32-unknown-unknown";
 /// is what keeps the two from drifting apart again.
 pub const BUNDLE_NAME: &str = "craftkit_web";
 
+/// The package the browser app is built from.
+///
+/// **One name, because the gate and the bundle have to agree about it.** The
+/// gate checks that this package builds for the browser ✓ and the bundle is
+/// made from it ✓; a second spelling would let the two drift ✓ and the drift
+/// would be invisible ✓ — the gate would be checking one app and the page
+/// would be served another. §291.
+pub const WEB_PACKAGE: &str = "craftkit-web";
+
 /// Is the target installed on this machine?
 pub fn target_installed() -> bool {
     match crate::command("rustup", &["target", "list", "--installed"], Path::new(".")) {
@@ -230,14 +239,32 @@ mod tests {
         assert!(note.contains(reason), "the reason was dropped: {note}");
     }
 
+    /// §291: the gate **says** it checks the web app, and it did not.
+    ///
+    /// The web app is exempt from the layering rules ✓ — it is an app ✓ — and
+    /// it was filtered out of the wasm check with the apps ✓, so the message
+    /// the gate printed ✓ was a claim about a crate it never compiled ✓. The
+    /// two things are unrelated ✓, and the check has to name the app ✓.
     #[test]
     fn the_wasm_check_covers_every_layered_crate_plus_the_web_app() {
         let root = crate::root().expect("root");
         let crates = layers::load(&root).expect("metadata");
-        let web = crates.iter().find(|c| c.name == "craftkit-web").expect("craftkit-web is a member");
+        let web = crates.iter().find(|c| c.name == WEB_PACKAGE).expect("craftkit-web is a member");
         // It is exempt from the layering rules and still checked for wasm: the
         // two things are unrelated.
         assert_eq!(layers::classify(&web.name), Some(layers::Class::Exempt));
+
+        let checked = layers::wasm_packages();
+        assert!(
+            checked.contains(&WEB_PACKAGE),
+            "the gate says it checks {WEB_PACKAGE} and does not: {checked:?}"
+        );
+        // And every layered crate is in there too.
+        for (name, class) in layers::TABLE {
+            if matches!(class, layers::Class::Layer(_)) {
+                assert!(checked.contains(name), "{name} is a library crate and is not checked");
+            }
+        }
         let _ = root;
     }
 

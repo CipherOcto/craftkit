@@ -7470,5 +7470,15 @@ swap xtask/src/anchors.rs \
 expect_catch "anchors: a case that asks for a test the crate does not have is not reported" \
     "cargo test -p xtask --profile ci a_case_that_asks_for_a_test_the_crate_does_not_have_is_reported"
 
+# ------------------------------------------- §291: the wasm gate's own claim ----
+# The gate says the browser app builds for wasm, and it did not: the app was
+# filtered out with the other apps, so the message was a claim about a crate
+# nothing compiled.
+swap xtask/src/layers.rs \
+    '    packages.push(wasm::WEB_PACKAGE);' \
+    '    // the browser app is not checked'
+expect_catch "wasm: the browser app is not checked for wasm" \
+    "cargo test -p xtask --profile ci the_wasm_check_covers_every_layered_crate_plus_the_web_app"
+
 restore
 finish
