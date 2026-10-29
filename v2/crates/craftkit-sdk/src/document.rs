@@ -609,12 +609,33 @@ pub struct Relation {
     pub to: u64,
     /// What the relation is: `source`, `route`, `vca`, `loop`, …
     pub kind: String,
+    /// What the edge **says**.
+    ///
+    /// An edge is not always only an edge. A PDF's `/Resources 12 0 R`
+    /// says which **key** the reference is under and which **generation**
+    /// of the object it names; a symbol instance says the **transform** it
+    /// was placed with; a track's send says the **level** it sends at.
+    ///
+    /// None of that fits in the kind — the kind is the *name* of the edge,
+    /// and two edges of the same kind can say different things. So the
+    /// edge carries a **payload**, and the core does not read it.
+    ///
+    /// Before this there was nowhere to put it, and a plugin had to
+    /// squeeze it into the kind — `ref/Resources` — which made the kind
+    /// mean two things at once.
+    #[format(default)]
+    pub payload: serde_json::Value,
 }
 
 impl Relation {
     /// A relation from one node to another.
     pub fn new(from: u64, to: u64, kind: impl Into<String>) -> Self {
-        Relation { from, to, kind: kind.into() }
+        Relation { from, to, kind: kind.into(), payload: serde_json::Value::Null }
+    }
+
+    /// A relation that says something.
+    pub fn with_payload(from: u64, to: u64, kind: impl Into<String>, payload: serde_json::Value) -> Self {
+        Relation { from, to, kind: kind.into(), payload }
     }
 }
 

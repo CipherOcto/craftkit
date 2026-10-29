@@ -322,6 +322,23 @@ pub fn malformed_tag_id(id: &str) -> Option<String> {
     None
 }
 
+/// Take the **payload** off every relation in a value.
+///
+/// A version that does not know about the payload of a relation must not
+/// write it: the payload is the eighth version's field, and a file of the
+/// seventh version that has one is a file of the seventh version with
+/// something in it that the seventh version does not know.
+fn without_payloads(value: &mut Json) {
+    let Some(relations) = value.get_mut("relations").and_then(|relations| relations.as_array_mut()) else {
+        return;
+    };
+    for relation in relations.iter_mut() {
+        if let Some(object) = relation.as_object_mut() {
+            object.remove("payload");
+        }
+    }
+}
+
 /// Take the **stream** off every node in a value.
 ///
 /// A version that does not know about streams must not write them: the
@@ -432,6 +449,7 @@ pub fn write_v5(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
     });
     without_streams(&mut value);
+    without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -453,6 +471,7 @@ pub fn write_v6(document: &Document) -> Json {
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
     without_streams(&mut value);
+    without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -678,6 +697,59 @@ impl V6ToV7 {
         for node in nodes.iter_mut() {
             if let Some(object) = node.as_object_mut() {
                 object.entry("stream").or_insert(Json::Null);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The eighth version of the document format.
+///
+/// A relation carries a **payload**: what the edge says, besides its
+/// kind. The port of a PDF application is what found the gap: a
+/// reference says which key it is under, and two edges of the same kind
+/// can say different things.
+pub fn write_v8(document: &Document) -> Json {
+    let mut value = serde_json::json!({
+        "format": "craftkit/8",
+        "version": 8,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+        "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
+    });
+    without_payloads(&mut value);
+    merge_unknown(&mut value, &document.unknown);
+    value
+}
+
+/// The eighth version of the document format.
+pub static FORMAT_V8: FormatSpec =
+    FormatSpec { tag: "craftkit/8", version: 8, layer: "core", read: Document::from_json, write: write_v8 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V8 }
+}
+
+/// The step from the seventh version to the eighth.
+///
+/// It gives every relation the payload the eighth version writes. A file
+/// of the seventh version has none, and none is what it gets.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.7to8", family = "craftkit", from = 7, to = 8, layer = "core")]
+pub struct V7ToV8;
+
+impl V7ToV8 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        let Some(relations) = value.get_mut("relations").and_then(|relations| relations.as_array_mut())
+        else {
+            return Ok(());
+        };
+        for relation in relations.iter_mut() {
+            if let Some(object) = relation.as_object_mut() {
+                object.entry("payload").or_insert(Json::Null);
             }
         }
         Ok(())

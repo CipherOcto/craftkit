@@ -29,6 +29,13 @@
 //! - the same edge with the same kind is the same relation, and it is not
 //!   made twice;
 //! - removing a relation does not remove the nodes it joined.
+//!
+//! # An edge can say something
+//!
+//! The kind is the **name** of the edge, and two edges of the same kind
+//! can say different things: a PDF's reference says which key it is
+//! under, a symbol instance says the transform it was placed with. So a
+//! relation carries a **payload** as well, and the core does not read it.
 
 use craftkit_derive::Command;
 
@@ -45,6 +52,8 @@ pub struct LinkAdd {
     pub to: NodeRef,
     /// What the link is: `source`, `route`, `vca`, `loop`, …
     pub kind: Text,
+    /// What the link says, if it says anything.
+    pub payload: Option<crate::serde_json::Value>,
 }
 
 impl LinkAdd {
@@ -66,7 +75,12 @@ impl LinkAdd {
             });
         }
         let kind = self.kind.0.clone();
-        let relation = Relation::new(from, to, kind.clone());
+        let payload = match &self.payload {
+            Some(payload) if payload.is_null() => crate::serde_json::Value::Null,
+            Some(payload) => payload.clone(),
+            None => crate::serde_json::Value::Null,
+        };
+        let relation = Relation::with_payload(from, to, kind.clone(), payload);
         if !session.document_mut().add_relation(relation) {
             return Err(EngineError::Failed {
                 id: "link.add".to_string(),
@@ -141,6 +155,7 @@ impl LinkList {
                     "from": relation.from,
                     "to": relation.to,
                     "kind": relation.kind,
+                    "payload": relation.payload,
                 })
             })
             .collect();

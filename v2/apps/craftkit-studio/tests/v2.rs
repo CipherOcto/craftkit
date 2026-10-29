@@ -1305,6 +1305,53 @@ fn the_links_survive_the_file() {
     assert_eq!(read.relations, document.relations, "the links survive the file");
 }
 
+/// A link can say something.
+///
+/// The kind is the **name** of the edge, and two edges of the same kind
+/// can say different things: a PDF's reference says which key it is
+/// under, a symbol instance says the transform it was placed with.
+#[test]
+fn a_link_can_say_something() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "to", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute(
+            "link.add",
+            &json!({
+                "from": 1,
+                "to": 2,
+                "kind": "symbol",
+                "payload": { "key": "Resources", "generation": 0 },
+            }),
+        )
+        .expect("the link is added");
+    let relation = &session.document().relations[0];
+    assert_eq!(relation.kind, "symbol");
+    assert_eq!(relation.payload["key"], json!("Resources"), "the edge says what it says");
+    // And it says so in the list.
+    let outcome = session.execute("link.list", &json!({})).expect("the links are read");
+    assert_eq!(outcome.data["links"][0]["payload"]["key"], json!("Resources"));
+}
+
+/// A link without a payload still works: the payload is optional.
+#[test]
+fn a_link_without_a_payload_still_works() {
+    let mut session = ecosystem().session();
+    session
+        .execute("node.add", &json!({ "name": "from", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session
+        .execute("node.add", &json!({ "name": "to", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    session.execute("link.add", &json!({ "from": 1, "to": 2, "kind": "symbol" })).expect("the link is added");
+    assert!(session.document().relations[0].payload.is_null(), "the edge says nothing");
+}
+
 /// A file of the fourth version has no links, and it is given none.
 #[test]
 fn a_fourth_version_file_is_migrated_to_the_fifth() {

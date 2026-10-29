@@ -98,7 +98,8 @@ fn the_resources_are_the_rest_of_the_registry() {
             "craftkit/4",
             "craftkit/5",
             "craftkit/6",
-            "craftkit/7"
+            "craftkit/7",
+            "craftkit/8"
         ])
     );
     assert!(answer["result"]["evaluators"].as_array().expect("there are evaluators").len() >= 2);
