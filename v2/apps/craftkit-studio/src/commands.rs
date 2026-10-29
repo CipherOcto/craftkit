@@ -107,6 +107,7 @@ impl NodeAdd {
     id = "node.mute",
     area = "node",
     icon = "mute",
+    menu("Node"),
     mutates,
     undoable,
     enabled = has_nodes

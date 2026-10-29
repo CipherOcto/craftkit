@@ -6,6 +6,18 @@ use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{RecordingCanvas, Session};
 use craftkit_studio::ecosystem;
 
+/// Print a part of the menu, and what is in it.
+fn print_menu(part: &craftkit_sdk::MenuNode, depth: usize) {
+    let indent = "   ".repeat(depth);
+    println!("{indent}{}", part.name);
+    for command in &part.commands {
+        println!("{indent}  {} — {}", command.id, command.label);
+    }
+    for child in &part.children {
+        print_menu(child, depth + 1);
+    }
+}
+
 fn main() {
     let ecosystem = match ecosystem() {
         Ok(ecosystem) => ecosystem,
@@ -76,6 +88,47 @@ fn main() {
     println!("\n── the plan: what the document means, as the kinds say it");
     for item in session.evaluate().items {
         println!("   {} {} {}", item.kind, item.node, item.value);
+    }
+
+    println!("\n── the menu, as a tree");
+    for part in ecosystem.projection().menu_tree(&["command", "effect"]) {
+        print_menu(&part, 1);
+    }
+
+    println!("\n── the session's own state");
+    // The tool in the hand, and a part of a node that is selected: both
+    // are the session's state and not the document's.
+    match session.execute("tool.hold", &json!({ "tool": "tool.rect" })) {
+        Ok(outcome) => println!("   {}", outcome.message),
+        Err(error) => println!("   refused: {error}"),
+    }
+    let rectangle = session.document().node_by_name("rectangle 5").map(|node| node.id);
+    if let Some(id) = rectangle {
+        match session.execute("select.span", &json!({ "node": id, "from": 1.0, "to": 4.0 })) {
+            Ok(outcome) => println!("   {}", outcome.message),
+            Err(error) => println!("   refused: {error}"),
+        }
+    }
+    // A second node, so that a relation has two ends.
+    let _ = session.execute("node.add", &json!({ "name": "second", "kind": "geometry.rect" }));
+    // A relation: a thing attached to another thing, and not in it.
+    match session.execute("link.add", &json!({ "from": 1, "to": 2, "kind": "symbol" })) {
+        Ok(outcome) => println!("   {}", outcome.message),
+        Err(error) => println!("   refused: {error}"),
+    }
+    // A file the document needs.
+    match session.execute("doc.asset.add", &json!({ "path": "fonts/text.ttf", "kind": "font" })) {
+        Ok(outcome) => println!("   {}", outcome.message),
+        Err(error) => println!("   refused: {error}"),
+    }
+    println!("   selected: {:?}", session.selection());
+    println!("   in the hand: {:?}", session.tool());
+    println!("   relations: {:?}", session.document().relations);
+    println!("   needs: {:?}", session.document().assets);
+
+    println!("\n── the journal: what the session was asked to do");
+    for entry in session.journal() {
+        println!("   {} {}", entry.id, entry.params);
     }
 
     println!("\n── a command made while the program runs");
