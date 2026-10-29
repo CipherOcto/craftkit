@@ -80,6 +80,8 @@ pub mod seams;
 pub mod select;
 pub mod session;
 pub mod stream;
+pub mod taskcmds;
+pub mod tasks;
 
 pub use anchor::{Anchored, PluginAnchor};
 pub use bundle::{Bundle, File};
@@ -103,6 +105,7 @@ pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use select::Selected;
 pub use session::Session;
+pub use tasks::{Task, TaskRegistry, TaskState};
 
 /// The link-time registry, re-exported so a plugin does not have to depend
 /// on `inventory` itself.

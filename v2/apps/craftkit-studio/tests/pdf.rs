@@ -5,6 +5,10 @@
 //! to other objects.
 
 use craftkit_sdk::Ecosystem;
+
+// The tests that use it are the ones for the battery, and the battery is
+// optional: the import is with them.
+#[cfg(feature = "pdf")]
 use craftkit_sdk::serde_json::json;
 
 /// The ecosystem the tests drive.

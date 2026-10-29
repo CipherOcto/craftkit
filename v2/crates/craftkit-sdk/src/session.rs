@@ -56,6 +56,7 @@ use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
 use crate::select::Selected;
+use crate::tasks::TaskRegistry;
 
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
@@ -72,6 +73,8 @@ pub struct Session {
     journal: Vec<JournalEntry>,
     /// The tool in the hand, if any.
     tool: Option<String>,
+    /// The tasks: work that may outlive the process.
+    tasks: TaskRegistry,
     depth: usize,
     /// How many states the history has been given.
     ///
@@ -98,6 +101,7 @@ impl Session {
             log: Vec::new(),
             journal: Vec::new(),
             tool: None,
+            tasks: TaskRegistry::new(),
             depth: 0,
             states_made: 0,
             running: None,
@@ -191,6 +195,22 @@ impl Session {
     /// The nodes that are selected, in the order they are in the document.
     pub fn selected_nodes(&self) -> Vec<&crate::document::Node> {
         self.document.walk().filter(|node| self.selected_ids().contains(&node.id)).collect()
+    }
+
+    /// The tasks: work that may outlive the process.
+    ///
+    /// They are the session's state, the way the selection and the tool
+    /// are: a task is something the program is doing, not something the
+    /// document holds. A host that wants them to travel with the document
+    /// writes them into the payload; the registry is JSON, and reading it
+    /// back is a command.
+    pub fn tasks(&self) -> &TaskRegistry {
+        &self.tasks
+    }
+
+    /// The tasks, to change.
+    pub fn tasks_mut(&mut self) -> &mut TaskRegistry {
+        &mut self.tasks
     }
 
     /// The tool in the hand, if any.
