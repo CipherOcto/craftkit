@@ -837,7 +837,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**262 tests.**
+**265 tests.**
 
 ### Not built
 
@@ -913,7 +913,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 262 tests
+cargo test          # 265 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1424,9 +1424,11 @@ fifth gives a document that names no files the none it has.
   global allocator, which is `unsafe` by definition. v2 has no
   `unsafe` at all, and that is worth more than the measurement until
   somebody decides otherwise.
-- **A bundle that the application writes.** The container is here; the
-  studio has no media to put in one, so the command that writes a
-  bundle is not written.
+- **A bundle that the application writes** — **this one is built now**
+  (§25.1): the studio writes one and reads one back. What is still not
+  there is a bundle that a *plugin* fills: the files come from the
+  document's assets and from the nodes' streams, and a plugin that keeps
+  its media in its payload has no way to say which files those are.
 - **The rest of the §20 list**: a selection of spans rather than of
   ids, the view state, and the three plugin formats.
 
@@ -1852,3 +1854,26 @@ later. If v2 grows a seam for that — a durable handle, a provider id, a
 completion that arrives from outside — the rest of artcraft's shape
 follows. Without it, artcraft is a consumer of v2's *front end* — the
 registry, the commands, the plan — and not a document that lives in one.
+
+### 25.1 The bundle the application writes
+
+A stream needs a **producer**: without one, the name of a file is a name
+and nothing else. The SDK could carry the bytes and the document could
+name them, but no command wrote a bundle.
+
+There are two commands now:
+
+| | |
+|---|---|
+| `doc.save.bundle` | the document and the files it needs — the assets **and** the nodes' streams — in one file. A file that is not there is refused **by name**. |
+| `doc.open.bundle` | reads one back, writes the files into the directory they are relative to, and puts the document in the session |
+
+Three tests: the bytes come back byte for byte, a missing file is refused
+by name, and the assets travel as well as the streams.
+
+What is still not there is a bundle that a **plugin** fills. The files
+come from the document's assets and from the nodes' streams, and a plugin
+that keeps its media in its own payload has no way to say which files
+those are. That is the next thing this seam asks for, and it is a
+question about how a plugin says "these are my files", not about the
+container.
