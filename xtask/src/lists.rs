@@ -2004,6 +2004,44 @@ pub fn the_bounds_are_named_in_the_prose(root: &Path) -> Result<Vec<String>, Str
     Ok(problems)
 }
 
+/// The application's data folder, and the one place it is built. §283.
+///
+/// The control channel's token file and the engine's crash reports each
+/// built the **same** folder themselves — the same three branches, the same
+/// name, the same code — in two crates that never met. So a fork that
+/// renamed the folder in one of them put the token in one place and the
+/// crash reports in another.
+///
+/// The gate looks for the platform's rule itself — `XDG_DATA_HOME` — in the
+/// tree's **production** code, and requires it to be written once. The one
+/// home is `crates/foundation/src/paths.rs`.
+pub fn the_applications_data_folder_is_built_in_one_place(root: &Path) -> Result<Vec<String>, String> {
+    let home = "crates/foundation/src/paths.rs";
+    let mut problems = Vec::new();
+    let mut homes = 0;
+    for path in rust_files(root) {
+        let Ok(text) = crate::tree::read_rust(&path, Subject::Production) else { continue };
+        if !text.contains("\"XDG_DATA_HOME\"") {
+            continue;
+        }
+        let name = crate::tree::relative_name(root, &path);
+        if name == home {
+            homes += 1;
+            continue;
+        }
+        problems.push(format!(
+            "{name}: the platform's data folder is built here, and its one home is `{home}`; \
+             the application's data lives in one place, and a second builder is a second place."
+        ));
+    }
+    if homes == 0 {
+        problems.push(format!(
+            "{home}: the platform's data folder is built nowhere; the one home has to build it."
+        ));
+    }
+    Ok(problems)
+}
+
 /// The MCP server's name, and the one place it is written. §282.
 ///
 /// The server publishes its name in what a client sees: the tool names, the
@@ -6075,6 +6113,11 @@ const RUST_READING_GATES: &[(&str, Subject, &str)] = &[
         "the name is a string the tree ships, and a name in a comment is not one",
     ),
     (
+        "the_applications_data_folder_is_built_in_one_place",
+        Subject::Production,
+        "the platform's rule is code the tree ships, and a copy of it in a comment is not a builder",
+    ),
+    (
         "a_reply_asks_the_tick",
         Subject::Production,
         "the reply sites are the code that runs, and a call in a comment builds no reply",
@@ -7859,6 +7902,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             .map(|p| format!("{p}\n     A budget that is a number of its own drifts from the budget.")),
     );
 
+    // The application's data folder, and the one place it is built. §283.
+    problems.extend(
+        the_applications_data_folder_is_built_in_one_place(root)?
+            .into_iter()
+            .map(|p| format!("{p}\n     The application's data lives in one place.")),
+    );
+
     // The MCP server's name, and the one place it is written. §282.
     problems.extend(
         the_servers_name_is_written_in_one_place(root)?.into_iter().map(|p| {
@@ -9322,6 +9372,48 @@ mod tests {
         // The gate looks for three budgets; this tree has none of them in
         // code, so what matters is that the fabricated one is among them.
         assert!(problems.iter().any(|p| p.contains("MAX_HISTORY_BYTES")), "{problems:#?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The application's data folder is built in one place.
+    ///
+    /// §283: the control channel's token file and the engine's crash
+    /// reports each built the same folder themselves, in two crates that
+    /// never met.
+    #[test]
+    fn the_applications_data_folder_is_built_in_one_home() {
+        let root = crate::root().expect("the workspace root");
+        let problems = the_applications_data_folder_is_built_in_one_place(&root).expect("runs");
+        assert!(problems.is_empty(), "the folder is built in one place: {problems:#?}");
+    }
+
+    /// A second builder of the data folder is caught.
+    ///
+    /// The fabricated tree builds the folder in the one home and once more
+    /// somewhere else.
+    #[test]
+    fn a_second_builder_of_the_applications_data_folder_is_caught() {
+        let dir = crate::temp::dir("data-folder-second-home").expect("a temporary folder");
+        let home = dir.join("crates/foundation/src");
+        let other = dir.join("crates/engine/src");
+        std::fs::create_dir_all(&home).expect("the fabricated tree");
+        std::fs::create_dir_all(&other).expect("the fabricated tree");
+        std::fs::write(
+            home.join("paths.rs"),
+            "pub fn data_dir() -> std::path::PathBuf {\n    let dir = std::env::var(\"XDG_DATA_HOME\").unwrap_or_default();\n    std::path::PathBuf::from(dir)\n}\n",
+        )
+        .expect("the fabricated source");
+        std::fs::write(
+            other.join("crash.rs"),
+            "pub fn base_dir() -> std::path::PathBuf {\n    let dir = std::env::var(\"XDG_DATA_HOME\").unwrap_or_default();\n    std::path::PathBuf::from(dir)\n}\n",
+        )
+        .expect("the fabricated source");
+
+        let problems = the_applications_data_folder_is_built_in_one_place(&dir).expect("runs");
+        assert!(
+            problems.iter().any(|p| p.contains("crash.rs")),
+            "a second builder is not reported: {problems:#?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

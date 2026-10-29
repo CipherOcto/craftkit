@@ -7299,5 +7299,18 @@ swap crates/mcp/src/tools.rs \
 expect_catch "mcp: the server's name is written in a second place" \
     "cargo xtask lists"
 
+# --------------------------------------- the data folder has one builder ----
+# Section 283. The control channel's token file and the engine's crash
+# reports each built the same folder themselves, so a fork that renamed one
+# of them put half the application's data in one place and half in another.
+swap crates/control/src/token.rs \
+    '    craftkit_foundation::paths::data_dir()' \
+    '    if let Ok(dir) = std::env::var("XDG_DATA_HOME") {
+        return PathBuf::from(dir).join("craftkit");
+    }
+    std::env::temp_dir().join("craftkit")'
+expect_catch "control: the data folder is built in a second place" \
+    "cargo xtask lists"
+
 restore
 finish

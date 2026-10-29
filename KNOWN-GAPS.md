@@ -32888,6 +32888,125 @@ way round is impossible ✓, and knowing that is what the fix is built on ✓.
 | **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
 
 
+## 283. The application's data folder was built twice, in two crates
+
+### The finding
+
+**The control channel's token file and the engine's crash reports each built
+the same folder themselves.**
+
+```rust
+// crates/control/src/token.rs — before
+fn base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("XDG_DATA_HOME") && !dir.trim().is_empty() {
+        return PathBuf::from(dir).join("craftkit");
+    }
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        return PathBuf::from(home).join(".local").join("share").join("craftkit");
+    }
+    std::env::temp_dir().join("craftkit")
+}
+```
+
+**The same function, with the same three branches and the same name, in
+`crates/engine/src/crash.rs`** ✓ — in a crate that never met the control
+channel ✓.
+
+**So the application's data lived in two places** ✓, in the sense that
+mattered: a fork that renamed the folder in one of them put the **token**
+in one place ✓ and the **crash reports** in another ✓ — and an operator
+looking for the application's data would find half of it ✓.
+
+### Measured
+
+Before — the platform's rule was written **twice** ✓:
+
+```text
+crates/control/src/token.rs    XDG_DATA_HOME → home/.local/share → temp
+crates/engine/src/crash.rs     XDG_DATA_HOME → home/.local/share → temp
+```
+
+After — it is written **once** ✓:
+
+```text
+crates/foundation/src/paths.rs  APP_NAME, data_dir(), test_dir_name()
+```
+
+And the tree's own gate asks where the rule is written ✓:
+
+```text
+cargo xtask lists
+   ok: ... the application's data folder is built in one place ...
+```
+
+**And the property is checked where it is used** ✓ — the token file is in
+the data folder ✓, and the crash reports are in the data folder ✓.
+
+### Why nothing else would have caught it
+
+- **Nothing was wrong.** Both copies produced the same folder ✓, on every
+  platform ✓, and every test passed ✓. The defect was that the rule was
+  written down twice ✓ — and the tree's rule that the app's data lives in
+  one place was a rule twice over ✓.
+- **The two crates have no reason to meet.** The control channel is layer
+  5 ✓ and the engine is layer 4 ✓, and the crash reporter has no business
+  knowing about tokens ✓ — but both need the *platform's* data folder ✓,
+  and that is the one thing they share ✓.
+- **The tree's one-home rules were about functions with one caller.** The
+  parameter reader ✓, the temporary folder ✓, the file writer ✓ — each has
+  one caller ✓. This one had **two** ✓, in two crates ✓, and neither called
+  the other ✓.
+
+### The fix
+
+**One builder, in the crate every crate can reach.**
+
+`craftkit_foundation::paths` holds the application's name ✓ and the folder ✓
+— `data_dir()` ✓ — and the control channel ✓ and the engine ✓ both call it ✓.
+
+The name is there too ✓, so the folder's **name** is written once ✓, and the
+foundation's own test folder is built from it ✓ — so the tree's leftovers
+are never confused with the application's data ✓.
+
+And the gate `the_applications_data_folder_is_built_in_one_place` looks for
+the platform's rule itself — `XDG_DATA_HOME` ✓ — in the tree's production
+code ✓, and reports every file that writes it but the one home ✓.
+
+### What is not claimed
+
+- **The desktop app's own folder is eframe's.** `apps/craftkit` uses
+  `internal_data_path()` ✓, which is eframe's idea of the place ✓ and
+  usually the same place ✓ — but it is eframe's rule ✓, not this one ✓,
+  and the tree does not pretend the two are the same ✓.
+- **The name is still a literal.** §4.5 of the survey wants names as
+  *configuration* ✓; this is one home ✓, not a runtime option ✓.
+- **The other names are untouched.** The format tag ✓, the file extension ✓,
+  the token environment variable ✓ and the stash key ✓ are still literals ✓
+  — each in its own crate ✓, and each is its own piece of work ✓.
+
+### The lesson
+
+**A rule written twice is a rule twice over.**
+
+The tree's data folder was one rule — *the application's data lives in the
+platform's data directory* ✓ — and it was written in two crates ✓, so
+"one place" was two places ✓. The general form: *a rule that two crates
+need has to have one home that both can reach*, and the reachability is a
+layering question ✓, not a convenience ✓.
+
+**And the home belongs to the crate everyone can reach.** The foundation is
+layer 0 ✓ and the control channel is layer 5 ✓ — so the foundation is the
+only place both can be given the rule ✓, and putting it there is not a
+shortcut ✓, it is the layering ✓.
+
+**And a copy of a function is invisible to every gate that checks
+behaviour.** Both copies did the same thing ✓, so every test passed ✓ —
+and the gate had to ask a question about the *text* ✓, not about the
+behaviour ✓.
+
+| **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
+
+
 ## What enforces what
 
 The point of this list is that a rule with nothing behind it is a wish. Every
@@ -33502,6 +33621,7 @@ caught a gate quietly stopping — or the honest word *nothing*.
 | **The undo stack lives with the trait it asks** | `cargo test -p craftkit-foundation --profile ci` — the foundation's own suite, which runs the stack's tests without the model | 1 mutation — §280 |
 | **The scaffolding section names every crate the domain touches** | `the_scaffolding_section_names_the_crates_the_domain_touches` in `xtask/src/lists.rs` | 1 mutation — §281 |
 | **The server's name is written in one place** | `the_servers_name_is_written_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §282 |
+| **The application's data folder is built in one place** | `the_applications_data_folder_is_built_in_one_place` in `xtask/src/lists.rs` | 1 mutation — §283 |
 | **The documented replies carry the fields the channel sends** | `the_documented_replies_carry_exactly_the_fields_the_channel_sends` in `crates/control/src/protocol.rs` | 1 mutation — §279 |
 | **A published instant is a value the command accepts** | `a_published_instant_is_a_value_the_command_accepts` in `crates/engine/src/commands.rs` | 1 mutation — §268 |
 | **A bezier written with its points is read back** | `a_bezier_written_with_its_points_is_read_back` in `crates/model/src/keyframe.rs` | 1 mutation — §267 |

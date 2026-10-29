@@ -40,7 +40,7 @@ pub fn dir(tag: &str) -> Result<PathBuf, CoreError> {
 /// every call gets a folder of its own and no call inherits one. §212.
 fn dir_numbered(tag: &str, n: u64) -> Result<PathBuf, CoreError> {
     let name = format!("{tag}-{}-{n}", std::process::id());
-    let dir = std::env::temp_dir().join("craftkit-tests").join(name);
+    let dir = std::env::temp_dir().join(crate::paths::test_dir_name()).join(name);
     if dir.exists() {
         std::fs::remove_dir_all(&dir)
             .map_err(|e| CoreError::BadPath(format!("could not clear {}: {e}", dir.display())))?;

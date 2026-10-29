@@ -198,18 +198,15 @@ pub struct CrashReport {
     pub at: i64,
 }
 
+/// The folder the crash reports live in.
+///
+/// The application's own data folder ✓ — **one home** ✓, shared with the
+/// control channel's token file ✓, so an operator finds them all in one
+/// place ✓. §283: this function was written here and written again in the
+/// control channel, and a fork that renamed one of them renamed half the
+/// application's data.
 fn base_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME")
-        && !dir.trim().is_empty()
-    {
-        return PathBuf::from(dir).join("craftkit");
-    }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home).join(".local").join("share").join("craftkit");
-    }
-    // A container with no home and no XDG: somewhere writable is better than
-    // giving up, and the caller is told the path in the log either way.
-    std::env::temp_dir().join("craftkit")
+    craftkit_foundation::paths::data_dir()
 }
 
 /// Build a report from the session as it stands.
@@ -2176,5 +2173,17 @@ mod tests {
             "reading a {text_bytes}-byte report peaked at {peak} bytes of memory; \
              the budget is {budget} bytes (the text and one document)"
         );
+    }
+
+    /// The crash reports live in the application's own data folder.
+    ///
+    /// §283: this crate built that folder itself and the control channel's
+    /// token file built it again, so a fork that renamed one of them put the
+    /// crash reports in one place and the token in another.
+    #[test]
+    fn the_crash_reports_live_in_the_applications_data_folder() {
+        let dir = report_dir();
+        let data = craftkit_foundation::paths::data_dir();
+        assert!(dir.starts_with(&data), "the reports are at {dir:?} and the data folder is {data:?}");
     }
 }

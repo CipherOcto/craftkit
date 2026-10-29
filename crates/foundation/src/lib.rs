@@ -57,6 +57,7 @@ pub mod atomic;
 pub mod history;
 pub mod measure;
 pub mod params;
+pub mod paths;
 pub mod readers;
 pub mod snapshot;
 pub mod temp;

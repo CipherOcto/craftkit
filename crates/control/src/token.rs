@@ -202,16 +202,14 @@ pub fn token_path_in(dir: &Path, port: u16) -> PathBuf {
     dir.join(format!("{port}.token"))
 }
 
+/// The folder the token file lives in.
+///
+/// The application's own data folder ✓ — **one home** ✓, shared with the
+/// engine's crash reports ✓, so an operator finds them all in one place ✓.
+/// §283: this function was written here and written again in the engine,
+/// and a fork that renamed one of them renamed half the application's data.
 fn base_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME")
-        && !dir.trim().is_empty()
-    {
-        return PathBuf::from(dir).join("craftkit");
-    }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home).join(".local").join("share").join("craftkit");
-    }
-    std::env::temp_dir().join("craftkit")
+    craftkit_foundation::paths::data_dir()
 }
 
 /// Write a token to `path`, readable only by its owner.
@@ -480,5 +478,18 @@ mod tests {
     fn reading_a_missing_file_names_it() {
         let path = PathBuf::from("/nonexistent/craftkit/9999.token");
         assert!(read_token(&path).unwrap_err().contains("9999.token"));
+    }
+
+    /// The token file lives in the application's own data folder.
+    ///
+    /// §283: this crate built that folder itself and the engine's crash
+    /// reporter built it again, so a fork that renamed one of them put the
+    /// token in one place and the crash reports in another.
+    #[test]
+    fn the_token_file_lives_in_the_applications_data_folder() {
+        let path = token_path(1234);
+        let data = craftkit_foundation::paths::data_dir();
+        assert!(path.starts_with(&data), "the token is at {path:?} and the data folder is {data:?}");
+        assert_eq!(path.parent().and_then(|p| p.file_name()), Some(std::ffi::OsStr::new("control")));
     }
 }
