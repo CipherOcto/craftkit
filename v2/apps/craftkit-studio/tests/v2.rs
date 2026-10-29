@@ -707,6 +707,39 @@ fn an_old_flat_file_is_migrated_into_the_tree() {
     assert!(document.nodes[0].children.is_empty(), "the step gives the node its group");
 }
 
+/// The session remembers what is selected.
+///
+/// The selection is the session's own state: what a person has picked out,
+/// or what an agent has named. Every front end has the same commands,
+/// because they are in the SDK.
+#[test]
+fn the_session_remembers_what_is_selected() {
+    let mut session = ecosystem().session();
+    session
+        .execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 1, "height": 1 }))
+        .expect("the rectangle is added");
+    session
+        .execute("geometry.rectangle", &json!({ "x": 2, "y": 0, "width": 1, "height": 1 }))
+        .expect("the second rectangle is added");
+
+    session.execute("select.all", &json!({})).expect("everything is selected");
+    assert_eq!(session.selection().len(), 2, "both nodes are selected");
+
+    session.execute("select.none", &json!({})).expect("nothing is selected");
+    assert!(session.selection().is_empty());
+
+    session.execute("select.node", &json!({ "node": 1 })).expect("the node is selected");
+    assert_eq!(session.selection(), &[1]);
+}
+
+/// Selecting a node that is not there is refused.
+#[test]
+fn selecting_a_node_that_is_not_there_is_refused() {
+    let mut session = ecosystem().session();
+    let error = session.execute("select.node", &json!({ "node": 99 })).expect_err("the node is not there");
+    assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+}
+
 /// A file from a program that is newer than this one is refused.
 #[test]
 fn a_file_from_the_future_is_refused() {

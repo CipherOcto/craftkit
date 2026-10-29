@@ -284,7 +284,7 @@ impl TotalAreaEvaluator {
     fn evaluate(document: &Document) -> Plan {
         let mut plan = Plan::new();
         let mut total = 0.0;
-        for node in document.nodes() {
+        for node in document.walk() {
             if node.kind != "vector.path" {
                 continue;
             }
@@ -308,14 +308,19 @@ impl TotalAreaEvaluator {
 #[command(id = "vector.path.unite", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
 pub struct UnitePaths {
     /// The first path.
-    pub first: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub first: Option<NodeRef>,
     /// The second path.
-    pub second: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub second: Option<NodeRef>,
 }
 
 impl UnitePaths {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        combine(session, "vector.path.unite", self.first.0, self.second.0, geom::BoolOp::Union)
+        let (first, second) = two_of(session, self.first, self.second)?;
+        combine(session, "vector.path.unite", first, second, geom::BoolOp::Union)
     }
 }
 
@@ -327,14 +332,19 @@ impl UnitePaths {
 #[command(id = "vector.path.subtract", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
 pub struct SubtractPaths {
     /// The path to take from.
-    pub first: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub first: Option<NodeRef>,
     /// The path to take away.
-    pub second: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub second: Option<NodeRef>,
 }
 
 impl SubtractPaths {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        combine(session, "vector.path.subtract", self.first.0, self.second.0, geom::BoolOp::Difference)
+        let (first, second) = two_of(session, self.first, self.second)?;
+        combine(session, "vector.path.subtract", first, second, geom::BoolOp::Difference)
     }
 }
 
@@ -345,14 +355,19 @@ impl SubtractPaths {
 #[command(id = "vector.path.intersect", area = "vector", layer = "vector", icon = "path", mutates, undoable)]
 pub struct IntersectPaths {
     /// The first path.
-    pub first: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub first: Option<NodeRef>,
     /// The second path.
-    pub second: NodeRef,
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub second: Option<NodeRef>,
 }
 
 impl IntersectPaths {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        combine(session, "vector.path.intersect", self.first.0, self.second.0, geom::BoolOp::Intersect)
+        let (first, second) = two_of(session, self.first, self.second)?;
+        combine(session, "vector.path.intersect", first, second, geom::BoolOp::Intersect)
     }
 }
 
@@ -440,6 +455,42 @@ fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(),
     Ok(())
 }
 
+/// The two paths a command works on.
+///
+/// The ones it was **given**, or the ones that are **selected** — and the
+/// selection is the session's own state, so a person who picked two
+/// shapes and an agent that names two ids are saying the same thing.
+fn two_of(
+    session: &Session,
+    first: Option<NodeRef>,
+    second: Option<NodeRef>,
+) -> Result<(u64, u64), EngineError> {
+    let selected: Vec<u64> = session.selection().to_vec();
+    let need = |what: &str| {
+        Err(EngineError::Failed {
+            id: "vector.path".to_string(),
+            message: format!("there is nothing {what}: name two paths or select two"),
+        })
+    };
+    match (first, second) {
+        (Some(first), Some(second)) => Ok((first.0, second.0)),
+        (Some(first), None) => match selected.first() {
+            Some(second) => Ok((first.0, *second)),
+            None => need("selected"),
+        },
+        (None, Some(second)) => match selected.first() {
+            Some(first) => Ok((*first, second.0)),
+            None => need("selected"),
+        },
+        (None, None) => {
+            if selected.len() < 2 {
+                return need("selected");
+            }
+            Ok((selected[0], selected[1]))
+        }
+    }
+}
+
 /// Combine two paths into the first one, and take the second away.
 fn combine(
     session: &mut Session,
@@ -461,7 +512,7 @@ fn combine(
     let mut result = one.clone();
     result.path = path;
     write_back(session, first, &result)?;
-    session.document_mut().nodes.retain(|node| node.id != second);
+    session.document_mut().remove_node(second);
     Ok(Outcome::changed("the paths are one now")
         .with_data(serde_json::json!({ "id": first, "removed": second })))
 }
@@ -760,6 +811,29 @@ mod tests {
         session
             .execute("vector.path.unite", &json!({ "first": 1, "second": 2 }))
             .expect("the paths are united");
+        assert_eq!(session.document().nodes.len(), 1, "the two paths are one now");
+        let node = &session.document().nodes[0];
+        let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");
+        let area = geom::area(&vector.path);
+        assert!((area - 150.0).abs() < 0.1, "the area is {area}, not 150");
+    }
+
+    /// The selection can be united.
+    ///
+    /// A person picks two shapes and says "make them one"; an agent names
+    /// two ids. The command takes either, and the **selection** is the
+    /// session's own state.
+    #[test]
+    fn the_selection_can_be_united() {
+        let mut session = session();
+        session
+            .execute("vector.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the first rectangle is added");
+        session
+            .execute("vector.rectangle", &json!({ "x": 5.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
+            .expect("the second rectangle is added");
+        session.execute("select.all", &json!({})).expect("everything is selected");
+        session.execute("vector.path.unite", &json!({})).expect("the selected paths are united");
         assert_eq!(session.document().nodes.len(), 1, "the two paths are one now");
         let node = &session.document().nodes[0];
         let vector = VectorNode::from_json(&node.data).expect("the payload is the plugin's own");

@@ -43,6 +43,8 @@ pub struct NodeAdd {
     pub name: Text,
     /// The kind of thing it is.
     pub kind: Text,
+    /// The node to put it in, if it goes in one.
+    pub parent: Option<NodeRef>,
 }
 
 impl NodeAdd {
@@ -55,7 +57,21 @@ impl NodeAdd {
             });
         }
         let name = self.name.0.clone();
-        let id = session.document_mut().add_node(name.clone(), kind.clone(), Rect::new(0.0, 0.0, 10.0, 10.0));
+        let parent = self.parent.map(|parent| parent.0);
+        if let Some(parent) = parent
+            && session.document().node(parent).is_none()
+        {
+            return Err(EngineError::Failed {
+                id: "node.add".to_string(),
+                message: format!("there is no node `{parent}`"),
+            });
+        }
+        let id = session.document_mut().add_node_under(
+            parent,
+            name.clone(),
+            kind.clone(),
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+        );
         Ok(Outcome::changed(format!("added a {kind} `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": kind })))
     }
@@ -164,13 +180,60 @@ pub fn runtime_echo() -> CommandSpec {
     }
 }
 
+/// Put the selected nodes in a group.
+///
+/// The **selection** is the session's state, and this is what a person
+/// does with it: pick two things, and put them in a box. The group is a
+/// node, and the nodes go into it.
+#[derive(Command)]
+#[command(id = "node.group", area = "node", icon = "group", mutates, undoable)]
+pub struct NodeGroup {}
+
+impl NodeGroup {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let selected = session.selection().to_vec();
+        if selected.len() < 2 {
+            return Err(EngineError::Failed {
+                id: "node.group".to_string(),
+                message: "select two nodes or more, and then group them".to_string(),
+            });
+        }
+        // The group's box is the box of what is in it.
+        let mut bounds: Option<Rect> = None;
+        for id in &selected {
+            let Some(node) = session.document().node(*id) else { continue };
+            bounds = Some(match bounds {
+                None => node.rect,
+                Some(bounds) => Rect::new(
+                    bounds.x.min(node.rect.x),
+                    bounds.y.min(node.rect.y),
+                    (bounds.w + bounds.x).max(node.rect.x + node.rect.w) - bounds.x,
+                    (bounds.h + bounds.y).max(node.rect.y + node.rect.h) - bounds.y,
+                ),
+            });
+        }
+        let rect = bounds.unwrap_or_default();
+        let group = session.document_mut().add_node("group", "core.group", rect);
+        let mut moved = 0;
+        for id in selected {
+            let Some(node) = session.document_mut().take_node(id) else { continue };
+            if let Some(parent) = session.document_mut().node_mut(group) {
+                parent.children.push(node);
+                moved += 1;
+            }
+        }
+        Ok(Outcome::changed(format!("grouped {moved} node(s)"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": group, "grouped": moved })))
+    }
+}
+
 /// The panel that shows the document's nodes.
 ///
 /// A panel is **data**: an id, a label and the commands it shows. The
 /// ecosystem checks that every command it names is there, so a panel cannot
 /// point at a command that does not exist.
 #[derive(Panel)]
-#[panel(id = "panel.nodes", label = "Nodes", layer = "core", commands("node.add", "node.mute"))]
+#[panel(id = "panel.nodes", label = "Nodes", layer = "core", commands("node.add", "node.mute", "node.group"))]
 pub struct NodesPanel;
 
 /// Save the document to a file.
