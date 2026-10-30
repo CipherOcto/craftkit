@@ -842,10 +842,14 @@ different commands with one id.
   of a video editor — bins, items, tracks and clips — ported into v2's
   seams, and the three things it found (§30). It is optional, like the
   other three.
+- `crates/craftkit-plugin-fx` — the **compositing battery**: the document
+  model of a compositing application — comps, layers, property trees and
+  the paths that address them — ported into v2's seams, and the three
+  things it found (§31). It is optional, like the other four.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**296 tests.**
+**303 tests.**
 
 ### Not built
 
@@ -921,7 +925,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 296 tests
+cargo test          # 303 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2149,3 +2153,74 @@ already taught the kit were enough. The cost is falling, and that is the
 finding of the fifth port: the kit is not a list of missing features any
 more, it is a set of seams that a new domain arrives at and finds
 already there.
+
+---
+
+## 31. The fifth battery: a compositing application
+
+Four ports, and each one has found the same kind of thing. This one is a
+**compositing application**, and its document is the strangest of the
+five.
+
+### What was ported
+
+A composition is a stack of **layers**, and every layer has a **tree of
+properties**: a group holds groups and properties, a property has a
+value, and the value may be **animated** over time or computed by an
+**expression**.
+
+What is ported is that model, and the **paths** that address into it:
+
+```text
+transform/position
+effects/#1/blurriness
+contents/rect#2/size
+```
+
+| the application | v2 |
+|---|---|
+| a composition | a **node** of the kind `fx.comp` |
+| a layer | a **node** of the kind `fx.layer`, in the comp |
+| a layer's property tree | the node's **payload** |
+| a property's value, its keyframes, its expression | the **payload** |
+| the path that addresses a property | the **plugin's own** |
+
+### The three things the port found
+
+- **A path is not a path of node ids.** The core addresses a node by its
+  id, and an application addresses a property by *name and order*: "the
+  third `effects` group, its `blurriness` property". That path survives
+  a rename and a reorder, which is why it is the way an application
+  addresses its own properties. And it is **the plugin's**: the core
+  does not know what a match id is, and a path type in the core would
+  have to know. So the path type is in the plugin, with the rest of it.
+- **A property tree is not a tree of nodes.** A layer has fifty
+  properties and a comp has thirty layers: a thousand nodes for one
+  picture, and the node graph would be unreadable. So the tree goes in
+  the **payload**, and the paths address into it. This is what the
+  payload is for, and the fifth port is the second one to say so.
+- **The value at a time is derived.** A property's value at frame
+  forty-eight is the interpolation of its keyframes, and it changes when
+  a keyframe moves. So the **evaluator** says it, and nobody writes it
+  down.
+
+### The table, with the fifth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids; a property tree is not a tree of nodes | nothing |
+
+Five ports, and **two of them cost nothing at all**. That is the
+finding of the fifth: the kit is not a list of missing features any more.
+It is a set of seams that a new domain arrives at and finds already
+there — the payload for what is data, the tree for what contains what,
+the relations for what is attached to what, the evaluator for what is
+derived, and the core's silence about what a domain calls its things.
+
+What the sixth port would have to do to cost nothing is the question
+that is left.
