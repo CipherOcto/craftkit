@@ -51,7 +51,7 @@
 //! at compile time. That is the price of the door, and it is stated here
 //! rather than discovered later.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::Value as Json;
@@ -292,6 +292,12 @@ struct ChildTransport {
     stdout: BufReader<ChildStdout>,
 }
 
+/// The most bytes a line of the plugin's wire may hold.
+///
+/// A command is a JSON object and an answer is a JSON object, and a
+/// megabyte is more than either needs.
+const MAX_LINE_BYTES: crate::lines::LineLimit = 1024 * 1024;
+
 impl Transport for ChildTransport {
     fn send(&mut self, line: &str) -> Result<(), PluginError> {
         writeln!(self.stdin, "{line}").map_err(PluginError::Io)?;
@@ -299,12 +305,9 @@ impl Transport for ChildTransport {
     }
 
     fn receive(&mut self) -> Result<Option<String>, PluginError> {
-        let mut line = String::new();
-        let read = self.stdout.read_line(&mut line).map_err(PluginError::Io)?;
-        if read == 0 {
-            return Ok(None);
-        }
-        Ok(Some(line.trim_end_matches(['\r', '\n']).to_string()))
+        // The line is read **within a limit**: a plugin that never ends
+        // its line must not be able to make the host allocate.
+        crate::lines::read_line_bounded(&mut self.stdout, MAX_LINE_BYTES).map_err(PluginError::Protocol)
     }
 }
 
@@ -597,10 +600,9 @@ pub fn serve(ecosystem: &crate::ecosystem::Ecosystem) -> Result<(), PluginError>
     out.flush().map_err(PluginError::Io)?;
 
     let stdin = std::io::stdin();
-    let mut lines = stdin.lock().lines();
-    loop {
-        let Some(line) = lines.next() else { return Ok(()) };
-        let line = line.map_err(PluginError::Io)?;
+    let lines = crate::lines::lines_bounded(stdin.lock(), MAX_LINE_BYTES);
+    for line in lines {
+        let line = line.map_err(PluginError::Protocol)?;
         if line.trim().is_empty() {
             continue;
         }
@@ -615,6 +617,7 @@ pub fn serve(ecosystem: &crate::ecosystem::Ecosystem) -> Result<(), PluginError>
         writeln!(out, "{answer}").map_err(PluginError::Io)?;
         out.flush().map_err(PluginError::Io)?;
     }
+    Ok(())
 }
 
 /// Answer one request.

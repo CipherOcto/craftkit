@@ -22,9 +22,16 @@
 )]
 #![forbid(unsafe_code)]
 
-use std::io::{BufRead, Write};
+use std::io::Write;
 
 use craftkit_mcp::Server;
+
+/// The most bytes a line of the protocol may hold.
+///
+/// A request is a JSON object and an answer is a JSON object, and a
+/// tool's arguments may carry a document — so this is bigger than the
+/// plugin's, and it is this program's number.
+const MAX_LINE_BYTES: craftkit_sdk::lines::LineLimit = 4 * 1024 * 1024;
 
 fn main() {
     let ecosystem = match craftkit_studio::ecosystem() {
@@ -40,7 +47,7 @@ fn main() {
 
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
+    for line in craftkit_sdk::lines::lines_bounded(stdin.lock(), MAX_LINE_BYTES) {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;

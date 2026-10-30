@@ -75,6 +75,7 @@ pub mod hand;
 pub mod history;
 pub mod jobs;
 pub mod journal;
+pub mod lines;
 pub mod link;
 pub mod params;
 pub mod plan;

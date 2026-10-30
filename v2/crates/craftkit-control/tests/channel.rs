@@ -170,3 +170,23 @@ fn the_server_can_be_stopped() {
     client.call(Method::Ping, json!({})).expect("the ping is answered");
     server.shutdown();
 }
+
+/// A line that is **longer than the protocol allows** is refused: the
+/// reader counts the bytes as it reads them, so a peer that never ends
+/// its line cannot make the server allocate without limit.
+#[test]
+fn a_line_that_is_too_long_is_refused() {
+    use std::io::{BufRead, Write};
+    let (_server, address) = a_server("secret");
+    let mut stream = std::net::TcpStream::connect(address).expect("the connection is made");
+    // The line is longer than the protocol's limit, and it never ends.
+    let mut line = vec![b'x'; craftkit_control::MAX_LINE + 1024];
+    line.push(b'\n');
+    stream.write_all(&line).expect("the bytes are written");
+    stream.flush().expect("the bytes are flushed");
+    let mut answer = String::new();
+    let read = std::io::BufReader::new(stream).read_line(&mut answer).expect("the answer is read");
+    // The server either refuses the line or closes the connection: what
+    // it does not do is read the whole line.
+    assert!(read == 0 || answer.contains("longer"), "the answer was: {answer:?}");
+}

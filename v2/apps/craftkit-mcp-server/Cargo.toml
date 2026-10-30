@@ -14,6 +14,10 @@ serde_json = { workspace = true }
 [dependencies]
 # The **server**: the registry, spoken to an agent.
 craftkit-mcp = { workspace = true }
+# The **SDK**: for the bounded line reader the protocol's lines are read
+# with. An application may depend on everything, and this one reads
+# lines from a peer.
+craftkit-sdk = { workspace = true }
 # The **application**: the studio's ecosystem and its session. Every
 # battery is linked in, so the tool list is the whole kit and not one
 # part of it.

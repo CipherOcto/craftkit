@@ -51,7 +51,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -62,6 +62,10 @@ use craftkit_sdk::Session;
 use craftkit_sdk::serde_json::{Map, Value as Json, json};
 
 /// The most a line may be.
+///
+/// The protocol had this number from the start, and the reader did not
+/// use it: a line was read until its newline, however long it was. The
+/// number is now the **reader's** bound.
 pub const MAX_LINE: usize = 1 << 20;
 
 /// What a client is asking for.
@@ -425,8 +429,8 @@ fn serve_connection(
     let mut writer = stream.try_clone()?;
     let reader = BufReader::new(stream);
     let mut authenticated = false;
-    for line in reader.lines() {
-        let line = line?;
+    for line in craftkit_sdk::lines::lines_bounded(reader, MAX_LINE) {
+        let line = line.map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
         let request = match Request::from_line(&line) {
             Ok(request) => request,
             Err(error) => {
@@ -648,8 +652,11 @@ impl Client {
         let mut writer = self.stream.try_clone()?;
         writeln!(writer, "{line}")?;
         writer.flush()?;
-        let mut answer = String::new();
-        self.reader.read_line(&mut answer)?;
+        let Some(answer) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_LINE)
+            .map_err(|message| ControlError::Protocol(ProtocolError::NotJson(message)))?
+        else {
+            return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
+        };
         if answer.trim().is_empty() {
             return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
         }
@@ -668,8 +675,11 @@ impl Client {
         let mut writer = self.stream.try_clone()?;
         writeln!(writer, "{}", request.to_line()?)?;
         writer.flush()?;
-        let mut line = String::new();
-        self.reader.read_line(&mut line)?;
+        let Some(line) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_LINE)
+            .map_err(|message| ControlError::Protocol(ProtocolError::NotJson(message)))?
+        else {
+            return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
+        };
         if line.trim().is_empty() {
             return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
         }

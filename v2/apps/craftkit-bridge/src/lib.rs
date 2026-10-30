@@ -70,7 +70,6 @@ include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Ecosystem, EngineError, MenuNode, Session};
-use std::io::BufRead;
 
 /// The name this server calls itself.
 pub const SERVER_NAME: &str = "craftkit-bridge";
@@ -275,11 +274,14 @@ fn engine_error_text(name: &str, error: &EngineError) -> String {
 ///
 /// One message per line, in and out. A line that is not a request is
 /// **ignored** rather than answered, because a stream may carry anything.
+/// The most bytes a line of the bridge may hold.
+const MAX_LINE_BYTES: craftkit_sdk::lines::LineLimit = 1024 * 1024;
+
 pub fn serve(mut bridge: Bridge) {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    for line in stdin.lock().lines() {
+    for line in craftkit_sdk::lines::lines_bounded(stdin.lock(), MAX_LINE_BYTES) {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
