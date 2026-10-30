@@ -325,6 +325,75 @@ pub struct ClapEventParamValue {
     pub value: f64,
 }
 
+/// How many beats a beat-time is in.
+///
+/// The format writes a position in beats as a **fixed-point** number:
+/// the position multiplied by this, so that a position keeps its
+/// fraction of a beat.
+pub const BEATTIME_FACTOR: i64 = 1 << 31;
+
+/// How many seconds a second-time is in.
+pub const SECTIME_FACTOR: i64 = 1 << 31;
+
+/// The transport says there is a tempo.
+pub const TRANSPORT_HAS_TEMPO: u32 = 1 << 0;
+
+/// The transport says where the music is, in beats.
+pub const TRANSPORT_HAS_BEATS_TIMELINE: u32 = 1 << 1;
+
+/// The transport says where the music is, in seconds.
+pub const TRANSPORT_HAS_SECONDS_TIMELINE: u32 = 1 << 2;
+
+/// The transport says what the time signature is.
+pub const TRANSPORT_HAS_TIME_SIGNATURE: u32 = 1 << 3;
+
+/// The transport says the music is playing.
+pub const TRANSPORT_IS_PLAYING: u32 = 1 << 4;
+
+/// The transport says the music is being recorded.
+pub const TRANSPORT_IS_RECORDING: u32 = 1 << 5;
+
+/// The transport says the loop is running.
+pub const TRANSPORT_IS_LOOP_ACTIVE: u32 = 1 << 6;
+
+/// A **transport** event: where the music is.
+///
+/// This is the event that puts a plugin **in time**: the position of
+/// the music in beats and in seconds, the tempo, the time signature,
+/// and whether it is playing.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapEventTransport {
+    /// The head every event has.
+    pub header: ClapEventHeader,
+    /// What the transport says: which of the fields below are there.
+    pub flags: u32,
+    /// Where the music is, in beats, as a fixed-point number.
+    pub song_pos_beats: i64,
+    /// Where the music is, in seconds, as a fixed-point number.
+    pub song_pos_seconds: i64,
+    /// The tempo, in beats a minute.
+    pub tempo: f64,
+    /// How much the tempo is changing, in beats a minute a second.
+    pub tempo_inc: f64,
+    /// Where the loop starts, in beats.
+    pub loop_start_beats: i64,
+    /// Where the loop ends, in beats.
+    pub loop_end_beats: i64,
+    /// Where the loop starts, in seconds.
+    pub loop_start_seconds: i64,
+    /// Where the loop ends, in seconds.
+    pub loop_end_seconds: i64,
+    /// Where the bar starts, in beats.
+    pub bar_start: i64,
+    /// Which bar it is.
+    pub bar_number: i32,
+    /// The top of the time signature.
+    pub tsig_num: u16,
+    /// The bottom of the time signature.
+    pub tsig_denom: u16,
+}
+
 /// The id of the **parameters** extension.
 pub const PARAMS_EXTENSION: &str = "clap.params";
 

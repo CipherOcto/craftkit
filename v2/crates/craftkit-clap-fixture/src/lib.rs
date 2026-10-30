@@ -189,8 +189,9 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapEventParamValue, ClapHost, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams,
-        ClapProcess, ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
+        ClapEventHeader, ClapEventParamValue, ClapEventTransport, ClapHost, ClapInputEvents,
+        ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams, ClapProcess,
+        ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
     };
 
     /// The entry point of this plugin, found by name.
@@ -230,6 +231,8 @@ mod exports {
         sample_rate: f64,
         /// The values of the parameters, by their ids.
         values: Vec<(u32, f64)>,
+        /// The tempo the host last told the plugin about.
+        tempo: f64,
     }
 
     /// The parameters the plugin holds: a gain and a tone.
@@ -391,6 +394,7 @@ mod exports {
             initialised: false,
             sample_rate: 0.0,
             values: Vec::new(),
+            tempo: 0.0,
         }));
         let plugin = Box::into_raw(Box::new(ClapPlugin {
             desc: super::descriptor(),
@@ -407,6 +411,79 @@ mod exports {
             on_main_thread: None,
         }));
         plugin as *const c_void
+    }
+
+    /// The tempo the host told the plugin about, if it told it.
+    ///
+    /// The events are the host's own, and every one of them begins
+    /// with a head that says how long it is and what it is — so the
+    /// list is read without knowing what is in it.
+    fn read_tempo(events: *const ClapInputEvents) -> Option<f64> {
+        if events.is_null() {
+            return None;
+        }
+        // SAFETY: the list is the host's own, and it lives for the
+        // length of the call.
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).size)) }?;
+        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).get)) }?;
+        for index in 0..count(events) {
+            // SAFETY: the list is the host's own, and the event at that
+            // index is the host's own event.
+            let event = get(events, index) as *const u8;
+            if event.is_null() {
+                continue;
+            }
+            // SAFETY: the event is the host's own, and it begins with
+            // the head every event has.
+            let kind = unsafe {
+                std::ptr::read_unaligned(event.add(std::mem::offset_of!(ClapEventHeader, type_)) as *const u32)
+            };
+            if kind != craftkit_clap_abi::EVENT_TRANSPORT {
+                continue;
+            }
+            // SAFETY: the event is a transport event, and the tempo is
+            // at its place.
+            return Some(unsafe {
+                std::ptr::read_unaligned(
+                    event.add(std::mem::offset_of!(ClapEventTransport, tempo)) as *const f64
+                )
+            });
+        }
+        None
+    }
+
+    /// The plugin tells the host that a parameter has moved.
+    ///
+    /// This is what a plugin does when something it cares about
+    /// changes: it **offers an event**, and the host reads it after
+    /// the block.
+    fn report_value(out_events: *const ClapOutputEvents, id: u32, value: f64) {
+        if out_events.is_null() {
+            return;
+        }
+        // SAFETY: the list is the host's own, and it lives for the
+        // length of the call.
+        let push = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*out_events).try_push)) };
+        let Some(push) = push else { return };
+        let event = ClapEventParamValue {
+            header: ClapEventHeader {
+                size: std::mem::size_of::<ClapEventParamValue>() as u32,
+                time: 0,
+                space_id: craftkit_clap_abi::CORE_EVENT_SPACE_ID,
+                type_: craftkit_clap_abi::EVENT_PARAM_VALUE,
+                flags: 0,
+            },
+            param_id: id,
+            cookie: std::ptr::null_mut(),
+            note_id: -1,
+            port_index: -1,
+            channel: -1,
+            key: -1,
+            value,
+        };
+        // SAFETY: the event is the plugin's own, and the host copies
+        // exactly as many bytes as its head says.
+        push(out_events, &event as *const ClapEventParamValue as *const c_void);
     }
 
     /// **Process** a block of audio.
@@ -448,6 +525,17 @@ mod exports {
                 }
             }
         }
+        // The transport, if the host gave one: the plugin takes the
+        // tempo and reports it, and the report is a parameter the host
+        // can read.
+        if let Some(tempo) = read_tempo(in_events) {
+            state.tempo = tempo;
+            set_value(state, 2, tempo);
+        }
+        // SAFETY: the block is the host's own, and it lives for the
+        // length of the call.
+        let out_events = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).out_events)) };
+        report_value(out_events, 2, state.tempo);
         // SAFETY: the block is the host's own, and it lives for the
         // length of the call.
         let frames = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).frames_count)) };

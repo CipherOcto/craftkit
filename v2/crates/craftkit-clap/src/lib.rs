@@ -73,8 +73,8 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use craftkit_clap_abi::{
-    ClapEventParamValue, ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory,
-    ClapProcessStatus, ClapVersion,
+    ClapEventHeader, ClapEventParamValue, ClapEventTransport, ClapHost, ClapPlugin as ClapPluginInstance,
+    ClapPluginEntry, ClapPluginFactory, ClapProcessStatus, ClapVersion,
 };
 
 /// The host's name, for a plugin that wants to say who it is to.
@@ -265,7 +265,8 @@ impl ClapFactory<'_> {
             plugin,
             _host: host,
             state,
-            events: RefCell::new(EventState { events: Vec::new() }),
+            events: RefCell::new(EventState::default()),
+            pushed: RefCell::new(EventState::default()),
             _factory: PhantomData,
         })
     }
@@ -286,14 +287,130 @@ pub struct HostRequests {
     pub callback: bool,
 }
 
-/// The events the host has to give the plugin.
+/// A **list of events**, the way the format keeps one.
 ///
-/// The list the plugin reads points at this, so it has to be one thing
-/// with an address: the events and the count of them together.
+/// The events are **packed bytes**, not a list of structures: the
+/// format's events are of different kinds and different sizes, and
+/// every one of them begins with a head that says how long it is. So
+/// the list is a buffer and a set of offsets into it.
 #[derive(Debug, Default)]
 struct EventState {
-    /// The events themselves.
-    events: Vec<ClapEventParamValue>,
+    /// The bytes of the events, packed together.
+    bytes: Vec<u8>,
+    /// Where each event begins.
+    offsets: Vec<usize>,
+}
+
+impl EventState {
+    /// Add an event to the list, and say where it went.
+    fn push(&mut self, event: &[u8]) {
+        self.offsets.push(self.bytes.len());
+        self.bytes.extend_from_slice(event);
+    }
+
+    /// How many events there are.
+    fn count(&self) -> u32 {
+        self.offsets.len() as u32
+    }
+}
+
+/// Where the music is, as the host tells a plugin.
+///
+/// The positions are in **beats** and in **seconds**, as numbers the
+/// host has; the format wants them as fixed-point numbers, and the
+/// conversion is the host's business.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClapTransport {
+    /// Where the music is, in beats.
+    pub song_pos_beats: f64,
+    /// Where the music is, in seconds.
+    pub song_pos_seconds: f64,
+    /// The tempo, in beats a minute.
+    pub tempo: f64,
+    /// The top of the time signature.
+    pub tsig_num: u16,
+    /// The bottom of the time signature.
+    pub tsig_denom: u16,
+    /// Whether the music is playing.
+    pub playing: bool,
+    /// Whether the music is being recorded.
+    pub recording: bool,
+}
+
+impl ClapTransport {
+    /// The event the host offers, as the format's bytes.
+    fn event(&self) -> Vec<u8> {
+        let mut flags = 0u32;
+        if self.playing {
+            flags |= craftkit_clap_abi::TRANSPORT_IS_PLAYING;
+        }
+        if self.recording {
+            flags |= craftkit_clap_abi::TRANSPORT_IS_RECORDING;
+        }
+        flags |= craftkit_clap_abi::TRANSPORT_HAS_TEMPO;
+        flags |= craftkit_clap_abi::TRANSPORT_HAS_BEATS_TIMELINE;
+        flags |= craftkit_clap_abi::TRANSPORT_HAS_SECONDS_TIMELINE;
+        flags |= craftkit_clap_abi::TRANSPORT_HAS_TIME_SIGNATURE;
+        let event = ClapEventTransport {
+            header: ClapEventHeader {
+                size: std::mem::size_of::<ClapEventTransport>() as u32,
+                time: 0,
+                space_id: craftkit_clap_abi::CORE_EVENT_SPACE_ID,
+                type_: craftkit_clap_abi::EVENT_TRANSPORT,
+                flags: 0,
+            },
+            flags,
+            song_pos_beats: (self.song_pos_beats * craftkit_clap_abi::BEATTIME_FACTOR as f64) as i64,
+            song_pos_seconds: (self.song_pos_seconds * craftkit_clap_abi::SECTIME_FACTOR as f64) as i64,
+            tempo: self.tempo,
+            tempo_inc: 0.0,
+            loop_start_beats: 0,
+            loop_end_beats: 0,
+            loop_start_seconds: 0,
+            loop_end_seconds: 0,
+            bar_start: 0,
+            bar_number: 0,
+            tsig_num: self.tsig_num,
+            tsig_denom: self.tsig_denom,
+        };
+        foreign::event_bytes(&event)
+    }
+}
+
+/// The **parameter values** among a list of events.
+///
+/// The events are the plugin's own bytes, and every one of them begins
+/// with a head that says how long it is and what it is — so a list can
+/// be read without knowing what is in it.
+pub fn parameter_values(events: &[u8]) -> Vec<(u32, f64)> {
+    let mut found: Vec<(u32, f64)> = Vec::new();
+    let mut at = 0usize;
+    while at + std::mem::size_of::<ClapEventHeader>() <= events.len() {
+        let size = read_u32(events, at + std::mem::offset_of!(ClapEventHeader, size)) as usize;
+        let kind = read_u32(events, at + std::mem::offset_of!(ClapEventHeader, type_));
+        if size == 0 || at + size > events.len() {
+            break;
+        }
+        if kind == craftkit_clap_abi::EVENT_PARAM_VALUE {
+            let id = read_u32(events, at + std::mem::offset_of!(ClapEventParamValue, param_id));
+            let value = read_f64(events, at + std::mem::offset_of!(ClapEventParamValue, value));
+            found.push((id, value));
+        }
+        at += size;
+    }
+    found
+}
+
+/// A number out of a list of bytes.
+fn read_u32(bytes: &[u8], at: usize) -> u32 {
+    let Some(slice) = bytes.get(at..at + 4) else { return 0 };
+    u32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]])
+}
+
+/// A number out of a list of bytes.
+fn read_f64(bytes: &[u8], at: usize) -> f64 {
+    let Some(slice) = bytes.get(at..at + 8) else { return 0.0 };
+    f64::from_ne_bytes([slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7]])
 }
 
 /// The host's own state, behind the plugin's back.
@@ -371,6 +488,8 @@ pub struct ClapInstance<'a> {
     /// where a value the host wants to change is kept until the plugin
     /// reads it.
     events: RefCell<EventState>,
+    /// The events the plugin gave the host.
+    pushed: RefCell<EventState>,
     /// The factory it came from, so that it cannot outlive it.
     _factory: PhantomData<&'a ClapFactory<'a>>,
 }
@@ -430,7 +549,10 @@ impl ClapInstance<'_> {
         // of the call: the plugin reads them, and they may not move
         // while it does.
         let events = self.events.borrow();
-        foreign::plugin_process(self.plugin, frames, block, &events).map_err(ClapError::new)
+        let mut pushed = self.pushed.borrow_mut();
+        pushed.bytes.clear();
+        pushed.offsets.clear();
+        foreign::plugin_process(self.plugin, frames, block, &events, &mut pushed).map_err(ClapError::new)
     }
 
     /// **Set** a parameter.
@@ -457,7 +579,27 @@ impl ClapInstance<'_> {
             key: -1,
             value,
         };
-        state.events.push(event);
+        let bytes = foreign::event_bytes(&event);
+        state.push(&bytes);
+    }
+
+    /// **Tell** the plugin where the music is.
+    ///
+    /// The transport is an **event** like any other: the host offers it
+    /// and the plugin reads it while it works, so it reaches the plugin
+    /// at the next block of audio.
+    pub fn set_transport(&self, transport: ClapTransport) {
+        let mut state = self.events.borrow_mut();
+        let bytes = transport.event();
+        state.push(&bytes);
+    }
+
+    /// The events the plugin **gave** the host, as their bytes.
+    ///
+    /// The plugin's events are the plugin's own, and the host copies
+    /// them out at once: they are gone when the next block comes.
+    pub fn pushed_events(&self) -> Vec<u8> {
+        self.pushed.borrow().bytes.clone()
     }
 
     /// The **parameters** the plugin holds.
@@ -528,7 +670,7 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapEventParamValue, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
+        ClapAudioBuffer, ClapEventHeader, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
         ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
         ClapPluginParams, ClapProcess, ClapProcessStatus, ClapVersion,
     };
@@ -544,6 +686,8 @@ mod foreign {
     const MAX_STRING_BYTES: usize = 64 * 1024;
     /// How many features a plugin may list.
     const MAX_FEATURES: usize = 256;
+    /// How long an event the plugin offers may be.
+    const MAX_EVENT_BYTES: usize = 64 * 1024;
 
     // The loader's doors. They are `unsafe` to call because the
     // operating system trusts the caller: a name that is not a string,
@@ -884,6 +1028,7 @@ mod foreign {
         frames: u32,
         block: &mut super::ClapBlock,
         events: &super::EventState,
+        pushed: &mut super::EventState,
     ) -> Result<ClapProcessStatus, String> {
         // SAFETY: the instance is the plugin's own struct, inside a
         // library that is open.
@@ -918,7 +1063,10 @@ mod foreign {
             size: Some(input_events_size),
             get: Some(input_events_get),
         };
-        let output_events = empty_output_events();
+        let output_events = ClapOutputEvents {
+            ctx: pushed as *mut super::EventState as *mut c_void,
+            try_push: Some(output_events_push),
+        };
         let block = ClapProcess {
             steady_time: 0,
             frames_count: frames,
@@ -935,53 +1083,87 @@ mod foreign {
         Ok(process(plugin, &block))
     }
 
+    /// The bytes of an event, as the format keeps them.
+    pub fn event_bytes<T>(event: &T) -> Vec<u8> {
+        // SAFETY: every event is a plain structure of numbers and
+        // pointers, and the bytes of it are what the format says they
+        // are. The pointers in it are the host's own and the plugin's
+        // own, and they are not read as pointers here.
+        let bytes =
+            unsafe { std::slice::from_raw_parts(event as *const T as *const u8, std::mem::size_of::<T>()) };
+        bytes.to_vec()
+    }
+
     /// How many events the host has to give.
-    ///
-    /// The count is kept **beside** the list, because the list's
-    /// context is the events themselves and the events do not know how
-    /// many of them there are.
     extern "C" fn input_events_size(list: *const ClapInputEvents) -> u32 {
-        let (count, _) = event_count(list);
-        count
+        match state_of(list) {
+            Some(state) => state.count(),
+            None => 0,
+        }
     }
 
     /// The event at that index.
     extern "C" fn input_events_get(list: *const ClapInputEvents, index: u32) -> *const c_void {
-        let (_, events) = event_count(list);
-        match events.get(index as usize) {
-            Some(event) => event as *const ClapEventParamValue as *const c_void,
-            None => std::ptr::null(),
-        }
+        let Some(state) = state_of(list) else { return std::ptr::null() };
+        let Some(offset) = state.offsets.get(index as usize).copied() else {
+            return std::ptr::null();
+        };
+        // SAFETY: the bytes are the host's own, and the offset is one
+        // of the host's own.
+        unsafe { state.bytes.as_ptr().add(offset) as *const c_void }
     }
 
-    /// The count of the host's events, and the events themselves.
+    /// The plugin offers an event to the host.
     ///
-    /// The list's context is the host's own state, and the state holds
-    /// the events and knows how many of them there are.
-    fn event_count(list: *const ClapInputEvents) -> (u32, &'static [ClapEventParamValue]) {
+    /// The event is the plugin's own, and the head of it says how long
+    /// it is — so the host copies exactly that many bytes and keeps
+    /// them until the block is done.
+    extern "C" fn output_events_push(list: *const ClapOutputEvents, event: *const c_void) -> bool {
+        let Some(state) = state_of_output(list) else { return false };
+        if event.is_null() {
+            return false;
+        }
+        // SAFETY: the event is the plugin's own, and its head says how
+        // long it is.
+        let size = unsafe { std::ptr::read_unaligned(event as *const u32) as usize };
+        let size = size.clamp(std::mem::size_of::<ClapEventHeader>(), MAX_EVENT_BYTES);
+        // SAFETY: the event is the plugin's own, and the host has said
+        // how many bytes of it it will take.
+        let bytes = unsafe { std::slice::from_raw_parts(event as *const u8, size) };
+        state.push(bytes);
+        true
+    }
+
+    /// The host's own events, from the list the plugin holds.
+    fn state_of(list: *const ClapInputEvents) -> Option<&'static super::EventState> {
         if list.is_null() {
-            return (0, &[]);
+            return None;
         }
         // SAFETY: the list is the host's own, and it lives for the
         // length of the call.
         let context = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*list).ctx)) };
         if context.is_null() {
-            return (0, &[]);
+            return None;
         }
         // SAFETY: the context is the host's own state, and it lives for
         // the length of the call.
-        let state = unsafe { &*(context as *const super::EventState) };
-        (state.events.len() as u32, state.events.as_slice())
+        Some(unsafe { &*(context as *const super::EventState) })
     }
 
-    /// The **output events**: there are none.
-    fn empty_output_events() -> ClapOutputEvents {
-        ClapOutputEvents { ctx: std::ptr::null_mut(), try_push: Some(output_events_push) }
-    }
-
-    /// Offer an event to the host: there is no host to take it.
-    extern "C" fn output_events_push(_list: *const ClapOutputEvents, _event: *const c_void) -> bool {
-        false
+    /// The host's own list of the events the plugin gave.
+    fn state_of_output(list: *const ClapOutputEvents) -> Option<&'static mut super::EventState> {
+        if list.is_null() {
+            return None;
+        }
+        // SAFETY: the list is the host's own, and it lives for the
+        // length of the call.
+        let context = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*list).ctx)) };
+        if context.is_null() {
+            return None;
+        }
+        // SAFETY: the context is the host's own state, and it lives for
+        // the length of the call.
+        Some(unsafe { &mut *(context as *mut super::EventState) })
     }
 
     /// The **parameters** the plugin holds.

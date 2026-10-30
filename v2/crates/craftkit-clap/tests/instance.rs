@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use craftkit_clap::{ClapBlock, ClapPlugin};
+use craftkit_clap::{ClapBlock, ClapPlugin, ClapTransport};
 use craftkit_clap_abi::ClapProcessStatus;
 
 /// The shared library the tests open.
@@ -161,6 +161,41 @@ fn a_parameter_moves_and_the_plugin_knows() {
         instance.process(4, &mut block).expect("the plugin processes");
         let parameters = instance.parameters().expect("the parameters are there");
         assert_eq!(parameters[0].value, 1.5, "the plugin took the value the host offered");
+    });
+}
+
+/// The **transport** reaches the plugin, and the plugin reports it
+/// back.
+///
+/// The transport is an event like any other: the host offers where the
+/// music is, and the plugin reads it while it works. The plugin then
+/// says what it made of it, by **offering an event of its own** — so
+/// the test sees the tempo twice: in the plugin's own parameter, and in
+/// the events it pushed.
+#[test]
+fn the_transport_reaches_the_plugin_and_comes_back() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        instance.activate(48_000.0, 1, 512).expect("the instance activates");
+        let mut block = ClapBlock::new(1, 4);
+        // The music is four beats in, at a hundred and twenty beats a
+        // minute, in three-four.
+        instance.set_transport(ClapTransport {
+            song_pos_beats: 4.0,
+            song_pos_seconds: 2.0,
+            tempo: 120.0,
+            tsig_num: 3,
+            tsig_denom: 4,
+            playing: true,
+            recording: false,
+        });
+        instance.process(4, &mut block).expect("the plugin processes");
+        let parameters = instance.parameters().expect("the parameters are there");
+        assert_eq!(parameters[1].value, 120.0, "the plugin took the tempo the host told it");
+        let pushed = instance.pushed_events();
+        let values = craftkit_clap::parameter_values(&pushed);
+        assert!(values.contains(&(2, 120.0)), "and the plugin reported it back: {values:?}");
     });
 }
 
