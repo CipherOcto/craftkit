@@ -279,6 +279,9 @@ pub const EVENT_PARAM_VALUE: u32 = 5;
 /// The type of a **MIDI** event.
 pub const EVENT_MIDI: u32 = 10;
 
+/// The type of a **note** event.
+pub const EVENT_NOTE: u32 = 3;
+
 /// The type of a **transport** event.
 pub const EVENT_TRANSPORT: u32 = 2;
 
@@ -392,6 +395,21 @@ pub struct ClapEventTransport {
     pub tsig_num: u16,
     /// The bottom of the time signature.
     pub tsig_denom: u16,
+}
+
+/// A **MIDI** event: a message for a port.
+///
+/// The message is the three bytes of a MIDI message, and the port says
+/// which of the plugin's ports it is for.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapEventMidi {
+    /// The head every event has.
+    pub header: ClapEventHeader,
+    /// The port the message is for.
+    pub port_index: u16,
+    /// The message itself: three bytes.
+    pub data: [u8; 3],
 }
 
 /// The id of the **parameters** extension.

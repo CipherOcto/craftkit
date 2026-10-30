@@ -130,7 +130,7 @@ fn the_plugin_says_what_parameters_it_holds() {
         let _ = plugin;
         instance.init().expect("the instance initialises");
         let parameters = instance.parameters().expect("the parameters are there");
-        assert_eq!(parameters.len(), 2, "the plugin holds two parameters");
+        assert_eq!(parameters.len(), 3, "the plugin holds three parameters");
         assert_eq!(parameters[0].id, 1, "the first parameter is the gain");
         assert_eq!(parameters[0].name, "gain", "and it is called that");
         assert_eq!(parameters[0].min_value, 0.0, "its range starts at zero");
@@ -140,6 +140,9 @@ fn the_plugin_says_what_parameters_it_holds() {
         assert_eq!(parameters[1].id, 2, "the second parameter is the tone");
         assert_eq!(parameters[1].name, "tone", "and it is called that");
         assert_eq!(parameters[1].value, 0.5, "and it is set to half");
+        assert_eq!(parameters[2].id, 3, "the third parameter is the count of notes");
+        assert_eq!(parameters[2].name, "notes", "and it is called that");
+        assert_eq!(parameters[2].value, 0.0, "and no note has been played yet");
     });
 }
 
@@ -196,6 +199,29 @@ fn the_transport_reaches_the_plugin_and_comes_back() {
         let pushed = instance.pushed_events();
         let values = craftkit_clap::parameter_values(&pushed);
         assert!(values.contains(&(2, 120.0)), "and the plugin reported it back: {values:?}");
+    });
+}
+
+/// A **note** reaches the plugin, and the plugin counts it.
+///
+/// The MIDI message is an event like any other: the host offers it
+/// and the plugin reads it while it works. The reference plugin counts
+/// the notes it was played, and says so through a parameter — so the
+/// test sees that the message arrived whole.
+#[test]
+fn a_note_reaches_the_plugin() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        instance.activate(48_000.0, 1, 512).expect("the instance activates");
+        let mut block = ClapBlock::new(1, 4);
+        // A note on: middle C, at the velocity of a piano.
+        instance.send_midi(0, [0x90, 60, 100]);
+        instance.process(4, &mut block).expect("the plugin processes");
+        let parameters = instance.parameters().expect("the parameters are there");
+        assert_eq!(parameters.len(), 3, "the plugin holds three parameters");
+        assert_eq!(parameters[2].name, "notes", "the third is the count of notes");
+        assert_eq!(parameters[2].value, 1.0, "and the plugin was played one note");
     });
 }
 

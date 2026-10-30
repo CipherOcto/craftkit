@@ -73,8 +73,8 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use craftkit_clap_abi::{
-    ClapEventHeader, ClapEventParamValue, ClapEventTransport, ClapHost, ClapPlugin as ClapPluginInstance,
-    ClapPluginEntry, ClapPluginFactory, ClapProcessStatus, ClapVersion,
+    ClapEventHeader, ClapEventMidi, ClapEventParamValue, ClapEventTransport, ClapHost,
+    ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory, ClapProcessStatus, ClapVersion,
 };
 
 /// The host's name, for a plugin that wants to say who it is to.
@@ -591,6 +591,32 @@ impl ClapInstance<'_> {
     pub fn set_transport(&self, transport: ClapTransport) {
         let mut state = self.events.borrow_mut();
         let bytes = transport.event();
+        state.push(&bytes);
+    }
+
+    /// **Send** a MIDI message to a port.
+    ///
+    /// A MIDI message is three bytes, and it is an **event** like any
+    /// other: the host offers it and the plugin reads it while it
+    /// works.
+    ///
+    /// A message that is not three bytes is refused: the format's
+    /// ordinary MIDI message is three, and the longer ones are a
+    /// different event that this arc does not build.
+    pub fn send_midi(&self, port: u16, message: [u8; 3]) {
+        let mut state = self.events.borrow_mut();
+        let event = ClapEventMidi {
+            header: ClapEventHeader {
+                size: std::mem::size_of::<ClapEventMidi>() as u32,
+                time: 0,
+                space_id: craftkit_clap_abi::CORE_EVENT_SPACE_ID,
+                type_: craftkit_clap_abi::EVENT_MIDI,
+                flags: 0,
+            },
+            port_index: port,
+            data: message,
+        };
+        let bytes = foreign::event_bytes(&event);
         state.push(&bytes);
     }
 

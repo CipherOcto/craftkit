@@ -189,7 +189,7 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapEventHeader, ClapEventParamValue, ClapEventTransport, ClapHost, ClapInputEvents,
+        ClapEventHeader, ClapEventMidi, ClapEventParamValue, ClapEventTransport, ClapHost, ClapInputEvents,
         ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams, ClapProcess,
         ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
     };
@@ -233,11 +233,13 @@ mod exports {
         values: Vec<(u32, f64)>,
         /// The tempo the host last told the plugin about.
         tempo: f64,
+        /// How many notes have been played.
+        notes: u32,
     }
 
     /// The parameters the plugin holds: a gain and a tone.
-    pub(super) const PARAMETERS: [(u32, &str, f64, f64, f64); 2] =
-        [(1, "gain", 0.0, 2.0, 1.0), (2, "tone", 0.0, 1.0, 0.5)];
+    pub(super) const PARAMETERS: [(u32, &str, f64, f64, f64); 3] =
+        [(1, "gain", 0.0, 2.0, 1.0), (2, "tone", 0.0, 1000.0, 0.5), (3, "notes", 0.0, 1000.0, 0.0)];
 
     /// Set the value of a parameter.
     fn set_value(state: &mut State, id: u32, value: f64) {
@@ -395,6 +397,7 @@ mod exports {
             sample_rate: 0.0,
             values: Vec::new(),
             tempo: 0.0,
+            notes: 0,
         }));
         let plugin = Box::into_raw(Box::new(ClapPlugin {
             desc: super::descriptor(),
@@ -424,8 +427,9 @@ mod exports {
         }
         // SAFETY: the list is the host's own, and it lives for the
         // length of the call.
-        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).size)) }?;
-        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).get)) }?;
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).size)) };
+        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).get)) };
+        let (Some(count), Some(get)) = (count, get) else { return None };
         for index in 0..count(events) {
             // SAFETY: the list is the host's own, and the event at that
             // index is the host's own event.
@@ -450,6 +454,46 @@ mod exports {
             });
         }
         None
+    }
+
+    /// The **MIDI** messages the host gave, if it gave any.
+    ///
+    /// The events are read one by one, and each one says what it is.
+    fn read_midi(events: *const ClapInputEvents) -> Vec<[u8; 3]> {
+        let mut messages: Vec<[u8; 3]> = Vec::new();
+        if events.is_null() {
+            return messages;
+        }
+        // SAFETY: the list is the host's own, and it lives for the
+        // length of the call.
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).size)) };
+        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*events).get)) };
+        let (Some(count), Some(get)) = (count, get) else { return messages };
+        for index in 0..count(events) {
+            // SAFETY: the list is the host's own, and the event at that
+            // index is the host's own event.
+            let event = get(events, index) as *const u8;
+            if event.is_null() {
+                continue;
+            }
+            // SAFETY: the event is the host's own, and it begins with
+            // the head every event has.
+            let kind = unsafe {
+                std::ptr::read_unaligned(event.add(std::mem::offset_of!(ClapEventHeader, type_)) as *const u32)
+            };
+            if kind != craftkit_clap_abi::EVENT_MIDI {
+                continue;
+            }
+            // SAFETY: the event is a MIDI event, and its message is at
+            // its place.
+            let message = unsafe {
+                std::ptr::read_unaligned(
+                    event.add(std::mem::offset_of!(ClapEventMidi, data)) as *const [u8; 3]
+                )
+            };
+            messages.push(message);
+        }
+        messages
     }
 
     /// The plugin tells the host that a parameter has moved.
@@ -524,6 +568,13 @@ mod exports {
                     set_value(state, param_id, value);
                 }
             }
+        }
+        // The MIDI, if the host gave any: the plugin counts the notes
+        // it was played, and says so through a parameter.
+        let messages = read_midi(in_events);
+        if !messages.is_empty() {
+            state.notes += messages.len() as u32;
+            set_value(state, 3, f64::from(state.notes));
         }
         // The transport, if the host gave one: the plugin takes the
         // tempo and reports it, and the report is a parameter the host
