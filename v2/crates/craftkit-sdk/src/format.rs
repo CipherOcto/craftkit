@@ -772,6 +772,56 @@ pub fn write_document(document: &Document, format: &FormatSpec) -> Json {
     (format.write)(document)
 }
 
+/// The document, in the **oldest** format of a family that can say
+/// everything the document says.
+///
+/// The file is written at the lowest version that **loses nothing**, so
+/// that a program which knows only that version can read it. That is the
+/// rule the family's page layout application follows (§51): it writes
+/// the oldest version that still represents the document.
+///
+/// How the version is chosen: the document is written at each version of
+/// the family, from the oldest to the newest, and read back. The first
+/// version whose round trip gives the same document back is the one.
+/// Nothing is declared and nothing is configured — the versions are
+/// tried, and the one that keeps everything wins.
+///
+/// The **bytes** a node's stream points at are not part of the
+/// comparison: they travel beside the document in the bundle, and no
+/// version of the document file can lose them.
+///
+/// `None` means that no version of the family round trips — which
+/// should not happen, and which the caller may answer by writing at the
+/// newest version instead.
+pub fn write_document_oldest(
+    document: &Document,
+    formats: &Registry<FormatSpec>,
+    migrations: &Registry<MigrationSpec>,
+    family: &str,
+) -> Option<(Json, u32)> {
+    let mut candidates: Vec<&FormatSpec> =
+        formats.all().iter().filter(|format| family_of(format.tag) == family).collect();
+    candidates.sort_by_key(|format| format.version);
+    for format in candidates {
+        let written = write_document(document, format);
+        let Ok(read_back) = read_document(&written, formats, migrations) else { continue };
+        if same_document(document, &read_back) {
+            return Some((written, format.version));
+        }
+    }
+    None
+}
+
+/// Whether two documents say the same thing.
+///
+/// Everything is compared, the **payload of a relation** included: the
+/// eighth version writes it and the seventh version does not, so a
+/// document whose relations say something needs the eighth version, and
+/// the comparison is what says so.
+fn same_document(left: &Document, right: &Document) -> bool {
+    left.to_json() == right.to_json()
+}
+
 /// Read a document, migrating it forward if it was written by an older
 /// program.
 ///

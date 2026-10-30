@@ -381,11 +381,10 @@ impl DocSaveBundle {
             files.push(craftkit_sdk::bundle::File::new(name, bytes));
         }
         let bytes =
-            craftkit_sdk::bundle::write(session.document(), files, session.formats()).map_err(|message| {
-                EngineError::Failed {
-                    id: "doc.save.bundle".to_string(),
-                    message: format!("the bundle could not be written: {message}"),
-                }
+            craftkit_sdk::bundle::write(session.document(), files, session.formats(), session.migrations())
+                .map_err(|message| EngineError::Failed {
+                id: "doc.save.bundle".to_string(),
+                message: format!("the bundle could not be written: {message}"),
             })?;
         std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
             id: "doc.save.bundle".to_string(),

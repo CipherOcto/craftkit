@@ -86,6 +86,7 @@ fn a_bundle_carries_the_document_and_its_files() {
         &document,
         vec![craftkit_sdk::File::new("sounds/kick.wav", vec![1, 2, 3])],
         &ecosystem.formats,
+        &ecosystem.migrations,
     )
     .expect("the bundle is written");
     let bundle =
@@ -101,8 +102,8 @@ fn a_bundle_carries_the_document_and_its_files() {
 fn a_damaged_bundle_is_refused() {
     let ecosystem = ecosystem();
     let document = craftkit_sdk::Document::new("bundled");
-    let mut bytes =
-        craftkit_sdk::bundle::write(&document, vec![], &ecosystem.formats).expect("the bundle is written");
+    let mut bytes = craftkit_sdk::bundle::write(&document, vec![], &ecosystem.formats, &ecosystem.migrations)
+        .expect("the bundle is written");
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
     let error = craftkit_sdk::bundle::read(&bytes, &ecosystem.formats, &ecosystem.migrations)

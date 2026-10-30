@@ -135,6 +135,7 @@ fn the_bytes_come_back_byte_for_byte() {
         session.document(),
         vec![craftkit_sdk::bundle::File::new("streams/page-1.bin", bytes.clone())],
         &ecosystem.formats,
+        &ecosystem.migrations,
     )
     .expect("the bundle is written");
     let read = craftkit_sdk::bundle::read(&bundle, &ecosystem.formats, &ecosystem.migrations)
@@ -157,8 +158,13 @@ fn a_document_says_what_it_is_missing() {
         .execute("node.stream.set", &json!({ "node": 1, "path": "streams/page-1.bin" }))
         .expect("the stream is set");
 
-    let bundle = craftkit_sdk::bundle::write(session.document(), Vec::new(), &ecosystem.formats)
-        .expect("the bundle is written");
+    let bundle = craftkit_sdk::bundle::write(
+        session.document(),
+        Vec::new(),
+        &ecosystem.formats,
+        &ecosystem.migrations,
+    )
+    .expect("the bundle is written");
     let read = craftkit_sdk::bundle::read(&bundle, &ecosystem.formats, &ecosystem.migrations)
         .expect("the bundle is read");
     assert_eq!(read.missing(), vec!["streams/page-1.bin".to_string()], "the stream is missing");

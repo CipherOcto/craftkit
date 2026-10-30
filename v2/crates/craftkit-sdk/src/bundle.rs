@@ -106,16 +106,25 @@ impl Bundle {
 
 /// Write a bundle.
 ///
-/// The document is written in the **newest** format the program knows,
-/// and the files are written as they are.
+/// The document is written in the **oldest** format of the family that
+/// can say everything the document says — so that a program which knows
+/// only that version can read the file — and the files are written as
+/// they are.
+///
+/// If no version round trips, which should not happen, the **newest** one
+/// is used: a bundle that cannot be written at all is worse than one
+/// that is written at a version that loses something.
 pub fn write(
     document: &Document,
     files: Vec<File>,
     formats: &Registry<FormatSpec>,
+    migrations: &Registry<MigrationSpec>,
 ) -> Result<Vec<u8>, String> {
-    let format = crate::format::newest_format(formats, "craftkit")
+    let newest = crate::format::newest_format(formats, "craftkit")
         .ok_or_else(|| "this program has no format to write the document in".to_string())?;
-    let document_bytes = crate::format::write_document(document, format).to_string().into_bytes();
+    let (document_json, _) = crate::format::write_document_oldest(document, formats, migrations, "craftkit")
+        .unwrap_or_else(|| (crate::format::write_document(document, newest), newest.version));
+    let document_bytes = document_json.to_string().into_bytes();
     let mut out: Vec<u8> = Vec::new();
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&VERSION.to_le_bytes());
@@ -246,8 +255,9 @@ mod tests {
     #[test]
     fn a_bundle_round_trips() {
         let document = document();
-        let bytes = write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats())
-            .expect("the bundle is written");
+        let bytes =
+            write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats(), &migrations())
+                .expect("the bundle is written");
         let bundle = read(&bytes, &formats(), &migrations()).expect("the bundle is read");
         assert_eq!(bundle.document, document, "the document came back");
         assert_eq!(bundle.files.len(), 1);
@@ -267,8 +277,9 @@ mod tests {
     #[test]
     fn a_damaged_bundle_is_refused() {
         let document = document();
-        let mut bytes = write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats())
-            .expect("the bundle is written");
+        let mut bytes =
+            write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats(), &migrations())
+                .expect("the bundle is written");
         let last = bytes.len() - 1;
         bytes[last] ^= 0xff;
         let error = read(&bytes, &formats(), &migrations()).expect_err("it is refused");
@@ -286,8 +297,9 @@ mod tests {
     #[test]
     fn a_bundle_that_ends_early_is_refused() {
         let document = document();
-        let bytes = write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats())
-            .expect("the bundle is written");
+        let bytes =
+            write(&document, vec![File::new("sounds/kick.wav", vec![1, 2, 3, 4])], &formats(), &migrations())
+                .expect("the bundle is written");
         let error = read(&bytes[..bytes.len() - 20], &formats(), &migrations()).expect_err("it is refused");
         assert!(!error.is_empty(), "{error}");
     }
