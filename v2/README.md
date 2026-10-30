@@ -808,7 +808,8 @@ different commands with one id.
   (§20.2), the **menu tree** (§20.3), the **real-time lane** (§21.1) and
   the **assets** and the **bundle** (§21.2) are in here too, because
   they belong to the document and the session and not to an
-  application.
+  application. So are the **prompt seam** (§45) and the **resumable
+  command** (§50): a command that asks the host while it runs.
 - `crates/craftkit-derive` — **eight** derives (`Command`, `NodeKind`,
   `Tool`, `Panel`, `Layer`, `Evaluator`, `Format`, `Migration`), with tests
   on the rules they hold.
@@ -881,11 +882,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**463 tests.** The MCP server links **all nine batteries** in, so the
+**479 tests.** The MCP server links **all nine batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`) — and the studio on its own, with no
-features, carries 158 of them.
+features, carries 172 of them.
 
 ### Not built
 
@@ -966,7 +967,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 463 tests
+cargo test          # 479 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2976,7 +2977,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all nine batteries it is
-**129**, measured the same way.
+**130**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3290,6 +3291,10 @@ shape the outer tree's shell has (§118). Whether the kit should have
 one is a decision for the owner, and it is written down here rather
 than decided here.
 
+**§45 built the first half** — the host's turn *before* the command
+runs — and **§50 built the second**: a command that asks *while* it
+runs, with the session holding the question and the answer.
+
 ### The table, with the eighth row
 
 | the port | what it found | what it cost |
@@ -3360,7 +3365,7 @@ It is **not** the CAD case. CADCraft's interactive commands ask *while
 they run*: they draw a preview, wait for a point, and keep going until
 the person says Enter. That is a **resumable command** — a state
 machine per command, with the session holding it — and it is a bigger
-thing than this seam.
+thing than this seam. **§50 builds it.**
 
 What this seam covers is the other half, and it is the half that an
 agent needs: a command whose parameters are not known before it runs, and
@@ -3400,7 +3405,7 @@ so.
 | the **history** that branches | **built** | §24 |
 | a **task** that may outlive the process | **built** | §28 |
 | one **camera** with its own caps | **built** | §29 |
-| the **prompt**: a host that has what a command is missing | **built** as a seam; a command that asks *while it runs* is not | §45 |
+| the **prompt**: a host that has what a command is missing | **built**, both halves: the host's turn before the command runs (§45), and a command that asks **while it runs** (§50) | §45, §50 |
 | **copy-on-write**, so the undo is cheap | **not built.** The history clones the document; the family's trees share it, and this is the one place they are plainly ahead | §40, §43 |
 | a **typed relation to a part** of a thing (an area, a sub-part) | **not built, and not needed**: two ports needed it and both kept it in the payload, where the plugin owns it | §42, §43 |
 | the **reader's** keeping of what it does not understand | **built**, at the document and at the node | §33, §43 |
@@ -3408,19 +3413,21 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 
-### The three things that are honestly not there
+### The two things that are honestly not there
 
 1. **The numeric core.** The typed value, the unit, the solver. Not
    built, and §39 says where it goes.
-2. **The resumable command.** A command that asks while it runs, with a
-   preview and a live prompt, is a state machine per command and the
-   session holding it. §45 built the other half and says plainly that
-   this half is not built.
-3. **The cheap undo.** The family's trees share their documents and
+2. **The cheap undo.** The family's trees share their documents and
    snapshot a pointer; this kit clones. Simple, correct, and more
    expensive than it needs to be — and the only item on this list that
    is a **regression against the family's own trees** rather than a gap
    in the kit's design.
+
+The third item on this list used to be the **resumable command** — a
+command that asks while it runs. §50 built it, and §50 also says what
+the answer costs: the command is **run again** when the answer comes,
+so a command that asks must ask **before** it changes the document, and
+the session checks that rather than trusting the command.
 
 ### And the one that is not a code gap
 
@@ -3543,3 +3550,102 @@ interval.
 | the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
 | the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
 | the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
+
+---
+
+## 50. The resumable command: a command that asks while it runs
+
+§45 built the **first half** of the prompt: the host's turn *before* the
+command runs. §44 said what was missing, in the words of the survey: a
+command that asks *while it runs* — CADCraft's `interactive:
+Option<Factory>`, a command that draws a preview, waits for a point, and
+keeps going until the person says Enter. §48 listed that as one of the
+**three** things this kit did not have.
+
+This section is the third thing answered.
+
+### What was built
+
+- **`Session::ask(&Question)`** — the command asks. It is one method on
+  the session, and a command calls it while it runs.
+- **`EngineError::NeedsInput`** — the signal that travels out of the
+  command. The `?` is the whole of it.
+- **`Outcome::needs_input`** — what the host is told: the question, and
+  the fact that nothing has changed.
+- **`Session::answer(value)`** — the host answers, the command runs
+  again, and this time the answer is waiting for it.
+- **`Session::cancel()`** — giving up, which costs nothing.
+- **`Session::pending()`** — what is waiting, if anything.
+- **`doc.ask` and `core.note`** — the worked example: a command that
+  asks, and a node of the core's kind that holds the question and the
+  answer in its payload.
+- **The MCP door** — the agent is told what is wanted **in the same
+  words as a command that is missing a parameter**, and calls the tool
+  again with the answer in it. The agent learns one thing and not two.
+
+### The rule, and why there is one
+
+> **A command that asks must ask before it changes the document.**
+
+The rule is enforced by the **session**, not by a convention: the
+session compares the document with the snapshot it took before the run,
+and a command that changed something and *then* asked is **refused and
+put back**.
+
+The reason is the reason the whole design turns on. Rust cannot suspend
+a call and pick it up where it left off — there is no generator in the
+language, and this kit does not have one. So the answer to "a command
+that asks while it runs" is: **the command runs again**, and the answer
+is waiting for it. And running a command again is only safe if it
+changed nothing — so that is the rule, and the session checks it rather
+than trusting the command.
+
+This is the **constrained** answer, and it is a real difference from the
+CAD case, so it is written down rather than glossed over: CADCraft's
+interactive commands keep a **live** preview and a live prompt, drawing
+as they go. Here the command may **compute** and **preview** — that is
+not the document — but it may not **change the document** before it
+asks. So the live part is the preview, and the preview is the host's.
+
+### The bounds, and why they are here
+
+- **Thirty-two questions** for one command. A command that asks for
+  ever is a command that never finishes, and the host is the one that
+  has to notice; the kit notices it instead.
+- **Thirty-two answers** for one command. The same bound from the other
+  side, because a command and a host that keep answering each other is
+  a loop.
+- **A pending command has changed nothing**, so dropping it costs
+  nothing — and that is what makes the third rule safe: another command
+  may run while one is waiting, and the waiting one is dropped. The
+  document is exactly as it was.
+
+### What it cost
+
+Almost nothing, and the shape of the cost is the point:
+
+- `Outcome` gained **one field** — `needs_input`, a question or
+  nothing;
+- `EngineError` gained **one variant**;
+- the **document** gained nothing: no field, no version, no node kind
+  beyond the plain `core.note` the example needs;
+- the **registry** gained nothing: no command gained a "prompts" field,
+  and no kind became interactive;
+- the **command's own shape** did not change. It is still a struct with
+  typed fields, and asking is a call it makes while it runs.
+
+### What it does not settle
+
+- **The live preview.** A command may compute what it would draw, but
+  the kit has no canvas to draw it on — there is no UI toolkit and no
+  window (§16) — and no place in the document to put a preview. The
+  preview is the host's, and the seam gives the host the question and
+  nothing else.
+- **The person at a prompt.** The kit has no UI, so the host is a
+  program: an agent, a script, a test. The three are the same seam
+  (§45), and a person would be a fourth host behind the same door.
+- **The waiting command is not in the document.** It is the session's
+  own state, the way the selection and the camera are. A document saved
+  while a command is waiting has no trace of the question, and that is
+  a thing to decide rather than to inherit: the command was waiting,
+  not the document.
