@@ -944,7 +944,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**780 tests.** The MCP server links **all twelve batteries** in, so the
+**789 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -5688,7 +5688,10 @@ is the inflate.
     stored, fixed Huffman and dynamic Huffman — and the zlib wrapper
     around them, with the Adler-32 checked at the end;
   - the **filters**: PNG's five ways of storing a row, undone;
-  - the **pixels**: the samples, as they are.
+  - the **pixels**: the samples, as they are;
+  - the **transparency**: the `tRNS` chunk, which says which of a
+    picture's colours are see-through, and which comes out as an alpha
+    beside every pixel (§77).
 - **The snapshot reads PNG as well as JPEG**, and draws it.
 - **The tests are on pictures made by two writers**: the kit's own,
   which *stores* its data and does not compress it, and the `image`
@@ -5920,8 +5923,10 @@ the ones a picture has when it is mostly one colour.
   that is what a canvas wants. The values are scaled, and the scaling
   is the file's convention (a four-bit grey is multiplied by seventeen),
   not the kit's.
-- **The transparency of a palette is not read.** A `tRNS` chunk says
-  which palette entries are see-through, and the reader ignores it.
+- **The transparency of a picture is not read.** A `tRNS` chunk says
+  which colours are see-through, and the reader ignores it. (This was
+  settled later, in §77: the chunk is read, and a picture with a
+  transparency comes out with an alpha beside every pixel.)
 - **Interlaced pictures are still refused** (§71), and that is the one
   shape of PNG this reader does not take.
 
@@ -6075,3 +6080,76 @@ down from a specification rather than guessed at.
   `create_plugin` answers with nothing. A host that has read a plugin
   has not yet used one, and the difference is the whole of the next
   arc.
+
+---
+
+## 77. The picture's transparency
+
+The kit could write a PNG and read a PNG's pixels, and the one thing
+the reader threw away was the `tRNS` chunk — the part of the file
+that says **which of the picture's colours are see-through**. A
+picture with a transparency came out as if it had none, so a picture
+with a see-through background came out with an opaque one, and
+nothing in the kit could tell the difference.
+
+### What was built
+
+- **The `tRNS` chunk is read**, and what it means is decided by the
+  picture's **colour type**: one grey value for a grey picture, one
+  colour for a colour picture, and an alpha for each of a palette's
+  entries for a palette picture.
+- **A picture with a transparency comes out with an alpha.** The
+  samples grow by one — a grey becomes grey and alpha, a colour
+  becomes red, green, blue and alpha, and a palette becomes colours
+  and alpha — and the picture says how many samples a pixel has, so a
+  caller can tell.
+- **The chunk is only allowed where the format allows it.** A grey or
+  a colour picture of fewer than eight bits may not have one, a
+  picture that already has an alpha channel may not have one either,
+  and a transparency that names more palette entries than the palette
+  has is refused. Each of those is a refusal **with a name**.
+- **The reader was split in two.** The part that undoes the filters
+  now hands back the bytes as they are stored, and a second part
+  **composes** the picture: the palette's indices become colours, a
+  grey of fewer than eight bits is scaled up, a sixteen-bit picture
+  becomes eight-bit, and the transparency becomes an alpha.
+
+### What the port found
+
+- **A transparency is not a colour.** The chunk does not say "this
+  pixel is see-through"; it says "this **value** is see-through", and
+  the picture decides which pixels have that value. So the transparency
+  has to be read **before** the picture is composed, and a sixteen-bit
+  picture has to be compared at sixteen bits: a grey of `0x0100` is
+  not a grey of `0x01ff`, even though they share the high byte the
+  picture ends up with. The first draft compared the eight-bit
+  samples and would have made the wrong pixels see-through.
+- **A picture's channels are what the picture is, and the file's
+  encoding is the file's business.** A palette picture has one sample
+  a pixel in the file and four in the kit; a picture with an alpha
+  channel in the file has four and keeps them. The number the reader
+  reports is the number of samples in the **kit's** picture, and that
+  is the number a canvas wants.
+- **A chunk's meaning can depend on a chunk that came before it.** The
+  `tRNS` chunk is two bytes for a grey picture and six for a colour
+  picture, and a palette's transparency may be two bytes as well — so
+  the length alone does not say what the chunk means. The reader
+  keeps the bytes and reads them when it knows the colour type.
+
+### What it cost
+
+- one chunk read, one step of composition, and **nine tests** on
+  pictures written by hand — because no writer writes a `tRNS` chunk
+  on purpose.
+
+### What it does not settle
+
+- **A picture with a transparency is a picture with an alpha**, and
+  the alpha is **binary**: see-through or not. The format says a
+  palette's entries may be partly see-through, and that is read; but
+  a grey or a colour picture's transparency names one value, and that
+  value is either seen or not.
+- **The kit's own writer still writes no transparency.** It writes
+  RGBA, which is the whole of the alpha channel, so it has no use for
+  a `tRNS` chunk — and a reader that reads transparency and a writer
+  that cannot write it is a half of a round trip.
