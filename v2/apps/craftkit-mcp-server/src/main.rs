@@ -12,6 +12,16 @@
 //! Every command in the registry is a tool of its own, so an agent that
 //! asks for the tool list gets the command list.
 
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
 use std::io::{BufRead, Write};
 
 use craftkit_mcp::Server;

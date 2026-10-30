@@ -56,6 +56,10 @@ name = "craftkit-ffi-abi"
 version = "0.2.0"
 
 [[package]]
+name = "craftkit-gates"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-hello-server"
 version = "0.2.0"
 dependencies = [

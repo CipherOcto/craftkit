@@ -25,6 +25,16 @@
 //! is loaded, not when it is compiled. That is the price of this door, and
 //! it is the reason the other two exist.
 
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
 use craftkit_sdk::Ecosystem;
 
 // The plugin whose commands are served. The reference keeps the crate in
