@@ -1,0 +1,25 @@
+[package]
+name = "craftkit-png"
+description = "The PNG reader: the pixels of a picture, from the file."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. The reader is RFC 1951 and RFC 2083, and both are written
+# out here.
+
+[dev-dependencies]
+# An **encoder**, for the tests only: a decoder is tested against files
+# that were written, and the compressed ones are what exercise the
+# Huffman paths. It is a test-only dependency and nothing that ships
+# here depends on it.
+image = { version = "0.25", default-features = false, features = ["png"] }
+# The kit's own writer, for the round trip: a picture the kit wrote is
+# a picture the kit can read.
+craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }
+# A **compressor**, for the tests only: the inflate is checked against
+# streams that were compressed by somebody else.
+flate2 = "1.1"
+craftkit-sdk = { path = "../craftkit-sdk", version = "0.2.0" }

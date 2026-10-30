@@ -81,6 +81,8 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-image", 0),
     // The JPEG decoder: the family's own, and it depends on nothing.
     ("craftkit-jpeg", 0),
+    // The PNG reader: RFC 1951 and RFC 2083, and it depends on nothing.
+    ("craftkit-png", 0),
     ("craftkit-payload", 0),
     ("craftkit-sound-time", 0),
     // The line breaker: arithmetic over the widths a caller brings. It

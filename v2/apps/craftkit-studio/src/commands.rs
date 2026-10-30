@@ -565,18 +565,28 @@ fn draw_picture(
     format: &str,
     rect: craftkit_sdk::Rect,
 ) -> Result<(), String> {
-    if format != "jpeg" {
-        return Err(format!("`{}` is a `{format}`, and this snapshot reads JPEG", file.display()));
-    }
     let bytes = craftkit_sdk::files::read_bounded(file, 64 * 1024 * 1024)?;
-    let mut limits = craftkit_jpeg::Limits::default();
-    limits.max_pixels = 64 * 1024 * 1024;
-    let decoded = craftkit_jpeg::decode(&bytes, &limits, None)
-        .map_err(|error| format!("`{}` could not be decoded: {error}", file.display()))?;
-    let samples: Vec<u8> = match &decoded.samples {
-        craftkit_jpeg::Samples::U8(samples) => samples.clone(),
-        craftkit_jpeg::Samples::U16(samples) => samples.iter().map(|sample| (sample >> 8) as u8).collect(),
-    };
-    raster.blit(&samples, decoded.width, decoded.height, decoded.components, rect);
-    Ok(())
+    match format {
+        "jpeg" => {
+            let mut limits = craftkit_jpeg::Limits::default();
+            limits.max_pixels = 64 * 1024 * 1024;
+            let decoded = craftkit_jpeg::decode(&bytes, &limits, None)
+                .map_err(|error| format!("`{}` could not be decoded: {error}", file.display()))?;
+            let samples: Vec<u8> = match &decoded.samples {
+                craftkit_jpeg::Samples::U8(samples) => samples.clone(),
+                craftkit_jpeg::Samples::U16(samples) => {
+                    samples.iter().map(|sample| (sample >> 8) as u8).collect()
+                }
+            };
+            raster.blit(&samples, decoded.width, decoded.height, decoded.components, rect);
+            Ok(())
+        }
+        "png" => {
+            let picture = craftkit_png::read(&bytes, &Default::default())
+                .map_err(|error| format!("`{}` could not be decoded: {error}", file.display()))?;
+            raster.blit(&picture.samples, picture.width, picture.height, picture.channels, rect);
+            Ok(())
+        }
+        other => Err(format!("`{}` is a `{other}`, and this snapshot reads JPEG and PNG", file.display())),
+    }
 }

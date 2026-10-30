@@ -80,6 +80,32 @@ fn a_snapshot_draws_the_pictures_in_the_document() {
     );
 }
 
+/// A snapshot draws a **PNG** too.
+///
+/// The PNG is the kit's own: it is written by the kit's writer and read
+/// by the kit's reader, and the picture lands where the node says.
+#[cfg(feature = "image")]
+#[test]
+fn a_snapshot_draws_a_png() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let directory = directory("drawn-png");
+    let picture = format!("{directory}/block.png");
+    let image = craftkit_raster::Image::new(8, 8, craftkit_sdk::Colour::BLACK);
+    std::fs::write(&picture, image.to_png()).expect("the picture is written");
+    session
+        .execute("image.add", &json!({ "path": picture, "rect": { "x": -5, "y": -5, "w": 10, "h": 10 } }))
+        .expect("the picture is added");
+    let with_picture = format!("{directory}/with.png");
+    let outcome = session
+        .execute("doc.snapshot", &json!({ "path": with_picture, "width": 64, "height": 64 }))
+        .expect("the picture is written");
+    assert_eq!(outcome.data.get("pictures").and_then(|pictures| pictures.as_u64()), Some(1));
+    assert_eq!(
+        outcome.data.get("skipped").and_then(|skipped| skipped.as_array()).map(|skipped| skipped.len()),
+        Some(0)
+    );
+}
+
 /// A baseline JPEG of one grey block, written by hand.
 ///
 /// The decoder is the family's own, and this is the smallest picture it
