@@ -1444,12 +1444,16 @@ fifth gives a document that names no files the none it has.
   (§32): a counting global allocator, the one piece of `unsafe` in v2, and
   a test that proves the lane's work allocates zero times.
 - **A bundle that the application writes** — **this one is built now**
-  (§25.1): the studio writes one and reads one back. What is still not
-  there is a bundle that a *plugin* fills: the files come from the
-  document's assets and from the nodes' streams, and a plugin that keeps
-  its media in its payload has no way to say which files those are.
-- **The rest of the §20 list**: a selection of spans rather than of
-  ids, the view state, and the three plugin formats.
+  (§25.1): the studio writes one and reads one back. And a bundle that a
+  *plugin* fills — **that one is built now too** (§25's stream, used by
+  the art battery in §33): the files come from the document's assets and
+  from the nodes' streams, and a plugin's own file is a node's stream, so
+  the plugin says which file it is without asking for a new seam.
+- **The rest of the §20 list**: a selection of spans rather than of ids
+  (still not built), the view state (the **camera** is built, §29; what
+  is not built is a view state that outlives the session), and the three
+  plugin formats (still not built: they are FFI, and FFI is unsafe — §32
+  is the pattern they would use).
 
 ---
 
@@ -1828,24 +1832,34 @@ are a payload like any other.
 
 ### The three things that do not fit
 
+**This list is history.** It is what the survey found on the day it was
+written, and §33 is the port that came after the seams it asked for. Each
+of the three is answered below, and the answers are in §33.
+
 - **The 3D scene is a document that refuses to be one.** The engine owns
   the scene and saves it as **one opaque JSON string**, and the front end
   keeps a *view* of it. Making that a v2 document means re-expressing the
   engine's scene graph as nodes with contributed kinds, and giving the
   engine a way to build itself *from* the document instead of from its own
   JSON. That is a rewrite of the 3D half, not a seam change, and it is
-  the largest single piece of work in the list.
+  the largest single piece of work in the list. — **Answered in §33**: the
+  kit does not have to model it. The scene is a node's **stream**, the
+  bytes travel beside the document, and the engine takes them back.
 - **A job that lives outside the process.** A generation is enqueued, gets
   a provider id, is polled, is written to SQLite so that it survives the
   app being closed, and is finished by an **event that arrives from
   outside**. The job pool is in-process: a queue, workers, a cancellation
   flag, results the caller collects. There is no durable handle and no
   completion from outside, and **that is a new seam, not a domain thing**.
+  — **Built in §28**: a task with a durable handle, and §33 added the
+  lookup by that handle.
 - **Assets that are pointers, not files.** The media are cloud tokens and
   CDN URLs, resolved lazily and cached. A list of URLs in the asset list
   would be a small change, but the **bundle is simply wrong here**:
   bundling that media means downloading the library. Those assets belong in
-  a payload under a namespaced key, not in the document's asset list.
+  a payload under a namespaced key, not in the document's asset list. —
+  **Answered in §33**: the tokens are in the payload and the bundle never
+  sees them.
 
 And one thing that is **not** a gap in the kit: the language. v2 is Rust
 and wasm, and artcraft is a TypeScript application. That is a gap between

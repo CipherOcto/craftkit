@@ -300,3 +300,47 @@ fn the_undo_takes_the_elements_with_it() {
     session.undo().expect("the undo works");
     assert_eq!(session.document().walk().count(), before, "the element is gone");
 }
+
+/// A directory of this test's own, so that the files do not mix.
+#[cfg(feature = "art")]
+fn directory(name: &str) -> String {
+    let path = std::env::temp_dir().join(format!("craftkit-v2-art-{name}"));
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).expect("the directory is made");
+    path.to_string_lossy().to_string()
+}
+
+/// A **plugin's own file** travels in the bundle.
+///
+/// This is the gap §21.2 listed: a plugin that keeps a file of its own
+/// had no way to say which file it was. It does now — the file is the
+/// node's **stream**, and the bundle carries the streams.
+#[cfg(feature = "art")]
+#[test]
+fn a_plugins_own_file_travels_in_the_bundle() {
+    let from = directory("stage");
+    let into = directory("stage-into");
+    let mut session = ecosystem().session();
+    session
+        .execute("art.stage.add", &json!({ "name": "the room", "path": "scenes/room.json" }))
+        .expect("the stage is added");
+    std::fs::create_dir_all(std::path::Path::new(&from).join("scenes")).expect("the folder is made");
+    std::fs::write(std::path::Path::new(&from).join("scenes/room.json"), b"{\"version\":3}")
+        .expect("the scene is written");
+
+    let bundle = format!("{from}/the-film.bundle");
+    session
+        .execute("doc.save.bundle", &json!({ "path": bundle, "from": from }))
+        .expect("the bundle is written");
+
+    let mut opened = ecosystem().session();
+    opened
+        .execute("doc.open.bundle", &json!({ "path": bundle, "into": into }))
+        .expect("the bundle is opened");
+    let stage = opened.document().node(1).expect("the stage is there");
+    assert_eq!(stage.kind, "art.stage");
+    assert_eq!(stage.stream.as_deref(), Some("scenes/room.json"), "the scene is still a file");
+    let bytes =
+        std::fs::read(std::path::Path::new(&into).join("scenes/room.json")).expect("the file is there");
+    assert_eq!(bytes, b"{\"version\":3}", "the bytes came back byte for byte");
+}
