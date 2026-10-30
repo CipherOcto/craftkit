@@ -1,0 +1,9 @@
+[package]
+name = "craftkit-image"
+description = "The size of a picture, read from its header."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]

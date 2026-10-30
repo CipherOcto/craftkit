@@ -65,6 +65,36 @@ pub fn read_text_bounded(path: &Path, limit: ByteLimit) -> Result<String, String
     std::fs::read_to_string(path).map_err(|error| format!("`{}` could not be read: {error}", path.display()))
 }
 
+/// Read the **head** of a file, at most the limit.
+///
+/// Some files are big and only their head is wanted: a picture's header
+/// says how big the picture is, and the pixels are not needed for that.
+/// The reader reads what it was asked for and stops.
+///
+/// The head is **not** a smaller file: a file whose header is not in the
+/// bytes is a file this call cannot measure, and the caller is told so.
+pub fn read_prefix_bounded(path: &Path, limit: ByteLimit) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("`{}` could not be read: {error}", path.display()))?;
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut chunk = vec![0u8; 8192];
+    let mut read: u64 = 0;
+    while read < limit {
+        let want = ((limit - read) as usize).min(chunk.len());
+        let count = file
+            .read(&mut chunk[..want])
+            .map_err(|error| format!("`{}` could not be read: {error}", path.display()))?;
+        if count == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..count]);
+        read += count as u64;
+    }
+    Ok(buffer)
+}
+
 /// The length of a file, in bytes.
 ///
 /// A file that is not there is a refusal, and so is one whose length
