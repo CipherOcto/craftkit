@@ -26,6 +26,9 @@ craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", optional 
 # The **third battery**: the object model of a PDF document. Off by default
 # as well: a program that wants dictionaries and references says so.
 craftkit-plugin-pdf = { path = "../../crates/craftkit-plugin-pdf", optional = true }
+# The **fourth battery**: the document model of a video editor. Off by
+# default as well: a program that wants bins, tracks and clips says so.
+craftkit-plugin-film = { path = "../../crates/craftkit-plugin-film", optional = true }
 
 [features]
 default = []
@@ -37,6 +40,9 @@ sound = ["dep:craftkit-plugin-sound"]
 # The PDF battery. Off by default: a program that wants the object model
 # of a PDF document says so.
 pdf = ["dep:craftkit-plugin-pdf"]
+# The film battery. Off by default: a program that wants bins, tracks and
+# clips says so.
+film = ["dep:craftkit-plugin-film"]
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build

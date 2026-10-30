@@ -1,0 +1,14 @@
+[package]
+name = "craftkit-plugin-film"
+description = "A plugin that adds the document model of a video editor: bins, items, tracks and clips."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. **Nothing else** — the application never names a
+# symbol of this crate, and this crate never names a symbol of the
+# application.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
