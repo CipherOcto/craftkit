@@ -346,6 +346,43 @@ impl History {
         self.nodes.iter_mut().find(|node| node.id == id)
     }
 
+    /// Drop the oldest states until the tree is inside a budget.
+    ///
+    /// The budget is **the caller's** — the session has one of its own
+    /// that covers everything the session holds, and the tree is the
+    /// part of it that gives way last.
+    ///
+    /// The state that is current is never dropped: it holds the document
+    /// the session is working on, and a bound that drops the working
+    /// document is not a bound, it is a data loss.
+    pub fn prune_to(&mut self, budget: usize) {
+        while self.bytes > budget {
+            let Some(victim) = self.nodes.iter().find(|node| node.id != self.current).map(|node| node.id)
+            else {
+                break;
+            };
+            self.drop(victim);
+        }
+    }
+
+    /// Drop one state, and take its bytes off the count.
+    fn drop(&mut self, victim: u64) {
+        let parent = self.node(victim).and_then(|node| node.parent);
+        let children = self.node(victim).map(|node| node.children.clone()).unwrap_or_default();
+        let bytes = self.node(victim).map(|node| node.bytes).unwrap_or(0);
+        if let Some(parent) = parent.and_then(|parent| self.node_mut(parent)) {
+            parent.children.retain(|child| *child != victim);
+            parent.children.extend(children.iter().copied());
+        }
+        for child in &children {
+            if let Some(child) = self.node_mut(*child) {
+                child.parent = parent;
+            }
+        }
+        self.nodes.retain(|node| node.id != victim);
+        self.bytes = self.bytes.saturating_sub(bytes);
+    }
+
     /// Drop the oldest states when the tree is full.
     ///
     /// The oldest state that is not the current one goes, and what came
@@ -367,20 +404,7 @@ impl History {
                 // the history's to lose.
                 break;
             };
-            let parent = self.node(victim).and_then(|node| node.parent);
-            let children = self.node(victim).map(|node| node.children.clone()).unwrap_or_default();
-            let bytes = self.node(victim).map(|node| node.bytes).unwrap_or(0);
-            if let Some(parent) = parent.and_then(|parent| self.node_mut(parent)) {
-                parent.children.retain(|child| *child != victim);
-                parent.children.extend(children.iter().copied());
-            }
-            for child in &children {
-                if let Some(child) = self.node_mut(*child) {
-                    child.parent = parent;
-                }
-            }
-            self.nodes.retain(|node| node.id != victim);
-            self.bytes = self.bytes.saturating_sub(bytes);
+            self.drop(victim);
         }
     }
 }

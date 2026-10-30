@@ -396,6 +396,19 @@ impl TaskRegistry {
         Ok(registry)
     }
 
+    /// Drop the oldest **finished** task, and say whether one went.
+    ///
+    /// A task that is still pending or running is not dropped: it is work
+    /// that has not been accounted for, and losing it would lose the
+    /// handle that the other end knows it by.
+    pub fn drop_oldest_finished(&mut self) -> bool {
+        let Some(victim) = self.tasks.iter().find(|task| task.state.is_finished()).map(|task| task.id) else {
+            return false;
+        };
+        self.tasks.retain(|task| task.id != victim);
+        true
+    }
+
     /// Drop the oldest finished tasks when the registry is full.
     ///
     /// A task that is still pending or running is **not** dropped: it is

@@ -70,6 +70,65 @@ use crate::tasks::TaskRegistry;
 /// runs for days would otherwise hold every line it ever wrote.
 pub const MAX_LOG_ENTRIES: usize = 256;
 
+/// How many documents a session holds at once.
+///
+/// The document being edited, the snapshot a command takes before it
+/// runs, and the history's own budget — which is two documents' worth,
+/// because the family says it is (§ the history's budget).
+///
+/// The number is the **family's**, and the name is the family's, so that
+/// a reader of either tree can look it up.
+pub const SESSION_OWN_DOCUMENTS: usize = 2;
+
+/// The snapshot a command takes before it edits anything.
+///
+/// It is taken for every command, and it exists **alongside** the
+/// document it was taken from: a session holds one more document while
+/// a command runs than it does between them, and a budget that counts
+/// only the resting state is a budget that every command exceeds.
+pub const SESSION_SNAPSHOT_DOCUMENTS: usize = 1;
+
+/// How many documents a session holds at once.
+pub const SESSION_DOCUMENTS: usize =
+    SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION;
+
+/// How much memory the documents a session holds may take.
+///
+/// This is the number that says what the **process** uses — which is what
+/// the document's own budget used to claim for itself, and was wrong by
+/// a factor of five.
+///
+/// It is the document's budget times the number of documents a session
+/// holds, because every document it holds is bounded by that budget and
+/// the history is bounded by its own.
+pub const MAX_SESSION_BYTES: usize = crate::document::MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS;
+
+/// What a session is holding, in bytes.
+///
+/// It is the **parts**, and not one number: a session that is over its
+/// budget has to give something up, and the part that gives way is the
+/// part that is cheapest to lose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Memory {
+    /// The document being edited.
+    pub document: usize,
+    /// The history: every state it holds.
+    pub history: usize,
+    /// The journal: every entry it holds.
+    pub journal: usize,
+    /// The tasks: every task it holds.
+    pub tasks: usize,
+    /// The log: every line it holds.
+    pub log: usize,
+}
+
+impl Memory {
+    /// What all of it comes to.
+    pub fn total(&self) -> usize {
+        self.document + self.history + self.journal + self.tasks + self.log
+    }
+}
+
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -113,6 +172,8 @@ pub struct Session {
     /// are: a command that is waiting is not in the document, and the
     /// document is as it was. See [`crate::resume`].
     pending: Option<Pending>,
+    /// How much memory the session may hold.
+    memory_budget: usize,
 }
 
 impl Session {
@@ -139,6 +200,7 @@ impl Session {
             states_made: 0,
             running: None,
             pending: None,
+            memory_budget: MAX_SESSION_BYTES,
         }
     }
 
@@ -428,6 +490,61 @@ impl Session {
         self.tool = tool;
     }
 
+    /// What the session is holding, in bytes.
+    ///
+    /// It is the **parts**, and not one number: a session that is over
+    /// its budget has to give something up, and the part that gives way
+    /// is the part that is cheapest to lose.
+    pub fn memory(&self) -> Memory {
+        let log = self.log.capacity() * std::mem::size_of::<String>()
+            + self.log.iter().map(|line| line.capacity()).sum::<usize>();
+        Memory {
+            document: self.document.estimated_bytes(),
+            history: self.history.bytes(),
+            journal: self.journal_bytes,
+            tasks: self.tasks.bytes(),
+            log,
+        }
+    }
+
+    /// How much memory the session may hold.
+    pub fn memory_budget(&self) -> usize {
+        self.memory_budget
+    }
+
+    /// Say how much memory the session may hold.
+    ///
+    /// The budget is **the caller's**: the kit's own number is the
+    /// default, and a program that knows better says so here.
+    pub fn set_memory_budget(&mut self, bytes: usize) {
+        self.memory_budget = bytes;
+    }
+
+    /// Give things up until the session is inside its budget.
+    ///
+    /// The order is the **order of what is cheapest to lose**, and it is
+    /// the same in every session:
+    ///
+    /// 1. the **journal** — a record of what was asked for, and the
+    ///    newest entries are the useful ones;
+    /// 2. the **finished tasks** — their results have been collected, or
+    ///    nobody is waiting for them;
+    /// 3. the **history** — the oldest states, which are the ones a
+    ///    person has already undone past.
+    ///
+    /// The document is never given up: it is the work.
+    fn give_way(&mut self) {
+        let budget = self.memory_budget;
+        if self.memory().total() <= budget {
+            return;
+        }
+        while self.memory().total() > budget && self.journal.len() > 1 {
+            self.drop_journal(0, 1);
+        }
+        while self.memory().total() > budget && self.tasks.drop_oldest_finished() {}
+        self.history.prune_to(budget.saturating_sub(self.memory().document));
+    }
+
     /// What the session has been asked to do.
     pub fn log(&self) -> &[String] {
         &self.log
@@ -637,6 +754,26 @@ impl Session {
                 let mut outcome = outcome;
                 outcome.changed = changed;
                 if changed {
+                    // The document is judged **after** the command, and
+                    // not only when it is written: a command that made
+                    // the document too big is refused and the document is
+                    // put back, because a document nobody could save is
+                    // a document nobody should have.
+                    let bytes = self.document.estimated_bytes();
+                    if bytes > crate::document::MAX_DOCUMENT_BYTES {
+                        self.document = snapshot;
+                        self.selection = selection_snapshot;
+                        self.tool = tool_snapshot;
+                        let error = EngineError::Failed {
+                            id: id.to_string(),
+                            message: format!(
+                                "the document is {bytes} bytes, and the limit is {}",
+                                crate::document::MAX_DOCUMENT_BYTES
+                            ),
+                        };
+                        self.note(format!("{id}: refused ({error})"));
+                        return Err(error);
+                    }
                     if spec.undoable && self.depth == 0 && self.states_made == states_before {
                         // The state the command came from keeps the
                         // selection and the tool as they were **before**
@@ -663,6 +800,10 @@ impl Session {
                 if spec.journal {
                     self.journal_entry(id, params.value());
                 }
+                // The session gives way if it is over its budget: the
+                // journal, the finished tasks and the history, in that
+                // order — what is cheapest to lose goes first.
+                self.give_way();
                 // The command finished, so it is not waiting any more.
                 self.pending = None;
                 Ok(outcome)
@@ -803,5 +944,35 @@ impl Session {
     /// Without a branch, the newest one is taken.
     pub fn redo(&mut self, branch: Option<u64>) -> Result<Outcome, EngineError> {
         crate::history::redo(self, branch)
+    }
+}
+
+/// What the session is holding, and what it may hold.
+///
+/// It changes nothing, so it is not an undo step, and it is not in the
+/// journal: a journal of a measurement is not a program.
+///
+/// It is the one place a person — or an agent — can see what the session
+/// is spending its memory on, which is the question every **budget** in
+/// this kit exists to answer.
+#[derive(craftkit_derive::Command)]
+#[command(id = "session.memory", area = "session", icon = "list", no_journal)]
+pub struct SessionMemory {}
+
+impl SessionMemory {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let memory = session.memory();
+        let total = memory.total();
+        let budget = session.memory_budget();
+        Ok(Outcome::new(format!("{total} byte(s) of {budget}")).with_data(crate::serde_json::json!({
+            "document": memory.document,
+            "history": memory.history,
+            "journal": memory.journal,
+            "tasks": memory.tasks,
+            "log": memory.log,
+            "total": total,
+            "budget": budget,
+            "inside": total <= budget,
+        })))
     }
 }
