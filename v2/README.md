@@ -5851,3 +5851,58 @@ tree, against this tree's README.
   this tree — the recipes, the architecture notes — are not read by the
   gate, and a bound named only in one of them is a bound the gate
   cannot see.
+
+---
+
+## 74. The depths below eight
+
+§71 read the PNGs it could and refused the rest. This section reads the
+rest: the **one-bit**, **two-bit** and **four-bit** pictures, which are
+the ones a picture has when it is mostly one colour.
+
+### What was built
+
+- **The samples of a picture of fewer than eight bits are unpacked.**
+  They are packed into the bytes, most significant bits first, and a
+  grey picture's values are scaled up: a one-bit grey is black or white,
+  a four-bit grey is one of sixteen greys, and the picture that comes
+  out is eight-bit.
+- **A palette picture's samples are the palette's indices**, and the
+  picture that comes out has **three** samples a pixel — the colours,
+  and not the indices. The reader says which it is, because a caller
+  that reads one grey where there are three colours draws nonsense.
+- **The filters count a packed pixel as one byte**, which is what PNG
+  says: the byte to the left of a packed pixel is the byte before it,
+  and not the pixel before that.
+
+### What the port found
+
+- **A row's bytes and a pixel's bytes are different numbers.** The row
+  of a four-bit picture holds as many bytes as its samples need — four
+  pixels are two bytes — while the *filter* counts a pixel as one byte,
+  because that is the unit the filter works in. Getting that wrong
+  makes the reader say the picture's rows are shorter than they are,
+  which is a refusal and not a wrong picture: the reader was right to
+  refuse and wrong about why.
+- **The picture that comes out is not the picture that went in.** A
+  four-bit grey comes out eight-bit and a palette comes out as
+  colours, and a caller that does not know that reads nonsense. So the
+  reader says what it produced — how many samples a pixel has — and
+  the rule is that the *samples* are what a picture is, and the file's
+  encoding of them is the file's business.
+
+### What it cost
+
+- one function, and two tests on pictures written by hand.
+
+### What it does not settle
+
+- **A sixteen-bit picture comes out eight-bit**, and a one-bit picture
+  comes out eight-bit too: the kit's pictures are eight-bit, because
+  that is what a canvas wants. The values are scaled, and the scaling
+  is the file's convention (a four-bit grey is multiplied by seventeen),
+  not the kit's.
+- **The transparency of a palette is not read.** A `tRNS` chunk says
+  which palette entries are see-through, and the reader ignores it.
+- **Interlaced pictures are still refused** (§71), and that is the one
+  shape of PNG this reader does not take.
