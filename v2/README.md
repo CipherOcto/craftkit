@@ -889,7 +889,7 @@ different commands with one id.
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
   words, the measure it sits in, the **metric** it is set in, and the
   lines it breaks into — ported into v2's seams, and what it found
-  (§58, §59). It is optional, like the others.
+  (§58, §59, §60). It is optional, like the others.
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -909,11 +909,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**623 tests.** The MCP server links **all twelve batteries** in, so the
+**632 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
-on its own, with no features, carries **195** of them, and **206** with
+on its own, with no features, carries **195** of them, and **208** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1001,7 +1001,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 623 tests
+cargo test          # 632 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3451,7 +3451,7 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
-| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the widths live in a **metric node**, the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59) | §58, §59 |
+| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60) | §58, §59, §60 |
 | **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
 
 ### The list of things that are honestly not there: empty
@@ -3905,7 +3905,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the thirteenth row
+### The table, with the fourteenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3923,8 +3923,9 @@ growing.
 | the **typed value** | the unit is a **plugin's** business; the typed value is **not a command parameter** | a library and a plugin |
 | the **line breaker** | the kit has **no font**, so the widths come from the caller; the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
 | the **metric** | a typeface is **few**, so it is a **node**, and the paragraph's typeface is an **edge**; a monospaced paragraph is a metric with an empty table | an edge and a kind |
+| the **metric's runs** | a width belongs to a **run** of characters, not to a character: a ligature replaces its characters and a kerning pair adjusts the gap between them | two tables in a payload |
 
-Thirteen ports, and one of them is not a port at all: it is the answer to
+Fourteen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4613,3 +4614,103 @@ because a paragraph is set in one metric and not in two.
   port.
 - **There is no font *file* and no font *name* that means anything.**
   The metric is called what the caller calls it.
+
+---
+
+## 60. A width is not a property of a character
+
+§59 left a gap and named it: a metric was a width **per character**, and
+a real typeface is not that. The letter pair "fi" in a typeface with the
+fi ligature is **one glyph**, and the pair "AV" in a typeface with
+kerning is **two glyphs that are closer together**. Neither is a sum of
+character widths.
+
+This section gives the metric what it needs, and says what the port
+found.
+
+### The three tables
+
+A metric is now **three tables**, and the three are applied in three
+different places:
+
+| the table | it is | what it does |
+|---|---|---|
+| the **advances** | a character → millimetres | the width of a character that has one |
+| the **runs** | two or more characters → millimetres | **replaces** its characters: a run is one glyph |
+| the **pairs** | exactly two characters → millimetres | **adjusts** the gap between them: a pair is two glyphs |
+
+A word is read from the left: at every place the **longest run** that
+matches is taken and replaces its characters, and at every **boundary**
+the pair's adjustment is added. The adjustments may be **negative** —
+that is what a kerning pair is for — and the widths may not.
+
+Two rules have teeth, and both are in the command rather than in the
+reader:
+
+- a **run** is two characters or more. A run of one character is
+  refused, because that is an advance, and the metric has a table for
+  those;
+- a **pair** is exactly two characters. A pair of three is refused,
+  because that is a run.
+
+### What the port found
+
+- **A width belongs to a run of characters, not to a character.** This
+  is the second time in this tree that a number turned out to be about
+  something else than it looked (§38's panic, §52's unit). The metric's
+  table was not a table of widths; it was a table of widths *for single
+  characters*, which is a special case of the real thing, and the real
+  thing needed **three** tables and a rule about which one wins.
+- **The longest run wins, and the rule is the model's.** Shaping turns a
+  string into **clusters**, and the cluster is the longest thing that
+  matches. So the reader looks for the longest run first, at every
+  place, and takes it. There is no separate "shaping" step: the width
+  of a word *is* the reading of the word, and the reading has a rule.
+- **A run and a pair are different things, and the model says so.** A
+  ligature is **one glyph**: it replaces its characters, and it has a
+  width. A kerning pair is **two glyphs**: it replaces nothing, and it
+  has an *adjustment*. One table with widths and one table with
+  adjustments is not tidiness — it is the difference between the two
+  things, and a model that had one table for both would have to encode
+  "this replaces" and "this adjusts" in the numbers.
+- **A kerning pair may be negative and a width may not.** The rule is
+  in the command and it is a *sign* rule, not a rule about the size of
+  the number: an adjustment is a difference and a difference may go
+  either way. A width below nothing is refused, because a width below
+  nothing is not a width.
+- **The reader leaves out what it does not understand, and the command
+  refuses it.** A metric that arrived in a file may hold a run of one
+  character and a pair of three: the reader drops both, and the letters
+  fall back to the default. A metric that is being made cannot: the
+  command says why, and says which of the two rules was broken. This is
+  §43's reader rule and §59's command rule, in the same table, with
+  the same difference between them.
+- **The bound is on the run, and it is a bound on the work.** A run is
+  looked for at every place of a word, and the longest one wins, so the
+  number of characters a run may have is the number of places that are
+  looked at. The metric's runs are at most **eight** characters, and the
+  constant is named: `MAX_RUN`. A typeface with a longer cluster than
+  that is a typeface this model does not shape — and the model says so
+  rather than searching forever.
+
+### What it cost
+
+- **nothing in the core**, and nothing in the library: the breaker takes
+  item widths, and the widths are still widths;
+- **two tables** in the metric's payload, two optional parameters in
+  the command, and the word-width function, which is no longer a sum;
+- seven tests in the plugin and two in the studio.
+
+### What it does not settle
+
+- **A cluster is not a glyph.** Real shaping also decides *which*
+  glyphs a cluster is made of, and where each one is put: a mark's
+  position, a contextual form, a script's own rules. This port has the
+  **width** of a cluster and not its **shape**, so a paragraph set with
+  it is measured correctly and would not be *drawn* correctly — and this
+  tree draws nothing, so that is not a gap here yet.
+- **The adjustment is one number per pair.** Real kerning is per pair
+  **and** per size, and a typeface's tables are large. The model's
+  table is a payload, so it can be as large as the document can carry
+  — but nothing bounds it, and nothing says how many pairs a metric
+  may hold.
