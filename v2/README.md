@@ -513,8 +513,9 @@ something.
 - The wasm build is **not run** by anything in this tree. It compiles, and
   the anchor was measured by instantiating the module under Node and asking
   the ecosystem how many commands it had.
-- The browser bundle is **not built here**: the old tree's `cargo xtask
-  wasm` is a compile check, and it says so (`KNOWN-GAPS.md` §13).
+- The **old tree's** browser bundle is not built here: its `cargo xtask wasm`
+  is a compile check, and it says so (`KNOWN-GAPS.md` §13). (v2's own
+  browser door has no bundler to wait for: §78.)
 - The old tree is **not** affected by the drop: it does not use
   `inventory`, and its commands are a static array
   (`crates/engine/src/command.rs`).
@@ -931,6 +932,9 @@ different commands with one id.
   whose build script generates the wiring.
 - `apps/craftkit-repl` — **the terminal door**: a person drives the kit
   from a prompt (§75).
+- `apps/craftkit-wasm` — **the browser door**: the kit in a page, as a
+  WebAssembly module and the page that loads it. No bundler is involved:
+  the module is the file cargo built (§78).
 - `crates/craftkit-clap-abi` — **the CLAP contract**: the shapes a CLAP
   plugin is made of — the version, the entry, the factory and the
   descriptor — and the two names a host looks for. No dependencies and
@@ -944,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**789 tests.** The MCP server links **all twelve batteries** in, so the
+**796 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -970,8 +974,9 @@ wrong.)
   and a version chain the ecosystem checks.
 - **The old tree's front ends.** No toolbar, no control channel. The **MCP
   server is built** (§41: one tool per command, generated from the
-  registry), and what v2 has besides that is the **projection** every front
-  end would read, and one front end built on it as a proof.
+  registry), the **bridge** is built (§35), the **terminal door** is built
+  (§75) and the **browser door** is built (§78) — and what v2 has besides
+  those is the **projection** every front end would read.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
   the port showed is missing: a typed body, text, and images. The
@@ -6153,3 +6158,76 @@ nothing in the kit could tell the difference.
   RGBA, which is the whole of the alpha channel, so it has no use for
   a `tRNS` chunk — and a reader that reads transparency and a writer
   that cannot write it is a half of a round trip.
+
+---
+
+## 78. The browser door
+
+The kit had doors for other programs and one for a person at a
+terminal. A browser is the other place a person is — and the **old
+tree's** web app cannot be built on this machine: the
+`wasm-bindgen` command-line tool here is 0.2.89, the crate is 0.2.129,
+and the two have to match exactly (`KNOWN-GAPS.md` §13).
+
+So the question this arc asked was not "how do we use the bundler" but
+**"does the door need one at all"**.
+
+### What was built
+
+- **`apps/craftkit-wasm`** — the **browser door**: a WebAssembly module
+  and the page that loads it.
+- **There is no bundler in it.** The module is the file cargo built,
+  and the page loads it with `WebAssembly.instantiate`. Nothing has to
+  be installed to open the kit in a browser, and the old tree's
+  blocker does not apply: there is no `wasm-bindgen` in this tree at
+  all.
+- **The boundary is four exports and two buffers**: the room for a
+  command and its address, the run, the answer's address and its
+  length. A page writes the command into the module's memory and reads
+  the answer out of it.
+- **The door is the terminal door.** It runs the same `Repl`, against
+  the same registry, and a test says that the page and the prompt say
+  the same thing for the same command.
+- **The bundle** is a program: it writes the page and the module side
+  by side into `dist/`, and a person serves that directory with
+  whatever they have.
+- **The command is bounded.** A page can be handed anything at all, so
+  a command over `MAX_COMMAND_BYTES` — sixty-four kibibytes — is
+  refused rather than read. The bound is **private**: it is this door's
+  own number, and a public bound is a promise anybody else may rely
+  on.
+
+### What the port found
+
+- **A browser is reachable without a bundler.** The whole of the
+  `wasm-bindgen` world is a convenience: a string is a pointer and a
+  length, and a page can write bytes into a module's memory itself.
+  Four exports and two buffers are the whole of it — and **none of it
+  needs `unsafe`** beyond the attribute that gives the exports their
+  names, because the module's memory is addressed by **numbers**, and a
+  number is not an unsafe thing.
+- **The registry survives the trip.** The ecosystem is built from the
+  `inventory` the linker wrote, and `inventory` has a wasm path of its
+  own. Measured here: the module holds **44 commands**, and they are
+  the same commands the prompt offers.
+- **A page cannot fetch a file off the disk.** The module and the
+  page have to be **served**, so the bundle puts them in one directory
+  and the person serves that. (The old tree's page has the same
+  requirement and the same answer.)
+- **The door's own words are the prompt's words.** The browser door
+  has exactly one answer of its own — `quit`, which a page does not
+  have — and everything else is the terminal door's.
+
+### What it cost
+
+- one application, one page, one check, and **seven tests**.
+
+### What it does not settle
+
+- **The page is text.** The kit's answers are text, and the canvas
+  (§67) is a raster that the page does not draw.
+- **The page is not a shell.** It has one input and one answer: no
+  editing, no history, no completion — exactly as at the prompt (§75).
+- **Nothing runs this in CI.** v2 has no CI job of its own, so the
+  module is built by hand and the check is run by hand. That is the
+  last thing to come, and it is a job of its own.
