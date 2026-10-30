@@ -882,6 +882,11 @@ different commands with one id.
   value as a plugin — lengths, angles and boxes, with the units derived
   from the stored millimetres and radians (§52). It is optional, like
   the others.
+- `crates/craftkit-payload` — the **payload reader**: a bounded reading
+  of the values a document carries. A **library**, not a plugin: the
+  core bounds a command's parameters and says nothing about a payload,
+  so the reading of one is a plugin's business and the mechanism is
+  shared (§61).
 - `crates/craftkit-text-layout` — the **line breaker**: the box, glue and
   penalty model, and the two breakers — the optimal one and the greedy
   one. A **library**, not a plugin: it contributes nothing to the
@@ -909,11 +914,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**632 tests.** The MCP server links **all twelve batteries** in, so the
+**657 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
-on its own, with no features, carries **195** of them, and **208** with
+on its own, with no features, carries **195** of them, and **209** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1001,7 +1006,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 632 tests
+cargo test          # 657 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3905,7 +3910,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the fourteenth row
+### The table, with the fifteenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3924,8 +3929,9 @@ growing.
 | the **line breaker** | the kit has **no font**, so the widths come from the caller; the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
 | the **metric** | a typeface is **few**, so it is a **node**, and the paragraph's typeface is an **edge**; a monospaced paragraph is a metric with an empty table | an edge and a kind |
 | the **metric's runs** | a width belongs to a **run** of characters, not to a character: a ligature replaces its characters and a kerning pair adjusts the gap between them | two tables in a payload |
+| the **payload** | the core bounds a command's parameters and says nothing about a **payload**, so every plugin that reads one has to write its own bounds | a library and two core bounds |
 
-Fourteen ports, and one of them is not a port at all: it is the answer to
+Fifteen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4714,3 +4720,116 @@ reader:
   table is a payload, so it can be as large as the document can carry
   — but nothing bounds it, and nothing says how many pairs a metric
   may hold.
+
+---
+
+## 61. The payload is the untrusted hole
+
+§59 and §60 gave the metric three tables, and the tables are read out
+of a node's **payload**. Nothing about that is safe by itself: the
+payload came from a file, and the kit's rule is that input-derived
+numbers are hostile — *check finiteness, bound sizes, cap loop counts*.
+
+The core enforces that rule for a command's **parameters**. It does not
+enforce it for a **payload**, because the core has no opinion about
+what a payload holds: that is the plugin's business, and the plugin
+reads the payload itself.
+
+Which means: **every plugin that reads a payload has to write its own
+bounds**, and a plugin that forgets is a plugin that will read a table
+of a million entries into a map because a file said so.
+
+This section closes that hole the way the kit has closed every other
+one: with a **library**.
+
+### The library
+
+`crates/craftkit-payload` is a **bounded reader** for a JSON value. It
+depends on serde_json and on nothing else — not even on the SDK — and
+it reads:
+
+| it reads | it is | and it refuses |
+|---|---|---|
+| `number` | a number | one that is not a number, or one beyond the limit |
+| `text` | a string | one that is longer than the limit |
+| `boolean` | a true or a false | anything else |
+| `words` | a list of strings | a list that is too long, or a word that is too long |
+| `table` | a map of keys to numbers | a table that is too big, a key that is too long, a value that is not a number |
+| `table_lossy` | the same | the same, **except** that an entry it does not understand is skipped |
+
+`Limits` is a value: the most entries, the longest key, the longest
+string and the largest number. The **plugin** chooses them, and the
+text battery's are in one place — a thousand entries, a sixty-four
+character key, a four-thousand-character word, a number under a
+million.
+
+### What the port found
+
+- **The payload is the hole the parameters are not.** The core bounds a
+  command's parameters and says nothing about a node's payload, so the
+  **reading** of a payload was the plugin's business and its **size**
+  was the plugin's business too — which means it was nobody's until a
+  plugin wrote it down. The answer is the same one the typed value
+  gave (§39, §52): the core has no opinion about a payload's shape, so
+  the mechanism is a **library** and not a change to the core.
+- **A bound is not negotiable and a shape is.** The same table can be
+  read two ways: `table` refuses an entry it does not understand, and
+  `table_lossy` skips it. The **bounds bite in both**: a table with too
+  many entries is refused either way, because a bound that can be
+  traded away is not a bound. Which reading to use is the plugin's,
+  because it depends on whether the reader must keep what it does not
+  understand — and in this tree it must (§43).
+- **Finiteness is the format's job, and the format has done it.** A
+  JSON number is always finite: serde_json **refuses** a number that is
+  out of range and writes a float that is not finite as `null`. The
+  kit's rule asks for a finiteness check on every number from outside,
+  and for a payload the format has already made it. What the reader
+  checks is the **magnitude**, which the format does not know about.
+  The library says so in its own documentation rather than carrying a
+  check that cannot fire.
+- **The core's own kinds are now bounded, and the bounds are safety
+  nets.** A **text** parameter is refused above sixty-five thousand
+  characters, and the **raw door** — a JSON value of any shape — is
+  refused above a million values or sixty-four of nesting. Both are
+  *looser* than the bounds a plugin sets on the values it takes: the
+  numeric battery refuses a hundred thousand lengths itself (§52), and
+  its refusal is the one a caller sees, because a count is a
+  **meaning** and a meaning is the plugin's. The core's bound is for
+  the value nobody thought about.
+- **A bound on a number's magnitude is still the plugin's.** The core
+  checks that a number is finite and nothing more, because the range
+  of a number depends on what it *means*: a millimetre is bounded by
+  the typed value, a sample count by the sound battery, and a
+  coordinate by the CAD battery. The core cannot know, and guessing
+  would be a unit in the core — which §39 said is the one thing the
+  core must never have.
+- **The paragraph's words are bounded too, and the refusal is
+  visible.** A paragraph whose words are more than the limit allows is
+  **not read**: it has no lines, and its evaluation says its word count
+  is **null** rather than a number it cannot vouch for. A document that
+  a file made enormous is not a paragraph anybody can lay out, and the
+  kit says so instead of laying it out.
+
+### What it cost
+
+- **one library** (`craftkit-payload`), seventeen tests, and no
+  dependency but serde_json;
+- **two bounds in the core** — a text parameter's length and the raw
+  door's size — and four tests;
+- the text battery's reader went through the library, and the battery
+  grew two tests of its own and one in the studio.
+
+### What it does not settle
+
+- **The payload is bounded by the plugin that reads it, and two
+  plugins reading the same payload may bound it differently.** In
+  practice one plugin owns a kind and reads its payload, so this has
+  not come up; but the kit has no **shared** rule about how big a
+  document's payload may be, and the file format does not check it
+  either.
+- **A document read from a file is not checked against these bounds at
+  the door.** The reader refuses a payload it is asked to read, and the
+  format's reader keeps what it does not understand (§43) — so a file
+  with an enormous payload is read into memory and only then refused.
+  The bound that would stop that is in the **format**, and the format
+  has no opinion about payloads either.
