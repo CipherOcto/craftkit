@@ -266,7 +266,7 @@ impl SaveTasks {
 /// The most bytes a **tasks** file may hold.
 ///
 /// A list of tasks is small: this is more than any of them needs.
-const MAX_TASKS_BYTES: crate::files::ByteLimit = 4 * 1024 * 1024;
+const MAX_TASKS_FILE_BYTES: crate::files::ByteLimit = 4 * 1024 * 1024;
 
 /// Read the tasks back.
 ///
@@ -284,7 +284,7 @@ impl LoadTasks {
         let path = self.path.0.clone();
         // The file is read **within a limit**: the limit is checked
         // before the read, so a file that is too big is never read.
-        let text = crate::files::read_text_bounded(std::path::Path::new(&path), MAX_TASKS_BYTES)
+        let text = crate::files::read_text_bounded(std::path::Path::new(&path), MAX_TASKS_FILE_BYTES)
             .map_err(|message| EngineError::Failed { id: "task.load".to_string(), message })?;
         let value: crate::serde_json::Value =
             crate::serde_json::from_str(&text).map_err(|error| EngineError::Failed {

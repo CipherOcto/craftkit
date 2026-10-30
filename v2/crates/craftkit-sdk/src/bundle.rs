@@ -153,12 +153,17 @@ pub const MAX_FILES: usize = 4096;
 
 /// The most bytes the **document** in a bundle may hold.
 ///
-/// The bundle's own bytes are the program's business (§ the format's
-/// limits), but the document is the part every reader shares.
-pub const MAX_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
+/// The bundle's own bytes are the program's business (the program's own
+/// bound on the file it reads), but the document is the part every
+/// reader shares — so this one is the format's, and it is named in the
+/// v2 README beside the other bounds.
+const MAX_BUNDLE_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
 
 /// The most bytes a **path** in a bundle may hold.
-pub const MAX_PATH_BYTES: usize = 4096;
+///
+/// A path is a name, and a name is not long. It is named in the v2
+/// README beside the other bounds.
+const MAX_BUNDLE_PATH_BYTES: usize = 4096;
 
 /// Read a bundle.
 ///
@@ -193,9 +198,9 @@ pub fn read(
         return Err(format!("this is a bundle of version {version} and not of version {VERSION}"));
     }
     let document_length = read_u64(bytes, &mut at)? as usize;
-    if document_length > MAX_DOCUMENT_BYTES {
+    if document_length > MAX_BUNDLE_DOCUMENT_BYTES {
         return Err(format!(
-            "the document in the bundle is {document_length} bytes, and the limit is {MAX_DOCUMENT_BYTES}"
+            "the document in the bundle is {document_length} bytes, and the limit is {MAX_BUNDLE_DOCUMENT_BYTES}"
         ));
     }
     let document_bytes = read_slice(bytes, &mut at, document_length)?;
@@ -210,9 +215,9 @@ pub fn read(
     let mut files = Vec::with_capacity(count.min(1024));
     for _ in 0..count {
         let path_length = read_u32(bytes, &mut at)? as usize;
-        if path_length > MAX_PATH_BYTES {
+        if path_length > MAX_BUNDLE_PATH_BYTES {
             return Err(format!(
-                "a path in the bundle is {path_length} bytes, and the limit is {MAX_PATH_BYTES}"
+                "a path in the bundle is {path_length} bytes, and the limit is {MAX_BUNDLE_PATH_BYTES}"
             ));
         }
         let path = read_slice(bytes, &mut at, path_length)?;
@@ -383,7 +388,7 @@ mod tests {
             write(&Document::new("bundled"), vec![], &formats, &migrations).expect("the bundle is written");
         // The document's length is the u64 after the version.
         let at = MAGIC.len() + 4;
-        let length = (MAX_DOCUMENT_BYTES as u64) + 1;
+        let length = (MAX_BUNDLE_DOCUMENT_BYTES as u64) + 1;
         bytes[at..at + 8].copy_from_slice(&length.to_le_bytes());
         let body = bytes[..bytes.len() - 8].to_vec();
         let written = checksum(&body);

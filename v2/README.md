@@ -4858,7 +4858,11 @@ This section puts a bound where the bytes arrive.
   without being read. Two functions, one for bytes and one for text.
 - **The bundle's counts are capped**: the number of files, the length of
   the document and the length of a path. A cap **refuses** the bundle;
-  it does not read less of it.
+  it does not read less of it. The two byte caps are the format's own
+  and are named here so that a reader can look them up:
+  `MAX_BUNDLE_DOCUMENT_BYTES` (sixty-four megabytes) and
+  `MAX_BUNDLE_PATH_BYTES` (four kilobytes); the number of files is
+  `MAX_FILES` (four thousand and ninety-six).
 - **The doors use it**: `doc.open` (a document), `doc.open.bundle` (a
   bundle), `doc.save.bundle` (an asset), and `task.load` (a list of
   tasks). Each has a limit, and the limit is **the program's**: a

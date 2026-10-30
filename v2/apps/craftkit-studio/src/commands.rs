@@ -309,13 +309,13 @@ impl DocSave {
 /// A document is a tree of nodes with payloads, and this is more than
 /// any document needs: it is this program's number, and another program
 /// may have another one.
-const MAX_DOCUMENT_BYTES: craftkit_sdk::files::ByteLimit = 16 * 1024 * 1024;
+const MAX_DOCUMENT_FILE_BYTES: craftkit_sdk::files::ByteLimit = 16 * 1024 * 1024;
 
 /// The most bytes a **bundle** may hold.
 ///
 /// A bundle carries the document and the files it needs — a sound, a
 /// picture — so its limit is bigger than a document's.
-const MAX_BUNDLE_BYTES: craftkit_sdk::files::ByteLimit = 256 * 1024 * 1024;
+const MAX_BUNDLE_FILE_BYTES: craftkit_sdk::files::ByteLimit = 256 * 1024 * 1024;
 
 #[derive(Command)]
 #[command(id = "doc.open", area = "doc", icon = "open", menu("File"), mutates, undoable)]
@@ -329,7 +329,7 @@ impl DocOpen {
         let path = self.path.0.clone();
         // The file is read **within a limit**: the limit is this
         // program's, and it is checked before the read.
-        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_DOCUMENT_BYTES)
+        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_DOCUMENT_FILE_BYTES)
             .map_err(|message| EngineError::Failed { id: "doc.open".to_string(), message })?;
         let value: craftkit_sdk::serde_json::Value =
             craftkit_sdk::serde_json::from_str(&text).map_err(|error| EngineError::Failed {
@@ -389,7 +389,7 @@ impl DocSaveBundle {
             let source = std::path::Path::new(&from).join(&name);
             // The file is read **within a limit**, like every other file
             // this program reads.
-            let bytes = craftkit_sdk::files::read_bounded(&source, MAX_BUNDLE_BYTES)
+            let bytes = craftkit_sdk::files::read_bounded(&source, MAX_BUNDLE_FILE_BYTES)
                 .map_err(|message| EngineError::Failed { id: "doc.save.bundle".to_string(), message })?;
             files.push(craftkit_sdk::bundle::File::new(name, bytes));
         }
@@ -429,7 +429,7 @@ impl DocOpenBundle {
         // The bundle is read **within a limit**: a bundle may hold
         // media, so its limit is bigger than a document's, and it is
         // this program's number.
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BUNDLE_BYTES)
+        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BUNDLE_FILE_BYTES)
             .map_err(|message| EngineError::Failed { id: "doc.open.bundle".to_string(), message })?;
         let bundle = craftkit_sdk::bundle::read(&bytes, session.formats(), session.migrations()).map_err(
             |message| EngineError::Failed {
