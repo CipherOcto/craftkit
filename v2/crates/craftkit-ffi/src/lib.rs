@@ -51,8 +51,6 @@
 // and refuses `unsafe` in any crate that is not on it.
 #![deny(unsafe_code)]
 
-use std::ffi::c_void;
-
 use craftkit_ffi_abi::{ABI_VERSION, PluginVtable};
 
 /// What went wrong.
@@ -87,7 +85,12 @@ pub type Result<T> = std::result::Result<T, FfiError>;
 #[derive(Debug)]
 pub struct Library {
     /// The handle the operating system gave us.
-    handle: *mut c_void,
+    ///
+    /// It is an **address** and not a pointer: the loader's handle is
+    /// opaque, and keeping it as a number means the library is `Send`
+    /// and `Sync` like any other piece of session state, with no
+    /// `unsafe impl` anywhere to say so.
+    handle: usize,
 }
 
 impl Library {
@@ -196,7 +199,7 @@ mod foreign {
     }
 
     /// Open a shared library and give back its handle.
-    pub fn open(path: &str) -> Result<*mut c_void, String> {
+    pub fn open(path: &str) -> Result<usize, String> {
         let name = match std::ffi::CString::new(path) {
             Ok(name) => name,
             Err(_) => return Err(format!("the path `{path}` has a zero byte in it")),
@@ -209,18 +212,18 @@ mod foreign {
         if handle.is_null() {
             return Err(format!("the library `{path}` did not open: {}", last_error()));
         }
-        Ok(handle)
+        Ok(handle as usize)
     }
 
     /// Close a library.
-    pub fn close(handle: *mut c_void) {
+    pub fn close(handle: usize) {
         // SAFETY: the handle came from `dlopen` and has not been
         // closed, and this is called once, from the drop.
-        unsafe { dlclose(handle) };
+        unsafe { dlclose(handle as *mut c_void) };
     }
 
     /// The plugin's table, found **by name**, and the version it says.
-    pub fn vtable(handle: *mut c_void) -> Result<(*const PluginVtable, u32), String> {
+    pub fn vtable(handle: usize) -> Result<(*const PluginVtable, u32), String> {
         let wanted = match std::ffi::CString::new(ENTRY_POINT) {
             Ok(wanted) => wanted,
             Err(_) => return Err("the entry point's name is not a C string".to_string()),
@@ -228,7 +231,7 @@ mod foreign {
         // SAFETY: the handle is open, and the name is a valid C string
         // with no zero byte in it. The result is a pointer into the
         // library, which stays open as long as the handle does.
-        let symbol = unsafe { dlsym(handle, wanted.as_ptr()) };
+        let symbol = unsafe { dlsym(handle as *mut c_void, wanted.as_ptr()) };
         if symbol.is_null() {
             return Err(format!("the library has no `{ENTRY_POINT}`: {}", last_error()));
         }
@@ -310,12 +313,12 @@ mod foreign {
     use craftkit_ffi_abi::PluginVtable;
 
     /// Open a shared library: not here.
-    pub fn open(path: &str) -> Result<*mut c_void, String> {
+    pub fn open(path: &str) -> Result<usize, String> {
         Err(format!("a shared library cannot be opened on this target: `{path}`"))
     }
 
     /// Close a shared library: nothing was opened.
-    pub fn close(_handle: *mut c_void) {}
+    pub fn close(_handle: usize) {}
 
     /// The plugin's table: there is no library to look in.
     pub fn vtable(_handle: *mut c_void) -> Result<(*const PluginVtable, u32), String> {

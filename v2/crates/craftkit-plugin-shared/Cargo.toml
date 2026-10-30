@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # The contract, and nothing else.
-craftkit-ffi-abi = { path = "../craftkit-ffi-abi" }
+craftkit-ffi-abi = { workspace = true }
 
 [dev-dependencies]
 # A plugin that is **not part of the program**: a shared library, built

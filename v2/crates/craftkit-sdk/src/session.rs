@@ -56,6 +56,7 @@ use crate::history::History;
 use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
+use crate::plugins::PluginLibraries;
 use crate::select::Selected;
 use crate::tasks::TaskRegistry;
 
@@ -78,6 +79,8 @@ pub struct Session {
     tasks: TaskRegistry,
     /// The camera: what is on screen.
     camera: Camera,
+    /// The plugin libraries this session has open.
+    plugins: PluginLibraries,
     depth: usize,
     /// How many states the history has been given.
     ///
@@ -106,6 +109,7 @@ impl Session {
             tool: None,
             tasks: TaskRegistry::new(),
             camera: Camera::new(),
+            plugins: PluginLibraries::new(),
             depth: 0,
             states_made: 0,
             running: None,
@@ -232,6 +236,20 @@ impl Session {
     /// The tasks, to change.
     pub fn tasks_mut(&mut self) -> &mut TaskRegistry {
         &mut self.tasks
+    }
+
+    /// The **plugin libraries** this session has open.
+    ///
+    /// They are the session's state, the way the tasks are: a library is
+    /// a program the session has open, not something the document
+    /// holds.
+    pub fn plugins(&self) -> &PluginLibraries {
+        &self.plugins
+    }
+
+    /// The plugin libraries, to change.
+    pub fn plugins_mut(&mut self) -> &mut PluginLibraries {
+        &mut self.plugins
     }
 
     /// The tool in the hand, if any.

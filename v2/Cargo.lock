@@ -146,6 +146,7 @@ name = "craftkit-sdk"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-ffi",
  "inventory",
  "serde_json",
 ]
@@ -167,6 +168,7 @@ dependencies = [
  "craftkit-plugin-hello",
  "craftkit-plugin-pdf",
  "craftkit-plugin-shapes",
+ "craftkit-plugin-shared",
  "craftkit-plugin-sound",
  "craftkit-plugin-vector",
  "craftkit-sdk",

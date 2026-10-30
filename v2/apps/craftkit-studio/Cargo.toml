@@ -65,6 +65,10 @@ art = ["dep:craftkit-plugin-art"]
 # It is a **dev** dependency: nothing in the application links it, and
 # the application itself still forbids unsafe.
 craftkit-alloc = { path = "../../crates/craftkit-alloc" }
+# A plugin that is **not part of the program**: a shared library, built
+# by cargo and opened by the door's tests. It is a dev dependency, so
+# nothing that ships links it.
+craftkit-plugin-shared = { path = "../../crates/craftkit-plugin-shared" }
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build

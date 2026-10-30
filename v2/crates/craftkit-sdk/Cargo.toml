@@ -15,3 +15,8 @@ craftkit-derive = { workspace = true }
 # SDK re-exports `inventory`, so a plugin's dependency list is the SDK and
 # the macro — and nothing else.
 inventory = { workspace = true }
+# The **door**: opening a shared library and calling the plugin table in
+# it. The SDK holds the libraries a session has open, so this is where
+# that comes from. The door's own `unsafe` is in that crate and nowhere
+# else.
+craftkit-ffi = { workspace = true }

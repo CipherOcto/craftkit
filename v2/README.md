@@ -866,7 +866,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**326 tests** by default, and **365** with the six optional batteries
+**331 tests** by default, and **370** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
@@ -944,7 +944,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 326 tests (365 with the batteries on)
+cargo test          # 331 tests (370 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -2515,8 +2515,63 @@ in v2 as well.
 
 ### What is still not built
 
-The **formats** are not built. There is no CLAP, no VST3 and no AU here:
+The **formats** are not built. (The door is a **command** now: §35.) There is no CLAP, no VST3 and no AU here:
 each is a large ABI in another language, and each would be a **shim**
 over this door, not a change to it. What is built is the door, the
 contract, the version check, and the proof that a plugin in another
 shared library can be reached from a program that has never seen it.
+
+---
+
+## 35. The door is a command
+
+§34 built the door as a **library**: a host that opens a shared library
+and calls the table in it. A library that only a Rust program can reach
+is not a door; it is a function. The tree's rule is that everything a
+person, an agent or a script can do is a **command**, and the door was
+not one, so it became one.
+
+### What was added
+
+Three commands, in the SDK, next to the task commands:
+
+- `plugin.library.open` — open a shared library, and give back its
+  number;
+- `plugin.library.list` — the plugins in the open libraries, with their
+  names and their parameters;
+- `plugin.library.close` — close one.
+
+And the **session** holds the open libraries, the way it holds the
+tasks and the camera: they are **session state**, not document state. A
+library is a program the session has open, not a file the document owns,
+so the undo does not close it and the bundle does not carry it.
+
+### The three things this found
+
+- **A handle that is a pointer makes the session un-`Send`.** The first
+  version of the loader kept the operating system's handle as a raw
+  pointer, and `Arc<Library>` was neither `Send` nor `Sync` — a warning
+  in the SDK, and a session that could not cross a thread. The fix was
+  not an `unsafe impl Send` (that would be a second exception in a
+  crate that has one) but to keep the handle as an **address**: the
+  loader's handle is opaque, and a number is as good a name for it as a
+  pointer. The library became ordinary session state.
+- **A library that is not a plugin fails at the right place.** Opening
+  `libm.so.6` succeeds — it is a shared object — and the failure comes
+  when the host looks for the entry point and does not find it. The
+  refusal names the symbol it wanted, which is the thing the caller can
+  act on.
+- **The undo has nothing to undo, and that is correct.** Opening a
+  library does not change the document, so there is no state to go back
+  to, and the undo says so instead of pretending. A test says it: the
+  library is still open after the undo refused.
+
+### What this is not
+
+The door is **query-only**: a plugin says what it is and what its
+parameters are, and the host reads them. A format's ABI has more in it
+than that — it has a way to create, activate and process — and a real
+plugin would need the table to grow. That is a change to the **contract**
+(`craftkit-ffi-abi`), which is exactly what a version number is for: the
+host refuses a table it does not understand, so a table can grow and the
+old host will not call the new one.

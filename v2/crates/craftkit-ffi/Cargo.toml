@@ -9,7 +9,7 @@ license.workspace = true
 [dependencies]
 # The contract. The loader does not invent the table: it finds the one
 # the two sides agreed on.
-craftkit-ffi-abi = { path = "../craftkit-ffi-abi" }
+craftkit-ffi-abi = { workspace = true }
 
 
 [dev-dependencies]
