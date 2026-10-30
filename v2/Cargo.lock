@@ -300,6 +300,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-repl"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+ "craftkit-studio",
+]
+
+[[package]]
 name = "craftkit-sdk"
 version = "0.2.0"
 dependencies = [

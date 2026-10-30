@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-repl"
+description = "The terminal door: a person drives the kit from a prompt."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+# The studio: the ecosystem the door drives.
+craftkit-studio = { path = "../craftkit-studio" }

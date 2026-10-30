@@ -138,6 +138,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-bridge", 5),
     ("craftkit-hello-server", 5),
     ("craftkit-mcp-server", 5),
+    ("craftkit-repl", 5),
     ("craftkit-studio", 5),
 ];
 
