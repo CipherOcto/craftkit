@@ -837,7 +837,7 @@ different commands with one id.
 - `crates/craftkit-plugin-pdf` — the **PDF battery**: the object model of
   a PDF document — indirect objects, dictionaries, streams and
   references — ported into v2's seams, and the three things it found
-  (§27). It is optional, like the other two.
+  (§27). It is optional, like the others.
 - `crates/craftkit-plugin-film` — the **film battery**: the document model
   of a video editor — bins, items, tracks and clips — ported into v2's
   seams, and the three things it found (§30). It is optional, like the
@@ -845,7 +845,11 @@ different commands with one id.
 - `crates/craftkit-plugin-fx` — the **compositing battery**: the document
   model of a compositing application — comps, layers, property trees and
   the paths that address them — ported into v2's seams, and the three
-  things it found (§31). It is optional, like the other four.
+  things it found (§31). It is optional, like the others.
+- `crates/craftkit-plugin-art` — the **artist's battery**: the document model
+  of an artist's IDE — projects, scenes, tracks, elements, an opaque 3D stage
+  and remote generations — ported into v2's seams, and the three things it
+  found (§33). It is optional, like the others.
 - `crates/craftkit-alloc` — the **counting allocator**: the one piece of
   `unsafe` in v2, and what turns the lane's "must not allocate" rule into
   a measurement (§32). It is a **dev** dependency of the studio and
@@ -853,8 +857,9 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**314 tests** by default, and **336** with the five optional batteries
-enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`).
+**319 tests** by default, and **357** with the six optional batteries
+enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
+`/art`).
 
 ### Not built
 
@@ -930,7 +935,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 314 tests (336 with the batteries on)
+cargo test          # 319 tests (357 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -1869,6 +1874,11 @@ completion that arrives from outside — the rest of artcraft's shape
 follows. Without it, artcraft is a consumer of v2's *front end* — the
 registry, the commands, the plan — and not a document that lives in one.
 
+**And then it grew it** (§28), and §33 is the port this section was
+waiting for: the stream carried the opaque 3D scene, the task carried the
+remote job, and the payload carried the media tokens. The verdict above
+was true when it was written and it is **history**, not a rule.
+
 ### 25.1 The bundle the application writes
 
 A stream needs a **producer**: without one, the name of a file is a name
@@ -2297,3 +2307,97 @@ the same discipline the outer tree uses for its own single allowed
 the CLAP, VST3 and AU plugin formats, which are FFI, and FFI is unsafe.
 When that port comes, it should land in its own crate under the same gate,
 not in the middle of the SDK.
+
+---
+
+## 33. The sixth battery: an artist's IDE, and the port that was waiting
+
+§26 surveyed the last tree in the family and gave it a verdict: the kit
+survives this domain **for the document-shaped half**, and it does not
+survive artcraft **as it is**, because artcraft's centre of gravity is a
+cloud media library and a remote generation queue rather than a document.
+
+That verdict was written before three things existed. The **stream**
+(§25) carries bytes beside the document, the **task** (§28) is work with
+a durable handle, and the **payload** (§25) holds what a domain calls
+its things. So §26's three objections have answers now, and this section
+is the sixth battery: `craftkit-plugin-art`.
+
+The port is of artcraft's own three models — a **video editor**, a **3D
+stage** and a **generation queue** — and it is honest about which half of
+each one is in.
+
+### What was ported
+
+| artcraft | v2 |
+|---|---|
+| a project | a **node** of the kind `art.project` |
+| a scene | a **node** of the kind `art.scene` |
+| a track: `video`, `text`, `audio`, `graphic`, `effect` | **five kinds**, `art.track.video` and its four siblings |
+| an element: `video`, `image`, `audio`, `text`, `sticker`, `graphic`, `effect` | **seven kinds**, `art.element.video` and its six siblings |
+| the media an element plays | the element's **payload**: a **token**, not a file |
+| the params, the effects, the masks, the keyframes | the element's **payload** |
+| the 3D scene, one opaque JSON string | a **stream**: one file beside the document |
+| a generation, with a provider's job id | a **task**, and the job id is its **handle** |
+
+### The three things the port found
+
+- **A closed union becomes kinds, and the core learns nothing.** The
+  application has five kinds of track and seven kinds of element inside
+  TypeScript unions that a new kind would have to edit. Here each one is
+  a **kind**, and v2's kinds are open strings: a new kind of element is
+  another plugin's kind, and nothing in this crate and nothing in the
+  core changes. The price was **twelve commands** instead of one, and
+  the twelve are twelve lines of macro each.
+- **A document may carry a thing it does not model.** The 3D scene is the
+  engine's own JSON, and modelling it would be a rewrite of the engine's
+  half — the objection §26 raised. The kit does not have to model it: a
+  node may have a **stream**, the bytes travel beside the document in the
+  bundle, and the editor hands them back to the engine untouched. So the
+  largest single piece of work in the family turned out to be **a file
+  name**.
+- **A job that lives outside the process is a task, and the outside
+  world's name for it is a handle.** §26 said this was *the one thing the
+  kit would have to learn*, and §28 built it. What §26 did not say is
+  that the provider's job id comes back **by name** when the job is
+  done, so the task has to be findable by that name — and the registry
+  only found tasks by the registry's own number. That was **one method**
+  in the SDK (`find_by_handle`, and `complete_by_handle` and
+  `fail_by_handle` beside it), and it is the first thing a port has cost
+  the core.
+
+### And the one that is not the port's
+
+The **media** are the interesting non-finding. The application holds
+media as **tokens** — `m_1`, `jinf_7` — and resolves them lazily against
+a server. So they are **not** assets: the asset list is for files the
+document owns, and a token is a pointer into somebody else's library.
+A bundle that tried to collect the media would download the library. So
+the tokens live in the payload, under a name of the application's own,
+and the bundle never sees them. That was §26's second objection, and it
+cost nothing — but it is a **rule**, and the rule is worth writing down:
+*the asset list is for bytes the document owns; a pointer is a pointer.*
+
+### The table, with the sixth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids; a property tree is not a tree of nodes | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model; a task must be findable by its **handle** | one method |
+
+Six ports. Two of them cost nothing at all, and the sixth cost **one
+method in the SDK** — the smallest thing a port has ever cost, and the
+first time one of them touched the core.
+
+§31 asked what a sixth port would have to do to cost nothing. The answer
+turns out to be: arrive with a **closed union** and leave with kinds,
+arrive with an **opaque blob** and leave with a stream, and arrive with a
+**job id from outside** and find that the kit can already hold it. The
+kit did not grow a seam for this domain. It grew one method, in the
+place where the outside world's name for a piece of work had to be
+understood.

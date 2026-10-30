@@ -56,6 +56,14 @@ name = "craftkit-link"
 version = "0.2.0"
 
 [[package]]
+name = "craftkit-plugin-art"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-plugin-film"
 version = "0.2.0"
 dependencies = [
@@ -133,6 +141,7 @@ dependencies = [
  "craftkit-alloc",
  "craftkit-derive",
  "craftkit-link",
+ "craftkit-plugin-art",
  "craftkit-plugin-film",
  "craftkit-plugin-fx",
  "craftkit-plugin-hello",

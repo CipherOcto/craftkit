@@ -195,6 +195,58 @@ impl TaskRegistry {
         self.tasks.iter_mut().find(|task| task.id == id)
     }
 
+    /// The task with that **handle**: the outside world's own id for it.
+    ///
+    /// The handle is how the other end names the work: a provider's job
+    /// comes back with its job id, and the only way to find the task is
+    /// by that id. So the registry can be searched by it.
+    ///
+    /// The first task with the handle is found, and a handle is meant to
+    /// be **unique**: it is the other end's name for one piece of work.
+    pub fn find_by_handle(&self, handle: &str) -> Option<&Task> {
+        self.tasks.iter().find(|task| task.handle.as_deref() == Some(handle))
+    }
+
+    /// The task with that handle, to change.
+    pub fn find_by_handle_mut(&mut self, handle: &str) -> Option<&mut Task> {
+        self.tasks.iter_mut().find(|task| task.handle.as_deref() == Some(handle))
+    }
+
+    /// Finish the task with that **handle**, with what it produced.
+    ///
+    /// This is the door the outside world comes in by: the event that
+    /// says the work is done names the work by the id the other end
+    /// knows it by, and this is where that id is turned back into the
+    /// task.
+    pub fn complete_by_handle(&mut self, handle: &str, result: Json) -> Result<(), String> {
+        let Some(task) = self.find_by_handle_mut(handle) else {
+            return Err(format!("there is no task with the handle `{handle}`"));
+        };
+        if task.state.is_finished() {
+            return Err(format!("the task {} is {}, and it is finished", task.id, task.state.name()));
+        }
+        task.state = TaskState::Done;
+        task.progress = 100;
+        task.result = Some(result);
+        Ok(())
+    }
+
+    /// Finish the task with that **handle**, with the reason it did not
+    /// finish.
+    ///
+    /// The other door the outside world comes in by.
+    pub fn fail_by_handle(&mut self, handle: &str, message: impl Into<String>) -> Result<(), String> {
+        let Some(task) = self.find_by_handle_mut(handle) else {
+            return Err(format!("there is no task with the handle `{handle}`"));
+        };
+        if task.state.is_finished() {
+            return Err(format!("the task {} is {}, and it is finished", task.id, task.state.name()));
+        }
+        task.state = TaskState::Failed;
+        task.message = Some(message.into());
+        Ok(())
+    }
+
     /// Every task.
     pub fn tasks(&self) -> &[Task] {
         &self.tasks
@@ -402,5 +454,58 @@ mod tests {
     fn a_registry_of_nothing_is_refused() {
         let error = TaskRegistry::from_json(&serde_json::json!({})).expect_err("it is refused");
         assert!(error.contains("no tasks"), "{error}");
+    }
+
+    /// A task is found by the **handle**: the outside world's own name
+    /// for it.
+    ///
+    /// This is how the other end names the work: the event that says the
+    /// work is done comes back with the provider's job id, and the only
+    /// way to find the task is by that id.
+    #[test]
+    fn a_task_is_found_by_its_handle() {
+        let mut registry = registry();
+        let id = registry.tasks()[0].id;
+        registry.attach(id, "provider-42").expect("the handle is attached");
+        let found = registry.find_by_handle("provider-42").expect("the task is there");
+        assert_eq!(found.id, id);
+        assert!(registry.find_by_handle("provider-99").is_none(), "there is no such task");
+    }
+
+    /// A task is finished by its handle, by whoever gets there first.
+    #[test]
+    fn a_task_is_finished_by_its_handle() {
+        let mut registry = registry();
+        let id = registry.tasks()[0].id;
+        registry.attach(id, "provider-42").expect("the handle is attached");
+        registry
+            .complete_by_handle("provider-42", serde_json::json!({ "media": "m_1" }))
+            .expect("it is done");
+        let task = registry.task(id).expect("the task is there");
+        assert_eq!(task.state, TaskState::Done);
+        assert_eq!(task.result, Some(serde_json::json!({ "media": "m_1" })));
+    }
+
+    /// And it is failed by its handle too.
+    #[test]
+    fn a_task_is_failed_by_its_handle() {
+        let mut registry = registry();
+        let id = registry.tasks()[0].id;
+        registry.attach(id, "provider-42").expect("the handle is attached");
+        registry.fail_by_handle("provider-42", "the model is gone").expect("it failed");
+        let task = registry.task(id).expect("the task is there");
+        assert_eq!(task.state, TaskState::Failed);
+        assert_eq!(task.message.as_deref(), Some("the model is gone"));
+    }
+
+    /// A handle nobody knows finishes nothing.
+    #[test]
+    fn a_handle_nobody_knows_finishes_nothing() {
+        let mut registry = registry();
+        let error =
+            registry.complete_by_handle("provider-99", serde_json::json!(null)).expect_err("it is refused");
+        assert!(error.contains("no task with the handle"), "{error}");
+        let error = registry.fail_by_handle("provider-99", "no").expect_err("it is refused");
+        assert!(error.contains("no task with the handle"), "{error}");
     }
 }

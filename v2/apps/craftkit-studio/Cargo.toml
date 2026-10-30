@@ -33,6 +33,11 @@ craftkit-plugin-film = { path = "../../crates/craftkit-plugin-film", optional = 
 # Off by default as well: a program that wants comps and properties says
 # so.
 craftkit-plugin-fx = { path = "../../crates/craftkit-plugin-fx", optional = true }
+# The **sixth battery**: the document model of an artist's IDE — projects,
+# scenes, tracks, elements, an opaque 3D stage and remote generations. Off
+# by default as well: a program that wants a timeline of media tokens says
+# so.
+craftkit-plugin-art = { path = "../../crates/craftkit-plugin-art", optional = true }
 
 [features]
 default = []
@@ -50,6 +55,9 @@ film = ["dep:craftkit-plugin-film"]
 # The compositing battery. Off by default: a program that wants comps and
 # property trees says so.
 fx = ["dep:craftkit-plugin-fx"]
+# The artist's battery. Off by default: a program that wants a timeline of
+# media tokens and remote generations says so.
+art = ["dep:craftkit-plugin-art"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes
