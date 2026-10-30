@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**805 tests.** The MCP server links **all twelve batteries** in, so the
+**806 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6525,3 +6525,65 @@ working.
   except the shared-library door, which is `unix`-only by name.
 - **The mutation suite is not here.** The outer tree's instrument runs
   against the outer tree's gates, and v2's gates are not in it.
+
+---
+
+## 84. Where the music is
+
+A plugin that plays has to know **when** it is playing: the position
+of the music in beats and in seconds, the tempo, the time signature,
+and whether it is playing at all. That is the **transport**, and the
+format keeps it as an event — so the host offers it and the plugin
+reads it while it works.
+
+### What was built
+
+- **The ABI crate gained the transport event**: the position in beats
+  and in seconds (as the format's fixed-point numbers), the tempo, the
+  time signature, and the flags that say which of them are there.
+- **The host offers a transport** before a block of audio, and the
+  plugin takes it while it works.
+- **The events are a byte buffer now**, in both directions. The
+  format's events are of different kinds and different sizes, and
+  every one of them begins with a head that says how long it is — so
+  the list is a buffer and a set of offsets, exactly as the format
+  keeps them.
+- **The plugin's own events reach the host.** The plugin offers an
+  event and the host copies it out, and the host reads the parameter
+  values among them.
+
+### What the port found
+
+- **The events are bytes, not structures.** The host's list was a list
+  of parameter-value events, which is a list of **one kind** — and the
+  format's list holds many kinds, each with its own size. Packing them
+  into a buffer with the head at the front of each is the format's own
+  shape, and it is the shape that lets the host hand over an event it
+  does not understand.
+- **A position in beats is a fixed-point number.** The format writes
+  a beat as the position multiplied by `1 << 31`, so that a position
+  keeps its fraction of a beat. The host's numbers are ordinary
+  numbers, and the conversion is the host's business: the plugin
+  sees the format's own.
+- **The plugin's own events are how a plugin reports.** A plugin that
+  wants to say "this parameter has moved" does not call the host; it
+  **offers an event**, and the host reads it after the block. The
+  reference plugin reports the tempo it was given, and the test sees
+  the tempo twice: in the plugin's own parameter, and in the events it
+  pushed.
+
+### What it cost
+
+- one structure in the ABI crate, two lists in the host, and **one
+  test**.
+
+### What it does not settle
+
+- **The transport is whole-beats and whole-seconds.** The format's
+  fixed-point positions are converted from the host's numbers, and the
+  host's numbers are the ones the caller gave it — the kit's own time
+  model is not in this path yet.
+- **No MIDI.** The format's other events — the notes, the MIDI — are
+  not built, so an instrument cannot be played.
+- **The loop is not there.** The transport has four fields for the
+  loop, and the host writes zeros into them.
