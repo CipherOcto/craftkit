@@ -44,7 +44,10 @@
 /// than any picture needs: the JPEG's frame header comes after the
 /// application's own segments, and the largest of those that anybody
 /// writes is a few kilobytes.
-pub const MAX_HEADER_BYTES: usize = 1024 * 1024;
+///
+/// The name is the kit's own and the number is the kit's own, and both
+/// are named in the v2 README beside the other bounds.
+const MAX_HEADER_BYTES: usize = 1024 * 1024;
 
 /// The formats this crate reads the size of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

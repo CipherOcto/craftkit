@@ -5429,7 +5429,9 @@ written down.
 - **The head of a file is read, and the rest is not.**
   `craftkit_sdk::files::read_prefix_bounded` reads what it was asked
   for and stops: a picture of forty megabytes is measured by reading a
-  few kilobytes of it.
+  few kilobytes of it. The bounds this section adds are the kit's own
+  and are named here: `MAX_HEADER_BYTES` (a megabyte of header) in the
+  size reader, and the battery's own head (a megabyte) beside it.
 
 ### What the port found
 
