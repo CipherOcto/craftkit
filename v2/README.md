@@ -857,7 +857,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**319 tests** by default, and **357** with the six optional batteries
+**319 tests** by default, and **358** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
@@ -935,7 +935,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 319 tests (357 with the batteries on)
+cargo test          # 319 tests (358 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
