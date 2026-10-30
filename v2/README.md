@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**803 tests.** The MCP server links **all twelve batteries** in, so the
+**804 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6354,3 +6354,66 @@ every audio plugin exists for — was not made. This arc makes it.
   have (§79).
 - **The block is float.** The format's sixty-four bit half is not
   used, and neither is the latency or the constant mask.
+
+---
+
+## 81. The parameters a plugin holds
+
+The host could make a plugin and could feed it audio (§80), and it
+could not ask the plugin **anything**: not what its parameters are,
+not what they are set to. An audio application that wants to show a
+plugin's controls — or automate them — needs exactly that.
+
+### What was built
+
+- **The ABI crate gained the parameters extension**: the parameter's
+  own information — its id, its name, its range, its default — and
+  the plugin's table of them, and the host's half of the same
+  extension.
+- **The host asks the plugin for the extension** by its name
+  (`clap.params`), and reads the whole table at once: how many
+  parameters there are, what each of them is, and what each of them
+  is set to.
+- **The names are copied out of the plugin's own fixed-size arrays.**
+  The format says a parameter's name is a short fixed thing, and the
+  host that has to allocate for every parameter it reads is a host
+  that allocates on the audio thread.
+- **The reference plugin has parameters now**: a gain and a tone,
+  with their ranges, their defaults and their values.
+
+### What the port found
+
+- **An extension is found by name, and it is the plugin's own table.**
+  The plugin is asked for `clap.params` and answers with an address;
+  the host then reads that table with the plugin's own functions. The
+  shape is the same as the entry point's: a **data** answer, and
+  functions behind it.
+- **The names are arrays, not pointers.** Every other string in the
+  format is a pointer to a C string, and this one is a **fixed-size
+  array** with a zero byte at the end of the text. So reading a name
+  is a copy of the array and a cut at the zero byte — and the host
+  never has to free it, because the plugin never owned it separately.
+- **Reading a value and setting one are different.** The plugin's
+  table has `get_value` and **no** `set_value`: the format sets a
+  parameter by **offering an event**, so setting one needs the event
+  path that is not built yet. This arc reads; the next one writes.
+- **The host's half of the extension is the plugin's way to ask.**
+  A plugin that has changed its parameters asks the host to **rescan**
+  them. This host has no such answer yet, and says so by having no
+  extension of its own.
+
+### What it cost
+
+- three more structures in the ABI crate, one read in the host, and
+  **one test**.
+
+### What it does not settle
+
+- **A parameter cannot be set yet.** The format sets one by offering
+  an event, and the events are not built (§80). So the host can read
+  a plugin's parameters and cannot move them.
+- **The plugin's values are not flushed.** The extension's `flush` is
+  where a plugin says "I have new values"; this host does not read it.
+- **The host has no parameters extension of its own.** A plugin that
+  asks the host to rescan its parameters gets nothing, and the format
+  says that is allowed.
