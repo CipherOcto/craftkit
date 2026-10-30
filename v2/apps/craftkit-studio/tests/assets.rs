@@ -110,3 +110,26 @@ fn a_damaged_bundle_is_refused() {
         .expect_err("it is refused");
     assert!(error.contains("damaged"), "{error}");
 }
+
+/// A **document file** that is bigger than the program allows is
+/// refused — and it is refused **before** it is read, so the memory is
+/// never spent.
+#[test]
+fn a_document_file_that_is_too_big_is_refused() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let path = std::env::temp_dir().join("craftkit-too-big.craftkit");
+    let file = std::fs::File::create(&path).expect("the file is made");
+    // Seventeen megabytes: more than this program's limit.
+    let block = vec![b'x'; 1024 * 1024];
+    let mut writer = std::io::BufWriter::new(file);
+    for _ in 0..17 {
+        std::io::Write::write_all(&mut writer, &block).expect("the bytes are written");
+    }
+    std::io::Write::flush(&mut writer).expect("the bytes are flushed");
+    drop(writer);
+    let error = session
+        .execute("doc.open", &craftkit_sdk::serde_json::json!({ "path": path.to_string_lossy() }))
+        .expect_err("that file is too big");
+    assert!(error.to_string().contains("limit"), "the refusal says the limit: {error}");
+    let _ = std::fs::remove_file(&path);
+}

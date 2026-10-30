@@ -263,6 +263,11 @@ impl SaveTasks {
     }
 }
 
+/// The most bytes a **tasks** file may hold.
+///
+/// A list of tasks is small: this is more than any of them needs.
+const MAX_TASKS_BYTES: crate::files::ByteLimit = 4 * 1024 * 1024;
+
 /// Read the tasks back.
 ///
 /// The list survives the process that made it: this is what makes a task
@@ -277,10 +282,10 @@ pub struct LoadTasks {
 impl LoadTasks {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let text = std::fs::read_to_string(&path).map_err(|error| EngineError::Failed {
-            id: "task.load".to_string(),
-            message: format!("`{path}` could not be read: {error}"),
-        })?;
+        // The file is read **within a limit**: the limit is checked
+        // before the read, so a file that is too big is never read.
+        let text = crate::files::read_text_bounded(std::path::Path::new(&path), MAX_TASKS_BYTES)
+            .map_err(|message| EngineError::Failed { id: "task.load".to_string(), message })?;
         let value: crate::serde_json::Value =
             crate::serde_json::from_str(&text).map_err(|error| EngineError::Failed {
                 id: "task.load".to_string(),
