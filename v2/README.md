@@ -895,6 +895,11 @@ different commands with one id.
   words, the measure it sits in, the **metric** it is set in, and the
   lines it breaks into — ported into v2's seams, and what it found
   (§58, §59, §60). It is optional, like the others.
+- `crates/craftkit-jpeg` — the **JPEG decoder**: the family's own,
+  clean-room from ITU-T T.81, ported here whole — the twelve-bit and the
+  arithmetic-coded files that the common decoders refuse. A **library**,
+  not a plugin: it contributes nothing to the registry and the linker
+  does not wire it in (§70).
 - `crates/craftkit-image` — the **picture's size**: read from a
   picture's header, in JPEG and PNG. A **library**, not a plugin: it
   contributes nothing to the registry and the linker does not wire it in
@@ -5561,3 +5566,88 @@ every use of it was a way around the registry.
   session's own business and not a command: a program hands a document to
   a session that has none, and nothing is undone because there was no
   edit. It is `pub(crate)`, so it is not a second path out of the crate.
+
+---
+
+## 70. The pixels
+
+§68 left one line open: *the pixels are still not in the kit*. This
+section closes it — with the **family's own decoder**, ported whole.
+
+### What was built
+
+- **`craftkit-jpeg`** — the family's clean-room decoder for the JPEG
+  processes most decoders do not handle, written from ITU-T T.81:
+  sequential DCT with Huffman coding at eight and twelve bits, extended
+  sequential with **arithmetic** coding, and progressive with arithmetic
+  coding. It is ported **whole** — thirteen hundred lines, the tables,
+  the IDCT, the arithmetic decoder and the colour conversion — and the
+  port changed two things:
+  - the **error type** says its three cases out loud instead of deriving
+    them from `thiserror`, because this kit has no dependency it did
+    not choose; and
+  - the crate root carries this tree's **deny list** and the
+    `forbid(unsafe_code)`, and the decoder's own code needed no change
+    for either: it has never had an `unwrap`, an `expect` or a `panic`
+    in it.
+- **The canvas draws a picture.** `Raster::blit` takes the decoder's
+  samples — interleaved by pixel, the rows top to bottom — and scales
+  them into a rectangle, with the **nearest** pixel and no filtering.
+- **A picture has a place.** `image.add` takes a rectangle, and the
+  picture node holds it.
+- **The snapshot draws the pictures in the document.** `doc.snapshot`
+  takes the folder the streams are relative to, decodes every picture it
+  can and draws it where the node says. A picture that cannot be decoded
+  is **reported and not drawn**: the snapshot is of the document, and a
+  broken picture is not a reason to refuse the whole of it.
+- **The tests are on a picture written by hand.** There is no encoder
+  here and no dependency: the test builds a baseline JPEG byte by byte —
+  the quantisation table, the frame, the two smallest Huffman tables
+  there are, and the entropy coded data — and the decoder reads it back
+  as a mid-grey block.
+
+### What the port found
+
+- **The family's decoder is already a kit citizen.** It was written for
+  a tree with the same rules — no panics on input, the limits are the
+  caller's, the allocations are checked before they are made — and it
+  dropped into this tree with **one** change. That is the strongest
+  evidence yet that the rules are not this tree's taste: they are
+  **portable**, and a piece of code written under them lives under
+  another set unchanged.
+- **A decoder and a document are different kinds of thing.** The
+  decoder's output is pixels, and pixels do not go in a document: they
+  are big, they are binary, and they belong to nobody but the file they
+  came from. So the decoder is a **library** and the picture is a
+  **node** whose payload is two numbers and whose stream is the file.
+  The kit never holds the pixels — it *draws* them and lets them go.
+- **The scale of a picture is the front end's business.** The canvas
+  scales by taking the nearest pixel, and it says so; a canvas that
+  filtered would be a canvas with an opinion about pictures, and this
+  one has none.
+- **A picture that cannot be decoded does not stop the picture.** The
+  snapshot reports what it could not draw and draws the rest. A
+  document with one broken picture is still a document.
+
+### What it cost
+
+- one crate of thirteen hundred lines, ported and adapted in two places;
+- one method on the canvas, one parameter on a command, and one loop in
+  the snapshot;
+- **five tests** on a hand-built picture and **one** on the canvas.
+
+### What it does not settle
+
+- **PNG is written and not read.** The kit writes PNG (§67) and reads
+  its *header* (§68), but it does not decode one: a PNG reader needs an
+  **inflate**, and an inflate is a library of its own. The snapshot
+  draws JPEG and reports the PNG as what it cannot read.
+- **The decoder is JPEG only.** The family has no PNG decoder either,
+  so this is not a gap the port opened — it is a gap the family has and
+  the kit inherited.
+- **The decoder is the family's, not this tree's.** It was written for
+  another tree, under another crate's name, with another tree's
+  comments; the port changed the error type and the lint list and
+  nothing else. What is *not* settled is whether the kit should own the
+  decoder or merely borrow it: a decoder is a library, and a library
+  that is borrowed is a library that can be replaced.
