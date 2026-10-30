@@ -1,0 +1,11 @@
+[package]
+name = "craftkit-ffi-abi"
+description = "The C ABI a craftkit plugin speaks: a table of function pointers with a version at the front."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. The contract is a struct and two constants, and a contract
+# that depends on nothing is a contract that cannot move.

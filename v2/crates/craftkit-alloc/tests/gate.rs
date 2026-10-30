@@ -1,23 +1,33 @@
-//! The gate: **one** piece of `unsafe` in v2, and it is this one.
+//! The gate: **the list** of crates in v2 that may hold `unsafe`, and
+//! the proof that the list is short.
 //!
-//! The exception is allowed because it is measurable and small: a
-//! counting global allocator, so that the lane's "must not allocate"
-//! rule can be *measured* rather than asserted. The price of allowing
-//! it is that the tree now has a place where the rule can be broken, and
-//! this gate is what holds that place to one crate.
+//! The exceptions are allowed because they are small, named and
+//! mechanical. Each one on the list says what it is for, and the rules
+//! are:
 //!
-//! What it checks:
+//! - `unsafe` appears **only** in the crates on the list;
+//! - every crate on the list says `deny(unsafe_code)` and **not**
+//!   `forbid`, because a `forbid` could not be relaxed by the `allow` it
+//!   needs;
+//! - every crate **not** on the list still forbids unsafe outright;
+//! - every crate on the list has **exactly one** `allow(unsafe_code)`,
+//!   so the exception is one marked place and not a scattering;
+//! - the only `unsafe impl` in the tree is the counting allocator's.
 //!
-//! - **this crate is the only one with `unsafe` in it** — no `unsafe
-//!   impl`, no `unsafe fn`, no `unsafe` block, no `unsafe` trait, and no
-//!   `allow(unsafe_code)` anywhere else in the tree;
-//! - **this crate has exactly one exception**, and it is on the
-//!   allocator's impl;
-//! - **this crate says `deny(unsafe_code)` and not `forbid`**, because a
-//!   `forbid` could not be relaxed by the one `allow` it needs;
-//! - **every other crate still forbids unsafe outright**.
+//! The list is one list, here, and it is the whole of the exceptions.
+//! A fourth exception is a line in this file and a reason in it.
 
 use std::path::{Path, PathBuf};
+
+/// The crates that may hold `unsafe`, and why each one does.
+///
+/// **This is the list.** Nothing outside it may hold `unsafe`, and the
+/// test below reads the whole workspace to say so.
+const ALLOWED: &[(&str, &str)] = &[
+    ("craftkit-alloc", "the counting allocator: a global allocator is unsafe by definition"),
+    ("craftkit-ffi", "the plugin loader: opening a library and calling into it"),
+    ("craftkit-plugin-shared", "a shared library's entry point, which is found by name"),
+];
 
 /// The root of the workspace.
 fn workspace_root() -> PathBuf {
@@ -58,6 +68,12 @@ fn collect(directory: &Path, crate_name: &str, found: &mut Vec<(String, PathBuf)
             continue;
         }
         if path.extension().map(|extension| extension == "rs").unwrap_or(false) {
+            // This file is the gate, and it talks about `unsafe` in its
+            // own words. A gate that counted itself would count its own
+            // prose.
+            if path.ends_with("tests/gate.rs") {
+                continue;
+            }
             found.push((crate_name.to_string(), path));
         }
     }
@@ -80,15 +96,28 @@ fn lines_with(source: &str, marks: &[&str]) -> Vec<String> {
 
 /// The marks that mean "there is unsafe in this file".
 fn unsafe_marks() -> Vec<&'static str> {
-    vec!["unsafe impl", "unsafe fn", "unsafe trait", "unsafe {", "allow(unsafe_code)"]
+    vec![
+        "unsafe impl",
+        "unsafe fn",
+        "unsafe trait",
+        "unsafe {",
+        "unsafe extern",
+        "unsafe(no_mangle)",
+        "allow(unsafe_code)",
+    ]
 }
 
-/// Only this crate has unsafe in it.
+/// Whether a crate is on the list.
+fn is_allowed(crate_name: &str) -> bool {
+    ALLOWED.iter().any(|(name, _)| *name == crate_name)
+}
+
+/// Only the crates on the list have unsafe in them.
 #[test]
-fn only_this_crate_has_unsafe_in_it() {
+fn only_the_crates_on_the_list_have_unsafe_in_them() {
     let offenders: Vec<String> = every_source()
         .into_iter()
-        .filter(|(crate_name, _)| crate_name != "craftkit-alloc")
+        .filter(|(crate_name, _)| !is_allowed(crate_name))
         .filter_map(|(crate_name, path)| {
             let source = std::fs::read_to_string(&path).ok()?;
             let lines = lines_with(&source, &unsafe_marks());
@@ -101,44 +130,76 @@ fn only_this_crate_has_unsafe_in_it() {
     assert!(offenders.is_empty(), "there is unsafe in the tree: {offenders:#?}");
 }
 
-/// This crate has exactly one exception, and it is the allocator's.
+/// Every crate on the list **has** unsafe in it: the list does not carry
+/// a name that has moved.
 #[test]
-fn this_crate_has_exactly_one_exception() {
-    let source = include_str!("../src/lib.rs");
-    let exceptions = lines_with(source, &["allow(unsafe_code)"]);
-    assert_eq!(exceptions.len(), 1, "there is one exception: {exceptions:?}");
-    let impls = lines_with(source, &["unsafe impl"]);
-    assert_eq!(impls.len(), 1, "there is one unsafe impl: {impls:?}");
-    assert!(impls[0].contains("GlobalAlloc for Counting"), "the impl is the allocator's: {impls:?}");
-}
-
-/// The exception is inside the impl, and nowhere else.
-#[test]
-fn the_unsafe_is_inside_the_impl() {
-    let source = include_str!("../src/lib.rs");
-    let blocks = lines_with(source, &["unsafe {"]);
-    // One per method of the impl, and no more.
-    assert!(blocks.len() <= 4, "there are unsafe blocks: {blocks:?}");
-    for block in &blocks {
-        assert!(block.contains("std::alloc::System"), "the block is the allocator's: {block}");
+fn every_crate_on_the_list_still_needs_its_exception() {
+    for (name, reason) in ALLOWED {
+        let found = every_source().into_iter().filter(|(crate_name, _)| crate_name == name).count();
+        assert!(found > 0, "the crate `{name}` is not in the tree any more: {reason}");
+        let unsafe_lines: usize = every_source()
+            .into_iter()
+            .filter(|(crate_name, _)| crate_name == name)
+            .filter_map(|(_, path)| std::fs::read_to_string(&path).ok())
+            .map(|source| lines_with(&source, &unsafe_marks()).len())
+            .sum();
+        assert!(unsafe_lines > 0, "the crate `{name}` has no unsafe in it any more: {reason}");
     }
-    let traits = lines_with(source, &["unsafe trait"]);
-    assert!(traits.is_empty(), "there is an unsafe trait: {traits:?}");
 }
 
-/// This crate says `deny`, and not `forbid`.
-///
-/// A `forbid` could not be relaxed by the one `allow` the allocator
-/// needs, so the crate root has to say `deny`. Everything else in the
-/// crate is under the same rule as everywhere else.
+/// Each crate on the list has **exactly one** exception: one marked
+/// place, and not a scattering of them.
 #[test]
-fn this_crate_says_deny_and_not_forbid() {
-    let source = include_str!("../src/lib.rs");
-    assert!(source.contains("#![deny(unsafe_code)]"), "the crate denies unsafe");
-    assert!(
-        !source.contains("#![forbid(unsafe_code)]"),
-        "the crate does not forbid it: the exception is here"
-    );
+fn each_crate_on_the_list_has_exactly_one_exception() {
+    for (name, _) in ALLOWED {
+        let exceptions: Vec<String> = every_source()
+            .into_iter()
+            .filter(|(crate_name, _)| crate_name == *name)
+            .filter_map(|(_, path)| std::fs::read_to_string(&path).ok())
+            .flat_map(|source| lines_with(&source, &["allow(unsafe_code)"]))
+            .collect();
+        assert_eq!(exceptions.len(), 1, "the crate `{name}` has one exception: {exceptions:?}");
+    }
+}
+
+/// The crate on the list that has an `unsafe impl` has **one**, and it
+/// is the allocator's.
+#[test]
+fn the_only_unsafe_impl_is_the_allocators() {
+    let mut found: Vec<String> = Vec::new();
+    for (crate_name, path) in every_source() {
+        let Ok(source) = std::fs::read_to_string(&path) else { continue };
+        for line in lines_with(&source, &["unsafe impl"]) {
+            found.push(format!("{crate_name}: {line}"));
+        }
+    }
+    assert_eq!(found.len(), 1, "there is one unsafe impl: {found:?}");
+    assert!(found[0].contains("craftkit-alloc"), "the impl is the allocator's: {found:?}");
+    assert!(found[0].contains("GlobalAlloc for Counting"), "the impl is the allocator's: {found:?}");
+}
+
+/// Every crate on the list says `deny`, and not `forbid`.
+///
+/// A `forbid` could not be relaxed by the `allow` it needs, so the
+/// crate roots have to say `deny`.
+#[test]
+fn the_crates_on_the_list_say_deny_and_not_forbid() {
+    for (name, _) in ALLOWED {
+        let roots: Vec<PathBuf> = every_source()
+            .into_iter()
+            .filter(|(crate_name, path)| crate_name == *name && path.ends_with("lib.rs"))
+            .map(|(_, path)| path)
+            .collect();
+        assert!(!roots.is_empty(), "the crate `{name}` has no root");
+        for root in roots {
+            let source = std::fs::read_to_string(&root).expect("the root is readable");
+            assert!(source.contains("#![deny(unsafe_code)]"), "the crate {root:?} denies unsafe");
+            assert!(
+                !source.contains("#![forbid(unsafe_code)]"),
+                "the crate {root:?} does not forbid it: the exception is here"
+            );
+        }
+    }
 }
 
 /// Every other crate still forbids unsafe outright.
@@ -146,7 +207,7 @@ fn this_crate_says_deny_and_not_forbid() {
 fn every_other_crate_forbids_unsafe() {
     let offenders: Vec<String> = every_source()
         .into_iter()
-        .filter(|(crate_name, _)| crate_name != "craftkit-alloc")
+        .filter(|(crate_name, _)| !is_allowed(crate_name))
         .filter_map(|(crate_name, path)| {
             let source = std::fs::read_to_string(&path).ok()?;
             // The crate root is the file that has the crate's attributes.

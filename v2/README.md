@@ -850,14 +850,23 @@ different commands with one id.
   of an artist's IDE — projects, scenes, tracks, elements, an opaque 3D stage
   and remote generations — ported into v2's seams, and the three things it
   found (§33). It is optional, like the others.
-- `crates/craftkit-alloc` — the **counting allocator**: the one piece of
-  `unsafe` in v2, and what turns the lane's "must not allocate" rule into
-  a measurement (§32). It is a **dev** dependency of the studio and
-  nothing else, and a gate test holds it to that.
+- `crates/craftkit-alloc` — the **counting allocator**: the first of the
+  crates that may hold `unsafe`, and what turns the lane's "must not
+  allocate" rule into a measurement (§32). It is a **dev** dependency of
+  the studio and nothing else.
+- `crates/craftkit-ffi-abi` — **the contract** between a host and a plugin
+  that is not part of the program: a versioned table of function
+  pointers. No dependencies at all (§34).
+- `crates/craftkit-ffi` — **the door**: opens a shared library, finds the
+  entry point by name, checks the version and calls the table (§34). The
+  second crate that may hold `unsafe`.
+- `crates/craftkit-plugin-shared` — **a plugin that is not part of the
+  program**: a shared library with an exported entry point, and the proof
+  that the door works on something the host has never seen (§34).
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**319 tests** by default, and **358** with the six optional batteries
+**326 tests** by default, and **365** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
@@ -935,7 +944,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 319 tests (358 with the batteries on)
+cargo test          # 326 tests (365 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -1441,8 +1450,9 @@ fifth gives a document that names no files the none it has.
   one drives the lane from the device's callback, and that is the
   host's business.
 - **The measurement of the allocation rule** — **this one is built now**
-  (§32): a counting global allocator, the one piece of `unsafe` in v2, and
-  a test that proves the lane's work allocates zero times.
+  (§32): a counting global allocator, the first of the three crates on
+  **the list** (§34), and a test that proves the lane's work allocates
+  zero times.
 - **A bundle that the application writes** — **this one is built now**
   (§25.1): the studio writes one and reads one back. And a bundle that a
   *plugin* fills — **that one is built now too** (§25's stream, used by
@@ -1452,8 +1462,11 @@ fifth gives a document that names no files the none it has.
 - **The rest of the §20 list**: a selection of spans rather than of ids
   (still not built), the view state (the **camera** is built, §29; what
   is not built is a view state that outlives the session), and the three
-  plugin formats (still not built: they are FFI, and FFI is unsafe — §32
-  is the pattern they would use).
+  plugin formats — **the door they come through is built** (§34: a
+  shared library, an entry point by name, a versioned table), and the
+  formats themselves are not, because each is a large ABI in another
+  language and each would be a shim over that door rather than a change
+  to it.
 
 ---
 
@@ -1723,7 +1736,9 @@ And the things that were never in the list, still not in it: the transport
 (which belongs to the lane), and the CLAP, VST3 and AU plugin formats (they
 are FFI, and FFI is unsafe). The allocation measurement of the lane is no
 longer in that list: it is built (§32), and it cost one piece of `unsafe`
-in a crate of its own.
+in a crate of its own. The **door** for the plugin formats is built too
+(§34): the formats themselves are not, and they are a much larger piece
+of work than the door they would come through.
 
 ### What this says about the kit
 
@@ -2255,6 +2270,11 @@ that is left.
 
 ## 32. One piece of `unsafe`, and the lane's rule measured
 
+**And then there were three** (§34): the loader and a shared library's
+entry point joined the allocator on **the list**. The rule below did not
+survive as "one piece of `unsafe`"; it survived as **the shape** — a
+list, a reason beside each name, and a gate that reads the tree.
+
 The lane has one rule: **its work must not allocate**. `run` does bounded
 work in bounded time, and an allocation inside it is a lock inside it — a
 lock on the lane, from the thread that is supposed to never wait. The rule
@@ -2415,3 +2435,88 @@ arrive with an **opaque blob** and leave with a stream, and arrive with a
 kit did not grow a seam for this domain. It grew one method, in the
 place where the outside world's name for a piece of work had to be
 understood.
+
+---
+
+## 34. The door: a plugin that is not part of the program
+
+§32 made a rule and broke it on purpose: one crate, one `unsafe impl`,
+one `allow`, and a gate that holds the tree to it. That was the **first**
+exception. This section is the **second** and the **third**, and it is
+what a real plugin format needs.
+
+### What the formats are, and what the door is
+
+CLAP, VST3 and AU are not document models. They are **binary
+contracts**: a C or C++ API with a fixed layout, a factory function, and
+a set of calls the host makes. Porting one of them is not a port; it is
+an implementation of somebody else's ABI, in a language this kit does
+not speak, and it is large.
+
+What was built is the **door** the formats would come through:
+
+- `crates/craftkit-ffi-abi` — **the contract**: a table of function
+  pointers with a version at the front. No dependencies at all, because a
+  contract that depends on nothing is a contract that cannot move.
+- `crates/craftkit-ffi` — **the host**: opens a shared library with
+  `dlopen`, finds the entry point **by name** with `dlsym`, checks the
+  version, and calls the table.
+- `crates/craftkit-plugin-shared` — **a plugin that is not part of the
+  program**: a `cdylib` that exports `craftkit_plugin_vtable` and does
+  not link into the host at all.
+
+A CLAP plugin would arrive as a **shim**: a small piece of C++ that
+exposes this table. Nothing above the door would know the difference, and
+the door is the same one the outer tree's Android package uses — a shared
+library, an entry point, looked up by name.
+
+### What the port found
+
+- **The entry point cannot be the table.** The host does not know where
+  in the library the table is, so the thing it finds by name has to be a
+  **function** that gives the address. The first attempt made the entry
+  point the table itself, and the host read a version of 822447432 out
+  of a function pointer: the test caught it in one run.
+- **A version is the whole of the safety here.** The host cannot know
+  what is in a library it has not read, so the table says which contract
+  it speaks, and the host **refuses** a table it does not understand
+  rather than calling it and hoping. A plugin built against another
+  version is not called; the numbers would mean different things.
+- **The unsafe is one module.** Every foreign call in the loader —
+  `dlopen`, `dlsym`, `dlclose`, `dlerror`, and reading a C string the
+  plugin gave back — lives in **one module** with **one**
+  `allow(unsafe_code)`. The rest of the crate is safe Rust that calls
+  into it. The plugin's side is one `#[unsafe(no_mangle)]`, because a
+  name that is found by name cannot be mangled.
+
+### The list, and what it cost
+
+The gate in `craftkit-alloc` used to hold the tree to **one** exception.
+It is now a **list**, and the list is the whole of the exceptions:
+
+| the crate | why it may hold `unsafe` |
+|---|---|
+| `craftkit-alloc` | a counting global allocator is unsafe by definition |
+| `craftkit-ffi` | opening a library and calling into it |
+| `craftkit-plugin-shared` | a shared library's entry point, found by name |
+
+And the rules around it are mechanical: `unsafe` appears **only** in
+those three crates; each of them says `deny(unsafe_code)` and **not**
+`forbid`; each has **exactly one** `allow(unsafe_code)`, so an exception
+is one marked place and not a scattering; the only `unsafe impl` in the
+tree is the allocator's; and every other crate still forbids unsafe
+outright.
+
+So §32's rule did not survive as "one piece of `unsafe`". It survived as
+**the shape**: a list, a reason beside each name, and a gate that reads
+the whole tree. That is the outer tree's own pattern — one list of
+allowed exceptions, and a gate that holds the tree to it — and it is now
+in v2 as well.
+
+### What is still not built
+
+The **formats** are not built. There is no CLAP, no VST3 and no AU here:
+each is a large ABI in another language, and each would be a **shim**
+over this door, not a change to it. What is built is the door, the
+contract, the version check, and the proof that a plugin in another
+shared library can be reached from a program that has never seen it.

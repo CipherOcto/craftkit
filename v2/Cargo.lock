@@ -44,6 +44,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-ffi"
+version = "0.2.0"
+dependencies = [
+ "craftkit-ffi-abi",
+ "craftkit-plugin-shared",
+]
+
+[[package]]
+name = "craftkit-ffi-abi"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-hello-server"
 version = "0.2.0"
 dependencies = [
@@ -101,6 +113,14 @@ version = "0.2.0"
 dependencies = [
  "craftkit-derive",
  "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-shared"
+version = "0.2.0"
+dependencies = [
+ "craftkit-ffi-abi",
+ "craftkit-plugin-shared",
 ]
 
 [[package]]

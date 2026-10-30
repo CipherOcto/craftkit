@@ -1,0 +1,19 @@
+[package]
+name = "craftkit-ffi"
+description = "The door: a host that opens a shared library and calls the plugin table inside it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The contract. The loader does not invent the table: it finds the one
+# the two sides agreed on.
+craftkit-ffi-abi = { path = "../craftkit-ffi-abi" }
+
+
+[dev-dependencies]
+# A plugin that is **not part of the program**: a shared library, built
+# by cargo and opened by the tests. It is a dev dependency, so nothing
+# that ships links it.
+craftkit-plugin-shared = { path = "../craftkit-plugin-shared" }

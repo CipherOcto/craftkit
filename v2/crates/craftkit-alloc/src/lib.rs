@@ -1,5 +1,5 @@
-//! `craftkit-alloc` — a **counting allocator**, and the one piece of
-//! `unsafe` in v2.
+//! `craftkit-alloc` — a **counting allocator**, and the **first** of the
+//! crates in v2 that may hold `unsafe`.
 //!
 //! # Why it is here
 //!
@@ -9,7 +9,7 @@
 //! measuring it needs a counting global allocator, and a global allocator
 //! is `unsafe` by definition.
 //!
-//! So this crate is the exception, and it is a small one:
+//! So this crate is an exception, and it is a small one:
 //!
 //! - it is **one crate**, and it does **one thing**;
 //! - it holds **one** `unsafe impl`, and the impl is the allocator the
@@ -17,9 +17,13 @@
 //! - the crate root says `deny(unsafe_code)` and **not** `forbid`, so
 //!   the exception is explicit and the rest of the crate is under the
 //!   same rule as every other crate in the tree;
-//! - a **test holds it there**: it reads the whole workspace and refuses
-//!   a second `unsafe`, a second exception, or a `forbid` that has been
-//!   swapped for a `deny` in the wrong place.
+//! - a **test holds it there**: the gate in this crate's `tests` reads
+//!   the whole workspace and refuses `unsafe` in any crate that is not
+//!   on **the list**, refuses a crate with more than one exception, and
+//!   refuses a `forbid` that has been swapped for a `deny` in the wrong
+//!   place. The list has three names on it now — this one, the plugin
+//!   loader, and a shared library's exported entry point — and each one
+//!   says why it is there.
 //!
 //! # What it measures
 //!
