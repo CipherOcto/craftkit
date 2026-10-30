@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**801 tests.** The MCP server links **all twelve batteries** in, so the
+**803 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6295,3 +6295,62 @@ factory, given a **host**, and lived through.
 - **One instance at a time.** The host makes an instance and keeps it;
   there is no pool, no panel of plugins, and no state to save and
   restore.
+
+---
+
+## 80. The audio path
+
+The instance had a life but no **work**: the `process` call — the one
+every audio plugin exists for — was not made. This arc makes it.
+
+### What was built
+
+- **The ABI crate gained the block**: the audio buffer, the input and
+  output event lists, and the process structure that holds them.
+- **The host builds the block and hands it over.** The channels are
+  **planar** — one vector a channel — because that is how the family's
+  own audio is laid out, and the host writes the channel addresses into
+  the buffer it gives the plugin.
+- **The events are empty.** This host has no transport and no event
+  list, and the format says a plugin may be given none.
+- **The reference plugin does audio now.** It is a **gain**: it adds
+  one to every sample that comes in and writes it out.
+
+### What the port found
+
+- **The audio crosses the boundary in both directions, and the test
+  says so.** The plugin adds one; the test reads the output and finds
+  one more than it put in. That single fact says that the samples
+  arrived where the plugin expected them *and* left where the host
+  expected them — which is the whole of what a host has to get right.
+- **The channels are a table of addresses.** The format's buffer does
+  not hold samples; it holds the **addresses** of the channels, and
+  the channels hold the samples. So the host builds the table, and the
+  vectors it points at must not move while the plugin is writing —
+  which is why the block is borrowed for the length of the call.
+- **A plugin that is not ready must not be asked to work.** The
+  reference plugin says `ContinueIfNotProcessed` before it is
+  initialised, and the host believes it. The status is the plugin's
+  own word, and the host has nothing better to say.
+- **The events are the part that is not built.** The format's events
+  are a transport, a note, a parameter value — each one a structure
+  with a size and a type, and a list that is read through two
+  functions. This host gives the plugin an **empty** list, which the
+  format allows, and the audio path works without them.
+
+### What it cost
+
+- three more structures in the ABI crate, one call in the host, and
+  **two tests**.
+
+### What it does not settle
+
+- **There are no events.** No transport, no notes, no parameter
+  values: the plugin is given none. A MIDI plugin needs them, and
+  that is the next arc.
+- **The ports are one port each way.** The host offers one input port
+  and one output port, whatever the plugin says it has. A plugin with
+  more ports needs the audio-ports extension, which this host does not
+  have (§79).
+- **The block is float.** The format's sixty-four bit half is not
+  used, and neither is the latency or the constant mask.
