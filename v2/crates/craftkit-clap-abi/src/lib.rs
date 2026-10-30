@@ -270,6 +270,96 @@ pub struct ClapPlugin {
     pub on_main_thread: Option<extern "C" fn(plugin: *const ClapPlugin)>,
 }
 
+/// The id of the **parameters** extension.
+pub const PARAMS_EXTENSION: &str = "clap.params";
+
+/// How long a parameter's name may be, in bytes.
+pub const NAME_SIZE: usize = 256;
+
+/// How long a parameter's module path may be, in bytes.
+pub const PATH_SIZE: usize = 1024;
+
+/// What one parameter of a plugin is.
+///
+/// The name and the module are **fixed-size** arrays, not pointers: the
+/// format says a parameter's name is a short, fixed thing, and a
+/// host that has to allocate for every parameter it reads is a host
+/// that allocates on the audio thread.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapParamInfo {
+    /// The parameter's id: the name a host asks by.
+    pub id: u32,
+    /// What the parameter is: stepped, hidden, read-only, and so on.
+    pub flags: u32,
+    /// The plugin's own state for this parameter.
+    pub cookie: *mut c_void,
+    /// The parameter's name, for a person.
+    pub name: [c_char; NAME_SIZE],
+    /// The module the parameter belongs to.
+    pub module: [c_char; PATH_SIZE],
+    /// The smallest value the parameter takes.
+    pub min_value: f64,
+    /// The largest value the parameter takes.
+    pub max_value: f64,
+    /// The value the parameter starts at.
+    pub default_value: f64,
+}
+
+/// The **parameters** a plugin holds.
+///
+/// The plugin says how many there are, what each of them is, and what
+/// each of them is set to. Setting one is not here: the format sets a
+/// parameter by **offering an event**, and that is a later arc.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapPluginParams {
+    /// How many parameters the plugin holds.
+    pub count: Option<extern "C" fn(plugin: *const ClapPlugin) -> u32>,
+    /// What the parameter at that index is.
+    pub get_info: Option<
+        extern "C" fn(plugin: *const ClapPlugin, param_index: u32, param_info: *mut ClapParamInfo) -> bool,
+    >,
+    /// What the parameter with that id is set to.
+    pub get_value:
+        Option<extern "C" fn(plugin: *const ClapPlugin, param_id: u32, out_value: *mut f64) -> bool>,
+    /// The parameter's value as text.
+    pub value_to_text: Option<
+        extern "C" fn(
+            plugin: *const ClapPlugin,
+            param_id: u32,
+            value: f64,
+            out_buffer: *mut c_char,
+            out_buffer_capacity: u32,
+        ) -> bool,
+    >,
+    /// The value the text means.
+    pub text_to_value: Option<
+        extern "C" fn(
+            plugin: *const ClapPlugin,
+            param_id: u32,
+            param_value_text: *const c_char,
+            out_value: *mut f64,
+        ) -> bool,
+    >,
+    /// The plugin has new values to give.
+    pub flush: Option<
+        extern "C" fn(plugin: *const ClapPlugin, in_: *const ClapInputEvents, out: *const ClapOutputEvents),
+    >,
+}
+
+/// The **host's** parameters: what a plugin may ask of the host.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapHostParams {
+    /// The plugin's parameters have changed: ask it again.
+    pub rescan: Option<extern "C" fn(host: *const ClapHost, flags: u32)>,
+    /// Forget the automations of a parameter.
+    pub clear: Option<extern "C" fn(host: *const ClapHost, param_id: u32, flags: u32)>,
+    /// The host wants the plugin's values.
+    pub request_flush: Option<extern "C" fn(host: *const ClapHost)>,
+}
+
 /// The **audio buffer**: the channels of one port.
 ///
 /// The channels are **planar**: each one is its own array of samples,

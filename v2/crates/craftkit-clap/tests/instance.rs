@@ -119,6 +119,30 @@ fn an_instance_that_is_not_ready_does_no_audio() {
     });
 }
 
+/// The plugin says what **parameters** it holds.
+///
+/// The host asks the plugin for its parameters extension, and the
+/// plugin answers with its own table: how many, what each of them is,
+/// and what each of them is set to.
+#[test]
+fn the_plugin_says_what_parameters_it_holds() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        let parameters = instance.parameters().expect("the parameters are there");
+        assert_eq!(parameters.len(), 2, "the plugin holds two parameters");
+        assert_eq!(parameters[0].id, 1, "the first parameter is the gain");
+        assert_eq!(parameters[0].name, "gain", "and it is called that");
+        assert_eq!(parameters[0].min_value, 0.0, "its range starts at zero");
+        assert_eq!(parameters[0].max_value, 2.0, "and ends at two");
+        assert_eq!(parameters[0].default_value, 1.0, "and it starts at one");
+        assert_eq!(parameters[0].value, 1.0, "and it is set to one");
+        assert_eq!(parameters[1].id, 2, "the second parameter is the tone");
+        assert_eq!(parameters[1].name, "tone", "and it is called that");
+        assert_eq!(parameters[1].value, 0.5, "and it is set to half");
+    });
+}
+
 /// An id the factory does not know is refused, by name.
 #[test]
 fn an_id_the_factory_does_not_know_is_refused() {

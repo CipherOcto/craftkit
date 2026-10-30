@@ -189,7 +189,8 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapHost, ClapPlugin, ClapPluginFactory, ClapProcess, ClapProcessStatus, PLUGIN_FACTORY_ID,
+        ClapHost, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams, ClapProcess,
+        ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
     };
 
     /// The entry point of this plugin, found by name.
@@ -227,6 +228,104 @@ mod exports {
         initialised: bool,
         /// The rate the instance was activated at.
         sample_rate: f64,
+        /// The values of the parameters, by their ids.
+        values: Vec<(u32, f64)>,
+    }
+
+    /// The parameters the plugin holds: a gain and a tone.
+    pub(super) const PARAMETERS: [(u32, &str, f64, f64, f64); 2] =
+        [(1, "gain", 0.0, 2.0, 1.0), (2, "tone", 0.0, 1.0, 0.5)];
+
+    /// The parameter with that id, if the plugin has it.
+    fn parameter(id: u32) -> Option<(u32, &'static str, f64, f64, f64)> {
+        PARAMETERS.iter().copied().find(|parameter| parameter.0 == id)
+    }
+
+    /// The **parameters** the plugin holds.
+    ///
+    /// The plugin's parameters are an **extension**: the host asks for
+    /// it by name, and the plugin answers with the address of its own
+    /// table.
+    pub(super) extern "C" fn get_extension(plugin: *const ClapPlugin, id: *const c_char) -> *const c_void {
+        if id.is_null() {
+            return std::ptr::null();
+        }
+        // SAFETY: the host asks for an extension by its id, and the
+        // answer is compared against that same id. Both are C strings.
+        let wanted = unsafe { std::ffi::CStr::from_ptr(id) };
+        if wanted.to_bytes() != PARAMS_EXTENSION.as_bytes() {
+            return std::ptr::null();
+        }
+        if state(plugin).is_none() {
+            return std::ptr::null();
+        }
+        &PARAMS_TABLE as *const ClapPluginParams as *const c_void
+    }
+
+    /// The **parameters** table of the plugin.
+    static PARAMS_TABLE: ClapPluginParams = ClapPluginParams {
+        count: Some(params_count),
+        get_info: Some(params_get_info),
+        get_value: Some(params_get_value),
+        value_to_text: None,
+        text_to_value: None,
+        flush: None,
+    };
+
+    /// How many parameters the plugin holds.
+    pub(super) extern "C" fn params_count(_plugin: *const ClapPlugin) -> u32 {
+        PARAMETERS.len() as u32
+    }
+
+    /// What the parameter at that index is.
+    pub(super) extern "C" fn params_get_info(
+        _plugin: *const ClapPlugin,
+        param_index: u32,
+        param_info: *mut ClapParamInfo,
+    ) -> bool {
+        let Some((id, name, min, max, default)) = PARAMETERS.get(param_index as usize).copied() else {
+            return false;
+        };
+        if param_info.is_null() {
+            return false;
+        }
+        // SAFETY: the host asked for this parameter's information, and
+        // it gave the room it wants it written into.
+        unsafe {
+            let info = &mut *param_info;
+            info.id = id;
+            info.flags = 0;
+            info.cookie = std::ptr::null_mut();
+            let bytes = name.as_bytes();
+            let count = bytes.len().min(info.name.len() - 1);
+            for (index, byte) in bytes.iter().take(count).enumerate() {
+                info.name[index] = *byte as c_char;
+            }
+            info.name[count] = 0;
+            info.min_value = min;
+            info.max_value = max;
+            info.default_value = default;
+        }
+        true
+    }
+
+    /// What the parameter with that id is set to.
+    pub(super) extern "C" fn params_get_value(
+        plugin: *const ClapPlugin,
+        param_id: u32,
+        out_value: *mut f64,
+    ) -> bool {
+        let Some(state) = state(plugin) else { return false };
+        let Some((_, _, _, _, default)) = parameter(param_id) else { return false };
+        let value =
+            state.values.iter().find(|(id, _)| *id == param_id).map(|(_, value)| *value).unwrap_or(default);
+        if out_value.is_null() {
+            return false;
+        }
+        // SAFETY: the host asked for the value and gave the room it
+        // wants it written into.
+        unsafe { *out_value = value };
+        true
     }
 
     /// The instance's own state.
@@ -283,6 +382,7 @@ mod exports {
             host: host as *const ClapHost,
             initialised: false,
             sample_rate: 0.0,
+            values: Vec::new(),
         }));
         let plugin = Box::into_raw(Box::new(ClapPlugin {
             desc: super::descriptor(),
@@ -295,7 +395,7 @@ mod exports {
             stop_processing: Some(stop_processing),
             reset: Some(reset),
             process: Some(process),
-            get_extension: None,
+            get_extension: Some(get_extension),
             on_main_thread: None,
         }));
         plugin as *const c_void

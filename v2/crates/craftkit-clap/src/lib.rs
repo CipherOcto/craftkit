@@ -312,6 +312,28 @@ impl ClapBlock {
     }
 }
 
+/// One **parameter** of a plugin, as the host reads it.
+///
+/// Everything is **owned**: the name was copied out of the plugin's
+/// own fixed-size array, and the values are numbers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClapParameter {
+    /// The parameter's id: the name a host asks by.
+    pub id: u32,
+    /// The parameter's name, for a person.
+    pub name: String,
+    /// What the parameter is: stepped, hidden, read-only, and so on.
+    pub flags: u32,
+    /// The smallest value the parameter takes.
+    pub min_value: f64,
+    /// The largest value the parameter takes.
+    pub max_value: f64,
+    /// The value the parameter starts at.
+    pub default_value: f64,
+    /// The value the parameter is set to, as the plugin says it is.
+    pub value: f64,
+}
+
 /// A **plugin instance**: a plugin that has been made.
 ///
 /// The instance is the plugin's own: it has its own state, and it is
@@ -385,6 +407,15 @@ impl ClapInstance<'_> {
         foreign::plugin_process(self.plugin, frames, block).map_err(ClapError::new)
     }
 
+    /// The **parameters** the plugin holds.
+    ///
+    /// The plugin says how many there are, what each of them is, and
+    /// what each of them is set to — and the host copies all of it out
+    /// at once, because the plugin's own memory is the plugin's.
+    pub fn parameters(&self) -> Result<Vec<ClapParameter>> {
+        foreign::plugin_parameters(self.plugin).map_err(ClapError::new)
+    }
+
     /// What the plugin asked the host for.
     pub fn requests(&self) -> HostRequests {
         HostRequests {
@@ -444,9 +475,9 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapHost, ClapInputEvents, ClapOutputEvents, ClapPlugin as ClapPluginInstance,
-        ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapProcess, ClapProcessStatus,
-        ClapVersion,
+        ClapAudioBuffer, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
+        ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
+        ClapPluginParams, ClapProcess, ClapProcessStatus, ClapVersion,
     };
 
     use super::{ClapDescriptor, HostState};
@@ -871,6 +902,87 @@ mod foreign {
     /// Offer an event to the host: there is no host to take it.
     extern "C" fn output_events_push(_list: *const ClapOutputEvents, _event: *const c_void) -> bool {
         false
+    }
+
+    /// The **parameters** the plugin holds.
+    ///
+    /// The plugin's parameters are an **extension**: the plugin is
+    /// asked for it by name, and it answers with the address of its
+    /// own table. Everything in the table is then copied out at once.
+    pub fn plugin_parameters(plugin: *const ClapPluginInstance) -> Result<Vec<super::ClapParameter>, String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let get_extension = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).get_extension)) };
+        let Some(get_extension) = get_extension else {
+            return Err("the plugin has no extensions".to_string());
+        };
+        let id = match CString::new(craftkit_clap_abi::PARAMS_EXTENSION) {
+            Ok(id) => id,
+            Err(_) => return Err("the extension's name is not a C string".to_string()),
+        };
+        // The plugin's own function, called with the instance back and
+        // the extension's id, as the format says.
+        let extension = get_extension(plugin, id.as_ptr());
+        if extension.is_null() {
+            return Err(format!("the plugin has no `{}`", craftkit_clap_abi::PARAMS_EXTENSION));
+        }
+        let extension = extension as *const ClapPluginParams;
+        // SAFETY: the extension is the plugin's own table, inside a
+        // library that is open.
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*extension).count)) };
+        let get_info = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*extension).get_info)) };
+        let get_value = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*extension).get_value)) };
+        let Some(count) = count else {
+            return Err("the plugin's parameters cannot be counted".to_string());
+        };
+        let Some(get_info) = get_info else {
+            return Err("the plugin's parameters cannot be read".to_string());
+        };
+        let total = count(plugin);
+        let mut parameters: Vec<super::ClapParameter> = Vec::with_capacity(total as usize);
+        for index in 0..total {
+            let mut info = ClapParamInfo {
+                id: 0,
+                flags: 0,
+                cookie: std::ptr::null_mut(),
+                name: [0; craftkit_clap_abi::NAME_SIZE],
+                module: [0; craftkit_clap_abi::PATH_SIZE],
+                min_value: 0.0,
+                max_value: 0.0,
+                default_value: 0.0,
+            };
+            // The plugin's own function, called with the instance back
+            // and the index, as the format says. It fills in the
+            // information the host asked for.
+            if !get_info(plugin, index, &mut info) {
+                return Err(format!("the plugin would not say what parameter {index} is"));
+            }
+            let mut value = 0.0;
+            let value_read = match get_value {
+                Some(get_value) => get_value(plugin, info.id, &mut value),
+                None => false,
+            };
+            parameters.push(super::ClapParameter {
+                id: info.id,
+                name: read_fixed(&info.name),
+                flags: info.flags,
+                min_value: info.min_value,
+                max_value: info.max_value,
+                default_value: info.default_value,
+                value: if value_read { value } else { info.default_value },
+            });
+        }
+        Ok(parameters)
+    }
+
+    /// A fixed-size name, as text.
+    ///
+    /// The format's names are arrays with a zero byte at the end of
+    /// the text, and the rest of the array is whatever was there
+    /// before.
+    fn read_fixed(bytes: &[std::ffi::c_char]) -> String {
+        let text: Vec<u8> = bytes.iter().take_while(|byte| **byte != 0).map(|byte| *byte as u8).collect();
+        String::from_utf8_lossy(&text).into_owned()
     }
 
     /// The host has **no extensions** to give.
