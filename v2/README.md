@@ -901,7 +901,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**564 tests.** The MCP server links **all eleven batteries** in, so the
+**579 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
@@ -986,7 +986,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 564 tests
+cargo test          # 579 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3434,16 +3434,32 @@ so.
 | the **plan**: one evaluated thing every consumer reads | **built** | §24 |
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
-| the **version a file is written at**, derived from what the document holds | **not built.** The kit writes the newest version and reads the old ones through its chain of migrations; the family's page layout application writes the *oldest* version that still represents the document | §51 |
+| the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
 
-### The one thing that is honestly not there
+### The list of things that are honestly not there: empty
 
-1. **The version a file is written at.** The kit writes the newest
-   version it knows and reads the old ones through its chain of
-   migrations. The family's page layout application writes the *oldest*
-   version that still represents the document, so that old readers keep
-   working (§51). The kit has the machinery — the chain — and not the
-   habit, and the habit is a decision about the format's contract.
+It is empty, and that is not the end of the work — it is the end of
+*this* list. The table above still has rows that are not built (the
+toolbar, by design; the plugin formats, which are a shim over a door
+that is built; images, which are a port nobody has made yet), and
+those are **not** on this list because they are not gaps in the kit's
+design: they are things this tree has not been asked for.
+
+What was on this list, and where each of them went:
+
+- the **resumable command** — §50, and §50 says what the answer costs:
+  the command is **run again** when the answer comes, so a command that
+  asks must ask **before** it changes the document, and the session
+  checks that rather than trusting the command.
+- the **cheap undo** — §53: the nodes are shared, the states keep what
+  they were, and the cost of an edit no longer depends on the size of
+  the document — measured before and after.
+- the **typed parameter** — §56, and §56 says that the claim which put
+  it on this list was wrong: the seam was open, and what was missing
+  was the schema's name and its unit.
+- the **version a file is written at** — §57: a file is written at the
+  oldest version that loses nothing, and the round trip that decides it
+  found a bug in the format.
 
 Three items used to be on this list and are not now. The **resumable
 command** — a command that asks while it runs — was built in §50, and
@@ -4251,3 +4267,98 @@ vector library made, and the layering table says so.
 §48's list is re-checked below, and the typed parameter comes off it.
 What is left on that list is the **version a file is written at**, which
 is a decision about the format's contract and not a seam.
+
+---
+
+## 57. The version a file is written at, and the bug the round trip found
+
+§51 found the rule in the family's page layout application: it writes
+the **oldest** version that still represents the document, so that old
+readers keep working. §48 listed it as the one thing that was honestly
+not there.
+
+This section builds it — and the round trip that decides it found a bug
+in the format that had been there since the relation's payload arrived.
+
+### The rule
+
+A file is written at the **oldest version that loses nothing**.
+
+How the version is decided is the interesting part: **nothing is
+declared and nothing is configured**. The document is written at each
+version of the family, from the oldest to the newest, and read back.
+The first version whose round trip gives the same document back is the
+one. The versions are *tried*, and the one that keeps everything wins.
+
+So the version is **derived from the document**, and here is what the
+derivation says:
+
+| the document has | it is written at |
+|---|---|
+| a plain node | **1** — the first version can say this |
+| a muted node | **2** — the second version is the one with `muted` |
+| a child | **3** — the third version is the one with children |
+| a payload of its own | **4** |
+| a relation | **5** |
+| a stream | **7** |
+| a relation that says something | **8** — the payload of a relation is the eighth version's field |
+
+A plain document is written at the **first** version. A document with a
+stream is written at the seventh. And the bundle says which version it
+wrote, in the document's own tag ✓.
+
+### The bug
+
+The round trip found it on the first run, and it was a real one: **a
+relation's payload was lost from every file**.
+
+The commit that gave the relation its payload (§339) said the right
+thing — *"the older writers take the field off again, because a file of
+the seventh version must not carry a field the seventh version does not
+know"* — and then wrote it the other way round:
+
+- the **seventh** version wrote the relations *with* their payloads, a
+  field the seventh version does not know;
+- the **eighth** version — the one that *has* the payload — took the
+  payload off again.
+
+So the payload never reached a file: the version that could write it
+dropped it, and the version that dropped it wrote one. A relation that
+said something said it only until the document was saved.
+
+The fix is two lines in the two writers, and two tests hold it: a
+relation's payload survives the file, and a file of the seventh version
+does not carry it.
+
+This is the **first bug** this tree's own features have found, and it
+was found by a feature that was built to answer a different question.
+That is worth saying plainly: the round trip was not written to find a
+bug, and it found one.
+
+### What it cost
+
+- one function in the format module — `write_document_oldest` — and the
+  bundle's writer uses it;
+- the bundle's `write` takes the migrations now, because the round trip
+  needs them;
+- **nothing in the format's shape**: the eight versions, the eight
+  writers and the seven steps are exactly as they were.
+
+### What it does not settle
+
+- **The bundle's own version is separate.** A bundle carries its own
+  version number, and that is still the newest one: the *document*
+  inside it is written at the oldest version that keeps it, and the
+  bundle around it is the newest bundle there is. Those are two
+  versions, and only one of them is about the document.
+- **The version is the oldest that *this* program can read back.** A
+  program that knows fewer versions writes a **newer** file, because it
+  cannot read back what it does not know — which is right: a file must
+  be readable by the program that wrote it.
+- **The bytes a node's stream points at are not in the comparison.**
+  They travel beside the document in the bundle (§25), and no version of
+  the document file can lose them.
+- **The cost is a read and a write per version.** Eight versions, so
+  sixteen operations on a save. That is the price of a rule that is
+  decided by trying rather than by declaring, and it is cheap enough to
+  be worth it.
