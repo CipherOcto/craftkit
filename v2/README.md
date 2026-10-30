@@ -5727,6 +5727,67 @@ is the inflate.
 
 ---
 
+## 73. The numbers agree with the prose
+
+§72 closed the half of the rule that says a bound must be **named** in
+the prose. This section closes the other half: the prose must say the
+**number**, and the number must be the number the code has.
+
+### What was built
+
+- **A table of the bounds**, in this README, with the expression each
+  one is written with:
+
+| the bound | the number |
+|---|---|
+| `MAX_DOCUMENT_BYTES` | `32 * 1024 * 1024` |
+| `MAX_HISTORY_BYTES` | `MAX_DOCUMENT_BYTES * HISTORY_EXPANSION` |
+| `MAX_SESSION_BYTES` | `MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS` |
+
+- **A small evaluator** (`crates/craftkit-gates/src/numbers.rs`): the
+  four operators an arithmetic bound is written with — `*`, `+`, `-` and
+  `<<` — and the tree's own constants as the names it may use. The two
+  expressions are **evaluated** and compared, so `32 * 1024 * 1024` and
+  `33554432` are the same number, and a reader cannot tell that from
+  the text.
+- **The fifth rule of the gate**: a bound whose number and the prose's
+  number differ is a finding.
+
+### What the port found
+
+- **The prose was telling the truth in words and the code was telling
+  it in numbers, and nothing compared them.** §63 said the document's
+  budget was thirty-two mebibytes; §65 said the history's was two
+  documents; §66 said the session's was five. The words were right and
+  the numbers were right, and a change to one would not have touched
+  the other. That is the drift the outer tree's own rule exists to
+  stop (§144: two caps with the same value and no relation between them
+  drift apart the moment one of them is changed).
+- **A number that cannot be worked out is not checked, and the gate
+  says nothing.** The evaluator knows four operators and a name; a bound
+  written any other way is a bound the gate **cannot** check, and a
+  gate that guesses is worse than a gate that is quiet.
+
+### What it cost
+
+- one module of about two hundred lines, one rule, and the table above.
+
+### What it does not settle
+
+- **The table is this README and nothing else.** A bound named in a
+  recipe and not in the table is a bound the gate cannot check, and the
+  rule says the bound is *named* (it is) while the number goes
+  unchecked.
+- **The evaluator is small on purpose.** A bound written with a cast, a
+  function call or a shift by a variable is not checked, and the
+  numbers this tree uses are all arithmetic.
+- **The gate checks the tree's own constants, not the compiler's.** A
+  constant that the compiler would fold differently — the evaluator
+  works in `u64` and the code in `usize` — is the same number on a
+  64-bit target and not on a 32-bit one. The tree is 64-bit.
+
+---
+
 ## 72. The fourth rule: the bounds are named in the prose
 
 The outer tree has a rule that is about **prose** and not about code:
