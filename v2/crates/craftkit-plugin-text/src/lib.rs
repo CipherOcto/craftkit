@@ -172,7 +172,9 @@ impl MetricKind {
             "default_mm": metric.default_mm,
             "space_mm": metric.space_mm,
             "characters": metric.advances.len(),
-            "monospaced": metric.advances.is_empty(),
+            "runs": metric.runs.len(),
+            "pairs": metric.pairs.len(),
+            "monospaced": metric.advances.is_empty() && metric.runs.is_empty() && metric.pairs.is_empty(),
         }))
     }
 }
@@ -182,19 +184,41 @@ const SET_IN: &str = "text.set_in";
 
 /// A **metric**, read from a node's payload.
 ///
+/// A metric is **three tables**, and the three are applied in three
+/// different places:
+///
+/// - the **advances**: the width of a character that has one;
+/// - the **runs**: the width of a *run* of characters that is one glyph —
+///   a ligature. A run **replaces** its characters;
+/// - the **pairs**: the **adjustment** between two characters — a
+///   kerning pair. A pair does not replace anything: it changes the gap
+///   between two characters that are still two glyphs.
+///
 /// The reader keeps what it does not understand: a width that is not a
-/// number, or a key that is not a single character, is **left out** —
-/// the character falls back to the default. A metric that was made by
-/// the command cannot hold such a thing; a metric that arrived in a
-/// file can.
+/// number, a key that is not a single character, a run of one character
+/// and a pair of three are **left out**. A metric that was made by the
+/// command cannot hold such a thing; a metric that arrived in a file
+/// can.
 struct Metric {
     /// The width of a character that has no width of its own.
     default_mm: f64,
     /// The widths of the characters that have one.
     advances: HashMap<char, f64>,
+    /// The widths of the runs that have one.
+    runs: HashMap<String, f64>,
+    /// The adjustments of the pairs that have one.
+    pairs: HashMap<String, f64>,
     /// The width of the space between two words.
     space_mm: f64,
 }
+
+/// The longest run a metric may hold: eight characters.
+///
+/// A run is looked for at every position of a word, and the longest one
+/// wins, so the number of characters a run may have is the number of
+/// places that are looked at. Eight is enough for the clusters a
+/// typeface has and small enough to bound the work.
+pub const MAX_RUN: usize = 8;
 
 impl Metric {
     /// Read the metric out of a node's payload.
@@ -205,17 +229,35 @@ impl Metric {
             return None;
         }
         let mut advances = HashMap::new();
-        if let Some(table) = node.data.get("advances").and_then(|value| value.as_object()) {
-            for (key, value) in table {
-                let Some(character) = one_character(key) else { continue };
-                let Some(width) = value.as_f64() else { continue };
-                if !width.is_finite() || width < 0.0 {
-                    continue;
-                }
-                advances.insert(character, width);
-            }
+        for (key, value) in table_of(node, "advances") {
+            let Some(character) = one_character(key) else { continue };
+            let Some(width) = width_of(value) else { continue };
+            advances.insert(character, width);
         }
-        Some(Metric { default_mm, advances, space_mm })
+        let mut runs = HashMap::new();
+        for (key, value) in table_of(node, "runs") {
+            // A run is **two** characters or more: one character is an
+            // advance, and the metric has a table for those.
+            if key.chars().count() < 2 {
+                continue;
+            }
+            let Some(width) = width_of(value) else { continue };
+            runs.insert(key.clone(), width);
+        }
+        let mut pairs = HashMap::new();
+        for (key, value) in table_of(node, "pairs") {
+            // A pair is **exactly** two characters: more is a run, and
+            // fewer is not a pair.
+            if key.chars().count() != 2 {
+                continue;
+            }
+            let Some(adjust) = value.as_f64() else { continue };
+            if !adjust.is_finite() {
+                continue;
+            }
+            pairs.insert(key.clone(), adjust);
+        }
+        Some(Metric { default_mm, advances, runs, pairs, space_mm })
     }
 
     /// The width of one character.
@@ -223,10 +265,64 @@ impl Metric {
         self.advances.get(&character).copied().unwrap_or(self.default_mm)
     }
 
-    /// The width of a word: its characters, one at a time.
-    fn word_width(&self, word: &str) -> f64 {
-        word.chars().map(|character| self.advance(character)).sum()
+    /// The longest run that starts at `index`, and its width.
+    fn longest_run(&self, characters: &[char], index: usize) -> Option<(usize, f64)> {
+        let mut length = characters.len().min(index + MAX_RUN) - index;
+        while length >= 2 {
+            let text: String = characters[index..index + length].iter().collect();
+            if let Some(width) = self.runs.get(&text) {
+                return Some((length, *width));
+            }
+            length -= 1;
+        }
+        None
     }
+
+    /// The width of a word: its runs, its characters and its pairs.
+    ///
+    /// The word is read from the left: at every place the **longest
+    /// run** that matches is taken and replaces its characters, and at
+    /// every **boundary** the pair's adjustment is added.
+    fn word_width(&self, word: &str) -> f64 {
+        let characters: Vec<char> = word.chars().collect();
+        let mut width = 0.0;
+        let mut index = 0;
+        while index < characters.len() {
+            match self.longest_run(&characters, index) {
+                Some((length, run_width)) => {
+                    width += run_width;
+                    index += length;
+                }
+                None => {
+                    width += self.advance(characters[index]);
+                    index += 1;
+                }
+            }
+            // The adjustment at the boundary, if the pair has one.
+            if index < characters.len() {
+                let pair: String = characters[index - 1..index + 1].iter().collect();
+                if let Some(adjust) = self.pairs.get(&pair) {
+                    width += adjust;
+                }
+            }
+        }
+        width
+    }
+}
+
+/// The table in a node's payload under a name, if it is a table.
+fn table_of<'a>(node: &'a Node, name: &str) -> Vec<(&'a String, &'a Json)> {
+    node.data
+        .get(name)
+        .and_then(|value| value.as_object())
+        .map(|table| table.iter().collect())
+        .unwrap_or_default()
+}
+
+/// The width in a table, if it is one.
+fn width_of(value: &Json) -> Option<f64> {
+    let width = value.as_f64()?;
+    if !width.is_finite() || width < 0.0 { None } else { Some(width) }
 }
 
 /// The one character of a key, if the key is one character.
@@ -323,6 +419,14 @@ pub struct AddMetric {
     /// The widths of the characters that have one: a table of character
     /// to millimetres.
     pub advances: Option<Json>,
+    /// The widths of the **runs** that have one: a table of two or more
+    /// characters to millimetres. A run is one glyph — a ligature — and
+    /// it replaces its characters.
+    pub runs: Option<Json>,
+    /// The **adjustments** of the pairs that have one: a table of two
+    /// characters to millimetres. A pair is a kerning pair: it changes
+    /// the gap between two characters and replaces nothing.
+    pub pairs: Option<Json>,
 }
 
 impl AddMetric {
@@ -341,36 +445,9 @@ impl AddMetric {
                 message: "a space is not narrower than nothing".to_string(),
             });
         }
-        let mut advances = craftkit_sdk::serde_json::Map::new();
-        if let Some(table) = &self.advances {
-            let Some(table) = table.as_object() else {
-                return Err(EngineError::Failed {
-                    id: "text.metric.add".to_string(),
-                    message: "the widths are a table of character to millimetres".to_string(),
-                });
-            };
-            for (key, value) in table {
-                let Some(character) = one_character(key) else {
-                    return Err(EngineError::Failed {
-                        id: "text.metric.add".to_string(),
-                        message: format!("`{key}` is not one character"),
-                    });
-                };
-                let Some(width) = value.as_f64() else {
-                    return Err(EngineError::Failed {
-                        id: "text.metric.add".to_string(),
-                        message: format!("the width of `{character}` is not a number"),
-                    });
-                };
-                if !width.is_finite() || width < 0.0 {
-                    return Err(EngineError::Failed {
-                        id: "text.metric.add".to_string(),
-                        message: format!("the width of `{character}` is not a width"),
-                    });
-                }
-                advances.insert(key.clone(), json!(width));
-            }
-        }
+        let advances = read_advances(self.advances.as_ref())?;
+        let runs = read_runs(self.runs.as_ref())?;
+        let pairs = read_pairs(self.pairs.as_ref())?;
         let id = session.document_mut().add_node_with_under(
             None,
             self.name.0.clone(),
@@ -380,10 +457,123 @@ impl AddMetric {
                 "default_mm": default_mm,
                 "space_mm": space_mm,
                 "advances": Json::Object(advances),
+                "runs": Json::Object(runs),
+                "pairs": Json::Object(pairs),
             }),
         );
         Ok(Outcome::changed(format!("added the metric `{}`", self.name.0)).with_data(json!({ "id": id })))
     }
+}
+
+/// Read the table of **advances**: a character to millimetres.
+///
+/// A key that is not one character is refused, because the table of
+/// runs is the table for the longer ones.
+fn read_advances(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+    let mut out = craftkit_sdk::serde_json::Map::new();
+    let Some(table) = table else { return Ok(out) };
+    let Some(table) = table.as_object() else {
+        return Err(EngineError::Failed {
+            id: "text.metric.add".to_string(),
+            message: "the widths are a table of character to millimetres".to_string(),
+        });
+    };
+    for (key, value) in table {
+        let Some(character) = one_character(key) else {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("`{key}` is not one character"),
+            });
+        };
+        let Some(width) = value.as_f64() else {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the width of `{character}` is not a number"),
+            });
+        };
+        if !width.is_finite() || width < 0.0 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the width of `{character}` is not a width"),
+            });
+        }
+        out.insert(key.clone(), json!(width));
+    }
+    Ok(out)
+}
+
+/// Read the table of **runs**: two or more characters to millimetres.
+///
+/// A run of one character is refused: that is an advance, and the
+/// metric has a table for those.
+fn read_runs(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+    let mut out = craftkit_sdk::serde_json::Map::new();
+    let Some(table) = table else { return Ok(out) };
+    let Some(table) = table.as_object() else {
+        return Err(EngineError::Failed {
+            id: "text.metric.add".to_string(),
+            message: "the runs are a table of characters to millimetres".to_string(),
+        });
+    };
+    for (key, value) in table {
+        if key.chars().count() < 2 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("`{key}` is one character, and that is an advance"),
+            });
+        }
+        let Some(width) = value.as_f64() else {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the width of `{key}` is not a number"),
+            });
+        };
+        if !width.is_finite() || width < 0.0 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the width of `{key}` is not a width"),
+            });
+        }
+        out.insert(key.clone(), json!(width));
+    }
+    Ok(out)
+}
+
+/// Read the table of **pairs**: exactly two characters to millimetres.
+///
+/// The adjustment may be **negative**: that is what a kerning pair is
+/// for.
+fn read_pairs(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+    let mut out = craftkit_sdk::serde_json::Map::new();
+    let Some(table) = table else { return Ok(out) };
+    let Some(table) = table.as_object() else {
+        return Err(EngineError::Failed {
+            id: "text.metric.add".to_string(),
+            message: "the pairs are a table of two characters to millimetres".to_string(),
+        });
+    };
+    for (key, value) in table {
+        if key.chars().count() != 2 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("`{key}` is not two characters, and that is not a pair"),
+            });
+        }
+        let Some(adjust) = value.as_f64() else {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the adjustment of `{key}` is not a number"),
+            });
+        };
+        if !adjust.is_finite() {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: format!("the adjustment of `{key}` is not a number"),
+            });
+        }
+        out.insert(key.clone(), json!(adjust));
+    }
+    Ok(out)
 }
 
 /// Put a **paragraph** in the document.
@@ -687,7 +877,13 @@ mod tests {
     /// forced break.
     #[test]
     fn the_words_become_boxes_and_glue() {
-        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs: HashMap::new(),
+            pairs: HashMap::new(),
+            space_mm: 1.0,
+        };
         let words = vec!["one".to_string(), "two".to_string(), "three".to_string()];
         let items = items_for(&words, &metric);
         assert_eq!(items.len(), 6, "a box, a glue, a box, a glue, a box and a forced break");
@@ -710,7 +906,8 @@ mod tests {
     fn a_character_with_a_width_of_its_own_is_wider() {
         let mut advances = HashMap::new();
         advances.insert('i', 1.0);
-        let metric = Metric { default_mm: 2.0, advances, space_mm: 1.0 };
+        let metric =
+            Metric { default_mm: 2.0, advances, runs: HashMap::new(), pairs: HashMap::new(), space_mm: 1.0 };
         assert_eq!(metric.word_width("iii"), 3.0, "three narrow letters");
         assert_eq!(metric.word_width("abc"), 6.0, "three ordinary ones");
     }
@@ -718,7 +915,13 @@ mod tests {
     /// An empty paragraph is no items at all: there is nothing to break.
     #[test]
     fn an_empty_paragraph_has_no_items() {
-        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs: HashMap::new(),
+            pairs: HashMap::new(),
+            space_mm: 1.0,
+        };
         assert!(items_for(&[], &metric).is_empty());
     }
 
@@ -937,6 +1140,103 @@ mod tests {
             )
             .expect_err("that is not a width");
         assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    }
+
+    /// A **run** replaces its characters: a ligature is one glyph and
+    /// not two letters.
+    #[test]
+    fn a_run_replaces_its_characters() {
+        let mut runs = HashMap::new();
+        runs.insert("fi".to_string(), 3.0);
+        let metric =
+            Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs: HashMap::new(), space_mm: 1.0 };
+        assert_eq!(metric.word_width("fi"), 3.0, "the ligature is one glyph");
+        assert_eq!(metric.word_width("fl"), 4.0, "and the other pair is two letters");
+    }
+
+    /// The **longest** run wins: the reader looks for the longest one
+    /// first, at every place.
+    #[test]
+    fn the_longest_run_wins() {
+        let mut runs = HashMap::new();
+        runs.insert("fi".to_string(), 3.0);
+        runs.insert("fij".to_string(), 4.0);
+        let metric =
+            Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs: HashMap::new(), space_mm: 1.0 };
+        assert_eq!(metric.word_width("fij"), 4.0, "the longer run is taken");
+        assert_eq!(metric.word_width("fig"), 5.0, "and where there is none, the letters are");
+    }
+
+    /// A **pair** is an adjustment between two characters: it replaces
+    /// nothing and it may be negative.
+    #[test]
+    fn a_pair_is_an_adjustment() {
+        let mut pairs = HashMap::new();
+        pairs.insert("AV".to_string(), -0.5);
+        let metric =
+            Metric { default_mm: 2.0, advances: HashMap::new(), runs: HashMap::new(), pairs, space_mm: 1.0 };
+        assert_eq!(metric.word_width("AV"), 3.5, "the pair is closer together");
+        assert_eq!(metric.word_width("VA"), 4.0, "and the other way round it is not");
+    }
+
+    /// A run and a pair may both be there: the run is taken first and
+    /// the pair is applied at the boundary.
+    #[test]
+    fn a_run_and_a_pair_are_both_applied() {
+        let mut runs = HashMap::new();
+        runs.insert("fi".to_string(), 3.0);
+        let mut pairs = HashMap::new();
+        pairs.insert("iV".to_string(), -0.5);
+        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs, space_mm: 1.0 };
+        assert_eq!(metric.word_width("fiV"), 4.5, "the ligature, and the pair after it");
+    }
+
+    /// A run of **one character** is refused: that is an advance.
+    #[test]
+    fn a_run_of_one_character_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute(
+                "text.metric.add",
+                &json!({ "name": "bad", "default_mm": 2.0, "space_mm": 1.0, "runs": { "i": 1.0 } }),
+            )
+            .expect_err("that is an advance, not a run");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    }
+
+    /// A pair of **three characters** is refused: that is a run.
+    #[test]
+    fn a_pair_of_three_characters_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute(
+                "text.metric.add",
+                &json!({ "name": "bad", "default_mm": 2.0, "space_mm": 1.0, "pairs": { "abc": -1.0 } }),
+            )
+            .expect_err("that is a run, not a pair");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    }
+
+    /// The **reader** leaves out what it does not understand: a run of
+    /// one character and a pair of three are dropped, and the letters
+    /// fall back to the default.
+    #[test]
+    fn the_reader_leaves_out_what_it_does_not_understand() {
+        let mut session = session();
+        session
+            .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 1.0 }))
+            .expect("the metric is added");
+        {
+            let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
+            node.data["runs"] = json!({ "i": 1.0, "fi": 3.0 });
+            node.data["pairs"] = json!({ "abc": -1.0, "AV": -0.5 });
+        }
+        let metric =
+            Metric::of(session.document().node(1).expect("the metric is there")).expect("the metric is read");
+        assert_eq!(metric.runs.len(), 1, "the run of one character is left out");
+        assert_eq!(metric.pairs.len(), 1, "and the pair of three");
+        assert_eq!(metric.word_width("fi"), 3.0, "the run that was understood is used");
+        assert_eq!(metric.word_width("AV"), 3.5, "and so is the pair");
     }
 
     /// A paragraph that is set in a node that is not a metric is

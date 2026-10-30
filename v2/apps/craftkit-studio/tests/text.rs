@@ -273,3 +273,61 @@ fn a_character_with_a_width_of_its_own_is_wider() {
     // "iii" is three millimetres wide, "abc" is six.
     assert_eq!(lines[0]["width"], json!(3.0), "the narrow letters are narrow");
 }
+
+/// A **ligature** is one glyph and not two letters: a run replaces its
+/// characters, and the paragraph is narrower for it.
+#[cfg(feature = "text")]
+#[test]
+fn a_ligature_makes_the_paragraph_narrower() {
+    let mut session = ecosystem().session();
+    session
+        .execute(
+            "text.metric.add",
+            &json!({
+                "name": "ligated",
+                "default_mm": 2.0,
+                "space_mm": 2.0,
+                "runs": { "fi": 3.0 },
+            }),
+        )
+        .expect("the metric is added");
+    session
+        .execute("text.paragraph.add", &json!({ "text": "fi fi", "metric": 1 }))
+        .expect("the paragraph is added");
+    session
+        .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 20.0 }))
+        .expect("the paragraph is measured");
+    let plan = session.evaluate();
+    let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are in the plan");
+    let lines = item.value["lines"].as_array().expect("the lines are a list");
+    assert_eq!(lines[0]["width"], json!(8.0), "two ligatures and a space");
+}
+
+/// A **kerning pair** is an adjustment between two characters: it
+/// replaces nothing, and it may be negative.
+#[cfg(feature = "text")]
+#[test]
+fn a_kerning_pair_makes_the_paragraph_narrower() {
+    let mut session = ecosystem().session();
+    session
+        .execute(
+            "text.metric.add",
+            &json!({
+                "name": "kerned",
+                "default_mm": 2.0,
+                "space_mm": 2.0,
+                "pairs": { "AV": -0.5 },
+            }),
+        )
+        .expect("the metric is added");
+    session
+        .execute("text.paragraph.add", &json!({ "text": "AV", "metric": 1 }))
+        .expect("the paragraph is added");
+    session
+        .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 20.0 }))
+        .expect("the paragraph is measured");
+    let plan = session.evaluate();
+    let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are in the plan");
+    let lines = item.value["lines"].as_array().expect("the lines are a list");
+    assert_eq!(lines[0]["width"], json!(3.5), "two letters and half a millimetre less");
+}
