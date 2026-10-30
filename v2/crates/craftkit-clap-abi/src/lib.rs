@@ -270,6 +270,61 @@ pub struct ClapPlugin {
     pub on_main_thread: Option<extern "C" fn(plugin: *const ClapPlugin)>,
 }
 
+/// The **space** the core events live in.
+pub const CORE_EVENT_SPACE_ID: u16 = 0;
+
+/// The type of a **parameter value** event.
+pub const EVENT_PARAM_VALUE: u32 = 5;
+
+/// The type of a **MIDI** event.
+pub const EVENT_MIDI: u32 = 10;
+
+/// The type of a **transport** event.
+pub const EVENT_TRANSPORT: u32 = 2;
+
+/// The **head** of every event.
+///
+/// Every event begins with this, so that a list of events can be read
+/// without knowing what is in it: the size says how long the event is,
+/// and the type says what it is.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapEventHeader {
+    /// How long the whole event is, in bytes.
+    pub size: u32,
+    /// When the event happened, in samples.
+    pub time: u32,
+    /// Which space the event is in.
+    pub space_id: u16,
+    /// What the event is.
+    pub type_: u32,
+    /// What the event is like: live, or not to be recorded.
+    pub flags: u32,
+}
+
+/// A **parameter value** event: the host telling the plugin that a
+/// parameter has moved.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapEventParamValue {
+    /// The head every event has.
+    pub header: ClapEventHeader,
+    /// The parameter that moved.
+    pub param_id: u32,
+    /// The host's own state for the parameter.
+    pub cookie: *mut c_void,
+    /// The note the parameter belongs to, if it belongs to one.
+    pub note_id: i32,
+    /// The port the parameter belongs to, if it belongs to one.
+    pub port_index: i16,
+    /// The channel the parameter belongs to, if it belongs to one.
+    pub channel: i16,
+    /// The key the parameter belongs to, if it belongs to one.
+    pub key: i16,
+    /// The value the parameter is now.
+    pub value: f64,
+}
+
 /// The id of the **parameters** extension.
 pub const PARAMS_EXTENSION: &str = "clap.params";
 

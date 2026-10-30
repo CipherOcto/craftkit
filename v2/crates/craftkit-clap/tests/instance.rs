@@ -143,6 +143,27 @@ fn the_plugin_says_what_parameters_it_holds() {
     });
 }
 
+/// A parameter **moves**, and the plugin knows.
+///
+/// The format sets a parameter by **offering an event**: the host
+/// offers, the plugin reads while it works, and the value is there
+/// afterwards. So the test sets the gain, processes a block, and reads
+/// the parameter back.
+#[test]
+fn a_parameter_moves_and_the_plugin_knows() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        instance.activate(48_000.0, 1, 512).expect("the instance activates");
+        let mut block = ClapBlock::new(1, 4);
+        // The gain is set to one and a half.
+        instance.set_parameter(1, 1.5);
+        instance.process(4, &mut block).expect("the plugin processes");
+        let parameters = instance.parameters().expect("the parameters are there");
+        assert_eq!(parameters[0].value, 1.5, "the plugin took the value the host offered");
+    });
+}
+
 /// An id the factory does not know is refused, by name.
 #[test]
 fn an_id_the_factory_does_not_know_is_refused() {

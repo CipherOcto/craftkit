@@ -189,8 +189,8 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapHost, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams, ClapProcess,
-        ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
+        ClapEventParamValue, ClapHost, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams,
+        ClapProcess, ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
     };
 
     /// The entry point of this plugin, found by name.
@@ -235,6 +235,14 @@ mod exports {
     /// The parameters the plugin holds: a gain and a tone.
     pub(super) const PARAMETERS: [(u32, &str, f64, f64, f64); 2] =
         [(1, "gain", 0.0, 2.0, 1.0), (2, "tone", 0.0, 1.0, 0.5)];
+
+    /// Set the value of a parameter.
+    fn set_value(state: &mut State, id: u32, value: f64) {
+        match state.values.iter_mut().find(|(other, _)| *other == id) {
+            Some(entry) => entry.1 = value,
+            None => state.values.push((id, value)),
+        }
+    }
 
     /// The parameter with that id, if the plugin has it.
     fn parameter(id: u32) -> Option<(u32, &'static str, f64, f64, f64)> {
@@ -415,6 +423,30 @@ mod exports {
         let Some(state) = state(plugin) else { return ClapProcessStatus::ContinueIfNotProcessed };
         if !state.initialised {
             return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // The events the host gave: a parameter value is the one the
+        // host offers, and the plugin takes it.
+        let in_events = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).in_events)) };
+        if !in_events.is_null() {
+            // SAFETY: the list is the host's own, and it lives for the
+            // length of the call.
+            let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*in_events).size)) };
+            let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*in_events).get)) };
+            if let (Some(count), Some(get)) = (count, get) {
+                for index in 0..count(in_events) {
+                    // SAFETY: the list is the host's own, and the event
+                    // at that index is the host's own event.
+                    let event = get(in_events, index) as *const ClapEventParamValue;
+                    if event.is_null() {
+                        continue;
+                    }
+                    // SAFETY: the event is the host's own, and it is a
+                    // parameter value event.
+                    let param_id = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*event).param_id)) };
+                    let value = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*event).value)) };
+                    set_value(state, param_id, value);
+                }
+            }
         }
         // SAFETY: the block is the host's own, and it lives for the
         // length of the call.

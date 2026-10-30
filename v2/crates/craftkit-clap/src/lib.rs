@@ -68,13 +68,13 @@
 // and refuses `unsafe` in any crate that is not on it.
 #![deny(unsafe_code)]
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use craftkit_clap_abi::{
-    ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory, ClapProcessStatus,
-    ClapVersion,
+    ClapEventParamValue, ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory,
+    ClapProcessStatus, ClapVersion,
 };
 
 /// The host's name, for a plugin that wants to say who it is to.
@@ -261,7 +261,13 @@ impl ClapFactory<'_> {
             request_callback: Some(foreign::request_callback),
         });
         let plugin = foreign::create_plugin(self.factory, &*host, id).map_err(ClapError::new)?;
-        Ok(ClapInstance { plugin, _host: host, state, _factory: PhantomData })
+        Ok(ClapInstance {
+            plugin,
+            _host: host,
+            state,
+            events: RefCell::new(EventState { events: Vec::new() }),
+            _factory: PhantomData,
+        })
     }
 }
 
@@ -278,6 +284,16 @@ pub struct HostRequests {
     pub process: bool,
     /// The plugin asked the host to call it on its main thread.
     pub callback: bool,
+}
+
+/// The events the host has to give the plugin.
+///
+/// The list the plugin reads points at this, so it has to be one thing
+/// with an address: the events and the count of them together.
+#[derive(Debug, Default)]
+struct EventState {
+    /// The events themselves.
+    events: Vec<ClapEventParamValue>,
 }
 
 /// The host's own state, behind the plugin's back.
@@ -349,6 +365,12 @@ pub struct ClapInstance<'a> {
     _host: Box<ClapHost>,
     /// The host's state, boxed: the plugin holds a pointer to it too.
     state: Box<HostState>,
+    /// The events the host has to give the plugin.
+    ///
+    /// The format sets a parameter by **offering an event**, so this is
+    /// where a value the host wants to change is kept until the plugin
+    /// reads it.
+    events: RefCell<EventState>,
     /// The factory it came from, so that it cannot outlive it.
     _factory: PhantomData<&'a ClapFactory<'a>>,
 }
@@ -404,7 +426,38 @@ impl ClapInstance<'_> {
     /// The events are **empty**: this host has no transport and no
     /// event list, and the format says a plugin may be given none.
     pub fn process(&self, frames: u32, block: &mut ClapBlock) -> Result<ClapProcessStatus> {
-        foreign::plugin_process(self.plugin, frames, block).map_err(ClapError::new)
+        // The events the host has to give are borrowed for the length
+        // of the call: the plugin reads them, and they may not move
+        // while it does.
+        let events = self.events.borrow();
+        foreign::plugin_process(self.plugin, frames, block, &events).map_err(ClapError::new)
+    }
+
+    /// **Set** a parameter.
+    ///
+    /// The format does not set a parameter by calling the plugin: it
+    /// **offers an event**, and the plugin reads it while it works. So
+    /// the value is kept here, and it reaches the plugin at the next
+    /// block of audio.
+    pub fn set_parameter(&self, id: u32, value: f64) {
+        let mut state = self.events.borrow_mut();
+        let event = ClapEventParamValue {
+            header: craftkit_clap_abi::ClapEventHeader {
+                size: std::mem::size_of::<ClapEventParamValue>() as u32,
+                time: 0,
+                space_id: craftkit_clap_abi::CORE_EVENT_SPACE_ID,
+                type_: craftkit_clap_abi::EVENT_PARAM_VALUE,
+                flags: 0,
+            },
+            param_id: id,
+            cookie: std::ptr::null_mut(),
+            note_id: -1,
+            port_index: -1,
+            channel: -1,
+            key: -1,
+            value,
+        };
+        state.events.push(event);
     }
 
     /// The **parameters** the plugin holds.
@@ -475,7 +528,7 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
+        ClapAudioBuffer, ClapEventParamValue, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
         ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
         ClapPluginParams, ClapProcess, ClapProcessStatus, ClapVersion,
     };
@@ -830,6 +883,7 @@ mod foreign {
         plugin: *const ClapPluginInstance,
         frames: u32,
         block: &mut super::ClapBlock,
+        events: &super::EventState,
     ) -> Result<ClapProcessStatus, String> {
         // SAFETY: the instance is the plugin's own struct, inside a
         // library that is open.
@@ -857,7 +911,13 @@ mod foreign {
             latency: 0,
             constant_mask: 0,
         };
-        let input_events = empty_input_events();
+        // The events the host has to give: the plugin reads them while
+        // it works, and the list is the host's own.
+        let input_events = ClapInputEvents {
+            ctx: events as *const super::EventState as *mut c_void,
+            size: Some(input_events_size),
+            get: Some(input_events_get),
+        };
         let output_events = empty_output_events();
         let block = ClapProcess {
             steady_time: 0,
@@ -875,23 +935,43 @@ mod foreign {
         Ok(process(plugin, &block))
     }
 
-    /// The **input events**: there are none.
-    fn empty_input_events() -> ClapInputEvents {
-        ClapInputEvents {
-            ctx: std::ptr::null_mut(),
-            size: Some(input_events_size),
-            get: Some(input_events_get),
+    /// How many events the host has to give.
+    ///
+    /// The count is kept **beside** the list, because the list's
+    /// context is the events themselves and the events do not know how
+    /// many of them there are.
+    extern "C" fn input_events_size(list: *const ClapInputEvents) -> u32 {
+        let (count, _) = event_count(list);
+        count
+    }
+
+    /// The event at that index.
+    extern "C" fn input_events_get(list: *const ClapInputEvents, index: u32) -> *const c_void {
+        let (_, events) = event_count(list);
+        match events.get(index as usize) {
+            Some(event) => event as *const ClapEventParamValue as *const c_void,
+            None => std::ptr::null(),
         }
     }
 
-    /// How many events there are: none.
-    extern "C" fn input_events_size(_list: *const ClapInputEvents) -> u32 {
-        0
-    }
-
-    /// The event at that index: there is none.
-    extern "C" fn input_events_get(_list: *const ClapInputEvents, _index: u32) -> *const c_void {
-        std::ptr::null()
+    /// The count of the host's events, and the events themselves.
+    ///
+    /// The list's context is the host's own state, and the state holds
+    /// the events and knows how many of them there are.
+    fn event_count(list: *const ClapInputEvents) -> (u32, &'static [ClapEventParamValue]) {
+        if list.is_null() {
+            return (0, &[]);
+        }
+        // SAFETY: the list is the host's own, and it lives for the
+        // length of the call.
+        let context = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*list).ctx)) };
+        if context.is_null() {
+            return (0, &[]);
+        }
+        // SAFETY: the context is the host's own state, and it lives for
+        // the length of the call.
+        let state = unsafe { &*(context as *const super::EventState) };
+        (state.events.len() as u32, state.events.as_slice())
     }
 
     /// The **output events**: there are none.
