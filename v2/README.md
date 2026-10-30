@@ -850,6 +850,10 @@ different commands with one id.
   of an artist's IDE — projects, scenes, tracks, elements, an opaque 3D stage
   and remote generations — ported into v2's seams, and the three things it
   found (§33). It is optional, like the others.
+- `crates/craftkit-plugin-grid` — the **spreadsheet battery**: the document
+  model of a spreadsheet — workbooks, sheets, cells in a payload, and the
+  formulas and the graph of areas between them — ported into v2's seams,
+  and the four things it found (§42). It is optional, like the others.
 - `crates/craftkit-alloc` — the **counting allocator**: the first of the
   crates that may hold `unsafe`, and what turns the lane's "must not
   allocate" rule into a measurement (§32). It is a **dev** dependency of
@@ -866,10 +870,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**406 tests.** The MCP server links **all six batteries** in, so the
+**421 tests.** The MCP server links **all seven batteries** in, so the
 workspace's count is the same with or without the studio's features
-(`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`) —
-and the studio on its own, with no features, carries 341 of them.
+(`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
+`/grid`) — and the studio on its own, with no features, carries 341 of
+them.
 
 ### Not built
 
@@ -950,7 +955,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 406 tests
+cargo test          # 421 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2978,3 +2983,78 @@ window with — is not here, and neither is a **toolbar**. The MCP server
 is the door an agent uses; the other two are doors a person uses, and
 they are the same kind of thing: a front end that reads the registry and
 calls the commands.
+
+---
+
+## 42. The seventh battery: a spreadsheet, and a graph of areas
+
+§40 said the spreadsheet is the hardest port in the family, because it is
+not a tree and its graph is not a graph of things. So it is the seventh
+battery: `craftkit-plugin-grid`.
+
+### What was ported
+
+- a **workbook** of **sheets** — nodes, `grid.workbook` and `grid.sheet`;
+- the **cells** — the sheet's payload, a sparse map of addresses;
+- the **formula** — a small language: numbers, text, booleans, cell
+  references (`B3`), **ranges** (`A1:B4`), the arithmetic, the
+  comparisons, and `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`;
+- the **dependency graph** — the areas a formula reads, and the cells
+  whose formulas cover a given cell;
+- the **values** — derived, by the evaluator, every time.
+
+### The four things the port found
+
+- **A grid is not a tree, and the cells are in the payload.** A cell has
+  no children and no relations, and a sheet has far too many of them to
+  be nodes: a million cells is not a tree with a million nodes. So the
+  sheet carries them, and the **payload is where the size is**. That is
+  a thing a kit must be able to say out loud, because a document with a
+  huge payload is a different kind of document from one with a huge tree,
+  and a kit that cannot say which is which cannot plan for either.
+- **A precedent is an area, not a thing.** `SUM(A1:B4)` reads sixteen
+  cells and one range, and "what depends on this cell" is a question
+  about *areas*. A kit whose relations are between **nodes** cannot hold
+  that graph in its relations — so the graph lives in the payload and the
+  plugin owns it, the same bargain the compositing battery made with its
+  paths. The graph of a spreadsheet is not the graph of a document.
+- **The value of a formula is derived, and the application stores it.**
+  GridCraft's cell carries **both** the formula and the cached result,
+  because a spreadsheet shows numbers and must show them at once. Here
+  the cell carries **only** the formula, and the evaluator computes the
+  value every time: a cell's value cannot be wrong, because it is never
+  written down. The price is that every value is computed every time,
+  and the price is paid knowingly.
+- **A cell's address is a name, and the kit's ids are numbers.** `B3` is
+  not an id: it is a *name*, and a name in a sheet is a name in a
+  **range** — `A1:B4` is sixteen names at once. So the naming is the
+  plugin's, exactly as the property paths are the compositing battery's,
+  and this is the second time a path has turned out not to be a path of
+  ids.
+
+### And the one that is better here
+
+**A cycle is refused when the formula is set.** `=A1+1` in `A1` is
+refused at the moment it is typed, and so is a cycle of two, and the
+refusal says which cell reads itself. The application finds a cycle
+later, in the middle of a recalculation, which is a bad afternoon; the
+kit finds it here, which is a keystroke. The check is possible because
+the graph is in the payload and the payload is the plugin's.
+
+### The table, with the seventh row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area**; a value is **derived** | nothing |
+
+Seven ports. Four of them cost nothing, and the seventh — the one the
+survey called the hardest — cost nothing either. What it cost was **the
+kit learning to say that a document's size can be in its payload**, and
+that a graph of areas is not a graph of nodes.

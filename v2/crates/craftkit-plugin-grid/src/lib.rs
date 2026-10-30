@@ -1,0 +1,583 @@
+//! `craftkit-plugin-grid` — the document model of a **spreadsheet**.
+//!
+//! # What is ported
+//!
+//! A spreadsheet is the hardest thing in the family to put in a kit,
+//! because it is not a tree and its graph is not a graph of things:
+//!
+//! - a **workbook** of **sheets**;
+//! - a sheet's **cells**, which are far too many to be nodes: a sheet
+//!   with a million cells is not a tree with a million nodes;
+//! - a **formula** in a cell, which reads **areas** of cells rather than
+//!   cells: `SUM(A1:B4)` reads sixteen cells and one range;
+//! - the **value** of a formula cell, which the application computes and
+//!   **stores** beside the formula.
+//!
+//! # The mapping
+//!
+//! | the application | v2 |
+//! |---|---|
+//! | a workbook | a **node** of the kind `grid.workbook` |
+//! | a sheet | a **node** of the kind `grid.sheet` |
+//! | the cells | the sheet's **payload**: a sparse map |
+//! | a formula | the cell's **payload**: the formula's text |
+//! | a cell's value | **derived**: the evaluator computes it |
+//! | the dependency graph | the sheet's **payload**, and the plugin's business |
+//!
+//! # The three things the port found
+//!
+//! - **A grid is not a tree, and the cells are in the payload.** A cell
+//!   is not a node: a sheet has too many of them, and they have no
+//!   children and no relations. So the sheet carries them, and the
+//!   **payload is where the size is** — which is a thing a kit must be
+//!   able to say out loud, because a document with a huge payload is a
+//!   different kind of document from one with a huge tree.
+//! - **A precedent is an area, not a thing.** The graph of a
+//!   spreadsheet is a graph of **areas**: a formula reads a *range* of
+//!   cells, and "what depends on this cell" is a question about areas.
+//!   A kit whose relations are between nodes cannot hold that graph in
+//!   its relations, so the graph lives in the payload and the plugin
+//!   owns it — the same bargain the compositing battery made with its
+//!   paths.
+//! - **The value of a formula is derived, and the application stores
+//!   it.** The application keeps the cached result beside the formula,
+//!   because a spreadsheet shows numbers and must show them at once.
+//!   Here the cell keeps **only** the formula, and the evaluator
+//!   computes the value every time — so a cell's value cannot be wrong,
+//!   because it is never written down. The price is that every value is
+//!   computed every time, and the price is paid knowingly.
+
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+#![forbid(unsafe_code)]
+
+mod formula;
+
+use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_sdk::serde_json::{self, Value as Json, json};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
+
+use formula::{CellRef, Cells, Value};
+
+/// The grid layer.
+///
+/// It needs the core, and it says so.
+#[derive(Layer)]
+#[layer(id = "grid", name = "Grid", requires("core"))]
+pub struct GridLayer;
+
+/// A **workbook**.
+#[derive(NodeKind)]
+#[node_kind(kind = "grid.workbook", label = "Workbook", layer = "grid", evaluates)]
+pub struct WorkbookKind;
+
+impl WorkbookKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a workbook **means**: its sheets.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "sheets": node.children.iter().filter(|child| child.kind == "grid.sheet").count(),
+        }))
+    }
+}
+
+/// A **sheet**: a grid of cells, held in the payload.
+#[derive(NodeKind)]
+#[node_kind(kind = "grid.sheet", label = "Sheet", layer = "grid", evaluates)]
+pub struct SheetKind;
+
+impl SheetKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a sheet **means**: how many cells it has, and how many of
+    /// them hold a formula.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let cells = cells_of(node);
+        let formulas = cells.iter().filter(|(_, cell)| cell.formula.is_some()).count();
+        Some(json!({
+            "cells": cells.len(),
+            "formulas": formulas,
+        }))
+    }
+}
+
+/// The cells of a sheet, from its payload.
+fn cells_of(node: &Node) -> Cells {
+    let mut cells = Cells::new();
+    let Some(map) = node.data.get("cells").and_then(|cells| cells.as_object()) else {
+        return cells;
+    };
+    for (address, entry) in map {
+        let Some(cell) = CellRef::parse(address) else { continue };
+        let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|text| text.to_string());
+        let value = entry.get("value").map(Value::from_json);
+        match (value, formula) {
+            (_, Some(formula)) => cells.set_formula(cell, formula),
+            (Some(value), None) => cells.set_value(cell, value),
+            (None, None) => {}
+        }
+    }
+    cells
+}
+
+/// The cells of a sheet, into its payload.
+fn cells_into(cells: &Cells) -> Json {
+    let mut map = serde_json::Map::new();
+    for (cell, entry) in cells.iter() {
+        let mut one = serde_json::Map::new();
+        if let Some(formula) = &entry.formula {
+            one.insert("formula".to_string(), Json::String(formula.clone()));
+        }
+        if let Some(value) = &entry.value {
+            one.insert("value".to_string(), value.to_json());
+        }
+        map.insert(cell.to_text(), Json::Object(one));
+    }
+    Json::Object(map)
+}
+
+/// The cell at an address, or the error that says there is no such cell.
+fn cell_at(text: &str, id: &str) -> Result<CellRef, EngineError> {
+    CellRef::parse(text.trim())
+        .ok_or_else(|| EngineError::Failed { id: id.to_string(), message: format!("`{text}` is not a cell") })
+}
+
+/// The cells of a sheet, from a node, to change them.
+fn sheet_cells_mut(node: &mut Node) -> Cells {
+    cells_of(node)
+}
+
+/// Put a **workbook** in the document.
+#[derive(Command)]
+#[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct AddWorkbook {
+    /// What to call it.
+    pub name: Text,
+}
+
+impl AddWorkbook {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let name = self.name.0.clone();
+        if name.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "grid.workbook.add".to_string(),
+                message: "a workbook has a name".to_string(),
+            });
+        }
+        let id =
+            session.document_mut().add_node_with_under(None, name.clone(), "grid.workbook", None, json!({}));
+        Ok(Outcome::changed(format!("added the workbook `{name}`"))
+            .with_data(json!({ "id": id, "name": name })))
+    }
+}
+
+/// Put a **sheet** in a workbook.
+#[derive(Command)]
+#[command(id = "grid.sheet.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct AddSheet {
+    /// The workbook it goes in.
+    pub workbook: NodeRef,
+    /// What to call it.
+    pub name: Text,
+}
+
+impl AddSheet {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let name = self.name.0.clone();
+        if name.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "grid.sheet.add".to_string(),
+                message: "a sheet has a name".to_string(),
+            });
+        }
+        let workbook = self.workbook.0;
+        if session.document().node(workbook).is_none() {
+            return Err(EngineError::Failed {
+                id: "grid.sheet.add".to_string(),
+                message: format!("there is no workbook `{workbook}`"),
+            });
+        }
+        let id = session.document_mut().add_node_with_under(
+            Some(workbook),
+            name.clone(),
+            "grid.sheet",
+            None,
+            json!({ "cells": {} }),
+        );
+        Ok(Outcome::changed(format!("added the sheet `{name}`")).with_data(json!({ "id": id, "name": name })))
+    }
+}
+
+/// Put a **value** in a cell.
+#[derive(Command)]
+#[command(id = "grid.cell.set", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct SetCell {
+    /// The sheet it goes in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// The value: a number, a text or a boolean.
+    pub value: Json,
+}
+
+impl SetCell {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, "grid.cell.set")?;
+        let value = Value::from_json(&self.value);
+        let Some(node) = session.document_mut().node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.cell.set".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: "grid.cell.set".to_string(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let mut cells = sheet_cells_mut(node);
+        cells.set_value(cell, value.clone());
+        node.data["cells"] = cells_into(&cells);
+        Ok(Outcome::changed(format!("set the cell {}", cell.to_text()))
+            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "value": value.to_json() })))
+    }
+}
+
+/// Put a **formula** in a cell.
+///
+/// A formula that does not parse is refused, and so is one that reads
+/// itself: the cycle is found **here**, and not later in the middle of
+/// a recalculation.
+#[derive(Command)]
+#[command(id = "grid.formula.set", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct SetFormula {
+    /// The sheet it goes in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// The formula, with or without its `=`.
+    pub formula: Text,
+}
+
+impl SetFormula {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, "grid.formula.set")?;
+        let text = self.formula.0.trim().to_string();
+        let expression = formula::parse(&text).map_err(|error| EngineError::Failed {
+            id: "grid.formula.set".to_string(),
+            message: error.message,
+        })?;
+        let Some(node) = session.document_mut().node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.formula.set".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: "grid.formula.set".to_string(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let mut cells = sheet_cells_mut(node);
+        // The cycle check: with the new formula in place, does the cell
+        // read itself?
+        cells.set_formula(cell, text.clone());
+        if reads_itself(&cells, cell, &mut Vec::new()) {
+            return Err(EngineError::Failed {
+                id: "grid.formula.set".to_string(),
+                message: format!("the formula in {} reads itself", cell.to_text()),
+            });
+        }
+        node.data["cells"] = cells_into(&cells);
+        let precedents = formula::precedents(&expression);
+        Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "formula": text,
+            "precedents": precedents
+                .iter()
+                .map(|area| area.to_text())
+                .collect::<Vec<_>>(),
+        })))
+    }
+}
+
+/// Empty a **cell**.
+#[derive(Command)]
+#[command(id = "grid.cell.clear", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
+pub struct ClearCell {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+}
+
+impl ClearCell {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
+        let Some(node) = session.document_mut().node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.cell.clear".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut cells = sheet_cells_mut(node);
+        let was_there = cells.clear(cell);
+        node.data["cells"] = cells_into(&cells);
+        Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text()))
+            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "was_there": was_there })))
+    }
+}
+
+/// The **precedents** of a cell: the areas its formula reads.
+#[derive(Command)]
+#[command(id = "grid.precedents", area = "grid", layer = "grid", icon = "list")]
+pub struct ReadPrecedents {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+}
+
+impl ReadPrecedents {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, "grid.precedents")?;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.precedents".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let cells = cells_of(node);
+        let Some(entry) = cells.get(cell) else {
+            return Err(EngineError::Failed {
+                id: "grid.precedents".to_string(),
+                message: format!("the cell {} is empty", cell.to_text()),
+            });
+        };
+        let Some(formula) = &entry.formula else {
+            return Err(EngineError::Failed {
+                id: "grid.precedents".to_string(),
+                message: format!("the cell {} holds no formula", cell.to_text()),
+            });
+        };
+        let expression = formula::parse(formula).map_err(|error| EngineError::Failed {
+            id: "grid.precedents".to_string(),
+            message: error.message,
+        })?;
+        let areas = formula::precedents(&expression);
+        Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "precedents": areas
+                .iter()
+                .map(|area| json!({
+                    "area": area.to_text(),
+                    "cells": area.count(),
+                }))
+                .collect::<Vec<_>>(),
+        })))
+    }
+}
+
+/// The **dependents** of a cell: the cells whose formulas read it.
+#[derive(Command)]
+#[command(id = "grid.dependents", area = "grid", layer = "grid", icon = "list")]
+pub struct ReadDependents {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+}
+
+impl ReadDependents {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, "grid.dependents")?;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.dependents".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let cells = cells_of(node);
+        let mut dependents: Vec<Json> = Vec::new();
+        for (other, entry) in cells.iter() {
+            let Some(formula) = &entry.formula else { continue };
+            let Ok(expression) = formula::parse(formula) else { continue };
+            for area in formula::precedents(&expression) {
+                if area.covers(cell) {
+                    dependents.push(json!({
+                        "cell": other.to_text(),
+                        "reads": area.to_text(),
+                    }));
+                    break;
+                }
+            }
+        }
+        let count = dependents.len();
+        Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "dependents": dependents,
+        })))
+    }
+}
+
+/// The **values** of a sheet: every formula, computed.
+///
+/// The same thing the evaluator says, as a command: an agent asks for
+/// the numbers.
+#[derive(Command)]
+#[command(id = "grid.calc", area = "grid", layer = "grid", icon = "list")]
+pub struct CalcSheet {
+    /// The sheet to calculate.
+    pub sheet: NodeRef,
+}
+
+impl CalcSheet {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.calc".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let cells = cells_of(node);
+        let mut values = serde_json::Map::new();
+        for (cell, entry) in cells.iter() {
+            if entry.formula.is_none() {
+                continue;
+            }
+            values.insert(cell.to_text(), cells.value_of(cell).to_json());
+        }
+        let count = values.len();
+        Ok(Outcome::new(format!("{count} value(s)")).with_data(json!({
+            "sheet": sheet,
+            "cells": Json::Object(values),
+        })))
+    }
+}
+
+/// Whether a cell's formula reads itself, directly or through others.
+fn reads_itself(cells: &Cells, cell: CellRef, being: &mut Vec<CellRef>) -> bool {
+    let Some(entry) = cells.get(cell) else { return false };
+    let Some(formula) = &entry.formula else { return false };
+    let Ok(expression) = formula::parse(formula) else { return false };
+    if being.contains(&cell) {
+        return true;
+    }
+    being.push(cell);
+    let mut found = false;
+    for area in formula::precedents(&expression) {
+        for row in area.start.row..=area.end.row {
+            for col in area.start.col..=area.end.col {
+                let other = CellRef { col, row };
+                if other == cell {
+                    found = true;
+                    break;
+                }
+                if reads_itself(cells, other, being) {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        if found {
+            break;
+        }
+    }
+    being.pop();
+    found
+}
+
+/// The evaluator: the **values** of a sheet.
+///
+/// Every formula is computed, every time, from the cells it reads. No
+/// value is stored, so no value can be wrong.
+#[derive(Evaluator)]
+#[evaluator(id = "grid.calc", label = "Calc", layer = "grid")]
+pub struct CalcEvaluator;
+
+impl CalcEvaluator {
+    /// The values of every sheet that has a formula in it.
+    fn evaluate(document: &Document) -> Plan {
+        let mut plan = Plan::new();
+        for node in document.walk() {
+            if node.kind != "grid.sheet" {
+                continue;
+            }
+            let cells = cells_of(node);
+            let mut values = serde_json::Map::new();
+            for (cell, entry) in cells.iter() {
+                if entry.formula.is_none() {
+                    continue;
+                }
+                let value = cells.value_of(cell);
+                values.insert(cell.to_text(), value.to_json());
+            }
+            plan.items.push(PlanItem {
+                node: node.id,
+                kind: "grid.calc".to_string(),
+                value: json!({ "cells": Json::Object(values) }),
+            });
+        }
+        plan
+    }
+}
+
+/// The panel that shows the workbook.
+#[derive(Panel)]
+#[panel(
+    id = "panel.grid",
+    label = "Grid",
+    layer = "grid",
+    commands("grid.workbook.add", "grid.sheet.add", "grid.cell.set", "grid.formula.set", "grid.calc")
+)]
+pub struct GridPanel;
+
+// The whole of the battery, on every target.
+craftkit_sdk::plugin_anchor!(
+    GridLayer,
+    WorkbookKind,
+    SheetKind,
+    AddWorkbook,
+    AddSheet,
+    SetCell,
+    SetFormula,
+    ClearCell,
+    ReadPrecedents,
+    ReadDependents,
+    CalcSheet,
+    CalcEvaluator,
+    GridPanel
+);

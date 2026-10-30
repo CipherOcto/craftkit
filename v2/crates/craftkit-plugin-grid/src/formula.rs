@@ -1,0 +1,748 @@
+//! The **formula** of a grid: what a cell's text means.
+//!
+//! # What is here
+//!
+//! A small formula language, and it is small on purpose: the point of
+//! the port is not to be Excel, it is to find out what a **spreadsheet**
+//! asks of a kit.
+//!
+//! - numbers, text (`"like this"`), booleans (`TRUE`, `FALSE`);
+//! - **cell references** (`B3`) and **ranges** (`A1:B4`);
+//! - the arithmetic (`+ - * / ^`), the comparisons (`= <> < <= > >=`)
+//!   and the parentheses;
+//! - four functions: `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT`.
+//!
+//! # The two things that matter
+//!
+//! - a formula's **precedents are areas**, not cells: `SUM(A1:B4)` reads
+//!   sixteen cells and one range, and the graph of a spreadsheet is a
+//!   graph of areas. That is what [`precedents`] returns.
+//! - a formula's **value is derived**: it is computed from the cells it
+//!   reads, every time, and it is never written down. A cell that holds
+//!   a formula holds the formula and nothing else.
+//!
+//! # The cycle
+//!
+//! A formula that reads itself is refused at the point it is set, and
+//! the refusal says which cell and which cell. A cycle found later, in
+//! the middle of a recalculation, is a bad afternoon.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+
+use craftkit_sdk::serde_json;
+
+/// A cell's address: a column and a row, both counted from zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CellRef {
+    /// The column, from zero.
+    pub col: u32,
+    /// The row, from zero.
+    pub row: u32,
+}
+
+impl CellRef {
+    /// The address, as `A1`.
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_text(self) -> String {
+        let mut name = String::new();
+        let mut col = self.col;
+        loop {
+            name.insert(0, (b'A' + (col % 26) as u8) as char);
+            if col < 26 {
+                break;
+            }
+            col = col / 26 - 1;
+        }
+        let _ = write!(name, "{}", self.row + 1);
+        name
+    }
+
+    /// The address, from `A1`.
+    pub fn parse(text: &str) -> Option<CellRef> {
+        let mut letters = String::new();
+        let mut digits = String::new();
+        let mut seen_digit = false;
+        for character in text.chars() {
+            match character {
+                'A'..='Z' | 'a'..='z' if !seen_digit => letters.push(character),
+                '0'..='9' => {
+                    seen_digit = true;
+                    digits.push(character);
+                }
+                '$' => {}
+                _ => return None,
+            }
+        }
+        if letters.is_empty() || digits.is_empty() {
+            return None;
+        }
+        let mut col = 0u32;
+        for character in letters.chars() {
+            let upper = character.to_ascii_uppercase();
+            let value = (upper as u8 - b'A') as u32;
+            col = col.checked_mul(26)?.checked_add(value)?;
+        }
+        let row = digits.parse::<u32>().ok()?.checked_sub(1)?;
+        Some(CellRef { col, row })
+    }
+}
+
+impl std::fmt::Display for CellRef {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.to_text())
+    }
+}
+
+/// A **range** of cells: a corner and another corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Area {
+    /// The first corner.
+    pub start: CellRef,
+    /// The last corner.
+    pub end: CellRef,
+}
+
+impl Area {
+    /// The area from one corner to another, whichever way round they are.
+    pub fn new(first: CellRef, second: CellRef) -> Area {
+        Area {
+            start: CellRef { col: first.col.min(second.col), row: first.row.min(second.row) },
+            end: CellRef { col: first.col.max(second.col), row: first.row.max(second.row) },
+        }
+    }
+
+    /// Whether the area covers that cell.
+    pub fn covers(&self, cell: CellRef) -> bool {
+        cell.col >= self.start.col
+            && cell.col <= self.end.col
+            && cell.row >= self.start.row
+            && cell.row <= self.end.row
+    }
+
+    /// How many cells it covers.
+    pub fn count(&self) -> u64 {
+        let columns = (self.end.col - self.start.col + 1) as u64;
+        let rows = (self.end.row - self.start.row + 1) as u64;
+        columns * rows
+    }
+
+    /// The area, as `A1:B4`.
+    pub fn to_text(self) -> String {
+        if self.start == self.end {
+            return self.start.to_text();
+        }
+        format!("{}:{}", self.start.to_text(), self.end.to_text())
+    }
+}
+
+/// What a cell holds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    /// Nothing.
+    Empty,
+    /// A number.
+    Number(f64),
+    /// Text.
+    Text(String),
+    /// A boolean.
+    Bool(bool),
+    /// An error, and what it says.
+    Error(String),
+}
+
+impl Value {
+    /// The value as a number, if it is one.
+    pub fn as_number(&self) -> Option<f64> {
+        match self {
+            Value::Number(number) => Some(*number),
+            Value::Bool(value) => Some(if *value { 1.0 } else { 0.0 }),
+            _ => None,
+        }
+    }
+
+    /// The value as JSON, for the document.
+    pub fn to_json(&self) -> serde_json::Value {
+        match self {
+            Value::Empty => serde_json::Value::Null,
+            Value::Number(number) => serde_json::json!(number),
+            Value::Text(text) => serde_json::json!(text),
+            Value::Bool(value) => serde_json::json!(value),
+            Value::Error(message) => serde_json::json!({ "error": message }),
+        }
+    }
+
+    /// The value from JSON, as the document holds it.
+    pub fn from_json(value: &serde_json::Value) -> Value {
+        match value {
+            serde_json::Value::Null => Value::Empty,
+            serde_json::Value::Bool(value) => Value::Bool(*value),
+            serde_json::Value::Number(number) => Value::Number(number.as_f64().unwrap_or(0.0)),
+            serde_json::Value::String(text) => Value::Text(text.clone()),
+            serde_json::Value::Object(map) => match map.get("error") {
+                Some(serde_json::Value::String(message)) => Value::Error(message.clone()),
+                _ => Value::Empty,
+            },
+            _ => Value::Empty,
+        }
+    }
+}
+
+/// A formula, parsed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    /// A number.
+    Number(f64),
+    /// Text.
+    Text(String),
+    /// A boolean.
+    Bool(bool),
+    /// One cell.
+    Cell(CellRef),
+    /// A range of cells.
+    Range(Area),
+    /// A function and its arguments.
+    Call(String, Vec<Expr>),
+    /// A negation.
+    Negate(Box<Expr>),
+    /// A binary operation.
+    Binary(String, Box<Expr>, Box<Expr>),
+}
+
+/// A formula that did not parse.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormulaError {
+    /// What went wrong, in words.
+    pub message: String,
+}
+
+/// Parse a formula.
+///
+/// The text may begin with `=`; it does not have to.
+pub fn parse(text: &str) -> Result<Expr, FormulaError> {
+    let text = text.trim();
+    let text = text.strip_prefix('=').unwrap_or(text).trim();
+    if text.is_empty() {
+        return Err(FormulaError { message: "the formula is empty".to_string() });
+    }
+    let characters: Vec<char> = text.chars().collect();
+    let mut parser = Parser { characters, at: 0 };
+    let expression = parser.expression()?;
+    parser.skip_spaces();
+    if parser.at < parser.characters.len() {
+        return Err(FormulaError {
+            message: format!("there is something after the formula at character {}", parser.at + 1),
+        });
+    }
+    Ok(expression)
+}
+
+/// The cells and ranges a formula reads.
+pub fn precedents(expression: &Expr) -> Vec<Area> {
+    let mut found: Vec<Area> = Vec::new();
+    collect_precedents(expression, &mut found);
+    found
+}
+
+fn collect_precedents(expression: &Expr, found: &mut Vec<Area>) {
+    match expression {
+        Expr::Cell(cell) => found.push(Area::new(*cell, *cell)),
+        Expr::Range(area) => found.push(*area),
+        Expr::Call(_, arguments) => {
+            for argument in arguments {
+                collect_precedents(argument, found);
+            }
+        }
+        Expr::Negate(inner) => collect_precedents(inner, found),
+        Expr::Binary(_, left, right) => {
+            collect_precedents(left, found);
+            collect_precedents(right, found);
+        }
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => {}
+    }
+}
+
+/// The parser: a small recursive descent over the characters.
+struct Parser {
+    /// The characters of the formula.
+    characters: Vec<char>,
+    /// Where the parser is.
+    at: usize,
+}
+
+impl Parser {
+    /// Skip the spaces.
+    fn skip_spaces(&mut self) {
+        while self.at < self.characters.len() && self.characters[self.at].is_whitespace() {
+            self.at += 1;
+        }
+    }
+
+    /// The character at the parser's place, if there is one.
+    fn peek(&self) -> Option<char> {
+        self.characters.get(self.at).copied()
+    }
+
+    /// Take a character if it is that one.
+    fn take(&mut self, character: char) -> bool {
+        if self.peek() == Some(character) {
+            self.at += 1;
+            return true;
+        }
+        false
+    }
+
+    /// Take a word if it is that one, in any case.
+    fn take_word(&mut self, word: &str) -> bool {
+        let mut at = self.at;
+        for expected in word.chars() {
+            match self.characters.get(at) {
+                Some(character) if character.eq_ignore_ascii_case(&expected) => at += 1,
+                _ => return false,
+            }
+        }
+        self.at = at;
+        true
+    }
+
+    /// The error, with the place it happened.
+    fn error(&self, message: &str) -> FormulaError {
+        FormulaError { message: format!("{message} (at character {})", self.at + 1) }
+    }
+
+    /// An expression: a comparison.
+    fn expression(&mut self) -> Result<Expr, FormulaError> {
+        let left = self.additive()?;
+        self.skip_spaces();
+        for operator in ["<>", "<=", ">="] {
+            if self.take_word(operator) {
+                let right = self.additive()?;
+                return Ok(Expr::Binary(operator.to_string(), Box::new(left), Box::new(right)));
+            }
+        }
+        if self.take('=') {
+            let right = self.additive()?;
+            return Ok(Expr::Binary("=".to_string(), Box::new(left), Box::new(right)));
+        }
+        if self.take('<') {
+            let right = self.additive()?;
+            return Ok(Expr::Binary("<".to_string(), Box::new(left), Box::new(right)));
+        }
+        if self.take('>') {
+            let right = self.additive()?;
+            return Ok(Expr::Binary(">".to_string(), Box::new(left), Box::new(right)));
+        }
+        Ok(left)
+    }
+
+    /// A sum or a difference.
+    fn additive(&mut self) -> Result<Expr, FormulaError> {
+        let mut left = self.multiplicative()?;
+        loop {
+            self.skip_spaces();
+            if self.take('+') {
+                let right = self.multiplicative()?;
+                left = Expr::Binary("+".to_string(), Box::new(left), Box::new(right));
+                continue;
+            }
+            if self.take('-') {
+                let right = self.multiplicative()?;
+                left = Expr::Binary("-".to_string(), Box::new(left), Box::new(right));
+                continue;
+            }
+            return Ok(left);
+        }
+    }
+
+    /// A product or a quotient.
+    fn multiplicative(&mut self) -> Result<Expr, FormulaError> {
+        let mut left = self.power()?;
+        loop {
+            self.skip_spaces();
+            if self.take('*') {
+                let right = self.power()?;
+                left = Expr::Binary("*".to_string(), Box::new(left), Box::new(right));
+                continue;
+            }
+            if self.take('/') {
+                let right = self.power()?;
+                left = Expr::Binary("/".to_string(), Box::new(left), Box::new(right));
+                continue;
+            }
+            return Ok(left);
+        }
+    }
+
+    /// A power.
+    fn power(&mut self) -> Result<Expr, FormulaError> {
+        let base = self.unary()?;
+        self.skip_spaces();
+        if self.take('^') {
+            let exponent = self.power()?;
+            return Ok(Expr::Binary("^".to_string(), Box::new(base), Box::new(exponent)));
+        }
+        Ok(base)
+    }
+
+    /// A negation.
+    fn unary(&mut self) -> Result<Expr, FormulaError> {
+        self.skip_spaces();
+        if self.take('-') {
+            let inner = self.unary()?;
+            return Ok(Expr::Negate(Box::new(inner)));
+        }
+        if self.take('+') {
+            return self.unary();
+        }
+        self.primary()
+    }
+
+    /// A literal, a reference or a call.
+    fn primary(&mut self) -> Result<Expr, FormulaError> {
+        self.skip_spaces();
+        let Some(character) = self.peek() else {
+            return Err(self.error("the formula stops here"));
+        };
+        if character == '(' {
+            self.at += 1;
+            let inner = self.expression()?;
+            self.skip_spaces();
+            if !self.take(')') {
+                return Err(self.error("the bracket is not closed"));
+            }
+            return Ok(inner);
+        }
+        if character == '"' {
+            self.at += 1;
+            let mut text = String::new();
+            loop {
+                match self.peek() {
+                    None => return Err(self.error("the text is not closed")),
+                    Some('"') => {
+                        self.at += 1;
+                        break;
+                    }
+                    Some(character) => {
+                        text.push(character);
+                        self.at += 1;
+                    }
+                }
+            }
+            return Ok(Expr::Text(text));
+        }
+        if character.is_ascii_digit() || (character == '.' && self.next_is_digit()) {
+            return self.number();
+        }
+        if character.is_ascii_alphabetic() || character == '$' {
+            return self.word();
+        }
+        Err(self.error("this is not something a formula can hold"))
+    }
+
+    /// Whether the next character is a digit.
+    fn next_is_digit(&self) -> bool {
+        self.characters.get(self.at + 1).map(|character| character.is_ascii_digit()).unwrap_or(false)
+    }
+
+    /// A number.
+    fn number(&mut self) -> Result<Expr, FormulaError> {
+        let start = self.at;
+        while self.at < self.characters.len()
+            && (self.characters[self.at].is_ascii_digit() || self.characters[self.at] == '.')
+        {
+            self.at += 1;
+        }
+        let text: String = self.characters[start..self.at].iter().collect();
+        match text.parse::<f64>() {
+            Ok(number) if number.is_finite() => Ok(Expr::Number(number)),
+            _ => Err(self.error("that is not a number")),
+        }
+    }
+
+    /// A word: a reference, a range, a boolean or a function.
+    fn word(&mut self) -> Result<Expr, FormulaError> {
+        let start = self.at;
+        while self.at < self.characters.len()
+            && (self.characters[self.at].is_ascii_alphanumeric()
+                || self.characters[self.at] == '$'
+                || self.characters[self.at] == '_')
+        {
+            self.at += 1;
+        }
+        let word: String = self.characters[start..self.at].iter().collect();
+        if word.is_empty() {
+            return Err(self.error("there is nothing there"));
+        }
+        if word.eq_ignore_ascii_case("TRUE") {
+            return Ok(Expr::Bool(true));
+        }
+        if word.eq_ignore_ascii_case("FALSE") {
+            return Ok(Expr::Bool(false));
+        }
+        // A range: `A1:B4`.
+        let mut after = self.at;
+        while after < self.characters.len() && self.characters[after].is_whitespace() {
+            after += 1;
+        }
+        if self.characters.get(after) == Some(&':') {
+            let mut end = after + 1;
+            while end < self.characters.len()
+                && (self.characters[end].is_ascii_alphanumeric() || self.characters[end] == '$')
+            {
+                end += 1;
+            }
+            let second: String = self.characters[after + 1..end].iter().collect();
+            self.at = end;
+            let first_cell = CellRef::parse(&word)
+                .ok_or_else(|| FormulaError { message: format!("`{word}` is not a cell") })?;
+            let second_cell = CellRef::parse(&second)
+                .ok_or_else(|| FormulaError { message: format!("`{second}` is not a cell") })?;
+            return Ok(Expr::Range(Area::new(first_cell, second_cell)));
+        }
+        // A function: a name and a bracket.
+        if self.peek() == Some('(') {
+            self.at += 1;
+            let mut arguments = Vec::new();
+            self.skip_spaces();
+            if !self.take(')') {
+                loop {
+                    arguments.push(self.expression()?);
+                    self.skip_spaces();
+                    if self.take(',') {
+                        continue;
+                    }
+                    if self.take(')') {
+                        break;
+                    }
+                    return Err(self.error("the bracket is not closed"));
+                }
+            }
+            return Ok(Expr::Call(word.to_ascii_uppercase(), arguments));
+        }
+        match CellRef::parse(&word) {
+            Some(cell) => Ok(Expr::Cell(cell)),
+            None => Err(FormulaError { message: format!("`{word}` is not a cell or a function") }),
+        }
+    }
+}
+
+/// The cells of a sheet: what is in them, and what a formula reads.
+#[derive(Debug, Clone, Default)]
+pub struct Cells {
+    /// The cells, by address.
+    cells: BTreeMap<CellRef, Cell>,
+}
+
+/// A cell: a value, or a formula.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cell {
+    /// The value, when the cell holds one.
+    pub value: Option<Value>,
+    /// The formula's text, when the cell holds one.
+    pub formula: Option<String>,
+}
+
+impl Cells {
+    /// An empty sheet.
+    pub fn new() -> Cells {
+        Cells { cells: BTreeMap::new() }
+    }
+
+    /// The cell at that address.
+    pub fn get(&self, cell: CellRef) -> Option<&Cell> {
+        self.cells.get(&cell)
+    }
+
+    /// Put a value in a cell.
+    pub fn set_value(&mut self, cell: CellRef, value: Value) {
+        self.cells.insert(cell, Cell { value: Some(value), formula: None });
+    }
+
+    /// Put a formula in a cell.
+    pub fn set_formula(&mut self, cell: CellRef, formula: String) {
+        self.cells.insert(cell, Cell { value: None, formula: Some(formula) });
+    }
+
+    /// Empty a cell.
+    pub fn clear(&mut self, cell: CellRef) -> bool {
+        self.cells.remove(&cell).is_some()
+    }
+
+    /// Every cell, in order.
+    pub fn iter(&self) -> impl Iterator<Item = (CellRef, &Cell)> {
+        self.cells.iter().map(|(cell, value)| (*cell, value))
+    }
+
+    /// How many cells there are.
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
+
+    /// The **value** of a cell: what it holds, or what its formula says.
+    ///
+    /// A formula's value is **derived**: it is computed from the cells it
+    /// reads, every time, and it is never written down.
+    pub fn value_of(&self, cell: CellRef) -> Value {
+        self.value_of_guarded(cell, &mut Vec::new())
+    }
+
+    /// The value of a cell, with the cells being computed on the way.
+    fn value_of_guarded(&self, cell: CellRef, being: &mut Vec<CellRef>) -> Value {
+        let Some(entry) = self.cells.get(&cell) else { return Value::Empty };
+        if let Some(value) = &entry.value {
+            return value.clone();
+        }
+        let Some(formula) = &entry.formula else { return Value::Empty };
+        if being.contains(&cell) {
+            return Value::Error(format!("{} reads itself", cell.to_text()));
+        }
+        let expression = match parse(formula) {
+            Ok(expression) => expression,
+            Err(error) => return Value::Error(error.message),
+        };
+        being.push(cell);
+        let value = self.evaluate(&expression, being);
+        being.pop();
+        value
+    }
+
+    /// Evaluate an expression against the sheet.
+    pub fn evaluate(&self, expression: &Expr, being: &mut Vec<CellRef>) -> Value {
+        match expression {
+            Expr::Number(number) => Value::Number(*number),
+            Expr::Text(text) => Value::Text(text.clone()),
+            Expr::Bool(value) => Value::Bool(*value),
+            Expr::Cell(cell) => self.value_of_guarded(*cell, being),
+            Expr::Range(area) => {
+                let mut values = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        values.push(self.value_of_guarded(CellRef { col, row }, being));
+                    }
+                }
+                Value::Text(format!("{} values", values.len()))
+            }
+            Expr::Negate(inner) => match self.evaluate(inner, being).as_number() {
+                Some(number) => Value::Number(-number),
+                None => Value::Error("#VALUE!".to_string()),
+            },
+            Expr::Binary(operator, left, right) => {
+                let left = self.evaluate(left, being);
+                let right = self.evaluate(right, being);
+                binary(operator, &left, &right)
+            }
+            Expr::Call(name, arguments) => self.call(name, arguments, being),
+        }
+    }
+
+    /// Call a function.
+    fn call(&self, name: &str, arguments: &[Expr], being: &mut Vec<CellRef>) -> Value {
+        // A range argument is the numbers of every cell it covers.
+        let mut numbers: Vec<f64> = Vec::new();
+        let mut plain: Vec<Value> = Vec::new();
+        for argument in arguments {
+            match argument {
+                Expr::Range(area) => {
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let value = self.value_of_guarded(CellRef { col, row }, being);
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            }
+                        }
+                    }
+                }
+                other => {
+                    let value = self.evaluate(other, being);
+                    if let Some(number) = value.as_number() {
+                        numbers.push(number);
+                    }
+                    plain.push(value);
+                }
+            }
+        }
+        match name {
+            "SUM" => Value::Number(numbers.iter().sum()),
+            "AVERAGE" => {
+                if numbers.is_empty() {
+                    Value::Error("#DIV/0!".to_string())
+                } else {
+                    Value::Number(numbers.iter().sum::<f64>() / numbers.len() as f64)
+                }
+            }
+            "MIN" => numbers
+                .iter()
+                .copied()
+                .fold(None, |smallest: Option<f64>, number| {
+                    Some(smallest.map_or(number, |smallest| smallest.min(number)))
+                })
+                .map(Value::Number)
+                .unwrap_or(Value::Empty),
+            "MAX" => numbers
+                .iter()
+                .copied()
+                .fold(None, |largest: Option<f64>, number| {
+                    Some(largest.map_or(number, |largest| largest.max(number)))
+                })
+                .map(Value::Number)
+                .unwrap_or(Value::Empty),
+            "COUNT" => Value::Number(numbers.len() as f64),
+            "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
+            other => Value::Error(format!("there is no function `{other}`")),
+        }
+    }
+}
+
+/// A binary operation on two values.
+fn binary(operator: &str, left: &Value, right: &Value) -> Value {
+    if let Value::Error(message) = left {
+        return Value::Error(message.clone());
+    }
+    if let Value::Error(message) = right {
+        return Value::Error(message.clone());
+    }
+    if operator == "=" || operator == "<>" {
+        let same = match (left, right) {
+            (Value::Text(a), Value::Text(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            _ => match (left.as_number(), right.as_number()) {
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            },
+        };
+        let result = if operator == "=" { same } else { !same };
+        return Value::Bool(result);
+    }
+    if operator == "<" || operator == "<=" || operator == ">" || operator == ">=" {
+        let (Some(a), Some(b)) = (left.as_number(), right.as_number()) else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let result = match operator {
+            "<" => a < b,
+            "<=" => a <= b,
+            ">" => a > b,
+            _ => a >= b,
+        };
+        return Value::Bool(result);
+    }
+    let (Some(a), Some(b)) = (left.as_number(), right.as_number()) else {
+        return Value::Error("#VALUE!".to_string());
+    };
+    let result = match operator {
+        "+" => a + b,
+        "-" => a - b,
+        "*" => a * b,
+        "/" => {
+            if b == 0.0 {
+                return Value::Error("#DIV/0!".to_string());
+            }
+            a / b
+        }
+        "^" => a.powf(b),
+        _ => return Value::Error(format!("there is no operation `{operator}`")),
+    };
+    if !result.is_finite() {
+        return Value::Error("#NUM!".to_string());
+    }
+    Value::Number(result)
+}

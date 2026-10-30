@@ -38,6 +38,10 @@ craftkit-plugin-fx = { path = "../../crates/craftkit-plugin-fx", optional = true
 # by default as well: a program that wants a timeline of media tokens says
 # so.
 craftkit-plugin-art = { path = "../../crates/craftkit-plugin-art", optional = true }
+# The **seventh battery**: the document model of a spreadsheet. Off by
+# default as well: a program that wants a grid of cells and the formulas
+# between them says so.
+craftkit-plugin-grid = { path = "../../crates/craftkit-plugin-grid", optional = true }
 
 [features]
 default = []
@@ -58,6 +62,9 @@ fx = ["dep:craftkit-plugin-fx"]
 # The artist's battery. Off by default: a program that wants a timeline of
 # media tokens and remote generations says so.
 art = ["dep:craftkit-plugin-art"]
+# The spreadsheet battery. Off by default: a program that wants a grid of
+# cells and the formulas between them says so.
+grid = ["dep:craftkit-plugin-grid"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes

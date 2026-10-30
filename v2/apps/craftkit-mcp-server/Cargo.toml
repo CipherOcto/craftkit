@@ -24,4 +24,5 @@ craftkit-studio = { path = "../craftkit-studio", features = [
     "film",
     "fx",
     "art",
+    "grid",
 ] }

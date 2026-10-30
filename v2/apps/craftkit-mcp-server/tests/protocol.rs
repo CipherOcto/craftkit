@@ -71,7 +71,10 @@ fn the_handshake_answers() {
     assert_eq!(answer["result"]["serverInfo"]["name"], json!("craftkit"));
     let instructions = answer["result"]["instructions"].as_str().unwrap_or_default().to_string();
     assert!(instructions.contains("a tool of its own"), "{answer}");
-    assert!(instructions.contains("106 commands"), "{answer}");
+    // The handshake says how many commands there are, and it is the
+    // number of tools: the registry and the tool list are the same size.
+    let commands = ecosystem().commands.all().len();
+    assert!(instructions.contains(&format!("{commands} commands")), "{answer}");
 }
 
 /// A protocol version the server does not know falls back to the one it
