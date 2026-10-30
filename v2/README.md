@@ -914,7 +914,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**665 tests.** The MCP server links **all twelve batteries** in, so the
+**672 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -1006,7 +1006,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 665 tests
+cargo test          # 672 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3910,7 +3910,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the sixteenth row
+### The table, with the seventeenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3931,8 +3931,9 @@ growing.
 | the **metric's runs** | a width belongs to a **run** of characters, not to a character: a ligature replaces its characters and a kerning pair adjusts the gap between them | two tables in a payload |
 | the **payload** | the core bounds a command's parameters and says nothing about a **payload**, so every plugin that reads one has to write its own bounds | a library and two core bounds |
 | the **file** | every bound was applied **after** the bytes were in memory, and the biggest input is a file: the bound that matters is on the bytes, checked before the read | a module and three caps |
+| the **document** | the depth bound was the JSON **parser's** number and not the kit's, and a value built in memory is not bounded by the parser at all — and a stack overflow is not a panic, so the guard never sees it | three constants and four checks |
 
-Sixteen ports, and one of them is not a port at all: it is the answer to
+Seventeen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4925,3 +4926,91 @@ This section puts a bound where the bytes arrive.
   format's parser bounds it at a hundred and twenty-eight, and that is
   the number in force — but it is the *parser's* number, not the kit's,
   and the kit has no way to say "this document is too deep for me".
+
+---
+
+## 63. The document's own bounds, and the number that was not ours
+
+§62 ended with an unsettled line: *"nothing bounds the tree's depth in
+the kit's own terms; the format's parser bounds it at a hundred and
+twenty-eight, and that is the parser's number, not the kit's."*
+
+This section makes it the kit's number, and finds that the parser's
+number was the only thing standing between a document and a **crash**.
+
+### What was built
+
+The **document's shape** is now bounded, and the bounds are the kit's:
+
+| the bound | it is | and it is |
+|---|---|---|
+| `MAX_DEPTH` | sixty-four levels | the deepest a document's tree may be |
+| `MAX_NODES` | ten thousand | the most nodes a document may hold |
+| `MAX_RELATIONS` | ten thousand | the most relations a document may hold |
+
+They are checked in three places, and the three are the same numbers:
+
+- **while the node is read** — the reader is recursive, and it counts
+  the depth on the way down;
+- **on the document that was read** — the node count and the relation
+  count, checked on the tree the reader built;
+- **on the document that is about to be written** — the bundle and the
+  save command refuse a document that nobody could read back.
+
+### What the port found
+
+- **The depth bound was the parser's, and a parser's bound is not a
+  rule.** serde_json refuses a document nested deeper than a hundred and
+  twenty-eight levels — which is why nothing had ever gone wrong. But
+  the parser's limit only applies to a value that was **parsed**. A
+  value that was **built** — a command's raw parameter, a plugin's own
+  JSON, a document assembled in memory — is not bounded by the parser
+  at all, and the kit's reader is **recursive**: it would have walked
+  as deep as the value went.
+- **A stack overflow is not a panic, and the guard does not catch it.**
+  This tree's panic guard (§38) turns a panic into an error, and the
+  kit's rule is that no production code panics. But a recursion that
+  runs out of stack does not panic: it is a **crash**, and the guard
+  never sees it. So the depth is checked on the way down, and the
+  refusal is a value like any other. This is the first time in this
+  tree that a bound has been about the **stack** rather than about the
+  memory.
+- **The reader and the writer must agree, or the round trip means
+  nothing.** §57 decides which version to write by writing the document
+  and reading it back. If the reader refused documents the writer
+  happily wrote, the round trip would fail for every document near the
+  bound — and the version would be decided by the bound rather than by
+  what the document holds. So both sides check the same numbers, and
+  the numbers are the kit's.
+- **The document's shape is the kit's business and the plugin's is
+  not.** A plugin may add a kind of node, a payload and an edge (§12,
+  §44) — and it may not make the document deeper or wider than the kit
+  allows. That is the same seam as everywhere else: the plugin owns
+  what a node **means**, and the kit owns how many nodes there may be.
+- **A document over the bound is refused, not truncated.** A document
+  with too many nodes is refused at the door and refused at the save;
+  it is never trimmed to fit. A document that is quietly smaller than
+  the file says is a lie about what was read, and §62's finding — that
+  a cap which can be traded away is not a cap — says the same thing
+  here.
+
+### What it cost
+
+- three constants and one method on the document (`check_bounds`), and
+  the node reader's depth check;
+- **four checks** in the format, the bundle and the save command;
+- seven tests.
+
+### What it does not settle
+
+- **The depth of a document that is *built* rather than read.** The
+  reader's bound applies to the reading; a program that assembles a
+  tree in memory can build one deeper than the bound, and the bound is
+  only checked when the document is read or written. The **writing**
+  check catches it (§57's round trip reads it back) — but the program
+  that built it had the stack in the meantime.
+- **The bounds are the kit's, and the kit has no opinion about what a
+  document is for.** Ten thousand nodes is right for a drawing and
+  wrong for a spreadsheet with a million cells; the number is a
+  **default**, not a fact, and a program that needs a different one has
+  no way to say so.
