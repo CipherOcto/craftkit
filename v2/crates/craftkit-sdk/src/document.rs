@@ -549,6 +549,40 @@ pub const MAX_NODES: usize = 10_000;
 /// The most **relations** a document may hold.
 pub const MAX_RELATIONS: usize = 10_000;
 
+/// How much memory **one document** may hold.
+///
+/// Every other limit here is a **count**, and a count does not say how
+/// much memory the thing counted holds: ten thousand nodes, each with a
+/// payload, is a number no machine has. This is the number that says
+/// how much memory a document takes, and it is the same number the
+/// family uses — a document is a document in either tree.
+///
+/// It is measured with an **estimate** that never under-estimates: a
+/// budget a document can lie about is not a budget.
+pub const MAX_DOCUMENT_BYTES: usize = 32 * 1024 * 1024;
+
+/// A cheap, conservative estimate of the memory a JSON value holds.
+///
+/// It never under-estimates: the strings' **capacities** are counted and
+/// not their lengths, and the lists' capacities are counted as well as
+/// their contents.
+pub fn estimated_bytes(value: &serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Null => 0,
+        serde_json::Value::Bool(_) => std::mem::size_of::<bool>(),
+        serde_json::Value::Number(_) => std::mem::size_of::<serde_json::Number>(),
+        serde_json::Value::String(text) => text.capacity(),
+        serde_json::Value::Array(items) => {
+            items.capacity() * std::mem::size_of::<serde_json::Value>()
+                + items.iter().map(estimated_bytes).sum::<usize>()
+        }
+        serde_json::Value::Object(table) => {
+            table.len() * (std::mem::size_of::<String>() + std::mem::size_of::<serde_json::Value>())
+                + table.iter().map(|(key, value)| key.capacity() + estimated_bytes(value)).sum::<usize>()
+        }
+    }
+}
+
 /// A **shared** node writes and reads as the node it holds.
 ///
 /// The sharing is an implementation detail of the document: a file says
@@ -809,6 +843,29 @@ pub struct Document {
 }
 
 impl Document {
+    /// A cheap, conservative estimate of the memory this document holds.
+    ///
+    /// Never under-estimates, and it counts the **children**: a
+    /// document's memory is its nodes' memory.
+    pub fn estimated_bytes(&self) -> usize {
+        let mut total = std::mem::size_of::<Document>()
+            + self.name.capacity()
+            + estimated_bytes(&self.data)
+            + self.nodes.capacity() * std::mem::size_of::<Arc<Node>>()
+            + self.relations.capacity() * std::mem::size_of::<Relation>()
+            + self
+                .relations
+                .iter()
+                .map(|relation| relation.kind.capacity() + estimated_bytes(&relation.payload))
+                .sum::<usize>()
+            + self.assets.capacity() * std::mem::size_of::<Asset>()
+            + self.assets.iter().map(|asset| asset.path.capacity() + asset.kind.capacity()).sum::<usize>();
+        for node in &self.nodes {
+            total += node.estimated_bytes();
+        }
+        total
+    }
+
     /// Check the document against the kit's **own** bounds.
     ///
     /// The depth, the number of nodes and the number of relations are
@@ -817,6 +874,10 @@ impl Document {
     /// agree on what a document may hold, or the round trip that decides
     /// which version to write (§57) cannot mean anything.
     pub fn check_bounds(&self) -> Result<(), String> {
+        let bytes = self.estimated_bytes();
+        if bytes > MAX_DOCUMENT_BYTES {
+            return Err(format!("the document is {bytes} bytes, and the limit is {MAX_DOCUMENT_BYTES}"));
+        }
         if self.relations.len() > MAX_RELATIONS {
             return Err(format!(
                 "the document holds {} relations, and the limit is {MAX_RELATIONS}",
@@ -1129,6 +1190,36 @@ impl<'a> Iterator for Descendants<'a> {
 }
 
 impl Node {
+    /// A cheap, conservative estimate of the memory this node holds.
+    ///
+    /// Never under-estimates: a budget a document can lie about is not a
+    /// budget.
+    pub fn estimated_bytes(&self) -> usize {
+        let mut total = std::mem::size_of::<Node>()
+            + self.name.capacity()
+            + self.kind.capacity()
+            + self.stream.as_ref().map_or(0, |stream| stream.capacity())
+            + estimated_bytes(&self.data)
+            + estimated_bytes(&self.unknown);
+        // The children are walked with a stack and not by recursing: a
+        // tree that is deep is a tree the kit has a bound for, and a
+        // bound that is checked by overflowing the stack is not a bound.
+        let mut stack: Vec<&Node> = self.children.iter().map(|child| &**child).collect();
+        while let Some(child) = stack.pop() {
+            total += std::mem::size_of::<Node>()
+                + child.name.capacity()
+                + child.kind.capacity()
+                + child.stream.as_ref().map_or(0, |stream| stream.capacity())
+                + estimated_bytes(&child.data)
+                + estimated_bytes(&child.unknown)
+                + child.children.capacity() * std::mem::size_of::<Arc<Node>>();
+            for grandchild in &child.children {
+                stack.push(grandchild);
+            }
+        }
+        total
+    }
+
     /// Put a node under this one.
     ///
     /// The sharing is the document's business: a caller that has a node

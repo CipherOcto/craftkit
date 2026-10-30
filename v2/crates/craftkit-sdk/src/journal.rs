@@ -51,6 +51,19 @@ use crate::{EngineError, Outcome, Session};
 /// undo stack.
 pub const JOURNAL_LIMIT: usize = 1024;
 
+/// How much memory the journal may hold.
+///
+/// The count above counts **entries**, and an entry is not a thing of a
+/// fixed size: it holds the parameters the caller sent, and a caller
+/// that sends a megabyte of parameters sends a megabyte of journal. A
+/// thousand of those is a gigabyte, and the count would have said
+/// nothing.
+///
+/// So the journal has a budget in bytes as well, and it is **the
+/// program's**: this is the journal of the kit, and a program that wants
+/// a bigger macro says so.
+pub(crate) const MAX_JOURNAL_BYTES: usize = 8 * 1024 * 1024;
+
 /// One command that ran, with the values it was given.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JournalEntry {
@@ -64,6 +77,16 @@ impl JournalEntry {
     /// The entry, as it is written.
     pub fn to_json(&self) -> crate::serde_json::Value {
         crate::serde_json::json!({ "id": self.id, "params": self.params })
+    }
+
+    /// What this entry costs, in bytes.
+    ///
+    /// It is measured when the entry is made and not again, and it never
+    /// under-estimates: a budget an entry can lie about is not a budget.
+    pub fn bytes(&self) -> usize {
+        self.id.capacity()
+            + std::mem::size_of::<crate::serde_json::Value>()
+            + crate::document::estimated_bytes(&self.params)
     }
 }
 

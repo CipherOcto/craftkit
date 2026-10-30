@@ -49,6 +49,17 @@ use crate::serde_json::Value as Json;
 /// A thousand is a lot of jobs, and it is a number rather than a rule.
 pub const TASK_LIMIT: usize = 1024;
 
+/// How much memory the registry may hold.
+///
+/// The count above counts **tasks**, and a task is not a thing of a fixed
+/// size: a finished task holds the result the work produced, and that
+/// result is as big as the work made it. A thousand of them is not a
+/// thousand of anything.
+///
+/// The name is the kit's own and the number is the kit's own, and both are
+/// named in the v2 README beside the other bounds.
+const MAX_TASKS_BYTES: usize = 8 * 1024 * 1024;
+
 /// The state of a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
@@ -151,19 +162,52 @@ impl Task {
         let result = value.get("result").cloned().filter(|result| !result.is_null());
         Ok(Task { id, kind, state, handle, progress, message, result })
     }
+
+    /// What this task costs, in bytes.
+    ///
+    /// It never under-estimates: a budget a task can lie about is not a
+    /// budget. The result is the big part, and it is counted as it is.
+    pub fn bytes(&self) -> usize {
+        std::mem::size_of::<Task>()
+            + self.kind.capacity()
+            + self.handle.as_ref().map_or(0, |handle| handle.capacity())
+            + self.message.as_ref().map_or(0, |message| message.capacity())
+            + self.result.as_ref().map_or(0, crate::document::estimated_bytes)
+    }
 }
 
 /// The tasks a session knows about.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TaskRegistry {
     tasks: Vec<Task>,
     next_id: u64,
+    /// How much memory the registry may hold.
+    budget: usize,
+}
+
+impl Default for TaskRegistry {
+    fn default() -> Self {
+        TaskRegistry::new()
+    }
 }
 
 impl TaskRegistry {
     /// A registry with nothing in it.
     pub fn new() -> Self {
-        TaskRegistry { tasks: Vec::new(), next_id: 1 }
+        TaskRegistry { tasks: Vec::new(), next_id: 1, budget: MAX_TASKS_BYTES }
+    }
+
+    /// A registry with a budget of its own.
+    ///
+    /// The budget is **the caller's**: the kit's own number is the
+    /// default, and a program that knows better says so here.
+    pub fn with_budget(budget: usize) -> Self {
+        TaskRegistry { budget, ..TaskRegistry::new() }
+    }
+
+    /// How much memory the registry may hold.
+    pub fn budget(&self) -> usize {
+        self.budget
     }
 
     /// Register a task, and give back its number.
@@ -228,6 +272,7 @@ impl TaskRegistry {
         task.state = TaskState::Done;
         task.progress = 100;
         task.result = Some(result);
+        self.prune();
         Ok(())
     }
 
@@ -303,6 +348,7 @@ impl TaskRegistry {
         task.state = TaskState::Done;
         task.progress = 100;
         task.result = Some(result);
+        self.prune();
         Ok(())
     }
 
@@ -355,6 +401,11 @@ impl TaskRegistry {
     /// A task that is still pending or running is **not** dropped: it is
     /// work that has not been accounted for, and losing it would lose the
     /// handle that the other end knows it by.
+    ///
+    /// There are two bounds: the **count** of tasks and the **bytes** they
+    /// cost. A registry of a thousand finished tasks, each holding a large
+    /// result, is over the bytes and under the count — and the bytes are
+    /// what the memory is.
     fn prune(&mut self) {
         while self.tasks.len() > TASK_LIMIT {
             let Some(victim) = self.tasks.iter().find(|task| task.state.is_finished()).map(|task| task.id)
@@ -363,6 +414,19 @@ impl TaskRegistry {
             };
             self.tasks.retain(|task| task.id != victim);
         }
+        while self.bytes() > self.budget {
+            let Some(victim) = self.tasks.iter().find(|task| task.state.is_finished()).map(|task| task.id)
+            else {
+                break;
+            };
+            self.tasks.retain(|task| task.id != victim);
+        }
+    }
+
+    /// What the registry costs, in bytes.
+    pub fn bytes(&self) -> usize {
+        self.tasks.capacity() * std::mem::size_of::<Task>()
+            + self.tasks.iter().map(Task::bytes).sum::<usize>()
     }
 }
 

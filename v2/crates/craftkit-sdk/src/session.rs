@@ -62,6 +62,14 @@ use crate::resume::Pending;
 use crate::select::Selected;
 use crate::tasks::TaskRegistry;
 
+/// How many lines the session's log holds.
+///
+/// The log is what a person reads to see what the session did, and it is
+/// the one part of the session that is written on every command. A
+/// number rather than a rule, but a bound all the same: a session that
+/// runs for days would otherwise hold every line it ever wrote.
+pub const MAX_LOG_ENTRIES: usize = 256;
+
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -75,6 +83,13 @@ pub struct Session {
     history: History,
     log: Vec<String>,
     journal: Vec<JournalEntry>,
+    /// What the journal costs, in bytes.
+    ///
+    /// It is kept rather than computed, so that the oldest entry can be
+    /// dropped by subtracting what it cost.
+    journal_bytes: usize,
+    /// How much memory the journal may hold.
+    journal_budget: usize,
     /// The tool in the hand, if any.
     tool: Option<String>,
     /// The tasks: work that may outlive the process.
@@ -114,6 +129,8 @@ impl Session {
             history: History::new(Document::new("untitled")),
             log: Vec::new(),
             journal: Vec::new(),
+            journal_bytes: 0,
+            journal_budget: crate::journal::MAX_JOURNAL_BYTES,
             tool: None,
             tasks: TaskRegistry::new(),
             camera: Camera::new(),
@@ -326,20 +343,57 @@ impl Session {
         &self.journal
     }
 
+    /// How much memory the journal may hold.
+    pub fn journal_budget(&self) -> usize {
+        self.journal_budget
+    }
+
+    /// Say how much memory the journal may hold.
+    ///
+    /// The budget is **the caller's**: the kit's own number is the
+    /// default, and a program that wants a bigger macro says so here.
+    pub fn set_journal_budget(&mut self, bytes: usize) {
+        self.journal_budget = bytes;
+    }
+
     /// Forget the journal.
     pub fn clear_journal(&mut self) {
         self.journal.clear();
+        self.journal_bytes = 0;
     }
 
     /// Write an entry in the journal.
     ///
     /// The limit is here and not in the caller: a session that grows a
     /// journal for ever is a leak, and the limit is what makes it bounded.
+    ///
+    /// There are two limits: the **count** of entries and the **bytes**
+    /// they cost. A count alone does not bound the memory, because an
+    /// entry holds the parameters the caller sent, and those are as big
+    /// as the caller made them. The bytes of an entry are measured when
+    /// it is made, so the oldest entry can be dropped by subtracting what
+    /// it cost.
     fn journal_entry(&mut self, id: &str, params: &Json) {
-        self.journal.push(JournalEntry { id: id.to_string(), params: params.clone() });
+        let entry = JournalEntry { id: id.to_string(), params: params.clone() };
+        let bytes = entry.bytes();
+        self.journal.push(entry);
+        self.journal_bytes += bytes;
         if self.journal.len() > crate::journal::JOURNAL_LIMIT {
             let excess = self.journal.len() - crate::journal::JOURNAL_LIMIT;
-            self.journal.drain(0..excess);
+            self.drop_journal(0, excess);
+        }
+        while self.journal_bytes > self.journal_budget && self.journal.len() > 1 {
+            // The oldest entry goes: the journal is a convenience and
+            // not a history, and the newest is the one that is useful.
+            self.drop_journal(0, 1);
+        }
+    }
+
+    /// Drop entries from the journal, and take their bytes off the count.
+    fn drop_journal(&mut self, from: usize, count: usize) {
+        let dropped: Vec<JournalEntry> = self.journal.drain(from..from + count).collect();
+        for entry in dropped {
+            self.journal_bytes = self.journal_bytes.saturating_sub(entry.bytes());
         }
     }
 
@@ -377,6 +431,19 @@ impl Session {
     /// What the session has been asked to do.
     pub fn log(&self) -> &[String] {
         &self.log
+    }
+
+    /// Write a line in the session's log.
+    ///
+    /// The log is for a person to read, and it is **bounded**: a session
+    /// that runs for days would otherwise hold every line it ever wrote.
+    /// The oldest lines go.
+    fn note(&mut self, message: String) {
+        self.log.push(message);
+        if self.log.len() > MAX_LOG_ENTRIES {
+            let excess = self.log.len() - MAX_LOG_ENTRIES;
+            self.log.drain(0..excess);
+        }
     }
 
     /// Run a command, and ask the host for what it is missing.
@@ -525,7 +592,7 @@ impl Session {
         }
         let Some(spec) = self.commands.get(id).cloned() else {
             let error = EngineError::Unknown(id.to_string());
-            self.log.push(format!("{id}: refused ({error})"));
+            self.note(format!("{id}: refused ({error})"));
             return Err(error);
         };
         if !(spec.enabled)(self) {
@@ -533,13 +600,13 @@ impl Session {
                 id: id.to_string(),
                 reason: "the session says it is not available".to_string(),
             };
-            self.log.push(format!("{id}: refused ({error})"));
+            self.note(format!("{id}: refused ({error})"));
             return Err(error);
         }
         let params = Params::new(raw);
         if let Err(source) = params.deny_unknown(&spec.param_names()) {
             let error = EngineError::Param { id: id.to_string(), source };
-            self.log.push(format!("{id}: refused ({error})"));
+            self.note(format!("{id}: refused ({error})"));
             return Err(error);
         }
 
@@ -564,7 +631,7 @@ impl Session {
                         id: id.to_string(),
                         message: "the command changed the document but does not mutate".to_string(),
                     };
-                    self.log.push(format!("{id}: refused ({error})"));
+                    self.note(format!("{id}: refused ({error})"));
                     return Err(error);
                 }
                 let mut outcome = outcome;
@@ -592,7 +659,7 @@ impl Session {
                         );
                     }
                 }
-                self.log.push(format!("{id}: {}", outcome.message));
+                self.note(format!("{id}: {}", outcome.message));
                 if spec.journal {
                     self.journal_entry(id, params.value());
                 }
@@ -615,7 +682,7 @@ impl Session {
                 self.selection = selection_snapshot;
                 self.tool = tool_snapshot;
                 self.pending = None;
-                self.log.push(format!("{id}: refused ({error})"));
+                self.note(format!("{id}: refused ({error})"));
                 Err(error)
             }
         }
@@ -642,7 +709,7 @@ impl Session {
                 id: id.to_string(),
                 message: "a command that asks must ask before it changes the document".to_string(),
             };
-            self.log.push(format!("{id}: refused ({error})"));
+            self.note(format!("{id}: refused ({error})"));
             return Err(error);
         }
         // The session's own state goes back too: a command that is
@@ -653,7 +720,7 @@ impl Session {
         let pending = self.pending.get_or_insert_with(|| Pending::new(id, params.clone()));
         pending.asked.push(question.clone());
         let outcome = Outcome::needs_input(question);
-        self.log.push(format!("{id}: {}", outcome.message));
+        self.note(format!("{id}: {}", outcome.message));
         Ok(outcome)
     }
 

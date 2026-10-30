@@ -48,6 +48,25 @@ use crate::{EngineError, Outcome, Session};
 /// for a long session and small enough that the memory is not a surprise.
 pub const HISTORY_LIMIT: usize = 256;
 
+/// How many **documents' worth** of memory the history may hold.
+///
+/// The count above is a count, and a count does not say how much memory
+/// what it counted holds: two hundred and fifty-six states of a thirty
+/// megabyte document are seven and a half gigabytes, and a count that
+/// says nothing about the memory is not a bound.
+///
+/// So the history has a budget in **bytes**, and the budget is derived
+/// from the document's own budget rather than written out: a budget and
+/// the thing it bounds must not drift apart.
+pub const HISTORY_EXPANSION: usize = 2;
+
+/// How much memory the history may hold.
+///
+/// The same number the family uses, and for the same reason: a session
+/// has to be able to undo more than one step, and the history is the one
+/// part of a session that can be given back.
+pub const MAX_HISTORY_BYTES: usize = crate::document::MAX_DOCUMENT_BYTES * HISTORY_EXPANSION;
+
 /// One state in the history.
 ///
 /// A state is a whole session state: the document, what was selected, and
@@ -75,6 +94,13 @@ pub struct HistoryNode {
     /// More than one means a branch: the work was undone and done
     /// differently.
     pub children: Vec<u64>,
+    /// What this state costs, in bytes.
+    ///
+    /// It is measured when the state is made and not again: a pruning
+    /// that has to measure a document to know what to drop is a pruning
+    /// that walks the whole tree, and the budget is checked on every
+    /// push.
+    pub bytes: usize,
 }
 
 impl HistoryNode {
@@ -98,6 +124,15 @@ pub struct History {
     nodes: Vec<HistoryNode>,
     current: u64,
     next_id: u64,
+    /// What the whole tree costs, in bytes.
+    ///
+    /// It is the sum of the states' own costs, and it is a number that
+    /// is **kept** rather than computed: the budget is checked on every
+    /// push, and a budget that has to be measured by walking the tree is
+    /// a budget that is checked too late.
+    bytes: usize,
+    /// How much memory the tree may hold.
+    budget: usize,
 }
 
 impl History {
@@ -105,6 +140,7 @@ impl History {
     ///
     /// The root is the document as it is, and the root has no parent.
     pub fn new(document: Document) -> Self {
+        let bytes = document.estimated_bytes();
         let root = HistoryNode {
             id: 0,
             command: String::new(),
@@ -113,8 +149,29 @@ impl History {
             tool: None,
             parent: None,
             children: Vec::new(),
+            bytes,
         };
-        History { nodes: vec![root], current: 0, next_id: 1 }
+        History { nodes: vec![root], current: 0, next_id: 1, bytes, budget: MAX_HISTORY_BYTES }
+    }
+
+    /// A history with a budget of its own.
+    ///
+    /// The budget is **the caller's**: the tree's default is the
+    /// family's number, and a program that knows better says so here.
+    pub fn with_budget(document: Document, budget: usize) -> Self {
+        let mut history = History::new(document);
+        history.budget = budget;
+        history
+    }
+
+    /// What the tree costs, in bytes.
+    pub fn bytes(&self) -> usize {
+        self.bytes
+    }
+
+    /// How much memory the tree may hold.
+    pub fn budget(&self) -> usize {
+        self.budget
     }
 
     /// Whether nothing has happened yet.
@@ -191,6 +248,7 @@ impl History {
         let id = self.next_id;
         self.next_id += 1;
         let parent = self.current;
+        let bytes = document.estimated_bytes();
         let node = HistoryNode {
             id,
             command: command.to_string(),
@@ -199,12 +257,14 @@ impl History {
             tool,
             parent: Some(parent),
             children: Vec::new(),
+            bytes,
         };
         self.nodes.push(node);
         if let Some(parent) = self.node_mut(parent) {
             parent.children.push(id);
         }
         self.current = id;
+        self.bytes += bytes;
         self.prune();
         id
     }
@@ -215,7 +275,14 @@ impl History {
     /// state it was in: the state is what the document is, and the
     /// document changed.
     pub fn set_current(&mut self, document: Document, selection: Vec<Selected>, tool: Option<String>) {
+        let bytes = document.estimated_bytes();
+        let before = self.node(self.current).map(|node| node.bytes).unwrap_or(0);
+        // The state costs what it costs now, not what it cost when it
+        // was made: the budget is the tree's memory, and a stale number
+        // is not the tree's memory.
+        self.bytes = self.bytes.saturating_sub(before) + bytes;
         if let Some(node) = self.node_mut(self.current) {
+            node.bytes = bytes;
             node.document = document;
             node.selection = selection;
             node.tool = tool;
@@ -285,14 +352,24 @@ impl History {
     /// from it takes its place: the tree stays a tree, and the state that
     /// is current stays current. The cost is that the history forgets how
     /// far back it goes, which is what a bound is.
+    ///
+    /// Two bounds bite here: the **count** of states and the **bytes**
+    /// they cost. A tree of small documents is bounded by the count, and
+    /// a tree of large ones by the bytes — and a tree that is over the
+    /// bytes is pruned even when it is under the count, because the bytes
+    /// are what the memory is.
     fn prune(&mut self) {
-        while self.nodes.len() > HISTORY_LIMIT {
+        while self.nodes.len() > HISTORY_LIMIT || self.bytes > self.budget {
             let Some(victim) = self.nodes.iter().find(|node| node.id != self.current).map(|node| node.id)
             else {
+                // Only the current state is left: it cannot be dropped
+                // without losing the document, and the document is not
+                // the history's to lose.
                 break;
             };
             let parent = self.node(victim).and_then(|node| node.parent);
             let children = self.node(victim).map(|node| node.children.clone()).unwrap_or_default();
+            let bytes = self.node(victim).map(|node| node.bytes).unwrap_or(0);
             if let Some(parent) = parent.and_then(|parent| self.node_mut(parent)) {
                 parent.children.retain(|child| *child != victim);
                 parent.children.extend(children.iter().copied());
@@ -303,6 +380,7 @@ impl History {
                 }
             }
             self.nodes.retain(|node| node.id != victim);
+            self.bytes = self.bytes.saturating_sub(bytes);
         }
     }
 }
