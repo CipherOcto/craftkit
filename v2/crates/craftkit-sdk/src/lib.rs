@@ -79,6 +79,7 @@ pub mod plan;
 pub mod plugin;
 pub mod plugincmds;
 pub mod plugins;
+pub mod prompt;
 pub mod realtime;
 pub mod seams;
 pub mod select;

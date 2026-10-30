@@ -858,6 +858,9 @@ different commands with one id.
   of a CAD drawing — layers, blocks, entities and the edges between them
   — ported into v2's seams, and the three things it found (§44). It is
   optional, like the others.
+- `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
+  agent, with **one tool per command** (§41). The SDK's **prompt seam**
+  (§45) is its other half: the host's turn before a command runs.
 - `crates/craftkit-alloc` — the **counting allocator**: the first of the
   crates that may hold `unsafe`, and what turns the lane's "must not
   allocate" rule into a measurement (§32). It is a **dev** dependency of
@@ -874,7 +877,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**432 tests.** The MCP server links **all eight batteries** in, so the
+**439 tests.** The MCP server links **all eight batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`) — and the studio on its own, with no features, carries
@@ -959,7 +962,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 432 tests
+cargo test          # 439 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3299,3 +3302,68 @@ than decided here.
 Eight ports. Six of them cost nothing. The two that did — the artist's
 unions and the branches — bought the kit's two strangest features, and
 everything the family has taught it since has cost **nothing**.
+
+---
+
+## 45. The prompt seam: the host's turn before the command runs
+
+§44 left one thing open and said so: **the prompt**. CADCraft's
+commands may ask — its registry has `interactive: Option<Factory>`, and
+its MCP server exposes the prompt itself as a tool, so an agent types at
+it exactly as a person would. This kit's rule is the opposite: a command
+takes its parameters and never asks.
+
+The rule is a **choice**, and this section is the choice made, with the
+shape of the change written down.
+
+### What was built
+
+- a **`Question`** — what is wanted, of what kind, and one line about it,
+  taken from the command's own declaration;
+- a **`Supplier`** — where the answers come from: a person, an agent, a
+  script, a file. `MapSupplier` is the one that already has them;
+- **`Session::execute_with(id, params, supplier)`** — run a command, and
+  ask the host for the parameters that are missing **before** it runs.
+
+And over the protocol, the MCP server tells an agent what is missing, of
+what kind, and that it can call again:
+
+```text
+the command `node.add` needs `name` (text): What to call it.
+Call it again with it.
+```
+
+### The rules it keeps
+
+- **The command does not change.** It declares what it needs; it does not
+  ask for it. The host is given a turn; the command is given none.
+- **The registry does not change.** No command gains a "prompts" field,
+  and no kind becomes interactive. The seam is at the **session**.
+- **The document does not change.** A command that is asked for and then
+  run is one command, and its undo is one step.
+- **A host is asked only for what is missing.** The questions are the
+  command's own required parameters that the caller did not give, in the
+  order they are declared; the optional ones are never asked for.
+- **A host that cannot answer changes nothing.** The parameter stays
+  missing and the command fails the way it would have failed anyway — so
+  the seam can never make a call succeed that should not have.
+
+### What it is not
+
+It is **not** the CAD case. CADCraft's interactive commands ask *while
+they run*: they draw a preview, wait for a point, and keep going until
+the person says Enter. That is a **resumable command** — a state
+machine per command, with the session holding it — and it is a bigger
+thing than this seam.
+
+What this seam covers is the other half, and it is the half that an
+agent needs: a command whose parameters are not known before it runs, and
+a host that can get them. For an agent over MCP that is a second call
+with the value; for a person it is a prompt; for a script it is a file.
+The three are the same seam with three suppliers.
+
+### What it cost
+
+A trait, a struct and a method. The `ParamError` gained one word — a
+missing value and a wrong value are different questions now, because a
+missing one is a host's business — and the MCP server learned to say so.

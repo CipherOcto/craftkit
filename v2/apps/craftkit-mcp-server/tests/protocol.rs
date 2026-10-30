@@ -199,3 +199,23 @@ fn the_session_is_the_session() {
         .expect("the call is answered");
     assert_eq!(server.session().document().nodes.len(), 1);
 }
+
+/// An agent is told **what** is missing, of what kind, and that it can
+/// call again: the missing parameter is the one failure an agent can fix
+/// by calling again.
+#[test]
+fn an_agent_is_told_what_is_missing() {
+    let mut server = server();
+    let answer = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": { "name": "craftkit_node_add", "arguments": { "kind": "geometry.rect" } },
+        }))
+        .expect("the call is answered");
+    assert_eq!(answer["result"]["isError"], json!(true), "{answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains("needs `name`"), "{text}");
+    assert!(text.contains("Call it again with it"), "{text}");
+}

@@ -240,7 +240,7 @@ impl Server {
         }
         match self.session.execute(&command, arguments) {
             Ok(outcome) => ToolResult::of(outcome),
-            Err(error) => ToolResult::error(describe_error(&error)),
+            Err(error) => ToolResult::error(self.describe_error(&error)),
         }
     }
 }
@@ -276,12 +276,34 @@ impl ToolResult {
     }
 }
 
-/// What a command said, in the words of the protocol.
-fn describe_error(error: &EngineError) -> String {
-    match error {
-        EngineError::Unknown(id) => format!("there is no command `{id}`"),
-        EngineError::Disabled { id, reason } => format!("`{id}` is not available: {reason}"),
-        other => other.to_string(),
+impl Server {
+    /// What a command said, in the words of the protocol.
+    ///
+    /// A **missing** parameter gets its own words, because it is the one
+    /// failure the agent can fix by calling again: the parameter's name,
+    /// what kind of value it takes, and the command's own line about it.
+    fn describe_error(&self, error: &EngineError) -> String {
+        match error {
+            EngineError::Unknown(id) => format!("there is no command `{id}`"),
+            EngineError::Disabled { id, reason } => format!("`{id}` is not available: {reason}"),
+            EngineError::Param { id, source } if source.is_missing() => {
+                let doc = self
+                    .session
+                    .registry()
+                    .get(id)
+                    .and_then(|spec| spec.params.iter().find(|param| param.name == source.key));
+                match doc {
+                    Some(doc) => format!(
+                        "the command `{id}` needs `{}` ({}): {}. Call it again with it.",
+                        doc.name,
+                        doc.kind.json_name(),
+                        doc.help
+                    ),
+                    None => format!("the command `{id}` needs `{}`. Call it again with it.", source.key),
+                }
+            }
+            other => other.to_string(),
+        }
     }
 }
 

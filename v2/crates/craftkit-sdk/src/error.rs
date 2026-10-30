@@ -19,17 +19,30 @@ pub struct ParamError {
     pub key: String,
     /// What was wrong with it.
     pub message: String,
+    /// Whether the value was not there at all, as opposed to being
+    /// there and being wrong.
+    ///
+    /// The two are different questions: a value that is wrong is the
+    /// caller's business, and a value that is missing is a **host's**,
+    /// because the host may be the one who can get it (§ the prompt
+    /// seam).
+    pub missing: bool,
 }
 
 impl ParamError {
     /// An error about a named parameter.
     pub fn new(key: impl Into<String>, message: impl Into<String>) -> Self {
-        ParamError { key: key.into(), message: message.into() }
+        ParamError { key: key.into(), message: message.into(), missing: false }
     }
 
     /// The error for a parameter that was not there.
     pub fn missing(key: &str) -> Self {
-        ParamError::new(key, format!("`{key}` is required"))
+        ParamError { key: key.to_string(), message: format!("`{key}` is required"), missing: true }
+    }
+
+    /// Whether the value was not there at all.
+    pub fn is_missing(&self) -> bool {
+        self.missing
     }
 }
 

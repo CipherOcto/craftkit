@@ -370,6 +370,56 @@ impl Session {
         &self.log
     }
 
+    /// Run a command, and ask the host for what it is missing.
+    ///
+    /// The command does not change and the document does not change: the
+    /// host is simply given a turn **before** the command runs. The
+    /// questions are the command's own required parameters that the
+    /// caller did not give, and they are asked in the order they are
+    /// declared.
+    ///
+    /// A command that is already given everything is run exactly as
+    /// [`Session::execute`] would run it, and the supplier is never
+    /// asked. A supplier that cannot answer leaves the parameter missing,
+    /// and the command fails the way it would have failed anyway.
+    pub fn execute_with(
+        &mut self,
+        id: &str,
+        raw: &Json,
+        supplier: &mut dyn crate::prompt::Supplier,
+    ) -> Result<Outcome, EngineError> {
+        let Some(spec) = self.commands.get(id).cloned() else {
+            return self.execute(id, raw);
+        };
+        let mut params = raw.clone();
+        if !params.is_object() {
+            return self.execute(id, raw);
+        }
+        for doc in spec.params {
+            if !doc.needed() {
+                continue;
+            }
+            if params.get(doc.name).is_some() {
+                continue;
+            }
+            // The other spelling of the parameter counts as given.
+            if let Some(alternative) = doc.alternative
+                && params.get(alternative).is_some()
+            {
+                continue;
+            }
+            let question = crate::prompt::Question {
+                name: doc.name.to_string(),
+                kind: doc.kind,
+                help: doc.help.to_string(),
+            };
+            if let Some(answer) = supplier.supply(&question) {
+                params[doc.name] = answer;
+            }
+        }
+        self.execute(id, &params)
+    }
+
     /// Run a command.
     pub fn execute(&mut self, id: &str, raw: &Json) -> Result<Outcome, EngineError> {
         let Some(spec) = self.commands.get(id).cloned() else {
