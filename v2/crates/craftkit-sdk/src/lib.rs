@@ -56,6 +56,7 @@
 pub use craftkit_derive::{Format, Migration};
 
 pub mod anchor;
+pub mod ask;
 pub mod assets;
 pub mod bundle;
 pub mod bytes;
@@ -81,6 +82,7 @@ pub mod plugincmds;
 pub mod plugins;
 pub mod prompt;
 pub mod realtime;
+pub mod resume;
 pub mod seams;
 pub mod select;
 pub mod session;
@@ -108,7 +110,9 @@ pub use journal::JournalEntry;
 pub use params::{Bool, Doc, Either, NodeRef, Number, ParamKind, Params, Text};
 pub use plan::{Plan, PlanItem};
 pub use plugin::{Catalogue, LoadedPlugin, PluginCommand, PluginError, PluginParam};
+pub use prompt::{MapSupplier, Question, Supplier};
 pub use realtime::{Block, Lane, LaneJob, LaneRunner, Mailbox, Report};
+pub use resume::Pending;
 pub use seams::{LayerSpec, PanelSpec, ToolSpec};
 pub use select::Selected;
 pub use session::Session;

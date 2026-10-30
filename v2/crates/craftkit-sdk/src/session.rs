@@ -57,6 +57,8 @@ use crate::journal::JournalEntry;
 use crate::params::Params;
 use crate::plan::{self, Plan};
 use crate::plugins::PluginLibraries;
+use crate::prompt::Question;
+use crate::resume::Pending;
 use crate::select::Selected;
 use crate::tasks::TaskRegistry;
 
@@ -90,6 +92,12 @@ pub struct Session {
     states_made: usize,
     /// The command that is running, if any.
     running: Option<String>,
+    /// The command that is **waiting** for an answer, if any.
+    ///
+    /// It is the session's own state, the way the selection and the tool
+    /// are: a command that is waiting is not in the document, and the
+    /// document is as it was. See [`crate::resume`].
+    pending: Option<Pending>,
 }
 
 impl Session {
@@ -113,6 +121,7 @@ impl Session {
             depth: 0,
             states_made: 0,
             running: None,
+            pending: None,
         }
     }
 
@@ -420,8 +429,100 @@ impl Session {
         self.execute(id, &params)
     }
 
+    /// **Ask the host** something, while the command runs.
+    ///
+    /// This is the other half of the prompt seam (§45): that one asks for
+    /// the command's *declared* parameters before it runs, and this one is
+    /// for what the command itself decides it needs, at the moment it
+    /// needs it.
+    ///
+    /// The answer comes back as the value. If the host has not answered
+    /// yet, the command is **stopped**: the error that comes out of this
+    /// is [`crate::EngineError::NeedsInput`], and the session turns it
+    /// into an outcome that says what is wanted. When the host answers
+    /// with [`Session::answer`], the command runs again and this time the
+    /// answer is waiting for it.
+    ///
+    /// The rule is that a command **asks before it changes the document**:
+    /// the session compares the document with the snapshot it took before
+    /// the run, and a command that changed something and then asked is
+    /// refused and put back. That is what makes running the command again
+    /// safe. See [`crate::resume`].
+    pub fn ask(&mut self, question: &Question) -> Result<Json, EngineError> {
+        let id = self.running.clone().unwrap_or_default();
+        if let Some(pending) = &self.pending
+            && let Some(answer) = pending.answer(&question.name)
+        {
+            return Ok(answer);
+        }
+        if let Some(pending) = &self.pending
+            && !pending.may_ask()
+        {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the command asked more than {} questions", crate::resume::MAX_QUESTIONS),
+            });
+        }
+        Err(EngineError::NeedsInput { id, question: question.clone() })
+    }
+
+    /// The command that is **waiting** for an answer, if there is one.
+    pub fn pending(&self) -> Option<&Pending> {
+        self.pending.as_ref()
+    }
+
+    /// **Answer** the question the waiting command asked.
+    ///
+    /// The command runs again, and this time the answer is waiting for it.
+    /// The command's own parameters are the ones it was given the first
+    /// time, and its undo is one step for the whole of it: asking and
+    /// answering are one command, not two.
+    pub fn answer(&mut self, value: Json) -> Result<Outcome, EngineError> {
+        let Some(pending) = &self.pending else {
+            return Err(EngineError::Failed {
+                id: "answer".to_string(),
+                message: "there is no command waiting for an answer".to_string(),
+            });
+        };
+        if !pending.may_resume() {
+            return Err(EngineError::Failed {
+                id: pending.id.clone(),
+                message: format!("the command was answered more than {} times", crate::resume::MAX_RESUMES),
+            });
+        }
+        let Some(question) = pending.question().cloned() else {
+            return Err(EngineError::Failed {
+                id: pending.id.clone(),
+                message: "the command has not asked anything".to_string(),
+            });
+        };
+        let id = pending.id.clone();
+        let params = pending.params.clone();
+        let name = question.name.clone();
+        if let Some(pending) = self.pending.as_mut() {
+            pending.answers.insert(name, value);
+            pending.resumes += 1;
+        }
+        self.execute(&id, &params)
+    }
+
+    /// **Give up** on the command that is waiting.
+    ///
+    /// It changed nothing — that is the rule — so giving up costs nothing
+    /// but the answer that will not come. It says whether there was one.
+    pub fn cancel(&mut self) -> bool {
+        self.pending.take().is_some()
+    }
+
     /// Run a command.
     pub fn execute(&mut self, id: &str, raw: &Json) -> Result<Outcome, EngineError> {
+        // A command that is waiting for an answer is dropped when another
+        // command runs. It changed nothing, so dropping it costs nothing.
+        if let Some(pending) = &self.pending
+            && pending.id != id
+        {
+            self.pending = None;
+        }
         let Some(spec) = self.commands.get(id).cloned() else {
             let error = EngineError::Unknown(id.to_string());
             self.log.push(format!("{id}: refused ({error})"));
@@ -495,16 +596,65 @@ impl Session {
                 if spec.journal {
                     self.journal_entry(id, params.value());
                 }
+                // The command finished, so it is not waiting any more.
+                self.pending = None;
                 Ok(outcome)
             }
             Err(error) => {
+                if let EngineError::NeedsInput { question, .. } = &error {
+                    return self.waiting(
+                        id,
+                        question.clone(),
+                        params.value(),
+                        snapshot,
+                        selection_snapshot,
+                        tool_snapshot,
+                    );
+                }
                 self.document = snapshot;
                 self.selection = selection_snapshot;
                 self.tool = tool_snapshot;
+                self.pending = None;
                 self.log.push(format!("{id}: refused ({error})"));
                 Err(error)
             }
         }
+    }
+
+    /// The command **asked**: the document is as it was, and the host has
+    /// to answer.
+    ///
+    /// The rule is enforced here, and not by a convention: a command that
+    /// changed the document and *then* asked cannot be run again safely,
+    /// so the change is put back and the command is refused.
+    fn waiting(
+        &mut self,
+        id: &str,
+        question: Question,
+        params: &Json,
+        snapshot: Document,
+        selection_snapshot: Vec<Selected>,
+        tool_snapshot: Option<String>,
+    ) -> Result<Outcome, EngineError> {
+        if self.document != snapshot {
+            self.document = snapshot;
+            let error = EngineError::Failed {
+                id: id.to_string(),
+                message: "a command that asks must ask before it changes the document".to_string(),
+            };
+            self.log.push(format!("{id}: refused ({error})"));
+            return Err(error);
+        }
+        // The session's own state goes back too: a command that is
+        // waiting has not finished, and it did not leave the selection
+        // moved.
+        self.selection = selection_snapshot;
+        self.tool = tool_snapshot;
+        let pending = self.pending.get_or_insert_with(|| Pending::new(id, params.clone()));
+        pending.asked.push(question.clone());
+        let outcome = Outcome::needs_input(question);
+        self.log.push(format!("{id}: {}", outcome.message));
+        Ok(outcome)
     }
 
     /// Run a command with a panic guard.

@@ -238,8 +238,21 @@ impl Server {
         if !self.tools.iter().any(|tool| tool.name == name) {
             return ToolResult::error(format!("there is no command `{command}`"));
         }
+        // A command that is **waiting** for an answer: the answer comes
+        // in the arguments, under the question's name. The command runs
+        // again and goes on.
+        if let Some(pending) = self.session.pending()
+            && pending.id == command
+            && let Some(question) = pending.question().cloned()
+            && let Some(value) = arguments.get(&question.name).cloned()
+        {
+            return match self.session.answer(value) {
+                Ok(outcome) => ToolResult::of(&command, outcome),
+                Err(error) => ToolResult::error(self.describe_error(&error)),
+            };
+        }
         match self.session.execute(&command, arguments) {
-            Ok(outcome) => ToolResult::of(outcome),
+            Ok(outcome) => ToolResult::of(&command, outcome),
             Err(error) => ToolResult::error(self.describe_error(&error)),
         }
     }
@@ -256,7 +269,25 @@ pub struct ToolResult {
 
 impl ToolResult {
     /// The result of a command that ran.
-    fn of(outcome: Outcome) -> ToolResult {
+    fn of(command: &str, outcome: Outcome) -> ToolResult {
+        // A command that is **waiting** for an answer is given the same
+        // words as a command that is missing a parameter: the name, what
+        // kind of value it takes, and the command's own line about it.
+        // The agent learns one thing, not two.
+        if let Some(question) = &outcome.needs_input {
+            let message = format!(
+                "the command `{command}` needs `{}` ({}): {}. Call it again with it.",
+                question.name,
+                question.kind.json_name(),
+                question.help
+            );
+            let mut content = vec![json!({ "type": "text", "text": message })];
+            if !outcome.data.is_null() {
+                let written = serde_json::to_string_pretty(&outcome.data).unwrap_or_default();
+                content.push(json!({ "type": "text", "text": written }));
+            }
+            return ToolResult { content, is_error: true };
+        }
         let mut content = vec![json!({ "type": "text", "text": outcome.message })];
         if !outcome.data.is_null() {
             let written = serde_json::to_string_pretty(&outcome.data).unwrap_or_default();

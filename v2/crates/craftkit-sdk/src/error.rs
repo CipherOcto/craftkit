@@ -11,6 +11,7 @@
 //! and this is what happened".
 
 use crate::params::Doc;
+use crate::prompt::Question;
 
 /// Why a parameter was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +72,13 @@ pub enum EngineError {
     /// is reported as what it is. §94 of the tree this replaces says the
     /// same thing about a panic in code craftkit does not own.
     Internal { id: String, message: String },
+    /// The command is **waiting**: it asked the host something while it
+    /// ran, and the host has to answer before it can go on.
+    ///
+    /// This is not a refusal. The command did not fail; it stopped to
+    /// ask, and the session turns this into an outcome that says what is
+    /// wanted. See [`crate::resume`].
+    NeedsInput { id: String, question: Question },
 }
 
 impl EngineError {
@@ -82,6 +90,15 @@ impl EngineError {
             EngineError::Param { id, .. } => Some(id),
             EngineError::Failed { id, .. } => Some(id),
             EngineError::Internal { id, .. } => Some(id),
+            EngineError::NeedsInput { id, .. } => Some(id),
+        }
+    }
+
+    /// The question the command is waiting for, if it is waiting.
+    pub fn question(&self) -> Option<&Question> {
+        match self {
+            EngineError::NeedsInput { question, .. } => Some(question),
+            _ => None,
         }
     }
 }
@@ -94,6 +111,9 @@ impl std::fmt::Display for EngineError {
             EngineError::Param { id, source } => write!(f, "`{id}` was refused: {source}"),
             EngineError::Failed { id, message } => write!(f, "`{id}` failed: {message}"),
             EngineError::Internal { id, message } => write!(f, "`{id}` failed inside: {message}"),
+            EngineError::NeedsInput { id, question } => {
+                write!(f, "`{id}` is waiting for `{}`: {}", question.name, question.help)
+            }
         }
     }
 }
@@ -109,17 +129,36 @@ pub struct Outcome {
     pub data: serde_json::Value,
     /// Whether the document changed.
     pub changed: bool,
+    /// The question the command is waiting for, if it is waiting.
+    ///
+    /// A command that asked while it ran stops with this set, and the
+    /// document is as it was: a command that asks **before** it changes
+    /// anything, so that it can be run again when the answer comes.
+    pub needs_input: Option<Question>,
 }
 
 impl Outcome {
     /// An outcome with a message and no data.
     pub fn new(message: impl Into<String>) -> Self {
-        Outcome { message: message.into(), data: serde_json::Value::Null, changed: false }
+        Outcome { message: message.into(), data: serde_json::Value::Null, changed: false, needs_input: None }
     }
 
     /// An outcome that changed the document.
     pub fn changed(message: impl Into<String>) -> Self {
-        Outcome { message: message.into(), data: serde_json::Value::Null, changed: true }
+        Outcome { message: message.into(), data: serde_json::Value::Null, changed: true, needs_input: None }
+    }
+
+    /// An outcome that says the command is **waiting** for an answer.
+    ///
+    /// It is not a refusal and not a change: the command asked, the host
+    /// has to answer, and the document is as it was.
+    pub fn needs_input(question: Question) -> Self {
+        let message = format!("waiting for `{}`: {}", question.name, question.help);
+        let data = serde_json::json!({
+            "status": "needs_input",
+            "question": question.to_json(),
+        });
+        Outcome { message, data, changed: false, needs_input: Some(question) }
     }
 
     /// The data the caller gets back.

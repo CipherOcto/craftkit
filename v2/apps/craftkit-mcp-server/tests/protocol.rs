@@ -219,3 +219,51 @@ fn an_agent_is_told_what_is_missing() {
     assert!(text.contains("needs `name`"), "{text}");
     assert!(text.contains("Call it again with it"), "{text}");
 }
+
+/// A command that **asks** while it runs is told what it wants, in the
+/// same words as a command that is missing a parameter: the agent learns
+/// one thing and not two.
+#[test]
+fn a_command_that_asks_is_told_what_it_wants() {
+    let mut server = server();
+    let answer = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": { "name": "craftkit_doc_ask", "arguments": { "question": "why?" } },
+        }))
+        .expect("the call is answered");
+    assert_eq!(answer["result"]["isError"], json!(true), "{answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains("needs `answer`"), "{answer}");
+    assert!(text.contains("Call it again with it."), "{answer}");
+}
+
+/// And the agent can answer it: the command runs again and goes on.
+#[test]
+fn the_agent_can_answer_the_question() {
+    let mut server = server();
+    server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": { "name": "craftkit_doc_ask", "arguments": { "question": "why?" } },
+        }))
+        .expect("the call is answered");
+    let answer = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "craftkit_doc_ask",
+                "arguments": { "question": "why?", "answer": "because" },
+            },
+        }))
+        .expect("the call is answered");
+    assert_eq!(answer["result"]["isError"], json!(false), "{answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains("why?"), "{answer}");
+}
