@@ -517,7 +517,7 @@ fn lying_command() -> CommandSpec {
         journal: true,
         enabled: craftkit_sdk::always,
         run: CommandRun::Static(|session, _params| {
-            session.document_mut().add_node(
+            session.document_mut()?.add_node(
                 "sneaky",
                 "geometry.rect",
                 Some(craftkit_sdk::Rect::new(0.0, 0.0, 1.0, 1.0)),
@@ -761,16 +761,20 @@ fn the_plan_walks_the_tree() {
         .execute("node.add", &json!({ "name": "group", "kind": "core.group" }))
         .expect("the group is added");
     let group = session.document().nodes.last().expect("there is a node").id;
+    // The rectangle is put in the group **by the command that adds it**:
+    // the tree is the document's, and a command may put a node in one.
     session
-        .execute("geometry.rectangle", &json!({ "x": 0, "y": 0, "width": 4, "height": 3, "name": "inside" }))
+        .execute(
+            "node.add",
+            &json!({
+                "name": "inside",
+                "kind": "geometry.rect",
+                "parent": group,
+                "rect": { "x": 0, "y": 0, "w": 4, "h": 3 },
+            }),
+        )
         .expect("the rectangle is added");
     let rectangle = session.document().node_by_name("inside").expect("the node is there").id;
-    // Put it in the group: the tree is the document's, and a command may
-    // put a node in one.
-    let taken = session.document_mut().take_node(rectangle);
-    if let (Some(taken), Some(parent)) = (taken, session.document_mut().node_mut(group)) {
-        parent.add_child(taken);
-    }
 
     let plan = session.evaluate();
     assert!(

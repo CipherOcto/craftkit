@@ -52,7 +52,7 @@ impl SetStream {
             });
         }
         let id = self.node.0;
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "node.stream.set".to_string(),
                 message: format!("there is no node {id} in the document"),
@@ -75,7 +75,7 @@ pub struct ClearStream {
 impl ClearStream {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = self.node.0;
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "node.stream.clear".to_string(),
                 message: format!("there is no node {id} in the document"),

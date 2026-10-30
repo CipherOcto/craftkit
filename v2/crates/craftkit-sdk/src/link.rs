@@ -81,7 +81,7 @@ impl LinkAdd {
             None => crate::serde_json::Value::Null,
         };
         let relation = Relation::with_payload(from, to, kind.clone(), payload);
-        if !session.document_mut().add_relation(relation) {
+        if !session.document_mut()?.add_relation(relation) {
             return Err(EngineError::Failed {
                 id: "link.add".to_string(),
                 message: format!("the node `{from}` is already linked to `{to}` as a `{kind}`"),
@@ -113,7 +113,7 @@ impl LinkRemove {
         let from = self.from.0;
         let to = self.to.map(|to| to.0);
         let kind = self.kind.as_ref().map(|kind| kind.0.clone());
-        let removed = session.document_mut().remove_relations(|relation| {
+        let removed = session.document_mut()?.remove_relations(|relation| {
             relation.from == from
                 && to.is_none_or(|to| relation.to == to)
                 && kind.as_ref().is_none_or(|kind| &relation.kind == kind)

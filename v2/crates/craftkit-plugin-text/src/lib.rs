@@ -456,10 +456,10 @@ impl AddMetric {
                 message: "a space is not narrower than nothing".to_string(),
             });
         }
-        let advances = read_advances(self.advances.as_ref())?;
-        let runs = read_runs(self.runs.as_ref())?;
-        let pairs = read_pairs(self.pairs.as_ref())?;
-        let id = session.document_mut().add_node_with_under(
+        let advances = read_advances("text.metric.add", self.advances.as_ref())?;
+        let runs = read_runs("text.metric.add", self.runs.as_ref())?;
+        let pairs = read_pairs("text.metric.add", self.pairs.as_ref())?;
+        let id = session.document_mut()?.add_node_with_under(
             None,
             self.name.0.clone(),
             "text.metric",
@@ -476,35 +476,135 @@ impl AddMetric {
     }
 }
 
+/// Change a metric.
+///
+/// A typeface's widths change — a font is updated, a table is corrected
+/// — and the way to change one is a **command**: the paragraphs set in
+/// it are measured again, and they are measured from the new widths.
+///
+/// A field that is not given is **left as it was**: the command changes
+/// what it is told to change and nothing else.
+#[derive(Command)]
+#[command(id = "text.metric.change", area = "text", layer = "text", icon = "pencil", mutates, undoable)]
+pub struct ChangeMetric {
+    /// The metric to change.
+    pub metric: NodeRef,
+    /// The width of a character that has no width of its own, in
+    /// millimetres.
+    pub default_mm: Option<Number>,
+    /// The width of the space between two words, in millimetres.
+    pub space_mm: Option<Number>,
+    /// The widths of the characters that have one: a table of character
+    /// to millimetres.
+    pub advances: Option<Json>,
+    /// The widths of the **runs** that have one.
+    pub runs: Option<Json>,
+    /// The **adjustments** of the pairs that have one.
+    pub pairs: Option<Json>,
+}
+
+impl ChangeMetric {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.metric.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: format!("there is no node {id} in the document"),
+            });
+        };
+        if node.kind != "text.metric" {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: format!("node {id} is not a metric"),
+            });
+        }
+        let default_mm = self.default_mm.map(|width| width.0);
+        if let Some(default_mm) = default_mm
+            && (!default_mm.is_finite() || default_mm < 0.0)
+        {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: "a character is not narrower than nothing".to_string(),
+            });
+        }
+        let space_mm = self.space_mm.map(|width| width.0);
+        if let Some(space_mm) = space_mm
+            && (!space_mm.is_finite() || space_mm < 0.0)
+        {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: "a space is not narrower than nothing".to_string(),
+            });
+        }
+        let advances = match &self.advances {
+            Some(table) => Some(read_advances("text.metric.change", Some(table))?),
+            None => None,
+        };
+        let runs = match &self.runs {
+            Some(table) => Some(read_runs("text.metric.change", Some(table))?),
+            None => None,
+        };
+        let pairs = match &self.pairs {
+            Some(table) => Some(read_pairs("text.metric.change", Some(table))?),
+            None => None,
+        };
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: format!("there is no node {id} in the document"),
+            });
+        };
+        if let Some(default_mm) = default_mm {
+            node.data["default_mm"] = json!(default_mm);
+        }
+        if let Some(space_mm) = space_mm {
+            node.data["space_mm"] = json!(space_mm);
+        }
+        if let Some(advances) = advances {
+            node.data["advances"] = Json::Object(advances);
+        }
+        if let Some(runs) = runs {
+            node.data["runs"] = Json::Object(runs);
+        }
+        if let Some(pairs) = pairs {
+            node.data["pairs"] = Json::Object(pairs);
+        }
+        Ok(Outcome::changed(format!("changed the metric {id}")).with_data(json!({ "id": id })))
+    }
+}
+
 /// Read the table of **advances**: a character to millimetres.
 ///
 /// A key that is not one character is refused, because the table of
 /// runs is the table for the longer ones.
-fn read_advances(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+fn read_advances(
+    id: &str,
+    table: Option<&Json>,
+) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
     let mut out = craftkit_sdk::serde_json::Map::new();
     let Some(table) = table else { return Ok(out) };
     let Some(table) = table.as_object() else {
         return Err(EngineError::Failed {
-            id: "text.metric.add".to_string(),
+            id: id.to_string(),
             message: "the widths are a table of character to millimetres".to_string(),
         });
     };
     for (key, value) in table {
         let Some(character) = one_character(key) else {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("`{key}` is not one character"),
             });
         };
         let Some(width) = value.as_f64() else {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the width of `{character}` is not a number"),
             });
         };
         if !width.is_finite() || width < 0.0 {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the width of `{character}` is not a width"),
             });
         }
@@ -517,31 +617,34 @@ fn read_advances(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<S
 ///
 /// A run of one character is refused: that is an advance, and the
 /// metric has a table for those.
-fn read_runs(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+fn read_runs(
+    id: &str,
+    table: Option<&Json>,
+) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
     let mut out = craftkit_sdk::serde_json::Map::new();
     let Some(table) = table else { return Ok(out) };
     let Some(table) = table.as_object() else {
         return Err(EngineError::Failed {
-            id: "text.metric.add".to_string(),
+            id: id.to_string(),
             message: "the runs are a table of characters to millimetres".to_string(),
         });
     };
     for (key, value) in table {
         if key.chars().count() < 2 {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("`{key}` is one character, and that is an advance"),
             });
         }
         let Some(width) = value.as_f64() else {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the width of `{key}` is not a number"),
             });
         };
         if !width.is_finite() || width < 0.0 {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the width of `{key}` is not a width"),
             });
         }
@@ -554,31 +657,34 @@ fn read_runs(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<Strin
 ///
 /// The adjustment may be **negative**: that is what a kerning pair is
 /// for.
-fn read_pairs(table: Option<&Json>) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
+fn read_pairs(
+    id: &str,
+    table: Option<&Json>,
+) -> Result<craftkit_sdk::serde_json::Map<String, Json>, EngineError> {
     let mut out = craftkit_sdk::serde_json::Map::new();
     let Some(table) = table else { return Ok(out) };
     let Some(table) = table.as_object() else {
         return Err(EngineError::Failed {
-            id: "text.metric.add".to_string(),
+            id: id.to_string(),
             message: "the pairs are a table of two characters to millimetres".to_string(),
         });
     };
     for (key, value) in table {
         if key.chars().count() != 2 {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("`{key}` is not two characters, and that is not a pair"),
             });
         }
         let Some(adjust) = value.as_f64() else {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the adjustment of `{key}` is not a number"),
             });
         };
         if !adjust.is_finite() {
             return Err(EngineError::Failed {
-                id: "text.metric.add".to_string(),
+                id: id.to_string(),
                 message: format!("the adjustment of `{key}` is not a number"),
             });
         }
@@ -619,7 +725,7 @@ impl AddParagraph {
         let metric_name = metric_node.name.clone();
         let words: Vec<String> = self.text.0.split_whitespace().map(|word| word.to_string()).collect();
         let name = name_of(&words);
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             name,
             "text.paragraph",
@@ -633,7 +739,7 @@ impl AddParagraph {
         // The paragraph is set **in** the metric: an edge, and the edge
         // says which metric, so that a reader can say so without
         // resolving it.
-        session.document_mut().add_relation(Relation::with_payload(
+        session.document_mut()?.add_relation(Relation::with_payload(
             id,
             metric,
             SET_IN,
@@ -685,7 +791,7 @@ impl SetMetric {
             });
         }
         let metric_name = metric_node.name.clone();
-        let document = session.document_mut();
+        let document = session.document_mut()?;
         document.remove_relations(|relation| relation.from == paragraph && relation.kind == SET_IN);
         document.add_relation(Relation::with_payload(
             paragraph,
@@ -757,7 +863,7 @@ impl MeasureParagraph {
             Some(flag) => flag.0,
             None => ragged_of(node),
         };
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "text.paragraph.measure".to_string(),
                 message: format!("there is no paragraph `{id}`"),
@@ -841,6 +947,7 @@ craftkit_sdk::plugin_anchor!(
     AddMetric,
     AddParagraph,
     MeasureParagraph,
+    ChangeMetric,
     SetMetric,
     LinesEvaluator,
     TextPanel
@@ -862,6 +969,7 @@ mod tests {
         commands.register(ADD_PARAGRAPH.clone()).expect("the command is registered");
         commands.register(MEASURE_PARAGRAPH.clone()).expect("the command is registered");
         commands.register(SET_METRIC.clone()).expect("the command is registered");
+        commands.register(CHANGE_METRIC.clone()).expect("the command is registered");
         let mut kinds: Registry<NodeKindSpec> = Registry::new();
         kinds.register(PARAGRAPH_KIND).expect("the kind is registered");
         kinds.register(METRIC_KIND).expect("the kind is registered");
@@ -874,6 +982,26 @@ mod tests {
             Registry::<MigrationSpec>::new(),
             evaluators,
         )
+    }
+
+    /// A node of that kind, with that payload.
+    ///
+    /// It is made by hand, because some of the things the **reader** has
+    /// to survive are things no command would ever make: a metric with a
+    /// thousand widths, a paragraph with two thousand words. The reader
+    /// is what is being tested, and it is given the node it is to read.
+    fn a_node(id: u64, kind: &str, data: Json) -> craftkit_sdk::Node {
+        craftkit_sdk::Node {
+            id,
+            name: kind.to_string(),
+            kind: kind.to_string(),
+            rect: None,
+            muted: false,
+            data,
+            children: Vec::new(),
+            unknown: Json::Null,
+            stream: None,
+        }
     }
 
     /// A monospaced metric: one width for every character.
@@ -1105,8 +1233,9 @@ mod tests {
 
         // The metric is widened: the same paragraph now fits more on a
         // line, and the paragraph itself has not been touched.
-        let Some(node) = session.document_mut().node_mut(metric) else { panic!("the metric is there") };
-        node.data["default_mm"] = json!(0.5);
+        session
+            .execute("text.metric.change", &json!({ "metric": metric, "default_mm": 0.5 }))
+            .expect("the metric is changed");
         let after = session.evaluate();
         let item = after.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
         assert_eq!(item.value["line_count"], json!(1), "the same words now fit on one line");
@@ -1233,17 +1362,20 @@ mod tests {
     /// fall back to the default.
     #[test]
     fn the_reader_leaves_out_what_it_does_not_understand() {
-        let mut session = session();
-        session
-            .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 1.0 }))
-            .expect("the metric is added");
-        {
-            let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
-            node.data["runs"] = json!({ "i": 1.0, "fi": 3.0 });
-            node.data["pairs"] = json!({ "abc": -1.0, "AV": -0.5 });
-        }
-        let metric =
-            Metric::of(session.document().node(1).expect("the metric is there")).expect("the metric is read");
+        // The reader is given the node it is to read, and nothing else:
+        // a document that holds a metric the commands would never make
+        // is a document only a file could have made.
+        let node = a_node(
+            1,
+            "text.metric",
+            json!({
+                "default_mm": 2.0,
+                "space_mm": 1.0,
+                "runs": { "i": 1.0, "fi": 3.0 },
+                "pairs": { "abc": -1.0, "AV": -0.5 },
+            }),
+        );
+        let metric = Metric::of(&node).expect("the metric is read");
         assert_eq!(metric.runs.len(), 1, "the run of one character is left out");
         assert_eq!(metric.pairs.len(), 1, "and the pair of three");
         assert_eq!(metric.word_width("fi"), 3.0, "the run that was understood is used");
@@ -1254,22 +1386,13 @@ mod tests {
     /// point, and there is no lossy way round it.
     #[test]
     fn a_metric_that_is_too_big_is_refused() {
-        let mut session = session();
-        monospaced(&mut session, 2.0);
-        session
-            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
-            .expect("the paragraph is added");
-        {
-            let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
-            let mut table = craftkit_sdk::serde_json::Map::new();
-            for index in 0..2000 {
-                table.insert(format!("k{index}"), json!(1.0));
-            }
-            node.data["advances"] = Json::Object(table);
+        let mut table = craftkit_sdk::serde_json::Map::new();
+        for index in 0..2000 {
+            table.insert(format!("k{index}"), json!(1.0));
         }
-        // The metric is refused, so the paragraph has no lines.
-        let plan = session.evaluate();
-        assert!(plan.items.iter().all(|item| item.kind != "text.lines"), "there are no lines");
+        let node = a_node(1, "text.metric", json!({ "default_mm": 2.0, "space_mm": 1.0, "advances": table }));
+        // The metric is refused, so there is no metric to read.
+        assert!(Metric::of(&node).is_none(), "the metric was read");
     }
 
     /// A paragraph with **too many words** is not read: the words are
@@ -1277,21 +1400,11 @@ mod tests {
     /// paragraph anybody can lay out.
     #[test]
     fn a_paragraph_with_too_many_words_is_not_read() {
-        let mut session = session();
-        monospaced(&mut session, 2.0);
-        session
-            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
-            .expect("the paragraph is added");
-        {
-            let Some(node) = session.document_mut().node_mut(2) else { panic!("the paragraph is there") };
-            let words: Vec<&str> = (0..2000).map(|_| "word").collect();
-            node.data["words"] = json!(words);
-        }
-        let plan = session.evaluate();
-        assert!(plan.items.iter().all(|item| item.kind != "text.lines"), "there are no lines");
+        let words: Vec<&str> = (0..2000).map(|_| "word").collect();
+        let node = a_node(2, "text.paragraph", json!({ "words": words }));
         let kind = PARAGRAPH_KIND.evaluate.as_ref().expect("the kind evaluates");
-        let node = session.document().node(2).expect("the paragraph is there").clone();
-        let value = kind(&node, session.document()).expect("the paragraph says what it means");
+        let document = Document::new("empty");
+        let value = kind(&node, &document).expect("the paragraph says what it means");
         assert_eq!(value["words"], Json::Null, "the words were not read");
     }
 

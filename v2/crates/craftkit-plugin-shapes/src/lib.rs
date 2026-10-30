@@ -117,7 +117,7 @@ impl AddRectangle {
             Some(name) => name.0.clone(),
             None => format!("rectangle {}", rect.w),
         };
-        let id = session.document_mut().add_node(name.clone(), "geometry.rect", Some(rect));
+        let id = session.document_mut()?.add_node(name.clone(), "geometry.rect", Some(rect));
         Ok(Outcome::changed(format!("added a rectangle `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": "geometry.rect" })))
     }

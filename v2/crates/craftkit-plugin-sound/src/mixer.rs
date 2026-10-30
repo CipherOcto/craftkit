@@ -301,7 +301,7 @@ impl AddBus {
             None => 2,
         };
         let payload = BusPayload { name: name.clone(), channels };
-        let id = session.document_mut().add_node_with(name.clone(), "sound.bus", None, payload.to_json());
+        let id = session.document_mut()?.add_node_with(name.clone(), "sound.bus", None, payload.to_json());
         Ok(Outcome::changed(format!("added a bus `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name })))
     }
@@ -341,7 +341,7 @@ impl AddRoute {
             }
         }
         let relation = craftkit_sdk::Relation::new(track, bus, "route");
-        if !session.document_mut().add_relation(relation) {
+        if !session.document_mut()?.add_relation(relation) {
             return Err(EngineError::Failed {
                 id: "sound.route.add".to_string(),
                 message: format!("the track `{track}` already feeds the bus `{bus}`"),
@@ -391,7 +391,7 @@ impl AddInsert {
         let bypass = self.bypass.map(|bypass| bypass.0).unwrap_or(false);
         let payload =
             InsertPayload { plugin: plugin.clone(), params: Json::Object(Default::default()), bypass };
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(track),
             plugin.clone(),
             "sound.insert",
@@ -450,7 +450,7 @@ impl AddSend {
             });
         }
         let payload = SendPayload { level_db, pan: 0.0, pre_fader: false };
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(track),
             format!("send to {bus}"),
             "sound.send",
@@ -458,7 +458,7 @@ impl AddSend {
             payload.to_json(),
         );
         let relation = craftkit_sdk::Relation::new(id, bus, "send");
-        session.document_mut().add_relation(relation);
+        session.document_mut()?.add_relation(relation);
         Ok(Outcome::changed(format!("the track `{track}` sends to the bus `{bus}`"))
             .with_data(serde_json::json!({ "id": id, "track": track, "bus": bus })))
     }
@@ -518,7 +518,7 @@ impl AddLane {
             None => Vec::new(),
         };
         let payload = LanePayload { param: param.clone(), points };
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(track),
             format!("{param} automation"),
             "sound.lane",

@@ -219,11 +219,12 @@ fn a_cycle_of_styles_ends_the_chain() {
     session
         .execute("prose.style.add", &json!({ "document": 1, "name": "Emphasis", "based_on": 2 }))
         .expect("the style is added");
-    // The style is based on the style it is based on, by hand: the edge
-    // is what makes the cycle, not the command.
-    let mut document = session.document().clone();
-    document.relations.push(craftkit_sdk::Relation::with_payload(2, 3, "prose.based_on", json!({})));
-    *session.document_mut() = document;
+    // The style is based on the style it is based on: the edge is what
+    // makes the cycle, and the edge is a command like any other — there
+    // is no way to make one by hand.
+    session
+        .execute("link.add", &json!({ "from": 2, "to": 3, "kind": "prose.based_on" }))
+        .expect("the edge is added");
     let plan = session.evaluate();
     let styles: Vec<_> = plan.items.iter().filter(|item| item.kind == "prose.style").collect();
     let body = styles.iter().find(|item| item.node == 2).expect("the style is there");

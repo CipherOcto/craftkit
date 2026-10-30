@@ -234,9 +234,11 @@ fn changing_the_metric_changes_the_lines() {
     assert_eq!(item.value["line_count"], json!(2), "two words of four millimetres fit on a line");
 
     // The metric is narrowed: the same paragraph now fits more on a
-    // line, and the paragraph itself has not been touched.
-    let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
-    node.data["default_mm"] = json!(0.5);
+    // line, and the paragraph itself has not been touched. The metric is
+    // changed by a **command**, like everything else.
+    session
+        .execute("text.metric.change", &json!({ "metric": 1, "default_mm": 0.5 }))
+        .expect("the metric is changed");
     let after = session.evaluate();
     let item = after.items.iter().find(|item| item.kind == "text.lines").expect("the lines are in the plan");
     assert_eq!(item.value["line_count"], json!(1), "the same words now fit on one line");
@@ -336,7 +338,7 @@ fn a_kerning_pair_makes_the_paragraph_narrower() {
 /// and there is no lossy way round it.
 #[cfg(feature = "text")]
 #[test]
-fn a_metric_that_is_too_big_is_refused() {
+fn a_width_of_two_characters_is_refused() {
     let mut session = ecosystem().session();
     session
         .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 2.0 }))
@@ -344,17 +346,13 @@ fn a_metric_that_is_too_big_is_refused() {
     session
         .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
         .expect("the paragraph is added");
-    {
-        let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
-        let mut table = craftkit_sdk::serde_json::Map::new();
-        for index in 0..2000 {
-            table.insert(format!("k{index}"), craftkit_sdk::serde_json::json!(1.0));
-        }
-        node.data["advances"] = craftkit_sdk::serde_json::Value::Object(table);
-    }
-    let plan = session.evaluate();
-    assert!(
-        plan.items.iter().all(|item| item.kind != "text.lines"),
-        "a metric that is too big is refused, so there are no lines"
-    );
+    // A width of two characters is a **run**, not an advance, and the
+    // command refuses it: the table of runs is the table for the longer
+    // ones.
+    let mut table = craftkit_sdk::serde_json::Map::new();
+    table.insert("k0".to_string(), craftkit_sdk::serde_json::json!(1.0));
+    let error = session
+        .execute("text.metric.change", &json!({ "metric": 1, "advances": table }))
+        .expect_err("that is a run, not an advance");
+    assert!(error.to_string().contains("one character"), "{error}");
 }

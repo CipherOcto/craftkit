@@ -107,7 +107,7 @@ impl Ask {
             "question": question,
             "answer": answer,
         });
-        let id = session.document_mut().add_node_with_under(None, name.clone(), "core.note", None, payload);
+        let id = session.document_mut()?.add_node_with_under(None, name.clone(), "core.note", None, payload);
         Ok(Outcome::changed(format!("asked `{question}`")).with_data(crate::serde_json::json!({
             "id": id,
             "name": name,

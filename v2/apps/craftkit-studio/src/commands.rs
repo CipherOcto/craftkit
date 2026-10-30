@@ -24,7 +24,7 @@ impl DocRename {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let name = self.name.0.clone();
         let changed = session.document().name != name;
-        session.document_mut().name = name.clone();
+        session.document_mut()?.name = name.clone();
         Ok(Outcome::new(format!("renamed to `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "name": name }))
             .changed_if(changed))
@@ -90,7 +90,7 @@ impl NodeAdd {
             None => None,
         };
         let data = self.data.clone().unwrap_or(craftkit_sdk::serde_json::Value::Null);
-        let id = session.document_mut().add_node_with_under(parent, name.clone(), kind.clone(), rect, data);
+        let id = session.document_mut()?.add_node_with_under(parent, name.clone(), kind.clone(), rect, data);
         Ok(Outcome::changed(format!("added a {kind} `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": kind })))
     }
@@ -147,7 +147,7 @@ impl NodeMute {
                 }
             },
         };
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "node.mute".to_string(),
                 message: format!("there is no node with id {id}"),
@@ -238,11 +238,11 @@ impl NodeGroup {
             });
         }
         let rect = bounds;
-        let group = session.document_mut().add_node("group", "core.group", rect);
+        let group = session.document_mut()?.add_node("group", "core.group", rect);
         let mut moved = 0;
         for id in selected {
-            let Some(node) = session.document_mut().take_node(id) else { continue };
-            if let Some(parent) = session.document_mut().node_mut(group) {
+            let Some(node) = session.document_mut()?.take_node(id) else { continue };
+            if let Some(parent) = session.document_mut()?.node_mut(group) {
                 parent.add_child(node);
                 moved += 1;
             }
@@ -351,7 +351,7 @@ impl DocOpen {
                 })?;
         let name = document.name.clone();
         let nodes = document.nodes.len();
-        *session.document_mut() = document;
+        *session.document_mut()? = document;
         let message = match forward {
             Some(version) => format!(
                 "opened `{path}` (written by a newer program, version {version}; the parts this \
@@ -460,7 +460,7 @@ impl DocOpenBundle {
         let name = bundle.document.name.clone();
         let nodes = bundle.document.nodes.len();
         let files = bundle.files.len();
-        *session.document_mut() = bundle.document;
+        *session.document_mut()? = bundle.document;
         Ok(Outcome::changed(format!("opened `{path}` ({files} file(s))")).with_data(
             craftkit_sdk::serde_json::json!({
                 "path": path,

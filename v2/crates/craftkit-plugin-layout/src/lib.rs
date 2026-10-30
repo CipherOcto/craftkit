@@ -289,7 +289,7 @@ impl AddDocument {
                 message: "a document has a name".to_string(),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             name.clone(),
             "layout.document",
@@ -327,7 +327,7 @@ impl AddSpread {
                 message: format!("there is no document `{document}`"),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "layout.spread",
@@ -371,7 +371,7 @@ impl AddPage {
         }
         let width = size(self.width.as_ref(), 210.0, "layout.page.add", "a width")?;
         let height = size(self.height.as_ref(), 297.0, "layout.page.add", "a height")?;
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(spread),
             name.clone(),
             "layout.page",
@@ -412,7 +412,7 @@ impl AddLayer {
             });
         }
         let color = self.color.as_ref().map(|color| color.0.clone());
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "layout.layer",
@@ -451,7 +451,7 @@ impl AddStory {
                 message: format!("there is no document `{document}`"),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "layout.story",
@@ -503,14 +503,14 @@ impl AddAsset {
             });
         }
         let kind = self.kind.as_ref().map(|kind| kind.0.clone()).unwrap_or_else(|| "file".to_string());
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "layout.asset",
             None,
             json!({ "kind": kind }),
         );
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "layout.asset.add".to_string(),
                 message: format!("the asset `{name}` is not in the document"),
@@ -568,7 +568,7 @@ impl AddItem {
         let shape =
             self.shape.as_ref().map(|shape| shape.0.clone()).unwrap_or_else(|| "rectangle".to_string());
         let rect = self.rect.clone().unwrap_or(Json::Null);
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(spread),
             name.clone(),
             &kind,
@@ -610,7 +610,7 @@ impl PutOnLayer {
             });
         }
         let name = node.name.clone();
-        let added = session.document_mut().add_relation(Relation::with_payload(
+        let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,
             layer,
             "layout.on_layer",
@@ -658,7 +658,7 @@ impl PutStory {
             });
         }
         let name = node.name.clone();
-        let added = session.document_mut().add_relation(Relation::with_payload(
+        let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,
             story,
             "layout.text",

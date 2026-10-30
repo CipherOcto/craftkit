@@ -184,7 +184,7 @@ impl AddWorkbook {
             });
         }
         let id =
-            session.document_mut().add_node_with_under(None, name.clone(), "grid.workbook", None, json!({}));
+            session.document_mut()?.add_node_with_under(None, name.clone(), "grid.workbook", None, json!({}));
         Ok(Outcome::changed(format!("added the workbook `{name}`"))
             .with_data(json!({ "id": id, "name": name })))
     }
@@ -216,7 +216,7 @@ impl AddSheet {
                 message: format!("there is no workbook `{workbook}`"),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(workbook),
             name.clone(),
             "grid.sheet",
@@ -244,7 +244,7 @@ impl SetCell {
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, "grid.cell.set")?;
         let value = Value::from_json(&self.value);
-        let Some(node) = session.document_mut().node_mut(sheet) else {
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.cell.set".to_string(),
                 message: format!("there is no sheet `{sheet}`"),
@@ -289,7 +289,7 @@ impl SetFormula {
             id: "grid.formula.set".to_string(),
             message: error.message,
         })?;
-        let Some(node) = session.document_mut().node_mut(sheet) else {
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.formula.set".to_string(),
                 message: format!("there is no sheet `{sheet}`"),
@@ -339,7 +339,7 @@ impl ClearCell {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
-        let Some(node) = session.document_mut().node_mut(sheet) else {
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.cell.clear".to_string(),
                 message: format!("there is no sheet `{sheet}`"),

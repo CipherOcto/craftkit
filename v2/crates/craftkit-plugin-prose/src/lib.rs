@@ -290,8 +290,13 @@ impl AddDocument {
                 message: "a document has a name".to_string(),
             });
         }
-        let id =
-            session.document_mut().add_node_with_under(None, name.clone(), "prose.document", None, json!({}));
+        let id = session.document_mut()?.add_node_with_under(
+            None,
+            name.clone(),
+            "prose.document",
+            None,
+            json!({}),
+        );
         Ok(Outcome::changed(format!("added the document `{name}`"))
             .with_data(json!({ "id": id, "name": name })))
     }
@@ -357,7 +362,7 @@ impl AddStyle {
             }
             None => None,
         };
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "prose.style",
@@ -366,7 +371,7 @@ impl AddStyle {
         );
         if let Some(base) = based_on {
             let base_name = session.document().node(base).map(|node| node.name.clone()).unwrap_or_default();
-            session.document_mut().add_relation(Relation::with_payload(
+            session.document_mut()?.add_relation(Relation::with_payload(
                 id,
                 base,
                 "prose.based_on",
@@ -415,14 +420,14 @@ impl AddMedia {
                 message: format!("there is no document `{document}`"),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             "prose.media",
             None,
             json!({}),
         );
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "prose.media.add".to_string(),
                 message: format!("the media `{name}` is not in the document"),
@@ -524,7 +529,7 @@ fn add_block(
         _ => "a table",
     };
     let block =
-        session.document_mut().add_node_with_under(Some(document), name.to_string(), kind, None, data);
+        session.document_mut()?.add_node_with_under(Some(document), name.to_string(), kind, None, data);
     Ok(Outcome::changed(format!("added {name}")).with_data(json!({ "id": block, "kind": kind })))
 }
 
@@ -559,7 +564,7 @@ impl PutOnStyle {
             });
         }
         let name = node.name.clone();
-        let added = session.document_mut().add_relation(Relation::with_payload(
+        let added = session.document_mut()?.add_relation(Relation::with_payload(
             block,
             style,
             "prose.styled_by",
@@ -631,7 +636,7 @@ impl SetRuns {
                 });
             }
         }
-        let Some(node) = session.document_mut().node_mut(block) else {
+        let Some(node) = session.document_mut()?.node_mut(block) else {
             return Err(EngineError::Failed {
                 id: "prose.block.runs".to_string(),
                 message: format!("there is no block `{block}`"),

@@ -136,7 +136,7 @@ impl AddComp {
             "height": height,
             "duration": duration,
         });
-        let id = session.document_mut().add_node_with("comp".to_string(), "fx.comp", None, data);
+        let id = session.document_mut()?.add_node_with("comp".to_string(), "fx.comp", None, data);
         Ok(Outcome::changed(format!("added a {width} by {height} composition"))
             .with_data(serde_json::json!({ "id": id })))
     }
@@ -169,7 +169,8 @@ impl AddLayer {
             });
         }
         let data = serde_json::json!({ "props": serde_json::json!({}) });
-        let id = session.document_mut().add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
+        let id =
+            session.document_mut()?.add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
         Ok(Outcome::changed(format!("added the layer `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name })))
     }
@@ -200,7 +201,7 @@ impl SetProp {
                 message: "a path has something in it".to_string(),
             });
         }
-        let Some(node) = session.document_mut().node_mut(layer) else {
+        let Some(node) = session.document_mut()?.node_mut(layer) else {
             return Err(EngineError::Failed {
                 id: "fx.prop.set".to_string(),
                 message: format!("there is no layer `{layer}`"),

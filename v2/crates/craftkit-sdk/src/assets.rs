@@ -58,7 +58,7 @@ impl AddAsset {
             None => None,
         };
         let asset = Asset::new(path.clone(), kind.clone(), length);
-        if !session.document_mut().add_asset(asset) {
+        if !session.document_mut()?.add_asset(asset) {
             return Err(EngineError::Failed {
                 id: "doc.asset.add".to_string(),
                 message: format!("the document already needs `{path}`"),
@@ -80,7 +80,7 @@ pub struct RemoveAsset {
 impl RemoveAsset {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let removed = session.document_mut().remove_assets(|asset| asset.path == path);
+        let removed = session.document_mut()?.remove_assets(|asset| asset.path == path);
         if removed == 0 {
             return Err(EngineError::Failed {
                 id: "doc.asset.remove".to_string(),

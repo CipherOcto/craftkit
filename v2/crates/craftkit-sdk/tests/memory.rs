@@ -44,8 +44,8 @@ fn a_session() -> Session {
             run: CommandRun::Dynamic(std::sync::Arc::new(|session, params| {
                 let bytes = params.get("bytes").and_then(|value| value.as_u64()).unwrap_or(0) as usize;
                 let payload = "x".repeat(bytes);
-                let id = session.document_mut().add_node("heavy", "shape.rect", None);
-                if let Some(node) = session.document_mut().node_mut(id) {
+                let id = session.document_mut()?.add_node("heavy", "shape.rect", None);
+                if let Some(node) = session.document_mut()?.node_mut(id) {
                     node.data = json!({ "payload": payload });
                 }
                 Ok(Outcome::changed("filled".to_string()))

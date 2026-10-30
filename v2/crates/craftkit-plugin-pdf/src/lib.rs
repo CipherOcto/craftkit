@@ -184,7 +184,7 @@ impl AddObject {
         let entries = check_entries(&self.entries)?;
         let data = serde_json::json!({ "object": number, "entries": entries });
         let name = format!("object {number}");
-        let id = session.document_mut().add_node_with(name.clone(), "pdf.object", None, data);
+        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
         Ok(Outcome::changed(format!("added the `{name}`"))
             .with_data(serde_json::json!({ "id": id, "object": number })))
     }
@@ -231,8 +231,8 @@ impl AddStream {
         }
         let data = serde_json::json!({ "object": number, "entries": entries });
         let name = format!("object {number}");
-        let id = session.document_mut().add_node_with(name.clone(), "pdf.stream", None, data);
-        if let Some(node) = session.document_mut().node_mut(id) {
+        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.stream", None, data);
+        if let Some(node) = session.document_mut()?.node_mut(id) {
             node.stream = Some(path.clone());
         }
         Ok(Outcome::changed(format!("added the `{name}` with its stream"))
@@ -294,7 +294,7 @@ impl AddReference {
         }
         let payload = serde_json::json!({ "key": key, "generation": generation });
         let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload.clone());
-        if !session.document_mut().add_relation(relation) {
+        if !session.document_mut()?.add_relation(relation) {
             return Err(EngineError::Failed {
                 id: "pdf.ref.add".to_string(),
                 message: format!("the object `{from}` already refers to `{to}`"),

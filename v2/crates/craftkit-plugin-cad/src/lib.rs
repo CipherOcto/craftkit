@@ -266,7 +266,7 @@ impl AddDrawing {
             });
         }
         let id =
-            session.document_mut().add_node_with_under(None, name.clone(), "cad.drawing", None, json!({}));
+            session.document_mut()?.add_node_with_under(None, name.clone(), "cad.drawing", None, json!({}));
         Ok(Outcome::changed(format!("added the drawing `{name}`"))
             .with_data(json!({ "id": id, "name": name })))
     }
@@ -301,7 +301,7 @@ impl AddLayer {
             });
         }
         let color = self.color.as_ref().map(|color| color.0.clone());
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(drawing),
             name.clone(),
             "cad.layer",
@@ -338,7 +338,7 @@ impl AddBlock {
                 message: format!("there is no drawing `{drawing}`"),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(drawing),
             name.clone(),
             "cad.block",
@@ -509,7 +509,7 @@ impl AddInsert {
             geometry,
             "cad.entity.insert.add",
         )?;
-        session.document_mut().add_relation(Relation::with_payload(
+        session.document_mut()?.add_relation(Relation::with_payload(
             entity,
             inserts,
             "cad.inserts",
@@ -551,7 +551,7 @@ impl PutOnLayer {
             });
         }
         let name = node.name.clone();
-        let added = session.document_mut().add_relation(Relation::with_payload(
+        let added = session.document_mut()?.add_relation(Relation::with_payload(
             entity,
             layer,
             "cad.on_layer",
@@ -593,7 +593,7 @@ fn add_entity(
             message: format!("the node `{block}` is not a block"),
         });
     }
-    let entity = session.document_mut().add_node_with_under(
+    let entity = session.document_mut()?.add_node_with_under(
         Some(block),
         name.clone(),
         kind,

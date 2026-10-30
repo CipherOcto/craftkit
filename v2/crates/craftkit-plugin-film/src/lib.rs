@@ -192,7 +192,7 @@ impl AddBin {
             });
         }
         let parent = self.parent.map(|parent| parent.0);
-        let id = session.document_mut().add_node_under(parent, name.clone(), "film.bin", None);
+        let id = session.document_mut()?.add_node_under(parent, name.clone(), "film.bin", None);
         Ok(Outcome::changed(format!("added the bin `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name })))
     }
@@ -250,7 +250,8 @@ impl AddItem {
             "duration": duration,
             "offline": offline,
         });
-        let id = session.document_mut().add_node_with_under(Some(bin), name.clone(), "film.item", None, data);
+        let id =
+            session.document_mut()?.add_node_with_under(Some(bin), name.clone(), "film.item", None, data);
         Ok(Outcome::changed(format!("added the item `{name}`"))
             .with_data(serde_json::json!({ "id": id, "item": item, "name": name })))
     }
@@ -286,7 +287,7 @@ impl AddTrack {
         }
         let kind = self.kind.0.clone();
         let data = serde_json::json!({ "kind": kind });
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(sequence),
             name.clone(),
             "film.track",
@@ -349,10 +350,10 @@ impl AddClip {
         });
         let name = format!("clip at {start}");
         let id =
-            session.document_mut().add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
+            session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
         // The item the clip plays: an edge, not containment.
         let relation = craftkit_sdk::Relation::with_payload(id, item, "clip", serde_json::json!({}));
-        session.document_mut().add_relation(relation);
+        session.document_mut()?.add_relation(relation);
         Ok(Outcome::changed(format!("added a {duration}-frame clip at {start}"))
             .with_data(serde_json::json!({ "id": id, "item": item, "start": start, "duration": duration })))
     }

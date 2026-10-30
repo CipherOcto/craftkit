@@ -275,7 +275,7 @@ impl AddProject {
             None => DEFAULT_TICKS_PER_SECOND,
         };
         let data = serde_json::json!({ "fps": fps, "ticks_per_second": ticks });
-        let id = session.document_mut().add_node_with_under(None, name.clone(), "art.project", None, data);
+        let id = session.document_mut()?.add_node_with_under(None, name.clone(), "art.project", None, data);
         Ok(Outcome::changed(format!("added the project `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name, "fps": fps })))
     }
@@ -313,7 +313,7 @@ impl AddScene {
         let main = self.main.map(|main| main.0).unwrap_or(false);
         let data = serde_json::json!({ "main": main });
         let id =
-            session.document_mut().add_node_with_under(Some(project), name.clone(), "art.scene", None, data);
+            session.document_mut()?.add_node_with_under(Some(project), name.clone(), "art.scene", None, data);
         Ok(Outcome::changed(format!("added the scene `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name, "main": main })))
     }
@@ -352,7 +352,7 @@ macro_rules! track_command {
                     });
                 }
                 let id = session
-                    .document_mut()
+                    .document_mut()?
                     .add_node_with_under(Some(scene), name.clone(), $kind, None, serde_json::json!({}));
                 Ok(Outcome::changed(format!("added the track `{name}`"))
                     .with_data(serde_json::json!({ "id": id, "name": name, "kind": $kind })))
@@ -444,7 +444,7 @@ macro_rules! element_command {
                     },
                 });
                 let id = session
-                    .document_mut()
+                    .document_mut()?
                     .add_node_with_under(Some(track), name.clone(), $kind, None, data);
                 Ok(Outcome::changed(format!("added the element `{name}`"))
                     .with_data(serde_json::json!({ "id": id, "name": name, "start": start, "duration": duration })))
@@ -554,14 +554,14 @@ impl AddStage {
                 message: "a stage says which file its scene is in".to_string(),
             });
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             name.clone(),
             "art.stage",
             None,
             serde_json::json!({}),
         );
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "art.stage.add".to_string(),
                 message: format!("the stage `{name}` is not in the document"),
@@ -894,7 +894,7 @@ impl TrimElement {
                 message: format!("the media is {source} ticks long and the trim ends at {to}"),
             });
         }
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "art.element.trim".to_string(),
                 message: format!("there is no element `{id}`"),
@@ -927,7 +927,7 @@ impl RetimeElement {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = self.element.0;
         let rate = rate(self.rate.0, "art.element.retime")?;
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "art.element.retime".to_string(),
                 message: format!("there is no element `{id}`"),
@@ -994,7 +994,7 @@ impl RippleTrack {
         }
         let count = moved.len();
         for (element, start) in moved {
-            let Some(node) = session.document_mut().node_mut(element) else { continue };
+            let Some(node) = session.document_mut()?.node_mut(element) else { continue };
             node.data["start"] = serde_json::json!(start);
         }
         Ok(Outcome::changed(format!("rippled {count} element(s) on the track {track}")).with_data(

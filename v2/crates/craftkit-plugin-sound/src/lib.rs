@@ -557,7 +557,7 @@ impl AddTrack {
             None => 2,
         };
         let payload = TrackPayload { track_kind, channels };
-        let document = session.document_mut();
+        let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
         document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
         Ok(Outcome::changed(format!("added a track `{name}`"))
@@ -616,7 +616,7 @@ impl AddClip {
             Some(name) => name.0.clone(),
             None => format!("clip at {start}"),
         };
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             Some(playlist),
             name.clone(),
             "sound.clip",
@@ -626,7 +626,7 @@ impl AddClip {
         // The clip plays the source: that is a **relation**, not
         // containment. The clip is not in the source.
         if let Some(source) = self.source {
-            session.document_mut().add_relation(craftkit_sdk::Relation::new(id, source.0, "source"));
+            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(id, source.0, "source"));
         }
         Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
             serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
@@ -731,7 +731,7 @@ impl TrimClip {
         // The content moves with the start: a clip trimmed at its head
         // starts later in the source.
         trimmed.offset = payload.offset + (from as i64 - payload.start);
-        if let Some(node) = session.document_mut().node_mut(clip_id) {
+        if let Some(node) = session.document_mut()?.node_mut(clip_id) {
             node.data = trimmed.to_json();
         }
         Ok(Outcome::changed(format!("trimmed the clip `{clip_id}` to {from}..{to}")).with_data(
@@ -784,12 +784,12 @@ impl SetTempo {
         let existing = find_event(session, "sound.tempo", tick);
         let id = match existing {
             Some(id) => {
-                if let Some(node) = session.document_mut().node_mut(id) {
+                if let Some(node) = session.document_mut()?.node_mut(id) {
                     node.data = payload.to_json();
                 }
                 id
             }
-            None => session.document_mut().add_node_with(
+            None => session.document_mut()?.add_node_with(
                 format!("tempo {bpm}"),
                 "sound.tempo",
                 None,
@@ -842,12 +842,12 @@ impl SetMeter {
         let existing = find_event(session, "sound.meter", tick);
         let id = match existing {
             Some(id) => {
-                if let Some(node) = session.document_mut().node_mut(id) {
+                if let Some(node) = session.document_mut()?.node_mut(id) {
                     node.data = payload.to_json();
                 }
                 id
             }
-            None => session.document_mut().add_node_with(
+            None => session.document_mut()?.add_node_with(
                 format!("meter {numerator}/{denominator}"),
                 "sound.meter",
                 None,
@@ -888,7 +888,7 @@ impl AddMarker {
         };
         let payload = MarkerPayload { start, end };
         let name = self.name.0.clone();
-        let id = session.document_mut().add_node_with(name.clone(), "sound.marker", None, payload.to_json());
+        let id = session.document_mut()?.add_node_with(name.clone(), "sound.marker", None, payload.to_json());
         Ok(Outcome::changed(format!("added a marker `{name}`"))
             .with_data(serde_json::json!({ "id": id, "name": name, "start": start, "end": end })))
     }
@@ -931,10 +931,10 @@ impl AddSource {
         let session_settings = session_of(session.document());
         let payload =
             SourcePayload { path: path.clone(), channels, frames, sample_rate: session_settings.sample_rate };
-        let id = session.document_mut().add_node_with(path.clone(), "sound.source", None, payload.to_json());
+        let id = session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
         // The document now says that it needs this file. The bytes are
         // not in the document: they travel beside it, in a bundle.
-        session.document_mut().add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
+        session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
         Ok(Outcome::changed(format!("added a source `{path}`"))
             .with_data(serde_json::json!({ "id": id, "path": path })))
     }
@@ -976,7 +976,7 @@ impl SetSession {
         if let Some(start) = &self.timecode_start {
             settings.timecode_start = samples(start.0, "where the timecode starts")?;
         }
-        set_session(session.document_mut(), &settings);
+        set_session(session.document_mut()?, &settings);
         Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
             .with_data(serde_json::json!({
                 "sample_rate": settings.sample_rate,

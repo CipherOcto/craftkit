@@ -62,7 +62,7 @@ impl SaveView {
             "zoom": zoom,
             "offset": { "x": offset.x, "y": offset.y },
         });
-        session.document_mut().data[VIEW_KEY] = view.clone();
+        session.document_mut()?.data[VIEW_KEY] = view.clone();
         Ok(Outcome::changed(format!("the view is written down at {zoom}"))
             .with_data(crate::serde_json::json!({ "view": view })))
     }

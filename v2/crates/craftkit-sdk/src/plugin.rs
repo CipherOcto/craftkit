@@ -502,7 +502,7 @@ impl LoadedPlugin {
                         message: format!("the plugin sent a document nobody can read: {error}"),
                     }
                 })?;
-                *session.document_mut() = document;
+                *session.document_mut()? = document;
             }
             let message = answer
                 .get("message")
@@ -627,7 +627,7 @@ fn answer(ecosystem: &crate::ecosystem::Ecosystem, request: &Json) -> Json {
     let document = request.get("document").cloned().unwrap_or(Json::Null);
     let mut session = ecosystem.session();
     if let Ok(document) = crate::document::Document::from_json(&document) {
-        *session.document_mut() = document;
+        session.set_document(document);
     }
     match session.execute(&id, &params) {
         Ok(outcome) => serde_json::json!({

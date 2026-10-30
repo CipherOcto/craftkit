@@ -509,7 +509,7 @@ fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
 /// Put a path back into a node, and move the node's box to where it is.
 fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(), EngineError> {
     let rect = geom::bounds(&vector.path);
-    let document = session.document_mut();
+    let document = session.document_mut()?;
     let node = document.node_mut(id).ok_or_else(|| EngineError::Failed {
         id: id.to_string(),
         message: format!("there is no node `{id}`"),
@@ -578,7 +578,7 @@ fn combine(
     let mut result = one.clone();
     result.path = path;
     write_back(session, first, &result)?;
-    session.document_mut().remove_node(second);
+    session.document_mut()?.remove_node(second);
     Ok(Outcome::changed("the paths are one now")
         .with_data(serde_json::json!({ "id": first, "removed": second })))
 }
@@ -596,7 +596,7 @@ fn add_path(
     };
     let vector = VectorNode { path: path.clone(), fill: colour, stroke: None };
     let rect = bounds(&path);
-    let id = session.document_mut().add_node_with(name, "vector.path", Some(rect), vector.to_json());
+    let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
     Ok(id)
 }
 

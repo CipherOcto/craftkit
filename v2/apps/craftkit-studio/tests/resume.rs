@@ -30,7 +30,7 @@ pub struct ChangeThenAsk {
 
 impl ChangeThenAsk {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        session.document_mut().add_node_with_under(None, self.name.0.clone(), "core.group", None, json!({}));
+        session.document_mut()?.add_node_with_under(None, self.name.0.clone(), "core.group", None, json!({}));
         let wanted = Question {
             name: "answer".to_string(),
             kind: Doc::Text,
@@ -65,7 +65,7 @@ impl AskTwice {
             help: "The second answer.".to_string(),
         })?;
         let payload = json!({ "first": first, "second": second });
-        session.document_mut().add_node_with_under(None, self.name.0.clone(), "core.group", None, payload);
+        session.document_mut()?.add_node_with_under(None, self.name.0.clone(), "core.group", None, payload);
         Ok(Outcome::changed("asked twice"))
     }
 }

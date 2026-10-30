@@ -363,8 +363,34 @@ impl Session {
     /// Public because a command has to be able to change what it is about —
     /// the command is the thing that is allowed to write, and it writes
     /// here, inside the snapshot the engine took.
-    pub fn document_mut(&mut self) -> &mut Document {
-        &mut self.document
+    ///
+    /// **And only a command may have it.** The session knows whether a
+    /// command is running, and outside one this is a refusal: a program
+    /// that could change the document without the registry would have a
+    /// **second path** to it — a path with no snapshot, no undo step and
+    /// nothing in the log. The family tree refuses that in the same way,
+    /// and this is the same rule: **the registry is the only way**.
+    ///
+    /// So the caller is a command, and the error says so.
+    pub fn document_mut(&mut self) -> Result<&mut Document, EngineError> {
+        if self.running.is_none() {
+            return Err(EngineError::Failed {
+                id: "session".to_string(),
+                message: "the document is changed by a command, and no command is running".to_string(),
+            });
+        }
+        Ok(&mut self.document)
+    }
+
+    /// Put a document into the session, whole.
+    ///
+    /// This is the session's own business: it is how a program hands a
+    /// document to a session that has none — a plugin's bridge, a test
+    /// that opens a file — and it is **not** a command, because it is
+    /// not an edit: nothing is undone and nothing is logged, because
+    /// there was no edit.
+    pub(crate) fn set_document(&mut self, document: Document) {
+        self.document = document;
     }
 
     /// What the document means, as the kinds say it.

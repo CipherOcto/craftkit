@@ -166,7 +166,7 @@ pub struct AddLength {
 impl AddLength {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let length = self.value;
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             format!("{} mm", length.as_millimetres()),
             "numeric.length",
@@ -190,7 +190,7 @@ pub struct AddAngle {
 impl AddAngle {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let angle = self.value;
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             format!("{} rad", angle.as_radians()),
             "numeric.angle",
@@ -216,7 +216,7 @@ impl AddBox {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let width = self.width;
         let height = self.height;
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             format!("{} by {} mm", width.as_millimetres(), height.as_millimetres()),
             "numeric.box",
@@ -264,7 +264,7 @@ impl ScaleLength {
         let length =
             Length::from_number(millimetres).map_err(|error| refused("numeric.length.scale", error))?;
         let scaled = length.scale(self.factor.0).map_err(|error| refused("numeric.length.scale", error))?;
-        let Some(node) = session.document_mut().node_mut(id) else {
+        let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "numeric.length.scale".to_string(),
                 message: format!("there is no length `{id}`"),
@@ -311,7 +311,7 @@ impl TotalLengths {
                 Length::from_number(millimetres).map_err(|error| refused("numeric.length.total", error))?;
             total = total.checked_add(length).map_err(|error| refused("numeric.length.total", error))?;
         }
-        let id = session.document_mut().add_node_with_under(
+        let id = session.document_mut()?.add_node_with_under(
             None,
             format!("{} mm", total.as_millimetres()),
             "numeric.length",

@@ -111,8 +111,8 @@ impl AddPicture {
             Some(name) => name.0.clone(),
             None => file_name(&path),
         };
-        let id = session.document_mut().add_node(name.clone(), "image.picture", None);
-        if let Some(node) = session.document_mut().node_mut(id) {
+        let id = session.document_mut()?.add_node(name.clone(), "image.picture", None);
+        if let Some(node) = session.document_mut()?.node_mut(id) {
             node.data = json!({
                 "width": size.width,
                 "height": size.height,
