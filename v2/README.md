@@ -931,8 +931,20 @@ different commands with one id.
   whose build script generates the wiring.
 - `apps/craftkit-repl` — **the terminal door**: a person drives the kit
   from a prompt (§75).
+- `crates/craftkit-clap-abi` — **the CLAP contract**: the shapes a CLAP
+  plugin is made of — the version, the entry, the factory and the
+  descriptor — and the two names a host looks for. No dependencies and
+  no `unsafe` (§76).
+- `crates/craftkit-clap` — **the CLAP host**: opens a shared library,
+  finds the entry, checks the version, initialises the plugin and reads
+  the descriptors. The fourth crate that may hold `unsafe` (§76).
+- `crates/craftkit-clap-fixture` — **a reference CLAP plugin**: a real
+  `cdylib` that exports the entry by name, so that the host's tests
+  open a plugin and not a mock. The fifth crate that may hold `unsafe`,
+  and the only thing in it that is unsafe is the attribute that gives
+  the symbol its name (§76).
 
-**763 tests.** The MCP server links **all twelve batteries** in, so the
+**780 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -2581,9 +2593,11 @@ It is now a **list**, and the list is the whole of the exceptions:
 | `craftkit-alloc` | a counting global allocator is unsafe by definition |
 | `craftkit-ffi` | opening a library and calling into it |
 | `craftkit-plugin-shared` | a shared library's entry point, found by name |
+| `craftkit-clap` | the CLAP host: opening a plugin and reading the entry it exports |
+| `craftkit-clap-fixture` | a reference CLAP plugin: the entry point is a data symbol, found by name |
 
 And the rules around it are mechanical: `unsafe` appears **only** in
-those three crates; each of them says `deny(unsafe_code)` and **not**
+those five crates; each of them says `deny(unsafe_code)` and **not**
 `forbid`; each has **exactly one** `allow(unsafe_code)`, so an exception
 is one marked place and not a scattering; the only `unsafe impl` in the
 tree is the allocator's; and every other crate still forbids unsafe
@@ -2597,11 +2611,13 @@ in v2 as well.
 
 ### What is still not built
 
-The **formats** are not built. (The door is a **command** now: §35.) There is no CLAP, no VST3 and no AU here:
+The **formats** are not built. (The door is a **command** now: §35.) There is no VST3 and no AU here:
 each is a large ABI in another language, and each would be a **shim**
 over this door, not a change to it. What is built is the door, the
 contract, the version check, and the proof that a plugin in another
 shared library can be reached from a program that has never seen it.
+(CLAP came later, in §76: a **shim over the same idea**, with its own
+door, because its entry point is a data symbol and not a function.)
 
 ---
 
@@ -5979,3 +5995,83 @@ own vocabulary is a line of text.
 - **The door is one ecosystem.** It drives the studio's ecosystem, so
   the batteries it offers are the studio's — the optional ones are off
   unless the studio is built with them.
+
+---
+
+## 76. The CLAP door
+
+The kit had a door for its **own** plugin format: a shared library, an
+entry point found by name, a versioned table (§34). The real formats —
+CLAP, VST3, AU — were "not built", and the reason given was that each
+is a large ABI in another language. CLAP is the one of the three whose
+ABI is **published and open**, so it is the one that could be written
+down from a specification rather than guessed at.
+
+### What was built
+
+- **`crates/craftkit-clap-abi`** — the **shapes**: the version, the
+  entry, the factory and the descriptor, and the two names a host looks
+  for (`clap_entry` and `clap.plugin-factory`). It has **no
+  dependencies** and **no `unsafe` at all**: a binary contract is a set
+  of shapes, and a set of shapes is data.
+- **`crates/craftkit-clap`** — the **host**: opens a shared library,
+  finds the entry, checks the version, initialises the plugin, asks for
+  the factory by its id, and reads the descriptors out of it. It is the
+  **fourth** crate that may hold `unsafe`, and it is held to the same
+  rules as the others: `deny(unsafe_code)` and not `forbid`, **one**
+  `allow(unsafe_code)`, and one marked module where every unsafe block
+  says why it is sound.
+- **`crates/craftkit-clap-fixture`** — a **reference CLAP plugin**: a
+  real `cdylib`, built by cargo, exporting the entry by name. It is the
+  **fifth** crate that may hold `unsafe`, and the only unsafe in it is
+  the attribute that gives the symbol its name.
+
+### What the port found
+
+- **A format's entry point may be a data symbol.** Craftkit's own door
+  finds a **function** and calls it. CLAP's entry is a **variable**:
+  `clap_entry` is a pointer whose value is the address of the entry
+  struct. So the host reads the pointer *at* the symbol's address, and
+  then the struct *at* that pointer — two reads, and the other door
+  cannot be reused, because it was written for a function.
+- **The unsafe is on the two sides of the contract, and not in it.** The
+  shapes live in their own crate and hold none; the host reads the
+  plugin's memory; the plugin exports the symbol. The list of
+  exceptions grew from three to five, and each new entry has a reason
+  beside it — which is the shape §34 found, held again.
+- **A plugin's strings are copied out at once.** A descriptor's strings
+  belong to the plugin, and a string read later may be gone by then, so
+  every string is read and copied in one go — and read **bounded**:
+  `MAX_STRING_BYTES` is sixty-four kibibytes and `MAX_FEATURES` is two
+  hundred and fifty-six. Both are **private**: they are this host's own
+  numbers, and a public bound is a promise anybody else may rely on.
+- **A static may not hold a pointer.** The fixture's descriptor is a
+  struct of pointers, and a static is shared, and a raw pointer says
+  nothing about whether it may be shared. So the descriptor is built
+  once on the heap and its address is kept in an **atomic pointer** — a
+  pointer that may only be read is a pointer that may be shared.
+- **The version is checked before anything is called.** The rule is the
+  format's own: the major versions must agree. A plugin of another
+  major version is **refused**, not used, because the shapes may have
+  changed.
+
+### What it cost
+
+- two crates and a fixture, and **seventeen tests** — six on the shapes
+  (including the **layout**: the offset of every field, because a field
+  that moved is a field the host reads in the wrong place) and eleven
+  on the host.
+
+### What it does not settle
+
+- **The host reads a plugin; it does not make one.** Making a plugin
+  needs the structure the format calls the **host** — the thing the
+  plugin calls back into — and this kit has no such structure yet. So
+  there is no audio path here: no processing, no ports, no events.
+- **VST3 and AU are still not here.** CLAP was the one with an open,
+  published C ABI that could be written down from its specification.
+  The other two are larger, and each would be its own arc.
+- **The fixture does nothing.** It holds one plugin, and its
+  `create_plugin` answers with nothing. A host that has read a plugin
+  has not yet used one, and the difference is the whole of the next
+  arc.
