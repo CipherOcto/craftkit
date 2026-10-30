@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**807 tests.** The MCP server links **all twelve batteries** in, so the
+**808 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6634,3 +6634,60 @@ is an **instrument** needs more than that: it needs to be **played**.
 - **Nothing plays.** A message reaches the plugin and the plugin
   counts it; there is no synthesiser here, and the audio the plugin
   makes is still the gain of §80.
+
+---
+
+## 86. The state a plugin carries
+
+A plugin's **state** is the bytes that make it what it is: the
+parameters it holds, the notes it is playing, the position of a
+sampler. The host does not know what is in it — and that is the point:
+**the state is opaque**, and a document can carry opaque bytes.
+
+### What was built
+
+- **The ABI crate gained the state extension** and the two **streams**
+  it works through: one the plugin writes into and one it reads from.
+- **The host saves the plugin's state** and gives it back. The bytes
+  are copied out at once and the host does not look inside them.
+- **The reference plugin's state is its parameters** — a count, the
+  tempo, and each parameter's id and value — so the round trip is a
+  real one: a parameter is moved, the state is saved, the parameter is
+  moved again, and the state is given back.
+- **The events a host offers are for one block.** They are cleared
+  after the block, so a host that offered a note does not offer it
+  again in the next block.
+
+### What the port found
+
+- **The state travels through streams, not through a buffer.** The
+  format's save and load take a **stream**, and a stream is a pair of
+  functions: write this many bytes, read this many bytes. So the host
+  does not have to guess the size of the state in advance — the
+  plugin writes as much as it has, and the host keeps it.
+- **The events were being offered twice.** The host kept its events
+  after the block, so a note offered once was offered again in every
+  block after it — and a state given back was immediately overwritten
+  by the old event. The rule is simple and the format says it: **the
+  events are for this block**. The state round trip found it.
+- **A plugin's state is the one thing a document can carry whole.** It
+  is opaque by design: the host saves the bytes, the document holds
+  the bytes, and the plugin is the only one who knows what they mean.
+
+### What it cost
+
+- three structures in the ABI crate, two streams in the host, and
+  **one test**.
+
+### What it does not settle
+
+- **The state is not in a document yet.** The kit's document can carry
+  opaque bytes (§12, the payload), and the host can save and restore
+  them, but nothing joins them: there is no command that puts a
+  plugin's state into a node, and no command that takes it out again.
+- **The host's state extension answers nothing.** A plugin that says
+  "my state has changed" is not heard; the host has no way to know
+  that a saved state is out of date.
+- **The state is bounded at sixty-four mebibytes.** A plugin that
+  writes more than that is refused, and the bound is private to this
+  host.
