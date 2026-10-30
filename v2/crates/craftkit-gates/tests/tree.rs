@@ -179,6 +179,68 @@ fn a_private_bound_is_not_caught() {
     assert!(findings_of(&findings, "prose").is_empty(), "the gate caught it: {findings:?}");
 }
 
+/// A bound whose number and the prose's number **differ** is caught.
+///
+/// The prose says what the bound is and the code says what it is, and
+/// when the two disagree the reader is misled.
+#[test]
+fn a_bound_whose_number_disagrees_with_the_prose_is_caught() {
+    let tree = Tree::new("numbers");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub const MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    std::fs::write(
+        tree.root.join("README.md"),
+        "| the bound | the number |\n|---|---|\n| `MAX_MYSTERY_BYTES` | `64` |\n",
+    )
+    .expect("the README is written");
+    let findings = check(&tree.root);
+    let prose = findings_of(&findings, "prose");
+    assert_eq!(prose.len(), 1, "the gate caught it: {findings:?}");
+    assert!(prose[0].message.contains("42"), "{}", prose[0].message);
+}
+
+/// A bound whose number **agrees** with the prose is not caught.
+#[test]
+fn a_bound_whose_number_agrees_with_the_prose_is_not_caught() {
+    let tree = Tree::new("numbers-agree");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub const MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    std::fs::write(
+        tree.root.join("README.md"),
+        "| the bound | the number |\n|---|---|\n| `MAX_MYSTERY_BYTES` | `42` |\n",
+    )
+    .expect("the README is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "prose").is_empty(), "the gate caught it: {findings:?}");
+}
+
+/// A bound whose number is **written the other way** is not caught.
+///
+/// `42` and `6 * 7` are the same number, and the rule is about the
+/// number and not about the text.
+#[test]
+fn a_bound_written_another_way_is_not_caught() {
+    let tree = Tree::new("numbers-other-way");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub const MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    std::fs::write(
+        tree.root.join("README.md"),
+        "| the bound | the number |\n|---|---|\n| `MAX_MYSTERY_BYTES` | `6 * 7` |\n",
+    )
+    .expect("the README is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "prose").is_empty(), "the gate caught it: {findings:?}");
+}
+
 /// A plugin that depends on an **application** is caught.
 #[test]
 fn a_plugin_that_depends_on_an_application_is_caught() {

@@ -51,6 +51,8 @@
 )]
 #![forbid(unsafe_code)]
 
+mod numbers;
+
 use std::path::{Path, PathBuf};
 
 /// The lints, in house order.
@@ -352,8 +354,8 @@ fn bounds_named_in_the_prose(root: &Path, findings: &mut Vec<Finding>) {
             }
         }
     }
-    for (name, file) in names {
-        if !names_the_prose(&prose, &name) {
+    for (name, file) in &names {
+        if !names_the_prose(&prose, name) {
             findings.push(Finding {
                 rule: "prose",
                 crate_: "the tree".to_string(),
@@ -363,6 +365,112 @@ fn bounds_named_in_the_prose(root: &Path, findings: &mut Vec<Finding>) {
             });
         }
     }
+    numbers_agree_with_the_prose(root, &prose, &names, findings);
+}
+
+/// Rule 5: **the numbers agree with the prose**.
+///
+/// The prose says what a bound is; the code says what it is. When the
+/// two disagree, the reader is misled — and the reader is the reason
+/// the prose is there at all.
+///
+/// The prose states each bound's number as an **expression**, and the
+/// two expressions are **evaluated** and compared: `32 * 1024 * 1024`
+/// and `33554432` are the same number, and a reader cannot tell that
+/// from the text.
+///
+/// A bound whose number cannot be worked out — because it is written in
+/// a way the evaluator does not know — is **not** checked, and the gate
+/// says nothing about it: a gate that guesses is worse than a gate that
+/// is quiet.
+fn numbers_agree_with_the_prose(
+    root: &Path,
+    prose: &str,
+    names: &[(String, String)],
+    findings: &mut Vec<Finding>,
+) {
+    let constants = constants_of(root);
+    for (name, file) in names {
+        let Some(expression) = the_number_in_the_prose(prose, name) else { continue };
+        let Some(code) = the_expression_of(&constants, name) else { continue };
+        let (Ok(left), Ok(right)) =
+            (numbers::evaluate(&code, &constants), numbers::evaluate(&expression, &constants))
+        else {
+            continue;
+        };
+        if left != right {
+            findings.push(Finding {
+                rule: "prose",
+                crate_: "the tree".to_string(),
+                message: format!(
+                    "{file} has `{name}` = `{code}`, and the prose says `{expression}`; they are {left} and {right}"
+                ),
+            });
+        }
+    }
+}
+
+/// The expression a constant is written with.
+fn the_expression_of(constants: &numbers::Table, name: &str) -> Option<String> {
+    constants.expression_of(name)
+}
+
+/// The number the prose states for that bound.
+///
+/// The prose has a **table** of the bounds and their numbers, and this
+/// is the row of that table: the name in the first cell and the
+/// expression in the second.
+fn the_number_in_the_prose(prose: &str, name: &str) -> Option<String> {
+    for line in prose.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let cells: Vec<&str> = line.split('|').map(|cell| cell.trim()).collect();
+        let Some(first) = cells.get(1) else { continue };
+        if first.trim_matches('`') != name {
+            continue;
+        }
+        let Some(second) = cells.get(2) else { continue };
+        let expression = second.trim().trim_matches('`');
+        if expression.is_empty() {
+            return None;
+        }
+        return Some(expression.to_string());
+    }
+    None
+}
+
+/// Every constant of the tree, and what it is written with.
+fn constants_of(root: &Path) -> numbers::Table {
+    let mut table = numbers::Table::new();
+    for crate_ in crates(root) {
+        for file in rust_files(&crate_.dir) {
+            let Ok(code) = std::fs::read_to_string(&file) else { continue };
+            for (name, expression) in constants_in(&code) {
+                table.set_expression(&name, &expression);
+            }
+        }
+    }
+    table
+}
+
+/// The constants of a file, and what they are written with.
+fn constants_in(code: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for line in code.lines() {
+        let line = line.trim();
+        let line = line.strip_prefix("pub const ").or_else(|| line.strip_prefix("const "));
+        let Some(line) = line else { continue };
+        let Some((name, rest)) = line.split_once(':') else { continue };
+        let Some((_, expression)) = rest.split_once('=') else { continue };
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        out.push((name.to_string(), expression.trim().trim_end_matches(';').trim().to_string()));
+    }
+    out
 }
 
 /// The public bounds a file declares.
