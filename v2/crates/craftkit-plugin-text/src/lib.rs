@@ -12,13 +12,15 @@
 //! - a **paragraph** — a node of kind `text.paragraph`;
 //! - the paragraph's **words** — the node's **payload**: a word is
 //!   numerous, and what is numerous is in the payload;
-//! - the **advance** — the width of one character, in millimetres, and
-//!   it is in the payload too, because it is the **metric**, and the
-//!   metric is what the caller brings;
 //! - the **measure** — the width of the column, in millimetres, and it
 //!   is in the payload because it is a property of the paragraph's
 //!   place, not of the paragraph;
 //! - the **ragged** flag — the paragraph's setting, in the payload;
+//! - a **metric** — a node of kind `text.metric`: the widths of the
+//!   characters, in millimetres. A metric is **few** — a typeface is
+//!   shared by every paragraph in a document — so a metric is a node;
+//! - the paragraph's **typeface** — an **edge**: the paragraph is set
+//!   in the metric, and the edge says which one;
 //! - the **lines** — **derived**: the paragraph is broken every time
 //!   somebody asks, and the lines are in the plan, not in the document.
 //!
@@ -27,10 +29,26 @@
 //! - **The kit has no font, so the widths come from the caller.** A
 //!   line breaker needs the advance of every glyph, and an advance comes
 //!   from a typeface. This tree has no typeface and no asset of any
-//!   kind, so the paragraph carries an **advance** — the width of one
-//!   character — and a **space**, and the caller says what they are.
-//!   The moment a font arrives, it supplies those two numbers and
-//!   nothing else changes.
+//!   kind, so a **metric** is a table of widths and nothing else — no
+//!   outlines, no glyphs, no kerning — and the caller says what the
+//!   widths are. A metric is **numbers**, and numbers are data and not
+//!   artwork, so the no-asset rule and the missing font are compatible.
+//!   The moment a font arrives, it supplies the widths and nothing else
+//!   changes.
+//! - **The metric was in the paragraph's payload, and that was wrong.**
+//!   The first version of this battery put the **advance** and the
+//!   **space** in the paragraph's payload, because a paragraph's metric
+//!   looked like a property of the paragraph. It is not: a typeface is
+//!   shared by every paragraph in a document, and it has a name. So the
+//!   metric moves to a **node** and the paragraph's typeface becomes an
+//!   **edge** — the fifth kind of edge in this kit, after the PDF's
+//!   reference, the CAD's layer, the prose's style and the layout's
+//!   item's story.
+//! - **A monospaced paragraph is not a special case; it is a metric
+//!   with an empty table.** The general metric has a width for every
+//!   character that has one and a default for the rest; the
+//!   monospaced one has only the default. One code path, and the
+//!   degenerate metric is the one everybody starts with.
 //! - **A paragraph is words, not a string, and the words are the
 //!   payload.** The word processor stores a paragraph's text once, as a
 //!   string, and its runs over it. Here the string would be a second
@@ -77,9 +95,10 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
-    Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text,
+    Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
 };
 use craftkit_text_layout::{Breaks, Item, LayoutError, Method, Params, Rag, break_paragraph};
+use std::collections::HashMap;
 
 /// The text layer.
 ///
@@ -108,18 +127,120 @@ impl ParagraphKind {
     /// The lines are **derived**: the paragraph is broken every time
     /// somebody asks, and a paragraph with no measure yet has **no
     /// lines at all** — the count is null, not zero.
-    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
         let words = words_of(node);
         let measure = measure_of(node);
-        let lines =
-            if measure > 0.0 { break_lines(node).ok().map(|breaks| breaks.lines.len()) } else { None };
+        let metric = metric_of(document, node);
+        let lines = if measure > 0.0 && metric.is_some() {
+            break_lines(node, metric.as_ref()).ok().map(|breaks| breaks.lines.len())
+        } else {
+            None
+        };
         Some(json!({
             "words": words.len(),
             "measure_mm": measure,
             "ragged": ragged_of(node),
+            "metric": metric.is_some(),
             "lines": lines,
         }))
     }
+}
+
+/// A **metric**: the widths of the characters, in millimetres.
+///
+/// A metric is **few** — a typeface is shared by every paragraph in a
+/// document — so a metric is a **node**, and a paragraph says which
+/// metric it is set in with an **edge**.
+#[derive(NodeKind)]
+#[node_kind(kind = "text.metric", label = "Metric", layer = "text", evaluates)]
+pub struct MetricKind;
+
+impl MetricKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a metric **means**: its default width, its space, and how
+    /// many characters have a width of their own.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let metric = Metric::of(node)?;
+        Some(json!({
+            "default_mm": metric.default_mm,
+            "space_mm": metric.space_mm,
+            "characters": metric.advances.len(),
+            "monospaced": metric.advances.is_empty(),
+        }))
+    }
+}
+
+/// The kind of the edge that says a paragraph is set in a metric.
+const SET_IN: &str = "text.set_in";
+
+/// A **metric**, read from a node's payload.
+///
+/// The reader keeps what it does not understand: a width that is not a
+/// number, or a key that is not a single character, is **left out** —
+/// the character falls back to the default. A metric that was made by
+/// the command cannot hold such a thing; a metric that arrived in a
+/// file can.
+struct Metric {
+    /// The width of a character that has no width of its own.
+    default_mm: f64,
+    /// The widths of the characters that have one.
+    advances: HashMap<char, f64>,
+    /// The width of the space between two words.
+    space_mm: f64,
+}
+
+impl Metric {
+    /// Read the metric out of a node's payload.
+    fn of(node: &Node) -> Option<Metric> {
+        let default_mm = node.data.get("default_mm").and_then(|value| value.as_f64())?;
+        let space_mm = node.data.get("space_mm").and_then(|value| value.as_f64())?;
+        if !default_mm.is_finite() || !space_mm.is_finite() || default_mm < 0.0 || space_mm < 0.0 {
+            return None;
+        }
+        let mut advances = HashMap::new();
+        if let Some(table) = node.data.get("advances").and_then(|value| value.as_object()) {
+            for (key, value) in table {
+                let Some(character) = one_character(key) else { continue };
+                let Some(width) = value.as_f64() else { continue };
+                if !width.is_finite() || width < 0.0 {
+                    continue;
+                }
+                advances.insert(character, width);
+            }
+        }
+        Some(Metric { default_mm, advances, space_mm })
+    }
+
+    /// The width of one character.
+    fn advance(&self, character: char) -> f64 {
+        self.advances.get(&character).copied().unwrap_or(self.default_mm)
+    }
+
+    /// The width of a word: its characters, one at a time.
+    fn word_width(&self, word: &str) -> f64 {
+        word.chars().map(|character| self.advance(character)).sum()
+    }
+}
+
+/// The one character of a key, if the key is one character.
+fn one_character(key: &str) -> Option<char> {
+    let mut characters = key.chars();
+    let first = characters.next()?;
+    if characters.next().is_some() { None } else { Some(first) }
+}
+
+/// The metric a paragraph is set in, if it is set in one.
+fn metric_of(document: &Document, paragraph: &Node) -> Option<Metric> {
+    let relation = document.relations_from(paragraph.id, Some(SET_IN)).into_iter().next()?;
+    let node = document.node(relation.to)?;
+    Metric::of(node)
 }
 
 /// The words of a paragraph: the payload's list of strings.
@@ -129,16 +250,6 @@ fn words_of(node: &Node) -> Vec<String> {
         .and_then(|words| words.as_array())
         .map(|words| words.iter().filter_map(|word| word.as_str().map(|word| word.to_string())).collect())
         .unwrap_or_default()
-}
-
-/// The width of one character, in millimetres.
-fn advance_of(node: &Node) -> f64 {
-    node.data.get("advance_mm").and_then(|value| value.as_f64()).unwrap_or(0.0)
-}
-
-/// The width of the space between two words, in millimetres.
-fn space_of(node: &Node) -> f64 {
-    node.data.get("space_mm").and_then(|value| value.as_f64()).unwrap_or(0.0)
 }
 
 /// The width of the column, in millimetres. Zero means **not set yet**.
@@ -153,21 +264,20 @@ fn ragged_of(node: &Node) -> bool {
 
 /// The paragraph's words, as the library's **items**.
 ///
-/// A word is a **box** of `characters × advance`; between two words is a
-/// **glue** of the space, which stretches a little and shrinks a little;
-/// and after the last word is a **forced break**, so that the paragraph
-/// ends where it ends.
+/// A word is a **box** as wide as the **metric** says its characters
+/// are; between two words is a **glue** of the space, which stretches a
+/// little and shrinks a little; and after the last word is a **forced
+/// break**, so that the paragraph ends where it ends.
 ///
 /// The items alternate box and glue, so the item index of a word is
 /// twice its word index.
-fn items_for(words: &[String], advance: f64, space: f64) -> Vec<Item> {
+fn items_for(words: &[String], metric: &Metric) -> Vec<Item> {
     let mut items: Vec<Item> = Vec::with_capacity(words.len() * 2);
     for (index, word) in words.iter().enumerate() {
         if index > 0 {
-            items.push(Item::glue(space, space / 2.0, space / 3.0));
+            items.push(Item::glue(metric.space_mm, metric.space_mm / 2.0, metric.space_mm / 3.0));
         }
-        let width = word.chars().count() as f64 * advance;
-        items.push(Item::boxed(width));
+        items.push(Item::boxed(metric.word_width(word)));
     }
     if !words.is_empty() {
         items.push(Item::forced());
@@ -181,11 +291,99 @@ fn layout_params(ragged: bool) -> Params {
 }
 
 /// Break a paragraph into lines, with the library.
-fn break_lines(node: &Node) -> Result<Breaks, LayoutError> {
+///
+/// The metric is the paragraph's, and the caller has found it: the
+/// paragraph says which metric it is set in with an edge.
+fn break_lines(node: &Node, metric: Option<&Metric>) -> Result<Breaks, LayoutError> {
+    let Some(metric) = metric else { return Err(LayoutError::BadMeasure) };
     let words = words_of(node);
-    let items = items_for(&words, advance_of(node), space_of(node));
+    let items = items_for(&words, metric);
     let params = layout_params(ragged_of(node));
     break_paragraph(&items, measure_of(node), &params)
+}
+
+/// Put a **metric** in the document: the widths of the characters.
+///
+/// A metric is **few**, so it is a **node**: a typeface is shared by
+/// every paragraph in a document, and it has a name.
+///
+/// The widths are the metric's payload: they are numerous — one per
+/// character that has one — and they hold nothing but numbers.
+#[derive(Command)]
+#[command(id = "text.metric.add", area = "text", layer = "text", icon = "plus", mutates, undoable)]
+pub struct AddMetric {
+    /// What to call it: the typeface's name.
+    pub name: Text,
+    /// The width of a character that has no width of its own, in
+    /// millimetres. A metric with no table at all is a **monospaced**
+    /// one.
+    pub default_mm: Number,
+    /// The width of the space between two words, in millimetres.
+    pub space_mm: Number,
+    /// The widths of the characters that have one: a table of character
+    /// to millimetres.
+    pub advances: Option<Json>,
+}
+
+impl AddMetric {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let default_mm = self.default_mm.0;
+        let space_mm = self.space_mm.0;
+        if !default_mm.is_finite() || default_mm < 0.0 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: "a character is not narrower than nothing".to_string(),
+            });
+        }
+        if !space_mm.is_finite() || space_mm < 0.0 {
+            return Err(EngineError::Failed {
+                id: "text.metric.add".to_string(),
+                message: "a space is not narrower than nothing".to_string(),
+            });
+        }
+        let mut advances = craftkit_sdk::serde_json::Map::new();
+        if let Some(table) = &self.advances {
+            let Some(table) = table.as_object() else {
+                return Err(EngineError::Failed {
+                    id: "text.metric.add".to_string(),
+                    message: "the widths are a table of character to millimetres".to_string(),
+                });
+            };
+            for (key, value) in table {
+                let Some(character) = one_character(key) else {
+                    return Err(EngineError::Failed {
+                        id: "text.metric.add".to_string(),
+                        message: format!("`{key}` is not one character"),
+                    });
+                };
+                let Some(width) = value.as_f64() else {
+                    return Err(EngineError::Failed {
+                        id: "text.metric.add".to_string(),
+                        message: format!("the width of `{character}` is not a number"),
+                    });
+                };
+                if !width.is_finite() || width < 0.0 {
+                    return Err(EngineError::Failed {
+                        id: "text.metric.add".to_string(),
+                        message: format!("the width of `{character}` is not a width"),
+                    });
+                }
+                advances.insert(key.clone(), json!(width));
+            }
+        }
+        let id = session.document_mut().add_node_with_under(
+            None,
+            self.name.0.clone(),
+            "text.metric",
+            None,
+            json!({
+                "default_mm": default_mm,
+                "space_mm": space_mm,
+                "advances": Json::Object(advances),
+            }),
+        );
+        Ok(Outcome::changed(format!("added the metric `{}`", self.name.0)).with_data(json!({ "id": id })))
+    }
 }
 
 /// Put a **paragraph** in the document.
@@ -198,28 +396,26 @@ fn break_lines(node: &Node) -> Result<Breaks, LayoutError> {
 pub struct AddParagraph {
     /// The paragraph's text: the words are split on whitespace.
     pub text: Text,
-    /// The width of one character, in millimetres.
-    pub advance_mm: Number,
-    /// The width of the space between two words, in millimetres.
-    pub space_mm: Number,
+    /// The metric it is set in: the widths of the characters.
+    pub metric: NodeRef,
 }
 
 impl AddParagraph {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let advance = self.advance_mm.0;
-        let space = self.space_mm.0;
-        if !advance.is_finite() || advance < 0.0 {
+        let metric = self.metric.0;
+        let Some(metric_node) = session.document().node(metric) else {
             return Err(EngineError::Failed {
                 id: "text.paragraph.add".to_string(),
-                message: "a character is not narrower than nothing".to_string(),
+                message: format!("there is no metric `{metric}`"),
             });
-        }
-        if !space.is_finite() || space < 0.0 {
+        };
+        if metric_node.kind != "text.metric" {
             return Err(EngineError::Failed {
                 id: "text.paragraph.add".to_string(),
-                message: "a space is not narrower than nothing".to_string(),
+                message: format!("the node `{metric}` is not a metric"),
             });
         }
+        let metric_name = metric_node.name.clone();
         let words: Vec<String> = self.text.0.split_whitespace().map(|word| word.to_string()).collect();
         let name = name_of(&words);
         let id = session.document_mut().add_node_with_under(
@@ -229,13 +425,75 @@ impl AddParagraph {
             None,
             json!({
                 "words": words,
-                "advance_mm": advance,
-                "space_mm": space,
                 "measure_mm": 0.0,
                 "ragged": false,
             }),
         );
-        Ok(Outcome::changed("added a paragraph").with_data(json!({ "id": id })))
+        // The paragraph is set **in** the metric: an edge, and the edge
+        // says which metric, so that a reader can say so without
+        // resolving it.
+        session.document_mut().add_relation(Relation::with_payload(
+            id,
+            metric,
+            SET_IN,
+            json!({ "metric": metric_name }),
+        ));
+        Ok(Outcome::changed("added a paragraph").with_data(json!({ "id": id, "metric": metric })))
+    }
+}
+
+/// Set the **metric** a paragraph is set in.
+///
+/// The metric is a **node** and the paragraph's typeface is an **edge**,
+/// so setting it is adding an edge — and taking the old one away.
+#[derive(Command)]
+#[command(id = "text.paragraph.metric", area = "text", layer = "text", icon = "list", mutates, undoable)]
+pub struct SetMetric {
+    /// The paragraph.
+    pub paragraph: NodeRef,
+    /// The metric it is set in.
+    pub metric: NodeRef,
+}
+
+impl SetMetric {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let paragraph = self.paragraph.0;
+        let metric = self.metric.0;
+        let Some(node) = session.document().node(paragraph) else {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.metric".to_string(),
+                message: format!("there is no paragraph `{paragraph}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.metric".to_string(),
+                message: format!("the node `{paragraph}` is not a paragraph"),
+            });
+        }
+        let Some(metric_node) = session.document().node(metric) else {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.metric".to_string(),
+                message: format!("there is no metric `{metric}`"),
+            });
+        };
+        if metric_node.kind != "text.metric" {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.metric".to_string(),
+                message: format!("the node `{metric}` is not a metric"),
+            });
+        }
+        let metric_name = metric_node.name.clone();
+        let document = session.document_mut();
+        document.remove_relations(|relation| relation.from == paragraph && relation.kind == SET_IN);
+        document.add_relation(Relation::with_payload(
+            paragraph,
+            metric,
+            SET_IN,
+            json!({ "metric": metric_name.clone() }),
+        ));
+        Ok(Outcome::changed(format!("set the paragraph {paragraph} in the metric `{metric_name}`"))
+            .with_data(json!({ "paragraph": paragraph, "metric": metric })))
     }
 }
 
@@ -330,8 +588,9 @@ impl LinesEvaluator {
             if measure_of(node) <= 0.0 {
                 continue;
             }
+            let Some(metric) = metric_of(document, node) else { continue };
             let words = words_of(node);
-            let Ok(breaks) = break_lines(node) else { continue };
+            let Ok(breaks) = break_lines(node, Some(&metric)) else { continue };
             let lines: Vec<Json> = breaks
                 .lines
                 .iter()
@@ -369,7 +628,7 @@ impl LinesEvaluator {
     id = "panel.text",
     label = "Text",
     layer = "text",
-    commands("text.paragraph.add", "text.paragraph.measure")
+    commands("text.metric.add", "text.paragraph.add", "text.paragraph.measure", "text.paragraph.metric")
 )]
 pub struct TextPanel;
 
@@ -377,8 +636,11 @@ pub struct TextPanel;
 craftkit_sdk::plugin_anchor!(
     TextLayer,
     ParagraphKind,
+    MetricKind,
+    AddMetric,
     AddParagraph,
     MeasureParagraph,
+    SetMetric,
     LinesEvaluator,
     TextPanel
 );
@@ -395,10 +657,13 @@ mod tests {
     /// A session with this battery's commands in it.
     fn session() -> Session {
         let mut commands: Registry<CommandSpec> = Registry::new();
+        commands.register(ADD_METRIC.clone()).expect("the command is registered");
         commands.register(ADD_PARAGRAPH.clone()).expect("the command is registered");
         commands.register(MEASURE_PARAGRAPH.clone()).expect("the command is registered");
+        commands.register(SET_METRIC.clone()).expect("the command is registered");
         let mut kinds: Registry<NodeKindSpec> = Registry::new();
         kinds.register(PARAGRAPH_KIND).expect("the kind is registered");
+        kinds.register(METRIC_KIND).expect("the kind is registered");
         let mut evaluators: Registry<EvaluatorSpec> = Registry::new();
         evaluators.register(LINES_EVALUATOR).expect("the evaluator is registered");
         Session::with_formats(
@@ -410,12 +675,21 @@ mod tests {
         )
     }
 
+    /// A monospaced metric: one width for every character.
+    fn monospaced(session: &mut Session, advance: f64) -> u64 {
+        session
+            .execute("text.metric.add", &json!({ "name": "mono", "default_mm": advance, "space_mm": 2.0 }))
+            .expect("the metric is added");
+        1
+    }
+
     /// The words become boxes and glue, and the paragraph ends with a
     /// forced break.
     #[test]
     fn the_words_become_boxes_and_glue() {
+        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), space_mm: 1.0 };
         let words = vec!["one".to_string(), "two".to_string(), "three".to_string()];
-        let items = items_for(&words, 2.0, 1.0);
+        let items = items_for(&words, &metric);
         assert_eq!(items.len(), 6, "a box, a glue, a box, a glue, a box and a forced break");
         assert_eq!(items[0].kind, craftkit_text_layout::Kind::Box);
         assert_eq!(items[0].width, 6.0, "three characters of two millimetres");
@@ -430,24 +704,37 @@ mod tests {
         assert!(items[5].is_forced(), "the paragraph ends where it ends");
     }
 
+    /// A character with a width of its own is as wide as it says, and
+    /// the others are as wide as the default.
+    #[test]
+    fn a_character_with_a_width_of_its_own_is_wider() {
+        let mut advances = HashMap::new();
+        advances.insert('i', 1.0);
+        let metric = Metric { default_mm: 2.0, advances, space_mm: 1.0 };
+        assert_eq!(metric.word_width("iii"), 3.0, "three narrow letters");
+        assert_eq!(metric.word_width("abc"), 6.0, "three ordinary ones");
+    }
+
     /// An empty paragraph is no items at all: there is nothing to break.
     #[test]
     fn an_empty_paragraph_has_no_items() {
-        assert!(items_for(&[], 2.0, 1.0).is_empty());
+        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), space_mm: 1.0 };
+        assert!(items_for(&[], &metric).is_empty());
     }
 
     /// A measure that is negative is refused, and nothing is measured.
     #[test]
     fn a_negative_measure_is_refused() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute("text.paragraph.add", &json!({ "text": "one two", "advance_mm": 2.0, "space_mm": 1.0 }))
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
             .expect("the paragraph is added");
         let error = session
-            .execute("text.paragraph.measure", &json!({ "paragraph": 1, "measure_mm": -5.0 }))
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": -5.0 }))
             .expect_err("a negative measure is refused");
         assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
-        let node = session.document().node(1).expect("the paragraph is there");
+        let node = session.document().node(2).expect("the paragraph is there");
         assert_eq!(node.data["measure_mm"], json!(0.0), "and it was not measured");
     }
 
@@ -455,8 +742,9 @@ mod tests {
     #[test]
     fn a_node_that_is_not_a_paragraph_is_refused() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute("text.paragraph.add", &json!({ "text": "one two", "advance_mm": 2.0, "space_mm": 1.0 }))
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
             .expect("the paragraph is added");
         let error = session
             .execute("text.paragraph.measure", &json!({ "paragraph": 99, "measure_mm": 50.0 }))
@@ -469,14 +757,12 @@ mod tests {
     #[test]
     fn a_measured_paragraph_is_broken_into_lines() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute(
-                "text.paragraph.add",
-                &json!({ "text": "one two three four", "advance_mm": 2.0, "space_mm": 2.0 }),
-            )
+            .execute("text.paragraph.add", &json!({ "text": "one two three four", "metric": metric }))
             .expect("the paragraph is added");
         session
-            .execute("text.paragraph.measure", &json!({ "paragraph": 1, "measure_mm": 30.0 }))
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 30.0 }))
             .expect("the paragraph is measured");
         let plan = session.evaluate();
         let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
@@ -494,14 +780,12 @@ mod tests {
     #[test]
     fn a_measure_that_cannot_be_justified_uses_the_greedy_breaker() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute(
-                "text.paragraph.add",
-                &json!({ "text": "one two three four", "advance_mm": 2.0, "space_mm": 1.0 }),
-            )
+            .execute("text.paragraph.add", &json!({ "text": "one two three four", "metric": metric }))
             .expect("the paragraph is added");
         session
-            .execute("text.paragraph.measure", &json!({ "paragraph": 1, "measure_mm": 20.0 }))
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 20.0 }))
             .expect("the paragraph is measured");
         let plan = session.evaluate();
         let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
@@ -514,21 +798,19 @@ mod tests {
     #[test]
     fn a_ragged_paragraph_is_broken_and_keeps_its_setting() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute(
-                "text.paragraph.add",
-                &json!({ "text": "one two three four", "advance_mm": 2.0, "space_mm": 2.0 }),
-            )
+            .execute("text.paragraph.add", &json!({ "text": "one two three four", "metric": metric }))
             .expect("the paragraph is added");
         session
-            .execute("text.paragraph.measure", &json!({ "paragraph": 1, "measure_mm": 30.0, "ragged": true }))
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 30.0, "ragged": true }))
             .expect("the paragraph is measured");
-        let node = session.document().node(1).expect("the paragraph is there");
+        let node = session.document().node(2).expect("the paragraph is there");
         assert_eq!(node.data["ragged"], json!(true));
         session
-            .execute("text.paragraph.measure", &json!({ "paragraph": 1, "measure_mm": 30.0 }))
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 30.0 }))
             .expect("the paragraph is measured again");
-        let node = session.document().node(1).expect("the paragraph is there");
+        let node = session.document().node(2).expect("the paragraph is there");
         assert_eq!(node.data["ragged"], json!(true), "the setting is kept");
         let plan = session.evaluate();
         let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
@@ -540,15 +822,135 @@ mod tests {
     #[test]
     fn a_paragraph_with_no_measure_has_no_lines() {
         let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
         session
-            .execute("text.paragraph.add", &json!({ "text": "one two", "advance_mm": 2.0, "space_mm": 1.0 }))
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
             .expect("the paragraph is added");
         let plan = session.evaluate();
         assert!(plan.items.iter().all(|item| item.kind != "text.lines"), "there are no lines");
         let kind = PARAGRAPH_KIND.evaluate.as_ref().expect("the kind evaluates");
-        let node = session.document().node(1).expect("the paragraph is there").clone();
+        let node = session.document().node(2).expect("the paragraph is there").clone();
         let value = kind(&node, session.document()).expect("the paragraph says what it means");
         assert_eq!(value["lines"], Json::Null, "no measure, no lines");
         assert_eq!(value["words"], json!(2));
+    }
+
+    /// The metric is a **node** and the paragraph's typeface is an
+    /// **edge**: the paragraph does not hold the widths.
+    #[test]
+    fn a_metric_is_a_node_and_a_paragraph_is_set_in_it() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        let node = session.document().node(2).expect("the paragraph is there");
+        assert!(node.data.get("advance_mm").is_none(), "the widths are not in the paragraph");
+        let relations = session.document().relations_from(2, Some(SET_IN));
+        assert_eq!(relations.len(), 1, "the paragraph is set in the metric");
+        assert_eq!(relations[0].to, metric);
+        assert_eq!(relations[0].payload["metric"], json!("mono"), "and the edge says which one");
+    }
+
+    /// A paragraph that is set in another metric is set in it: the old
+    /// edge goes and the new one comes.
+    #[test]
+    fn setting_the_metric_again_replaces_the_edge() {
+        let mut session = session();
+        let first = monospaced(&mut session, 2.0);
+        session
+            .execute("text.metric.add", &json!({ "name": "wide", "default_mm": 4.0, "space_mm": 1.0 }))
+            .expect("the metric is added");
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": first }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.metric", &json!({ "paragraph": 3, "metric": 2 }))
+            .expect("the metric is set");
+        let relations = session.document().relations_from(3, Some(SET_IN));
+        assert_eq!(relations.len(), 1, "there is one edge, not two");
+        assert_eq!(relations[0].to, 2, "and it is the new one");
+    }
+
+    /// **Changing the metric changes the lines, and nothing in the
+    /// paragraph is touched.** The lines are derived, and the dependency
+    /// is not inside the node but **between** two nodes.
+    #[test]
+    fn changing_the_metric_changes_the_lines() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "aa bb cc dd", "metric": metric }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 10.0 }))
+            .expect("the paragraph is measured");
+        let before = session.evaluate();
+        let item = before.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
+        assert_eq!(item.value["line_count"], json!(2), "two words of four millimetres fit on a line");
+
+        // The metric is widened: the same paragraph now fits more on a
+        // line, and the paragraph itself has not been touched.
+        let Some(node) = session.document_mut().node_mut(metric) else { panic!("the metric is there") };
+        node.data["default_mm"] = json!(0.5);
+        let after = session.evaluate();
+        let item = after.items.iter().find(|item| item.kind == "text.lines").expect("the lines are there");
+        assert_eq!(item.value["line_count"], json!(1), "the same words now fit on one line");
+        let node = session.document().node(2).expect("the paragraph is there");
+        assert_eq!(node.data["words"], json!(["aa", "bb", "cc", "dd"]), "and the paragraph is the same");
+    }
+
+    /// A monospaced metric is a metric with no table: one width for
+    /// every character, and no special case in the code.
+    #[test]
+    fn a_monospaced_metric_is_a_metric_with_an_empty_table() {
+        let mut session = session();
+        monospaced(&mut session, 2.0);
+        let plan = session.evaluate();
+        let item = plan.items.iter().find(|item| item.kind == "text.metric").expect("the metric is there");
+        assert_eq!(item.value["monospaced"], json!(true));
+        assert_eq!(item.value["characters"], json!(0));
+    }
+
+    /// A table's key is **one character**, and a key that is not is
+    /// refused.
+    #[test]
+    fn a_key_that_is_not_one_character_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute(
+                "text.metric.add",
+                &json!({ "name": "bad", "default_mm": 2.0, "space_mm": 1.0, "advances": { "ab": 3.0 } }),
+            )
+            .expect_err("that is not one character");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    }
+
+    /// A width that is not a width is refused.
+    #[test]
+    fn a_width_that_is_not_a_width_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute(
+                "text.metric.add",
+                &json!({ "name": "bad", "default_mm": 2.0, "space_mm": 1.0, "advances": { "i": -1.0 } }),
+            )
+            .expect_err("that is not a width");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
+    }
+
+    /// A paragraph that is set in a node that is not a metric is
+    /// refused.
+    #[test]
+    fn a_paragraph_in_something_that_is_not_a_metric_is_refused() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        let error = session
+            .execute("text.paragraph.add", &json!({ "text": "three four", "metric": 2 }))
+            .expect_err("a paragraph is not a metric");
+        assert!(matches!(error, EngineError::Failed { .. }), "{error:?}");
     }
 }
