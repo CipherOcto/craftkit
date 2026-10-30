@@ -867,6 +867,9 @@ different commands with one id.
   model of a page layout application — spreads, pages, items, layers,
   stories and assets — ported into v2's seams, and the five things it
   found (§51). It is optional, like the others.
+- `crates/craftkit-control` — the **other door**: a session behind a
+  token-authenticated socket, with the family's wire format, so that a
+  running program can be driven from another one (§55).
 - `crates/craftkit-gates` — the tree's **own gate**: the deny
   attribute, the layering, and what a plugin may depend on. It is a
   **function** over a root, so the tests can point it at trees that are
@@ -898,7 +901,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**540 tests.** The MCP server links **all eleven batteries** in, so the
+**558 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
@@ -983,7 +986,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 540 tests
+cargo test          # 558 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3413,7 +3416,7 @@ so.
 | the **geometry** | **built**: a library of its own, with no commands and no document knowledge | §13, §43 |
 | the **file format**: the old tree's `.craftkit` | **by design, untouched.** v2's format is a contribution, with migrations that are contributions, and a version chain the ecosystem checks | §15 |
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
-| a **control channel** | **not built.** The MCP server is the other door, and it is built | §41 |
+| a **control channel** | **built**: the session behind a token-authenticated socket, with the family's wire format and the family's methods — and no `ui.*`, because this tree has no window | §55 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
 | a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44) and a paragraph's own text and runs in a third (§49); **images are not ported**, and an appearance is still a plugin's payload | §44, §49 |
 | a **selection of spans** | **built** | §22 |
@@ -4061,3 +4064,92 @@ it: the broken trees are built in a temporary directory, in the test.
   and what makes it a *reading* of the tree rather than the tree
   itself. A manifest written in a form the reader does not know would
   be read as no dependencies at all.
+
+---
+
+## 55. The other door: a session you can drive from another program
+
+§48 listed the **control channel** as not built, and said why: *"The MCP
+server is the other door, and it is built."* That was true of the
+*agent's* door. The family's applications have a second one — a channel
+over a socket, for a program that is already running — and this tree did
+not have it.
+
+So it does now: `crates/craftkit-control`.
+
+### What it is
+
+A **session** behind a **door**: the server holds the session and
+answers, and another program asks. The wire format is the family's —
+newline-delimited JSON, one object per line:
+
+```json
+{"id": 1, "token": "…", "method": "engine.execute", "params": {"command": "node.add"}}
+```
+
+and the reply says whether it worked, in a machine-readable `kind` when
+it did not:
+
+```json
+{"id": 1, "ok": false, "message": "there is no method `engine.explode`; …", "kind": "unknown-method"}
+```
+
+| the method | what it does |
+|---|---|
+| `ping` | whether the peer is alive |
+| `engine.describe` | the command catalogue and the kinds |
+| `engine.execute` | run a command |
+| `session.state` | what the session is holding |
+| `diagnostics.list` | the log and the journal |
+| `shutdown` | stop the server |
+
+### The four things the port found
+
+- **Two doors, one session, and the same answers.** The MCP door is
+  stdio and the control door is a socket, and a client that uses either
+  gets the same registry, the same commands and the same outcomes. The
+  sharpest evidence is the **waiting command** (§50): a command that
+  asks while it runs is answered over the control channel in exactly the
+  way the MCP door answers it — the answer comes back in the
+  parameters, under the question's name, and the command goes on. The
+  seam is in the session, so every door inherits it.
+- **The catalogue over the wire is the command list.** §41 said the MCP
+  surface *is* the registry; that holds for the second door too, and the
+  catalogue is the same `CommandSpec` list the buttons are made of. There
+  is no second description of the commands anywhere.
+- **The `ui.*` methods are not here, and their absence is the finding.**
+  The family's channel has `ui`, `ui.click`, `ui.screenshot` and
+  `ui.render`, because the family has windows. This tree has no window
+  (§16), so those methods would answer "there is no method" — and a
+  method that is not there says so **by name**, listing the ones that
+  are, rather than doing nothing quietly. That is the family rule about
+  a closed set of methods, kept.
+- **The token is on the first request of the connection, and the
+  comparison does not stop early.** The family puts the launch token on
+  the first request and nowhere else; a connection without it is closed.
+  The comparison here walks the whole string, so the time it takes does
+  not say how much of the token was right. A line is at most a megabyte:
+  a request that is a gigabyte long is not a request, and the reader
+  refuses it rather than reading it.
+
+### What it cost
+
+- one crate, **twenty lines of it** being protocol and the rest being
+  the dispatch;
+- **nothing in the core**: no command, no kind, no session method, no
+  format version. The channel reaches the session the way the MCP
+  server does — through `session.execute` — and through nothing else.
+
+### What it does not settle
+
+- **There is no application that serves it yet.** The crate is a door
+  and a client; the program that opens the door and holds the window is
+  the app's business, and this tree has no app with a window.
+- **The crash reports are not a separate list.** The family keeps a list
+  of crash reports; here a panic in a command comes back as the error of
+  that command, and the log (`diagnostics.list`) carries it. The guard
+  is the same one (§38); only the *shape* of the report is different.
+- **The announce file is a convenience, not a discovery protocol.** The
+  server can write its address and token to a file, so that another
+  program can find the door. Where that file lives, and who is allowed
+  to read it, is the host's business and not the channel's.
