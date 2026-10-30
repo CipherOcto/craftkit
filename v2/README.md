@@ -5651,3 +5651,76 @@ section closes it — with the **family's own decoder**, ported whole.
   nothing else. What is *not* settled is whether the kit should own the
   decoder or merely borrow it: a decoder is a library, and a library
   that is borrowed is a library that can be replaced.
+
+---
+
+## 71. The inflate, and the PNG the kit could write but not read
+
+§70 left a line open: *PNG is written and not read*, because a PNG's
+pixels are in a **zlib** stream and the kit had no inflate. This section
+is the inflate.
+
+### What was built
+
+- **`craftkit-png`** — a **library**, and it depends on nothing:
+  - the **chunks**: the signature, the header, the palette, the data
+    and the end, each with its **CRC checked** — a picture whose own
+    word about itself does not match is a broken picture;
+  - the **inflate** (`inflate.rs`): RFC 1951's three kinds of block —
+    stored, fixed Huffman and dynamic Huffman — and the zlib wrapper
+    around them, with the Adler-32 checked at the end;
+  - the **filters**: PNG's five ways of storing a row, undone;
+  - the **pixels**: the samples, as they are.
+- **The snapshot reads PNG as well as JPEG**, and draws it.
+- **The tests are on pictures made by two writers**: the kit's own,
+  which *stores* its data and does not compress it, and the `image`
+  crate's, which compresses it — and a compressed picture is what
+  exercises the Huffman paths.
+
+### What the port found
+
+- **The canonical order is the whole of a Huffman decoder.** The codes
+  are numbered by length first and by symbol second, and the table's
+  symbols sit in that order. Getting the *offsets* wrong — starting
+  each length's symbols after the previous length's, instead of after
+  every **shorter** length's — makes a decoder that reads valid
+  streams as invalid ones, and it does so **quietly**: the table it
+  builds is over-subscribed, and the over-subscription is the only
+  symptom. The bug was found by a picture that the `image` crate wrote
+  and the kit could not read, and it was found by *reading the bytes*,
+  not by reading the code: the code looked like puff's, and puff's is
+  right.
+- **A decoder is tested against a compressor, not against itself.** The
+  kit's own writer stores its data, so it exercises only the stored
+  path; the Huffman paths are exercised by streams somebody else
+  compressed. The tests borrow two compressors — `flate2` and
+  `image` — and they are **test-only** dependencies: nothing that
+  ships here depends on either.
+- **The zlib wrapper is part of the format, not part of the decoder.**
+  The two header bytes, the check bits and the trailing checksum are
+  read and checked, and a stream with a preset dictionary is a refusal
+  with a name.
+- **The interlaced picture is a refusal, not a half-picture.** Adam7 is
+  a different shape of file, and the reader says so instead of drawing
+  the wrong thing.
+
+### What it cost
+
+- one crate of about six hundred lines, in two files: the inflate and
+  the reader;
+- **ten tests**: six on pictures and four on streams;
+- two test-only dependencies, and no dependency that ships.
+
+### What it does not settle
+
+- **The bit depths of one, two and four bits are not read.** Eight and
+  sixteen are; the others are a refusal with a name.
+- **A sixteen-bit picture comes out as eight-bit.** The high byte of
+  each sample is taken, because that is what a canvas wants and what a
+  document holds — and the picture the kit draws is not the picture the
+  file carried, in the way a picture shown on a screen is not the
+  picture a camera took.
+- **The kit's writer does not compress.** A PNG the kit writes is
+  bigger than it needs to be, because the writer has no compressor and
+  the compressor is a library of its own. The reader has one now: the
+  inflate. The writer may yet use it.
