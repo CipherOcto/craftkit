@@ -13,6 +13,8 @@
 //! plugin can add a kind of thing to a document that was written before the
 //! plugin existed.
 
+use std::sync::Arc;
+
 use crate::Format;
 use crate::contribution::Contribution;
 use crate::format::FormatValue;
@@ -490,7 +492,7 @@ impl FormatValue for Node {
                 .as_array()
                 .ok_or_else(|| "a node's children are a list".to_string())?
                 .iter()
-                .map(Node::from_json)
+                .map(|child| Node::from_json(child).map(Arc::new))
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
@@ -502,6 +504,20 @@ impl FormatValue for Node {
         // that does not have one says so.
         let stream = value.get("stream").and_then(|stream| stream.as_str()).map(|path| path.to_string());
         Ok(Node { id, name, kind, rect, muted, data, children, unknown, stream })
+    }
+}
+
+/// A **shared** node writes and reads as the node it holds.
+///
+/// The sharing is an implementation detail of the document: a file says
+/// what a node is, not how many programs are holding it.
+impl FormatValue for Arc<Node> {
+    fn to_json(&self) -> serde_json::Value {
+        (**self).to_json()
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        Node::from_json(value).map(Arc::new)
     }
 }
 
@@ -569,7 +585,12 @@ pub struct Node {
     /// Before this, the document was a list — and a list cannot hold a
     /// group, a layer, or anything else that holds other things. The port
     /// of a real application found that, the way it found the payload.
-    pub children: Vec<Node>,
+    ///
+    /// The children are **shared**: each one is behind an `Arc`, so a
+    /// document that is copied — and the history copies one for every
+    /// state — shares the parts that were not changed. That is what
+    /// makes the undo cheap: § the session's history.
+    pub children: Vec<Arc<Node>>,
     /// The fields of this node that the reader did **not** understand.
     ///
     /// A program that writes a node with a field this one does not know
@@ -706,7 +727,11 @@ pub struct Document {
     #[format(default)]
     pub data: serde_json::Value,
     /// Its nodes.
-    pub nodes: Vec<Node>,
+    ///
+    /// The nodes are **shared** the same way the children are, so that
+    /// copying a document is cheap and the history's states share what
+    /// they have in common.
+    pub nodes: Vec<Arc<Node>>,
     /// The relations between the nodes.
     ///
     /// The tree says what **holds** what; the relations say what is
@@ -806,8 +831,8 @@ impl Document {
             stream: None,
         };
         match parent.and_then(|parent| self.node_mut(parent)) {
-            Some(parent) => parent.children.push(node),
-            None => self.nodes.push(node),
+            Some(parent) => parent.children.push(Arc::new(node)),
+            None => self.nodes.push(Arc::new(node)),
         }
         id
     }
@@ -818,10 +843,10 @@ impl Document {
     /// one — and it comes back whole, with whatever is in it.
     pub fn take_node(&mut self, id: u64) -> Option<Node> {
         if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
-            return Some(self.nodes.remove(index));
+            return Some(unwrap(self.nodes.remove(index)));
         }
         for node in self.nodes.iter_mut() {
-            if let Some(taken) = node.take_child(id) {
+            if let Some(taken) = Arc::make_mut(node).take_child(id) {
                 return Some(taken);
             }
         }
@@ -829,13 +854,13 @@ impl Document {
     }
 
     /// The nodes at the top level.
-    pub fn roots(&self) -> &[Node] {
+    pub fn roots(&self) -> &[Arc<Node>] {
         &self.nodes
     }
 
     /// Every node, in the order they are drawn: a node, then what is in it.
     pub fn walk(&self) -> Descendants<'_> {
-        Descendants { stack: self.nodes.iter().rev().collect() }
+        Descendants { stack: self.nodes.iter().rev().map(|node| &**node).collect() }
     }
 
     /// Take a node out of the document, and say whether it was there.
@@ -848,7 +873,7 @@ impl Document {
             return true;
         }
         for node in self.nodes.iter_mut() {
-            if node.remove_child(id) {
+            if Arc::make_mut(node).remove_child(id) {
                 return true;
             }
         }
@@ -867,7 +892,7 @@ impl Document {
         data: serde_json::Value,
     ) -> u64 {
         let id = self.next_id();
-        self.nodes.push(Node {
+        self.nodes.push(Arc::new(Node {
             id,
             name: name.into(),
             kind: kind.into(),
@@ -877,13 +902,13 @@ impl Document {
             children: Vec::new(),
             unknown: serde_json::Value::Null,
             stream: None,
-        });
+        }));
         id
     }
 
     /// The nodes, in order.
     pub fn nodes(&self) -> impl Iterator<Item = &Node> {
-        self.nodes.iter()
+        self.nodes.iter().map(|node| &**node)
     }
 
     /// Add a relation between two nodes, and say whether it was new.
@@ -986,12 +1011,16 @@ impl Document {
 
     /// The node with an id, wherever it is, to change.
     pub fn node_mut(&mut self, id: u64) -> Option<&mut Node> {
-        fn find(nodes: &mut [Node], id: u64) -> Option<&mut Node> {
+        // The node is **made mutable** on the way: a node that is shared
+        // with a state in the history is copied first, so that the state
+        // keeps what it was. That is the whole of copy-on-write, and it
+        // is why copying a document is cheap and changing one is not.
+        fn find(nodes: &mut [Arc<Node>], id: u64) -> Option<&mut Node> {
             for node in nodes.iter_mut() {
                 if node.id == id {
-                    return Some(node);
+                    return Some(Arc::make_mut(node));
                 }
-                if let Some(found) = find(&mut node.children, id) {
+                if let Some(found) = find(&mut Arc::make_mut(node).children, id) {
                     return Some(found);
                 }
             }
@@ -1020,20 +1049,29 @@ impl<'a> Iterator for Descendants<'a> {
     fn next(&mut self) -> Option<&'a Node> {
         let node = self.stack.pop()?;
         for child in node.children.iter().rev() {
-            self.stack.push(child);
+            self.stack.push(&**child);
         }
         Some(node)
     }
 }
 
 impl Node {
+    /// Put a node under this one.
+    ///
+    /// The sharing is the document's business: a caller that has a node
+    /// in its hand gives it over, and does not know how the document
+    /// holds it.
+    pub fn add_child(&mut self, node: Node) {
+        self.children.push(Arc::new(node));
+    }
+
     /// Take a child out of this node, and give it back.
     pub fn take_child(&mut self, id: u64) -> Option<Node> {
         if let Some(index) = self.children.iter().position(|node| node.id == id) {
-            return Some(self.children.remove(index));
+            return Some(unwrap(self.children.remove(index)));
         }
         for node in self.children.iter_mut() {
-            if let Some(taken) = node.take_child(id) {
+            if let Some(taken) = Arc::make_mut(node).take_child(id) {
                 return Some(taken);
             }
         }
@@ -1047,7 +1085,7 @@ impl Node {
             return true;
         }
         for node in self.children.iter_mut() {
-            if node.remove_child(id) {
+            if Arc::make_mut(node).remove_child(id) {
                 return true;
             }
         }
@@ -1058,6 +1096,14 @@ impl Node {
     pub fn descendants(&self) -> Descendants<'_> {
         Descendants { stack: vec![self] }
     }
+}
+
+/// The node an `Arc` holds, copied out if it is shared.
+///
+/// A node that is still shared belongs to a state in the history, so it
+/// is copied rather than taken: the state keeps what it was.
+fn unwrap(node: Arc<Node>) -> Node {
+    Arc::try_unwrap(node).unwrap_or_else(|shared| (*shared).clone())
 }
 
 /// One kind of node, as the ecosystem sees it.

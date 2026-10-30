@@ -1175,7 +1175,8 @@ fn playlist_of(session: &Session, track: u64, name: Option<String>) -> Result<u6
             message: format!("node {track} is a `{}` and not a track", node.kind),
         });
     }
-    let playlists: Vec<&Node> = node.children.iter().filter(|child| child.kind == "sound.playlist").collect();
+    let playlists: Vec<&Node> =
+        node.children.iter().filter(|child| child.kind == "sound.playlist").map(|child| &**child).collect();
     match name {
         Some(name) => {
             playlists.iter().find(|playlist| playlist.name == name).map(|playlist| playlist.id).ok_or_else(

@@ -769,7 +769,7 @@ fn the_plan_walks_the_tree() {
     // put a node in one.
     let taken = session.document_mut().take_node(rectangle);
     if let (Some(taken), Some(parent)) = (taken, session.document_mut().node_mut(group)) {
-        parent.children.push(taken);
+        parent.add_child(taken);
     }
 
     let plan = session.evaluate();

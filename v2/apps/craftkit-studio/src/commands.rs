@@ -243,7 +243,7 @@ impl NodeGroup {
         for id in selected {
             let Some(node) = session.document_mut().take_node(id) else { continue };
             if let Some(parent) = session.document_mut().node_mut(group) {
-                parent.children.push(node);
+                parent.add_child(node);
                 moved += 1;
             }
         }
