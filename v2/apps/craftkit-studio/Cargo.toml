@@ -54,6 +54,10 @@ craftkit-plugin-prose = { path = "../../crates/craftkit-plugin-prose", optional 
 # Off by default as well: a program that wants spreads, pages, items and
 # stories says so.
 craftkit-plugin-layout = { path = "../../crates/craftkit-plugin-layout", optional = true }
+# The **eleventh battery**: the **typed value** — a length in millimetres
+# and an angle in radians. Off by default as well: a program that wants
+# a unit says so.
+craftkit-plugin-numeric = { path = "../../crates/craftkit-plugin-numeric", optional = true }
 
 [features]
 default = []
@@ -86,6 +90,9 @@ prose = ["dep:craftkit-plugin-prose"]
 # The layout battery. Off by default: a program that wants spreads, pages
 # and stories says so.
 layout = ["dep:craftkit-plugin-layout"]
+# The numeric battery. Off by default: a program that wants a typed
+# value with a unit says so.
+numeric = ["dep:craftkit-plugin-numeric"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes

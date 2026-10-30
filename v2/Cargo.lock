@@ -86,6 +86,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-numeric"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-plugin-art"
 version = "0.2.0"
 dependencies = [
@@ -138,6 +142,15 @@ name = "craftkit-plugin-layout"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-numeric"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-numeric",
  "craftkit-sdk",
 ]
 
@@ -219,6 +232,7 @@ dependencies = [
  "craftkit-plugin-grid",
  "craftkit-plugin-hello",
  "craftkit-plugin-layout",
+ "craftkit-plugin-numeric",
  "craftkit-plugin-pdf",
  "craftkit-plugin-prose",
  "craftkit-plugin-shapes",

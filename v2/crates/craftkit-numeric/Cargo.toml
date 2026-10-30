@@ -1,0 +1,11 @@
+[package]
+name = "craftkit-numeric"
+description = "The typed value: a length in millimetres and an angle in radians. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# No dependencies: the typed value is plain arithmetic over `std` types, and
+# a library that a plugin pulls in should not drag anything else with it.
+[dependencies]

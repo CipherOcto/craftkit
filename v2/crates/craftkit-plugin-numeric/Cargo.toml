@@ -1,0 +1,14 @@
+[package]
+name = "craftkit-plugin-numeric"
+description = "A plugin that gives the document a typed value: lengths in millimetres and angles in radians."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. And a **library**: the arithmetic over the typed
+# value is not the plugin's, and the linker does not wire a library in.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+craftkit-numeric = { path = "../craftkit-numeric", version = "0.2.0" }
