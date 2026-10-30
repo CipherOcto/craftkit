@@ -83,9 +83,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),
-    // L3 — the two things that sit above the SDK and are not plugins:
-    // the MCP server, and the vector geometry library, which speaks the
-    // SDK's own types.
+    // L3 — the things that sit above the SDK and are not plugins: the
+    // MCP server, the control channel, and the vector geometry library,
+    // which speaks the SDK's own types.
+    ("craftkit-control", 3),
     ("craftkit-mcp", 3),
     ("craftkit-vector-geom", 3),
     // L4 — the batteries: the plugins, each one a document model of its

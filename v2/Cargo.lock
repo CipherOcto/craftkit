@@ -34,6 +34,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-control"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-derive"
 version = "0.2.0"
 dependencies = [

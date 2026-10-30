@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-control"
+description = "The other door: a session you can drive from another program, over a token-authenticated channel."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK, and nothing else: the channel is a door to a session, and the
+# session is the SDK's.
+craftkit-sdk = { workspace = true }
+
+[dev-dependencies]
+# The SDK again, for the tests: a channel needs a session, and a session
+# needs an ecosystem.
+craftkit-sdk = { workspace = true }
