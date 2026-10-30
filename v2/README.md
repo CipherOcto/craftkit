@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**806 tests.** The MCP server links **all twelve batteries** in, so the
+**807 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6587,3 +6587,50 @@ reads it while it works.
   not built, so an instrument cannot be played.
 - **The loop is not there.** The transport has four fields for the
   loop, and the host writes zeros into them.
+
+---
+
+## 85. A note reaches the plugin
+
+The transport told the plugin where the music was (§84). A plugin that
+is an **instrument** needs more than that: it needs to be **played**.
+
+### What was built
+
+- **The ABI crate gained the MIDI event**: the three bytes of a
+  message and the port it is for.
+- **The host sends a MIDI message** to a port, and the plugin reads it
+  while it works — an event like any other.
+- **The reference plugin counts the notes it was played**, and says so
+  through a parameter, so the host can see that the message arrived
+  whole.
+
+### What the port found
+
+- **A MIDI message is three bytes and an event is a header and a
+  body.** The message is the body, the header says how long the whole
+  thing is, and the plugin reads the list without knowing what is in
+  it. So the host did not have to change at all to send a note: it
+  wrote another event into the same buffer.
+- **The test needs a way to see inside the plugin.** A plugin's memory
+  is the plugin's, so the only things a host can see are what the
+  plugin says and what it offers. The reference plugin counts its
+  notes in a **parameter**, and that is a real thing a real plugin
+  does — a parameter is how a plugin says something about itself.
+
+### What it cost
+
+- one structure in the ABI crate, one method in the host, and **one
+  test**.
+
+### What it does not settle
+
+- **The message is three bytes.** The format's system-exclusive
+  messages are longer and are a different event; this arc does not
+  build them.
+- **There is no note event.** The format has a richer note event, with
+  a key and a velocity of its own, and this host sends the ordinary
+  MIDI message instead.
+- **Nothing plays.** A message reaches the plugin and the plugin
+  counts it; there is no synthesiser here, and the audio the plugin
+  makes is still the gain of §80.
