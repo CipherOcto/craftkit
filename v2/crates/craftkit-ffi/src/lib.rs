@@ -321,7 +321,7 @@ mod foreign {
     pub fn close(_handle: usize) {}
 
     /// The plugin's table: there is no library to look in.
-    pub fn vtable(_handle: *mut c_void) -> Result<(*const PluginVtable, u32), String> {
+    pub fn vtable(_handle: usize) -> Result<(*const PluginVtable, u32), String> {
         Err("there is no shared library on this target".to_string())
     }
 
