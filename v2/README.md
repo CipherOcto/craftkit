@@ -2735,3 +2735,61 @@ not say, and the failure is **visible** instead of silent.
 The **numeric core**: there is no type for a length in millimetres or an
 angle in radians, and every number in a document is a JSON number. The
 guard is the machinery around that gap, and the gap is still there.
+
+---
+
+## 39. The kernel: what six ports say about the typed value
+
+§16's first item was the **kernel**, and the honest reading of it is: no
+**numeric core**. There is no type for a length in millimetres or an
+angle in radians, and every number in a document is a JSON number.
+
+Six ports have now gone through the kit, and they are the evidence.
+
+| the port | the number it needed | where it lives |
+|---|---|---|
+| the video editor | a length in **frames** | the clip's payload |
+| the sound editor | a length in **samples** | the clip's payload |
+| the artist's IDE | a length in **ticks**, and a tick rate | the element's payload, and the project's |
+| the compositing application | a path of **names and orders** | the layer's payload |
+| the PDF application | an **object number** | the reference's payload |
+| the vector application | a **point** in the world's units | the node's rectangle and payload |
+
+Five numeric domains, and the core has **no opinion** about any of them:
+the number is in the payload, the unit is the kind's, and the core
+carries it without reading it. That is not an accident — it is the same
+bargain the payload makes, one level down, and it is why six ports cost
+six small things rather than six redesigns.
+
+### So what would a numeric core buy, and what would it cost?
+
+**Buy:** a number that cannot be confused with a number of another kind.
+A length cannot be added to an angle, and a millimetre cannot be read as
+a pixel. That is real, and it is why the old tree has a kernel.
+
+**Cost:** every number in the **format** would have to carry its unit,
+every plugin's payload would have to be typed, and every JSON value in
+the plan would have to become a typed value. The `.craftkit` file, the
+payload, the journal and the plan are all JSON today, and they are JSON
+because they are **portable** — a document is a text file that anybody
+can read.
+
+### And the conclusion is not "no"
+
+The conclusion is that a numeric core is **a plugin**, not a change to
+the core. The seam is already there and it is exactly the right shape:
+
+- a **kind** carries its own evaluation and returns a value;
+- a **value** is JSON, so the format and the plan do not move;
+- the **guard** (§38) is around every evaluation, so a numeric core
+  that panics on a bad input is caught like any other contribution.
+
+So a kernel would arrive as `craftkit-plugin-geometry` or
+`craftkit-plugin-units`: kinds whose values carry units, a `Length` and
+an `Angle` in the payload, and the core none the wiser. The kit would
+not need a **seam** for it, because the seam is the seam a kind already
+uses.
+
+That is the last of §16's list answered — not by building the kernel,
+but by showing where it goes when it is built, and what it costs to put
+it anywhere else.
