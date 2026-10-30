@@ -914,7 +914,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**672 tests.** The MCP server links **all twelve batteries** in, so the
+**679 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -1006,7 +1006,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 672 tests
+cargo test          # 679 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3910,7 +3910,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the seventeenth row
+### The table, with the eighteenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3932,8 +3932,9 @@ growing.
 | the **payload** | the core bounds a command's parameters and says nothing about a **payload**, so every plugin that reads one has to write its own bounds | a library and two core bounds |
 | the **file** | every bound was applied **after** the bytes were in memory, and the biggest input is a file: the bound that matters is on the bytes, checked before the read | a module and three caps |
 | the **document** | the depth bound was the JSON **parser's** number and not the kit's, and a value built in memory is not bounded by the parser at all — and a stack overflow is not a panic, so the guard never sees it | three constants and four checks |
+| the **stream** | every newline-delimited door read its lines without a limit, and the control channel had declared one for years without using it | a module and six call sites |
 
-Seventeen ports, and one of them is not a port at all: it is the answer to
+Eighteen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -5014,3 +5015,75 @@ They are checked in three places, and the three are the same numbers:
   wrong for a spreadsheet with a million cells; the number is a
   **default**, not a fact, and a program that needs a different one has
   no way to say so.
+
+---
+
+## 64. The doors that read a line
+
+§62 bounded the file that a document arrives in. The next door is the
+same shape and it was worse: every **stream** in this kit speaks
+newline-delimited JSON, and every one of those readers read a line
+until its newline, with **no limit** on how much they would hold.
+
+### What was built
+
+- **`craftkit_sdk::lines`** — a **bounded line reader**: the line is read
+  **byte by byte**, so the limit is checked *as the line is read* and
+  not after the whole of it has been in memory. A line that is over the
+  limit is refused, and the stream **ends**: the reader was cut off
+  mid-line and cannot know where the next one starts.
+- The **doors** use it: the plugin's wire in both directions (§34),
+  the **control channel** (§55), the **MCP server** (§41) and the
+  **bridge**.
+- The limits are the **protocols'**: a megabyte for the plugin's wire
+  and the bridge, four for the control channel and the MCP server (a
+  tool's arguments may carry a whole document).
+
+### What the port found
+
+- **The protocol already had the number, and the reader did not use
+  it.** The control channel has declared `MAX_LINE` — a megabyte —
+  since it was written, and its reader read until a newline. A limit
+  that is declared and not enforced is **worse than no limit**: it says
+  the protocol is bounded when it is not, and a reader of the code
+  believes it. Now the number is the reader's bound ✓.
+- **A reader that checks the length afterwards has already spent the
+  memory.** The bound that matters is the one checked *while* the
+  bytes arrive, so the mechanism reads a byte at a time and stops at
+  the limit. A line of a gigabyte costs a megabyte of memory and then
+  a refusal — which is the difference between a program that survives
+  a hostile peer and one that does not.
+- **A refused line ends the stream, and that is the rule.** The reader
+  was cut off in the middle of a line and cannot know where the next
+  one begins, so the door closes. This is §62's rule again — a refusal
+  that can be resynchronised is not a refusal — and it is the same
+  shape as the file: the bytes that were read are gone.
+- **A stream's peer is alive, and a file's is not.** A file arrives and
+  ends: its size is known before it is read, which is what §62's bound
+  exploits. A peer can send **forever**, and the only thing that stops
+  it is a number the reader counts. That is the whole difference
+  between the two arcs, and it took two arcs to find it.
+- **The limit is the protocol's, and the mechanism is the kit's.** Five
+  doors, five numbers, one reader ✓ — the same answer as §61's payload
+  reader and §62's file reader: the mechanism is shared and the number
+  belongs to the caller.
+
+### What it cost
+
+- one module in the SDK (`lines`), six tests, and no new dependency;
+- **six call sites** changed — the plugin's wire in two directions, the
+  control channel in two, the MCP server and the bridge;
+- one test in the control channel: a peer sends a line longer than the
+  protocol allows, and the server refuses it rather than reading it.
+
+### What it does not settle
+
+- **A line is not the only thing a stream carries.** The MCP protocol
+  frames its messages with headers and a body, and a body that is a
+  megabyte of JSON is a line of a megabyte here — but a protocol that
+  frames differently would need its own bound, and the mechanism reads
+  **lines**.
+- **The refusal says how long the limit is and not how long the line
+  was.** The reader stops at the limit, so it does not know how much
+  more was coming, and a message that says "the line is longer than a
+  megabyte" is true and is all the reader knows.
