@@ -331,3 +331,30 @@ fn a_kerning_pair_makes_the_paragraph_narrower() {
     let lines = item.value["lines"].as_array().expect("the lines are a list");
     assert_eq!(lines[0]["width"], json!(3.5), "two letters and half a millimetre less");
 }
+
+/// A metric with **too many entries** is refused: a bound is a bound,
+/// and there is no lossy way round it.
+#[cfg(feature = "text")]
+#[test]
+fn a_metric_that_is_too_big_is_refused() {
+    let mut session = ecosystem().session();
+    session
+        .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 2.0 }))
+        .expect("the metric is added");
+    session
+        .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
+        .expect("the paragraph is added");
+    {
+        let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
+        let mut table = craftkit_sdk::serde_json::Map::new();
+        for index in 0..2000 {
+            table.insert(format!("k{index}"), craftkit_sdk::serde_json::json!(1.0));
+        }
+        node.data["advances"] = craftkit_sdk::serde_json::Value::Object(table);
+    }
+    let plan = session.evaluate();
+    assert!(
+        plan.items.iter().all(|item| item.kind != "text.lines"),
+        "a metric that is too big is refused, so there are no lines"
+    );
+}

@@ -105,3 +105,52 @@ fn a_boolean_is_read() {
     let muted = Bool::read(&params(&value), "muted").expect("the flag is read");
     assert!(muted.0);
 }
+
+/// A **text** parameter is bounded: the core owns this kind, so the
+/// core owns its bound.
+#[test]
+fn a_text_that_is_too_long_is_refused() {
+    let value = json!({ "name": "x".repeat(70_000) });
+    let error = Text::read(&params(&value), "name").expect_err("that text is too long");
+    assert!(error.message.contains("longer"), "{error:?}");
+}
+
+/// And a text that fits is read.
+#[test]
+fn a_text_that_fits_is_read() {
+    let value = json!({ "name": "x".repeat(70) });
+    let name = Text::read(&params(&value), "name").expect("the text is read");
+    assert_eq!(name.0.len(), 70);
+}
+
+/// The **raw door** is bounded too: a value may be of any shape, and it
+/// may not be of any size.
+#[test]
+fn a_raw_value_with_too_many_values_is_refused() {
+    let items: Vec<i64> = (0..1_000_001).collect();
+    let value = json!({ "raw": items });
+    let error = serde_json::Value::read(&params(&value), "raw").expect_err("that value is too large");
+    assert!(error.message.contains("larger"), "{error:?}");
+}
+
+/// And a raw value that fits is read.
+#[test]
+fn a_raw_value_that_fits_is_read() {
+    let items: Vec<i64> = (0..10).collect();
+    let value = json!({ "raw": items });
+    let raw = serde_json::Value::read(&params(&value), "raw").expect("the value is read");
+    assert_eq!(raw.as_array().map(|items| items.len()), Some(10));
+}
+
+/// A raw value that is nested too deeply is refused, so the walk that
+/// counts it cannot be made to run out of stack.
+#[test]
+fn a_raw_value_that_is_too_deep_is_refused() {
+    let mut value = json!(1);
+    for _ in 0..80 {
+        value = json!([value]);
+    }
+    let error =
+        serde_json::Value::read(&params(&json!({ "raw": value })), "raw").expect_err("that is too deep");
+    assert!(error.message.contains("larger"), "{error:?}");
+}

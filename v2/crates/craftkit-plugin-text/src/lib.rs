@@ -93,6 +93,7 @@
 #![forbid(unsafe_code)]
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_payload::{Limits, Payload, Refusal};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
     Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
@@ -131,13 +132,13 @@ impl ParagraphKind {
         let words = words_of(node);
         let measure = measure_of(node);
         let metric = metric_of(document, node);
-        let lines = if measure > 0.0 && metric.is_some() {
+        let lines = if measure > 0.0 && metric.is_some() && words.is_some() {
             break_lines(node, metric.as_ref()).ok().map(|breaks| breaks.lines.len())
         } else {
             None
         };
         Some(json!({
-            "words": words.len(),
+            "words": words.as_ref().map(|words| words.len()),
             "measure_mm": measure,
             "ragged": ragged_of(node),
             "metric": metric.is_some(),
@@ -222,40 +223,42 @@ pub const MAX_RUN: usize = 8;
 
 impl Metric {
     /// Read the metric out of a node's payload.
+    ///
+    /// The payload came from outside, so it is read **within limits**:
+    /// the tables are bounded, the keys are bounded and the numbers are
+    /// bounded. A table that is too big refuses the metric — the bound
+    /// is the point — and an entry the reader does not understand is
+    /// **left out**, which is the reader's rule.
     fn of(node: &Node) -> Option<Metric> {
-        let default_mm = node.data.get("default_mm").and_then(|value| value.as_f64())?;
-        let space_mm = node.data.get("space_mm").and_then(|value| value.as_f64())?;
-        if !default_mm.is_finite() || !space_mm.is_finite() || default_mm < 0.0 || space_mm < 0.0 {
+        let payload = Payload::new(&node.data, LIMITS);
+        let default_mm = payload.number("default_mm").ok()?;
+        let space_mm = payload.number("space_mm").ok()?;
+        if default_mm < 0.0 || space_mm < 0.0 {
             return None;
         }
         let mut advances = HashMap::new();
-        for (key, value) in table_of(node, "advances") {
+        for (key, width) in table_of(&payload, "advances")? {
+            // An advance is **one character**; the table of runs is the
+            // table for the longer ones.
             let Some(character) = one_character(key) else { continue };
-            let Some(width) = width_of(value) else { continue };
             advances.insert(character, width);
         }
         let mut runs = HashMap::new();
-        for (key, value) in table_of(node, "runs") {
-            // A run is **two** characters or more: one character is an
-            // advance, and the metric has a table for those.
+        for (key, width) in table_of(&payload, "runs")? {
+            // A run is **two** characters or more.
             if key.chars().count() < 2 {
                 continue;
             }
-            let Some(width) = width_of(value) else { continue };
-            runs.insert(key.clone(), width);
+            runs.insert(key.to_string(), width);
         }
         let mut pairs = HashMap::new();
-        for (key, value) in table_of(node, "pairs") {
+        for (key, adjust) in table_of(&payload, "pairs")? {
             // A pair is **exactly** two characters: more is a run, and
             // fewer is not a pair.
             if key.chars().count() != 2 {
                 continue;
             }
-            let Some(adjust) = value.as_f64() else { continue };
-            if !adjust.is_finite() {
-                continue;
-            }
-            pairs.insert(key.clone(), adjust);
+            pairs.insert(key.to_string(), adjust);
         }
         Some(Metric { default_mm, advances, runs, pairs, space_mm })
     }
@@ -310,19 +313,25 @@ impl Metric {
     }
 }
 
-/// The table in a node's payload under a name, if it is a table.
-fn table_of<'a>(node: &'a Node, name: &str) -> Vec<(&'a String, &'a Json)> {
-    node.data
-        .get(name)
-        .and_then(|value| value.as_object())
-        .map(|table| table.iter().collect())
-        .unwrap_or_default()
-}
+/// The limits the text battery holds a payload to.
+///
+/// A metric's tables are a typeface's characters, runs and pairs: a
+/// thousand of each is more than any typeface has, and a paragraph's
+/// words are a paragraph's worth.
+const LIMITS: Limits = Limits { entries: 1024, key_length: 64, text_length: 4096, value: 1_000_000.0 };
 
-/// The width in a table, if it is one.
-fn width_of(value: &Json) -> Option<f64> {
-    let width = value.as_f64()?;
-    if !width.is_finite() || width < 0.0 { None } else { Some(width) }
+/// A table in a payload, if it is there.
+///
+/// A table that is **not there** is an empty table: the metric may
+/// have no advances, no runs and no pairs. A table that is **too big**
+/// refuses the metric: a bound is a bound, and there is no lossy way
+/// round it.
+fn table_of<'a>(payload: &Payload<'a>, name: &str) -> Option<Vec<(&'a str, f64)>> {
+    match payload.table_lossy(name) {
+        Ok(table) => Some(table),
+        Err(Refusal::NotFound { .. }) => Some(Vec::new()),
+        Err(_) => None,
+    }
 }
 
 /// The one character of a key, if the key is one character.
@@ -340,12 +349,14 @@ fn metric_of(document: &Document, paragraph: &Node) -> Option<Metric> {
 }
 
 /// The words of a paragraph: the payload's list of strings.
-fn words_of(node: &Node) -> Vec<String> {
-    node.data
-        .get("words")
-        .and_then(|words| words.as_array())
-        .map(|words| words.iter().filter_map(|word| word.as_str().map(|word| word.to_string())).collect())
-        .unwrap_or_default()
+///
+/// The list is **bounded**: a paragraph with more words than the limit
+/// allows is not read, and the paragraph has no lines — a document that
+/// a file made enormous is not a paragraph anybody can lay out.
+fn words_of(node: &Node) -> Option<Vec<String>> {
+    let payload = Payload::new(&node.data, LIMITS);
+    let words = payload.words("words").ok()?;
+    Some(words.into_iter().map(|word| word.to_string()).collect())
 }
 
 /// The width of the column, in millimetres. Zero means **not set yet**.
@@ -392,7 +403,7 @@ fn layout_params(ragged: bool) -> Params {
 /// paragraph says which metric it is set in with an edge.
 fn break_lines(node: &Node, metric: Option<&Metric>) -> Result<Breaks, LayoutError> {
     let Some(metric) = metric else { return Err(LayoutError::BadMeasure) };
-    let words = words_of(node);
+    let Some(words) = words_of(node) else { return Err(LayoutError::BadMeasure) };
     let items = items_for(&words, metric);
     let params = layout_params(ragged_of(node));
     break_paragraph(&items, measure_of(node), &params)
@@ -779,7 +790,7 @@ impl LinesEvaluator {
                 continue;
             }
             let Some(metric) = metric_of(document, node) else { continue };
-            let words = words_of(node);
+            let Some(words) = words_of(node) else { continue };
             let Ok(breaks) = break_lines(node, Some(&metric)) else { continue };
             let lines: Vec<Json> = breaks
                 .lines
@@ -1237,6 +1248,51 @@ mod tests {
         assert_eq!(metric.pairs.len(), 1, "and the pair of three");
         assert_eq!(metric.word_width("fi"), 3.0, "the run that was understood is used");
         assert_eq!(metric.word_width("AV"), 3.5, "and so is the pair");
+    }
+
+    /// A metric with **too many entries** is refused: the bound is the
+    /// point, and there is no lossy way round it.
+    #[test]
+    fn a_metric_that_is_too_big_is_refused() {
+        let mut session = session();
+        monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
+            .expect("the paragraph is added");
+        {
+            let Some(node) = session.document_mut().node_mut(1) else { panic!("the metric is there") };
+            let mut table = craftkit_sdk::serde_json::Map::new();
+            for index in 0..2000 {
+                table.insert(format!("k{index}"), json!(1.0));
+            }
+            node.data["advances"] = Json::Object(table);
+        }
+        // The metric is refused, so the paragraph has no lines.
+        let plan = session.evaluate();
+        assert!(plan.items.iter().all(|item| item.kind != "text.lines"), "there are no lines");
+    }
+
+    /// A paragraph with **too many words** is not read: the words are
+    /// bounded, and a document that a file made enormous is not a
+    /// paragraph anybody can lay out.
+    #[test]
+    fn a_paragraph_with_too_many_words_is_not_read() {
+        let mut session = session();
+        monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
+            .expect("the paragraph is added");
+        {
+            let Some(node) = session.document_mut().node_mut(2) else { panic!("the paragraph is there") };
+            let words: Vec<&str> = (0..2000).map(|_| "word").collect();
+            node.data["words"] = json!(words);
+        }
+        let plan = session.evaluate();
+        assert!(plan.items.iter().all(|item| item.kind != "text.lines"), "there are no lines");
+        let kind = PARAGRAPH_KIND.evaluate.as_ref().expect("the kind evaluates");
+        let node = session.document().node(2).expect("the paragraph is there").clone();
+        let value = kind(&node, session.document()).expect("the paragraph says what it means");
+        assert_eq!(value["words"], Json::Null, "the words were not read");
     }
 
     /// A paragraph that is set in a node that is not a metric is

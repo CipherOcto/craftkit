@@ -195,6 +195,16 @@ impl ParamKind for Number {
     }
 }
 
+/// The most characters a **text** parameter may hold.
+///
+/// A parameter comes from outside, and the kit's rule is that
+/// input-derived numbers are hostile: check finiteness, **bound sizes**,
+/// cap loop counts. The core owns this kind, so the core owns its
+/// bound. A paragraph's text, a node's name and a command's label all
+/// fit in it many times over; a document's worth of text does not, and
+/// that belongs in a **payload** and not in a parameter.
+pub const MAX_TEXT_CHARACTERS: usize = 65_536;
+
 /// A string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Text(pub String);
@@ -205,6 +215,9 @@ impl ParamKind for Text {
 
     fn from_json(value: &Json) -> Result<Self, ParamError> {
         match value.as_str() {
+            Some(text) if text.chars().count() > MAX_TEXT_CHARACTERS => {
+                Err(ParamError::new("", "the text is longer than the limit allows"))
+            }
             Some(text) => Ok(Text(text.to_string())),
             None => Err(ParamError::new("", "expected a string")),
         }
@@ -252,12 +265,66 @@ impl ParamKind for NodeRef {
 ///
 /// The implementation is on [`serde_json::Value`] itself, so a plugin that
 /// wants the raw value asks for the value and gets it.
+///
+/// The value is **bounded**: a raw value may be of any shape, and it may
+/// not be of any size. [`MAX_JSON_NODES`] is the most values a raw
+/// parameter may hold, and [`MAX_JSON_DEPTH`] is the deepest it may be
+/// nested. A plugin that wants a list of a hundred thousand numbers
+/// still checks that itself — the count is a *meaning*, and a meaning is
+/// the plugin's — but the door is not a hole.
 impl ParamKind for serde_json::Value {
     const DOC: Doc = Doc::Json;
     const REQUIRED: bool = true;
 
     fn from_json(value: &serde_json::Value) -> Result<Self, ParamError> {
+        if nodes(value, 0).is_none() {
+            return Err(ParamError::new("", "the value is larger than the limit allows"));
+        }
         Ok(value.clone())
+    }
+}
+
+/// The most values a raw parameter may hold.
+///
+/// It is a **safety net**, and it is looser than the bounds a plugin
+/// puts on the values it takes: a plugin that takes a list of a
+/// hundred thousand lengths says so itself, and its refusal is the one
+/// a caller sees. This bound is for the value nobody thought about.
+pub const MAX_JSON_NODES: usize = 1_000_000;
+
+/// The deepest a raw parameter may be nested.
+pub const MAX_JSON_DEPTH: usize = 64;
+
+/// The number of values in a raw value, if it is within the limits.
+///
+/// The walk stops at the limits, so a value that is enormous costs no
+/// more than a value that is not.
+fn nodes(value: &serde_json::Value, depth: usize) -> Option<usize> {
+    if depth > MAX_JSON_DEPTH {
+        return None;
+    }
+    match value {
+        serde_json::Value::Array(items) => {
+            let mut total = 1;
+            for item in items {
+                total += nodes(item, depth + 1)?;
+                if total > MAX_JSON_NODES {
+                    return None;
+                }
+            }
+            Some(total)
+        }
+        serde_json::Value::Object(table) => {
+            let mut total = 1;
+            for (_, item) in table {
+                total += 1 + nodes(item, depth + 1)?;
+                if total > MAX_JSON_NODES {
+                    return None;
+                }
+            }
+            Some(total)
+        }
+        _ => Some(1),
     }
 }
 
