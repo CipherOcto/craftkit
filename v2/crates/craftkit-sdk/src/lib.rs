@@ -67,6 +67,7 @@ pub mod document;
 pub mod ecosystem;
 pub mod error;
 pub mod evaluator;
+pub mod files;
 pub mod format;
 pub mod group;
 pub mod guard;

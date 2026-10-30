@@ -143,10 +143,32 @@ pub fn write(
     Ok(out)
 }
 
+/// The most files a bundle may hold.
+///
+/// A bundle's file count comes from the file, and a loop count that
+/// comes from outside is **capped** — the kit's rule, and the reason
+/// this number is here. The cap **refuses** the bundle: a bundle with
+/// more files than the limit allows is not truncated into one that fits.
+pub const MAX_FILES: usize = 4096;
+
+/// The most bytes the **document** in a bundle may hold.
+///
+/// The bundle's own bytes are the program's business (§ the format's
+/// limits), but the document is the part every reader shares.
+pub const MAX_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
+
+/// The most bytes a **path** in a bundle may hold.
+pub const MAX_PATH_BYTES: usize = 4096;
+
 /// Read a bundle.
 ///
 /// A bundle that is not a bundle, or that was damaged on the way, is
 /// **refused** — and the reason says which.
+///
+/// The counts that come out of the file are **capped**: the number of
+/// files, the length of the document and the length of a path. A cap
+/// that can be traded away is not a cap, so each of them refuses the
+/// bundle rather than quietly reading less.
 pub fn read(
     bytes: &[u8],
     formats: &Registry<FormatSpec>,
@@ -171,15 +193,28 @@ pub fn read(
         return Err(format!("this is a bundle of version {version} and not of version {VERSION}"));
     }
     let document_length = read_u64(bytes, &mut at)? as usize;
+    if document_length > MAX_DOCUMENT_BYTES {
+        return Err(format!(
+            "the document in the bundle is {document_length} bytes, and the limit is {MAX_DOCUMENT_BYTES}"
+        ));
+    }
     let document_bytes = read_slice(bytes, &mut at, document_length)?;
     let document_value: crate::serde_json::Value = crate::serde_json::from_slice(document_bytes)
         .map_err(|error| format!("the document in the bundle is not JSON: {error}"))?;
     let document = crate::format::read_document(&document_value, formats, migrations)
         .map_err(|message| format!("the document in the bundle is not one anybody can read: {message}"))?;
     let count = read_u32(bytes, &mut at)? as usize;
+    if count > MAX_FILES {
+        return Err(format!("the bundle holds {count} files, and the limit is {MAX_FILES}"));
+    }
     let mut files = Vec::with_capacity(count.min(1024));
     for _ in 0..count {
         let path_length = read_u32(bytes, &mut at)? as usize;
+        if path_length > MAX_PATH_BYTES {
+            return Err(format!(
+                "a path in the bundle is {path_length} bytes, and the limit is {MAX_PATH_BYTES}"
+            ));
+        }
         let path = read_slice(bytes, &mut at, path_length)?;
         let path =
             String::from_utf8(path.to_vec()).map_err(|_| "a path in the bundle is not text".to_string())?;
@@ -310,6 +345,52 @@ mod tests {
         let document = document();
         assert_eq!(document.missing_assets(&[]), vec!["sounds/kick.wav".to_string()]);
         assert!(document.missing_assets(&["sounds/kick.wav".to_string()]).is_empty());
+    }
+
+    /// A bundle that claims **more files** than the limit allows is
+    /// refused: the count comes from the file, and a count that comes
+    /// from outside is capped.
+    #[test]
+    fn a_bundle_with_too_many_files_is_refused() {
+        let formats = formats();
+        let migrations = Registry::<MigrationSpec>::new();
+        let mut bytes =
+            write(&Document::new("bundled"), vec![], &formats, &migrations).expect("the bundle is written");
+        // The file count is the u32 after the version, the document's
+        // length and the document itself.
+        let document_length = u64::from_le_bytes(
+            bytes[MAGIC.len() + 4..MAGIC.len() + 12].try_into().expect("the length is there"),
+        ) as usize;
+        let at = MAGIC.len() + 4 + 8 + document_length;
+        let count = (MAX_FILES as u32) + 1;
+        bytes[at..at + 4].copy_from_slice(&count.to_le_bytes());
+        // The checksum covers the body, so it is put back.
+        let body = bytes[..bytes.len() - 8].to_vec();
+        let written = checksum(&body);
+        let last = bytes.len() - 8;
+        bytes[last..].copy_from_slice(&written.to_le_bytes());
+        let error = read(&bytes, &formats, &migrations).expect_err("it is refused");
+        assert!(error.contains("files"), "{error}");
+    }
+
+    /// A bundle whose **document** is bigger than the limit allows is
+    /// refused, and so is one with a path that is too long.
+    #[test]
+    fn a_bundle_with_a_too_big_document_is_refused() {
+        let formats = formats();
+        let migrations = Registry::<MigrationSpec>::new();
+        let mut bytes =
+            write(&Document::new("bundled"), vec![], &formats, &migrations).expect("the bundle is written");
+        // The document's length is the u64 after the version.
+        let at = MAGIC.len() + 4;
+        let length = (MAX_DOCUMENT_BYTES as u64) + 1;
+        bytes[at..at + 8].copy_from_slice(&length.to_le_bytes());
+        let body = bytes[..bytes.len() - 8].to_vec();
+        let written = checksum(&body);
+        let last = bytes.len() - 8;
+        bytes[last..].copy_from_slice(&written.to_le_bytes());
+        let error = read(&bytes, &formats, &migrations).expect_err("it is refused");
+        assert!(error.contains("document"), "{error}");
     }
 
     /// A bundle knows what the document is missing.
