@@ -225,6 +225,32 @@ fn a_note_reaches_the_plugin() {
     });
 }
 
+/// The plugin's **state** is saved and given back.
+///
+/// The state is **opaque**: the host does not know what is in it, and
+/// it does not have to — it keeps the bytes and gives them back. So
+/// the test moves a parameter, saves the state, moves it again, gives
+/// the state back, and finds the parameter where it was.
+#[test]
+fn the_state_is_saved_and_given_back() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        // The gain is moved to one and a half.
+        instance.set_parameter(1, 1.5);
+        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        let saved = instance.save_state().expect("the state is saved");
+        assert!(!saved.is_empty(), "the state is not empty");
+        // The gain is moved again, and the state is given back.
+        instance.set_parameter(1, 0.5);
+        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        instance.load_state(&saved).expect("the state is given back");
+        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        let parameters = instance.parameters().expect("the parameters are there");
+        assert_eq!(parameters[0].value, 1.5, "the gain is where it was left");
+    });
+}
+
 /// An id the factory does not know is refused, by name.
 #[test]
 fn an_id_the_factory_does_not_know_is_refused() {

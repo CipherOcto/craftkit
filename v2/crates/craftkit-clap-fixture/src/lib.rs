@@ -189,9 +189,10 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapEventHeader, ClapEventMidi, ClapEventParamValue, ClapEventTransport, ClapHost, ClapInputEvents,
-        ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginFactory, ClapPluginParams, ClapProcess,
-        ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
+        ClapEventHeader, ClapEventMidi, ClapEventParamValue, ClapEventTransport, ClapHost, ClapIStream,
+        ClapInputEvents, ClapOStream, ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginFactory,
+        ClapPluginParams, ClapPluginState, ClapProcess, ClapProcessStatus, PARAMS_EXTENSION,
+        PLUGIN_FACTORY_ID, STATE_EXTENSION,
     };
 
     /// The entry point of this plugin, found by name.
@@ -266,13 +267,91 @@ mod exports {
         // SAFETY: the host asks for an extension by its id, and the
         // answer is compared against that same id. Both are C strings.
         let wanted = unsafe { std::ffi::CStr::from_ptr(id) };
-        if wanted.to_bytes() != PARAMS_EXTENSION.as_bytes() {
-            return std::ptr::null();
-        }
         if state(plugin).is_none() {
             return std::ptr::null();
         }
-        &PARAMS_TABLE as *const ClapPluginParams as *const c_void
+        if wanted.to_bytes() == PARAMS_EXTENSION.as_bytes() {
+            return &PARAMS_TABLE as *const ClapPluginParams as *const c_void;
+        }
+        if wanted.to_bytes() == STATE_EXTENSION.as_bytes() {
+            return &STATE_TABLE as *const ClapPluginState as *const c_void;
+        }
+        std::ptr::null()
+    }
+
+    /// The **state** table of the plugin.
+    static STATE_TABLE: ClapPluginState = ClapPluginState { save: Some(save_state), load: Some(load_state) };
+
+    /// Write the plugin's state into the stream.
+    ///
+    /// The state is the plugin's **parameters**: a count, the tempo,
+    /// and then each parameter's id and its value. The format does not
+    /// say what a state's bytes are — only that the plugin is the one
+    /// who knows.
+    pub(super) extern "C" fn save_state(plugin: *const ClapPlugin, stream: *const ClapOStream) -> bool {
+        let Some(state) = state(plugin) else { return false };
+        if stream.is_null() {
+            return false;
+        }
+        // SAFETY: the stream is the host's own, and it lives for the
+        // length of the call.
+        let write = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*stream).write)) };
+        let Some(write) = write else { return false };
+        let count = state.values.len() as u32;
+        let mut header = Vec::with_capacity(12);
+        header.extend_from_slice(&count.to_ne_bytes());
+        header.extend_from_slice(&state.tempo.to_ne_bytes());
+        // SAFETY: the stream is the host's own.
+        if write(stream, header.as_ptr() as *const c_void, header.len() as u64) < 0 {
+            return false;
+        }
+        for (id, value) in &state.values {
+            let mut pair = Vec::with_capacity(12);
+            pair.extend_from_slice(&id.to_ne_bytes());
+            pair.extend_from_slice(&value.to_ne_bytes());
+            // SAFETY: the stream is the host's own.
+            if write(stream, pair.as_ptr() as *const c_void, pair.len() as u64) < 0 {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Read the plugin's state from the stream.
+    pub(super) extern "C" fn load_state(plugin: *const ClapPlugin, stream: *const ClapIStream) -> bool {
+        let Some(state) = state(plugin) else { return false };
+        if stream.is_null() {
+            return false;
+        }
+        // SAFETY: the stream is the host's own, and it lives for the
+        // length of the call.
+        let read = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*stream).read)) };
+        let Some(read) = read else { return false };
+        let mut header = [0u8; 12];
+        // SAFETY: the stream is the host's own, and the room is the
+        // plugin's own.
+        if read(stream, header.as_mut_ptr() as *mut c_void, header.len() as u64) != header.len() as i64 {
+            return false;
+        }
+        let count = u32::from_ne_bytes([header[0], header[1], header[2], header[3]]);
+        state.tempo = f64::from_ne_bytes([
+            header[4], header[5], header[6], header[7], header[8], header[9], header[10], header[11],
+        ]);
+        state.values.clear();
+        for _ in 0..count {
+            let mut pair = [0u8; 12];
+            // SAFETY: the stream is the host's own, and the room is the
+            // plugin's own.
+            if read(stream, pair.as_mut_ptr() as *mut c_void, pair.len() as u64) != pair.len() as i64 {
+                return false;
+            }
+            let id = u32::from_ne_bytes([pair[0], pair[1], pair[2], pair[3]]);
+            let value = f64::from_ne_bytes([
+                pair[4], pair[5], pair[6], pair[7], pair[8], pair[9], pair[10], pair[11],
+            ]);
+            state.values.push((id, value));
+        }
+        true
     }
 
     /// The **parameters** table of the plugin.

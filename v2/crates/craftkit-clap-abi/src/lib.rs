@@ -412,6 +412,57 @@ pub struct ClapEventMidi {
     pub data: [u8; 3],
 }
 
+/// The id of the **state** extension.
+pub const STATE_EXTENSION: &str = "clap.state";
+
+/// A **stream** the plugin reads from.
+///
+/// The format says a plugin's state is a stream of bytes, and this is
+/// the reading end of one: the plugin asks for bytes and the host
+/// gives them.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapIStream {
+    /// The host's own state, which the read reads.
+    pub ctx: *mut c_void,
+    /// Read up to that many bytes, and say how many there were.
+    pub read: Option<extern "C" fn(stream: *const ClapIStream, buffer: *mut c_void, size: u64) -> i64>,
+}
+
+/// A **stream** the plugin writes to.
+///
+/// The writing end: the plugin writes bytes and the host keeps them.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapOStream {
+    /// The host's own state, which the write writes to.
+    pub ctx: *mut c_void,
+    /// Write that many bytes, and say how many there were.
+    pub write: Option<extern "C" fn(stream: *const ClapOStream, buffer: *const c_void, size: u64) -> i64>,
+}
+
+/// The **state** of a plugin: the bytes that make it what it is.
+///
+/// A plugin's state is **opaque**: the host does not know what is in
+/// it, and it does not have to — it saves the bytes and gives them
+/// back, and the plugin knows what they mean.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapPluginState {
+    /// Write the plugin's state into the stream.
+    pub save: Option<extern "C" fn(plugin: *const ClapPlugin, stream: *const ClapOStream) -> bool>,
+    /// Read the plugin's state from the stream.
+    pub load: Option<extern "C" fn(plugin: *const ClapPlugin, stream: *const ClapIStream) -> bool>,
+}
+
+/// The **host's** state: what a plugin may say about its own state.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapHostState {
+    /// The plugin's state has changed.
+    pub mark_dirty: Option<extern "C" fn(host: *const ClapHost)>,
+}
+
 /// The id of the **parameters** extension.
 pub const PARAMS_EXTENSION: &str = "clap.params";
 

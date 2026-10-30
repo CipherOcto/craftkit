@@ -413,6 +413,17 @@ fn read_f64(bytes: &[u8], at: usize) -> f64 {
     f64::from_ne_bytes([slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7]])
 }
 
+/// The bytes a plugin's state is read from.
+///
+/// The stream reads from the caller's bytes and says how far it has
+/// got, so the two travel together.
+struct StreamState<'a> {
+    /// The bytes.
+    bytes: &'a [u8],
+    /// How far the stream has read.
+    at: &'a mut usize,
+}
+
 /// The host's own state, behind the plugin's back.
 ///
 /// It is in a box because the plugin holds a pointer to it, and a
@@ -422,6 +433,7 @@ struct HostState {
     restart: AtomicBool,
     process: AtomicBool,
     callback: AtomicBool,
+    dirty: AtomicBool,
 }
 
 /// A **block of audio**: what goes into the plugin and what comes out.
@@ -548,11 +560,17 @@ impl ClapInstance<'_> {
         // The events the host has to give are borrowed for the length
         // of the call: the plugin reads them, and they may not move
         // while it does.
-        let events = self.events.borrow();
+        let mut events = self.events.borrow_mut();
         let mut pushed = self.pushed.borrow_mut();
         pushed.bytes.clear();
         pushed.offsets.clear();
-        foreign::plugin_process(self.plugin, frames, block, &events, &mut pushed).map_err(ClapError::new)
+        let status =
+            foreign::plugin_process(self.plugin, frames, block, &events, &mut pushed).map_err(ClapError::new);
+        // The events were for **this** block: a host that kept them
+        // would offer the same note again in the next one.
+        events.bytes.clear();
+        events.offsets.clear();
+        status
     }
 
     /// **Set** a parameter.
@@ -637,6 +655,28 @@ impl ClapInstance<'_> {
         foreign::plugin_parameters(self.plugin).map_err(ClapError::new)
     }
 
+    /// The plugin's **state**, as bytes.
+    ///
+    /// The state is **opaque**: the plugin writes it and the host
+    /// keeps it, without knowing what is in it. That is what makes it
+    /// a thing a document can carry.
+    pub fn save_state(&self) -> Result<Vec<u8>> {
+        foreign::plugin_save_state(self.plugin).map_err(ClapError::new)
+    }
+
+    /// Give the plugin its **state** back.
+    pub fn load_state(&self, bytes: &[u8]) -> Result<()> {
+        foreign::plugin_load_state(self.plugin, bytes).map_err(ClapError::new)
+    }
+
+    /// Whether the plugin says its state has **changed**.
+    ///
+    /// A plugin says so through the host's own state extension, and a
+    /// host that ignores that would save a state that is out of date.
+    pub fn state_dirty(&self) -> bool {
+        self.state.dirty.load(Ordering::SeqCst)
+    }
+
     /// What the plugin asked the host for.
     pub fn requests(&self) -> HostRequests {
         HostRequests {
@@ -696,12 +736,13 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapEventHeader, ClapHost, ClapInputEvents, ClapOutputEvents, ClapParamInfo,
-        ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
-        ClapPluginParams, ClapProcess, ClapProcessStatus, ClapVersion,
+        ClapAudioBuffer, ClapEventHeader, ClapHost, ClapIStream, ClapInputEvents, ClapOStream,
+        ClapOutputEvents, ClapParamInfo, ClapPlugin as ClapPluginInstance, ClapPluginDescriptor,
+        ClapPluginEntry, ClapPluginFactory, ClapPluginParams, ClapPluginState, ClapProcess,
+        ClapProcessStatus, ClapVersion,
     };
 
-    use super::{ClapDescriptor, HostState};
+    use super::{ClapDescriptor, HostState, StreamState};
 
     /// Resolve the library completely before it is used.
     pub const RTLD_NOW: i32 = 2;
@@ -714,6 +755,8 @@ mod foreign {
     const MAX_FEATURES: usize = 256;
     /// How long an event the plugin offers may be.
     const MAX_EVENT_BYTES: usize = 64 * 1024;
+    /// How long a plugin's state may be.
+    const MAX_STATE_BYTES: usize = 64 * 1024 * 1024;
 
     // The loader's doors. They are `unsafe` to call because the
     // operating system trusts the caller: a name that is not a string,
@@ -1271,6 +1314,123 @@ mod foreign {
     fn read_fixed(bytes: &[std::ffi::c_char]) -> String {
         let text: Vec<u8> = bytes.iter().take_while(|byte| **byte != 0).map(|byte| *byte as u8).collect();
         String::from_utf8_lossy(&text).into_owned()
+    }
+
+    /// The plugin's **state**, as bytes.
+    ///
+    /// The plugin writes into a stream and the host keeps what was
+    /// written: the state is opaque, and the host does not look at it.
+    pub fn plugin_save_state(plugin: *const ClapPluginInstance) -> Result<Vec<u8>, String> {
+        let params = plugin_params(plugin)?;
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let save = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*params).save)) };
+        let Some(save) = save else {
+            return Err("the plugin cannot save its state".to_string());
+        };
+        let mut written: Vec<u8> = Vec::new();
+        let stream =
+            ClapOStream { ctx: &mut written as *mut Vec<u8> as *mut c_void, write: Some(stream_write) };
+        // The plugin's own function, called with the instance back and
+        // the stream, as the format says.
+        if !save(plugin, &stream) {
+            return Err("the plugin would not save its state".to_string());
+        }
+        Ok(written)
+    }
+
+    /// Give the plugin its **state** back.
+    pub fn plugin_load_state(plugin: *const ClapPluginInstance, bytes: &[u8]) -> Result<(), String> {
+        let params = plugin_params(plugin)?;
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let load = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*params).load)) };
+        let Some(load) = load else {
+            return Err("the plugin cannot load a state".to_string());
+        };
+        let mut at = 0usize;
+        // The bytes the stream gives are the ones the caller has.
+        let stream = ClapIStream {
+            ctx: &mut StreamState { bytes, at: &mut at } as *mut StreamState as *mut c_void,
+            read: Some(stream_read),
+        };
+        // The plugin's own function, called with the instance back and
+        // the stream, as the format says.
+        if !load(plugin, &stream) {
+            return Err("the plugin would not take the state".to_string());
+        }
+        Ok(())
+    }
+
+    /// The plugin's **state** extension.
+    fn plugin_params(plugin: *const ClapPluginInstance) -> Result<*const ClapPluginState, String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let get_extension = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).get_extension)) };
+        let Some(get_extension) = get_extension else {
+            return Err("the plugin has no extensions".to_string());
+        };
+        let id = match CString::new(craftkit_clap_abi::STATE_EXTENSION) {
+            Ok(id) => id,
+            Err(_) => return Err("the extension's name is not a C string".to_string()),
+        };
+        // The plugin's own function, called with the instance back and
+        // the extension's id, as the format says.
+        let extension = get_extension(plugin, id.as_ptr());
+        if extension.is_null() {
+            return Err(format!("the plugin has no `{}`", craftkit_clap_abi::STATE_EXTENSION));
+        }
+        Ok(extension as *const ClapPluginState)
+    }
+
+    /// The plugin writes its state, and the host keeps it.
+    extern "C" fn stream_write(stream: *const ClapOStream, buffer: *const c_void, size: u64) -> i64 {
+        if stream.is_null() || buffer.is_null() {
+            return -1;
+        }
+        // SAFETY: the context is the host's own buffer, and it lives
+        // for the length of the call.
+        let context = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*stream).ctx)) };
+        if context.is_null() {
+            return -1;
+        }
+        // SAFETY: the context is the host's own buffer.
+        let kept = unsafe { &mut *(context as *mut Vec<u8>) };
+        let count = usize::try_from(size).unwrap_or(0);
+        if count > MAX_STATE_BYTES {
+            return -1;
+        }
+        // SAFETY: the plugin's own bytes, and the host has said how
+        // many of them it will take.
+        let bytes = unsafe { std::slice::from_raw_parts(buffer as *const u8, count) };
+        kept.extend_from_slice(bytes);
+        count as i64
+    }
+
+    /// The plugin reads its state, and the host gives it the bytes.
+    extern "C" fn stream_read(stream: *const ClapIStream, buffer: *mut c_void, size: u64) -> i64 {
+        if stream.is_null() || buffer.is_null() {
+            return -1;
+        }
+        // SAFETY: the context is the host's own state, and it lives for
+        // the length of the call.
+        let context = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*stream).ctx)) };
+        if context.is_null() {
+            return -1;
+        }
+        // SAFETY: the context is the host's own state.
+        let state = unsafe { &mut *(context as *mut StreamState) };
+        let count = usize::try_from(size).unwrap_or(0);
+        let left = state.bytes.len().saturating_sub(*state.at);
+        let take = count.min(left);
+        if take > 0 {
+            // SAFETY: the plugin's own room, and the host has said how
+            // many bytes it will fill.
+            let destination = unsafe { std::slice::from_raw_parts_mut(buffer as *mut u8, take) };
+            destination.copy_from_slice(&state.bytes[*state.at..*state.at + take]);
+            *state.at += take;
+        }
+        take as i64
     }
 
     /// The host has **no extensions** to give.
