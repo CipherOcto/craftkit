@@ -901,11 +901,14 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**579 tests.** The MCP server links **all eleven batteries** in, so the
+**612 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
-own, with no features, carries 175 of them.
+`/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
+on its own, with no features, carries **195** of them, and **203** with
+the text battery. (Both measured; the number in an earlier draft of this
+line was stale, and a number that is not measured is a number that is
+wrong.)
 
 ### Not built
 
@@ -932,7 +935,10 @@ own, with no features, carries 175 of them.
   **geometry** has a home (§13), the document is a **tree** (§14), and the
   **selection** is the session's state (§14). What is still missing is the
   rest of a document model: layers with a meaning of their own, an
-  appearance that is not a plugin's payload, text, and images.
+  appearance that is not a plugin's payload, and images. **Text** is no
+  longer on that list: a paragraph and its runs are in the prose battery
+  (§49), and a paragraph **laid out** — broken into lines — is in the
+  text battery (§58).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -986,7 +992,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 579 tests
+cargo test          # 612 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2857,7 +2863,8 @@ depend on any app."*
 
 What is in it: colour management (ICC profiles, transforms, gamut),
 text shaping (hyphenation in forty-eight languages, UAX #14 line
-breaks, UAX #9 bidi), crash-safe file writing, path safety for paths
+breaks, UAX #9 bidi) — of which the **line breaker** has been ported
+into this tree (§58) —, crash-safe file writing, path safety for paths
 stored in a document, fonts end to end, MP4/MOV/Matroska demuxing, a
 clean-room JPEG decoder, PDF read and write, prepress and ink plates,
 the OS shell (windows, menus, dialogs, printing, updates) and an egui
@@ -2997,8 +3004,8 @@ the protocol.
 So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
-checking that they are the same size. With all eleven batteries it is
-**144**, measured the same way.
+checking that they are the same size. With all twelve batteries it is
+**146**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3419,7 +3426,7 @@ so.
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
 | a **control channel** | **built**: the session behind a token-authenticated socket, with the family's wire format and the family's methods — and no `ui.*`, because this tree has no window | §55 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
-| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44) and a paragraph's own text and runs in a third (§49); **images are not ported**, and an appearance is still a plugin's payload | §44, §49 |
+| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller, because the kit has no font; **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
@@ -3435,6 +3442,8 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
+| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the paragraph carries an advance and a space, and the caller says what they are | §58 |
+| **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
 
 ### The list of things that are honestly not there: empty
 
@@ -3887,7 +3896,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the eleventh row
+### The table, with the twelfth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3903,8 +3912,9 @@ growing.
 | the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
 | the **page layout application** | the typed id fields are **edges**; a relation's **inverse is derived**; the file's version is **derived from what is in it** | nothing |
 | the **typed value** | the unit is a **plugin's** business; the typed value is **not a command parameter** | a library and a plugin |
+| the **line breaker** | the kit has **no font**, so the widths come from the caller; the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
 
-Eleven ports, and one of them is not a port at all: it is the answer to
+Twelve ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4362,3 +4372,137 @@ bug, and it found one.
   sixteen operations on a save. That is the price of a rule that is
   decided by trying rather than by declaring, and it is cheap enough to
   be worth it.
+
+---
+
+## 58. The twelfth battery: a paragraph, and the font the kit does not have
+
+§40 surveyed **craft-libs** and found, among twenty-six crates, a
+`craft-text`: hyphenation in forty-eight languages, UAX #14 line breaks,
+UAX #9 bidi, and a **line breaker** on Knuth and Plass's model — the
+optimal one and the greedy one, on boxes, glue and penalties, with the
+elasticity in three tiers.
+
+That breaker is the part this kit had never had. Every port so far has
+brought a **document model**; this one brings an **algorithm**, and an
+algorithm is a different kind of thing to port: it is not a kind of node
+and not an edge, it is **arithmetic**, and arithmetic belongs in a
+**library**.
+
+So this arc is two crates:
+
+- `crates/craftkit-text-layout` — the **library**: the model, the
+  optimal breaker and the greedy one, and the refusal of a hostile
+  width or measure;
+- `crates/craftkit-plugin-text` — the **battery**: a paragraph, its
+  words, the measure it sits in, and the lines it breaks into.
+
+### What was ported
+
+The model is three kinds of item and one rule each:
+
+| the item | it is | and |
+|---|---|---|
+| a **box** | fixed material — a word, a glyph | it is never a break |
+| **glue** | elastic space | it is a break when it follows a box, and the space at the break is dropped |
+| a **penalty** | a break opportunity with a cost | a hyphenation point is a penalty that adds a hyphen's width when it is taken |
+
+The **optimal** breaker minimises the whole paragraph at once: it is a
+dynamic program over the break opportunities, and each break keeps the
+best path to it for each fitness class of the line that ended there —
+tight, decent, loose, very loose — and, when there is a limit on
+hyphenation, for each number of flagged breaks in a row. The **greedy**
+breaker takes as much as fits on each line and never fails. The library
+says **which one ran**: `Breaks::method` is `Optimal` or `Greedy`, and
+that answer is in the plan.
+
+### The seven things the port found
+
+- **The kit has no font, so the widths come from the caller.** A line
+  breaker needs the advance of every glyph, and an advance comes from a
+  typeface — and this tree has no typeface and no asset of any kind,
+  because the outer tree's rule is that everything on screen is drawn in
+  code. So the paragraph carries an **advance** (the width of one
+  character) and a **space**, in millimetres, and the caller says what
+  they are. The moment a font arrives it supplies those two numbers and
+  nothing else changes: the breaker, the plugin, the document model and
+  the file format are all untouched by it.
+  This is the first time in this kit that a **missing asset** shaped a
+  document model, and the shape it took is honest: the metric is a
+  **value in the payload**, not a hidden assumption.
+- **The words are the payload, and the string is not.** The word
+  processor stores a paragraph's text once, as a string, with runs over
+  it. Here the string would be a second copy of what the words already
+  say, so the **words are stored** — a list in the payload — and the text
+  is split on whitespace when the paragraph is made and never put back
+  together. That is §49's rule ("what is numerous is in the payload")
+  applied to a thing that is numerous *and* a list.
+- **The measure is the paragraph's place, not the paragraph.** A
+  paragraph's measure is the width of the column it sits in, and the
+  column is a **place**. So the measure is set by a **command**
+  (`text.paragraph.measure`), and a paragraph with no measure yet is a
+  paragraph that has not been placed: it is in the document and it has
+  **no lines at all**, and the evaluation says so with a **null** rather
+  than a zero — a paragraph with no lines and a paragraph of no lines are
+  not the same thing.
+- **The lines are derived, and the derivation says which way it went.**
+  The plugin does not choose the breaks: it turns the words into boxes
+  and glue — a box of `characters × advance` for each word, a glue of
+  `space` between them — and hands them to the breaker. The plan carries
+  the lines, their widths, their ratios, and **the method**, so a caller
+  can tell a paragraph that was broken optimally from one that fell back
+  to the greedy breaker. A derived value that says how it was derived is
+  worth more than one that does not.
+- **The optimal breaker needs the whole paragraph at once, so the
+  paragraph is bounded.** It is quadratic in the number of break
+  opportunities, and a paragraph with ten thousand of them would take a
+  while. So the library names the limit — `MAX_BREAKS`, five thousand —
+  and past it the greedy breaker runs and says so. This is a **new kind
+  of limit in this kit**: not a limit on a number a caller gives, but a
+  limit on the **size of a document**, and the answer is that the document
+  is still written and read; only the *choice* of breaks is made the
+  cheap way.
+- **A varying measure is not built, and now it is named.** One
+  paragraph has one measure — the width of its column. A first line that
+  is narrower (an indent, a drop cap) makes the optimal breaker quadratic
+  in the **number of lines** as well as in the number of breaks, because
+  the measure of a line depends on how many lines came before it. The
+  library says so in its own documentation rather than pretending, and
+  the greedy breaker — which does not care — can already do it.
+- **Hyphenation is a dictionary's business.** The breaker knows a
+  **hyphenation point** — a flagged penalty — and it enforces the limit
+  on how many flagged breaks may follow each other, as a **hard
+  constraint**: a break that would exceed it is not taken, in both
+  breakers. But *finding* the points is the dictionary's work, and the
+  family's dictionary carries forty-eight languages — one of them under
+  a licence that is not this tree's. So the point is in the model and
+  the dictionary is not, and the two are separated in the same way the
+  font is.
+
+### What it cost
+
+- one **library** (`craftkit-text-layout`) with no dependencies at all —
+  the first crate in this tree that speaks neither the SDK nor anybody
+  else, and the first **library** that is not an arithmetic over the
+  kit's own types;
+- one **battery** (`craftkit-plugin-text`) with two commands, one kind,
+  one evaluator and one panel;
+- **nothing in the core.** No new parameter kind, no new relation, no
+  new field in the format: a paragraph is a node with a payload, exactly
+  like the prose battery's block (§49).
+
+### What it does not settle
+
+- **The glyphs.** The advance is one number for every character, so a
+  paragraph set with it is a **monospaced** paragraph. A font would give
+  every glyph its own advance, and the model would not change — but the
+  model would have to carry **per-glyph** widths, and the plugin's
+  payload would grow from two numbers to a list. That is the port's
+  **next** step, and it is a port, not a change.
+- **The justification.** The library rates a line and says how much it
+  has to stretch; it does not **place** the words. Placing them needs
+  the same advances, so it is the same missing thing.
+- **The bidi and the line-break opportunities.** UAX #9 and UAX #14 are
+  in the family's `craft-text` and are not here: they find *where* a line
+  may break, and this port only finds *how* the lines are best once the
+  opportunities are known.
