@@ -882,6 +882,14 @@ different commands with one id.
   value as a plugin — lengths, angles and boxes, with the units derived
   from the stored millimetres and radians (§52). It is optional, like
   the others.
+- `crates/craftkit-text-layout` — the **line breaker**: the box, glue and
+  penalty model, and the two breakers — the optimal one and the greedy
+  one. A **library**, not a plugin: it contributes nothing to the
+  registry and the linker does not wire it in (§58).
+- `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
+  words, the measure it sits in, the **metric** it is set in, and the
+  lines it breaks into — ported into v2's seams, and what it found
+  (§58, §59). It is optional, like the others.
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -901,11 +909,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**612 tests.** The MCP server links **all twelve batteries** in, so the
+**623 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
-on its own, with no features, carries **195** of them, and **203** with
+on its own, with no features, carries **195** of them, and **206** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -938,7 +946,8 @@ wrong.)
   appearance that is not a plugin's payload, and images. **Text** is no
   longer on that list: a paragraph and its runs are in the prose battery
   (§49), and a paragraph **laid out** — broken into lines — is in the
-  text battery (§58).
+  text battery (§58), and the **metric** it is set in is a node of its
+  own (§59).
 
 So v2 is a spike on **where behaviour comes from**, not a replacement for
 the tree beside it. What it demonstrates is the part that was hardest to
@@ -992,7 +1001,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 612 tests
+cargo test          # 623 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3005,7 +3014,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all twelve batteries it is
-**146**, measured the same way.
+**148**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3442,7 +3451,7 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
-| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the paragraph carries an advance and a space, and the caller says what they are | §58 |
+| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the widths live in a **metric node**, the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59) | §58, §59 |
 | **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
 
 ### The list of things that are honestly not there: empty
@@ -3896,7 +3905,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the twelfth row
+### The table, with the thirteenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3913,8 +3922,9 @@ growing.
 | the **page layout application** | the typed id fields are **edges**; a relation's **inverse is derived**; the file's version is **derived from what is in it** | nothing |
 | the **typed value** | the unit is a **plugin's** business; the typed value is **not a command parameter** | a library and a plugin |
 | the **line breaker** | the kit has **no font**, so the widths come from the caller; the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
+| the **metric** | a typeface is **few**, so it is a **node**, and the paragraph's typeface is an **edge**; a monospaced paragraph is a metric with an empty table | an edge and a kind |
 
-Twelve ports, and one of them is not a port at all: it is the answer to
+Thirteen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4506,3 +4516,100 @@ that answer is in the plan.
   in the family's `craft-text` and are not here: they find *where* a line
   may break, and this port only finds *how* the lines are best once the
   opportunities are known.
+
+---
+
+## 59. The metric is a node, and the typeface is an edge
+
+§58 built the line breaker and put the **metric** — the width of a
+character and the width of a space — in the **paragraph's payload**. It
+worked, and it was wrong: a metric is not a property of a paragraph.
+
+This section moves it, and says what the move found.
+
+### The move
+
+A metric is **few** — a typeface is shared by every paragraph in a
+document, and it has a name — so a metric is a **node**, and a paragraph
+says which metric it is set in with an **edge**:
+
+| | before (§58) | now |
+|---|---|---|
+| the widths | in the paragraph's payload | in a **metric node's** payload |
+| the paragraph's typeface | — | an **edge**, `text.set_in` |
+| a monospaced paragraph | a paragraph with one advance | a metric with an **empty table** |
+
+The commands follow: `text.metric.add` puts a metric in the document,
+`text.paragraph.add` takes the metric the paragraph is set in, and
+`text.paragraph.metric` sets it again — which **replaces** the edge,
+because a paragraph is set in one metric and not in two.
+
+### What the move found
+
+- **A thing with an identity is a node, and a thing without one is a
+  payload.** The first version of the battery could not tell the two
+  apart, because a metric *looked* like a number the paragraph carried:
+  one number for the advance, one for the space. The moment the metric
+  became a **table** — a width for every character that has one — it
+  became a thing with a name, a shape and a life of its own, and the
+  rule fired: **few is a node**. The PDF's dictionaries, the CAD's
+  layers, the prose's styles and the layout's stories all said the same
+  thing, and this is the **fifth** kind of edge in this kit.
+- **The dependency moved with it, and the plan still gets it right.**
+  Before, the paragraph's lines depended on the paragraph's own
+  payload. Now they depend on **another node**, across an edge — and the
+  evaluation follows the edge, so changing the metric changes every
+  paragraph's lines **and touches none of the paragraphs**. There is a
+  test for exactly that: the metric is narrowed, the same four words go
+  from two lines to one, and the paragraph's payload is byte for byte
+  what it was. This is the "derived values are derived" rule (§43) with
+  the dependency **outside** the node, which is the first time in this
+  tree that has happened.
+- **A monospaced paragraph is not a special case; it is a metric with
+  an empty table.** The general metric has a width for every character
+  that has one and a **default** for the rest; the monospaced one has
+  only the default. One code path, no branch, and the degenerate metric
+  is the one everybody starts with. The finding is that the *general*
+  case is no harder than the special one — the table is a payload, and a
+  payload is a value.
+- **The kit has no font, and that is not the same as having no
+  metric.** What a line breaker needs is a **width**, and a width is a
+  number. A font is glyphs — outlines, kerning, ligatures, hints — and
+  this tree may not have one. The two are separable, and the separation
+  is what makes the port legal: the metric is **numbers**, and numbers
+  are data and not artwork, so the tree's no-asset rule and the missing
+  font do not fight each other. The moment a font arrives it supplies
+  the table, and nothing in the model moves.
+- **A table's key is one character, and the reader keeps what it does
+  not understand.** The command refuses a key that is not a single
+  character and a width that is not a width; the **reader** — which may
+  be reading a file somebody else wrote — leaves such a key out, and
+  the character falls back to the default. That is the reader's rule
+  (§43) applied to a table instead of a document.
+- **The paragraph's payload now holds two things of two kinds, and
+  that is as far as it goes.** The **words** are numerous and in the
+  payload; the **measure** is the paragraph's *place* and in the
+  payload; the **typeface** is few and is a node; and the **link** is an
+  edge. Four kinds of thing, four homes, and the payload holds only the
+  two that belong to the paragraph alone.
+
+### What it cost
+
+- **nothing in the core** — again. A metric is a node like any other,
+  and the edge is a relation like the PDF's or the prose's;
+- **two** commands and **one** kind added to the battery, and a change
+  to two commands that already existed;
+- the plugin's tests grew from eight to sixteen, and the studio's from
+  nine to twelve.
+
+### What it does not settle
+
+- **The glyphs are still not here.** A metric is a width per character,
+  and a real typeface has a width per *glyph run*: a ligature is not
+  the sum of its letters, and a kerning pair is not two widths side by
+  side. The model would need the widths to come in **runs** rather than
+  per character, and the metric's table would become a list of
+  (characters, width) pairs. That is the port's next step, and it is a
+  port.
+- **There is no font *file* and no font *name* that means anything.**
+  The metric is called what the caller calls it.
