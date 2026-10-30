@@ -308,7 +308,7 @@ mod foreign {
 /// here refuses — and it says so, rather than pretending to work.
 #[cfg(not(unix))]
 mod foreign {
-    use std::ffi::{c_char, c_void};
+    use std::ffi::c_char;
 
     use craftkit_ffi_abi::PluginVtable;
 
