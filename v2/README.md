@@ -867,6 +867,14 @@ different commands with one id.
   model of a page layout application — spreads, pages, items, layers,
   stories and assets — ported into v2's seams, and the five things it
   found (§51). It is optional, like the others.
+- `crates/craftkit-numeric` — the **typed value**: a `Length` in
+  millimetres and an `Angle` in radians, and the arithmetic over them. A
+  **library**, not a plugin: it contributes nothing to the registry and
+  the linker does not wire it in (§52).
+- `crates/craftkit-plugin-numeric` — the **numeric battery**: the typed
+  value as a plugin — lengths, angles and boxes, with the units derived
+  from the stored millimetres and radians (§52). It is optional, like
+  the others.
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -886,11 +894,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**493 tests.** The MCP server links **all ten batteries** in, so the
+**521 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`, `/cad`, `/prose`, `/layout`) — and the studio on its own, with
-no features, carries 173 of them.
+`/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
+own, with no features, carries 175 of them.
 
 ### Not built
 
@@ -971,7 +979,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 493 tests
+cargo test          # 521 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2980,8 +2988,8 @@ the protocol.
 So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
-checking that they are the same size. With all ten batteries it is
-**139**, measured the same way.
+checking that they are the same size. With all eleven batteries it is
+**144**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3394,7 +3402,7 @@ so.
 
 | the claim | the truth today | where |
 |---|---|---|
-| a **numeric core**: a typed length, a typed angle | **not built.** Every number in a document is a JSON number, and the core has no unit. §39 says where it goes when it arrives — a plugin — and the CAD survey confirms it | §39, §43 |
+| a **numeric core**: a typed length, a typed angle | **built**, and **not in the core.** A `Length` in millimetres and an `Angle` in radians are a **library** and a **plugin** (§52), so every number in a document is still a JSON number and the core still has no unit — which is the answer §39 gave | §39, §43, §52 |
 | the **panic guard** | **built**, twice: the command path and the evaluation path, and the plan says what it could not say | §38 |
 | the **geometry** | **built**: a library of its own, with no commands and no document knowledge | §13, §43 |
 | the **file format**: the old tree's `.craftkit` | **by design, untouched.** v2's format is a contribution, with migrations that are contributions, and a version chain the ecosystem checks | §15 |
@@ -3420,8 +3428,12 @@ so.
 
 ### The three things that are honestly not there
 
-1. **The numeric core.** The typed value, the unit, the solver. Not
-   built, and §39 says where it goes.
+1. **The typed parameter.** The typed value is built (§52) — as a
+   library and a plugin — but a command may not *take* one: the kinds a
+   parameter may take are the core's, and a plugin cannot add one. So a
+   command takes a number and a unit name, and the conversion is in its
+   body. That is a **core** question, and it is written down rather
+   than decided.
 2. **The cheap undo.** The family's trees share their documents and
    snapshot a pointer; this kit clones. Simple, correct, and more
    expensive than it needs to be — and the only item on this list that
@@ -3759,3 +3771,101 @@ contract, and that decision is the owner's.
 Ten ports. Seven of them cost nothing. The two that did — the artist's
 unions and the branches — bought the kit's two strangest features, and
 everything the family has taught it since has cost **nothing**.
+
+---
+
+## 52. The typed value arrives: a library and a plugin, and not a core change
+
+§39 asked what a typed value would look like when it arrived, and the
+answer was that it arrives as a **plugin** and a **library**, and not as
+a change to the core. The CAD port confirmed it (§44): the geometry is
+in the payload in the world's own units, and the evaluation that does
+arithmetic reaches for a **library** — not for a unit in the core.
+
+This section builds that answer.
+
+### What was built
+
+- **`crates/craftkit-numeric`** — a **library**: a `Length` in
+  **millimetres** and an `Angle` in **radians**, and the arithmetic over
+  them. Both are newtypes over `f64`, so a millimetre cannot be passed
+  where a radian is wanted: the mistake is a compile error and not a
+  number that is wrong by a factor of fifty-seven. Fourteen tests.
+- **`crates/craftkit-plugin-numeric`** — a **plugin**: the kinds of
+  thing that have a length or an angle, the commands that make them, and
+  the evaluation that says what they measure. Five commands, three
+  kinds, one evaluator, one panel, fourteen tests.
+
+### What it proves
+
+- **The core has no unit, and it never will.** A length in a document
+  is a **number** in a payload, and the number is millimetres because
+  *the plugin* says so. The core reads the payload as JSON and knows
+  nothing about it: there is no "millimetre" anywhere in the SDK, and
+  there is no place to put one that would not be a plugin's business.
+- **The typed value is not a command parameter.** The kinds a parameter
+  may take are the **core's** — text, number, bool, a node reference —
+  and a plugin cannot add one. So a command takes a **number and a unit
+  name**, and the conversion happens in the command's body, in the
+  library. That is the one thing that would need the core to change, and
+  it is **named here** rather than worked around silently: a typed
+  parameter is a core change, and this kit did not make one.
+- **The other units are derived.** A length is stored once, in
+  millimetres, and the centimetres, the metres, the inches and the
+  points are worked out every time by the evaluation. The same is true of
+  an angle's degrees, and of a box's area — which is the library's
+  arithmetic and not the core's.
+- **The library is a library.** The application names the **plugin** and
+  not the library, so the linker does not wire the library in, and the
+  library contributes nothing to the registry. A test says so, by
+  reading the application's own manifest.
+
+### The hostile input, once more
+
+A length that comes from outside is not a length until it has been
+**checked**, and the check is in the library rather than in the command:
+a number that is not finite is refused, a number outside the range the
+model holds is refused, a unit that is not a unit is refused, and a
+list of a hundred thousand lengths is refused. The commands say so in
+their own words, and the tests say so in theirs.
+
+### What it cost
+
+- a **library** with two types and their arithmetic;
+- a **plugin** with five commands and three kinds;
+- **nothing in the core.** No field, no variant, no method, no version.
+
+### And what it does not settle
+
+The **typed parameter** is the thing this arc found missing, and it is
+not built: a command that takes a length takes a number and a unit
+name, and the conversion is in the body. That is a real cost — an agent
+reading the schema sees `{"type": "number"}` and a unit name beside it,
+and not `{"type": "length"}` — and it is a **core** question, not a
+plugin's. The kit's own rule is that a plugin may not change the core,
+and this arc did not.
+
+It is written down rather than decided, because the decision is the
+owner's: the kinds a parameter may take are the core's list, and adding
+one is a change to every parameter's schema, every front end's reader
+and every agent's idea of what a number can be.
+
+### The table, with the eleventh row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
+| the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
+| the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
+| the **page layout application** | the typed id fields are **edges**; a relation's **inverse is derived**; the file's version is **derived from what is in it** | nothing |
+| the **typed value** | the unit is a **plugin's** business; the typed value is **not a command parameter** | a library and a plugin |
+
+Eleven ports, and one of them is not a port at all: it is the answer to
+a question three of them asked.
