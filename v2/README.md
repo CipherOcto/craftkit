@@ -2793,3 +2793,123 @@ uses.
 That is the last of §16's list answered — not by building the kernel,
 but by showing where it goes when it is built, and what it costs to put
 it anywhere else.
+
+---
+
+## 40. Four more trees: the family built the kit three times
+
+Four more trees arrived, and they are the **same family** as the ones
+already surveyed: DesignCraft (page layout and publishing), GridCraft
+(spreadsheets), WordCraft (a word processor), and **craft-libs**, the
+shared library battery all three of them depend on.
+
+They are **Rust**, which artcraft was not, and that matters: this is
+the first time the family could have built craftkit's architecture and
+did not.
+
+### craft-libs: a battery, and not a kit
+
+Twenty-six crates, all named `craft-<name>`, and one rule: *"No app
+code. A crate here must be useful to more than one app and must not
+depend on any app."*
+
+What is in it: colour management (ICC profiles, transforms, gamut),
+text shaping (hyphenation in forty-eight languages, UAX #14 line
+breaks, UAX #9 bidi), crash-safe file writing, path safety for paths
+stored in a document, fonts end to end, MP4/MOV/Matroska demuxing, a
+clean-room JPEG decoder, PDF read and write, prepress and ink plates,
+the OS shell (windows, menus, dialogs, printing, updates) and an egui
+widget library with a docking workspace.
+
+What is **not** in it: no command registry, no document model, no
+evaluator, no plugin loader, no MCP layer, no `unsafe` at all (the
+workspace forbids it, and every FFI call is delegated to a safe wrapper
+in a third-party crate).
+
+The one thing that touches a kit's ideas is `craft-keymap`'s
+`CommandRef { id, params }`: a command's identity is a dotted id and a
+blob of JSON, and the key is canonicalised. That is craftkit's
+convention, arrived at in a crate that was not written for a kit.
+
+### The three applications
+
+Each one has the same crates in the same places: `doc` (the document),
+`engine` (the commands), `mcp` (the agent door), `ui-egui`, a CLI and a
+web build. And each one built the same architecture.
+
+| | DesignCraft | GridCraft | WordCraft | craftkit-v2 |
+|---|---|---|---|---|
+| the registry | `CommandSpec` + a `cmd!` macro | `CommandSpec` + a `cmd!` macro | `CommandSpec::new` + a builder | `CommandSpec` + `#[derive(Command)]` |
+| how many commands | 542 | 363 | 632 | 25, plus the batteries |
+| the one door | `Session::execute(id, json)` | `Session::execute(id, json)` | `Session::run(id, &json)` | `session.execute(id, params)` |
+| the panic guard | yes, and it restores the document | yes | yes | yes (§38 covers the evaluation too) |
+| the parameters | a **doc string**, parsed by hand | a doc string | a JSON-schema-ish string | **typed** `ParamDoc`s |
+| the MCP surface | 28 hand-written tools | 22 hand-written tools | ~17 hand-written tools | **one tool per command** |
+| a plugin seam | **none** | **none** | **none** | link-time registration |
+| the document's version | a ZIP with `meta.json` | **none at all** | **none at all** | `craftkit/N` + pending migrations |
+| the document | spreads, items, stories, typed id fields | a **grid** of cells | a flat list of blocks and a side-vector | a tree of nodes, relations, payloads |
+| a document-scoped plan | **none** | the calc graph | the layout cache | **the plan** |
+
+DesignCraft says the rest of it in its own gap list, in one line:
+*"Missing: any plug-in model… Owner decision; not estimated."*
+WordCraft says it in a different way: `Block` and `InlineObject` are
+**closed enums**, matched exhaustively in the document, the layout, the
+docx reader and writer, the format converters and the UI — so a new
+kind of content is a change in six crates at once.
+
+### What the survey found
+
+- **The architecture is the family's, and it was written three times.**
+  A command registry, one `Session::execute`, JSON parameters, a panic
+  guard that restores the document, an undo snapshot, a journal, and an
+  MCP façade over the registry. Three trees, independently, with the same
+  names for the same things. craftkit-v2 is not proposing something
+  new: it is proposing to **share** something three times copied.
+- **What the three trees lack is exactly what this kit has.** No plugin
+  seam in any of them; no versioned document in two of them; typed
+  relations replaced by hand-written id fields (`Item.story`,
+  `Page.parent`, `Story.frames`) or by closed enums; no document-scoped
+  plan, so every consumer of the document — `render`, `pdf`, `epub`,
+  `pptx` in DesignCraft — walks it again with its own rules and can
+  disagree with the others.
+- **The parameters are a string in all three.** DesignCraft parses the
+  `{…}` object out of the human-readable `params` text to reject
+  misspelt keys for out-of-app callers; the other two do the same. This
+  kit's parameters are **typed** (`ParamDoc { name, kind, required,
+  help }`), so an agent that reads `describe` gets the types, and a
+  hostile caller gets a typed failure instead of a string mismatch.
+- **The MCP surface is a second vocabulary.** Seventeen to twenty-eight
+  hand-written tools over three hundred and sixty-three to six hundred
+  and thirty-two commands means an agent must learn the façade *and* the
+  ids. This kit emits **one tool per command**, so the registry **is**
+  the protocol and there is nothing to learn twice.
+- **Where the derived value lives, three answers.** GridCraft writes a
+  formula's result back **into the cell** — a stored derived value, one
+  keystroke away from being wrong. WordCraft computes the layout and
+  never stores it, caching it by a revision counter. DesignCraft
+  composes per story, cached by the story's revision and the identity
+  of the styles it used. None of them is "the plan", and the plan is
+  what would let a plugin's evaluator and an application's renderer
+  agree about what a document means.
+- **Copy-on-write is how all three make undo cheap.** They share
+  immutable `Arc` subtrees and snapshot the document by pointer. This
+  kit's history **clones** the document, which is simple and correct and
+  more expensive than it needs to be.
+- **The spreadsheet is the hardest port yet.** A grid is not a tree at
+  all, and its dependency graph is between **areas** — a cell depends on
+  a *range* — which is the first relation kind this kit has not had.
+  Its answers are worth having before the seventh battery is built.
+
+### What the survey does not change
+
+The seams, the six batteries, the list of allowed exceptions and the
+rules of the tree are as they were. What changed is the **evidence**:
+this kit is not a theory about how an application might be put together.
+It is the third copy of a thing the family already builds, and the
+question it answers is no longer "would this work?" but "what is the
+cheapest way for four applications to stop copying it?".
+
+And the answer is visible in the table: **the plugin seam**. It is the
+one thing all three trees cannot do without a fork of their engine
+crate, it is the one thing this kit has, and it is the only thing in the
+list that is not a *shape* but a *door*.
