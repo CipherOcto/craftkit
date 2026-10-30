@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**796 tests.** The MCP server links **all twelve batteries** in, so the
+**801 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -2622,7 +2622,8 @@ over this door, not a change to it. What is built is the door, the
 contract, the version check, and the proof that a plugin in another
 shared library can be reached from a program that has never seen it.
 (CLAP came later, in §76: a **shim over the same idea**, with its own
-door, because its entry point is a data symbol and not a function.)
+door, because its entry point is a data symbol and not a function. And
+in §79 the host **makes** plugins, not only reads them.)
 
 ---
 
@@ -6231,3 +6232,66 @@ So the question this arc asked was not "how do we use the bundler" but
 - **Nothing runs this in CI.** v2 has no CI job of its own, so the
   module is built by hand and the check is run by hand. That is the
   last thing to come, and it is a job of its own.
+
+---
+
+## 79. The host and the instance
+
+The CLAP door could **read** a plugin: it found the entry, checked the
+version, and read the descriptors (§76). But a plugin that is only read
+is a file. The thing a program *uses* is an **instance**: made by the
+factory, given a **host**, and lived through.
+
+### What was built
+
+- **The ABI crate gained the other half of the contract**: the
+  **host** — what a plugin sees of the program that loaded it — and
+  the **instance**, the plugin's own table of life.
+- **The host is built and handed over**: its name, its vendor, its
+  url, its version, and three functions the plugin calls when it wants
+  something — a restart, a call back, a call on the main thread.
+- **The factory makes plugins.** `create(id)` gives an instance, and
+  the instance has a life: `init`, `activate` with the rate,
+  `deactivate`, `start_processing`, `stop_processing`, `reset`, and
+  `destroy`.
+- **The reference plugin is a real plugin now.** It is made, it reads
+  the host's name, it asks the host to restart it, it takes the rate
+  it was activated at, and it frees itself when it is destroyed.
+
+### What the port found
+
+- **A host is a structure the plugin reads and calls back through.**
+  The handshake is two words wide: the plugin reads the host's name
+  and asks for a restart. The **request** is the only channel a test
+  can see across the boundary — the plugin's own memory is the
+  plugin's — and it is enough to prove that the structure crossed
+  correctly.
+- **The instance is not the file.** The file holds a factory; the
+  factory makes instances; each instance has its own state and its own
+  destruction. The instance's `destroy` frees the state the plugin
+  made, so a host that never destroys **leaks** it.
+- **A pointer to a thing that moves is a pointer to nothing.** The
+  host and its state are boxed, because the plugin holds a pointer to
+  each of them and may keep it.
+- **The format's function pointers may be empty.** The reference
+  plugin has no `process` — it does no audio — and the format says
+  that is allowed. So the host must not call a pointer it has not
+  checked, and every call in the host checks.
+
+### What it cost
+
+- one more structure in the ABI crate, one more part of the host, and
+  **five tests**.
+
+### What it does not settle
+
+- **There is no audio.** The `process` call is not made: the block it
+  takes is a structure the format defines and this arc does not
+  model. That is the next arc, and it is the big one.
+- **The host has no extensions.** The state, the log, the parameters
+  and the ports are reached through `get_extension`, and this host
+  answers with nothing: a plugin that wants a parameter or a port does
+  not get one.
+- **One instance at a time.** The host makes an instance and keeps it;
+  there is no pool, no panel of plugins, and no state to save and
+  restore.
