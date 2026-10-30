@@ -37,12 +37,52 @@ fn the_numeric_battery_is_not_linked_in() {
 #[test]
 fn a_length_is_stored_in_millimetres() {
     let mut session = ecosystem().session();
-    session
-        .execute("numeric.length.add", &json!({ "value": 2.5, "unit": "cm" }))
-        .expect("the length is added");
+    // The parameter is a **length**: a number is in millimetres, and a
+    // string may carry its own unit.
+    session.execute("numeric.length.add", &json!({ "value": 25.0 })).expect("the length is added");
     let node = session.document().node(1).expect("the length is there");
     assert_eq!(node.kind, "numeric.length");
     assert_eq!(node.data["millimetres"], json!(25.0));
+}
+
+/// A string with a **unit** is read as a length, so that a person does
+/// not have to convert in their head.
+#[cfg(feature = "numeric")]
+#[test]
+fn a_string_with_a_unit_is_a_length() {
+    let mut session = ecosystem().session();
+    session.execute("numeric.length.add", &json!({ "value": "2.5cm" })).expect("the length is added");
+    let node = session.document().node(1).expect("the length is there");
+    assert_eq!(node.data["millimetres"], json!(25.0));
+}
+
+/// The **schema** says what the number is: the kind's own name and its
+/// unit.
+#[cfg(feature = "numeric")]
+#[test]
+fn the_schema_says_the_name_and_the_unit() {
+    let ecosystem = ecosystem();
+    let schema = ecosystem.projection().schema("numeric.length.add").expect("the schema is there");
+    let parameters = schema["parameters"].as_array().expect("a list of parameters");
+    let value = parameters
+        .iter()
+        .find(|parameter| parameter["name"] == json!("value"))
+        .expect("the value parameter is there");
+    assert_eq!(value["kind"], json!("number"), "the shape is a number");
+    assert_eq!(value["type_name"], json!("length"), "and the name says what it is");
+    assert_eq!(value["unit"], json!("mm"), "and the unit says what the number means");
+}
+
+/// A length that is too long is refused **at the parameter**, before the
+/// command's body runs: the type checks it.
+#[cfg(feature = "numeric")]
+#[test]
+fn a_length_that_is_too_long_is_refused_at_the_parameter() {
+    let mut session = ecosystem().session();
+    let error =
+        session.execute("numeric.length.add", &json!({ "value": 1e12 })).expect_err("that is too long");
+    assert!(error.to_string().contains("at most"), "{error}");
+    assert_eq!(session.document().nodes.len(), 0, "and nothing was added");
 }
 
 /// The unit is the **plugin's** business, and the core never sees it:
@@ -78,9 +118,7 @@ fn the_other_units_are_derived() {
 #[test]
 fn an_angle_is_stored_in_radians() {
     let mut session = ecosystem().session();
-    session
-        .execute("numeric.angle.add", &json!({ "value": 180.0, "unit": "deg" }))
-        .expect("the angle is added");
+    session.execute("numeric.angle.add", &json!({ "value": "180deg" })).expect("the angle is added");
     let node = session.document().node(1).expect("the angle is there");
     assert!((node.data["radians"].as_f64().expect("a number") - std::f64::consts::PI).abs() < 1e-9);
     let plan = session.evaluate();
@@ -133,19 +171,23 @@ fn the_total_of_lengths_is_derived() {
 fn a_unit_that_is_not_a_unit_is_refused() {
     let mut session = ecosystem().session();
     let error = session
-        .execute("numeric.length.add", &json!({ "value": 1.0, "unit": "furlongs" }))
+        .execute("numeric.length.add", &json!({ "value": "1 furlong" }))
         .expect_err("that is not a unit");
     assert!(error.to_string().contains("not a unit"), "{error}");
 }
 
-/// A number that is not a number is refused: the input is hostile.
+/// A value that is not a length is refused: the input is hostile.
 #[cfg(feature = "numeric")]
 #[test]
-fn a_value_that_is_not_a_number_is_refused() {
+fn a_value_that_is_not_a_length_is_refused() {
     let mut session = ecosystem().session();
     let error =
-        session.execute("numeric.length.add", &json!({ "value": "ten" })).expect_err("that is not a number");
-    assert!(error.to_string().contains("number"), "{error}");
+        session.execute("numeric.length.add", &json!({ "value": "ten" })).expect_err("that is not a length");
+    assert!(error.to_string().contains("not a length"), "{error}");
+    let error = session
+        .execute("numeric.length.add", &json!({ "value": { "millimetres": 10 } }))
+        .expect_err("that is not a length either");
+    assert!(error.to_string().contains("millimetres"), "{error}");
 }
 
 /// A length that is too long is refused: the library holds a range.

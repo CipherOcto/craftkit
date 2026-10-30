@@ -528,13 +528,23 @@ impl<'a> Projection<'a> {
             .params
             .iter()
             .map(|param| {
-                serde_json::json!({
+                let mut schema = serde_json::json!({
                     "name": param.name,
                     "kind": param.kind.json_name(),
                     "required": param.required,
                     "help": param.help,
                     "alternative": param.alternative,
-                })
+                });
+                // A kind that is a plugin's own says so, and says what
+                // unit it is in. The shape is unchanged: a length is a
+                // number, and the schema says number.
+                if let Some(type_name) = param.type_name {
+                    schema["type_name"] = serde_json::Value::String(type_name.to_string());
+                }
+                if let Some(unit) = param.unit {
+                    schema["unit"] = serde_json::Value::String(unit.to_string());
+                }
+                schema
             })
             .collect();
         Some(serde_json::json!({

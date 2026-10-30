@@ -142,6 +142,28 @@ pub trait ParamKind: Sized {
     /// Whether the caller has to supply it.
     const REQUIRED: bool;
 
+    /// The kind's **own name**, when it has one.
+    ///
+    /// The core's kinds are named by the core: `number`, `text`,
+    /// `bool`. A kind that is a plugin's own — a length, an angle, a
+    /// colour — says so here, and the schema carries the name, so that
+    /// an agent is told what it is being asked for and not only what
+    /// shape it has.
+    ///
+    /// It is a name and not a new kind: the **shape** is still
+    /// [`Self::DOC`], and that is what the schema's type says. A
+    /// length is a number, and the schema says number; the name says
+    /// length.
+    const NAME: Option<&'static str> = None;
+
+    /// The **unit** the value is in, when the kind has one.
+    ///
+    /// A number on its own says nothing: `25` is twenty-five of what?
+    /// This is the one that says "millimetres", and it is what makes the
+    /// number mean something to a caller who was not told the kind's
+    /// name.
+    const UNIT: Option<&'static str> = None;
+
     /// Read one value.
     fn from_json(value: &Json) -> Result<Self, ParamError>;
 
@@ -247,6 +269,11 @@ impl ParamKind for serde_json::Value {
 impl<T: ParamKind> ParamKind for Option<T> {
     const DOC: Doc = T::DOC;
     const REQUIRED: bool = false;
+    // An optional parameter is the same kind: it keeps the kind's own
+    // name and its unit, so that a schema says what it is whether the
+    // caller has to give it or not.
+    const NAME: Option<&'static str> = T::NAME;
+    const UNIT: Option<&'static str> = T::UNIT;
 
     fn from_json(value: &Json) -> Result<Self, ParamError> {
         T::from_json(value).map(Some)

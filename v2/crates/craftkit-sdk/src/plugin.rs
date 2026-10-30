@@ -114,6 +114,15 @@ pub struct PluginParam {
     pub help: String,
     /// The other spelling of this parameter, if it has one.
     pub alternative: Option<String>,
+    /// The kind's **own name**, when it has one.
+    ///
+    /// It travels over the door because the door is where a plugin's
+    /// own kinds have to survive: a plugin that is not part of the
+    /// program still has to be able to say that its parameter is a
+    /// length.
+    pub type_name: Option<String>,
+    /// The **unit** the value is in, when the kind has one.
+    pub unit: Option<String>,
 }
 
 impl PluginParam {
@@ -125,6 +134,8 @@ impl PluginParam {
             "required": self.required,
             "help": self.help,
             "alternative": self.alternative,
+            "type_name": self.type_name,
+            "unit": self.unit,
         })
     }
 
@@ -146,7 +157,9 @@ impl PluginParam {
             .get("alternative")
             .and_then(|alternative| alternative.as_str())
             .map(|alternative| alternative.to_string());
-        Ok(PluginParam { name, kind, required, help, alternative })
+        let type_name = value.get("type_name").and_then(|name| name.as_str()).map(|name| name.to_string());
+        let unit = value.get("unit").and_then(|unit| unit.as_str()).map(|unit| unit.to_string());
+        Ok(PluginParam { name, kind, required, help, alternative, type_name, unit })
     }
 }
 
@@ -423,6 +436,8 @@ impl LoadedPlugin {
                 required: param.required,
                 help: leak(param.help.clone()),
                 alternative: param.alternative.as_ref().map(|name| leak(name.clone())),
+                type_name: param.type_name.as_ref().map(|name| leak(name.clone())),
+                unit: param.unit.as_ref().map(|unit| leak(unit.clone())),
             })
             .collect();
         let params: &'static [ParamDoc] = Box::leak(params.into_boxed_slice());
@@ -568,6 +583,8 @@ pub fn serve(ecosystem: &crate::ecosystem::Ecosystem) -> Result<(), PluginError>
                         required: param.required,
                         help: param.help.to_string(),
                         alternative: param.alternative.map(|name| name.to_string()),
+                        type_name: param.type_name.map(|name| name.to_string()),
+                        unit: param.unit.map(|unit| unit.to_string()),
                     })
                     .collect(),
                 mutates: command.mutates,

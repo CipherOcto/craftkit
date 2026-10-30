@@ -89,6 +89,110 @@ impl std::fmt::Display for NumericError {
 
 impl std::error::Error for NumericError {}
 
+/// The kit's parameter trait, so that a length can be a **parameter**.
+///
+/// The typed value is the library's, and the *reading* is the kit's: a
+/// command that takes a length takes the library's type, and a caller
+/// is told what the number means.
+use craftkit_sdk::error::ParamError;
+use craftkit_sdk::params::{Doc, ParamKind};
+use craftkit_sdk::serde_json::Value as Json;
+
+/// Read a length from a caller's value.
+///
+/// The number is in **millimetres**, which is the unit the schema says.
+/// A **string** with a unit is also accepted — `2.5cm`, `1in` — because
+/// a person types that and a unit is not a thing to make people convert
+/// in their heads.
+fn length_from_json(value: &Json) -> Result<Length, ParamError> {
+    match value {
+        Json::Number(number) => {
+            let number = number.as_f64().ok_or_else(|| ParamError::new("", "expected a number"))?;
+            Length::from_number(number).map_err(|error| ParamError::new("", error.to_string()))
+        }
+        Json::String(text) => {
+            let (number, unit) = split_unit(text);
+            let number = number
+                .parse::<f64>()
+                .map_err(|_| ParamError::new("", format!("`{text}` is not a length")))?;
+            length_in(&unit, number).map_err(|error| ParamError::new("", error.to_string()))
+        }
+        _ => Err(ParamError::new("", "expected a number of millimetres, or a string with a unit")),
+    }
+}
+
+/// Read an angle from a caller's value.
+fn angle_from_json(value: &Json) -> Result<Angle, ParamError> {
+    match value {
+        Json::Number(number) => {
+            let number = number.as_f64().ok_or_else(|| ParamError::new("", "expected a number"))?;
+            Angle::from_number(number).map_err(|error| ParamError::new("", error.to_string()))
+        }
+        Json::String(text) => {
+            let (number, unit) = split_unit(text);
+            let number = number
+                .parse::<f64>()
+                .map_err(|_| ParamError::new("", format!("`{text}` is not an angle")))?;
+            angle_in(&unit, number).map_err(|error| ParamError::new("", error.to_string()))
+        }
+        _ => Err(ParamError::new("", "expected a number of radians, or a string with a unit")),
+    }
+}
+
+/// Split `2.5cm` into the number and the unit.
+///
+/// A number with no unit is in **millimetres**, because that is the
+/// unit the schema says.
+fn split_unit(text: &str) -> (String, String) {
+    let text = text.trim();
+    let split = text
+        .char_indices()
+        .find(|(_, character)| {
+            !(character.is_ascii_digit() || *character == '.' || *character == '-' || *character == '+')
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(text.len());
+    let (number, unit) = text.split_at(split);
+    let unit = unit.trim();
+    if unit.is_empty() {
+        (number.trim().to_string(), "mm".to_string())
+    } else {
+        (number.trim().to_string(), unit.to_string())
+    }
+}
+
+/// A length as a **parameter**: the kind's name and its unit are told.
+impl ParamKind for Length {
+    /// A length is a number underneath.
+    const DOC: Doc = Doc::Number;
+    /// The caller has to give it.
+    const REQUIRED: bool = true;
+    /// The kind's own name.
+    const NAME: Option<&'static str> = Some("length");
+    /// The unit the number is in.
+    const UNIT: Option<&'static str> = Some("mm");
+
+    fn from_json(value: &Json) -> Result<Self, ParamError> {
+        length_from_json(value)
+    }
+}
+
+/// An angle as a **parameter**.
+impl ParamKind for Angle {
+    /// An angle is a number underneath.
+    const DOC: Doc = Doc::Number;
+    /// The caller has to give it.
+    const REQUIRED: bool = true;
+    /// The kind's own name.
+    const NAME: Option<&'static str> = Some("angle");
+    /// The unit the number is in.
+    const UNIT: Option<&'static str> = Some("rad");
+
+    fn from_json(value: &Json) -> Result<Self, ParamError> {
+        angle_from_json(value)
+    }
+}
+
 /// A **length**, in millimetres.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Length {
@@ -419,6 +523,34 @@ mod tests {
         assert_eq!(length.as_millimetres(), 25.0);
         let length = length_in("inches", 1.0).expect("the length is a length");
         assert!((length.as_millimetres() - 25.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_length_is_a_parameter_that_says_its_unit() {
+        use craftkit_sdk::params::ParamKind;
+        assert_eq!(<Length as ParamKind>::DOC, craftkit_sdk::params::Doc::Number);
+        assert_eq!(<Length as ParamKind>::NAME, Some("length"));
+        assert_eq!(<Length as ParamKind>::UNIT, Some("mm"));
+        let length = <Length as ParamKind>::from_json(&craftkit_sdk::serde_json::json!(25.0))
+            .expect("a number is a length");
+        assert_eq!(length.as_millimetres(), 25.0);
+        let length = <Length as ParamKind>::from_json(&craftkit_sdk::serde_json::json!("2.5cm"))
+            .expect("a string with a unit is a length");
+        assert_eq!(length.as_millimetres(), 25.0);
+        assert!(
+            <Length as ParamKind>::from_json(&craftkit_sdk::serde_json::json!(1e12)).is_err(),
+            "a length that is too long is refused at the parameter"
+        );
+    }
+
+    #[test]
+    fn an_angle_is_a_parameter_that_says_its_unit() {
+        use craftkit_sdk::params::ParamKind;
+        assert_eq!(<Angle as ParamKind>::NAME, Some("angle"));
+        assert_eq!(<Angle as ParamKind>::UNIT, Some("rad"));
+        let angle = <Angle as ParamKind>::from_json(&craftkit_sdk::serde_json::json!("180deg"))
+            .expect("a string with a unit is an angle");
+        assert!((angle.as_degrees() - 180.0).abs() < 1e-9);
     }
 
     #[test]

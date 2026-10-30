@@ -75,7 +75,6 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-ffi-abi", 0),
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
-    ("craftkit-numeric", 0),
     ("craftkit-sound-time", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
@@ -88,6 +87,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // which speaks the SDK's own types.
     ("craftkit-control", 3),
     ("craftkit-mcp", 3),
+    // The numeric library is here and not at L0 because a **length** can
+    // be a command's parameter, and that means implementing the kit's
+    // own `ParamKind` — which is speaking the SDK's types. §56.
+    ("craftkit-numeric", 3),
     ("craftkit-vector-geom", 3),
     // L4 — the batteries: the plugins, each one a document model of its
     // own. A plugin may not depend on another plugin, and that is a

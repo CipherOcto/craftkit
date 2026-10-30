@@ -47,9 +47,9 @@
 #![forbid(unsafe_code)]
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
-use craftkit_numeric::{Angle, Length, NumericError, angle_in, length_in};
+use craftkit_numeric::{Angle, Length, NumericError};
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session};
 
 /// The numeric layer.
 ///
@@ -151,23 +151,21 @@ impl BoxKind {
 
 /// Put a **length** in the document.
 ///
-/// The value is a number and the unit is a name, because a parameter
-/// may not be typed: the kinds a parameter may take are the core's.
-/// The conversion is the library's, and the number that is stored is
-/// millimetres.
+/// The parameter is a **length**, not a number: the library's own type.
+/// A caller is told the unit in the schema — the number is in
+/// millimetres — and a string with a unit (`2.5cm`) is read as well, so
+/// that a person does not have to convert in their head.
 #[derive(Command)]
 #[command(id = "numeric.length.add", area = "numeric", layer = "numeric", icon = "plus", mutates, undoable)]
 pub struct AddLength {
-    /// How long it is.
-    pub value: Number,
-    /// The unit it is in: `mm`, `cm`, `m`, `in`, `ft` or `pt`.
-    pub unit: Option<Text>,
+    /// How long it is: a number of millimetres, or a string with a unit
+    /// (`2.5cm`).
+    pub value: Length,
 }
 
 impl AddLength {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let unit = self.unit.as_ref().map(|unit| unit.0.clone()).unwrap_or_else(|| "mm".to_string());
-        let length = length_in(&unit, self.value.0).map_err(|error| refused("numeric.length.add", error))?;
+        let length = self.value;
         let id = session.document_mut().add_node_with_under(
             None,
             format!("{} mm", length.as_millimetres()),
@@ -184,16 +182,14 @@ impl AddLength {
 #[derive(Command)]
 #[command(id = "numeric.angle.add", area = "numeric", layer = "numeric", icon = "plus", mutates, undoable)]
 pub struct AddAngle {
-    /// How far it turns.
-    pub value: Number,
-    /// The unit it is in: `rad` or `deg`.
-    pub unit: Option<Text>,
+    /// How far it turns: a number of radians, or a string with a unit
+    /// (`180deg`).
+    pub value: Angle,
 }
 
 impl AddAngle {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let unit = self.unit.as_ref().map(|unit| unit.0.clone()).unwrap_or_else(|| "rad".to_string());
-        let angle = angle_in(&unit, self.value.0).map_err(|error| refused("numeric.angle.add", error))?;
+        let angle = self.value;
         let id = session.document_mut().add_node_with_under(
             None,
             format!("{} rad", angle.as_radians()),
@@ -210,16 +206,16 @@ impl AddAngle {
 #[derive(Command)]
 #[command(id = "numeric.box.add", area = "numeric", layer = "numeric", icon = "plus", mutates, undoable)]
 pub struct AddBox {
-    /// How wide it is, in millimetres.
-    pub width: Number,
-    /// How high it is, in millimetres.
-    pub height: Number,
+    /// How wide it is: a number of millimetres, or a string with a unit.
+    pub width: Length,
+    /// How high it is: a number of millimetres, or a string with a unit.
+    pub height: Length,
 }
 
 impl AddBox {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let width = Length::from_number(self.width.0).map_err(|error| refused("numeric.box.add", error))?;
-        let height = Length::from_number(self.height.0).map_err(|error| refused("numeric.box.add", error))?;
+        let width = self.width;
+        let height = self.height;
         let id = session.document_mut().add_node_with_under(
             None,
             format!("{} by {} mm", width.as_millimetres(), height.as_millimetres()),

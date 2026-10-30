@@ -99,6 +99,9 @@ dependencies = [
 [[package]]
 name = "craftkit-numeric"
 version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+]
 
 [[package]]
 name = "craftkit-plugin-art"

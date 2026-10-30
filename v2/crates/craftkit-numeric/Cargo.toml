@@ -6,6 +6,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# No dependencies: the typed value is plain arithmetic over `std` types, and
-# a library that a plugin pulls in should not drag anything else with it.
 [dependencies]
+# The SDK, and nothing else. The typed value is plain arithmetic over
+# `std` types, and the SDK is the kit itself: the library implements the
+# kit's `ParamKind`, so that a **length** can be a command's parameter
+# and not only a number that means millimetres by accident.
+craftkit-sdk = { workspace = true }

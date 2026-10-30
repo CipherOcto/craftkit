@@ -195,17 +195,40 @@ pub struct ParamDoc {
     pub help: &'static str,
     /// The other spelling of this parameter, if it has one.
     pub alternative: Option<&'static str>,
+    /// The kind's **own name**, when the kind has one.
+    ///
+    /// A plugin's kind: `length`, `angle`. The shape is in
+    /// [`Self::kind`] and the name is here, so that a schema can say
+    /// both.
+    pub type_name: Option<&'static str>,
+    /// The **unit** the value is in, when the kind has one.
+    pub unit: Option<&'static str>,
 }
 
 impl ParamDoc {
     /// A required parameter.
     pub const fn required(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        ParamDoc { name, kind, required: true, help, alternative: None }
+        ParamDoc { name, kind, required: true, help, alternative: None, type_name: None, unit: None }
     }
 
     /// An optional parameter.
     pub const fn optional(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        ParamDoc { name, kind, required: false, help, alternative: None }
+        ParamDoc { name, kind, required: false, help, alternative: None, type_name: None, unit: None }
+    }
+
+    /// The parameter with the kind's **own name** on it.
+    ///
+    /// The shape is unchanged: this says what the number **is**, and the
+    /// shape says what it looks like.
+    pub const fn with_type_name(mut self, type_name: Option<&'static str>) -> Self {
+        self.type_name = type_name;
+        self
+    }
+
+    /// The parameter with the **unit** on it.
+    pub const fn with_unit(mut self, unit: Option<&'static str>) -> Self {
+        self.unit = unit;
+        self
     }
 
     /// A parameter with a second spelling.
@@ -218,7 +241,15 @@ impl ParamDoc {
         help: &'static str,
         alternative: &'static str,
     ) -> Self {
-        ParamDoc { name, kind, required: false, help, alternative: Some(alternative) }
+        ParamDoc {
+            name,
+            kind,
+            required: false,
+            help,
+            alternative: Some(alternative),
+            type_name: None,
+            unit: None,
+        }
     }
 
     /// Whether a person has to fill this in.

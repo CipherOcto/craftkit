@@ -367,6 +367,16 @@ fn schema_of(params: &[craftkit_sdk::ParamDoc]) -> Json {
         if !description.is_empty() {
             schema["description"] = Json::String(description.to_string());
         }
+        // A kind that is a plugin's own carries its **name** and its
+        // **unit**: `title` is the name a schema gives a thing, and the
+        // unit says what the number means. The type is unchanged: a
+        // length is a number, and the schema says number.
+        if let Some(type_name) = param.type_name {
+            schema["title"] = Json::String(type_name.to_string());
+        }
+        if let Some(unit) = param.unit {
+            schema["unit"] = Json::String(unit.to_string());
+        }
         properties.insert(param.name.to_string(), schema);
         if let Some(alternative) = param.alternative {
             properties

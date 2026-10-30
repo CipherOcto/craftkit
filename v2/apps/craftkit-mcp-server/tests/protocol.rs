@@ -267,3 +267,24 @@ fn the_agent_can_answer_the_question() {
     let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
     assert!(text.contains("why?"), "{answer}");
 }
+
+/// A **typed** parameter says what it is: the tool's schema carries the
+/// kind's own name and its unit, so that an agent is told what the
+/// number means and not only what shape it has.
+#[test]
+fn a_typed_parameter_says_its_name_and_its_unit() {
+    let mut server = server();
+    let answer = server
+        .handle(&json!({ "jsonrpc": "2.0", "id": 20, "method": "tools/list" }))
+        .expect("the list is answered");
+    let tools = answer["result"]["tools"].as_array().expect("there are tools");
+    let tool = tools
+        .iter()
+        .find(|tool| tool["name"] == json!("craftkit_numeric_length_add"))
+        .expect("the tool is there");
+    let schema = &tool["inputSchema"];
+    let value = &schema["properties"]["value"];
+    assert_eq!(value["type"], json!("number"), "the shape is a number: {value}");
+    assert_eq!(value["title"], json!("length"), "and the name says what it is: {value}");
+    assert_eq!(value["unit"], json!("mm"), "and the unit says what the number means: {value}");
+}
