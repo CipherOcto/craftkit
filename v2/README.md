@@ -6229,9 +6229,9 @@ So the question this arc asked was not "how do we use the bundler" but
   (§67) is a raster that the page does not draw.
 - **The page is not a shell.** It has one input and one answer: no
   editing, no history, no completion — exactly as at the prompt (§75).
-- **Nothing runs this in CI.** v2 has no CI job of its own, so the
-  module is built by hand and the check is run by hand. That is the
-  last thing to come, and it is a job of its own.
+- **Nothing runs this in CI.** v2 had no CI job of its own, so the
+  module was built by hand and the check was run by hand. That is now
+  a workflow of its own (§83).
 
 ---
 
@@ -6473,3 +6473,55 @@ works.
   wants to tell the host something cannot.
 - **The events are not timed.** The head has a time, and the host
   writes zero into it.
+
+---
+
+## 83. The tree's own continuous integration
+
+v2 is **excluded from the outer workspace**: it is a spike, it has its
+own rules, and it has its own gates. So it had no CI at all — every
+check in this README was run by hand, on one machine, by whoever was
+working.
+
+### What was built
+
+- **A workflow of its own** (`.github/workflows/v2.yml`), running the
+  v2 tree's house: the formatter, the linter, the tests, the browser
+  door's module built for the browser, and the **outer** gate that
+  reads v2's files.
+- **The job is skipped when there is no v2.** On `main` — where the
+  tree is the owner's own — there is no `v2/`, and the job says so
+  instead of running on a tree that is not there.
+- **The lock file is honoured.** Every cargo command runs `--locked`,
+  and the warnings are errors, exactly as the outer tree's own
+  workflow does it.
+
+### What the port found
+
+- **A tree that is not in the workspace cannot be in the workflow
+  either.** GitHub reads the workflows from the repository's own
+  root, so a workflow *inside* v2 would never run. The v2 CI is
+  therefore a file in the outer tree that **skips itself** when the
+  tree is not there — the same shape as the outer tree's own `wasm`
+  phase, which skips with a reason when its tool is missing.
+- **The outer gate reads v2, so the outer gate belongs in v2's CI.**
+  The gate that checks the public bounds v2 names, and the deny
+  attributes, and the layering, lives in the outer tree. So the v2
+  workflow runs it — the owner's gate, run on the owner's machine,
+  about the owner's tree.
+
+### What it cost
+
+- one workflow file, and no new code.
+
+### What it does not settle
+
+- **The workflow has never run.** It is written against the same
+  actions the outer tree's own workflow uses, and it is **not** the
+  outer tree's workflow: the outer tree's gates run on `main`, and
+  this one runs wherever v2 is.
+- **One machine.** The outer tree's workflow runs its gates on three
+  systems; this one runs on one. v2 has no platform-specific code
+  except the shared-library door, which is `unix`-only by name.
+- **The mutation suite is not here.** The outer tree's instrument runs
+  against the outer tree's gates, and v2's gates are not in it.
