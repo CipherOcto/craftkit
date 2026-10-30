@@ -1,0 +1,607 @@
+//! `craftkit-clap` — the **CLAP host**: a program that opens a CLAP
+//! plugin and asks it what it holds.
+//!
+//! # Why it is here
+//!
+//! A CLAP plugin is a **shared library** written in C, and the host
+//! cannot know what is inside it. The two sides agree on a **binary
+//! contract** — the shapes in [`craftkit_clap_abi`] — and the host
+//! finds the plugin's entry **by name**.
+//!
+//! This crate is the host side of that contract: it opens the library,
+//! finds `clap_entry`, checks the version, initialises the plugin, asks
+//! for the factory, and reads the descriptors out of it.
+//!
+//! # Why it is `unsafe`
+//!
+//! Opening a library, reading a symbol out of it and calling through
+//! pointers the plugin wrote is `unsafe` by definition: the host is
+//! reading memory it did not write, at addresses it did not choose. So
+//! this crate is on v2's **list** of exceptions — the fourth entry —
+//! and it is held to the same rules as the others:
+//!
+//! - it is **one crate**, and it does one thing;
+//! - the crate root says `deny(unsafe_code)` and **not** `forbid`, so
+//!   the exception is explicit;
+//! - **every** `unsafe` in it is inside **one module** — `foreign` —
+//!   that carries **one** `allow(unsafe_code)`, and every unsafe block
+//!   in it says, in a comment, why it is sound;
+//! - a **gate** in the tree scans every crate and refuses `unsafe`
+//!   anywhere else, so the list of exceptions is one list and it is
+//!   short.
+//!
+//! # The one thing that is different from craftkit's own door
+//!
+//! Craftkit's own door finds a **function** and calls it. CLAP exports
+//! a **data** symbol: `clap_entry` is a *variable* whose value is the
+//! address of the entry struct. So the host reads the pointer **at**
+//! the symbol's address, and then reads the struct **at** that
+//! pointer. Two reads, one address each, and both of them are the
+//! host's unsafe.
+//!
+//! # What it does **not** do
+//!
+//! It does not make a plugin and it does not run audio. It reads what
+//! a plugin says about itself: the version, and the descriptors. The
+//! making of a plugin needs a **host** to hand over — a structure this
+//! kit does not have yet — and that is a larger piece of work, in the
+//! same way that the audio path is.
+//!
+//! # The bounds
+//!
+//! A plugin is code the host did not write, so the host reads every
+//! string **bounded**: a string longer than `MAX_STRING_BYTES` is
+//! refused, and a feature list longer than `MAX_FEATURES` is refused.
+//! Both are named in this tree's README, because a bound a reader
+//! cannot look up is a bound a reader cannot check.
+
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+// **Not** `forbid`. There is an exception below, it is marked, and the
+// gate in `craftkit-alloc` holds the list: it reads the whole workspace
+// and refuses `unsafe` in any crate that is not on it.
+#![deny(unsafe_code)]
+
+use std::cell::Cell;
+use std::marker::PhantomData;
+
+use craftkit_clap_abi::{ClapPluginEntry, ClapPluginFactory, ClapVersion};
+
+/// What went wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClapError {
+    /// What happened, in words.
+    pub message: String,
+}
+
+impl ClapError {
+    /// A failure with a message.
+    fn new(message: impl Into<String>) -> ClapError {
+        ClapError { message: message.into() }
+    }
+}
+
+impl std::fmt::Display for ClapError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ClapError {}
+
+/// The result of talking to a plugin.
+pub type Result<T> = std::result::Result<T, ClapError>;
+
+/// A **CLAP plugin**, open.
+///
+/// The plugin is initialised at most once, and it is deinitialised
+/// when this is dropped — before the library is closed, because a
+/// plugin's `deinit` runs code that is still in the library.
+#[derive(Debug)]
+pub struct ClapPlugin {
+    /// The handle the operating system gave us.
+    handle: usize,
+    /// The plugin's entry, inside the library.
+    entry: *const ClapPluginEntry,
+    /// The path the library was opened with: the plugin's `init` wants
+    /// it, because a plugin may look beside itself for its own files.
+    path: String,
+    /// Whether the plugin has been initialised.
+    initialised: Cell<bool>,
+}
+
+impl ClapPlugin {
+    /// Open a CLAP plugin.
+    ///
+    /// The path is the library's own path: a file on disk, or a name
+    /// the loader searches for. The plugin's version is checked before
+    /// anything in it is called — a plugin this host does not
+    /// understand is refused, not used.
+    pub fn open(path: &str) -> Result<ClapPlugin> {
+        let handle = foreign::open(path).map_err(ClapError::new)?;
+        let entry = match foreign::entry(handle) {
+            Ok(entry) => entry,
+            Err(error) => {
+                // The library is open and nothing else will be done with
+                // it, so it is closed here: a library that is opened and
+                // then forgotten is a library that is never unloaded.
+                foreign::close(handle);
+                return Err(ClapError::new(error));
+            }
+        };
+        let version = foreign::version(entry);
+        if !version.is_compatible_with(ClapVersion::CURRENT) {
+            foreign::close(handle);
+            return Err(ClapError::new(format!(
+                "the plugin speaks version {}.{}.{} and this host speaks version {}.{}.{}",
+                version.major,
+                version.minor,
+                version.revision,
+                ClapVersion::CURRENT.major,
+                ClapVersion::CURRENT.minor,
+                ClapVersion::CURRENT.revision
+            )));
+        }
+        Ok(ClapPlugin { handle, entry, path: path.to_string(), initialised: Cell::new(false) })
+    }
+
+    /// The version the plugin speaks.
+    pub fn version(&self) -> ClapVersion {
+        foreign::version(self.entry)
+    }
+
+    /// The path the plugin was opened with.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// Initialise the plugin.
+    ///
+    /// The format asks the host to call `init` once, with the plugin's
+    /// own path, before anything else is asked of it. Calling it twice
+    /// is refused: the format does not say what happens then, and a
+    /// host that guesses is a host that breaks somebody's plugin.
+    pub fn init(&self) -> Result<()> {
+        if self.initialised.get() {
+            return Err(ClapError::new("the plugin is already initialised"));
+        }
+        foreign::init(self.entry, &self.path).map_err(ClapError::new)?;
+        self.initialised.set(true);
+        Ok(())
+    }
+
+    /// The **plugin factory**: the thing that holds the plugins.
+    ///
+    /// The plugin must be initialised first: the format says the
+    /// factory is asked for after `init`, and the host keeps that
+    /// order rather than hoping the plugin does not care.
+    pub fn factory(&self) -> Result<ClapFactory<'_>> {
+        if !self.initialised.get() {
+            return Err(ClapError::new("the plugin has not been initialised"));
+        }
+        let factory = foreign::factory(self.entry).map_err(ClapError::new)?;
+        Ok(ClapFactory { factory, _plugin: PhantomData })
+    }
+}
+
+impl Drop for ClapPlugin {
+    fn drop(&mut self) {
+        if self.initialised.get() {
+            foreign::deinit(self.entry);
+        }
+        foreign::close(self.handle);
+    }
+}
+
+/// The **factory** of a plugin: the plugins it holds.
+///
+/// It cannot outlive the plugin it came from: the factory lives inside
+/// the library, and the library is closed when the plugin is dropped.
+#[derive(Debug)]
+pub struct ClapFactory<'a> {
+    /// The factory, inside the library.
+    factory: *const ClapPluginFactory,
+    /// The plugin it is in, so that it cannot outlive it.
+    _plugin: PhantomData<&'a ClapPlugin>,
+}
+
+impl ClapFactory<'_> {
+    /// How many plugins the factory holds.
+    pub fn count(&self) -> u32 {
+        foreign::factory_count(self.factory)
+    }
+
+    /// The descriptor of the plugin at that index.
+    ///
+    /// Everything in a descriptor is **copied out** at once: the
+    /// strings belong to the plugin, and a string read later may be
+    /// gone by then.
+    pub fn descriptor(&self, index: u32) -> Result<ClapDescriptor> {
+        let descriptor = foreign::factory_descriptor(self.factory, index).map_err(ClapError::new)?;
+        foreign::descriptor(descriptor).map_err(ClapError::new)
+    }
+}
+
+/// What a plugin says about itself.
+///
+/// Every field is **owned**: the strings were copied out of the plugin
+/// when the descriptor was read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClapDescriptor {
+    /// The plugin's id: the name a host asks for by.
+    pub id: String,
+    /// The plugin's name, for a person.
+    pub name: String,
+    /// Who made it.
+    pub vendor: String,
+    /// Where it lives.
+    pub url: String,
+    /// Its manual.
+    pub manual_url: String,
+    /// Where to ask for help.
+    pub support_url: String,
+    /// Its own version.
+    pub version: String,
+    /// A line about it.
+    pub description: String,
+    /// The features it has.
+    pub features: Vec<String>,
+}
+
+/// The **foreign** part: the only `unsafe` in this crate.
+///
+/// Everything the operating system and the plugin's own memory go
+/// through is here, behind **one** `allow(unsafe_code)`. The rest of
+/// the crate is safe Rust that calls into this module.
+///
+/// The rules this module keeps:
+///
+/// - a name that goes to the operating system is a **C string**: no
+///   zero byte in it, and it is freed by nobody;
+/// - a handle that comes back is either null (which is an error) or a
+///   handle, and it is closed exactly once, by the drop;
+/// - a string that comes back from the plugin is **copied out** at
+///   once, and it is read **bounded**: the plugin decides how long it
+///   is, and the host decides how much it will read.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+mod foreign {
+    use std::ffi::{CString, c_char, c_void};
+
+    use craftkit_clap_abi::{ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapVersion};
+
+    use super::ClapDescriptor;
+
+    /// Resolve the library completely before it is used.
+    pub const RTLD_NOW: i32 = 2;
+    /// Do not offer this library's symbols to anything else.
+    pub const RTLD_LOCAL: i32 = 0;
+
+    /// How long a string from the plugin may be, in bytes.
+    const MAX_STRING_BYTES: usize = 64 * 1024;
+    /// How many features a plugin may list.
+    const MAX_FEATURES: usize = 256;
+
+    // The loader's doors. They are `unsafe` to call because the
+    // operating system trusts the caller: a name that is not a string,
+    // or a handle that is not a handle, is a crash.
+    unsafe extern "C" {
+        /// Open a shared library.
+        fn dlopen(filename: *const c_char, flags: i32) -> *mut c_void;
+        /// Find a symbol in an open library.
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+        /// Close an open library.
+        fn dlclose(handle: *mut c_void) -> i32;
+        /// The last error the loader had.
+        fn dlerror() -> *mut c_char;
+    }
+
+    /// Open a shared library and give back its handle.
+    pub fn open(path: &str) -> Result<usize, String> {
+        let name = match CString::new(path) {
+            Ok(name) => name,
+            Err(_) => return Err(format!("the path `{path}` has a zero byte in it")),
+        };
+        // SAFETY: the name is a valid C string with no zero byte in it,
+        // and the flags are `RTLD_NOW` and `RTLD_LOCAL`: the library is
+        // resolved completely before it is used, and its symbols are not
+        // offered to anything else that is loaded.
+        let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_LOCAL) };
+        if handle.is_null() {
+            return Err(format!("the library `{path}` did not open: {}", last_error()));
+        }
+        Ok(handle as usize)
+    }
+
+    /// Close a library.
+    pub fn close(handle: usize) {
+        // SAFETY: the handle came from `dlopen` and has not been
+        // closed, and this is called once, from the drop.
+        unsafe { dlclose(handle as *mut c_void) };
+    }
+
+    /// The plugin's **entry**, found by name.
+    ///
+    /// The symbol is a **variable**: the address the loader gives back
+    /// is the address of a pointer, and the pointer is the entry.
+    pub fn entry(handle: usize) -> Result<*const ClapPluginEntry, String> {
+        let wanted = match CString::new(craftkit_clap_abi::ENTRY_SYMBOL) {
+            Ok(wanted) => wanted,
+            Err(_) => return Err("the entry symbol's name is not a C string".to_string()),
+        };
+        // SAFETY: the handle is open, and the name is a valid C string
+        // with no zero byte in it. The result is a pointer into the
+        // library, which stays open as long as the handle does.
+        let symbol = unsafe { dlsym(handle as *mut c_void, wanted.as_ptr()) };
+        if symbol.is_null() {
+            return Err(format!(
+                "the library has no `{}`: {}",
+                craftkit_clap_abi::ENTRY_SYMBOL,
+                last_error()
+            ));
+        }
+        // SAFETY: the symbol is the plugin's entry point, and the
+        // format says it is a variable whose value is the address of
+        // the entry struct. The pointer is read once, and the struct it
+        // points at is only read after the version has been checked.
+        let entry = unsafe { std::ptr::read_unaligned(symbol as *const *const ClapPluginEntry) };
+        if entry.is_null() {
+            return Err("the plugin's entry is not there".to_string());
+        }
+        Ok(entry)
+    }
+
+    /// The version the plugin says it speaks.
+    pub fn version(entry: *const ClapPluginEntry) -> ClapVersion {
+        // SAFETY: the entry is the plugin's own struct, it is inside a
+        // library that is open, and the version is the first field.
+        unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*entry).clap_version)) }
+    }
+
+    /// Initialise the plugin.
+    pub fn init(entry: *const ClapPluginEntry, path: &str) -> Result<(), String> {
+        // SAFETY: the entry is the plugin's own struct, inside a library
+        // that is open.
+        let init = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*entry).init)) };
+        let Some(init) = init else {
+            return Err("the plugin has no `init`".to_string());
+        };
+        let path = match CString::new(path) {
+            Ok(path) => path,
+            Err(_) => return Err("the plugin's path has a zero byte in it".to_string()),
+        };
+        // The plugin's own function, called with the plugin's own
+        // path, as the format says. It returns whether it is ready.
+        if init(path.as_ptr()) { Ok(()) } else { Err("the plugin refused to initialise".to_string()) }
+    }
+
+    /// Deinitialise the plugin.
+    pub fn deinit(entry: *const ClapPluginEntry) {
+        // SAFETY: the entry is the plugin's own struct, inside a library
+        // that is open, and this is called once, from the drop.
+        let deinit = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*entry).deinit)) };
+        let Some(deinit) = deinit else { return };
+        // The plugin's own function, called once, as the format says.
+        deinit();
+    }
+
+    /// The **plugin factory**, asked for by its id.
+    pub fn factory(entry: *const ClapPluginEntry) -> Result<*const ClapPluginFactory, String> {
+        // SAFETY: the entry is the plugin's own struct, inside a library
+        // that is open.
+        let get_factory = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*entry).get_factory)) };
+        let Some(get_factory) = get_factory else {
+            return Err("the plugin has no `get_factory`".to_string());
+        };
+        let id = match CString::new(craftkit_clap_abi::PLUGIN_FACTORY_ID) {
+            Ok(id) => id,
+            Err(_) => return Err("the factory's id is not a C string".to_string()),
+        };
+        // The plugin's own function, called with the id of the factory
+        // the format defines. The answer is the factory's own struct,
+        // and it is only read while the library is open.
+        let factory = get_factory(id.as_ptr());
+        if factory.is_null() {
+            return Err(format!("the plugin has no factory `{}`", craftkit_clap_abi::PLUGIN_FACTORY_ID));
+        }
+        Ok(factory as *const ClapPluginFactory)
+    }
+
+    /// How many plugins the factory holds.
+    pub fn factory_count(factory: *const ClapPluginFactory) -> u32 {
+        // SAFETY: the factory is the plugin's own struct, inside a
+        // library that is open.
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*factory).get_plugin_count)) };
+        let Some(count) = count else { return 0 };
+        // The plugin's own function, called with the factory back, as
+        // the format says.
+        count(factory)
+    }
+
+    /// The descriptor of the plugin at that index.
+    pub fn factory_descriptor(
+        factory: *const ClapPluginFactory,
+        index: u32,
+    ) -> Result<*const ClapPluginDescriptor, String> {
+        // SAFETY: the factory is the plugin's own struct, inside a
+        // library that is open.
+        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*factory).get_plugin_descriptor)) };
+        let Some(get) = get else {
+            return Err("the factory has no `get_plugin_descriptor`".to_string());
+        };
+        // The plugin's own function, called with the factory back and
+        // an index, as the format says. The answer is the plugin's own
+        // descriptor.
+        let descriptor = get(factory, index);
+        if descriptor.is_null() {
+            return Err(format!("the factory has no plugin at {index}"));
+        }
+        Ok(descriptor)
+    }
+
+    /// The descriptor, **copied out**.
+    pub fn descriptor(descriptor: *const ClapPluginDescriptor) -> Result<ClapDescriptor, String> {
+        // SAFETY: the descriptor is the plugin's own struct, inside a
+        // library that is open. Every field is read once, and every
+        // string is copied out at once.
+        let unsafe_fields = unsafe {
+            (
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).id)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).name)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).vendor)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).url)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).manual_url)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).support_url)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).version)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).description)),
+                std::ptr::read_unaligned(std::ptr::addr_of!((*descriptor).features)),
+            )
+        };
+        Ok(ClapDescriptor {
+            id: read_string(unsafe_fields.0)?,
+            name: read_string(unsafe_fields.1)?,
+            vendor: read_string(unsafe_fields.2)?,
+            url: read_string(unsafe_fields.3)?,
+            manual_url: read_string(unsafe_fields.4)?,
+            support_url: read_string(unsafe_fields.5)?,
+            version: read_string(unsafe_fields.6)?,
+            description: read_string(unsafe_fields.7)?,
+            features: read_features(unsafe_fields.8)?,
+        })
+    }
+
+    /// A C string the plugin gave us, as a Rust string.
+    ///
+    /// The read is **bounded**: the plugin says how long the string is,
+    /// and the host says how much of it it will read. A string with no
+    /// zero byte in the first `MAX_STRING_BYTES` is refused rather
+    /// than read on and on.
+    fn read_string(pointer: *const c_char) -> Result<String, String> {
+        if pointer.is_null() {
+            // The format allows a field to be absent, and an absent
+            // field is an empty one.
+            return Ok(String::new());
+        }
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut at = pointer;
+        loop {
+            if bytes.len() >= MAX_STRING_BYTES {
+                return Err("the string is longer than the host reads".to_string());
+            }
+            // SAFETY: the pointer is the plugin's own C string, and a
+            // byte is read at a time: the read stops at the zero byte
+            // that ends the string, or at the bound.
+            let byte = unsafe { std::ptr::read_volatile(at as *const u8) };
+            if byte == 0 {
+                break;
+            }
+            bytes.push(byte);
+            // SAFETY: the byte just read was not the zero byte, so the
+            // next one is inside the string the plugin owns.
+            at = unsafe { at.add(1) };
+        }
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    /// The **features**: a list of C strings, ending at a null.
+    fn read_features(pointer: *const *const c_char) -> Result<Vec<String>, String> {
+        let mut features: Vec<String> = Vec::new();
+        if pointer.is_null() {
+            return Ok(features);
+        }
+        let mut at = pointer;
+        for _ in 0..MAX_FEATURES {
+            // SAFETY: the pointer is the plugin's own array, and one
+            // entry is read at a time.
+            let item = unsafe { std::ptr::read_volatile(at) };
+            if item.is_null() {
+                return Ok(features);
+            }
+            features.push(read_string(item)?);
+            // SAFETY: the entry just read was not the null that ends
+            // the list, so the next one is inside the array the plugin
+            // owns.
+            at = unsafe { at.add(1) };
+        }
+        Err("the plugin lists more features than the host reads".to_string())
+    }
+
+    /// The last error the loader had.
+    fn last_error() -> String {
+        // SAFETY: `dlerror` returns either a pointer to a message or
+        // null, and the message belongs to the loader.
+        let pointer = unsafe { dlerror() };
+        if pointer.is_null() {
+            return "the loader said nothing".to_string();
+        }
+        // SAFETY: the loader's message is a C string, and it is copied
+        // out here, so the copy does not point into the loader's memory.
+        unsafe { std::ffi::CStr::from_ptr(pointer) }.to_string_lossy().into_owned()
+    }
+}
+
+/// The **foreign** part, where there is no foreign part.
+///
+/// There is no shared library to open on this target, so every door
+/// here refuses — and it says so, rather than pretending to work.
+#[cfg(not(unix))]
+mod foreign {
+    use craftkit_clap_abi::{ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapVersion};
+
+    use super::ClapDescriptor;
+
+    /// Open a shared library: not here.
+    pub fn open(path: &str) -> Result<usize, String> {
+        Err(format!("a shared library cannot be opened on this target: `{path}`"))
+    }
+
+    /// Close a shared library: nothing was opened.
+    pub fn close(_handle: usize) {}
+
+    /// The plugin's entry: there is no library to look in.
+    pub fn entry(_handle: usize) -> Result<*const ClapPluginEntry, String> {
+        Err("there is no shared library on this target".to_string())
+    }
+
+    /// The plugin's version: there is no plugin.
+    pub fn version(_entry: *const ClapPluginEntry) -> ClapVersion {
+        ClapVersion::CURRENT
+    }
+
+    /// Initialise the plugin: there is no plugin.
+    pub fn init(_entry: *const ClapPluginEntry, _path: &str) -> Result<(), String> {
+        Err("there is no plugin on this target".to_string())
+    }
+
+    /// Deinitialise the plugin: there is no plugin.
+    pub fn deinit(_entry: *const ClapPluginEntry) {}
+
+    /// The factory: there is no plugin.
+    pub fn factory(_entry: *const ClapPluginEntry) -> Result<*const ClapPluginFactory, String> {
+        Err("there is no plugin on this target".to_string())
+    }
+
+    /// How many plugins: none.
+    pub fn factory_count(_factory: *const ClapPluginFactory) -> u32 {
+        0
+    }
+
+    /// The descriptor of a plugin: there is none.
+    pub fn factory_descriptor(
+        _factory: *const ClapPluginFactory,
+        _index: u32,
+    ) -> Result<*const ClapPluginDescriptor, String> {
+        Err("there is no plugin on this target".to_string())
+    }
+
+    /// The descriptor, copied out: there is none.
+    pub fn descriptor(_descriptor: *const ClapPluginDescriptor) -> Result<ClapDescriptor, String> {
+        Err("there is no plugin on this target".to_string())
+    }
+}

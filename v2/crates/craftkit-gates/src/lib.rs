@@ -79,6 +79,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-alloc", 0),
     ("craftkit-derive", 0),
     ("craftkit-ffi-abi", 0),
+    // The **CLAP ABI**: the shapes a CLAP plugin is made of. It is here
+    // for the same reason the other ABI is: a binary contract that two
+    // sides share is data, and data belongs at the bottom.
+    ("craftkit-clap-abi", 0),
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
     // The payload reader: a bounded reading of the values a document
@@ -97,6 +101,15 @@ pub const LAYERS: &[(&str, u8)] = &[
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),
+    // The **CLAP host**: the same door, in another format's language.
+    // A CLAP plugin's entry is a **data** symbol, so this door reads a
+    // pointer where the other one calls a function. One `unsafe`
+    // module, and it is named.
+    ("craftkit-clap", 1),
+    // A **reference CLAP plugin**: a shared library that exports the
+    // entry the host looks for. It is a fixture, and it is here because
+    // a host that has never opened a real plugin has not been tested.
+    ("craftkit-clap-fixture", 1),
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),

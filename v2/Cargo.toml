@@ -60,6 +60,9 @@ craftkit-numeric = { path = "crates/craftkit-numeric", version = "0.2.0" }
 craftkit-ffi = { path = "crates/craftkit-ffi", version = "0.2.0" }
 # The **contract** the door and the plugin agree on. No dependencies.
 craftkit-ffi-abi = { path = "crates/craftkit-ffi-abi", version = "0.2.0" }
+# The **CLAP ABI**: the shapes a CLAP plugin is made of. No dependencies:
+# a binary contract is a set of shapes, and a set of shapes is data.
+craftkit-clap-abi = { path = "crates/craftkit-clap-abi", version = "0.2.0" }
 
 serde_json = "1"
 inventory = "0.3"

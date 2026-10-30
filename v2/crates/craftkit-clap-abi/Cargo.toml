@@ -1,0 +1,10 @@
+[package]
+name = "craftkit-clap-abi"
+description = "The CLAP ABI: the shapes a CLAP plugin is made of."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. These are shapes, and a shape is data.

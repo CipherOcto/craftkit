@@ -64,6 +64,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-clap"
+version = "0.2.0"
+dependencies = [
+ "craftkit-clap-abi",
+ "craftkit-clap-fixture",
+]
+
+[[package]]
+name = "craftkit-clap-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-clap-fixture"
+version = "0.2.0"
+dependencies = [
+ "craftkit-clap-abi",
+]
+
+[[package]]
 name = "craftkit-control"
 version = "0.2.0"
 dependencies = [

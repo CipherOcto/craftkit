@@ -15,7 +15,7 @@
 //! - the only `unsafe impl` in the tree is the counting allocator's.
 //!
 //! The list is one list, here, and it is the whole of the exceptions.
-//! A fourth exception is a line in this file and a reason in it.
+//! A sixth exception is a line in this file and a reason in it.
 
 use std::path::{Path, PathBuf};
 
@@ -27,6 +27,8 @@ const ALLOWED: &[(&str, &str)] = &[
     ("craftkit-alloc", "the counting allocator: a global allocator is unsafe by definition"),
     ("craftkit-ffi", "the plugin loader: opening a library and calling into it"),
     ("craftkit-plugin-shared", "a shared library's entry point, which is found by name"),
+    ("craftkit-clap", "the CLAP host: opening a plugin and reading the entry it exports"),
+    ("craftkit-clap-fixture", "a reference CLAP plugin: the entry point is a data symbol, found by name"),
 ];
 
 /// The root of the workspace.
