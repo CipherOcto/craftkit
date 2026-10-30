@@ -1,0 +1,13 @@
+[package]
+name = "craftkit-payload"
+description = "Reading a node's payload without trusting it: a bounded reader for the values a document carries. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The JSON, and nothing else. The reader is arithmetic over a value it
+# was given, and it knows nothing about a document: the SDK is not
+# needed, and a plugin that has a payload has the value.
+serde_json = { workspace = true }

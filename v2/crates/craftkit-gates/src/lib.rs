@@ -75,6 +75,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-ffi-abi", 0),
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
+    // The payload reader: a bounded reading of the values a document
+    // carries. It knows nothing about the SDK and nothing about a
+    // document: it reads a JSON value within limits.
+    ("craftkit-payload", 0),
     ("craftkit-sound-time", 0),
     // The line breaker: arithmetic over the widths a caller brings. It
     // knows nothing about a document, a font or the kit.

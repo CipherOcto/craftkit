@@ -104,6 +104,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-payload"
+version = "0.2.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "craftkit-plugin-art"
 version = "0.2.0"
 dependencies = [
@@ -214,6 +221,7 @@ name = "craftkit-plugin-text"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-payload",
  "craftkit-sdk",
  "craftkit-text-layout",
 ]

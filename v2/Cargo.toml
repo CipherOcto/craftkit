@@ -18,6 +18,11 @@ craftkit-vector-geom = { path = "crates/craftkit-vector-geom", version = "0.2.0"
 # The time model of the sound battery: a **library**, not a plugin. It
 # contributes nothing to the registry and the linker does not wire it in.
 craftkit-sound-time = { path = "crates/craftkit-sound-time", version = "0.2.0" }
+# The **payload reader**: a bounded reader for the values a document
+# carries. A **library**, not a plugin — the core bounds a command's
+# parameters and says nothing about a payload, so the reading of one is
+# a plugin's business and the mechanism is shared.
+craftkit-payload = { path = "crates/craftkit-payload", version = "0.2.0" }
 # The line breaker: the box/glue/penalty model, and the two breakers. A
 # **library**, not a plugin. It contributes nothing to the registry and
 # the linker does not wire it in.
