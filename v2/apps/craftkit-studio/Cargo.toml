@@ -58,6 +58,10 @@ craftkit-plugin-layout = { path = "../../crates/craftkit-plugin-layout", optiona
 # and an angle in radians. Off by default as well: a program that wants
 # a unit says so.
 craftkit-plugin-numeric = { path = "../../crates/craftkit-plugin-numeric", optional = true }
+# The **twelfth battery**: the **text** — a paragraph, broken into lines.
+# Off by default as well: a program that wants a typeset paragraph says
+# so.
+craftkit-plugin-text = { path = "../../crates/craftkit-plugin-text", optional = true }
 
 [features]
 default = []
@@ -93,6 +97,9 @@ layout = ["dep:craftkit-plugin-layout"]
 # The numeric battery. Off by default: a program that wants a typed
 # value with a unit says so.
 numeric = ["dep:craftkit-plugin-numeric"]
+# The text battery. Off by default: a program that wants a paragraph
+# laid out into lines says so.
+text = ["dep:craftkit-plugin-text"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes

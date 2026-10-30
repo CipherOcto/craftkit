@@ -1,0 +1,14 @@
+[package]
+name = "craftkit-plugin-text"
+description = "A plugin that lays a paragraph out into lines: the text battery."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK and the macro. And a **library**: the line breaking is not the
+# plugin's, and the linker does not wire a library in.
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+craftkit-text-layout = { path = "../craftkit-text-layout", version = "0.2.0" }

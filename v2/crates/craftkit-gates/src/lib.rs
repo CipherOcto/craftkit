@@ -76,6 +76,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
     ("craftkit-sound-time", 0),
+    // The line breaker: arithmetic over the widths a caller brings. It
+    // knows nothing about a document, a font or the kit.
+    ("craftkit-text-layout", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),
@@ -106,6 +109,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-plugin-pdf", 4),
     ("craftkit-plugin-prose", 4),
     ("craftkit-plugin-shapes", 4),
+    ("craftkit-plugin-text", 4),
     ("craftkit-plugin-shared", 4),
     ("craftkit-plugin-sound", 4),
     ("craftkit-plugin-vector", 4),
