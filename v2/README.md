@@ -867,6 +867,10 @@ different commands with one id.
   model of a page layout application — spreads, pages, items, layers,
   stories and assets — ported into v2's seams, and the five things it
   found (§51). It is optional, like the others.
+- `crates/craftkit-gates` — the tree's **own gate**: the deny
+  attribute, the layering, and what a plugin may depend on. It is a
+  **function** over a root, so the tests can point it at trees that are
+  broken on purpose and say that it bites (§54).
 - `crates/craftkit-numeric` — the **typed value**: a `Length` in
   millimetres and an `Angle` in radians, and the arithmetic over them. A
   **library**, not a plugin: it contributes nothing to the registry and
@@ -894,7 +898,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**525 tests.** The MCP server links **all eleven batteries** in, so the
+**540 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
@@ -979,7 +983,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 525 tests
+cargo test          # 540 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3454,12 +3458,16 @@ size of the document — measured before and after.
 
 ### And the one that is not a code gap
 
-The **mutation suite** is CI-only by the machine's rule, so no claim in
-this README has been measured by mutation. The v2 gates are: the tests,
-clippy, fmt, and the workspace-scanning gate that holds the list of
-allowed `unsafe`. The outer tree's gates do not reach into `v2/`, which
-is excluded from the outer workspace — so the outer gate is evidence
-about the outer tree and **not** about this one.
+The **code mutation** is CI-only by the machine's rule, so no claim in
+this README has been measured by it. The v2 gates are: the tests,
+clippy, fmt, the workspace-scanning gate that holds the list of allowed
+`unsafe`, and — since §54 — the tree's **own** gate, which holds the
+deny attribute, the layering and what a plugin may depend on, and is
+measured by being pointed at trees that are broken on purpose.
+
+The outer tree's gates do not reach into `v2/`, which is excluded from
+the outer workspace — so the outer gate is evidence about the outer tree
+and **not** about this one. §54 is.
 
 ---
 
@@ -3956,3 +3964,100 @@ Honesty about the rest of it:
 The last of the family's three answers that this kit had not taken. The
 family's trees make undo cheap by sharing; this kit now does the same,
 and the measurement is in the tree rather than in a comment.
+
+---
+
+## 54. The gate: the rules of this tree, checked by a program
+
+§48 said the one thing that is not a code gap: *"The mutation suite is
+CI-only by the machine's rule, so no claim in this README has been
+measured by mutation."* Underneath that sentence there was a bigger
+problem, and this section is about it.
+
+### The problem: `v2/` has rules and no gate
+
+The outer tree has gates of its own — `cargo xtask lists` checks the deny
+attribute in every crate root, and `cargo xtask layers` checks the
+layering — and **none of them reach into `v2/`**, because `v2/` is
+excluded from the outer workspace. So the rules this tree lives by were
+**rules and not gates**: they were true, and nothing said so. A rule
+that nothing checks is a habit, and a habit is gone the day somebody is
+in a hurry.
+
+So the tree needed its own gate, and it is `crates/craftkit-gates`.
+
+### The three rules
+
+1. **The deny attribute is the house one.** Every crate root carries the
+   same six lints, in the same order. The comparison ignores the
+   formatting — one line and six lines are the same six lints — but not
+   the order: a deny list that varies between crates is a deny list
+   nobody can reason about.
+2. **The layering holds.** A crate may depend only on crates in
+   **strictly lower** layers, and the table of layers is in the gate
+   itself: a crate that is not in it is a finding, so a new crate has to
+   be given a layer rather than quietly floating. The apps are exempt —
+   they depend on everything, by design, and every real layering
+   mistake has been made in a library.
+3. **A plugin is a plugin.** A plugin may not depend on an application,
+   and may not depend on another plugin. The seam is the SDK, the macro
+   and the libraries, and nothing else.
+
+### What it found the day it was written
+
+The gate found three real things on its first run, and one of them was
+about the gate itself:
+
+- **The two binary-only applications had no deny attribute at all.**
+  `craftkit-hello-server` and `craftkit-mcp-server` are packages with no
+  library, so their root is `src/main.rs`, and nothing had put the
+  attribute there. Production code, unprotected.
+- **The gates crate was not in the layering table** — because it had
+  just been written and the table is written by hand, which is exactly
+  what the rule is for.
+- **A dev dependency is a testing arrangement, and the rule had to say
+  so.** The door's loader tests need a shared library to open, and that
+  library is a plugin; the plugin's own tests need the shared library to
+  be built first. Neither ships anything, so a **dev** dependency is
+  exempt from the layering and from the plugin rule — and the gate now
+  says that in its own words rather than leaving it to be guessed.
+
+### The measurement
+
+A gate that is only ever run on a good tree has never been shown to
+**bite**. So the gate is a **function** — `check(root) -> Vec<Finding>` —
+and the tests point it at trees that are broken **on purpose**:
+
+| the broken tree | what the gate said |
+|---|---|
+| a deny attribute with fewer lints | the house lints, and where |
+| a crate with no deny attribute | no deny attribute |
+| a crate that depends on a **higher** layer | which crate, and which layer |
+| a crate that depends on the **same** layer | the same |
+| a plugin that depends on **another plugin** | the plugin |
+| a plugin that depends on an **application** | the application |
+| a crate that is **not in the table** | not in the layering table |
+| a plugin that depends on the SDK and a library | **nothing** — that is allowed |
+
+Eight trees broken on purpose and one that is right, and the gate says
+the right thing about every one of them. That is the mutation
+instrument, and it needed neither a copy of the tree nor a change to
+it: the broken trees are built in a temporary directory, in the test.
+
+### What it did not settle
+
+- **The code mutation is still CI-only.** The outer tree's mutation job
+  breaks the **code** and checks that the tests catch it; that is a
+  seventy-five-minute run on the runner and the machine's rule keeps it
+  there. What §54 measures is the **gates**: that each rule has teeth.
+  The two are different instruments and only one of them has been run
+  here.
+- **The table is written by hand.** That is on purpose — the outer
+  tree's table is the rule, and a table that is generated from the
+  manifests cannot catch a manifest that is wrong. But it means a new
+  crate is a two-step change: the crate, and the table.
+- **The gate reads text.** It parses the manifests and the crate roots
+  rather than asking cargo, which is what makes it fast and hermetic —
+  and what makes it a *reading* of the tree rather than the tree
+  itself. A manifest written in a form the reader does not know would
+  be read as no dependencies at all.
