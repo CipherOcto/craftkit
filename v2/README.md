@@ -948,7 +948,7 @@ different commands with one id.
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
 
-**804 tests.** The MCP server links **all twelve batteries** in, so the
+**805 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -6417,3 +6417,59 @@ plugin's controls — or automate them — needs exactly that.
 - **The host has no parameters extension of its own.** A plugin that
   asks the host to rescan its parameters gets nothing, and the format
   says that is allowed.
+
+---
+
+## 82. The event that moves a parameter
+
+The host could read a plugin's parameters (§81) and could not move
+one, because the format does not set a parameter by calling the
+plugin: it **offers an event**, and the plugin reads it while it
+works.
+
+### What was built
+
+- **The ABI crate gained the events**: the head every event has, and
+  the parameter-value event the host offers.
+- **The host's event list is a real list now.** The host keeps the
+  events it has to give, and the plugin reads them through the
+  format's own two functions: how many there are, and the one at that
+  index.
+- **A parameter is set by offering an event**, and the value reaches
+  the plugin at the next block of audio — which is exactly what the
+  format says.
+- **The reference plugin reads the events** while it works, and takes
+  the value the host offered.
+
+### What the port found
+
+- **The format's events are a list with two functions behind it**, and
+  the host's own state is what the list points at. So the count of the
+  events and the events themselves have to be **one thing with an
+  address**: a list that pointed at a slice could not say how long
+  the slice was.
+- **An event is a header and a body.** Every event begins with the
+  same head — the size, the time, the space, the type — so a list of
+  events can be read without knowing what is in it. The host does not
+  have to know the body to hand the event over, and it does not.
+- **Setting a value is not calling the plugin.** The host offers, the
+  plugin takes, and the value is there **afterwards**: the test sets
+  the gain, processes a block, and reads the parameter back. That is
+  the whole round trip, and it is the first thing in this shim that a
+  person would call working.
+
+### What it cost
+
+- two structures in the ABI crate, a list in the host, and **one
+  test**.
+
+### What it does not settle
+
+- **Only parameter values travel.** The format's events include the
+  transport, the MIDI, the notes and the parameter changes; this host
+  offers one kind and reads one kind.
+- **The plugin's own events go nowhere.** The list the plugin pushes
+  into is still empty, and the host does not read it: a plugin that
+  wants to tell the host something cannot.
+- **The events are not timed.** The head has a time, and the host
+  writes zero into it.
