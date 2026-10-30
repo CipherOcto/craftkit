@@ -7,7 +7,8 @@
 
 use std::path::PathBuf;
 
-use craftkit_clap::ClapPlugin;
+use craftkit_clap::{ClapBlock, ClapPlugin};
+use craftkit_clap_abi::ClapProcessStatus;
 
 /// The shared library the tests open.
 ///
@@ -78,6 +79,43 @@ fn the_instance_has_a_life() {
         instance.stop_processing().expect("the instance stops");
         instance.reset().expect("the instance resets");
         instance.destroy();
+    });
+}
+
+/// The audio **crosses the boundary**.
+///
+/// The reference plugin is a gain: it adds one to every sample. So the
+/// samples that come out say two things at once — that the input
+/// arrived where the plugin expected it, and that the output left
+/// where the host expected it.
+#[test]
+fn the_audio_crosses_the_boundary() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        instance.init().expect("the instance initialises");
+        instance.activate(48_000.0, 1, 512).expect("the instance activates");
+        let mut block = ClapBlock::new(2, 4);
+        block.inputs[0] = vec![0.5; 4];
+        block.inputs[1] = vec![0.25; 4];
+        let status = instance.process(4, &mut block).expect("the plugin processes");
+        assert_eq!(status, ClapProcessStatus::Continue, "the plugin processed the block");
+        assert_eq!(block.outputs[0], vec![1.5; 4], "the first channel is the first channel plus one");
+        assert_eq!(block.outputs[1], vec![1.25; 4], "and so is the second");
+    });
+}
+
+/// An instance that was never initialised does **no** audio.
+///
+/// The plugin says so, and the host believes it: a plugin that is not
+/// ready must not be asked to work.
+#[test]
+fn an_instance_that_is_not_ready_does_no_audio() {
+    with_instance!(|plugin, instance| {
+        let _ = plugin;
+        let mut block = ClapBlock::new(1, 2);
+        let status = instance.process(2, &mut block).expect("the plugin is asked");
+        assert_eq!(status, ClapProcessStatus::ContinueIfNotProcessed, "the plugin did not process the block");
+        assert_eq!(block.outputs[0], vec![0.0; 2], "and wrote nothing");
     });
 }
 

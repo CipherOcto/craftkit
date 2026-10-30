@@ -188,7 +188,9 @@ pub fn is_initialised() -> bool {
 mod exports {
     use std::ffi::{c_char, c_void};
 
-    use craftkit_clap_abi::{ClapHost, ClapPlugin, ClapPluginFactory, PLUGIN_FACTORY_ID};
+    use craftkit_clap_abi::{
+        ClapHost, ClapPlugin, ClapPluginFactory, ClapProcess, ClapProcessStatus, PLUGIN_FACTORY_ID,
+    };
 
     /// The entry point of this plugin, found by name.
     ///
@@ -292,13 +294,79 @@ mod exports {
             start_processing: Some(start_processing),
             stop_processing: Some(stop_processing),
             reset: Some(reset),
-            // The fixture does no audio: the format says a function
-            // pointer may be empty, and this one is.
-            process: None,
+            process: Some(process),
             get_extension: None,
             on_main_thread: None,
         }));
         plugin as *const c_void
+    }
+
+    /// **Process** a block of audio.
+    ///
+    /// The plugin is a **gain**: it adds one to every sample that comes
+    /// in and writes it out. That is enough to prove that the audio
+    /// crosses the boundary in both directions — the samples arrive
+    /// where the plugin expects them and leave where the host expects
+    /// them.
+    pub(super) extern "C" fn process(
+        plugin: *const ClapPlugin,
+        process: *const ClapProcess,
+    ) -> ClapProcessStatus {
+        let Some(state) = state(plugin) else { return ClapProcessStatus::ContinueIfNotProcessed };
+        if !state.initialised {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // SAFETY: the block is the host's own, and it lives for the
+        // length of the call.
+        let frames = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).frames_count)) };
+        let inputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_inputs)) };
+        let outputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_outputs)) };
+        if outputs.is_null() {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // SAFETY: the output buffer is the host's own, and it holds the
+        // addresses of its channels.
+        let output_channels = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).data32)) };
+        let output_count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).channel_count)) };
+        if output_channels.is_null() {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // SAFETY: the input buffer is the host's own, and it holds the
+        // addresses of its channels.
+        let (input_channels, input_count) = if inputs.is_null() {
+            (std::ptr::null_mut(), 0u32)
+        } else {
+            (unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).data32)) }, unsafe {
+                std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).channel_count))
+            })
+        };
+        for channel in 0..output_count as usize {
+            // SAFETY: the channel is one of the buffer's own, and the
+            // address it holds is the host's own memory.
+            let out = unsafe { *output_channels.add(channel) };
+            if out.is_null() {
+                continue;
+            }
+            let input = if input_channels.is_null() || channel as u32 >= input_count {
+                std::ptr::null()
+            } else {
+                // SAFETY: the channel is one of the buffer's own.
+                unsafe { *input_channels.add(channel) }
+            };
+            for frame in 0..frames as usize {
+                let sample = if input.is_null() {
+                    0.0
+                } else {
+                    // SAFETY: the frame is inside the block, which the
+                    // host said how long it is.
+                    unsafe { *input.add(frame) }
+                };
+                // SAFETY: the frame is inside the block, which the host
+                // said how long it is.
+                unsafe { *out.add(frame) = sample + 1.0 };
+            }
+        }
+        ClapProcessStatus::Continue
     }
 
     /// The instance is ready to work.

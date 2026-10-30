@@ -73,7 +73,8 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use craftkit_clap_abi::{
-    ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory, ClapVersion,
+    ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory, ClapProcessStatus,
+    ClapVersion,
 };
 
 /// The host's name, for a plugin that wants to say who it is to.
@@ -290,6 +291,27 @@ struct HostState {
     callback: AtomicBool,
 }
 
+/// A **block of audio**: what goes into the plugin and what comes out.
+///
+/// The channels are **planar** — one vector a channel — because that
+/// is how the family's own audio is laid out, and a host that copied
+/// the format's interleaved shape would have to un-interleave every
+/// block.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClapBlock {
+    /// The channels going in.
+    pub inputs: Vec<Vec<f32>>,
+    /// The channels coming out.
+    pub outputs: Vec<Vec<f32>>,
+}
+
+impl ClapBlock {
+    /// A block of that many frames, with that many channels each way.
+    pub fn new(channels: usize, frames: usize) -> ClapBlock {
+        ClapBlock { inputs: vec![vec![0.0; frames]; channels], outputs: vec![vec![0.0; frames]; channels] }
+    }
+}
+
 /// A **plugin instance**: a plugin that has been made.
 ///
 /// The instance is the plugin's own: it has its own state, and it is
@@ -351,6 +373,18 @@ impl ClapInstance<'_> {
         foreign::plugin_destroy(self.plugin);
     }
 
+    /// **Process** a block of audio.
+    ///
+    /// The plugin reads the input channels and writes the output ones,
+    /// and the block it is given is **planar**: one vector a channel,
+    /// the way the family's own audio is.
+    ///
+    /// The events are **empty**: this host has no transport and no
+    /// event list, and the format says a plugin may be given none.
+    pub fn process(&self, frames: u32, block: &mut ClapBlock) -> Result<ClapProcessStatus> {
+        foreign::plugin_process(self.plugin, frames, block).map_err(ClapError::new)
+    }
+
     /// What the plugin asked the host for.
     pub fn requests(&self) -> HostRequests {
         HostRequests {
@@ -410,7 +444,8 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
+        ClapAudioBuffer, ClapHost, ClapInputEvents, ClapOutputEvents, ClapPlugin as ClapPluginInstance,
+        ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapProcess, ClapProcessStatus,
         ClapVersion,
     };
 
@@ -752,6 +787,90 @@ mod foreign {
         let Some(destroy) = destroy else { return };
         // The plugin's own function, called once, as the format says.
         destroy(plugin);
+    }
+
+    /// **Process** a block of audio.
+    ///
+    /// The buffers are built here, because the plugin's table of
+    /// channels is a table of **addresses**, and the addresses have to
+    /// point at the caller's own vectors for as long as the call
+    /// lasts.
+    pub fn plugin_process(
+        plugin: *const ClapPluginInstance,
+        frames: u32,
+        block: &mut super::ClapBlock,
+    ) -> Result<ClapProcessStatus, String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let process = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).process)) };
+        let Some(process) = process else {
+            return Err("the plugin has no `process`".to_string());
+        };
+        // The channels, as addresses. The vectors they point at are
+        // the caller's, and they do not move while the call lasts.
+        let mut input_channels: Vec<*mut f32> =
+            block.inputs.iter_mut().map(|channel| channel.as_mut_ptr()).collect();
+        let mut output_channels: Vec<*mut f32> =
+            block.outputs.iter_mut().map(|channel| channel.as_mut_ptr()).collect();
+        let input_buffer = ClapAudioBuffer {
+            data32: input_channels.as_mut_ptr(),
+            data64: std::ptr::null_mut(),
+            channel_count: u32::try_from(input_channels.len()).unwrap_or(0),
+            latency: 0,
+            constant_mask: 0,
+        };
+        let mut output_buffer = ClapAudioBuffer {
+            data32: output_channels.as_mut_ptr(),
+            data64: std::ptr::null_mut(),
+            channel_count: u32::try_from(output_channels.len()).unwrap_or(0),
+            latency: 0,
+            constant_mask: 0,
+        };
+        let input_events = empty_input_events();
+        let output_events = empty_output_events();
+        let block = ClapProcess {
+            steady_time: 0,
+            frames_count: frames,
+            transport: std::ptr::null(),
+            audio_inputs: &input_buffer,
+            audio_outputs: &mut output_buffer,
+            audio_inputs_count: 1,
+            audio_outputs_count: 1,
+            in_events: &input_events,
+            out_events: &output_events,
+        };
+        // The plugin's own function, called with the instance back and
+        // the block, as the format says.
+        Ok(process(plugin, &block))
+    }
+
+    /// The **input events**: there are none.
+    fn empty_input_events() -> ClapInputEvents {
+        ClapInputEvents {
+            ctx: std::ptr::null_mut(),
+            size: Some(input_events_size),
+            get: Some(input_events_get),
+        }
+    }
+
+    /// How many events there are: none.
+    extern "C" fn input_events_size(_list: *const ClapInputEvents) -> u32 {
+        0
+    }
+
+    /// The event at that index: there is none.
+    extern "C" fn input_events_get(_list: *const ClapInputEvents, _index: u32) -> *const c_void {
+        std::ptr::null()
+    }
+
+    /// The **output events**: there are none.
+    fn empty_output_events() -> ClapOutputEvents {
+        ClapOutputEvents { ctx: std::ptr::null_mut(), try_push: Some(output_events_push) }
+    }
+
+    /// Offer an event to the host: there is no host to take it.
+    extern "C" fn output_events_push(_list: *const ClapOutputEvents, _event: *const c_void) -> bool {
+        false
     }
 
     /// The host has **no extensions** to give.

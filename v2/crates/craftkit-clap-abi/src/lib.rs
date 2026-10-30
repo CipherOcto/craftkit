@@ -262,17 +262,85 @@ pub struct ClapPlugin {
     /// Called when the plugin is to forget its audio.
     pub reset: Option<extern "C" fn(plugin: *const ClapPlugin)>,
     /// Called with a block of audio.
-    ///
-    /// The block is a structure the format defines and this arc does
-    /// not model: the **audio path** is a later arc, and until then
-    /// this call is not made. The pointer is here because the shape of
-    /// the table is the format's, field for field.
     pub process:
-        Option<extern "C" fn(plugin: *const ClapPlugin, process: *const c_void) -> ClapProcessStatus>,
+        Option<extern "C" fn(plugin: *const ClapPlugin, process: *const ClapProcess) -> ClapProcessStatus>,
     /// Ask the plugin for an extension of its own.
     pub get_extension: Option<extern "C" fn(plugin: *const ClapPlugin, id: *const c_char) -> *const c_void>,
     /// Called on the host's main thread, when the plugin asks for it.
     pub on_main_thread: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+}
+
+/// The **audio buffer**: the channels of one port.
+///
+/// The channels are **planar**: each one is its own array of samples,
+/// and the buffer holds the addresses of those arrays.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapAudioBuffer {
+    /// The channels, as thirty-two bit floats.
+    pub data32: *mut *mut f32,
+    /// The channels, as sixty-four bit floats: the format's other
+    /// half, and this kit does not use it.
+    pub data64: *mut *mut f64,
+    /// How many channels the port has.
+    pub channel_count: u32,
+    /// How many samples of delay the port has.
+    pub latency: u32,
+    /// Which channels hold the same value all the way through.
+    pub constant_mask: u64,
+}
+
+/// The **input events**: what the plugin reads while it works.
+///
+/// The list is read through two functions: how many events there are,
+/// and the event at that index. A host with no events answers zero and
+/// nothing.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapInputEvents {
+    /// The host's own state, which the two functions read.
+    pub ctx: *mut c_void,
+    /// How many events there are.
+    pub size: Option<extern "C" fn(list: *const ClapInputEvents) -> u32>,
+    /// The event at that index.
+    pub get: Option<extern "C" fn(list: *const ClapInputEvents, index: u32) -> *const c_void>,
+}
+
+/// The **output events**: what the plugin writes while it works.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapOutputEvents {
+    /// The host's own state, which the function reads.
+    pub ctx: *mut c_void,
+    /// Offer an event to the host.
+    pub try_push: Option<extern "C" fn(list: *const ClapOutputEvents, event: *const c_void) -> bool>,
+}
+
+/// The **process**: one block of audio, going through.
+///
+/// This is the shape of the call the plugin is made for: the frames,
+/// the ports, and the events that go with them.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapProcess {
+    /// The host's steady clock, in nanoseconds.
+    pub steady_time: i64,
+    /// How many frames the block holds.
+    pub frames_count: u32,
+    /// The transport, if the host has one.
+    pub transport: *const c_void,
+    /// The input ports.
+    pub audio_inputs: *const ClapAudioBuffer,
+    /// The output ports.
+    pub audio_outputs: *mut ClapAudioBuffer,
+    /// How many input ports there are.
+    pub audio_inputs_count: u32,
+    /// How many output ports there are.
+    pub audio_outputs_count: u32,
+    /// The events going in.
+    pub in_events: *const ClapInputEvents,
+    /// The events coming out.
+    pub out_events: *const ClapOutputEvents,
 }
 
 /// The **descriptor** of a plugin: what the host knows about it before
