@@ -5,6 +5,9 @@
 //! where it starts on the timeline, and where in the media it begins.
 
 use craftkit_sdk::Ecosystem;
+// The tests that use it are the ones for the battery, and the battery is
+// optional: the import is with them.
+#[cfg(feature = "film")]
 use craftkit_sdk::serde_json::json;
 
 /// The ecosystem the tests drive.
@@ -13,6 +16,7 @@ fn ecosystem() -> Ecosystem {
 }
 
 /// A project with a bin, an item, a sequence, a track and a clip.
+#[cfg(feature = "film")]
 fn a_project() -> (craftkit_sdk::Session, u64) {
     let mut session = ecosystem().session();
     session.execute("film.bin.add", &json!({ "name": "media" })).expect("the bin is added");

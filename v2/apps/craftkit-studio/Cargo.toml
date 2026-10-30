@@ -29,6 +29,10 @@ craftkit-plugin-pdf = { path = "../../crates/craftkit-plugin-pdf", optional = tr
 # The **fourth battery**: the document model of a video editor. Off by
 # default as well: a program that wants bins, tracks and clips says so.
 craftkit-plugin-film = { path = "../../crates/craftkit-plugin-film", optional = true }
+# The **fifth battery**: the document model of a compositing application.
+# Off by default as well: a program that wants comps and properties says
+# so.
+craftkit-plugin-fx = { path = "../../crates/craftkit-plugin-fx", optional = true }
 
 [features]
 default = []
@@ -43,6 +47,9 @@ pdf = ["dep:craftkit-plugin-pdf"]
 # The film battery. Off by default: a program that wants bins, tracks and
 # clips says so.
 film = ["dep:craftkit-plugin-film"]
+# The compositing battery. Off by default: a program that wants comps and
+# property trees says so.
+fx = ["dep:craftkit-plugin-fx"]
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
