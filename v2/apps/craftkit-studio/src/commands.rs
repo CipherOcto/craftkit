@@ -282,6 +282,12 @@ impl DocSave {
                 message: "this program has no format to write".to_string(),
             });
         };
+        // The document is checked against the kit's own bounds: a file
+        // that cannot be read back is not a file.
+        session
+            .document()
+            .check_bounds()
+            .map_err(|message| EngineError::Failed { id: "doc.save".to_string(), message })?;
         let value = craftkit_sdk::format::write_document(session.document(), format);
         let text =
             craftkit_sdk::serde_json::to_string_pretty(&value).map_err(|error| EngineError::Failed {
@@ -329,8 +335,9 @@ impl DocOpen {
         let path = self.path.0.clone();
         // The file is read **within a limit**: the limit is this
         // program's, and it is checked before the read.
-        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_DOCUMENT_FILE_BYTES)
-            .map_err(|message| EngineError::Failed { id: "doc.open".to_string(), message })?;
+        let text =
+            craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_DOCUMENT_FILE_BYTES)
+                .map_err(|message| EngineError::Failed { id: "doc.open".to_string(), message })?;
         let value: craftkit_sdk::serde_json::Value =
             craftkit_sdk::serde_json::from_str(&text).map_err(|error| EngineError::Failed {
                 id: "doc.open".to_string(),

@@ -839,6 +839,17 @@ pub fn read_document(
     read_document_noting(value, formats, migrations).map(|(document, _)| document)
 }
 
+/// The document's own bounds, checked on the way in and on the way out.
+///
+/// A document is a tree of nodes with relations, and the shape of a
+/// document is the kit's business: the depth, the number of nodes and
+/// the number of relations are **bounded**, and the bound is the same
+/// for the reader and for the writer — so that the round trip that
+/// decides which version to write (§57) means something.
+fn check_bounds(document: &Document) -> Result<(), String> {
+    document.check_bounds()
+}
+
 /// Read a document, and say what the reader had to say about it.
 ///
 /// The second value is the **version the file was written with**, when
@@ -882,6 +893,7 @@ pub fn read_document_noting(
         // A file from a newer program. It is read with the newest reader
         // here, and what that reader does not understand is kept.
         let document = (newest.read)(value)?;
+        check_bounds(&document)?;
         return Ok((document, Some(written)));
     }
 
@@ -898,7 +910,9 @@ pub fn read_document_noting(
         (step.apply)(&mut value)?;
         version = step.to;
     }
-    Ok(((newest.read)(&value)?, None))
+    let document = (newest.read)(&value)?;
+    check_bounds(&document)?;
+    Ok((document, None))
 }
 
 /// The version a tag says, if the tag says one.

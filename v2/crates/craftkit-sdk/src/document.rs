@@ -449,6 +449,23 @@ impl FormatValue for Rect {
     }
 }
 
+impl Node {
+    /// Read a node, and the nodes under it, within the **depth** the
+    /// kit allows.
+    ///
+    /// The reader is **recursive**, and a recursion that runs out of
+    /// stack is a crash the panic guard cannot catch: the guard catches
+    /// a panic, and a stack overflow is not a panic. So the depth is
+    /// checked here, on the way down, and it is **the kit's number** —
+    /// not the number the JSON parser happens to have.
+    fn read_at(value: &serde_json::Value, depth: usize) -> Result<Node, String> {
+        if depth > MAX_DEPTH {
+            return Err(format!("the document is deeper than {MAX_DEPTH} levels"));
+        }
+        Node::read(value, depth)
+    }
+}
+
 impl FormatValue for Node {
     fn to_json(&self) -> serde_json::Value {
         let mut value = serde_json::json!({
@@ -467,6 +484,14 @@ impl FormatValue for Node {
     }
 
     fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        Node::read_at(value, 0)
+    }
+}
+
+/// The reading of a node, at a depth.
+impl Node {
+    /// Read a node and its children, at a known depth.
+    fn read(value: &serde_json::Value, depth: usize) -> Result<Node, String> {
         let id = value.get("id").and_then(|id| id.as_u64()).ok_or_else(|| "a node has no id".to_string())?;
         let name = value
             .get("name")
@@ -492,7 +517,7 @@ impl FormatValue for Node {
                 .as_array()
                 .ok_or_else(|| "a node's children are a list".to_string())?
                 .iter()
-                .map(|child| Node::from_json(child).map(Arc::new))
+                .map(|child| Node::read_at(child, depth + 1).map(Arc::new))
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         };
@@ -506,6 +531,23 @@ impl FormatValue for Node {
         Ok(Node { id, name, kind, rect, muted, data, children, unknown, stream })
     }
 }
+
+/// The deepest a document's **tree** may be.
+///
+/// It is the kit's number and not the JSON parser's: serde_json refuses
+/// a document nested deeper than a hundred and twenty-eight levels, and
+/// that is a backstop, not a rule. A value that was **built** rather
+/// than parsed — a command's raw parameter, a plugin's own JSON — is
+/// not bounded by the parser at all, and the reader that walks it is
+/// **recursive**: a recursion that runs out of stack is a crash the
+/// panic guard cannot catch.
+pub const MAX_DEPTH: usize = 64;
+
+/// The most **nodes** a document may hold.
+pub const MAX_NODES: usize = 10_000;
+
+/// The most **relations** a document may hold.
+pub const MAX_RELATIONS: usize = 10_000;
 
 /// A **shared** node writes and reads as the node it holds.
 ///
@@ -767,6 +809,37 @@ pub struct Document {
 }
 
 impl Document {
+    /// Check the document against the kit's **own** bounds.
+    ///
+    /// The depth, the number of nodes and the number of relations are
+    /// the shape of a document, and the shape is the kit's business: a
+    /// program that reads a file and a program that writes one must
+    /// agree on what a document may hold, or the round trip that decides
+    /// which version to write (§57) cannot mean anything.
+    pub fn check_bounds(&self) -> Result<(), String> {
+        if self.relations.len() > MAX_RELATIONS {
+            return Err(format!(
+                "the document holds {} relations, and the limit is {MAX_RELATIONS}",
+                self.relations.len()
+            ));
+        }
+        let mut stack: Vec<(&Node, usize)> = self.nodes.iter().rev().map(|node| (&**node, 1usize)).collect();
+        let mut nodes = 0usize;
+        while let Some((node, depth)) = stack.pop() {
+            nodes += 1;
+            if nodes > MAX_NODES {
+                return Err(format!("the document holds more than {MAX_NODES} nodes"));
+            }
+            if depth > MAX_DEPTH {
+                return Err(format!("the document is deeper than {MAX_DEPTH} levels"));
+            }
+            for child in node.children.iter().rev() {
+                stack.push((&**child, depth + 1));
+            }
+        }
+        Ok(())
+    }
+
     /// An empty document with a name.
     pub fn new(name: impl Into<String>) -> Self {
         Document {

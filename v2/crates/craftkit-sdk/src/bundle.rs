@@ -120,6 +120,10 @@ pub fn write(
     formats: &Registry<FormatSpec>,
     migrations: &Registry<MigrationSpec>,
 ) -> Result<Vec<u8>, String> {
+    // The document is checked against the kit's own bounds before it is
+    // written: a bundle that holds a document nobody can read back is
+    // worse than no bundle.
+    document.check_bounds()?;
     let newest = crate::format::newest_format(formats, "craftkit")
         .ok_or_else(|| "this program has no format to write the document in".to_string())?;
     let (document_json, _) = crate::format::write_document_oldest(document, formats, migrations, "craftkit")
