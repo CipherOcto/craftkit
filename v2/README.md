@@ -929,8 +929,10 @@ different commands with one id.
   that the door works on something the host has never seen (§34).
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
+- `apps/craftkit-repl` — **the terminal door**: a person drives the kit
+  from a prompt (§75).
 
-**679 tests.** The MCP server links **all twelve batteries** in, so the
+**763 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
@@ -5906,3 +5908,74 @@ the ones a picture has when it is mostly one colour.
   which palette entries are see-through, and the reader ignores it.
 - **Interlaced pictures are still refused** (§71), and that is the one
   shape of PNG this reader does not take.
+
+---
+
+## 75. The terminal door
+
+The kit had three doors for other programs — the MCP server, the
+control channel and the plugin bridge — and **none of them was for a
+person**. A person cannot speak MCP, and the prompt is the oldest and
+the simplest of the kit's doors: it is a line of text, and the kit's
+own vocabulary is a line of text.
+
+### What was built
+
+- **`apps/craftkit-repl`** — a program that asks a question, reads a
+  line, and answers it. The built-ins are `help`, `commands`, `plan`,
+  `memory`, `snapshot <path>` and `quit`; everything else is a command
+  of the kit's own, written `id` or `id {"name": "value"}`.
+- **The door reaches the registry and nothing else.** `plan` is
+  `doc.plan`, `memory` is `session.memory`, and `snapshot` is
+  `doc.snapshot` — the door asks, and it prints. There is no second
+  way to take a picture or to read a plan, so the answer a person gets
+  at the prompt is the answer the MCP server gives the agent.
+- **`doc.plan` is a new command** (§74 closed the PNG reader; this
+  closes the gap the plan left). The studio, the bridge and the
+  terminal door all wanted the plan, and each of them reached for the
+  evaluator itself. So the plan is a command now, and the three of
+  them ask it the same way.
+- **The line is bounded, and the door owns the bound.** A person may
+  paste a whole file into a prompt, so the line is read within a limit
+  and a line over it is refused rather than read. The limit is
+  `MAX_LINE_BYTES` — sixty-four kibibytes — and it is **private**: it
+  is this program's own number, and a public bound is a promise
+  anybody else may rely on, and this one is not a promise to anybody.
+  The reader that enforces it is the kit's own
+  (`craftkit_sdk::lines::read_line_bounded`, §62): the mechanism is
+  shared and the number is the caller's (§17).
+
+### What the port found
+
+- **A door with built-ins is a second registry, unless the built-ins
+  are commands.** The first draft of the terminal door drew the
+  picture itself, read the plan itself and asked the session for its
+  memory itself. Every one of those was a second path to an answer
+  the kit already had a command for, and the second path is where two
+  answers drift apart. The door now asks the command and prints it.
+- **The plan was the one thing the kit could not say out loud.** The
+  registry was the front ends' only source (§4), and the plan was the
+  exception: it was the one answer a front end had to compute for
+  itself. That is what `doc.plan` is for, and the finding is the
+  general one — *if two front ends both want it, it is a command*.
+- **The command's own log entry changes the number it reports.** A
+  command writes a line in the session's log, so the log is one line
+  bigger after a measurement than it was during it. The door shows the
+  state as it was when the command ran, and the log says the command
+  ran. This is not a bug to be smoothed over: it is the difference
+  between "how much is held" and "how much is held, and what was done
+  to it".
+
+### What it cost
+
+- one application, one command in the SDK, and **thirteen tests** on
+  the door.
+
+### What it does not settle
+
+- **The prompt is a prompt and not a shell.** There is no editing of
+  the line, no completion, and no history. A person who wants those
+  wants a shell, and a shell is a program that talks to this one.
+- **The door is one ecosystem.** It drives the studio's ecosystem, so
+  the batteries it offers are the studio's — the optional ones are off
+  unless the studio is built with them.
