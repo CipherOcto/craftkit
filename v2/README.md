@@ -2814,6 +2814,10 @@ They are **Rust**, which artcraft was not, and that matters: this is
 the first time the family could have built craftkit's architecture and
 did not.
 
+A fifth tree arrived in the middle of the session — **CADCraft**, the
+CAD application — and it is surveyed in §43, because it is the same
+domain this kit was written for and it deserves its own section.
+
 ### craft-libs: a battery, and not a kit
 
 Twenty-six crates, all named `craft-<name>`, and one rule: *"No app
@@ -2844,10 +2848,10 @@ Each one has the same crates in the same places: `doc` (the document),
 `engine` (the commands), `mcp` (the agent door), `ui-egui`, a CLI and a
 web build. And each one built the same architecture.
 
-| | DesignCraft | GridCraft | WordCraft | craftkit-v2 |
-|---|---|---|---|---|
-| the registry | `CommandSpec` + a `cmd!` macro | `CommandSpec` + a `cmd!` macro | `CommandSpec::new` + a builder | `CommandSpec` + `#[derive(Command)]` |
-| how many commands | 542 | 363 | 632 | 25, plus the batteries |
+| | DesignCraft | GridCraft | WordCraft | CADCraft | craftkit-v2 |
+|---|---|---|---|---|---|
+| the registry | `CommandSpec` + a `cmd!` macro | `CommandSpec` + a `cmd!` macro | `CommandSpec::new` + a builder | `CommandSpec` + const builders | `CommandSpec` + `#[derive(Command)]` |
+| how many commands | 542 | 363 | 632 | ~440 | 25, plus the batteries |
 | the one door | `Session::execute(id, json)` | `Session::execute(id, json)` | `Session::run(id, &json)` | `session.execute(id, params)` |
 | the panic guard | yes, and it restores the document | yes | yes | yes (§38 covers the evaluation too) |
 | the parameters | a **doc string**, parsed by hand | a doc string | a JSON-schema-ish string | **typed** `ParamDoc`s |
@@ -2866,7 +2870,7 @@ kind of content is a change in six crates at once.
 
 ### What the survey found
 
-- **The architecture is the family's, and it was written three times.**
+- **The architecture is the family's, and it was written four times.**
   A command registry, one `Session::execute`, JSON parameters, a panic
   guard that restores the document, an undo snapshot, a journal, and an
   MCP façade over the registry. Three trees, independently, with the same
@@ -3058,3 +3062,152 @@ Seven ports. Four of them cost nothing, and the seventh — the one the
 survey called the hardest — cost nothing either. What it cost was **the
 kit learning to say that a document's size can be in its payload**, and
 that a graph of areas is not a graph of nodes.
+
+---
+
+## 43. CADCraft: the tree that is this kit's own subject
+
+CADCraft appeared in the middle of the session: a **2D and 3D CAD and
+drafting application in pure Rust**, by the same team, with the same
+shape as the others — `doc`, `engine`, `mcp`, `ui-egui`, `geom`,
+`io`, and three apps.
+
+It matters more than the other four, because it is the **same domain**
+the tree this kit replaces was written for. So it is the closest thing
+to a port that already exists, and it is the hardest thing to read.
+
+### What it is
+
+- a **document** that is a **table-heavy database**, not a tree: a
+  header, the layers, the linetypes, the text and dimension styles, the
+  blocks, the layouts, the views, the constraints, and a flat **entity
+  store**;
+- an **entity** that is a **closed enum of thirty kinds** — line, point,
+  circle, arc, ellipse, polyline, spline, helix, text, mtext, an
+  attribute, an insert, a dimension, a leader, a hatch, a solid, a
+  region, an image, a table — each with its own struct, its own DXF
+  mapping, its own transform, its own grips and its own decomposition
+  into primitives;
+- an **engine** with the family's command registry: `CommandSpec { id,
+  label, menu, shortcut, aliases, params, enabled, run, undoable,
+  interactive, transparent }`, about **440 commands**, one registry, one
+  `Session::execute(id, &Value)`;
+- a **geometry crate** with no commands and no document knowledge:
+  `Vec2`, `Vec3`, `Mat3`, splines, intersections, fillets, regions;
+- a **constraint solver**: a clean-room parametric solver — residuals,
+  damped Gauss–Newton, a degrees-of-freedom analysis — that **rewrites
+  the document** with the solved geometry;
+- a **format** that is **DXF**, with no native versioned file of its own:
+  the version is `$ACADVER`, there is no migration chain, and the
+  application's own data rides along in `xdata` under the registered name
+  `CADCRAFT`.
+
+### The five things the port found
+
+- **A CAD drawing is tables and a flat store, and the tree is not
+  there.** Structure is expressed by *reference by name* (a layer, a
+  block, a linetype) and by *handle* (groups, constraints, a dimension
+  that is attached to the edges it measures). A kit whose tree is
+  containment has to decide what a layer is — and the answer is that a
+  layer is a **table**, a drawing's layers are **nodes**, and an
+  entity's layer is an **edge that says something** rather than
+  containment. That is the same answer the PDF port gave, and it is the
+  second time the answer is an edge and not a parent.
+- **A closed enum of thirty kinds is exactly what the open kind is
+  for.** Every variant needs its own struct, its own DXF mapping, its
+  own transform and its own decomposition, and a new kind of entity is a
+  change in four places at once. With kinds as open strings, a new
+  entity is a new kind, and nothing else moves.
+- **The numeric core is a library below the document, and this kit's
+  §39 said it would be.** CADCraft's geometry crate holds the numbers
+  and knows nothing about drawings; the solver is a *service* that
+  rewrites the document. So the core does not have a unit, does not have
+  a solver, and does not need one: the numbers live in the library, the
+  library is a plugin, and the kit is unchanged. §39's answer was not a
+  guess — it was the shape the family had already chosen.
+- **The prompt is a door, and a kit whose commands never ask cannot be
+  driven through the commands that ask.** CADCraft's registry has
+  `interactive: Option<Factory>`: some commands *ask*. Its MCP server
+  does not hide them behind a façade of JSON parameters — one of its
+  fifteen tools is `command_line {text}`, which types at the prompt
+  exactly as a person would, and another is `script {text}`, which runs
+  a `.scr` file. So an agent can drive the interactive commands *by
+  answering the prompt*. This kit's rule is the opposite: a command
+  takes its parameters and never asks, and only a front end's own entry
+  point may put a question to a person. The finding is that the rule is
+  **a choice, not a law**, and the family's choice buys something real.
+- **The extension story is a script language, not a plugin.** CADCraft
+  has a full **AutoLISP** interpreter — `defun c:NAME` makes a LISP
+  function into a *command*, and `entget`/`entmake`/`entmod` reach the
+  entities — plus `.scr` scripts and `.pgp` aliases, all routed through
+  the same registry. The plugin system is in the gap list, not in the
+  tree: *"E4 | Plug-in API (owner decision: Rust/WASM plug-ins rather
+  than ObjectARX/.NET) | 30–50"*. So the family's answer to "how does
+  somebody add to this?" is **scripting**, and this kit's answer is
+  **linking** — and both are answers to the same question.
+
+### And the three rules the tree already keeps
+
+Three things in CADCraft are the same rules this kit keeps, arrived at
+independently, and they are worth naming because they are evidence:
+
+- **Round-trip by preservation.** What the application does not model is
+  kept as raw file groups — `Foreign` for the drawing, `xdata` for the
+  entity, `EntityKind::Unknown` for the object — and written back
+  unchanged. That is §333's "the reader keeps what it does not
+  understand", and it is the rule the artist's port needed for its opaque
+  3D scene. Three trees, three implementations, one rule.
+- **Hostile input is refused, not clamped.** Every parser has a limit
+  with a number (`MAX_TAGS`, `MAX_OBJECTS`, a capped reader, a bounded
+  MCP reply), and a bad JSON count is **refused** rather than clamped —
+  the last two commits are exactly that. This kit's `Params` refuses a
+  hostile number for the same reason.
+- **Copy-on-write, so the undo is cheap.** The entity store is chunked
+  and shared: an undo snapshot copies pointers, not entities. This kit's
+  history **clones** the document, which is simple and correct and more
+  expensive than it needs to be. This is the one place where the
+  family's tree is plainly ahead, and it is a change to the kit's
+  history, not to its seams.
+
+### What CADCraft would get from this kit
+
+The survey's own list, and every item is a seam this kit has and that
+tree does not:
+
+1. a **node-kind and payload model**, replacing thirty hand-written enum
+   variants and their four places each;
+2. a **real extension registry** — the registry is a fixed list of
+   fifty-one `specs()` calls today, and the formats are a fixed enum;
+3. **typed parameter schemas** — `params` is a free-text string that is
+   parsed by hand;
+4. a **versioned native format with pending migrations**, instead of
+   `xdata` and raw-group preservation as the way to keep what the
+   format cannot say;
+5. **relations as data** — groups, dimension associativity and
+   constraints each invented their own reference mechanism;
+6. a **plan**, so that rendering, export and an agent's query all read
+   the same derived thing;
+7. **plugin-contributed commands, kinds, evaluators, panels and layers**;
+8. and **one id namespace**, separate from the compatibility label —
+   CADCraft's ids are AutoCAD command names, which is a parity metric
+   and not a stable name for a kit.
+
+### The table, with the eighth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
+| the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing yet |
+
+Eight ports. Five of them cost nothing, and the two hardest — the
+spreadsheet and the CAD application — cost nothing either. What the
+survey of the family changed is not the kit's shape: it is the
+**confidence** in the shape, which is now backed by five independent
+implementations and a survey of every one of them.
