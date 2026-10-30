@@ -914,11 +914,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**657 tests.** The MCP server links **all twelve batteries** in, so the
+**665 tests.** The MCP server links **all twelve batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
-on its own, with no features, carries **195** of them, and **209** with
+on its own, with no features, carries **196** of them, and **210** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1006,7 +1006,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 657 tests
+cargo test          # 665 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3910,7 +3910,7 @@ optional constants and two optional fields, so that a kind can say
 **what it is** and **what unit it is in** without the core's list
 growing.
 
-### The table, with the fifteenth row
+### The table, with the sixteenth row
 
 | the port | what it found | what it cost |
 |---|---|---|
@@ -3930,8 +3930,9 @@ growing.
 | the **metric** | a typeface is **few**, so it is a **node**, and the paragraph's typeface is an **edge**; a monospaced paragraph is a metric with an empty table | an edge and a kind |
 | the **metric's runs** | a width belongs to a **run** of characters, not to a character: a ligature replaces its characters and a kerning pair adjusts the gap between them | two tables in a payload |
 | the **payload** | the core bounds a command's parameters and says nothing about a **payload**, so every plugin that reads one has to write its own bounds | a library and two core bounds |
+| the **file** | every bound was applied **after** the bytes were in memory, and the biggest input is a file: the bound that matters is on the bytes, checked before the read | a module and three caps |
 
-Fifteen ports, and one of them is not a port at all: it is the answer to
+Sixteen ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
 
 ---
@@ -4833,3 +4834,90 @@ million.
   with an enormous payload is read into memory and only then refused.
   The bound that would stop that is in the **format**, and the format
   has no opinion about payloads either.
+
+---
+
+## 62. The door that reads a file
+
+§61 bounded the **values** in a document — a payload's tables, a
+paragraph's words, a command's parameters. Every one of those bounds is
+applied **after** the bytes are in memory, and for the biggest input
+there is that is the wrong order.
+
+A document arrives as a file, and a file arrives as **bytes**: a file of
+ten gigabytes was read into a `String` before anything had a chance to
+look at it, and the refusal that followed was a refusal of the
+*reading* and not of the *file*. The memory had already been spent.
+
+This section puts a bound where the bytes arrive.
+
+### What was built
+
+- **`craftkit_sdk::files`** — a **bounded read**: the file's own length
+  is checked **before** the read, and a file that is too long is refused
+  without being read. Two functions, one for bytes and one for text.
+- **The bundle's counts are capped**: the number of files, the length of
+  the document and the length of a path. A cap **refuses** the bundle;
+  it does not read less of it.
+- **The doors use it**: `doc.open` (a document), `doc.open.bundle` (a
+  bundle), `doc.save.bundle` (an asset), and `task.load` (a list of
+  tasks). Each has a limit, and the limit is **the program's**: a
+  document is sixteen megabytes, a bundle is two hundred and fifty-six,
+  a task list is four.
+
+### What the port found
+
+- **The door was the hole, and every bound was in the wrong place.**
+  §61's bounds all work on values that are *already in memory*, which
+  is fine for a payload of a megabyte and useless for a file of ten
+  gigabytes. The bound that matters most is on the **bytes**, and it
+  has to be checked on the file's **length**, before the read. This is
+  the kit's own rule — "bound sizes" — read in the order the input
+  actually arrives in.
+- **The bundle reader was safe by accident.** Its file count came out
+  of the file, and the loop stopped because the **bytes ran out**, not
+  because a rule said so. Running out of bytes is not a rule: it is the
+  buffer saying no, and the count that caused the work was never
+  capped. Now it is, and the cap **refuses** the bundle — because a cap
+  that can be traded away is not a cap, and truncating a bundle into
+  one that fits is a lie about what was read.
+- **The limit is the program's, not the kit's.** A program that opens
+  documents needs one limit; a program that opens bundles of media
+  needs another; a program that opens video needs a third. The kit does
+  not know which program it is in, so the limit is an **argument** and
+  `files` is the mechanism everybody uses. This is the same answer as
+  §61's payload reader: the mechanism is shared, the number is the
+  caller's.
+- **The format's depth was already bounded, by the format.** A document
+  nested deeper than a hundred and twenty-eight levels is refused by
+  serde_json's **parser**, so the tree the reader builds cannot be
+  deeper than that and no separate bound is needed. It is the third
+  time the format has done a check before the kit could (§61's
+  finiteness, and now this): a JSON number is finite, and a JSON
+  document is shallow. The kit's rule asks for both, and for a
+  document the format has already made them.
+- **A refused file is not a broken program.** The refusal says which
+  file, how long it was and what the limit was — the same shape as every
+  other refusal in the kit (§21): a value, not a panic, and not a
+  message that says "error".
+
+### What it cost
+
+- **one module** in the SDK (`files`), five tests, and no new dependency;
+- **three caps** in the bundle reader, two tests;
+- **four doors** changed, and one test that writes seventeen megabytes
+  and is refused.
+
+### What it does not settle
+
+- **A file that is not a regular file cannot be read through this
+  module.** A pipe has no length to check, so it is refused — and a
+  program that wants to read a pipe reads it another way and says so.
+- **The bundle's own bytes are still the caller's business.** The
+  bundle's files may be media, and the limit on the *bundle* is the
+  program's; only the document inside it has a limit in the format
+  itself.
+- **Nothing bounds the tree's depth in the kit's own terms.** The
+  format's parser bounds it at a hundred and twenty-eight, and that is
+  the number in force — but it is the *parser's* number, not the kit's,
+  and the kit has no way to say "this document is too deep for me".
