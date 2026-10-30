@@ -895,6 +895,13 @@ different commands with one id.
   words, the measure it sits in, the **metric** it is set in, and the
   lines it breaks into — ported into v2's seams, and what it found
   (§58, §59, §60). It is optional, like the others.
+- `crates/craftkit-image` — the **picture's size**: read from a
+  picture's header, in JPEG and PNG. A **library**, not a plugin: it
+  contributes nothing to the registry and the linker does not wire it in
+  (§68).
+- `crates/craftkit-plugin-image` — the **image battery**: a picture is a
+  size and a file — a node whose payload holds the size and whose stream
+  holds the bytes (§68). It is optional, like the others.
 - `crates/craftkit-raster` — the **rasteriser**: the canvas that draws a
   document into a picture, and the PNG writer that carries it. A
   **library**, not a plugin: it contributes nothing to the registry and
@@ -3023,7 +3030,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all twelve batteries it is
-**150**, measured the same way.
+**152**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -5392,3 +5399,79 @@ the kit from a document model into something a person can look at.
   painted into pixels as it happens; a program that wanted to zoom in
   after the fact would have to paint again. The camera is applied while
   drawing, and that is the only place it is applied.
+
+---
+
+## 68. A picture is a size and a file
+
+The kit had no idea what a picture was. An image was "a plugin's
+payload" — a thing an application knew about and the kit did not — and a
+document that held a picture had nowhere to put it but the document
+itself. That is the wrong shape, and this section is where the shape is
+written down.
+
+### What was built
+
+- **`craftkit-image`** — a **library**, not a plugin: it reads the
+  **size** of a picture and nothing else.
+  - **JPEG** — the frame header, walked the way ITU-T T.81 lays the
+    markers out. The walk is ported from the family's own clean-room
+    decoder (`craft-jpeg`), which is the tree that knows about the
+    twelve-bit and the arithmetic-coded files that the common decoders
+    refuse;
+  - **PNG** — the `IHDR` chunk, which is the first thing after the
+    signature and says the size in four bytes each way.
+- **`craftkit-plugin-image`** — the **thirteenth battery**: a **picture**
+  is a node whose **payload** holds the size and the format, and whose
+  **stream** is the file. The commands are `image.add` and
+  `image.measure`, and the aspect ratio and the pixel count are
+  **derived**.
+- **The head of a file is read, and the rest is not.**
+  `craftkit_sdk::files::read_prefix_bounded` reads what it was asked
+  for and stops: a picture of forty megabytes is measured by reading a
+  few kilobytes of it.
+
+### What the port found
+
+- **A picture is a size and a file, and never the pixels.** The family
+  keeps the bytes beside the document and writes them into the package
+  on save — so the document an application edits holds two numbers and
+  a name, and the file holds the rest. That is the kit's **stream**
+  (§25) arriving at the pictures, and it is the third tree to say it
+  after the artist's stage and the prose's media.
+- **The header is the only part of the picture the document needs.** So
+  the reader reads the **head** and stops. The measure of a picture is
+  cheap in a way the measure of a document is not: a document has to be
+  read to be known, and a picture does not.
+- **A picture is an *open* kind, and the format is data.** The family
+  has a vector of picture kinds — raster, vector, PDF — and every new
+  one is a change in the model, the reader, the writer and the panel.
+  Here the payload says which format it is, and the kit says nothing
+  about what a raster is. The size reader knows two formats and refuses
+  the rest with a **name**, not with a panic.
+- **A picture that cannot be measured is not a broken picture.** The
+  bytes may be the tail of a file, or a file whose header is further in
+  than the reader was told to look. The refusal says what was wrong and
+  stops.
+
+### What it cost
+
+- one library with six tests, one battery with four tests beside it, and
+  one method on the file reader;
+- **no decoder**: there are no pixels here, and a decoder is a library
+  of its own.
+
+### What it does not settle
+
+- **The pixels are still not in the kit.** The size reader measures a
+  picture; it does not decode one. The family's clean-room decoder is a
+  thousand lines of Huffman and IDCT and arithmetic coding, and the
+  question of where it belongs — a library beside this one, or a plugin
+  that draws — is a question this section does not answer.
+- **A picture is not drawn.** The canvas (§67) draws rectangles and
+  paths and the boxes that text would occupy; it cannot put a picture
+  on the page, because the pixels are in a file and the canvas is a
+  buffer.
+- **The head that is read is a limit and not a promise.** A picture
+  whose header is further in than the limit is a picture this program
+  cannot measure — and the program chose the limit.
