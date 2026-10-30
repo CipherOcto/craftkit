@@ -46,7 +46,7 @@
 // and refuses `unsafe` in any crate that is not on it.
 #![deny(unsafe_code)]
 
-use std::ffi::{c_char, c_void};
+use std::ffi::c_char;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
@@ -59,8 +59,12 @@ use craftkit_clap_abi::{ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory
 /// can see it.
 static INITIALISED: AtomicBool = AtomicBool::new(false);
 
-/// The plugin's id.
+/// The plugin's id, as the file says it.
 const ID: &[u8] = b"org.craftkit.fixture.clap\0";
+/// The same id, without the zero byte: the host asks by name, and a
+/// name is not a C string.
+const ID_TEXT: &[u8] = b"org.craftkit.fixture.clap";
+
 /// The plugin's name.
 const NAME: &[u8] = b"Craftkit Reference\0";
 /// Who made it.
@@ -125,7 +129,7 @@ fn build_descriptor() -> ClapPluginDescriptor {
 static FACTORY: ClapPluginFactory = ClapPluginFactory {
     get_plugin_count: Some(get_plugin_count),
     get_plugin_descriptor: Some(get_plugin_descriptor),
-    create_plugin: Some(create_plugin),
+    create_plugin: Some(exports::create_plugin),
 };
 
 /// The **entry**: what the host finds first.
@@ -163,19 +167,6 @@ extern "C" fn get_plugin_descriptor(
     std::ptr::null()
 }
 
-/// Make the plugin with that id.
-///
-/// This fixture does not make plugins: the arc is about the host
-/// *reading* one, and a host that has no audio path to give the
-/// plugin has nothing to make it for.
-extern "C" fn create_plugin(
-    _factory: *const ClapPluginFactory,
-    _host: *const c_void,
-    _id: *const c_char,
-) -> *const c_void {
-    std::ptr::null()
-}
-
 /// Whether the plugin has been initialised.
 ///
 /// The host's tests read this: the plugin's `init` is called before
@@ -184,16 +175,20 @@ pub fn is_initialised() -> bool {
     INITIALISED.load(Ordering::SeqCst)
 }
 
-/// The **exported** part: the one symbol the host looks for, and the
-/// one place this crate is `unsafe`.
+/// The **exported** part: the one symbol the host looks for, the
+/// plugin's own life, and the one place this crate is `unsafe`.
 ///
 /// CLAP's entry point is a **data** symbol: a variable whose value is
 /// the address of the entry struct. This is that variable.
+///
+/// The plugin's own functions are here because this is the crate's one
+/// marked place: reading the host's name and the instance's own state
+/// is reading memory the host and the host's plugin wrote.
 #[allow(unsafe_code)]
 mod exports {
     use std::ffi::{c_char, c_void};
 
-    use craftkit_clap_abi::{ClapPluginFactory, PLUGIN_FACTORY_ID};
+    use craftkit_clap_abi::{ClapHost, ClapPlugin, ClapPluginFactory, PLUGIN_FACTORY_ID};
 
     /// The entry point of this plugin, found by name.
     ///
@@ -219,5 +214,176 @@ mod exports {
             return std::ptr::null();
         }
         &super::FACTORY as *const ClapPluginFactory as *const c_void
+    }
+
+    /// The plugin's own state: the host it was given and what it has
+    /// done since.
+    pub(super) struct State {
+        /// The host, as the host gave it.
+        host: *const ClapHost,
+        /// Whether the instance has been initialised.
+        initialised: bool,
+        /// The rate the instance was activated at.
+        sample_rate: f64,
+    }
+
+    /// The instance's own state.
+    fn state(plugin: *const ClapPlugin) -> Option<&'static mut State> {
+        if plugin.is_null() {
+            return None;
+        }
+        // SAFETY: the instance is this plugin's own, and its
+        // `plugin_data` is the box this plugin made.
+        let data = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).plugin_data)) };
+        if data.is_null() {
+            return None;
+        }
+        // SAFETY: the data is the box this plugin made, and the plugin
+        // frees it when it is destroyed.
+        Some(unsafe { &mut *(data as *mut State) })
+    }
+
+    /// The host's name, read out of the host the plugin was given.
+    fn host_name(host: *const ClapHost) -> String {
+        if host.is_null() {
+            return String::new();
+        }
+        // SAFETY: the host is the host's own structure, and its name is
+        // a C string it keeps for as long as the plugin lives.
+        let name = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*host).name)) };
+        if name.is_null() {
+            return String::new();
+        }
+        // SAFETY: the name is a C string the host owns.
+        unsafe { std::ffi::CStr::from_ptr(name) }.to_string_lossy().into_owned()
+    }
+
+    /// **Make** the plugin with that id.
+    ///
+    /// The instance is made on the heap, because the host holds a
+    /// pointer to it and a pointer to a thing that moves is a pointer
+    /// to nothing. It is freed when the plugin is destroyed.
+    pub(super) extern "C" fn create_plugin(
+        _factory: *const ClapPluginFactory,
+        host: *const c_void,
+        id: *const c_char,
+    ) -> *const c_void {
+        if id.is_null() {
+            return std::ptr::null();
+        }
+        // SAFETY: the host asks for a plugin by its id, and the id is
+        // a C string it keeps for the length of the call.
+        let wanted = unsafe { std::ffi::CStr::from_ptr(id) };
+        if wanted.to_bytes() != super::ID_TEXT {
+            return std::ptr::null();
+        }
+        let state = Box::into_raw(Box::new(State {
+            host: host as *const ClapHost,
+            initialised: false,
+            sample_rate: 0.0,
+        }));
+        let plugin = Box::into_raw(Box::new(ClapPlugin {
+            desc: super::descriptor(),
+            plugin_data: state as *mut c_void,
+            init: Some(init),
+            destroy: Some(destroy),
+            activate: Some(activate),
+            deactivate: Some(deactivate),
+            start_processing: Some(start_processing),
+            stop_processing: Some(stop_processing),
+            reset: Some(reset),
+            // The fixture does no audio: the format says a function
+            // pointer may be empty, and this one is.
+            process: None,
+            get_extension: None,
+            on_main_thread: None,
+        }));
+        plugin as *const c_void
+    }
+
+    /// The instance is ready to work.
+    pub(super) extern "C" fn init(plugin: *const ClapPlugin) -> bool {
+        let Some(state) = state(plugin) else { return false };
+        // The **handshake**: the plugin reads the host's name, and asks
+        // the host to restart it. The request is the only channel a
+        // test can see across the boundary, and it is how the host's
+        // own functions are exercised.
+        let name = host_name(state.host);
+        if name.is_empty() {
+            return false;
+        }
+        if let Some(host) = Some(state.host) {
+            // SAFETY: the host is the host's own structure, and the
+            // request is one of its own functions.
+            let request = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*host).request_restart)) };
+            if let Some(request) = request {
+                request(host);
+            }
+        }
+        state.initialised = true;
+        true
+    }
+
+    /// The instance is to work at that rate.
+    pub(super) extern "C" fn activate(
+        plugin: *const ClapPlugin,
+        sample_rate: f64,
+        _min_frames: u32,
+        _max_frames: u32,
+    ) -> bool {
+        let Some(state) = state(plugin) else { return false };
+        if !state.initialised {
+            return false;
+        }
+        state.sample_rate = sample_rate;
+        // Ask the host to call us back: the second of the host's own
+        // functions, and the second channel a test can see.
+        let host = state.host;
+        if !host.is_null() {
+            // SAFETY: the host is the host's own structure, and the
+            // request is one of its own functions.
+            let request = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*host).request_process)) };
+            if let Some(request) = request {
+                request(host);
+            }
+        }
+        true
+    }
+
+    /// The instance is to stop working.
+    pub(super) extern "C" fn deactivate(plugin: *const ClapPlugin) {
+        let Some(state) = state(plugin) else { return };
+        state.sample_rate = 0.0;
+    }
+
+    /// The host starts to send audio.
+    pub(super) extern "C" fn start_processing(plugin: *const ClapPlugin) -> bool {
+        state(plugin).is_some()
+    }
+
+    /// The host stops sending audio.
+    pub(super) extern "C" fn stop_processing(plugin: *const ClapPlugin) {
+        let _ = state(plugin);
+    }
+
+    /// The instance is to forget its audio.
+    pub(super) extern "C" fn reset(plugin: *const ClapPlugin) {
+        let _ = state(plugin);
+    }
+
+    /// The instance is finished with, and is freed.
+    pub(super) extern "C" fn destroy(plugin: *const ClapPlugin) {
+        if plugin.is_null() {
+            return;
+        }
+        // SAFETY: the instance is this plugin's own, and its data is
+        // the box this plugin made. Both are freed here, once.
+        unsafe {
+            let data = std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).plugin_data));
+            if !data.is_null() {
+                drop(Box::from_raw(data as *mut State));
+            }
+            drop(Box::from_raw(plugin as *mut ClapPlugin));
+        }
     }
 }

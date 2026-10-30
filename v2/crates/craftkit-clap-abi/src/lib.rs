@@ -174,6 +174,107 @@ pub struct ClapPluginFactory {
     >,
 }
 
+/// The **host**: what a plugin sees of the program that loaded it.
+///
+/// This is the other half of the contract. The plugin is given a
+/// pointer to one of these when it is made, and it reads the name off
+/// it and calls back through it when it wants something.
+///
+/// The **extensions** the format has — the state, the log, the
+/// parameters, the audio ports — are not here: they are reached
+/// through `get_extension`, and a host that has none of them answers
+/// with nothing. That is a later arc, and the shape of the answer is
+/// the same either way.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapHost {
+    /// The version the host speaks.
+    pub clap_version: ClapVersion,
+    /// The host's own state, which the host's functions read.
+    pub host_data: *mut c_void,
+    /// The host's name, for a plugin that wants to say who it is to.
+    pub name: *const c_char,
+    /// Who made the host.
+    pub vendor: *const c_char,
+    /// Where the host lives.
+    pub url: *const c_char,
+    /// The host's own version.
+    pub version: *const c_char,
+    /// Ask for an extension of the host, by its id.
+    pub get_extension:
+        Option<extern "C" fn(host: *const ClapHost, extension_id: *const c_char) -> *const c_void>,
+    /// Ask the host to restart the plugin.
+    pub request_restart: Option<extern "C" fn(host: *const ClapHost)>,
+    /// Ask the host to call the plugin back.
+    pub request_process: Option<extern "C" fn(host: *const ClapHost)>,
+    /// Ask the host to call the plugin on its main thread.
+    pub request_callback: Option<extern "C" fn(host: *const ClapHost)>,
+}
+
+/// What the plugin says it did with a block of audio.
+///
+/// The format's enum, and an enum in C is a number: the four values
+/// are the four the format names.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClapProcessStatus {
+    /// The plugin processed the block.
+    Continue = 0,
+    /// The plugin did not process the block, and the host may carry on.
+    ContinueIfNotProcessed = 1,
+    /// The plugin is still processing a tail.
+    Tail = 2,
+    /// The plugin has nothing to do.
+    Sleep = 3,
+}
+
+/// The **plugin**: the instance the factory makes.
+///
+/// This is the instance, not the file: a file may hold many plugins,
+/// and each one that is made is an instance of its own, with its own
+/// state, its own life and its own destruction.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapPlugin {
+    /// What the plugin says about itself.
+    pub desc: *const ClapPluginDescriptor,
+    /// The plugin's own state, which the plugin reads and writes.
+    pub plugin_data: *mut c_void,
+    /// Called once, when the instance is ready to work.
+    pub init: Option<extern "C" fn(plugin: *const ClapPlugin) -> bool>,
+    /// Called once, when the instance is finished with.
+    pub destroy: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+    /// Called when the plugin is to work at that rate.
+    pub activate: Option<
+        extern "C" fn(
+            plugin: *const ClapPlugin,
+            sample_rate: f64,
+            min_frames_count: u32,
+            max_frames_count: u32,
+        ) -> bool,
+    >,
+    /// Called when the plugin is to stop working.
+    pub deactivate: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+    /// Called when the host starts to send audio.
+    pub start_processing: Option<extern "C" fn(plugin: *const ClapPlugin) -> bool>,
+    /// Called when the host stops sending audio.
+    pub stop_processing: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+    /// Called when the plugin is to forget its audio.
+    pub reset: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+    /// Called with a block of audio.
+    ///
+    /// The block is a structure the format defines and this arc does
+    /// not model: the **audio path** is a later arc, and until then
+    /// this call is not made. The pointer is here because the shape of
+    /// the table is the format's, field for field.
+    pub process:
+        Option<extern "C" fn(plugin: *const ClapPlugin, process: *const c_void) -> ClapProcessStatus>,
+    /// Ask the plugin for an extension of its own.
+    pub get_extension: Option<extern "C" fn(plugin: *const ClapPlugin, id: *const c_char) -> *const c_void>,
+    /// Called on the host's main thread, when the plugin asks for it.
+    pub on_main_thread: Option<extern "C" fn(plugin: *const ClapPlugin)>,
+}
+
 /// The **descriptor** of a plugin: what the host knows about it before
 /// it makes it.
 ///

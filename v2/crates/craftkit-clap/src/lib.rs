@@ -70,8 +70,20 @@
 
 use std::cell::Cell;
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use craftkit_clap_abi::{ClapPluginEntry, ClapPluginFactory, ClapVersion};
+use craftkit_clap_abi::{
+    ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginEntry, ClapPluginFactory, ClapVersion,
+};
+
+/// The host's name, for a plugin that wants to say who it is to.
+const HOST_NAME: &[u8] = b"craftkit\0";
+/// Who made the host.
+const HOST_VENDOR: &[u8] = b"Craftkit\0";
+/// Where the host lives.
+const HOST_URL: &[u8] = b"https://example.invalid/craftkit\0";
+/// The host's own version.
+const HOST_VERSION: &[u8] = b"0.2.0\0";
 
 /// What went wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,6 +238,127 @@ impl ClapFactory<'_> {
         let descriptor = foreign::factory_descriptor(self.factory, index).map_err(ClapError::new)?;
         foreign::descriptor(descriptor).map_err(ClapError::new)
     }
+
+    /// **Make** the plugin with that id.
+    ///
+    /// The plugin is given a **host**: the structure it reads to learn
+    /// who it is running in, and the one it calls when it wants
+    /// something. The host is this program's own, and it is boxed, so
+    /// that its address does not move while the plugin holds it.
+    pub fn create(&self, id: &str) -> Result<ClapInstance<'_>> {
+        let state = Box::new(HostState::default());
+        let host = Box::new(ClapHost {
+            clap_version: ClapVersion::CURRENT,
+            host_data: &*state as *const HostState as *mut std::ffi::c_void,
+            name: HOST_NAME.as_ptr() as *const std::ffi::c_char,
+            vendor: HOST_VENDOR.as_ptr() as *const std::ffi::c_char,
+            url: HOST_URL.as_ptr() as *const std::ffi::c_char,
+            version: HOST_VERSION.as_ptr() as *const std::ffi::c_char,
+            get_extension: Some(foreign::get_extension),
+            request_restart: Some(foreign::request_restart),
+            request_process: Some(foreign::request_process),
+            request_callback: Some(foreign::request_callback),
+        });
+        let plugin = foreign::create_plugin(self.factory, &*host, id).map_err(ClapError::new)?;
+        Ok(ClapInstance { plugin, _host: host, state, _factory: PhantomData })
+    }
+}
+
+/// What the plugin asked the host for.
+///
+/// A plugin cannot speak to the program it is in except by asking:
+/// these are the three things it may ask for, and the host answers
+/// each of them by **noting** it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HostRequests {
+    /// The plugin asked the host to restart it.
+    pub restart: bool,
+    /// The plugin asked the host to call it back.
+    pub process: bool,
+    /// The plugin asked the host to call it on its main thread.
+    pub callback: bool,
+}
+
+/// The host's own state, behind the plugin's back.
+///
+/// It is in a box because the plugin holds a pointer to it, and a
+/// pointer to a thing that moves is a pointer to nothing.
+#[derive(Debug, Default)]
+struct HostState {
+    restart: AtomicBool,
+    process: AtomicBool,
+    callback: AtomicBool,
+}
+
+/// A **plugin instance**: a plugin that has been made.
+///
+/// The instance is the plugin's own: it has its own state, and it is
+/// destroyed by the host when the host is finished with it. It cannot
+/// outlive the factory that made it, because the factory lives in the
+/// library and the library is closed when the plugin is dropped.
+#[derive(Debug)]
+pub struct ClapInstance<'a> {
+    /// The instance, inside the library.
+    plugin: *const ClapPluginInstance,
+    /// The host, boxed: the plugin holds a pointer to it, so it has to
+    /// live as long as the instance does.
+    _host: Box<ClapHost>,
+    /// The host's state, boxed: the plugin holds a pointer to it too.
+    state: Box<HostState>,
+    /// The factory it came from, so that it cannot outlive it.
+    _factory: PhantomData<&'a ClapFactory<'a>>,
+}
+
+impl ClapInstance<'_> {
+    /// What the plugin says about itself.
+    pub fn descriptor(&self) -> Result<ClapDescriptor> {
+        let descriptor = foreign::plugin_descriptor(self.plugin).map_err(ClapError::new)?;
+        foreign::descriptor(descriptor).map_err(ClapError::new)
+    }
+
+    /// The instance is ready to work.
+    pub fn init(&self) -> Result<()> {
+        foreign::plugin_init(self.plugin).map_err(ClapError::new)
+    }
+
+    /// The instance is to work at that rate.
+    pub fn activate(&self, sample_rate: f64, min_frames: u32, max_frames: u32) -> Result<()> {
+        foreign::plugin_activate(self.plugin, sample_rate, min_frames, max_frames).map_err(ClapError::new)
+    }
+
+    /// The instance is to stop working.
+    pub fn deactivate(&self) -> Result<()> {
+        foreign::plugin_deactivate(self.plugin).map_err(ClapError::new)
+    }
+
+    /// The host starts to send audio.
+    pub fn start_processing(&self) -> Result<()> {
+        foreign::plugin_start_processing(self.plugin).map_err(ClapError::new)
+    }
+
+    /// The host stops sending audio.
+    pub fn stop_processing(&self) -> Result<()> {
+        foreign::plugin_stop_processing(self.plugin).map_err(ClapError::new)
+    }
+
+    /// The instance is to forget its audio.
+    pub fn reset(&self) -> Result<()> {
+        foreign::plugin_reset(self.plugin).map_err(ClapError::new)
+    }
+
+    /// The instance is finished with, and is destroyed.
+    pub fn destroy(self) {
+        foreign::plugin_destroy(self.plugin);
+    }
+
+    /// What the plugin asked the host for.
+    pub fn requests(&self) -> HostRequests {
+        HostRequests {
+            restart: self.state.restart.load(Ordering::SeqCst),
+            process: self.state.process.load(Ordering::SeqCst),
+            callback: self.state.callback.load(Ordering::SeqCst),
+        }
+    }
 }
 
 /// What a plugin says about itself.
@@ -274,9 +407,14 @@ pub struct ClapDescriptor {
 mod foreign {
     use std::ffi::{CString, c_char, c_void};
 
-    use craftkit_clap_abi::{ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapVersion};
+    use std::sync::atomic::Ordering;
 
-    use super::ClapDescriptor;
+    use craftkit_clap_abi::{
+        ClapHost, ClapPlugin as ClapPluginInstance, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory,
+        ClapVersion,
+    };
+
+    use super::{ClapDescriptor, HostState};
 
     /// Resolve the library completely before it is used.
     pub const RTLD_NOW: i32 = 2;
@@ -474,6 +612,196 @@ mod foreign {
             description: read_string(unsafe_fields.7)?,
             features: read_features(unsafe_fields.8)?,
         })
+    }
+
+    /// **Make** the plugin with that id, and hand it the host.
+    pub fn create_plugin(
+        factory: *const ClapPluginFactory,
+        host: *const ClapHost,
+        id: &str,
+    ) -> Result<*const ClapPluginInstance, String> {
+        // SAFETY: the factory is the plugin's own struct, inside a
+        // library that is open.
+        let create = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*factory).create_plugin)) };
+        let Some(create) = create else {
+            return Err("the factory has no `create_plugin`".to_string());
+        };
+        let id = match CString::new(id) {
+            Ok(id) => id,
+            Err(_) => return Err("the plugin's id has a zero byte in it".to_string()),
+        };
+        // The plugin's own function, called with the factory back, the
+        // host and the id, as the format says. The answer is the
+        // instance, and it is the plugin's own.
+        let plugin = create(factory, host as *const c_void, id.as_ptr());
+        if plugin.is_null() {
+            return Err(format!("the factory made no plugin `{}`", id.to_string_lossy()));
+        }
+        Ok(plugin as *const ClapPluginInstance)
+    }
+
+    /// The instance's own descriptor.
+    pub fn plugin_descriptor(
+        plugin: *const ClapPluginInstance,
+    ) -> Result<*const ClapPluginDescriptor, String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let desc = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).desc)) };
+        if desc.is_null() {
+            return Err("the plugin has no descriptor".to_string());
+        }
+        Ok(desc)
+    }
+
+    /// The instance is ready to work.
+    pub fn plugin_init(plugin: *const ClapPluginInstance) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let init = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).init)) };
+        let Some(init) = init else {
+            return Err("the plugin has no `init`".to_string());
+        };
+        // The plugin's own function, called with the instance back, as
+        // the format says.
+        if init(plugin) { Ok(()) } else { Err("the plugin refused to initialise".to_string()) }
+    }
+
+    /// The instance is to work at that rate.
+    pub fn plugin_activate(
+        plugin: *const ClapPluginInstance,
+        sample_rate: f64,
+        min_frames: u32,
+        max_frames: u32,
+    ) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let activate = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).activate)) };
+        let Some(activate) = activate else {
+            return Err("the plugin has no `activate`".to_string());
+        };
+        // The plugin's own function, called with the instance back and
+        // the rate, as the format says.
+        if activate(plugin, sample_rate, min_frames, max_frames) {
+            Ok(())
+        } else {
+            Err("the plugin refused to activate".to_string())
+        }
+    }
+
+    /// The instance is to stop working.
+    pub fn plugin_deactivate(plugin: *const ClapPluginInstance) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let deactivate = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).deactivate)) };
+        let Some(deactivate) = deactivate else {
+            return Err("the plugin has no `deactivate`".to_string());
+        };
+        // The plugin's own function, called with the instance back, as
+        // the format says.
+        deactivate(plugin);
+        Ok(())
+    }
+
+    /// The host starts to send audio.
+    pub fn plugin_start_processing(plugin: *const ClapPluginInstance) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let start = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).start_processing)) };
+        let Some(start) = start else {
+            return Err("the plugin has no `start_processing`".to_string());
+        };
+        // The plugin's own function, called with the instance back, as
+        // the format says.
+        if start(plugin) { Ok(()) } else { Err("the plugin refused to start".to_string()) }
+    }
+
+    /// The host stops sending audio.
+    pub fn plugin_stop_processing(plugin: *const ClapPluginInstance) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let stop = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).stop_processing)) };
+        let Some(stop) = stop else {
+            return Err("the plugin has no `stop_processing`".to_string());
+        };
+        // The plugin's own function, called with the instance back, as
+        // the format says.
+        stop(plugin);
+        Ok(())
+    }
+
+    /// The instance is to forget its audio.
+    pub fn plugin_reset(plugin: *const ClapPluginInstance) -> Result<(), String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let reset = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).reset)) };
+        let Some(reset) = reset else {
+            return Err("the plugin has no `reset`".to_string());
+        };
+        // The plugin's own function, called with the instance back, as
+        // the format says.
+        reset(plugin);
+        Ok(())
+    }
+
+    /// The instance is finished with.
+    pub fn plugin_destroy(plugin: *const ClapPluginInstance) {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open, and this is called once, when the
+        // instance is dropped.
+        let destroy = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).destroy)) };
+        let Some(destroy) = destroy else { return };
+        // The plugin's own function, called once, as the format says.
+        destroy(plugin);
+    }
+
+    /// The host has **no extensions** to give.
+    ///
+    /// The format's extensions are the state, the log, the parameters
+    /// and the ports; this host has none of them, and says so by
+    /// answering with nothing.
+    pub extern "C" fn get_extension(_host: *const ClapHost, _extension_id: *const c_char) -> *const c_void {
+        std::ptr::null()
+    }
+
+    /// The plugin asked the host to restart it.
+    pub extern "C" fn request_restart(host: *const ClapHost) {
+        if let Some(state) = host_state(host) {
+            state.restart.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// The plugin asked the host to call it back.
+    pub extern "C" fn request_process(host: *const ClapHost) {
+        if let Some(state) = host_state(host) {
+            state.process.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// The plugin asked the host to call it on its main thread.
+    pub extern "C" fn request_callback(host: *const ClapHost) {
+        if let Some(state) = host_state(host) {
+            state.callback.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// The host's own state, from the host the plugin was given.
+    ///
+    /// The state is the loader's own, in a box that lives as long as
+    /// the instance does, and the plugin can only reach it while the
+    /// instance is alive.
+    fn host_state<'a>(host: *const ClapHost) -> Option<&'a HostState> {
+        if host.is_null() {
+            return None;
+        }
+        // SAFETY: the host is the loader's own structure, and its
+        // `host_data` is the loader's own state.
+        let data = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*host).host_data)) };
+        if data.is_null() {
+            return None;
+        }
+        // SAFETY: `host_data` was the state the loader put there, and
+        // the loader keeps it alive for as long as the instance is.
+        Some(unsafe { &*(data as *const HostState) })
     }
 
     /// A C string the plugin gave us, as a Rust string.
