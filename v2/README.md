@@ -901,7 +901,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**558 tests.** The MCP server links **all eleven batteries** in, so the
+**564 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
@@ -986,7 +986,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 558 tests
+cargo test          # 564 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3412,6 +3412,7 @@ so.
 | the claim | the truth today | where |
 |---|---|---|
 | a **numeric core**: a typed length, a typed angle | **built**, and **not in the core.** A `Length` in millimetres and an `Angle` in radians are a **library** and a **plugin** (§52), so every number in a document is still a JSON number and the core still has no unit — which is the answer §39 gave | §39, §43, §52 |
+| a **typed parameter**: a command that takes a length, and the schema says so | **built.** `ParamKind` was never sealed, so a library could always implement it for its own type; what was missing was the schema's **name and unit**, and that is the constrained change §56 made | §52, §56 |
 | the **panic guard** | **built**, twice: the command path and the evaluation path, and the plan says what it could not say | §38 |
 | the **geometry** | **built**: a library of its own, with no commands and no document knowledge | §13, §43 |
 | the **file format**: the old tree's `.craftkit` | **by design, untouched.** v2's format is a contribution, with migrations that are contributions, and a version chain the ecosystem checks | §15 |
@@ -3435,29 +3436,26 @@ so.
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **not built.** The kit writes the newest version and reads the old ones through its chain of migrations; the family's page layout application writes the *oldest* version that still represents the document | §51 |
 
-### The two things that are honestly not there
+### The one thing that is honestly not there
 
-1. **The typed parameter.** The typed value is built (§52) — as a
-   library and a plugin — but a command may not *take* one: the kinds a
-   parameter may take are the core's, and a plugin cannot add one. So a
-   command takes a number and a unit name, and the conversion is in its
-   body. That is a **core** question, and it is written down rather
-   than decided.
-2. **The version a file is written at.** The kit writes the newest
+1. **The version a file is written at.** The kit writes the newest
    version it knows and reads the old ones through its chain of
    migrations. The family's page layout application writes the *oldest*
    version that still represents the document, so that old readers keep
    working (§51). The kit has the machinery — the chain — and not the
    habit, and the habit is a decision about the format's contract.
 
-Two items used to be on this list and are not now. The **resumable
+Three items used to be on this list and are not now. The **resumable
 command** — a command that asks while it runs — was built in §50, and
 §50 says what the answer costs: the command is **run again** when the
 answer comes, so a command that asks must ask **before** it changes the
 document, and the session checks that rather than trusting the command.
 The **cheap undo** was built in §53: the nodes are shared, the states
 keep what they were, and the cost of an edit no longer depends on the
-size of the document — measured before and after.
+size of the document — measured before and after. The **typed
+parameter** was built in §56, and §56 says that the claim which put it
+on this list was wrong: the seam was open, and what was missing was the
+schema's name and its unit.
 
 ### And the one that is not a code gap
 
@@ -3821,6 +3819,11 @@ This section builds that answer.
   library. That is the one thing that would need the core to change, and
   it is **named here** rather than worked around silently: a typed
   parameter is a core change, and this kit did not make one.
+  — **This bullet was wrong, and §56 says so.** The trait is the SDK's
+  and it is **not sealed**, so a library could implement it for its own
+  type from the day it was written; the derive has always been generic
+  over it. What was missing was the *schema's* name and unit, and that
+  is what §56 added.
 - **The other units are derived.** A length is stored once, in
   millimetres, and the centimetres, the metres, the inches and the
   points are worked out every time by the evaluation. The same is true of
@@ -3860,6 +3863,13 @@ It is written down rather than decided, because the decision is the
 owner's: the kinds a parameter may take are the core's list, and adding
 one is a change to every parameter's schema, every front end's reader
 and every agent's idea of what a number can be.
+
+— **§56 answered it**, and the answer was partly that this section was
+wrong: the *reading* was never the problem, because `ParamKind` is open.
+The *schema* was, and the change §56 made is the constrained one: two
+optional constants and two optional fields, so that a kind can say
+**what it is** and **what unit it is in** without the core's list
+growing.
 
 ### The table, with the eleventh row
 
@@ -4153,3 +4163,91 @@ it did not:
   server can write its address and token to a file, so that another
   program can find the door. Where that file lives, and who is allowed
   to read it, is the host's business and not the channel's.
+
+---
+
+## 56. The typed parameter, and a claim that was wrong
+
+§52 said, in its own words, that the typed value **cannot** be a command
+parameter: *"the kinds a parameter may take are the core's — text,
+number, bool, a node reference — and a plugin cannot add one."*
+
+**That claim was wrong**, and this section is the correction, because a
+README that keeps a claim it has stopped believing is worse than one
+that never made it.
+
+### What was actually true
+
+The seam was open the whole time. The trait is the SDK's — it is called
+`ParamKind` — and it is **not sealed**: nothing stops a crate from
+implementing it for its own type. The derive has been generic over it
+since the beginning; it writes `<#ty as ParamKind>::read(params, name)`
+and never mentions what `#ty` is. So a library could implement
+`ParamKind` for its own `Length` from the day the trait was written,
+and a command could take a `Length` and not a number.
+
+What nobody had done is *use* it, and what nobody could do was **name
+the kind in the schema** — because the schema's kinds are the core's
+list, and a length is a number, and `number` says nothing about what
+the number means.
+
+### The constrained change
+
+Two optional constants, two optional fields, and nothing else:
+
+- `ParamKind` gains `NAME` and `UNIT`, both `Option<&'static str>`,
+  both defaulting to `None`. **Every existing kind is untouched**: a
+  kind that says nothing says nothing, and the schema is exactly what
+  it was.
+- `ParamDoc` carries them, and two builders put them on.
+- The derive passes them through, for a required parameter, an optional
+  one and an either.
+- The **ecosystem's schema** shows `type_name` and `unit`; the **MCP
+  door's** schema shows `title` (which is what a JSON Schema calls a
+  thing's name) and `unit`.
+- The **door** carries them too — the parameters travel as JSON, so a
+  plugin that is not part of the program can still say that its
+  parameter is a length. No change to the ABI's shape.
+
+### What it bought
+
+An agent is told what the number is:
+
+```json
+{"type": "number", "title": "length", "unit": "mm", "description": "How long it is: …"}
+```
+
+`25` on its own says nothing — twenty-five of what? The schema now says
+**millimetres**, and the command's parameter is the library's `Length`,
+so the range check happens in the *reading*: a length of a billion
+millimetres is refused before the command's body runs, and the body
+cannot mistake a length for a factor.
+
+And a person may type `2.5cm`: the reader takes a number in the unit
+the schema says, **or** a string with a unit of its own. The schema
+does not promise the string form — the *shape* is a number, and that is
+what it says — but the help text does, and the reader accepts it.
+
+### The library moved
+
+`craftkit-numeric` was at L0 with no dependencies at all, and it is now
+at **L3**, next to the vector geometry library, because implementing
+`ParamKind` means speaking the SDK's types. That is the same trade the
+vector library made, and the layering table says so.
+
+### What it did not settle
+
+- **The shape is still the core's.** A length is a number in the
+  schema, and a plugin cannot invent a JSON Schema type: the *shape* is
+  `number` and the *name* is `length`. A caller that validates strictly
+  against the schema sends a number, which is right, and a caller that
+  reads the title and the unit knows what it means.
+- **A plugin over the door names its kinds only in the parameters.** The
+  catalogue's *commands* still carry the core's shape, and a kind that
+  is a plugin's own has nowhere to be named in the command's own record.
+
+### And the correction, in the place it was made
+
+§48's list is re-checked below, and the typed parameter comes off it.
+What is left on that list is the **version a file is written at**, which
+is a decision about the format's contract and not a seam.
