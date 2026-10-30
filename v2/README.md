@@ -838,10 +838,14 @@ different commands with one id.
   a PDF document — indirect objects, dictionaries, streams and
   references — ported into v2's seams, and the three things it found
   (§27). It is optional, like the other two.
+- `crates/craftkit-plugin-film` — the **film battery**: the document model
+  of a video editor — bins, items, tracks and clips — ported into v2's
+  seams, and the three things it found (§30). It is optional, like the
+  other three.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**295 tests.**
+**296 tests.**
 
 ### Not built
 
@@ -917,7 +921,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 295 tests
+cargo test          # 296 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2084,3 +2088,64 @@ picture needs, and it took nothing from the core: a camera is a value,
 and the SDK hands it to whoever draws. The tree's rule — one set of
 camera controls — is now a rule the code can keep, and not only a rule
 the README can state.
+
+---
+
+## 30. The fourth battery: the document model of a video editor
+
+Three ports so far, and each one has found the same kind of thing. This
+one is a **video editor**, and its project is three things at once.
+
+### What was ported
+
+| | |
+|---|---|
+| a tree of **bins** | the folders the editor shows, each holding items and other bins |
+| a flat **registry of items** | the media, the sequences, the graphics — each with its own id, and each placed in a bin |
+| a **timeline** | sequences hold tracks, tracks hold clips, and a clip says which item it plays, where it starts, how long it is, and where in the media it begins |
+
+That last part is the **two clocks**: a clip has a place on the timeline
+and a place in the media, and they are not the same place.
+
+| the editor | v2 |
+|---|---|
+| a bin | a **node** of the kind `film.bin` — a group |
+| an item | a **node** of the kind `film.item`, in a bin |
+| a track | a **node** of the kind `film.track`, in a sequence |
+| a clip | a **node** of the kind `film.clip`, in a track |
+| the item a clip plays | a **relation** of the kind `clip` |
+| the item's own id | the payload's `item`, because the ids are the core's |
+
+### The three things the port found
+
+- **The tree gives a node one parent, and an editor's bins can hold the
+  same item twice.** The item lives in one bin, and a second bin that
+  holds it points at it with a relation. The core's rule — a node has
+  one parent — is the right one, and the editor's flat registry is what
+  has to give way. This is the same answer the PDF port gave for its
+  object graph, and it is now the second port to answer it the same way.
+- **The order of a timeline is not the order of the tree.** The children
+  of a track are in the order they were made, and the timeline is in the
+  order they *start*. So the order that matters is **derived**, and the
+  evaluator derives it. The tree keeps the order of history; the
+  timeline is the order of time.
+- **A sequence's duration is not stored.** It is the end of the last
+  clip on its tracks, and it changes when a clip moves. So it is derived
+  too, and nobody writes it down.
+
+### The table so far
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+
+Five ports. Four of them cost a field, a version, or a shape — and the
+fifth cost **nothing at all**, because the seams that the first four had
+already taught the kit were enough. The cost is falling, and that is the
+finding of the fifth port: the kit is not a list of missing features any
+more, it is a set of seams that a new domain arrives at and finds
+already there.
