@@ -153,6 +153,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-mcp-server", 5),
     ("craftkit-repl", 5),
     ("craftkit-studio", 5),
+    // The **browser door**: the kit in a page. It is an application,
+    // and it is the one application whose whole job is to be a
+    // browser.
+    ("craftkit-wasm", 5),
 ];
 
 /// The prefix a plugin's name carries.

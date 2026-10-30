@@ -95,6 +95,10 @@ pub const FOREIGN_SOURCE_EXCEPTIONS: &[(&str, &str)] = &[
         "the one home for the packaging steps the tree's two packages share (§258)",
     ),
     (".github/workflows/ci.yml", "continuous integration is YAML and runs nothing"),
+    (
+        "v2/apps/craftkit-wasm/browser-check.mjs",
+        "drives the browser door's WebAssembly module from Node; the browser's own language is what runs a WebAssembly module",
+    ),
 ];
 
 /// Whether a path is source code in a language other than Rust.

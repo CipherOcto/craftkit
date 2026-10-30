@@ -383,6 +383,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-wasm"
+version = "0.2.0"
+dependencies = [
+ "craftkit-repl",
+ "craftkit-studio",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

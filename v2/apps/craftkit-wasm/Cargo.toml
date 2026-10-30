@@ -1,0 +1,20 @@
+[package]
+name = "craftkit-wasm"
+description = "The browser door: the kit in a page, wasm32, with no bundler in the way."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# A **WebAssembly module**, and an rlib as well: the rlib is what the
+# tests link against, so the module's own logic can be driven from
+# Rust.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The door the page drives: the terminal door's own logic, so that the
+# page and the prompt say the same things for the same reasons.
+craftkit-repl = { path = "../craftkit-repl" }
+# The ecosystem the door drives.
+craftkit-studio = { path = "../craftkit-studio" }

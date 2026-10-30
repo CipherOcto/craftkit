@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>craftkit</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 52rem;
+        padding: 2rem 1rem;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem;
+      }
+      p.note {
+        margin: 0 0 1.5rem;
+        opacity: 0.75;
+      }
+      form {
+        display: flex;
+        gap: 0.5rem;
+      }
+      input {
+        flex: 1;
+        font: inherit;
+        padding: 0.4rem 0.6rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.4rem 0.9rem;
+      }
+      pre {
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        margin-top: 1.5rem;
+        padding: 0.75rem;
+        min-height: 4rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      p.status {
+        margin-top: 1rem;
+        opacity: 0.75;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>craftkit</h1>
+    <p class="note">
+      The kit, in a page. Type a command's id — <code>help</code> lists them —
+      and the answer is the answer the terminal door gives.
+    </p>
+    <form id="prompt">
+      <input id="line" name="line" autocomplete="off" spellcheck="false" placeholder="help" />
+      <button type="submit">run</button>
+    </form>
+    <pre id="answer"></pre>
+    <p class="status" id="status">loading the module…</p>
+
+    <script type="module">
+      // The whole of the boundary: load the module, write the command
+      // into its memory, call the four exports, read the answer back
+      // out of its memory.
+      const status = document.getElementById("status");
+      const answer = document.getElementById("answer");
+      const line = document.getElementById("line");
+      const form = document.getElementById("prompt");
+
+      let exports = null;
+
+      // The module's memory, read as bytes. The view is made again
+      // every time: the memory grows when the kit allocates, and a
+      // grown memory is a new buffer.
+      const memory = () => new Uint8Array(exports.memory.buffer);
+
+      // Ask the kit something, and get the answer back.
+      function ask(command) {
+        const bytes = new TextEncoder().encode(command);
+        const address = exports.craftkit_wasm_request_address(bytes.length);
+        memory().set(bytes, address);
+        const length = exports.craftkit_wasm_run();
+        const where_ = exports.craftkit_wasm_response_address();
+        return new TextDecoder().decode(new Uint8Array(exports.memory.buffer, where_, length));
+      }
+
+      try {
+        const response = await fetch("./craftkit_wasm.wasm");
+        if (!response.ok) {
+          throw new Error("the module was not found: " + response.status);
+        }
+        const module = await WebAssembly.instantiate(await response.arrayBuffer(), {});
+        exports = module.instance.exports;
+        status.textContent = "the kit is here. Type help.";
+        line.focus();
+      } catch (error) {
+        status.textContent =
+          "the module could not be loaded: " + error.message +
+          " — serve this directory over http (python3 -m http.server) and try again.";
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!exports) {
+          return;
+        }
+        const command = line.value;
+        line.value = "";
+        answer.textContent = ask(command);
+      });
+    </script>
+  </body>
+</html>
