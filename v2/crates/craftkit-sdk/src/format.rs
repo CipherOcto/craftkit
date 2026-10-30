@@ -495,6 +495,10 @@ pub fn write_v7(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
+    // The payload of a relation is the **eighth** version's field, and a
+    // file of the seventh version must not carry a field the seventh
+    // version does not know.
+    without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -719,7 +723,9 @@ pub fn write_v8(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
-    without_payloads(&mut value);
+    // The payload of a relation is the eighth version's field, and this
+    // is the version that has it: it is written here, and the seventh
+    // version's writer takes it off again.
     merge_unknown(&mut value, &document.unknown);
     value
 }
