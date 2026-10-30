@@ -846,10 +846,15 @@ different commands with one id.
   model of a compositing application — comps, layers, property trees and
   the paths that address them — ported into v2's seams, and the three
   things it found (§31). It is optional, like the other four.
+- `crates/craftkit-alloc` — the **counting allocator**: the one piece of
+  `unsafe` in v2, and what turns the lane's "must not allocate" rule into
+  a measurement (§32). It is a **dev** dependency of the studio and
+  nothing else, and a gate test holds it to that.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**303 tests.**
+**314 tests** by default, and **336** with the five optional batteries
+enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`).
 
 ### Not built
 
@@ -925,7 +930,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 303 tests
+cargo test          # 314 tests (336 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -1388,12 +1393,10 @@ can say so instead of finding out the hard way.
 **What this does not do, and says so:** there is **no device**, so
 nothing here plays a sound, and a real host drives the lane from its
 device's callback instead. There is **no priority**: nothing asks the
-operating system for a scheduling class. And the **allocation rule is a
-rule and not a measurement** — the lane's own path allocates nothing per
-block, and the job is told not to allocate, but this tree does not claim
-a measurement it has not made. The measurement would take a counting
-global allocator, which is `unsafe` by definition, and v2 has no
-`unsafe` at all.
+operating system for a scheduling class. And the **allocation rule is now
+a measurement** — it was a rule and not a measurement until §32, which
+built the counting global allocator the rule needed and proved the lane's
+work allocates nothing.
 
 ### 21.2 The files a document needs
 
@@ -1432,10 +1435,9 @@ fifth gives a document that names no files the none it has.
 - **A device.** The lane has no sound and no clock. A host that wants
   one drives the lane from the device's callback, and that is the
   host's business.
-- **The measurement of the allocation rule.** It wants a counting
-  global allocator, which is `unsafe` by definition. v2 has no
-  `unsafe` at all, and that is worth more than the measurement until
-  somebody decides otherwise.
+- **The measurement of the allocation rule** — **this one is built now**
+  (§32): a counting global allocator, the one piece of `unsafe` in v2, and
+  a test that proves the lane's work allocates zero times.
 - **A bundle that the application writes** — **this one is built now**
   (§25.1): the studio writes one and reads one back. What is still not
   there is a bundle that a *plugin* fills: the files come from the
@@ -1708,11 +1710,11 @@ One of the three is still there, and it is the smallest:
   answer for now is base64 in the payload (§23), and the answer costs a
   third more space and a format version when it arrives.
 
-And the things that were never in the list, still not in it: zoom and scroll
-(they need a camera module, and this tree has no camera), the transport
-(which belongs to the lane), the CLAP, VST3 and AU plugin formats (they are
-FFI, and this tree forbids unsafe), and the allocation measurement of the
-lane (it needs a counting global allocator, and that is unsafe too).
+And the things that were never in the list, still not in it: the transport
+(which belongs to the lane), and the CLAP, VST3 and AU plugin formats (they
+are FFI, and FFI is unsafe). The allocation measurement of the lane is no
+longer in that list: it is built (§32), and it cost one piece of `unsafe`
+in a crate of its own.
 
 ### What this says about the kit
 
@@ -2224,3 +2226,74 @@ derived, and the core's silence about what a domain calls its things.
 
 What the sixth port would have to do to cost nothing is the question
 that is left.
+
+---
+
+## 32. One piece of `unsafe`, and the lane's rule measured
+
+The lane has one rule: **its work must not allocate**. `run` does bounded
+work in bounded time, and an allocation inside it is a lock inside it — a
+lock on the lane, from the thread that is supposed to never wait. The rule
+was written down early, and for a long time it was a rule and not a
+measurement, because measuring it needs a **counting global allocator**, and
+a global allocator is `unsafe` by definition. v2 had no `unsafe` at all.
+
+That was a good default and it cost a measurement. This section is the
+trade, made once, on purpose.
+
+### What was allowed, exactly
+
+One new crate, `crates/craftkit-alloc`, and it holds **one** `unsafe impl`:
+
+```rust
+#![deny(unsafe_code)]   // **not** `forbid`
+
+#[allow(unsafe_code)]
+unsafe impl GlobalAlloc for Counting { /* counts, then defers to System */ }
+```
+
+The four rules that hold it there:
+
+- **one crate** does this, and the crate does one thing;
+- the crate root says **`deny`**, not `forbid` — because `forbid` cannot be
+  relaxed by an `allow`, so the exception could not live in the crate at
+  all. `deny` is the backstop; every other crate in the tree still says
+  `forbid(unsafe_code)`;
+- the counts are **per thread**, in a thread-local with a `const`
+  initialiser, so reading them inside the allocator cannot itself
+  allocate — which would be a very funny way to count allocations;
+- a **gate test** in that crate reads the whole workspace and refuses: a
+  second `unsafe` of any kind, a second `allow(unsafe_code)`, an `unsafe`
+  block outside the allocator, or a crate root that swapped `forbid` for
+  `deny` in the wrong place. The exception is therefore not a promise in
+  prose; it is a **mechanical** fact that a test re-checks.
+
+This is the same shape as the outer tree's own one allowed exception, and
+it was made because the owner asked for exactly this: *if v2 forbids it,
+make it allow it in a very constrained way so that it is manageable*.
+
+### What the measurement says
+
+The studio's test binary installs the allocator and runs a **real** lane
+job on a **real** lane thread. The job counts its own allocations before
+and after its work, and the test asserts the difference is **zero**.
+
+So the claim is no longer "the lane does not allocate", it is "the lane's
+work allocated zero times, measured on the thread that ran it". The
+control thread's allocations are not counted against it, because they are
+not the lane's — which is the whole reason the counters are per thread.
+
+### What this says about the kit
+
+A rule that cannot be measured is a rule that is only believed. The tree
+had one, and the price of keeping the tree `unsafe`-free was that the rule
+stayed unmeasured.
+
+The way out was not to argue about `unsafe`, but to make the exception
+**small, named, and mechanically checked**: one crate, one impl, one
+`allow`, and a test that reads the tree and refuses a second one. That is
+the same discipline the outer tree uses for its own single allowed
+`unsafe`, and it is now available here for the next thing that needs it —
+the CLAP, VST3 and AU plugin formats, which are FFI, and FFI is unsafe.
+When that port comes, it should land in its own crate under the same gate,
+not in the middle of the SDK.
