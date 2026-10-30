@@ -866,9 +866,10 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**341 tests** by default, and **393** with the six optional batteries
-enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
-`/art`).
+**406 tests.** The MCP server links **all six batteries** in, so the
+workspace's count is the same with or without the studio's features
+(`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`) —
+and the studio on its own, with no features, carries 341 of them.
 
 ### Not built
 
@@ -885,9 +886,10 @@ enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
   with its one-file-per-change discipline, is untouched. What v2 has is a
   format that is a **contribution**, with migrations that are contributions,
   and a version chain the ecosystem checks.
-- **The old tree's front ends.** No toolbar, no MCP server, no control
-  channel. What v2 has is the **projection** every front end would read, and
-  one front end built on it as a proof.
+- **The old tree's front ends.** No toolbar, no control channel. The **MCP
+  server is built** (§41: one tool per command, generated from the
+  registry), and what v2 has besides that is the **projection** every front
+  end would read, and one front end built on it as a proof.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
   the port showed is missing: a typed body, text, and images. The
@@ -948,7 +950,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 341 tests (393 with the batteries on)
+cargo test          # 406 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2913,3 +2915,66 @@ And the answer is visible in the table: **the plugin seam**. It is the
 one thing all three trees cannot do without a fork of their engine
 crate, it is the one thing this kit has, and it is the only thing in the
 list that is not a *shape* but a *door*.
+
+---
+
+## 41. The MCP door: one tool per command
+
+§40 surveyed three applications in the family that all put an **MCP
+façade** in front of their command registries: a handful of tools that
+take a command id and a bag of parameters, seventeen to twenty-eight of
+them over three hundred and sixty-three to six hundred and thirty-two
+commands.
+
+An agent that drives one of those servers has to learn **two** things: the
+façade's vocabulary, and the command ids the façade forwards to. This
+kit does not have a façade. It has the **registry**, and the registry is
+the protocol.
+
+### What was built
+
+- `crates/craftkit-mcp` — the server: it takes a session and answers
+  JSON-RPC 2.0 over newline-delimited stdio, which is what an MCP client
+  expects and what the family's servers speak;
+- `apps/craftkit-mcp-server` — the program: the studio's ecosystem with
+  **all six batteries linked in**, one session, and the protocol on its
+  standard output. Nothing else is ever printed there, because a log
+  line on the protocol stream breaks the client.
+
+### One tool per command
+
+- the tool's **name** is the command's id, with the dots turned into
+  underscores and a prefix: `doc.open` is `craftkit_doc_open`;
+- the tool's **schema** is built from the command's **typed** parameters:
+  `{"type": "string"}` for a text, `{"type": "integer", "minimum": 0}`
+  for a node reference, and the command's own help as the description;
+- the tool's **description** is the command's label and its own words;
+- **calling the tool runs the command**, in the session, and returns what
+  it said: the message, and the data as JSON.
+
+So there is nothing to learn twice, and a command that is added is a tool
+that is added. With the six batteries linked in, that is **106 tools** —
+and a test says so, by counting the registry and the tool list and
+checking that they are the same size.
+
+### What the survey said about this, and what it cost
+
+The survey's finding was that the three trees hide their registries
+behind a second vocabulary, and that their parameters are a **human-
+readable string** parsed by hand — DesignCraft parses the `{…}` object
+out of the `params` text so that a misspelt key from an out-of-app caller
+can be refused.
+
+This kit's parameters were already typed (§ the SDK's `Params`), and the
+schema above is that typing, written out. So the cost of the whole door
+is **one crate and one app**, and the difference it makes is that an
+agent reads the tool list and knows the kit's whole surface: what it can
+do, what each thing takes, and what each thing is for.
+
+### What is still not built
+
+The **control channel** — the loopback socket the outer tree drives the
+window with — is not here, and neither is a **toolbar**. The MCP server
+is the door an agent uses; the other two are doors a person uses, and
+they are the same kind of thing: a front end that reads the registry and
+calls the commands.

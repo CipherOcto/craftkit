@@ -1,0 +1,13 @@
+[package]
+name = "craftkit-mcp"
+description = "The MCP door: the command registry, spoken to an agent, one tool per command."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK, and nothing else: the server is the registry, and the registry
+# is the SDK's.
+craftkit-sdk = { workspace = true }
+serde_json = { workspace = true }

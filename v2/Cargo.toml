@@ -18,6 +18,8 @@ craftkit-vector-geom = { path = "crates/craftkit-vector-geom", version = "0.2.0"
 # The time model of the sound battery: a **library**, not a plugin. It
 # contributes nothing to the registry and the linker does not wire it in.
 craftkit-sound-time = { path = "crates/craftkit-sound-time", version = "0.2.0" }
+# The MCP door: the registry, spoken to an agent. One tool per command.
+craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
 # The **door**: opening a shared library and calling the plugin table in
 # it. A crate with the second of v2's three allowed exceptions.
 craftkit-ffi = { path = "crates/craftkit-ffi", version = "0.2.0" }

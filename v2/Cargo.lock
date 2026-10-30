@@ -68,6 +68,24 @@ name = "craftkit-link"
 version = "0.2.0"
 
 [[package]]
+name = "craftkit-mcp"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+ "serde_json",
+]
+
+[[package]]
+name = "craftkit-mcp-server"
+version = "0.2.0"
+dependencies = [
+ "craftkit-mcp",
+ "craftkit-sdk",
+ "craftkit-studio",
+ "serde_json",
+]
+
+[[package]]
 name = "craftkit-plugin-art"
 version = "0.2.0"
 dependencies = [

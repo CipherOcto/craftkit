@@ -1,0 +1,27 @@
+[package]
+name = "craftkit-mcp-server"
+description = "The MCP server over stdio: the command registry, one tool per command."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+# The SDK and the JSON, for the tests that drive the server.
+craftkit-sdk = { workspace = true }
+serde_json = { workspace = true }
+
+[dependencies]
+# The **server**: the registry, spoken to an agent.
+craftkit-mcp = { workspace = true }
+# The **application**: the studio's ecosystem and its session. Every
+# battery is linked in, so the tool list is the whole kit and not one
+# part of it.
+craftkit-studio = { path = "../craftkit-studio", features = [
+    "vector",
+    "sound",
+    "pdf",
+    "film",
+    "fx",
+    "art",
+] }
