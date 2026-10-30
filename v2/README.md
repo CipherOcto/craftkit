@@ -3030,7 +3030,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all twelve batteries it is
-**152**, measured the same way.
+**153**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -5477,3 +5477,87 @@ written down.
 - **The head that is read is a limit and not a promise.** A picture
   whose header is further in than the limit is a picture this program
   cannot measure — and the program chose the limit.
+
+---
+
+## 69. The one way, and the second path that was still open
+
+The family tree has a rule that is not about the code but about what the
+code **is for**: the session's public methods are the registry, and a
+public method that changed a design would be a **second path** to it. The
+gate in the family refuses one (§135).
+
+This tree had the same hole and did not know it. `Session::document_mut()`
+was public and handed out the document to anybody who asked — including a
+program that had no command running, and therefore no snapshot, no undo
+step and nothing in the log. The batteries used it, the tests used it, and
+every use of it was a way around the registry.
+
+### What was built
+
+- **The document is handed out only while a command is running.**
+  `Session::document_mut()` returns a `Result` now, and it is a refusal
+  when no command is running: *"the document is changed by a command, and
+  no command is running"*. The session already knew whether a command was
+  running — it keeps the name for the crash report — so the rule costs
+  nothing to enforce.
+- **Every call site went through the registry.** A hundred and sixteen of
+  them, in twenty-seven files: the batteries, the SDK's own commands and
+  the tests.
+- **The tests that built documents by hand now build them the way the
+  reader sees them.** A test that needs a metric with two thousand
+  widths — a thing no command would ever make — now hands the **reader**
+  the node it is to read, and the reader is what is being tested.
+- **The command the rule asked for exists.** Changing a metric's widths
+  was something a program could do by hand and not through the registry,
+  so there was no command for it; now there is: `text.metric.change`.
+- **A new file for the rule** (`crates/craftkit-sdk/tests/one_way.rs`),
+  with three tests: the refusal outside a command, the handover inside
+  one, and the judgement that follows.
+
+### What the port found
+
+- **A rule that is not enforced is a hope, and this one had been
+  enforced for months by nobody.** The hole was not in the batteries: it
+  was in the *session's own API*, and every battery had copied the shape
+  of it. The family found the same hole in its own tree and put a gate
+  in; the gate was the right answer there, and here the *runtime* is
+  better: the session refuses, so there is nothing to forget to call.
+- **Closing the second path found a missing command.** "A typeface's
+  widths change" was a thing the kit could do and could not *say*: the
+  only way to change a metric was to reach into the document. The rule
+  did not only close something — it **named a gap**, and the gap was a
+  command that should have existed.
+- **The tests that were cheating were testing the wrong thing.** Three
+  of them built documents that no file and no command could produce, and
+  then asked the *session* about them. They are now asking the *reader*,
+  which is where the question belonged, and they are better tests for
+  it: a reader that survives a metric with two thousand widths is a
+  reader that survives a file that has one.
+- **A refusal is a value, not a crash.** A program that reaches for the
+  document outside a command gets an error it can read and handle, and
+  the document is untouched.
+
+### What it cost
+
+- one signature, one guard, a hundred and sixteen call sites, one new
+  command, and three new tests;
+- the shape of the batteries' commands did not change: a command still
+  receives the session and writes through it.
+
+### What it does not settle
+
+- **The session still hands out the document to a command that lies.**
+  A command that says it does not change the document and changes it
+  anyway is caught afterwards — the session compares the document with
+  the snapshot and puts it back (§ the judgement) — but it *is* caught
+  afterwards and not before.
+- **The rule is the session's, and not the gate's.** The family puts a
+  gate in front of the same hole; here the session refuses, which is
+  stronger at run time and weaker at build time. A crate that reaches
+  for the document is refused **when it runs**, and not when it is
+  compiled.
+- **`set_document` is the door the plugin's bridge uses.** It is the
+  session's own business and not a command: a program hands a document to
+  a session that has none, and nothing is undone because there was no
+  edit. It is `pub(crate)`, so it is not a second path out of the crate.
