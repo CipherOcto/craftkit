@@ -111,3 +111,104 @@ fn an_interlaced_picture_is_refused() {
     let error = read(&bytes, &Limits::default()).expect_err("that picture is interlaced");
     assert!(error.to_string().contains("interlaced"), "{error}");
 }
+
+/// A PNG of **four-bit greyscale**, written by hand.
+///
+/// The samples of a four-bit picture are packed two to a byte, the
+/// most significant bits first, and the rows are stored the way PNG
+/// stores them: a filter byte and then the row.
+fn a_four_bit_grey_png() -> Vec<u8> {
+    let mut rows: Vec<u8> = Vec::new();
+    // The first row: eight greys, two to a byte, the most significant
+    // bits first.
+    rows.push(0);
+    rows.extend_from_slice(&[0x01, 0x23, 0x45, 0x67]);
+    // The second row: the same, the other way round.
+    rows.push(0);
+    rows.extend_from_slice(&[0xBA, 0xDC, 0xFE, 0x10]);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
+    let mut header = Vec::new();
+    header.extend_from_slice(&8u32.to_be_bytes());
+    header.extend_from_slice(&2u32.to_be_bytes());
+    header.extend_from_slice(&[4, 0, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &header);
+    chunk(&mut out, b"IDAT", &a_zlib(&rows));
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+/// A zlib stream of that data, stored and not compressed.
+fn a_zlib(data: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder.write_all(data).expect("the data is written");
+    encoder.finish().expect("the stream is finished")
+}
+
+/// One chunk: its length, its name, its bytes and its checksum.
+fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    out.extend_from_slice(kind);
+    out.extend_from_slice(data);
+    let mut checked = kind.to_vec();
+    checked.extend_from_slice(data);
+    out.extend_from_slice(&craftkit_png::crc32(kind, data).to_be_bytes());
+}
+
+/// A picture of **four-bit greyscale** is read, and its greys are
+/// scaled up.
+///
+/// A four-bit grey is one of sixteen greys, and the picture that comes
+/// out is eight-bit: the values are multiplied by seventeen, so that
+/// the last one is white.
+#[test]
+fn a_picture_of_four_bit_greyscale_is_read() {
+    let bytes = a_four_bit_grey_png();
+    let picture = read(&bytes, &Limits::default()).expect("the picture is read");
+    assert_eq!(picture.width, 8);
+    assert_eq!(picture.height, 2);
+    assert_eq!(picture.channels, 1);
+    assert_eq!(picture.samples.len(), 16, "there is a sample for every pixel");
+    assert_eq!(picture.samples[0], 0, "black is black");
+    assert_eq!(picture.samples[1], 17, "one is the first grey");
+    assert_eq!(picture.samples[7], 119, "seven is the seventh grey");
+    assert_eq!(picture.samples[8], 187, "the second row starts with eleven");
+    assert_eq!(picture.samples[15], 0, "and ends with zero");
+}
+
+/// A PNG with a **palette**, written by hand.
+///
+/// The picture's samples are the palette's indices, and the colours are
+/// what the picture is made of: the picture that comes out has three
+/// samples a pixel, not one.
+fn a_palette_png() -> Vec<u8> {
+    let mut rows: Vec<u8> = Vec::new();
+    rows.push(0);
+    // Four pixels: black, white, black, white.
+    rows.extend_from_slice(&[0x00, 0x01, 0x00, 0x01]);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
+    let mut header = Vec::new();
+    header.extend_from_slice(&4u32.to_be_bytes());
+    header.extend_from_slice(&1u32.to_be_bytes());
+    header.extend_from_slice(&[8, 3, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &header);
+    // Two colours: black and white.
+    chunk(&mut out, b"PLTE", &[0, 0, 0, 255, 255, 255]);
+    chunk(&mut out, b"IDAT", &a_zlib(&rows));
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+/// A picture with a palette is read, and its colours are the palette's.
+#[test]
+fn a_picture_with_a_palette_is_read() {
+    let bytes = a_palette_png();
+    let picture = read(&bytes, &Limits::default()).expect("the picture is read");
+    assert_eq!(picture.width, 4);
+    assert_eq!(picture.height, 1);
+    assert_eq!(picture.channels, 3, "a palette picture has three samples a pixel");
+    assert_eq!(&picture.samples[0..3], &[0, 0, 0], "the first pixel is black");
+    assert_eq!(&picture.samples[9..12], &[255, 255, 255], "the fourth is white");
+}

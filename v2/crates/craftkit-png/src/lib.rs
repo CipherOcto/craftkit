@@ -154,8 +154,13 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
     if interlaced {
         return Err(Error::Unsupported("the picture is interlaced".to_string()));
     }
-    if !matches!(depth, 8 | 16) {
-        return Err(Error::Unsupported("the picture is not eight or sixteen bits".to_string()));
+    if !matches!(depth, 1 | 2 | 4 | 8 | 16) {
+        return Err(Error::Unsupported("the picture's bit depth is not one of the five".to_string()));
+    }
+    if depth < 8 && !matches!(colour, 0 | 3) {
+        return Err(Error::Unsupported(
+            "only a grey picture and a palette may be fewer than eight bits".to_string(),
+        ));
     }
     let channels = match colour {
         0 => 1,
@@ -174,7 +179,49 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
     }
     let raw = inflate::zlib(&data, limits)?;
     let samples = unfilter(&raw, width as usize, height as usize, channels, depth, &palette)?;
+    // A palette picture's samples are the palette's **indices**, and the
+    // colours are what the picture is made of: the picture that comes
+    // out has three samples a pixel, not one.
+    let channels = if colour == 3 { 3 } else { channels };
     Ok(Picture { width, height, channels, samples })
+}
+
+/// The samples of a picture that is **fewer than eight bits**.
+///
+/// A grey picture of one, two or four bits has its samples packed into
+/// the bytes, most significant bits first, and a picture of fewer bits
+/// than eight has its **grey** scaled up: a one-bit grey is black or
+/// white and a four-bit grey is one of sixteen greys.
+///
+/// A palette picture's samples are the palette's **indices**, and the
+/// colours are what the picture is made of.
+fn unpack(samples: Vec<u8>, width: usize, height: usize, depth: u8, palette: &[[u8; 3]]) -> Vec<u8> {
+    let per_byte = 8 / depth as usize;
+    let mask = (1u16 << depth) - 1;
+    let mut values: Vec<u8> = Vec::with_capacity(width * height);
+    for byte in samples {
+        for index in 0..per_byte {
+            let shift = 8 - depth as usize * (index + 1);
+            let value = ((byte as u16) >> shift) & mask;
+            values.push(value as u8);
+        }
+    }
+    values.truncate(width * height);
+    if !palette.is_empty() {
+        let mut colours = Vec::with_capacity(values.len() * 3);
+        for index in values {
+            let entry = palette.get(index as usize).copied().unwrap_or([0, 0, 0]);
+            colours.extend_from_slice(&entry);
+        }
+        return colours;
+    }
+    // A grey picture is scaled up to eight bits.
+    let scale = match depth {
+        1 => 255,
+        2 => 85,
+        _ => 17,
+    };
+    values.into_iter().map(|value| value * scale).collect()
 }
 
 /// Undo the filters of the rows.
@@ -191,8 +238,13 @@ fn unfilter(
     depth: u8,
     palette: &[[u8; 3]],
 ) -> Result<Vec<u8>, Error> {
-    let bytes_per_pixel = (channels as usize) * (depth as usize / 8);
-    let row_bytes = width * bytes_per_pixel;
+    // The filters count the bytes of a **pixel**: one for a picture of
+    // fewer than eight bits, however many pixels are packed into it.
+    let bytes_per_pixel = ((channels as usize) * (depth as usize / 8)).max(1);
+    // The row holds the samples of every pixel, and a picture of fewer
+    // than eight bits packs them: the row is as many bytes as the
+    // samples need.
+    let row_bytes = (width * channels as usize * depth as usize).div_ceil(8);
     if raw.len() < height * (row_bytes + 1) {
         return Err(Error::Malformed("the picture's rows are shorter than they should be".to_string()));
     }
@@ -223,6 +275,9 @@ fn unfilter(
         }
         out.extend_from_slice(&current);
         previous.copy_from_slice(&current);
+    }
+    if depth < 8 {
+        return Ok(unpack(out, width, height, depth, palette));
     }
     // A palette picture's samples are the palette's **indices**, and the
     // colours are what the picture is made of.
