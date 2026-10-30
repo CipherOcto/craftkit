@@ -863,6 +863,10 @@ different commands with one id.
   model of a word processor — blocks, styles, media, and the runs that
   are intervals over a text — ported into v2's seams, and the five
   things it found (§49). It is optional, like the others.
+- `crates/craftkit-plugin-layout` — the **layout battery**: the document
+  model of a page layout application — spreads, pages, items, layers,
+  stories and assets — ported into v2's seams, and the five things it
+  found (§51). It is optional, like the others.
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -882,11 +886,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**479 tests.** The MCP server links **all nine batteries** in, so the
+**493 tests.** The MCP server links **all ten batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`, `/cad`, `/prose`) — and the studio on its own, with no
-features, carries 172 of them.
+`/grid`, `/cad`, `/prose`, `/layout`) — and the studio on its own, with
+no features, carries 173 of them.
 
 ### Not built
 
@@ -967,7 +971,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 479 tests
+cargo test          # 493 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2976,8 +2980,8 @@ the protocol.
 So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
-checking that they are the same size. With all nine batteries it is
-**130**, measured the same way.
+checking that they are the same size. With all ten batteries it is
+**139**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3412,8 +3416,9 @@ so.
 | the **plan**: one evaluated thing every consumer reads | **built** | §24 |
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
+| the **version a file is written at**, derived from what the document holds | **not built.** The kit writes the newest version and reads the old ones through its chain of migrations; the family's page layout application writes the *oldest* version that still represents the document | §51 |
 
-### The two things that are honestly not there
+### The three things that are honestly not there
 
 1. **The numeric core.** The typed value, the unit, the solver. Not
    built, and §39 says where it goes.
@@ -3422,12 +3427,18 @@ so.
    expensive than it needs to be — and the only item on this list that
    is a **regression against the family's own trees** rather than a gap
    in the kit's design.
+3. **The version a file is written at.** The kit writes the newest
+   version it knows and reads the old ones through its chain of
+   migrations. The family's page layout application writes the *oldest*
+   version that still represents the document, so that old readers keep
+   working (§51). The kit has the machinery — the chain — and not the
+   habit, and the habit is a decision about the format's contract.
 
-The third item on this list used to be the **resumable command** — a
-command that asks while it runs. §50 built it, and §50 also says what
-the answer costs: the command is **run again** when the answer comes,
-so a command that asks must ask **before** it changes the document, and
-the session checks that rather than trusting the command.
+The **resumable command** — a command that asks while it runs — used to
+be on this list. §50 built it, and §50 also says what the answer costs:
+the command is **run again** when the answer comes, so a command that
+asks must ask **before** it changes the document, and the session checks
+that rather than trusting the command.
 
 ### And the one that is not a code gap
 
@@ -3649,3 +3660,102 @@ Almost nothing, and the shape of the cost is the point:
   while a command is waiting has no trace of the question, and that is
   a thing to decide rather than to inherit: the command was waiting,
   not the document.
+
+---
+
+## 51. The tenth battery: a page layout document, and the edges that were id fields
+
+§40 surveyed DesignCraft: 542 commands, one `Session::execute`, and a
+document that is **not a tree and not a graph** — a set of **spreads**,
+each with **pages** and a flat, z-ordered list of **items**, beside
+**layers**, **stories**, **styles** and an **asset table**. It is the
+family's publishing application and the last of its trees that had not
+been ported, so it is the tenth battery: `craftkit-plugin-layout`.
+
+### What was ported
+
+| the page layout application | v2 |
+|---|---|
+| the document | a **node** of the kind `layout.document` |
+| a spread | a **node** of the kind `layout.spread` — pages and items |
+| a page | a **node** of the kind `layout.page` |
+| an item | a **node** of an **open kind**, and the **caller names it** |
+| a layer | a **node** — few things are nodes |
+| a story | a **node**: the text, stored once |
+| an asset | a **node** whose **stream** is the file |
+| an item's layer | a **relation**: an edge that says something |
+| an item's story | a **relation**: an edge that says something |
+| a story's frames | **derived**: the inverse of the edges |
+| the pages of a spread | **derived**, in order, by the evaluator |
+
+Nine commands, ten kinds, two evaluators, one panel, **14 tests**.
+
+### The five things the port found
+
+- **The typed id fields are the edges.** The application writes
+  `Item.story`, `Page.parent`, `Story.frames` and `Item.overrides` as
+  hand-written id fields, and the survey says a universal kit would
+  "type them once". Here they are **relations**: an edge with a payload
+  and a kind that says what it is. That is the **fourth** time an edge
+  has answered "what is this relationship?" — after the PDF's reference
+  (§27), the CAD's layer (§44) and the prose's style (§49) — and the
+  fourth time the answer has been the same.
+- **A relation has an inverse, and the inverse is derived.** The
+  application stores `Story.frames` as a field of its own, so the two
+  ends of the same fact are stored **twice** and can disagree. Here the
+  edge is stored **once**, from the item to the story, and the story's
+  frames are **worked out** from the edges. That is a new kind of
+  derived value in this kit: not a number, not a geometry and not a
+  timeline, but a **relation**.
+- **A closed union of contents is exactly what the open kind is for.**
+  The application's item content is `Unassigned | Text | Graphic |
+  Group`, matched exhaustively in the document, the composer, the
+  renderer and every exporter — so a new kind of content is a change in
+  five places at once. Here the **caller names the kind**, and the list
+  is open. The fifth port to find this, after the artist's unions and
+  the CAD's entities.
+- **The asset's bytes are in the package, not in the document.** The
+  application keeps them beside the document and the document holds the
+  id. That is this kit's **stream** (§25) — the **third** port to land
+  on it, after the artist's stage and the prose's media — and the
+  bundle carries the bytes without anybody naming a path twice.
+- **A story is a string, and what formats it is said over the text.**
+  The second tree to say it, after the word processor: the text is
+  stored **once**, and the runs are intervals over it. Two trees, one
+  shape, and the shape is the kit's.
+
+### And the finding that is not a document model
+
+The application's file format writes the **oldest version that still
+represents the document** — `required_version(doc)` returns 4 for a
+document with graphic layer options, 3 for one with EPS assets, and 2
+otherwise — so that old readers keep working. This kit writes the
+**current** version and has a chain of migrations to read the old ones.
+
+That is a difference worth naming, and it is **not built here**: a file
+written by this kit always says the newest version, even when the
+newest version says more than the document needs. What the application
+does is a **downgrade on write**, and the kit's version chain is the
+machinery it would need. It is written down rather than built, because
+"the version a file is written at" is a decision about the format's
+contract, and that decision is the owner's.
+
+### The table, with the tenth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
+| the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
+| the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
+| the **page layout application** | the typed id fields are **edges**; a relation's **inverse is derived**; the file's version is **derived from what is in it** | nothing |
+
+Ten ports. Seven of them cost nothing. The two that did — the artist's
+unions and the branches — bought the kit's two strangest features, and
+everything the family has taught it since has cost **nothing**.
