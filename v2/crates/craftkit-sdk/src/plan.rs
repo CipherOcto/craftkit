@@ -24,6 +24,7 @@
 use serde_json::Value as Json;
 
 use crate::document::{Document, Node};
+use crate::{EngineError, Outcome, Session};
 
 /// One thing the plan says about one node.
 #[derive(Debug, Clone, PartialEq)]
@@ -145,4 +146,25 @@ pub fn evaluate_node(node: &Node, document: &Document, kind: &crate::document::N
     let evaluate = kind.evaluate?;
     let guarded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(node, document)));
     guarded.ok().flatten()
+}
+
+/// What the document means, as a **command**.
+///
+/// The plan is what every front end wants to show, and until now a front
+/// end had to reach for the evaluator to get it: the studio, the bridge
+/// and the terminal door all called `session.evaluate()` themselves. That
+/// is a second path, and a second path is where two answers drift apart.
+///
+/// So the plan is a **command**. It is a query — it changes nothing, so
+/// it is not an undo step — and every door reaches it the same way, and
+/// the answer is the same wherever it is asked for.
+#[derive(craftkit_derive::Command)]
+#[command(id = "doc.plan", area = "doc", icon = "list", menu("File"), no_journal)]
+pub struct DocPlan {}
+
+impl DocPlan {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let plan = session.evaluate();
+        Ok(Outcome::new(format!("{} item(s)", plan.items.len())).with_data(plan.to_json()))
+    }
 }
