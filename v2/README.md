@@ -858,6 +858,10 @@ different commands with one id.
   of a CAD drawing — layers, blocks, entities and the edges between them
   — ported into v2's seams, and the three things it found (§44). It is
   optional, like the others.
+- `crates/craftkit-plugin-prose` — the **prose battery**: the document
+  model of a word processor — blocks, styles, media, and the runs that
+  are intervals over a text — ported into v2's seams, and the five
+  things it found (§49). It is optional, like the others.
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -877,11 +881,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**439 tests.** The MCP server links **all eight batteries** in, so the
+**463 tests.** The MCP server links **all nine batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`, `/cad`) — and the studio on its own, with no features, carries
-341 of them.
+`/grid`, `/cad`, `/prose`) — and the studio on its own, with no
+features, carries 158 of them.
 
 ### Not built
 
@@ -962,7 +966,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 439 tests
+cargo test          # 463 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2953,7 +2957,7 @@ the protocol.
   JSON-RPC 2.0 over newline-delimited stdio, which is what an MCP client
   expects and what the family's servers speak;
 - `apps/craftkit-mcp-server` — the program: the studio's ecosystem with
-  **all six batteries linked in**, one session, and the protocol on its
+  **all nine batteries linked in**, one session, and the protocol on its
   standard output. Nothing else is ever printed there, because a log
   line on the protocol stream breaks the client.
 
@@ -2971,7 +2975,8 @@ the protocol.
 So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
-checking that they are the same size.
+checking that they are the same size. With all nine batteries it is
+**129**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -3298,8 +3303,9 @@ than decided here.
 | the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
 | the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
 | the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
+| the **word processor** | a run is an **interval**; the words a run covers are **derived**; a cell that holds a tree is not a payload | nothing |
 
-Eight ports. Six of them cost nothing. The two that did — the artist's
+Nine ports. Six of them cost nothing. The two that did — the artist's
 unions and the branches — bought the kit's two strangest features, and
 everything the family has taught it since has cost **nothing**.
 
@@ -3386,7 +3392,7 @@ so.
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
 | a **control channel** | **not built.** The MCP server is the other door, and it is built | §41 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
-| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44); **images are not ported**, and an appearance is still a plugin's payload | §44 |
+| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44) and a paragraph's own text and runs in a third (§49); **images are not ported**, and an appearance is still a plugin's payload | §44, §49 |
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
@@ -3424,3 +3430,116 @@ clippy, fmt, and the workspace-scanning gate that holds the list of
 allowed `unsafe`. The outer tree's gates do not reach into `v2/`, which
 is excluded from the outer workspace — so the outer gate is evidence
 about the outer tree and **not** about this one.
+
+---
+
+## 49. The ninth battery: a word processor, and the rule that has a limit
+
+§40 surveyed WordCraft: 632 commands, one `Session::run`, a panic
+guard, and a document that is **a flat list of blocks, a side vector of
+styles, and a table of media**. It is the family's largest tree, and it
+is a word processor — so it is the ninth battery:
+`craftkit-plugin-prose`.
+
+### What was ported
+
+| the word processor | v2 |
+|---|---|
+| the document | a **node** of the kind `prose.document` |
+| a block | a **node** of an **open kind**: `prose.block.paragraph`, `prose.block.table` |
+| a paragraph's text | the block's **payload**, stored **once** |
+| a paragraph's runs | the **payload**: a run is an **interval** over the text |
+| the words a run covers | **derived**, every time, by the evaluator |
+| a style | a **node** — few things are nodes |
+| a block's style | a **relation**: an edge that says something |
+| a style's base | a **relation**: an edge that says something |
+| a table's cells | the **payload**: a cell holds a value and not a tree |
+| a media | a **node** whose **stream** is the file |
+| the blocks | **derived**, in order, by the evaluator |
+
+Seven commands, five kinds, one evaluator, one panel, **24 tests**.
+
+### The five things the port found
+
+- **A flat list is a shape the tree already had.** The blocks are a
+  sequence and not a nesting, so the tree is a list of children and
+  **the order is the tree's order** — no index field, no key. That is
+  the third shape a document has had here — a grid (§42), a flat store
+  (§44) and a list — and the tree took the first and the third without
+  a word being said.
+- **A run is an interval, and the words it covers are derived.** The
+  application stores a paragraph's text **once**, as a string, and a
+  run is a **length** over that string plus the formatting. The run
+  does not carry the words: it says how many of them it covers. Here
+  the run is an interval in the payload and the **words it covers are
+  worked out every time**. That is the **fourth** instance of "derived
+  values are derived" (after the timeline's lengths, the artist's
+  element durations and the CAD's extents) and the first where the
+  derived thing is **text**.
+- **The rule "what is numerous is in the payload" has a limit, and this
+  port found it.** A table cell in the application holds a **nested
+  list of blocks** — and a thing that holds a tree cannot be a value
+  in a payload. So the rule is not that, but the sharper one:
+  **what is numerous and holds nothing is in the payload; what holds a
+  tree is a node.** The grid's cells hold numbers, the CAD's geometry
+  holds numbers, a paragraph's runs hold formatting — all payload. A
+  cell that holds paragraphs is not, and this battery says so rather
+  than pretending: its table's cells hold values, and the port of the
+  nesting is **not built**.
+- **A style is a node, and a paragraph's style is an edge.** The third
+  time an edge has answered "what is this relationship?" — after the
+  PDF's reference (§27) and the CAD's layer (§44) — and the third time
+  the answer has been the same. A style's **base** is an edge too, and
+  the chain of styles is **derived** by walking the edges — bounded, and
+  stopped at a style it has already seen, so a cycle is not a hang.
+- **The media is a stream, and the port landed on a seam that was
+  already there.** The application's media table is a map from a key to
+  a file; here a media item is a node whose **stream** is that file
+  (§25), and the bundle carries the bytes without anybody naming a
+  path twice. Nothing in the core moved.
+
+### What the port does not carry
+
+Named, so that they are not mistaken for things that are there:
+**sections** (page size, margins, columns), **headers and footers**
+(the application's *parts*, which are separate stories), **track
+changes** (revisions, which the application stores as indices into a
+side table), **numbering**, **comments**, **content controls**, **fields**,
+the **layout engine** (line breaking, pagination, fonts) and the
+**copy-on-write** document that makes the undo cheap (§48's third gap,
+and this port confirms it: the application shares its blocks by `Arc`
+and this kit clones).
+
+The missing parts are **not** missing because the kit could not hold
+them. They are missing because the battery is the **document model**,
+and the rest of that application is a layout engine — which is a
+library, and §39 says where a numeric core goes when it arrives.
+
+### And the cost
+
+**Nothing.** No field, no method, no version, no change in the core.
+Seven commands, five kinds, one evaluator, one panel, and the
+twenty-fourth test through the twenty-fourth.
+
+The pattern is now nine ports old and **seven** of them cost nothing;
+the two that cost — the artist's closed unions (§33) and the branching
+history (§24) — bought the kit's two strangest features. Every domain
+the family has since shown this kit has fitted **the tree it already
+had**, and the fittings are the interesting part: a grid is a payload,
+a drawing is a flat store, a word processor is a list, and a run is an
+interval.
+
+### The table, with the ninth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
+| the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
+| the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
