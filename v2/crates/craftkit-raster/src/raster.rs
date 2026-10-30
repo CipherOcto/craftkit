@@ -1,0 +1,304 @@
+//! The **canvas**: the kit's painting seam, over a picture.
+
+use craftkit_sdk::camera::Camera;
+use craftkit_sdk::document::{Canvas, Colour, FillRule, Path, Point, Rect, Segment, Stroke};
+
+use crate::image::Image;
+
+/// The most pixels a picture may hold.
+///
+/// A picture is memory, and a picture that is asked to be enormous is a
+/// program that runs out of memory. The number is this crate's, and a
+/// program that wants a different one says so.
+pub const MAX_IMAGE_PIXELS: usize = 16_777_216;
+
+/// The longest side a picture may have.
+///
+/// A picture that is one pixel wide and sixteen million tall is within
+/// the pixels and is not a picture anybody wants; the bound is a shape
+/// and not only a size.
+pub const MAX_IMAGE_SIDE: usize = 8192;
+
+/// How many pieces a curve is cut into.
+///
+/// A cubic is not a line, and a line is what a rasteriser can draw. The
+/// number is a number: a hundredth of a curve is a curve to the eye.
+const CURVE_STEPS: usize = 24;
+
+/// How wide a character is, in the world's units, before the zoom.
+///
+/// There is no font in this kit, so a character is a **box**: this is
+/// how wide the box is.
+const ADVANCE: f64 = 8.0;
+
+/// How tall a character is, in the world's units, before the zoom.
+const LINE_HEIGHT: f64 = 12.0;
+
+/// The colour of a character's box.
+///
+/// The canvas is given no colour for text — the seam does not have one —
+/// so the canvas chooses: the ink is dark, and it is dark on purpose.
+const INK: Colour = Colour([0.15, 0.15, 0.15, 1.0]);
+
+/// A canvas that draws into a picture.
+#[derive(Debug, Clone)]
+pub struct Raster {
+    image: Image,
+    camera: Camera,
+}
+
+impl Raster {
+    /// A canvas of that size, with that camera.
+    ///
+    /// The size is refused when it is out of bounds: a picture that is
+    /// asked to be enormous is refused and not made smaller, because a
+    /// picture nobody asked for is not the picture that was asked for.
+    pub fn new(width: usize, height: usize, camera: Camera) -> Result<Self, String> {
+        if width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE {
+            return Err(format!(
+                "the picture is {width} by {height}, and the longest side is {MAX_IMAGE_SIDE}"
+            ));
+        }
+        if width.saturating_mul(height) > MAX_IMAGE_PIXELS {
+            return Err(format!(
+                "the picture holds {} pixels, and the limit is {MAX_IMAGE_PIXELS}",
+                width.saturating_mul(height)
+            ));
+        }
+        Ok(Raster { image: Image::new(width, height, Colour::WHITE), camera })
+    }
+
+    /// The picture that has been drawn.
+    pub fn image(&self) -> &Image {
+        &self.image
+    }
+
+    /// The camera the picture is seen through.
+    pub fn camera(&self) -> Camera {
+        self.camera
+    }
+
+    /// Where a point of the world is on the picture.
+    ///
+    /// The world's **up** is the picture's **down**: the document is
+    /// drawn the way it is looked at, and not the way it is stored.
+    fn to_pixels(&self, point: Point) -> (f64, f64) {
+        let zoom = self.camera.zoom();
+        let offset = self.camera.offset();
+        let centre_x = self.image.width() as f64 / 2.0;
+        let centre_y = self.image.height() as f64 / 2.0;
+        ((point.x - offset.x) * zoom + centre_x, centre_y - (point.y - offset.y) * zoom)
+    }
+
+    /// Fill a shape that has already been turned into a polygon.
+    fn fill_polygon(&mut self, points: &[(f64, f64)], colour: Colour, rule: FillRule) {
+        if points.len() < 3 || colour.0[3] <= 0.0 {
+            return;
+        }
+        let mut lowest = f64::INFINITY;
+        let mut highest = f64::NEG_INFINITY;
+        for (_, y) in points {
+            lowest = lowest.min(*y);
+            highest = highest.max(*y);
+        }
+        let first = (lowest.floor().max(0.0)) as usize;
+        let last = (highest.ceil().min(self.image.height() as f64)) as usize;
+        for row in first..last {
+            // The sample is the middle of the row: a pixel is either
+            // painted or it is not, and the middle is where it is.
+            let sample = row as f64 + 0.5;
+            let mut crossings: Vec<(f64, i32)> = Vec::new();
+            for (index, &(x0, y0)) in points.iter().enumerate() {
+                let (x1, y1) = points[(index + 1) % points.len()];
+                if (y0 <= sample) == (y1 <= sample) {
+                    continue;
+                }
+                let t = (sample - y0) / (y1 - y0);
+                let x = x0 + t * (x1 - x0);
+                let direction = if y1 > y0 { 1 } else { -1 };
+                crossings.push((x, direction));
+            }
+            crossings
+                .sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap_or(std::cmp::Ordering::Equal));
+            let mut winding = 0;
+            let mut start = 0.0;
+            for (x, direction) in crossings {
+                let was_inside = match rule {
+                    FillRule::NonZero => winding != 0,
+                    FillRule::EvenOdd => winding % 2 != 0,
+                };
+                winding += direction;
+                let is_inside = match rule {
+                    FillRule::NonZero => winding != 0,
+                    FillRule::EvenOdd => winding % 2 != 0,
+                };
+                if !was_inside && is_inside {
+                    start = x;
+                }
+                if was_inside && !is_inside {
+                    self.fill_span(row, start, x, colour);
+                }
+            }
+        }
+    }
+
+    /// Fill a run of a row, from one edge to another.
+    fn fill_span(&mut self, row: usize, from: f64, to: f64, colour: Colour) {
+        if to <= from {
+            return;
+        }
+        let first = (from.floor().max(0.0)) as usize;
+        let last = (to.ceil().min(self.image.width() as f64)) as usize;
+        for column in first..last {
+            self.image.blend(column, row, colour);
+        }
+    }
+}
+
+impl Canvas for Raster {
+    /// Draw a rectangle.
+    fn rect(&mut self, rect: Rect, fill: Colour) {
+        if fill.0[3] <= 0.0 {
+            return;
+        }
+        let (x0, y0) = self.to_pixels(Point::new(rect.x, rect.y + rect.h));
+        let (x1, y1) = self.to_pixels(Point::new(rect.x + rect.w, rect.y));
+        let left = x0.min(x1);
+        let right = x0.max(x1);
+        let top = y0.min(y1);
+        let bottom = y0.max(y1);
+        let first = (left.floor().max(0.0)) as usize;
+        let last = (right.ceil().min(self.image.width() as f64)) as usize;
+        let top_row = (top.floor().max(0.0)) as usize;
+        let bottom_row = (bottom.ceil().min(self.image.height() as f64)) as usize;
+        for row in top_row..bottom_row {
+            for column in first..last {
+                self.image.blend(column, row, fill);
+            }
+        }
+    }
+
+    /// Draw a path: filled, and stroked on its outline.
+    fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {
+        let contours: Vec<Vec<(f64, f64)>> =
+            path.subpaths.iter().map(|subpath| self.flatten(subpath)).collect();
+        if fill.0[3] > 0.0 {
+            for contour in &contours {
+                self.fill_polygon(contour, fill, path.rule);
+            }
+        }
+        let Some(stroke) = stroke else { return };
+        if stroke.colour.0[3] <= 0.0 || stroke.width <= 0.0 {
+            return;
+        }
+        for contour in &contours {
+            self.stroke_contour(contour, stroke);
+        }
+    }
+
+    /// Draw a line of text.
+    ///
+    /// There is **no font** in this kit: it has the metrics of a
+    /// typeface and not its glyphs. So a character is drawn as the box it
+    /// would occupy — a typewriter's worth of rectangles — and the
+    /// picture says *there is text here* and not what it says.
+    fn text(&mut self, at: Point, text: &str) {
+        let (origin_x, origin_y) = self.to_pixels(at);
+        let zoom = self.camera.zoom();
+        let advance = ADVANCE * zoom;
+        let height = LINE_HEIGHT * zoom;
+        for (index, character) in text.chars().enumerate() {
+            if character == ' ' {
+                continue;
+            }
+            let x = origin_x + index as f64 * advance;
+            let y = origin_y - height;
+            let first = (x.floor().max(0.0)) as usize;
+            let last = ((x + advance * 0.8).ceil().min(self.image.width() as f64)) as usize;
+            let top = (y.floor().max(0.0)) as usize;
+            let bottom = ((y + height).ceil().min(self.image.height() as f64)) as usize;
+            for row in top..bottom {
+                for column in first..last {
+                    self.image.blend(column, row, INK);
+                }
+            }
+        }
+    }
+}
+
+impl Raster {
+    /// Turn a contour into points on the picture.
+    fn flatten(&self, subpath: &craftkit_sdk::document::SubPath) -> Vec<(f64, f64)> {
+        let mut points = vec![self.to_pixels(subpath.start)];
+        let mut at = subpath.start;
+        for segment in &subpath.segments {
+            match segment {
+                Segment::Line { to } => {
+                    points.push(self.to_pixels(*to));
+                    at = *to;
+                }
+                Segment::Cubic { c1, c2, to } => {
+                    for step in 1..=CURVE_STEPS {
+                        let t = step as f64 / CURVE_STEPS as f64;
+                        let point = cubic(at, *c1, *c2, *to, t);
+                        points.push(self.to_pixels(point));
+                    }
+                    at = *to;
+                }
+            }
+        }
+        if subpath.closed && points.len() > 1 {
+            let first = points[0];
+            let last = points[points.len() - 1];
+            if (first.0 - last.0).abs() > f64::EPSILON || (first.1 - last.1).abs() > f64::EPSILON {
+                points.push(first);
+            }
+        }
+        points
+    }
+
+    /// Draw the outline of a contour.
+    ///
+    /// Each segment is a **quad**: the line, widened to the stroke's
+    /// width. The joints are squares, because a square joint is what a
+    /// machine can draw and a round one is not.
+    fn stroke_contour(&mut self, contour: &[(f64, f64)], stroke: Stroke) {
+        if contour.len() < 2 {
+            return;
+        }
+        let half = stroke.width * self.camera.zoom() / 2.0;
+        for window in contour.windows(2) {
+            let (x0, y0) = window[0];
+            let (x1, y1) = window[1];
+            let dx = x1 - x0;
+            let dy = y1 - y0;
+            let length = (dx * dx + dy * dy).sqrt();
+            if length <= f64::EPSILON {
+                continue;
+            }
+            let nx = -dy / length * half;
+            let ny = dx / length * half;
+            let quad = [(x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)];
+            self.fill_polygon(&quad, stroke.colour, FillRule::NonZero);
+        }
+        // The joints: a square at every corner, so that the outline has
+        // no gaps in it.
+        for point in contour {
+            let square = [
+                (point.0 - half, point.1 - half),
+                (point.0 + half, point.1 - half),
+                (point.0 + half, point.1 + half),
+                (point.0 - half, point.1 + half),
+            ];
+            self.fill_polygon(&square, stroke.colour, FillRule::NonZero);
+        }
+    }
+}
+
+/// A point on a cubic curve.
+fn cubic(from: Point, c1: Point, c2: Point, to: Point, t: f64) -> Point {
+    let u = 1.0 - t;
+    let x = u * u * u * from.x + 3.0 * u * u * t * c1.x + 3.0 * u * t * t * c2.x + t * t * t * to.x;
+    let y = u * u * u * from.y + 3.0 * u * u * t * c1.y + 3.0 * u * t * t * c2.y + t * t * t * to.y;
+    Point::new(x, y)
+}

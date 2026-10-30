@@ -98,6 +98,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // be a command's parameter, and that means implementing the kit's
     // own `ParamKind` — which is speaking the SDK's types. §56.
     ("craftkit-numeric", 3),
+    // The rasteriser: the canvas the picture is drawn on. It is here and
+    // not at L0 because it speaks the SDK's own types — the canvas
+    // trait, the document's nodes and the camera.
+    ("craftkit-raster", 3),
     ("craftkit-vector-geom", 3),
     // L4 — the batteries: the plugins, each one a document model of its
     // own. A plugin may not depend on another plugin, and that is a

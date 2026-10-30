@@ -1,0 +1,13 @@
+[package]
+name = "craftkit-raster"
+description = "A canvas that draws a document into a picture."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK: the canvas trait, the document's types and the camera. This
+# is a **library**, not a plugin: it contributes nothing to the registry
+# and the linker does not wire it in.
+craftkit-sdk = { workspace = true }

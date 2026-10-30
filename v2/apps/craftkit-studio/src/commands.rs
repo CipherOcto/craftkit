@@ -471,3 +471,59 @@ impl DocOpenBundle {
         ))
     }
 }
+
+/// Take a picture of the document.
+///
+/// This is the kit's **painting seam** at work: every kind of node draws
+/// itself, and the picture is what it drew. Nothing here knows what a
+/// rectangle is — the canvas is given the drawing, and the drawing comes
+/// from the kind.
+///
+/// There is **no font** in this kit: it has the metrics of a typeface
+/// and not its glyphs, so text is drawn as the boxes it would occupy.
+/// The picture says *there is text here*, and not what it says.
+#[derive(Command)]
+#[command(id = "doc.snapshot", area = "doc", icon = "camera", menu("File"))]
+pub struct DocSnapshot {
+    /// Where to write the picture.
+    pub path: Text,
+    /// How wide the picture is, in pixels.
+    pub width: Option<craftkit_sdk::Number>,
+    /// How tall the picture is, in pixels.
+    pub height: Option<craftkit_sdk::Number>,
+}
+
+impl DocSnapshot {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let width = self.width.map_or(800.0, |width| width.0);
+        let height = self.height.map_or(600.0, |height| height.0);
+        if !width.is_finite() || !height.is_finite() || width < 1.0 || height < 1.0 {
+            return Err(EngineError::Failed {
+                id: "doc.snapshot".to_string(),
+                message: "the picture has no size".to_string(),
+            });
+        }
+        let width = width as usize;
+        let height = height as usize;
+        // The camera is the session's own: one set of camera controls,
+        // and the picture is seen through them.
+        let camera = *session.camera();
+        let mut raster = craftkit_raster::Raster::new(width, height, camera)
+            .map_err(|message| EngineError::Failed { id: "doc.snapshot".to_string(), message })?;
+        for node in session.document().walk() {
+            let Some(kind) = session.kinds().get(&node.kind) else { continue };
+            (kind.paint)(node, &mut raster);
+        }
+        let png = raster.image().to_png();
+        std::fs::write(&path, png).map_err(|error| EngineError::Failed {
+            id: "doc.snapshot".to_string(),
+            message: format!("`{path}` could not be written: {error}"),
+        })?;
+        Ok(Outcome::new(format!("wrote `{path}`")).with_data(craftkit_sdk::serde_json::json!({
+            "path": path,
+            "width": width,
+            "height": height,
+        })))
+    }
+}

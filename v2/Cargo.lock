@@ -236,6 +236,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-raster"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-sdk"
 version = "0.2.0"
 dependencies = [
@@ -271,6 +278,7 @@ dependencies = [
  "craftkit-plugin-sound",
  "craftkit-plugin-text",
  "craftkit-plugin-vector",
+ "craftkit-raster",
  "craftkit-sdk",
 ]
 

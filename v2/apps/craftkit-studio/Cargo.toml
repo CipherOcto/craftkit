@@ -9,6 +9,9 @@ license.workspace = true
 [dependencies]
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
+# The rasteriser: the canvas the picture is drawn on. It is a **library**
+# and not a plugin: it contributes no command and no kind.
+craftkit-raster = { workspace = true }
 # A plugin. The application lists it because a plugin has to be *linked in*,
 # and for no other reason: no module of this crate names a symbol of it, and
 # a test says so.

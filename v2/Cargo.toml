@@ -29,6 +29,10 @@ craftkit-payload = { path = "crates/craftkit-payload", version = "0.2.0" }
 craftkit-text-layout = { path = "crates/craftkit-text-layout", version = "0.2.0" }
 # The MCP door: the registry, spoken to an agent. One tool per command.
 craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
+# The **rasteriser**: a canvas that draws a document into a picture. A
+# **library**, not a plugin: it contributes nothing to the registry and
+# the linker does not wire it in.
+craftkit-raster = { path = "crates/craftkit-raster", version = "0.2.0" }
 # The **typed value**: a length in millimetres and an angle in radians. A
 # **library**, not a plugin. It contributes nothing to the registry and
 # the linker does not wire it in.
