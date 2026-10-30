@@ -14,7 +14,9 @@
 //!   and the end, each with its CRC checked;
 //! - the **inflate**: the zlib stream, from [`inflate`];
 //! - the **filters**: the five ways a row may be stored, undone;
-//! - the **pixels**: the samples, as they are.
+//! - the **pixels**: the samples, as they are;
+//! - the **transparency**: the `tRNS` chunk, which says which of a
+//!   picture's colours are see-through.
 //!
 //! # What it does not do
 //!
@@ -91,6 +93,7 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
     let mut colour = 0u8;
     let mut interlaced = false;
     let mut palette: Vec<[u8; 3]> = Vec::new();
+    let mut transparency: Option<Vec<u8>> = None;
     let mut data: Vec<u8> = Vec::new();
     let mut saw_header = false;
     let mut saw_end = false;
@@ -130,6 +133,12 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
                     entries.push([entry[0], entry[1], entry[2]]);
                 }
                 palette = entries;
+            }
+            b"tRNS" => {
+                // The chunk's **meaning** depends on the picture's
+                // colour type, and the header may come after it, so
+                // the bytes are kept as they are and read below.
+                transparency = Some(chunk.to_vec());
             }
             b"IDAT" => {
                 data.extend_from_slice(chunk);
@@ -177,13 +186,107 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
     if colour == 3 && palette.is_empty() {
         return Err(Error::Malformed("the picture has a palette and no palette".to_string()));
     }
+    let transparency = transparency_for(colour, depth, transparency, palette.len())?;
     let raw = inflate::zlib(&data, limits)?;
-    let samples = unfilter(&raw, width as usize, height as usize, channels, depth, &palette)?;
+    let stored = unfilter(&raw, width as usize, height as usize, channels, depth)?;
+    let samples =
+        compose(stored, width as usize, height as usize, depth, colour, &palette, transparency.as_ref())?;
     // A palette picture's samples are the palette's **indices**, and the
     // colours are what the picture is made of: the picture that comes
-    // out has three samples a pixel, not one.
-    let channels = if colour == 3 { 3 } else { channels };
+    // out has three samples a pixel, not one. A picture with a
+    // transparency has an alpha as well.
+    let channels = match colour {
+        0 => {
+            if transparency.is_some() {
+                2
+            } else {
+                1
+            }
+        }
+        2 => {
+            if transparency.is_some() {
+                4
+            } else {
+                3
+            }
+        }
+        3 => {
+            if transparency.is_some() {
+                4
+            } else {
+                3
+            }
+        }
+        // A picture that already has an alpha channel keeps it, and
+        // the colour type says how many samples a pixel has.
+        _ => channels,
+    };
     Ok(Picture { width, height, channels, samples })
+}
+
+/// The **transparency** a picture carries.
+///
+/// PNG keeps it in one chunk, `tRNS`, and what the chunk means depends
+/// on the picture's colour type: for a grey picture it is one grey
+/// value, for a colour picture one colour, and for a palette picture
+/// it is an alpha for each of the palette's entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Transparency {
+    /// One grey value that is see-through.
+    Grey(u16),
+    /// One colour that is see-through.
+    Colour([u16; 3]),
+    /// The palette's entries and their alphas.
+    Palette(Vec<u8>),
+}
+
+/// Read the `tRNS` chunk, now that the picture's colour type is known.
+///
+/// The chunk is **only** allowed where the format allows it: a grey or
+/// a colour picture of eight or sixteen bits, and a palette picture.
+/// A picture that already has an alpha channel may not have one as
+/// well, because it has no use for it.
+fn transparency_for(
+    colour: u8,
+    depth: u8,
+    bytes: Option<Vec<u8>>,
+    palette_len: usize,
+) -> Result<Option<Transparency>, Error> {
+    let Some(bytes) = bytes else { return Ok(None) };
+    match colour {
+        0 => {
+            if bytes.len() != 2 {
+                return Err(Error::Malformed("a grey picture's transparency is two bytes".to_string()));
+            }
+            if !matches!(depth, 8 | 16) {
+                return Err(Error::Malformed(
+                    "a grey picture's transparency is only for eight and sixteen bits".to_string(),
+                ));
+            }
+            Ok(Some(Transparency::Grey(u16::from_be_bytes([bytes[0], bytes[1]]))))
+        }
+        2 => {
+            if bytes.len() != 6 {
+                return Err(Error::Malformed("a colour picture's transparency is six bytes".to_string()));
+            }
+            if !matches!(depth, 8 | 16) {
+                return Err(Error::Malformed(
+                    "a colour picture's transparency is only for eight and sixteen bits".to_string(),
+                ));
+            }
+            let value = |at: usize| u16::from_be_bytes([bytes[at], bytes[at + 1]]);
+            Ok(Some(Transparency::Colour([value(0), value(2), value(4)])))
+        }
+        3 => {
+            if bytes.len() > palette_len {
+                return Err(Error::Malformed("the transparency is longer than the palette".to_string()));
+            }
+            Ok(Some(Transparency::Palette(bytes)))
+        }
+        _ => Err(Error::Malformed(
+            "a picture with an alpha channel may not have a transparency as well".to_string(),
+        )),
+    }
 }
 
 /// The samples of a picture that is **fewer than eight bits**.
@@ -195,10 +298,10 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
 ///
 /// A palette picture's samples are the palette's **indices**, and the
 /// colours are what the picture is made of.
-fn unpack(samples: Vec<u8>, width: usize, height: usize, depth: u8, palette: &[[u8; 3]]) -> Vec<u8> {
+fn unpack(samples: Vec<u8>, pixels: usize, depth: u8) -> Vec<u8> {
     let per_byte = 8 / depth as usize;
     let mask = (1u16 << depth) - 1;
-    let mut values: Vec<u8> = Vec::with_capacity(width * height);
+    let mut values: Vec<u8> = Vec::with_capacity(pixels);
     for byte in samples {
         for index in 0..per_byte {
             let shift = 8 - depth as usize * (index + 1);
@@ -206,22 +309,148 @@ fn unpack(samples: Vec<u8>, width: usize, height: usize, depth: u8, palette: &[[
             values.push(value as u8);
         }
     }
-    values.truncate(width * height);
-    if !palette.is_empty() {
-        let mut colours = Vec::with_capacity(values.len() * 3);
-        for index in values {
-            let entry = palette.get(index as usize).copied().unwrap_or([0, 0, 0]);
-            colours.extend_from_slice(&entry);
-        }
-        return colours;
+    values.truncate(pixels);
+    values
+}
+
+/// The picture's samples, as they come out of the file.
+///
+/// This is where a picture becomes what it is: a palette's indices
+/// become the palette's colours, a grey of fewer than eight bits is
+/// scaled up, and a transparency becomes an alpha beside every pixel.
+fn compose(
+    stored: Vec<u8>,
+    width: usize,
+    height: usize,
+    depth: u8,
+    colour: u8,
+    palette: &[[u8; 3]],
+    transparency: Option<&Transparency>,
+) -> Result<Vec<u8>, Error> {
+    let pixels = width * height;
+    if colour == 3 {
+        return compose_palette(stored, pixels, depth, palette, transparency);
     }
-    // A grey picture is scaled up to eight bits.
-    let scale = match depth {
-        1 => 255,
-        2 => 85,
-        _ => 17,
+    compose_colour(stored, pixels, depth, colour, transparency)
+}
+
+/// A **palette** picture: the samples are indices, and the colours are
+/// what the palette says.
+fn compose_palette(
+    stored: Vec<u8>,
+    pixels: usize,
+    depth: u8,
+    palette: &[[u8; 3]],
+    transparency: Option<&Transparency>,
+) -> Result<Vec<u8>, Error> {
+    let indices: Vec<u8> = if depth < 8 { unpack(stored, pixels, depth) } else { stored };
+    let alphas: Option<&[u8]> = match transparency {
+        Some(Transparency::Palette(alphas)) => Some(alphas),
+        _ => None,
     };
-    values.into_iter().map(|value| value * scale).collect()
+    let mut out: Vec<u8> = Vec::with_capacity(pixels * if alphas.is_some() { 4 } else { 3 });
+    for index in indices.iter().take(pixels) {
+        let entry = palette
+            .get(usize::from(*index))
+            .ok_or_else(|| Error::Malformed("a pixel is outside the palette".to_string()))?;
+        out.extend_from_slice(entry);
+        if let Some(alphas) = alphas {
+            // A palette entry the transparency does not mention is
+            // fully opaque: the chunk says how many entries are see-
+            // through, and the rest are not.
+            out.push(alphas.get(usize::from(*index)).copied().unwrap_or(255));
+        }
+    }
+    Ok(out)
+}
+
+/// A **grey** or **colour** picture.
+fn compose_colour(
+    stored: Vec<u8>,
+    pixels: usize,
+    depth: u8,
+    colour: u8,
+    transparency: Option<&Transparency>,
+) -> Result<Vec<u8>, Error> {
+    if depth < 8 {
+        // A grey picture of fewer than eight bits: the samples are
+        // packed into the bytes, and each one is scaled up to eight
+        // bits, so that the last of them is white.
+        let values = unpack(stored, pixels, depth);
+        let scale = match depth {
+            1 => 255,
+            2 => 85,
+            _ => 17,
+        };
+        return Ok(values.into_iter().map(|value| value * scale).collect());
+    }
+    // The colour type says how many samples a pixel has, and whether
+    // the last of them is an alpha that is already there.
+    let (colour_channels, alpha_in_file) = match colour {
+        0 => (1usize, false),
+        2 => (3, false),
+        4 => (1, true),
+        _ => (3, true),
+    };
+    let stored_channels = colour_channels + usize::from(alpha_in_file);
+    let bytes_per_sample = usize::from(depth / 8);
+    let has_alpha = transparency.is_some();
+    let out_channels = colour_channels + usize::from(alpha_in_file || has_alpha);
+    let mut out: Vec<u8> = Vec::with_capacity(pixels * out_channels);
+    for pixel in 0..pixels {
+        let base = pixel * stored_channels * bytes_per_sample;
+        let mut transparent = false;
+        match transparency {
+            Some(Transparency::Grey(value)) => {
+                let sample = sample_value(&stored, base, bytes_per_sample);
+                transparent = sample_matches(sample, *value, depth);
+            }
+            Some(Transparency::Colour(colours)) => {
+                transparent = (0..colour_channels).all(|channel| {
+                    let at = base + channel * bytes_per_sample;
+                    let sample = sample_value(&stored, at, bytes_per_sample);
+                    sample_matches(sample, colours[channel], depth)
+                });
+            }
+            None => {}
+            // A palette picture has its transparency in its palette,
+            // and it is handled there.
+            Some(Transparency::Palette(_)) => {}
+        }
+        for channel in 0..colour_channels {
+            let at = base + channel * bytes_per_sample;
+            // A sixteen-bit picture comes out as **eight-bit**: the high
+            // byte of each sample, which is what a canvas wants.
+            out.push(stored[at]);
+        }
+        if alpha_in_file {
+            // The alpha the picture came with: the high byte of the
+            // last sample, for the same reason as the others.
+            out.push(stored[base + colour_channels * bytes_per_sample]);
+        } else if has_alpha {
+            out.push(if transparent { 0 } else { 255 });
+        }
+    }
+    Ok(out)
+}
+
+/// The value of one sample, as the sixteen-bit number the format
+/// compares against.
+fn sample_value(stored: &[u8], at: usize, bytes_per_sample: usize) -> u16 {
+    if bytes_per_sample == 2 {
+        return (u16::from(stored[at]) << 8) | u16::from(stored[at + 1]);
+    }
+    u16::from(stored[at])
+}
+
+/// Whether a sample is the one the transparency names.
+///
+/// The format writes the transparent value as a sixteen-bit number, and
+/// a picture of eight bits compares against its **low** byte: a writer
+/// of an eight-bit picture says `0x00vv`, and the value it names is
+/// `vv`.
+fn sample_matches(sample: u16, named: u16, depth: u8) -> bool {
+    if depth == 16 { sample == named } else { sample == (named & 0xff) }
 }
 
 /// Undo the filters of the rows.
@@ -230,14 +459,7 @@ fn unpack(samples: Vec<u8>, width: usize, height: usize, depth: u8, palette: &[[
 /// the pixel to the left, and the five filters say which. The bytes per
 /// pixel are what the filters count: one for a picture of eight-bit
 /// samples, two for a sixteen-bit one.
-fn unfilter(
-    raw: &[u8],
-    width: usize,
-    height: usize,
-    channels: u8,
-    depth: u8,
-    palette: &[[u8; 3]],
-) -> Result<Vec<u8>, Error> {
+fn unfilter(raw: &[u8], width: usize, height: usize, channels: u8, depth: u8) -> Result<Vec<u8>, Error> {
     // The filters count the bytes of a **pixel**: one for a picture of
     // fewer than eight bits, however many pixels are packed into it.
     let bytes_per_pixel = ((channels as usize) * (depth as usize / 8)).max(1);
@@ -275,29 +497,6 @@ fn unfilter(
         }
         out.extend_from_slice(&current);
         previous.copy_from_slice(&current);
-    }
-    if depth < 8 {
-        return Ok(unpack(out, width, height, depth, palette));
-    }
-    // A palette picture's samples are the palette's **indices**, and the
-    // colours are what the picture is made of.
-    if !palette.is_empty() && channels == 1 && depth == 8 {
-        let mut colours = Vec::with_capacity(out.len() * 3);
-        for index in out {
-            let entry = palette
-                .get(index as usize)
-                .ok_or_else(|| Error::Malformed("a pixel is outside the palette".to_string()))?;
-            colours.extend_from_slice(entry);
-        }
-        return Ok(colours);
-    }
-    if depth == 16 {
-        // The high byte of each sample: what a canvas wants.
-        let mut eight = Vec::with_capacity(out.len() / 2);
-        for index in (0..out.len()).step_by(2) {
-            eight.push(out[index]);
-        }
-        return Ok(eight);
     }
     Ok(out)
 }
