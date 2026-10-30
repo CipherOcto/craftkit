@@ -866,7 +866,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**331 tests** by default, and **370** with the six optional batteries
+**331 tests** by default, and **383** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
@@ -944,7 +944,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 331 tests (370 with the batteries on)
+cargo test          # 331 tests (383 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -2575,3 +2575,52 @@ plugin would need the table to grow. That is a change to the **contract**
 (`craftkit-ffi-abi`), which is exactly what a version number is for: the
 host refuses a table it does not understand, so a table can grow and the
 old host will not call the new one.
+
+---
+
+## 36. The editing half: a trim, a retime and a ripple
+
+§33 ported the artist's IDE as a document. A document you cannot edit is
+a picture of an editor, so this section ports the **editing**: the three
+operations that are about a **range** and not about a node.
+
+| the operation | what it does |
+|---|---|
+| `art.element.trim` | the element keeps its place and plays **less of its media** |
+| `art.element.retime` | the media plays **faster**, and the element takes less room |
+| `art.ripple` | the space one element took is given to the ones **after it** |
+
+### The three things this found
+
+- **The length of an element is derived, and the application stores it.**
+  The application keeps three numbers — the length on the timeline, the
+  span of the media, and the rate — and the first follows from the other
+  two. It stores it anyway, because it is an editor and a stale number
+  is one keystroke away. The kit **derives** it: the payload holds the
+  span and the rate, and the evaluator works out the length. So a trim
+  or a retime cannot leave a number behind that says something else.
+  This is the sixth time a port has found a stored value that should
+  have been derived, and the sixth time the kit's answer was the same.
+- **The ripple does not cross into another track, and that is the
+  application's rule.** A ripple takes the space out of one element and
+  gives it to the ones after it **on that track**: the other tracks do
+  not move, and the rule is not a default that could be changed — it is
+  the only behaviour. So the command takes a **track**, and the core
+  knows nothing about ripples.
+- **The rate is clamped, not refused.** The application's bounds are a
+  hundredth and five. A rate outside them is **clamped**, because the
+  application wants the edit to happen and the bound to be respected;
+  the kit's rule is the opposite — a hostile number is refused — so the
+  bounds are **constants of the plugin** and the clamping happens
+  there, where the domain's rules live.
+
+### And the one about ranges
+
+A trim is about a **range**, and the kit has a span selection (§22). But
+the art battery's trim does **not** use it: the command names the
+element **and** the range, in one call. The sound battery's trim works
+on the *selection* instead. Two domains, two shapes, and the kit is
+fine with both — because a command's parameters are typed, and what a
+range means is the domain's business. The core's span selection is
+there for the commands that act on "whatever is picked out", and a trim
+that names its target does not need one.

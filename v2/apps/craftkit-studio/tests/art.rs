@@ -94,7 +94,7 @@ fn an_element_plays_a_token_not_a_file() {
     assert_eq!(element.kind, "art.element.video");
     assert_eq!(element.data["media"], json!("m_1"), "the media is a token");
     assert_eq!(element.data["start"], json!(48), "where it starts on the timeline");
-    assert_eq!(element.data["duration"], json!(100), "how long it is");
+    assert_eq!(element.data["source_duration"], json!(100), "how long the media is");
 }
 
 /// The media is **not** an asset: the asset list is for files the document

@@ -70,6 +70,12 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 #[layer(id = "art", name = "Art", requires("core"))]
 pub struct ArtLayer;
 
+/// The slowest a rate may be.
+pub const MIN_RATE: f64 = 0.01;
+
+/// The fastest a rate may be.
+pub const MAX_RATE: f64 = 5.0;
+
 /// How many ticks are in a second.
 ///
 /// The application's own time base is a count of **ticks**, and how many
@@ -99,15 +105,17 @@ macro_rules! art_kind {
                 false
             }
 
-            /// What it **means**: its own place on the timeline, and the
-            /// media it plays.
+            /// What it **means**: its own place on the timeline, how long
+            /// it is there, and the media it plays.
             fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
                 Some(serde_json::json!({
                     "type": node.data.get("type").cloned().unwrap_or(serde_json::Value::Null),
                     "start": node.data.get("start").cloned().unwrap_or(serde_json::Value::Null),
-                    "duration": node.data.get("duration").cloned().unwrap_or(serde_json::Value::Null),
+                    "duration": timeline_duration(node),
+                    "source_duration": node.data.get("source_duration").cloned().unwrap_or(serde_json::Value::Null),
                     "trim_start": node.data.get("trim_start").cloned().unwrap_or(serde_json::Value::Null),
                     "trim_end": node.data.get("trim_end").cloned().unwrap_or(serde_json::Value::Null),
+                    "rate": node.data.get("rate").cloned().unwrap_or(serde_json::Value::Null),
                     "media": node.data.get("media").cloned().unwrap_or(serde_json::Value::Null),
                 }))
             }
@@ -378,7 +386,7 @@ macro_rules! element_command {
             pub name: Text,
             /// Where it starts on the timeline, in ticks.
             pub start: Number,
-            /// How long it is, in ticks.
+            /// How long the **media** is, in ticks.
             pub duration: Number,
             /// Where in the media it begins, in ticks.
             pub trim_start: Option<Number>,
@@ -412,21 +420,24 @@ macro_rules! element_command {
                         message: "an element is not zero ticks long".to_string(),
                     });
                 }
+                let rate = rate(1.0, $id)?;
                 let trim_start = match &self.trim_start {
                     Some(trim) => whole(*trim, $id, "a trim")?,
                     None => 0,
                 };
+                // No trim means the whole media is played.
                 let trim_end = match &self.trim_end {
                     Some(trim) => whole(*trim, $id, "a trim")?,
-                    None => 0,
+                    None => duration,
                 };
                 let extra = self.$extra.as_ref().map(|extra| extra.0.clone());
                 let data = serde_json::json!({
                     "type": $type,
                     "start": start,
-                    "duration": duration,
+                    "source_duration": duration,
                     "trim_start": trim_start,
                     "trim_end": trim_end,
+                    "rate": rate,
                     $extra_key: match &extra {
                         Some(extra) => serde_json::Value::String(extra.clone()),
                         None => serde_json::Value::Null,
@@ -588,8 +599,7 @@ impl ReadTimeline {
                     .filter(|child| child.kind.starts_with("art.element."))
                     .map(|child| {
                         let start = child.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-                        let duration =
-                            child.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                        let duration = timeline_duration(child);
                         (start, duration, child.kind.clone())
                     })
                     .collect();
@@ -666,9 +676,7 @@ impl TimelineEvaluator {
                         .filter(|child| child.kind.starts_with("art.element."))
                         .filter_map(|child| {
                             let start = child.data.get("start").and_then(|start| start.as_u64())?;
-                            let duration =
-                                child.data.get("duration").and_then(|duration| duration.as_u64())?;
-                            Some(start + duration)
+                            Some(start + timeline_duration(child))
                         })
                         .max()
                 })
@@ -843,6 +851,158 @@ impl JobFail {
     }
 }
 
+/// **Trim** an element: choose the part of the media it plays.
+///
+/// A trim is about a **range**, and not about a node: the element keeps
+/// its place on the timeline and plays less of its media. The length it
+/// takes on the timeline follows from the range, and nobody writes it
+/// down.
+#[derive(Command)]
+#[command(id = "art.element.trim", area = "art", layer = "art", icon = "trim", mutates, undoable)]
+pub struct TrimElement {
+    /// The element to trim.
+    pub element: NodeRef,
+    /// Where in the media it begins, in ticks.
+    pub from: Number,
+    /// Where in the media it ends, in ticks.
+    pub to: Number,
+}
+
+impl TrimElement {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.element.0;
+        let from = whole(self.from, "art.element.trim", "a trim")?;
+        let to = whole(self.to, "art.element.trim", "a trim")?;
+        if to <= from {
+            return Err(EngineError::Failed {
+                id: "art.element.trim".to_string(),
+                message: "a trim ends after it begins".to_string(),
+            });
+        }
+        let source = {
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "art.element.trim".to_string(),
+                    message: format!("there is no element `{id}`"),
+                });
+            };
+            node.data.get("source_duration").and_then(|source| source.as_u64()).unwrap_or(0)
+        };
+        if to > source {
+            return Err(EngineError::Failed {
+                id: "art.element.trim".to_string(),
+                message: format!("the media is {source} ticks long and the trim ends at {to}"),
+            });
+        }
+        let Some(node) = session.document_mut().node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "art.element.trim".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        };
+        node.data["trim_start"] = serde_json::json!(from);
+        node.data["trim_end"] = serde_json::json!(to);
+        let duration = timeline_duration(node);
+        Ok(Outcome::changed(format!("trimmed the element {id} to {from}..{to}")).with_data(
+            serde_json::json!({ "element": id, "trim_start": from, "trim_end": to, "duration": duration }),
+        ))
+    }
+}
+
+/// **Retime** an element: change how fast its media plays.
+///
+/// The rate is the application's own: it is clamped, not refused, and
+/// the bounds are the ones the application uses. The length on the
+/// timeline follows from the rate, and nobody writes it down.
+#[derive(Command)]
+#[command(id = "art.element.retime", area = "art", layer = "art", icon = "clock", mutates, undoable)]
+pub struct RetimeElement {
+    /// The element to retime.
+    pub element: NodeRef,
+    /// How fast the media plays: one is as fast as it was.
+    pub rate: Number,
+}
+
+impl RetimeElement {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.element.0;
+        let rate = rate(self.rate.0, "art.element.retime")?;
+        let Some(node) = session.document_mut().node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "art.element.retime".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        };
+        node.data["rate"] = serde_json::json!(rate);
+        let duration = timeline_duration(node);
+        Ok(Outcome::changed(format!("the element {id} plays at {rate}"))
+            .with_data(serde_json::json!({ "element": id, "rate": rate, "duration": duration })))
+    }
+}
+
+/// **Ripple** a track: take the space out of one element and give it to
+/// the ones after it.
+///
+/// The ripple is **per track**: it does not cross into another track,
+/// and that is the application's rule. The elements after the cut move
+/// earlier by the amount, and the ones before it do not move at all.
+#[derive(Command)]
+#[command(id = "art.ripple", area = "art", layer = "art", icon = "cut", mutates, undoable)]
+pub struct RippleTrack {
+    /// The track to ripple.
+    pub track: NodeRef,
+    /// Where the cut is, in ticks.
+    pub after: Number,
+    /// How much space to take out, in ticks.
+    pub amount: Number,
+}
+
+impl RippleTrack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let after = whole(self.after, "art.ripple", "a cut")?;
+        let amount = whole(self.amount, "art.ripple", "an amount")?;
+        if amount == 0 {
+            return Err(EngineError::Failed {
+                id: "art.ripple".to_string(),
+                message: "a ripple takes some space out or it takes none".to_string(),
+            });
+        }
+        let Some(node) = session.document().node(track) else {
+            return Err(EngineError::Failed {
+                id: "art.ripple".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        };
+        // The elements that move, and where they move to.
+        let mut moved: Vec<(u64, u64)> = Vec::new();
+        for child in &node.children {
+            if !child.kind.starts_with("art.element.") {
+                continue;
+            }
+            let start = child.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+            if start < after {
+                continue;
+            }
+            if start < amount {
+                return Err(EngineError::Failed {
+                    id: "art.ripple".to_string(),
+                    message: format!("the ripple would push the element at {start} before the start"),
+                });
+            }
+            moved.push((child.id, start - amount));
+        }
+        let count = moved.len();
+        for (element, start) in moved {
+            let Some(node) = session.document_mut().node_mut(element) else { continue };
+            node.data["start"] = serde_json::json!(start);
+        }
+        Ok(Outcome::changed(format!("rippled {count} element(s) on the track {track}")).with_data(
+            serde_json::json!({ "track": track, "after": after, "amount": amount, "moved": count }),
+        ))
+    }
+}
+
 /// The panel that shows the project.
 #[derive(Panel)]
 #[panel(
@@ -858,6 +1018,38 @@ impl JobFail {
     )
 )]
 pub struct ArtPanel;
+
+/// The **length of an element on the timeline**.
+///
+/// It is **derived**: the span of the media the element plays, divided
+/// by the rate it plays at. Nobody writes it down, so a trim or a
+/// retime cannot leave a stale number behind.
+fn timeline_duration(node: &Node) -> u64 {
+    let source = node.data.get("source_duration").and_then(|source| source.as_u64()).unwrap_or(0);
+    let trim_start = node.data.get("trim_start").and_then(|trim| trim.as_u64()).unwrap_or(0);
+    let trim_end = node.data.get("trim_end").and_then(|trim| trim.as_u64()).unwrap_or(source);
+    let span = trim_end.saturating_sub(trim_start).min(source);
+    let rate = node.data.get("rate").and_then(|rate| rate.as_f64()).unwrap_or(1.0);
+    if rate <= 0.0 {
+        return 0;
+    }
+    ((span as f64) / rate).round() as u64
+}
+
+/// A **rate**: how fast the media plays, and within the domain's bounds.
+///
+/// The bounds are the application's: a rate of a hundredth is slow
+/// enough and a rate of five is fast enough, and a rate outside them is
+/// clamped rather than refused — the same thing the application does.
+fn rate(value: f64, id: &str) -> Result<f64, EngineError> {
+    if !value.is_finite() || value <= 0.0 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a rate is a number above zero".to_string(),
+        });
+    }
+    Ok(value.clamp(MIN_RATE, MAX_RATE))
+}
 
 /// A whole number, and not a fraction and not a NaN.
 ///
@@ -904,6 +1096,9 @@ craftkit_sdk::plugin_anchor!(
     AddElementGraphic,
     AddElementEffect,
     AddStage,
+    TrimElement,
+    RetimeElement,
+    RippleTrack,
     ReadTimeline,
     TimelineEvaluator,
     Generate,
