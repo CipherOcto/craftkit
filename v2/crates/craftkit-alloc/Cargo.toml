@@ -1,0 +1,11 @@
+[package]
+name = "craftkit-alloc"
+description = "A counting allocator: the one piece of unsafe in v2, and the measurement of the lane's no-allocation rule."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. The allocator is the standard library's, and the counters are
+# a thread-local.

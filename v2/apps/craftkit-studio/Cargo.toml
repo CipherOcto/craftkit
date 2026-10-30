@@ -51,6 +51,13 @@ film = ["dep:craftkit-plugin-film"]
 # property trees says so.
 fx = ["dep:craftkit-plugin-fx"]
 
+[dev-dependencies]
+# The counting allocator: the one piece of unsafe in v2, and what makes
+# the lane's "must not allocate" rule a measurement rather than a claim.
+# It is a **dev** dependency: nothing in the application links it, and
+# the application itself still forbids unsafe.
+craftkit-alloc = { path = "../../crates/craftkit-alloc" }
+
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
 # dependency, so it is compiled for the build script and is not in the
