@@ -36,6 +36,21 @@ pub struct PlanItem {
     pub value: Json,
 }
 
+/// Something that went wrong while the plan was made.
+///
+/// A kind and an evaluator are **contributions**: they are code that
+/// craftkit does not own, and a contribution that panics must not take
+/// the program with it. So the panic is caught, the contribution is
+/// skipped, and the failure is **in the plan**: the plan says what it
+/// could not say, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanFailure {
+    /// Which contribution panicked: a kind's name, or an evaluator's.
+    pub who: String,
+    /// What it said when it panicked.
+    pub message: String,
+}
+
 /// What a document means.
 ///
 /// The items are in the order the nodes are in the document, so a plan is
@@ -44,17 +59,31 @@ pub struct PlanItem {
 pub struct Plan {
     /// The items.
     pub items: Vec<PlanItem>,
+    /// The contributions that panicked, and what they said.
+    ///
+    /// A plan with a failure in it is a plan that is **short**: the
+    /// contribution that panicked said nothing, and the plan says so
+    /// rather than pretending the document has no meaning.
+    pub failures: Vec<PlanFailure>,
 }
 
 impl Plan {
     /// An empty plan.
     pub fn new() -> Self {
-        Plan { items: Vec::new() }
+        Plan { items: Vec::new(), failures: Vec::new() }
     }
 
     /// The plan, as it is written.
     pub fn to_json(&self) -> Json {
         serde_json::json!({
+            "failures": self
+                .failures
+                .iter()
+                .map(|failure| serde_json::json!({
+                    "who": failure.who,
+                    "message": failure.message,
+                }))
+                .collect::<Vec<_>>(),
             "items": self
                 .items
                 .iter()
@@ -90,14 +119,30 @@ pub fn evaluate(
     for node in document.walk() {
         let Some(kind) = kinds.get(&node.kind) else { continue };
         let Some(evaluate) = kind.evaluate else { continue };
-        let Some(value) = evaluate(node, document) else { continue };
-        plan.items.push(PlanItem { node: node.id, kind: node.kind.clone(), value });
+        // The kind is a contribution: code this tree does not own. A
+        // contribution that panics must not take the program with it, so
+        // the panic is caught here and the plan says what went wrong.
+        let guarded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(node, document)));
+        match guarded {
+            Ok(Some(value)) => {
+                plan.items.push(PlanItem { node: node.id, kind: node.kind.clone(), value });
+            }
+            Ok(None) => {}
+            Err(panic) => {
+                plan.failures
+                    .push(PlanFailure { who: node.kind.clone(), message: crate::guard::message_of(&panic) });
+            }
+        }
     }
     plan
 }
 
 /// The plan of a document, as the kinds say it.
+///
+/// A kind that panics says nothing here either: the panic is caught and
+/// the answer is `None`.
 pub fn evaluate_node(node: &Node, document: &Document, kind: &crate::document::NodeKindSpec) -> Option<Json> {
     let evaluate = kind.evaluate?;
-    evaluate(node, document)
+    let guarded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(node, document)));
+    guarded.ok().flatten()
 }

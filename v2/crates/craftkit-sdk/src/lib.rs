@@ -68,6 +68,7 @@ pub mod error;
 pub mod evaluator;
 pub mod format;
 pub mod group;
+pub mod guard;
 pub mod hand;
 pub mod history;
 pub mod jobs;

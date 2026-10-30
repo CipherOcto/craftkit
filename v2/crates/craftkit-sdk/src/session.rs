@@ -290,8 +290,19 @@ impl Session {
         // come after the kinds' ones: the document's own nodes first, then
         // what is said about the document as a whole.
         for evaluator in self.evaluators.all() {
-            let theirs = (evaluator.evaluate)(&self.document);
-            plan.items.extend(theirs.items);
+            // An evaluator is a contribution too: code this tree does
+            // not own. A contribution that panics is skipped, and the
+            // plan says what it could not say.
+            let guarded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                (evaluator.evaluate)(&self.document)
+            }));
+            match guarded {
+                Ok(theirs) => plan.items.extend(theirs.items),
+                Err(panic) => plan.failures.push(crate::plan::PlanFailure {
+                    who: evaluator.id.to_string(),
+                    message: crate::guard::message_of(&panic),
+                }),
+            }
         }
         plan
     }

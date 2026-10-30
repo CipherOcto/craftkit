@@ -866,17 +866,21 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**337 tests** by default, and **389** with the six optional batteries
+**341 tests** by default, and **393** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
 ### Not built
 
 - **The kernel.** v2's document has nodes, and a node may have a place; it
-  has no numeric core, no panic guard and no geometry engine. The old tree's
-  `craftkit-kernel` is untouched. What v2 has is the **seam** the kernel
-  would plug into: a kind carries its own evaluation, and the plan is a
-  value.
+  has no **numeric core**: there is no type for a length in millimetres or
+  an angle in radians, and every number in a document is a JSON number.
+  The old tree's `craftkit-kernel` is untouched. What v2 has is the
+  **seam** the kernel would plug into: a kind carries its own evaluation,
+  and the plan is a value. The **panic guard** is built (§38, and the
+  command path before it), and the **geometry** is a library of its own
+  (§13) — so what is missing is the typed value, not the machinery
+  around it.
 - **The old tree's format.** The old tree's versioned `.craftkit` format,
   with its one-file-per-change discipline, is untouched. What v2 has is a
   format that is a **contribution**, with migrations that are contributions,
@@ -944,7 +948,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 337 tests (389 with the batteries on)
+cargo test          # 341 tests (393 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -2681,3 +2685,53 @@ after six ports and six batteries it is a claim with a number against
 it: the ports cost **a field**, **two fields and a version**, **a tree
 instead of a stack**, **a field and a version**, **nothing**, **nothing**
 and **one method**.
+
+---
+
+## 38. The guard: a contribution that panics does not take the program with it
+
+§16 listed the **kernel** as the thing v2 did not have, and part of that
+list was wrong: v2 had a **panic guard** for commands and none for
+**evaluation**. That is the gap this section closes, and it is the same
+gap the outer tree's `craftkit_kernel::guard` exists for.
+
+### What was there and what was not
+
+- A **command** that panics was already handled: `Session::execute`
+  clones the document, runs the command under the guard, and on a panic
+  **restores the pre-command document**. A command that panics is a
+  command that did not happen.
+- A **kind** or an **evaluator** that panics was **not** handled: the
+  panic unwound through `Session::evaluate` and into whatever was
+  drawing.
+
+And a kind and an evaluator are **contributions**: code this tree does
+not own. A plugin's kind that panics is a plugin's bug, and it must not
+be the program's crash.
+
+### What is there now
+
+Every evaluation is under the guard, and the **plan says what it could
+not say**:
+
+```text
+Plan { items: [...], failures: [PlanFailure { who, message }] }
+```
+
+- a kind that panics is **skipped**, and the plan carries a failure
+  naming the kind and what it said;
+- an evaluator that panics is **skipped**, and the plan carries a
+  failure naming it;
+- the failures are in the plan's **JSON** as well, so a front end can
+  show them rather than draw a document that is quietly missing a piece.
+
+A plan with a failure in it is a plan that is **short**, and it says so.
+That is the difference between a guard and a `catch_unwind` that throws
+the panic away: the program keeps running, the plan says what it could
+not say, and the failure is **visible** instead of silent.
+
+### What is still not built
+
+The **numeric core**: there is no type for a length in millimetres or an
+angle in radians, and every number in a document is a JSON number. The
+guard is the machinery around that gap, and the gap is still there.
