@@ -5087,3 +5087,116 @@ until its newline, with **no limit** on how much they would hold.
   was.** The reader stops at the limit, so it does not know how much
   more was coming, and a message that says "the line is longer than a
   megabyte" is true and is all the reader knows.
+
+---
+
+## 65. The session's own memory, and the counts that were not bounds
+
+§63 bounded the **document**. This section bounds the things a session
+holds *beside* the document — and it found that every one of them had a
+**count** and no **number of bytes**, which is the difference between a
+limit and a hope.
+
+### What was built
+
+- **The document has a byte budget.** `MAX_DOCUMENT_BYTES` is
+  thirty-two mebibytes, and it is the **same name and the same number**
+  the family uses: a document is a document in either tree, and a bound
+  that is written down twice with two numbers is two bounds.
+- **The estimate never under-estimates.** A budget a document can lie
+  about is not a budget, so the estimate counts the **capacities** and
+  not the lengths, and it counts the children, the relations and the
+  assets too. It is walked with a stack and not by recursing: a bound
+  that is checked by overflowing the stack is not a bound (§63).
+- **The history has a byte budget beside its count.**
+  `MAX_HISTORY_BYTES` is the document's budget times
+  `HISTORY_EXPANSION` (two) — sixty-four mebibytes, and the same name
+  and the same number the family uses. Each state's cost is measured
+  **when the state is made**, so the pruning is a **subtraction** and
+  not a walk of the tree.
+- **The journal has a byte budget beside its count.**
+  `MAX_JOURNAL_BYTES` is eight mebibytes. It is the **kit's own** name
+  and the kit's own number, and it is named here: a bound a reader
+  cannot look up is not a bound.
+- **The tasks have a byte budget beside their count.**
+  `MAX_TASKS_BYTES` is eight mebibytes, and a task that is still
+  **running** is never dropped for it.
+- **The log is bounded.** `MAX_LOG_ENTRIES` is two hundred and fifty-six:
+  the log is written on every command, and a session that runs for days
+  would otherwise hold every line it ever wrote.
+- **The bounds a program owns are the program's.** The journal's
+  budget, the task registry's budget and the history's budget can be
+  said out loud (`set_journal_budget`, `TaskRegistry::with_budget`,
+  `History::with_budget`). The document's byte budget is **not** the
+  program's: a document is a document in either tree.
+
+### What the port found
+
+- **A count is not a bound.** The history held two hundred and fifty-six
+  states, the journal a thousand entries and the registry a thousand
+  tasks — and every one of those held something whose size the caller
+  chose. Two hundred and fifty-six states of a thirty-megabyte document
+  are **seven and a half gigabytes**, and a thousand journal entries of
+  a megabyte each are a gigabyte. The counts said "a lot" and the
+  memory said "everything".
+- **The bound that binds is the byte one, and it binds long before the
+  count does.** A document over half a megabyte keeps **two** states in
+  the family, not a hundred and twenty-eight — and the number that
+  decided it was never the count.
+- **The budget is derived, not written down.** The history's budget is
+  the document's budget times an expansion, so that raising the
+  document's budget moves the history's with it. Two caps with the same
+  value and no relation between them drift apart the moment one of them
+  is changed — which is the reason the family's two caps are derived
+  from the model's.
+- **The measure is made when the thing is made.** A pruning that has to
+  measure a document to know what to drop is a pruning that walks the
+  whole tree on every push; a pruning that subtracts what the entry cost
+  is a subtraction. The family measures the entry's bytes at push time
+  for the same reason, and the two trees now say the same thing.
+- **A budget may cost the history, and never the document.** The state
+  that is current is not dropped for the budget: it holds the document
+  the session is working on, and a bound that drops the working
+  document is not a bound, it is a data loss.
+- **Work that has not been accounted for is not dropped.** A task that
+  is still running is not dropped for the byte budget: it is work whose
+  result nobody has collected yet, and losing it loses the handle the
+  other end knows it by.
+- **Two trees, one number, and the names that are shared are the
+  family's.** `MAX_DOCUMENT_BYTES` and `MAX_HISTORY_BYTES` are the
+  family's names with the family's numbers, so that a reader of either
+  tree can look them up. The caps that are the kit's own — the
+  journal's, the tasks' — are **private** and are named here, because a
+  name that means two things in two trees is a name that means nothing
+  in either.
+
+### What it cost
+
+- two constants and two methods on the document (`estimated_bytes` and
+  the byte check inside `check_bounds`), two constants and the
+  accounting on the history, one constant and one method on the
+  journal, one constant and one method on the task registry, one
+  constant and one method on the session;
+- one new test file with **ten tests** (`tests/bounds.rs`), beside the
+  seven that hold §63's bounds.
+
+### What it does not settle
+
+- **A document built in memory is still bounded only when it is
+  written.** This is §63's unsettled line, in the same shape: the byte
+  budget is checked when the document is read and when it is written,
+  and a program that assembles a thirty-three-megabyte document in
+  memory holds it until it tries to save it.
+- **The estimate counts the tree, and the tree shares.** A node is
+  shared between the document and the history's copies of it, and the
+  estimate counts it once per copy. So the history's budget is
+  **conservative**: two states of the same document cost what two
+  documents cost. That is the right way to be wrong.
+- **The plan is not bounded, and does not need to be.** The plan is
+  **derived** on demand and handed to the caller; the session does not
+  hold it. A plugin's value may be any size — and that is the
+  plugin's business, and the plan is not a leak.
+- **The bytes are an estimate, and the allocator is the truth.** The
+  estimate never under-estimates and it does not pretend to be the
+  allocator's number: a program's own allocator may hold more, and a
+  program's own bound is the way to say so.
