@@ -895,6 +895,10 @@ different commands with one id.
   words, the measure it sits in, the **metric** it is set in, and the
   lines it breaks into — ported into v2's seams, and what it found
   (§58, §59, §60). It is optional, like the others.
+- `crates/craftkit-raster` — the **rasteriser**: the canvas that draws a
+  document into a picture, and the PNG writer that carries it. A
+  **library**, not a plugin: it contributes nothing to the registry and
+  the linker does not wire it in (§67).
 - `crates/craftkit-mcp` — the **MCP door**: the registry, spoken to an
   agent, with **one tool per command** (§41). The SDK's **prompt seam**
   (§45) is its other half: the host's turn before a command runs.
@@ -3019,7 +3023,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all twelve batteries it is
-**149**, measured the same way.
+**150**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -5301,3 +5305,90 @@ document *built* in memory was bounded only when it was written.
   after each command that ran; a program that fills the session from
   outside the session — a plugin that holds its own copies — is not
   counted.
+
+---
+
+## 67. The canvas, and a picture of the document
+
+The kit has had a **painting seam** since the beginning: every kind of
+node knows how it is painted, and the core never matches on a kind. What
+it did not have was a canvas to paint on — the only backend was a
+recorder that wrote down what it was asked to draw, which is enough to
+*test* a kind and not enough to *see* one.
+
+Every application in the family draws. So this is the piece that turns
+the kit from a document model into something a person can look at.
+
+### What was built
+
+- **`craftkit-raster`** — a **library**, not a plugin: it contributes
+  nothing to the registry and the linker does not wire it in.
+  - a **picture**: a buffer of RGBA pixels with a background;
+  - a **canvas**: the kit's own `Canvas` trait, implemented over that
+    buffer, with the **camera's** zoom and offset applied — one set of
+    camera controls, and the canvas goes through them;
+  - a **PNG writer**: the picture as a file anybody can open, with no
+    dependency and no compression (the deflate stream is *stored*).
+- **The command `doc.snapshot`** — the application takes a picture of
+  the document and writes it to a file. It knows nothing about what a
+  rectangle is: the canvas is given the drawing, and the drawing comes
+  from the kind.
+- **The picture is bounded.** `MAX_IMAGE_PIXELS` (sixteen million
+  pixels) and `MAX_IMAGE_SIDE` (eight thousand and ninety-two) are the
+  crate's own numbers and they are named here. A picture that is asked
+  to be enormous is **refused** and not made smaller.
+
+### What the port found
+
+- **The seam was real, and nothing exercised it.** Every battery
+  declares how its kinds are painted, and no picture had ever come out
+  of it — so a painting bug could not have been found, because there was
+  nothing to look at. The seam was a promise with no witness.
+- **The camera was already there, and the canvas had to go through it.**
+  The camera is a zoom and an offset (§ the camera's own section), and
+  the rule is that every canvas goes through the one set of controls. The
+  rasteriser takes the camera and applies it: the world's **up** is the
+  picture's **down**, because a document is drawn the way it is looked
+  at and not the way it is stored.
+- **There is no font, and the kit says so.** The kit has the *metrics*
+  of a typeface (§59) and not its glyphs — so a character is drawn as
+  the **box it would occupy**, a typewriter's worth of rectangles. The
+  picture says *there is text here* and not what it says, which is
+  honest in a way that a fake glyph would not be.
+- **A picture without soft edges is a picture a machine can reason
+  about.** There is no anti-aliasing: a pixel is either painted or it is
+  not, and the fill is a scanline over the flattened curves. That is a
+  choice and not an omission — an edge that is exactly where it was put
+  is an edge that can be checked.
+- **The PNG writer is a hundred lines and no dependency.** The whole
+  point of the kit is that it has no dependency it did not choose, and a
+  PNG is a signature, three chunks, a CRC and a stored deflate stream.
+  The test **reads the file back** — every chunk, every CRC, and the
+  picture out of the stream — because a writer that is only trusted to
+  be right about itself is not a writer.
+- **The picture is not an edit.** `doc.snapshot` does not change the
+  document, so it makes no undo step: a photograph is not a change.
+
+### What it cost
+
+- one crate, one file's worth of PNG arithmetic, and one canvas;
+- one command in the application and three tests beside it;
+- **nine tests** in the crate, and **twelve** in all.
+
+### What it does not settle
+
+- **The picture is not the document.** It is what the kinds drew, and a
+  kind that draws nothing draws nothing. There is no second rendering
+  path and no "what the document really looks like" — there is only what
+  the kinds say, which is the point of the seam.
+- **There is no anti-aliasing and no soft edges.** A diagonal line is a
+  staircase, and a circle is a polygon. A picture for a person to look
+  at would want both, and the choice here was a machine-readable
+  picture.
+- **There is no font, so there is no text.** The boxes are a placeholder
+  that says where text would be; a real glyph needs a real typeface, and
+  a typeface is a file this kit does not carry.
+- **The canvas is a raster, and not a display list.** Everything is
+  painted into pixels as it happens; a program that wanted to zoom in
+  after the fact would have to paint again. The camera is applied while
+  drawing, and that is the only place it is applied.
