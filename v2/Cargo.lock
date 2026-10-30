@@ -134,6 +134,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-layout"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-plugin-pdf"
 version = "0.2.0"
 dependencies = [
@@ -210,6 +218,7 @@ dependencies = [
  "craftkit-plugin-fx",
  "craftkit-plugin-grid",
  "craftkit-plugin-hello",
+ "craftkit-plugin-layout",
  "craftkit-plugin-pdf",
  "craftkit-plugin-prose",
  "craftkit-plugin-shapes",

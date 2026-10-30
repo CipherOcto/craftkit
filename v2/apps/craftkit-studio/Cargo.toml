@@ -50,6 +50,10 @@ craftkit-plugin-cad = { path = "../../crates/craftkit-plugin-cad", optional = tr
 # default as well: a program that wants blocks, styles and media says
 # so.
 craftkit-plugin-prose = { path = "../../crates/craftkit-plugin-prose", optional = true }
+# The **tenth battery**: the document model of a page layout application.
+# Off by default as well: a program that wants spreads, pages, items and
+# stories says so.
+craftkit-plugin-layout = { path = "../../crates/craftkit-plugin-layout", optional = true }
 
 [features]
 default = []
@@ -79,6 +83,9 @@ cad = ["dep:craftkit-plugin-cad"]
 # The prose battery. Off by default: a program that wants blocks, styles
 # and media says so.
 prose = ["dep:craftkit-plugin-prose"]
+# The layout battery. Off by default: a program that wants spreads, pages
+# and stories says so.
+layout = ["dep:craftkit-plugin-layout"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes
