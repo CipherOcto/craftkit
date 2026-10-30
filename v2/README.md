@@ -3367,3 +3367,60 @@ The three are the same seam with three suppliers.
 A trait, a struct and a method. The `ParamError` gained one word — a
 missing value and a wrong value are different questions now, because a
 missing one is a host's business — and the MCP server learned to say so.
+
+---
+
+## 48. The list, checked: what this kit claims and does not claim
+
+A tree that keeps saying what it has not built is a tree whose claims
+can be believed. So here is every claim this README has made about what
+is **not** there, checked against the tree, with the section that says
+so.
+
+| the claim | the truth today | where |
+|---|---|---|
+| a **numeric core**: a typed length, a typed angle | **not built.** Every number in a document is a JSON number, and the core has no unit. §39 says where it goes when it arrives — a plugin — and the CAD survey confirms it | §39, §43 |
+| the **panic guard** | **built**, twice: the command path and the evaluation path, and the plan says what it could not say | §38 |
+| the **geometry** | **built**: a library of its own, with no commands and no document knowledge | §13, §43 |
+| the **file format**: the old tree's `.craftkit` | **by design, untouched.** v2's format is a contribution, with migrations that are contributions, and a version chain the ecosystem checks | §15 |
+| a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
+| a **control channel** | **not built.** The MCP server is the other door, and it is built | §41 |
+| the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
+| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44); **images are not ported**, and an appearance is still a plugin's payload | §44 |
+| a **selection of spans** | **built** | §22 |
+| the **view state** | **built**, and it is the session's | §37 |
+| the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
+| the **plugin formats** (CLAP, VST3, AU) | **the door is built**; the formats are not, and each would be a shim over the door | §34, §35 |
+| the **history** that branches | **built** | §24 |
+| a **task** that may outlive the process | **built** | §28 |
+| one **camera** with its own caps | **built** | §29 |
+| the **prompt**: a host that has what a command is missing | **built** as a seam; a command that asks *while it runs* is not | §45 |
+| **copy-on-write**, so the undo is cheap | **not built.** The history clones the document; the family's trees share it, and this is the one place they are plainly ahead | §40, §43 |
+| a **typed relation to a part** of a thing (an area, a sub-part) | **not built, and not needed**: two ports needed it and both kept it in the payload, where the plugin owns it | §42, §43 |
+| the **reader's** keeping of what it does not understand | **built**, at the document and at the node | §33, §43 |
+| the **plan**: one evaluated thing every consumer reads | **built** | §24 |
+| the **guard** around evaluation | **built** | §38 |
+| a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
+
+### The three things that are honestly not there
+
+1. **The numeric core.** The typed value, the unit, the solver. Not
+   built, and §39 says where it goes.
+2. **The resumable command.** A command that asks while it runs, with a
+   preview and a live prompt, is a state machine per command and the
+   session holding it. §45 built the other half and says plainly that
+   this half is not built.
+3. **The cheap undo.** The family's trees share their documents and
+   snapshot a pointer; this kit clones. Simple, correct, and more
+   expensive than it needs to be — and the only item on this list that
+   is a **regression against the family's own trees** rather than a gap
+   in the kit's design.
+
+### And the one that is not a code gap
+
+The **mutation suite** is CI-only by the machine's rule, so no claim in
+this README has been measured by mutation. The v2 gates are: the tests,
+clippy, fmt, and the workspace-scanning gate that holds the list of
+allowed `unsafe`. The outer tree's gates do not reach into `v2/`, which
+is excluded from the outer workspace — so the outer gate is evidence
+about the outer tree and **not** about this one.
