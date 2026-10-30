@@ -866,7 +866,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**331 tests** by default, and **383** with the six optional batteries
+**337 tests** by default, and **389** with the six optional batteries
 enabled (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`,
 `/art`).
 
@@ -944,7 +944,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 331 tests (383 with the batteries on)
+cargo test          # 337 tests (389 with the batteries on)
 cargo run -p craftkit-studio
 ```
 
@@ -1289,8 +1289,10 @@ the evaluator works out what they mean.
 
 ### What was not answered
 
-These are the stressors that are still open, and each one says what it
-would cost:
+**This list is history.** It is what the survey found on the day it was
+written, and every item on it has an answer now — the table at the end
+of §37 says which. The list is left as it was, because what it cost is
+part of the record:
 
 - **Real time.** The sound tree's plugin trait splits the work into
   `process` (the audio thread), `PluginEditor` and `PluginStateReader`
@@ -2624,3 +2626,58 @@ fine with both — because a command's parameters are typed, and what a
 range means is the domain's business. The core's span selection is
 there for the commands that act on "whatever is picked out", and a trim
 that names its target does not need one.
+
+---
+
+## 37. The view state, and the end of §20's list
+
+§20 listed six things the sound tree had and v2 did not. Five of them
+were answered by later sections: the real-time door (§21.1), the media
+that travel (§21.2), the span selection (§22), the plugin formats
+(§34's door), and the menu (the registry generates it, so there is no
+catalog to drift). The sixth was the **view state**, and this section is
+it.
+
+### What was built
+
+Two commands:
+
+- `view.save` — write the camera into the document, under the SDK's own
+  key, `craftkit/view`;
+- `view.restore` — read it back and move the camera.
+
+### The rules, and why they are two commands
+
+- **The camera is the session's state.** It is where the person is
+  looking, it has its own caps, and the undo does not move it.
+- **The document may remember the view.** The artist's IDE keeps the
+  viewport in the document (§33), and it is right to: a board is a thing
+  you come back to.
+- **Saving the view does not move the camera, and restoring it does not
+  change the document.** They are two commands because they are two
+  different things: one writes a fact down, the other moves the eye.
+  The undo takes the **saved** view back — saving changes the document —
+  and it does not take the **camera** back, because the camera is not
+  the document's.
+- **The key is the SDK's own.** The document's payload is shared, and two
+  plugins must not collide by accident, so the SDK writes under one
+  namespaced name and a plugin that keeps a view of its own writes under
+  a name of its own.
+
+### §20's list, closed
+
+| the stressor | answered |
+|---|---|
+| real time | §21.1 — the lane, its own rules, its own tests |
+| media that travel | §21.2 — the assets and the bundle |
+| a selection of spans | §22 — the selection holds parts |
+| view state | **this section** — the camera, and the view written down |
+| the plugin formats | §34 — the door; the formats themselves are not built |
+| the menu catalog | §20.3 — the registry generates the menu, so there is no catalog |
+
+Six stressors, six answers, and the kit grew a seam for each one rather
+than a feature for each one. That is the whole claim of this tree, and
+after six ports and six batteries it is a claim with a number against
+it: the ports cost **a field**, **two fields and a version**, **a tree
+instead of a stack**, **a field and a version**, **nothing**, **nothing**
+and **one method**.

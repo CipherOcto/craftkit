@@ -85,6 +85,7 @@ pub mod session;
 pub mod stream;
 pub mod taskcmds;
 pub mod tasks;
+pub mod view;
 
 pub use anchor::{Anchored, PluginAnchor};
 pub use bundle::{Bundle, File};

@@ -5,6 +5,7 @@
 //! media plays faster, and the space one element took is given to the
 //! ones after it.
 
+#[cfg(feature = "art")]
 use craftkit_sdk::Ecosystem;
 // The tests that use it are the ones for the battery, and the battery is
 // optional: the import is with them.
@@ -12,6 +13,7 @@ use craftkit_sdk::Ecosystem;
 use craftkit_sdk::serde_json::json;
 
 /// The ecosystem the tests drive.
+#[cfg(feature = "art")]
 fn ecosystem() -> Ecosystem {
     craftkit_studio::ecosystem().expect("the ecosystem is built")
 }
