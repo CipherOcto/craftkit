@@ -3019,7 +3019,7 @@ So there is nothing to learn twice, and a command that is added is a tool
 that is added. With the six batteries linked in, that is **106 tools** —
 and a test says so, by counting the registry and the tool list and
 checking that they are the same size. With all twelve batteries it is
-**148**, measured the same way.
+**149**, measured the same way.
 
 ### What the survey said about this, and what it cost
 
@@ -5200,3 +5200,104 @@ limit and a hope.
   estimate never under-estimates and it does not pretend to be the
   allocator's number: a program's own allocator may hold more, and a
   program's own bound is the way to say so.
+
+---
+
+## 66. One budget for the whole session, and the order things go in
+
+§65 bounded each part of a session on its own: the document, the
+history, the journal, the tasks, the log. This section is about the
+**whole** — and it closed §63's unsettled line, which said that a
+document *built* in memory was bounded only when it was written.
+
+### What was built
+
+- **The session judges the document after every command.** A command
+  that leaves the document over its byte budget is **refused and put
+  back**: the document is restored, the command reports the refusal, and
+  the work that was there before is still there. A document nobody could
+  save is a document nobody should have.
+- **The session has a budget of its own.** `MAX_SESSION_BYTES` is the
+  **family's** name and the **family's** number: the document's budget
+  times the number of documents a session holds — two of its own, one
+  snapshot and the history's two — which is one hundred and sixty
+  mebibytes.
+- **The session says what it is holding, and it says the parts.**
+  `Session::memory()` gives the document, the history, the journal, the
+  tasks and the log separately, because a session that is over its
+  budget has to give *something* up and the part that gives way is the
+  part that is cheapest to lose.
+- **The order of what gives way** is the same in every session:
+  1. the **journal** — a record of what was asked for, and the newest
+     entries are the useful ones;
+  2. the **finished tasks** — their results have been collected, or
+     nobody is waiting for them; a task that is still **running** is
+     never dropped;
+  3. the **history** — the oldest states, which are the ones a person
+     has already undone past.
+- **The document is not in the order.** It is never given up: it is the
+  work.
+- **The measurement is a command.** `session.memory` says what the
+  session is holding and what it may hold, because everything a person
+  or an agent can see is a command in this kit — and a budget nobody can
+  look up is a budget nobody can check.
+
+### What the port found
+
+- **§63's unsettled line is closed.** The depth bound was checked while
+  the node was read and the count bound when the document was read or
+  written — and a document assembled **in memory** was bounded only
+  when it was saved. The session now judges it after every command, and
+  puts it back. The bound bites where the work happens, not where the
+  file is written.
+- **A budget over parts is a budget with an order.** The parts cannot
+  all give way at once, and which one goes first is a **decision** and
+  not an implementation detail: the journal is a record of what was
+  asked for, the finished tasks are work nobody is waiting for, and the
+  history is the work itself. A program that lost its undo steps first
+  would be a program that lost the session.
+- **The document is never in the order.** A budget may cost the
+  history, the journal and the tasks; it may not cost the document. The
+  same rule the family keeps for the state that is current in the
+  history: a bound that drops the working document is not a bound, it
+  is a data loss.
+- **The parts' budgets add up to less than the session's budget.** The
+  document is thirty-two mebibytes, the history sixty-four, the journal
+  and the tasks eight each — and the session's budget is one hundred
+  and sixty. So with the kit's own numbers the session budget **does
+  not bind**, and it binds exactly when a program raises one of the
+  parts. That is the point of having both: the parts are the parts'
+  business, and the whole is the program's.
+- **The number that says what the process uses is not the number that
+  says what one document holds.** The family learned this the hard way
+  (§144): a table that claimed one document's budget was wrong by a
+  factor of four, because the session holds the document, the snapshot
+  and the stacks. Two trees now say the same thing about a session.
+
+### What it cost
+
+- two constants and the derivation, one struct (`Memory`), three
+  methods on the session, one method on the history, one on the task
+  registry, and one command;
+- **eight tests** in a new file (`tests/memory.rs`), beside the ten
+  that hold §65's bounds.
+
+### What it does not settle
+
+- **The budget is measured, and the allocator is the truth.** The
+  estimate counts the parts and never under-estimates; it does not
+  count the plugins' own memory, the process's stack, or the allocator's
+  overhead. The number says what the **session** holds, not what the
+  process uses.
+- **Giving way is not undoing.** When the journal gives up its oldest
+  entries and the history gives up its oldest states, they are **gone**:
+  a person who wanted them is out of luck. A bound costs something, and
+  the cost is named here rather than discovered at the worst moment.
+- **The document is not bounded while the command runs.** The session
+  judges the document **after** the command, so a command that builds a
+  very large document holds it for the length of that command. The
+  bound is on what the session *keeps*.
+- **The memory is not measured between commands.** The budget is checked
+  after each command that ran; a program that fills the session from
+  outside the session — a plugin that holds its own copies — is not
+  counted.
