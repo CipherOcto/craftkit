@@ -9,7 +9,7 @@
 //! therefore **rules and not gates**: they were true, and nothing said
 //! so.
 //!
-//! This crate is the gate. It has three rules:
+//! This crate is the gate. It has four rules:
 //!
 //! 1. **The deny attribute is the house one.** Every crate root carries
 //!    the same six lints, in the same order, so that a deny list that
@@ -21,6 +21,10 @@
 //! 3. **A plugin is a plugin.** A plugin may not depend on an app, and
 //!    may not depend on another plugin: the seam is the SDK, the macro
 //!    and the libraries, and nothing else.
+//! 4. **The bounds are named in the prose.** Every public bound in the
+//!    tree is named in this tree's README: a bound a reader cannot look
+//!    up is a bound a reader cannot check. The outer tree has the same
+//!    rule for its own tree (§71).
 //!
 //! # Why the gate is a function and not a script
 //!
@@ -313,7 +317,97 @@ pub fn check(root: &Path) -> Vec<Finding> {
             }
         }
     }
+
+    // Rule 4: the bounds are named in the prose.
+    bounds_named_in_the_prose(root, &mut findings);
+
     findings
+}
+
+/// Rule 4: **the bounds are named in the prose**.
+///
+/// A bound that no document names is a bound a reader cannot check: the
+/// number is in the code and the reason for it is nowhere. The outer
+/// tree has this rule for its own tree; this is the same rule for this
+/// one, and the prose it checks is **this** tree's README.
+///
+/// Only the **public** bounds are checked: a private cap is the
+/// program's own, and the README names those too — but a private cap is
+/// not a promise anybody else may rely on, and the rule is about the
+/// promises.
+fn bounds_named_in_the_prose(root: &Path, findings: &mut Vec<Finding>) {
+    // A tree with no README has no prose, and a bound with no prose is
+    // a bound no reader can look up: the rule is about the bounds, and
+    // it fires for each of them.
+    let prose = std::fs::read_to_string(root.join("README.md")).unwrap_or_default();
+    let mut names: Vec<(String, String)> = Vec::new();
+    for crate_ in crates(root) {
+        for file in rust_files(&crate_.dir) {
+            let Ok(code) = std::fs::read_to_string(&file) else { continue };
+            for name in public_bounds(&code) {
+                let found = name.clone();
+                if !names.iter().any(|(other, _)| *other == found) {
+                    names.push((found, file.display().to_string()));
+                }
+            }
+        }
+    }
+    for (name, file) in names {
+        if !names_the_prose(&prose, &name) {
+            findings.push(Finding {
+                rule: "prose",
+                crate_: "the tree".to_string(),
+                message: format!(
+                    "{file} has the public bound `{name}` and no document in the tree names it; a bound a reader cannot look up is a bound a reader cannot check"
+                ),
+            });
+        }
+    }
+}
+
+/// The public bounds a file declares.
+///
+/// A bound is a `MAX_` constant whose name says what it bounds: bytes,
+/// memory or steps. The names are the ones the outer tree's rule uses,
+/// so that a reader of either tree knows what is being looked for.
+fn public_bounds(code: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in code.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("pub const ") else { continue };
+        let Some((name, _)) = rest.split_once(':') else { continue };
+        let name = name.trim();
+        if !name.starts_with("MAX_") {
+            continue;
+        }
+        if !(name.ends_with("BYTES") || name.ends_with("MEMORY") || name.ends_with("STEPS")) {
+            continue;
+        }
+        out.push(name.to_string());
+    }
+    out
+}
+
+/// Whether the prose names that bound.
+///
+/// A name is named when it is in the text as a **word**: a bound that
+/// is a prefix of another bound's name is not named.
+fn names_the_prose(prose: &str, name: &str) -> bool {
+    prose.split(|character: char| !character.is_alphanumeric() && character != '_').any(|word| word == name)
+}
+
+/// The Rust files of a crate.
+fn rust_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir.join("src")) else { return out };
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+            out.push(path);
+        }
+    }
+    out.sort();
+    out
 }
 
 /// Whether a package name is one of the applications.

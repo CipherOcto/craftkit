@@ -128,6 +128,57 @@ fn a_plugin_that_depends_on_another_plugin_is_caught() {
     assert!(plugin[0].message.contains("craftkit-plugin-cad"), "{}", plugin[0].message);
 }
 
+/// A public bound that **no document names** is caught.
+///
+/// The rule of the outer tree, applied to this tree: a bound a reader
+/// cannot look up is a bound a reader cannot check.
+#[test]
+fn a_bound_that_no_document_names_is_caught() {
+    let tree = Tree::new("prose");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub const MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    let prose = findings_of(&findings, "prose");
+    assert_eq!(prose.len(), 1, "the gate caught it: {findings:?}");
+    assert!(prose[0].message.contains("MAX_MYSTERY_BYTES"), "{}", prose[0].message);
+}
+
+/// A bound that **is** named in the prose is not caught.
+///
+/// The rule bites on the *unnamed* bounds and on nothing else.
+#[test]
+fn a_bound_that_the_prose_names_is_not_caught() {
+    let tree = Tree::new("named");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub const MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    std::fs::write(tree.root.join("README.md"), "the tree holds `MAX_MYSTERY_BYTES` bytes\n")
+        .expect("the README is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "prose").is_empty(), "the gate caught it: {findings:?}");
+}
+
+/// A **private** bound is not caught.
+///
+/// A private cap is the program's own, and the rule is about the
+/// promises the tree makes to the world.
+#[test]
+fn a_private_bound_is_not_caught() {
+    let tree = Tree::new("private");
+    tree.crate_("crates", "craftkit-sdk", &[], None);
+    let root = tree.root.join("crates").join("craftkit-sdk").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\nconst MAX_MYSTERY_BYTES: usize = 42;\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "prose").is_empty(), "the gate caught it: {findings:?}");
+}
+
 /// A plugin that depends on an **application** is caught.
 #[test]
 fn a_plugin_that_depends_on_an_application_is_caught() {
