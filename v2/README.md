@@ -894,7 +894,7 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**521 tests.** The MCP server links **all eleven batteries** in, so the
+**525 tests.** The MCP server links **all eleven batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`) — and the studio on its
@@ -979,7 +979,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 521 tests
+cargo test          # 525 tests
 cargo run -p craftkit-studio
 ```
 
@@ -2929,7 +2929,9 @@ kind of content is a change in six crates at once.
 - **Copy-on-write is how all three make undo cheap.** They share
   immutable `Arc` subtrees and snapshot the document by pointer. This
   kit's history **clones** the document, which is simple and correct and
-  more expensive than it needs to be.
+  more expensive than it needs to be. — **Taken in §53**: the nodes are
+  shared now, and the cost of an edit no longer depends on the size of
+  the document.
 - **The spreadsheet is the hardest port yet.** A grid is not a tree at
   all, and its dependency graph is between **areas** — a cell depends on
   a *range* — which is the first relation kind this kit has not had.
@@ -3418,7 +3420,7 @@ so.
 | a **task** that may outlive the process | **built** | §28 |
 | one **camera** with its own caps | **built** | §29 |
 | the **prompt**: a host that has what a command is missing | **built**, both halves: the host's turn before the command runs (§45), and a command that asks **while it runs** (§50) | §45, §50 |
-| **copy-on-write**, so the undo is cheap | **not built.** The history clones the document; the family's trees share it, and this is the one place they are plainly ahead | §40, §43 |
+| **copy-on-write**, so the undo is cheap | **built**: the nodes are shared and the states keep what they were, and the cost of an edit no longer depends on the size of the document — measured, before and after (§53) | §40, §43, §53 |
 | a **typed relation to a part** of a thing (an area, a sub-part) | **not built, and not needed**: two ports needed it and both kept it in the payload, where the plugin owns it | §42, §43 |
 | the **reader's** keeping of what it does not understand | **built**, at the document and at the node | §33, §43 |
 | the **plan**: one evaluated thing every consumer reads | **built** | §24 |
@@ -3426,7 +3428,7 @@ so.
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **not built.** The kit writes the newest version and reads the old ones through its chain of migrations; the family's page layout application writes the *oldest* version that still represents the document | §51 |
 
-### The three things that are honestly not there
+### The two things that are honestly not there
 
 1. **The typed parameter.** The typed value is built (§52) — as a
    library and a plugin — but a command may not *take* one: the kinds a
@@ -3434,23 +3436,21 @@ so.
    command takes a number and a unit name, and the conversion is in its
    body. That is a **core** question, and it is written down rather
    than decided.
-2. **The cheap undo.** The family's trees share their documents and
-   snapshot a pointer; this kit clones. Simple, correct, and more
-   expensive than it needs to be — and the only item on this list that
-   is a **regression against the family's own trees** rather than a gap
-   in the kit's design.
-3. **The version a file is written at.** The kit writes the newest
+2. **The version a file is written at.** The kit writes the newest
    version it knows and reads the old ones through its chain of
    migrations. The family's page layout application writes the *oldest*
    version that still represents the document, so that old readers keep
    working (§51). The kit has the machinery — the chain — and not the
    habit, and the habit is a decision about the format's contract.
 
-The **resumable command** — a command that asks while it runs — used to
-be on this list. §50 built it, and §50 also says what the answer costs:
-the command is **run again** when the answer comes, so a command that
-asks must ask **before** it changes the document, and the session checks
-that rather than trusting the command.
+Two items used to be on this list and are not now. The **resumable
+command** — a command that asks while it runs — was built in §50, and
+§50 says what the answer costs: the command is **run again** when the
+answer comes, so a command that asks must ask **before** it changes the
+document, and the session checks that rather than trusting the command.
+The **cheap undo** was built in §53: the nodes are shared, the states
+keep what they were, and the cost of an edit no longer depends on the
+size of the document — measured before and after.
 
 ### And the one that is not a code gap
 
@@ -3536,9 +3536,9 @@ Named, so that they are not mistaken for things that are there:
 changes** (revisions, which the application stores as indices into a
 side table), **numbering**, **comments**, **content controls**, **fields**,
 the **layout engine** (line breaking, pagination, fonts) and the
-**copy-on-write** document that makes the undo cheap (§48's third gap,
-and this port confirms it: the application shares its blocks by `Arc`
-and this kit clones).
+**copy-on-write** document that makes the undo cheap (this port
+confirmed the family's way of doing it — the blocks are shared by `Arc`
+— and **§53** took it).
 
 The missing parts are **not** missing because the kit could not hold
 them. They are missing because the battery is the **document model**,
@@ -3869,3 +3869,90 @@ and every agent's idea of what a number can be.
 
 Eleven ports, and one of them is not a port at all: it is the answer to
 a question three of them asked.
+
+---
+
+## 53. The cheap undo: the states share what they have in common
+
+§48 listed the cheap undo as the one item on that list that is a
+**regression against the family's own trees**: they share their documents
+and snapshot a pointer, and this kit cloned. The survey (§40) said the
+same of all three: *"Copy-on-write is how all three make undo cheap."*
+
+This section fixes that, and it fixes it the way the family does it.
+
+### What changed
+
+The document's nodes are now **shared**:
+
+```text
+Node.children:  Vec<Arc<Node>>
+Document.nodes: Vec<Arc<Node>>
+```
+
+and a mutation goes through `Arc::make_mut`, so a node that is shared
+with a state in the history is **copied on the way to being changed** —
+and a node that is not shared is changed in place. Copying a document
+is now a matter of copying a vector of pointers.
+
+The rule that makes it safe is the one `make_mut` gives for free: **a
+state keeps what it was**, because the state holds a reference and the
+mutation copies the node rather than changing it. That is not a
+convention; it is what the type does.
+
+### The measurement
+
+The counting allocator (§32) is installed in the test binary, and the
+numbers are the difference between two readings. Twenty edits, on a
+document of two sizes, **before and after**:
+
+| the document | before | after |
+|---|---|---|
+| 10 nodes | 2344 allocations | **764** |
+| 400 nodes | 33560 allocations | **780** |
+
+The same number of edits, on a document **forty times** the size, cost
+**2.2 %** more allocations after the change and **fourteen times** more
+before it. At four hundred nodes the change is **forty-three times**
+fewer allocations for the same work.
+
+That is the claim the gap list made and could not back: the cost of an
+edit **does not depend on the size of the document**.
+
+Two tests hold it: one that says a state and the document **share** the
+node they have in common — a fact about the pointers, `Arc::ptr_eq`,
+and not about the time — and one that says the cost of twenty edits on
+a document forty times the size does not go up.
+
+### What it did not fix
+
+Honesty about the rest of it:
+
+- **The comparison is still linear.** The session compares the document
+  with the snapshot it took before the command, so that a command that
+  says `mutates: false` and changes the document is caught. That
+  comparison walks the document. The *memory* is shared now; the *time*
+  to answer "did anything change?" is not.
+- **The top level is copied.** A state copies the vector of top-level
+  nodes — the pointers, not the nodes. A document with ten thousand
+  top-level nodes still copies ten thousand pointers per state. The
+  family's trees have a handful of spreads at the top and share those;
+  this kit has one vector and shares the parts under it.
+- **The file format did not change.** A node is written the same way it
+  was, and the `Arc` is the document's business and not the file's.
+
+### What it cost
+
+- the node storage: two fields and the functions that reach them;
+- one method for callers: `Node::add_child`, so that a plugin that
+  moves a node under another one **does not know about the sharing** —
+  the SDK's own group command uses it, and so does a test;
+- **nothing else.** No command, no kind, no format version, and no
+  plugin changed: the batteries that add nodes, mutate payloads and read
+  trees are the same code they were.
+
+### And what it is
+
+The last of the family's three answers that this kit had not taken. The
+family's trees make undo cheap by sharing; this kit now does the same,
+and the measurement is in the tree rather than in a comment.
