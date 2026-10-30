@@ -5724,3 +5724,69 @@ is the inflate.
   bigger than it needs to be, because the writer has no compressor and
   the compressor is a library of its own. The reader has one now: the
   inflate. The writer may yet use it.
+
+---
+
+## 72. The fourth rule: the bounds are named in the prose
+
+The outer tree has a rule that is about **prose** and not about code:
+every public bound in the tree is named in a document, because a bound a
+reader cannot look up is a bound a reader cannot check. It caught this
+tree's own work in §414 — the size reader's byte cap was public and no
+document named it — and the fix was to make the cap private and name it
+here.
+
+That is a good rule, and this tree now has it as **a rule of its own**:
+the fourth rule of `craftkit-gates`, checked by a program, over this
+tree, against this tree's README.
+
+### What was built
+
+- **The rule.** Every **public** `MAX_…BYTES`, `MAX_…MEMORY` or
+  `MAX_…STEPS` constant in the tree is named in the README. A name is
+  named when it is in the prose as a **word** — a bound that is a prefix
+  of another bound's name is not named.
+- **The rule is a function over a root**, like the other three: the
+  gate takes a tree and says what it found, so a test can point it at a
+  tree broken on purpose.
+- **Three tests that say the rule bites**: a public bound with no
+  document naming it is caught; a bound the prose *does* name is not; a
+  **private** bound is not caught either, because a private cap is the
+  program's own and the rule is about the promises the tree makes.
+
+### What the port found
+
+- **The rule the outer tree had was the rule this tree needed.** §414
+  was the outer gate reaching into this tree and finding a bound that
+  no document named — and the fix was to name it *here*, in a README
+  the outer gate does not read. That is a rule that is **enforced in
+  the wrong place**: the number is in this tree's code and the reason
+  for it was in another tree's prose. A rule that is enforced elsewhere
+  is a rule that is enforced *late*.
+- **A bound that no document names is a promise nobody can rely on.**
+  The public bounds of this tree are three — the document's, the
+  history's and the session's — and every one of them is named here
+  with the number and the reason. That is the whole of the rule, and
+  the whole of it fits in a paragraph.
+- **The rule checks the names and not the numbers.** A bound named in
+  the prose with the *wrong* number in it is not caught: the prose says
+  what the bound is for, and the code says what it is. That is a gap,
+  and it is named here rather than left to be found.
+
+### What it cost
+
+- one rule, about a hundred lines, and three tests.
+
+### What it does not settle
+
+- **The numbers are not checked against the prose.** The rule says the
+  bound is named; it does not say the prose and the code agree about
+  its value. The outer tree's own rule has the same shape.
+- **Only the public bounds are checked.** The private caps — the
+  journal's, the tasks', the header's — are named in this README too,
+  but the gate does not ask for it, and a private cap is not a promise
+  the tree makes to anybody but itself.
+- **The prose is this README and nothing else.** The other documents of
+  this tree — the recipes, the architecture notes — are not read by the
+  gate, and a bound named only in one of them is a bound the gate
+  cannot see.
