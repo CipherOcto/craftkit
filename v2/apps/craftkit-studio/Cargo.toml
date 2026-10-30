@@ -42,6 +42,10 @@ craftkit-plugin-art = { path = "../../crates/craftkit-plugin-art", optional = tr
 # default as well: a program that wants a grid of cells and the formulas
 # between them says so.
 craftkit-plugin-grid = { path = "../../crates/craftkit-plugin-grid", optional = true }
+# The **eighth battery**: the document model of a CAD drawing. Off by
+# default as well: a program that wants layers, blocks and entities says
+# so.
+craftkit-plugin-cad = { path = "../../crates/craftkit-plugin-cad", optional = true }
 
 [features]
 default = []
@@ -65,6 +69,9 @@ art = ["dep:craftkit-plugin-art"]
 # The spreadsheet battery. Off by default: a program that wants a grid of
 # cells and the formulas between them says so.
 grid = ["dep:craftkit-plugin-grid"]
+# The CAD battery. Off by default: a program that wants layers, blocks and
+# entities says so.
+cad = ["dep:craftkit-plugin-cad"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes

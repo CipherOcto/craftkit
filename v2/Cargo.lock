@@ -94,6 +94,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-cad"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-plugin-film"
 version = "0.2.0"
 dependencies = [
@@ -189,6 +197,7 @@ dependencies = [
  "craftkit-derive",
  "craftkit-link",
  "craftkit-plugin-art",
+ "craftkit-plugin-cad",
  "craftkit-plugin-film",
  "craftkit-plugin-fx",
  "craftkit-plugin-grid",

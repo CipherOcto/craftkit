@@ -854,6 +854,10 @@ different commands with one id.
   model of a spreadsheet — workbooks, sheets, cells in a payload, and the
   formulas and the graph of areas between them — ported into v2's seams,
   and the four things it found (§42). It is optional, like the others.
+- `crates/craftkit-plugin-cad` — the **CAD battery**: the document model
+  of a CAD drawing — layers, blocks, entities and the edges between them
+  — ported into v2's seams, and the three things it found (§44). It is
+  optional, like the others.
 - `crates/craftkit-alloc` — the **counting allocator**: the first of the
   crates that may hold `unsafe`, and what turns the lane's "must not
   allocate" rule into a measurement (§32). It is a **dev** dependency of
@@ -870,11 +874,11 @@ different commands with one id.
 - `apps/craftkit-studio` — an application whose source names no plugin, and
   whose build script generates the wiring.
 
-**421 tests.** The MCP server links **all seven batteries** in, so the
+**432 tests.** The MCP server links **all eight batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`) — and the studio on its own, with no features, carries 341 of
-them.
+`/grid`, `/cad`) — and the studio on its own, with no features, carries
+341 of them.
 
 ### Not built
 
@@ -955,7 +959,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 421 tests
+cargo test          # 432 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3211,3 +3215,87 @@ spreadsheet and the CAD application — cost nothing either. What the
 survey of the family changed is not the kit's shape: it is the
 **confidence** in the shape, which is now backed by five independent
 implementations and a survey of every one of them.
+
+---
+
+## 44. The eighth battery: a CAD drawing, tables and a flat store
+
+§43 surveyed CADCraft, the family's CAD application. A drawing is the
+domain this kit was written for, so it is the eighth battery:
+`craftkit-plugin-cad`.
+
+### What was ported
+
+| the drawing | v2 |
+|---|---|
+| the drawing | a **node** of the kind `cad.drawing` |
+| a layer | a **node** of the kind `cad.layer` — a table row |
+| a block | a **node** of the kind `cad.block` — a table row that **contains** entities |
+| an entity | a **node** of an **open kind**: `cad.entity.line`, `.circle`, `.arc`, `.text`, `.insert` |
+| an entity's layer | a **relation**: an edge that says something |
+| a block insert | a **node** that **references** a block, by an edge |
+| the geometry | the entity's **payload**, in the world's units |
+| the extents | **derived**, by the evaluator, every time |
+
+### The three things the port found
+
+- **A drawing is tables and a flat store, and the tree is not there.**
+  Structure in a drawing is *reference by name* — a layer, a block, a
+  linetype — and by *handle*: a group, a constraint, a dimension that is
+  attached to the edges it measures. So a layer is a **table**, and an
+  entity's layer is an **edge that says something** rather than a
+  parent: the entity is in a block *and* it is on a layer, and those
+  are two different facts. This is the **second** time a port has
+  answered "what is this relationship?" with an edge — the PDF port
+  said it about a reference — and the answer is now a pattern rather
+  than a coincidence.
+- **A closed union of thirty kinds is exactly what the open kind is
+  for.** In the application every entity kind is a variant with its own
+  struct, its own file mapping, its own transform, its own grips and
+  its own decomposition into primitives, and a new kind of entity is a
+  change in four places at once. Here a kind is an **open string**: a
+  new entity is a new kind, and nothing else moves. The third port to
+  find this, after the artist's unions.
+- **The numbers belong to a library, and the core has no unit.** The
+  geometry is in the payload, in the world's own units, and the
+  evaluation that does arithmetic reaches for a **library** — not for a
+  unit in the core, and not for a solver in the core. That is §39's
+  answer confirmed by the tree it was a prediction about: the numeric
+  core arrives as a plugin, and the document does not change.
+
+### And the one the port does not settle
+
+The **prompt**. CADCraft's commands may *ask*: its registry has
+`interactive: Option<Factory>`, and its MCP server exposes the prompt
+itself as a tool, so an agent answers the questions an interactive
+command asks. This kit's rule is the opposite — a command takes its
+parameters and never asks, and only a front end's own entry point may
+put a question to a person.
+
+The rule is a **choice**, and the survey is evidence that it costs
+something: a kit whose commands never ask cannot be driven through the
+commands that ask. What it would cost to change is a real question,
+and it is **not** answered here. The shape of the change would be: an
+outcome that says "I need this", and a session that can be handed the
+answer — which is the shape CADCraft's `command_line` tool has, and the
+shape the outer tree's shell has (§118). Whether the kit should have
+one is a decision for the owner, and it is written down here rather
+than decided here.
+
+### The table, with the eighth row
+
+| the port | what it found | what it cost |
+|---|---|---|
+| the vector application | a node needs a **payload** | a field |
+| the sound application | a node may have **no place**; the document needs **relations** | two fields, a version |
+| the compositing application | the history needs to **branch** | a tree instead of a stack |
+| the PDF application | an edge has to be able to **say** something | a field, a version |
+| the video editor | the order and the length of a timeline are **derived** | nothing |
+| the compositing application (again) | a **path** is not a path of ids | nothing |
+| the artist's IDE | a closed union is **kinds**; a document may carry a thing it does not model | one method |
+| the **spreadsheet** | a grid is a **payload**; a precedent is an **area** | nothing |
+| the **CAD application** | a drawing is **tables and a flat store**; a layer is an **edge**; the prompt is a **door** | nothing |
+
+Eight ports. Six of them cost nothing. The two that did — the artist's
+unions and the branches — bought the kit's two strangest features, and
+everything the family has taught it since has cost **nothing**.
