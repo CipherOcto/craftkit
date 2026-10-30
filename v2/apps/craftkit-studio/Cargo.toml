@@ -13,6 +13,8 @@ craftkit-derive = { workspace = true }
 # and a file. Off by default as well: a program that wants pictures says
 # so.
 craftkit-plugin-image = { path = "../../crates/craftkit-plugin-image", optional = true }
+# The **JPEG decoder**: the family's own, and the pixels of a picture.
+craftkit-jpeg = { workspace = true }
 # The rasteriser: the canvas the picture is drawn on. It is a **library**
 # and not a plugin: it contributes no command and no kind.
 craftkit-raster = { workspace = true }

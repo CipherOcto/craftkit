@@ -1,0 +1,11 @@
+[package]
+name = "craftkit-jpeg"
+description = "The JPEG decoder the family wrote, clean-room from ITU-T T.81."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. The decoder is the family's own and it has no dependency of
+# its own.

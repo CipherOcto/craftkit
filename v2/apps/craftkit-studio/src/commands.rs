@@ -491,6 +491,12 @@ pub struct DocSnapshot {
     pub width: Option<craftkit_sdk::Number>,
     /// How tall the picture is, in pixels.
     pub height: Option<craftkit_sdk::Number>,
+    /// The directory the files are relative to.
+    ///
+    /// A node's **stream** is a name, and the name is relative to
+    /// something: the folder the document was opened from, or the folder
+    /// the bundle was written beside.
+    pub from: Option<Text>,
 }
 
 impl DocSnapshot {
@@ -515,6 +521,23 @@ impl DocSnapshot {
             let Some(kind) = session.kinds().get(&node.kind) else { continue };
             (kind.paint)(node, &mut raster);
         }
+        // The pictures are drawn too: the bytes are in the files, and the
+        // decoder is the family's own.
+        let mut skipped: Vec<String> = Vec::new();
+        let mut drawn = 0;
+        for node in session.document().walk() {
+            let Some(stream) = node.stream.clone() else { continue };
+            let Some(format) = node.data.get("format").and_then(|format| format.as_str()) else { continue };
+            let Some(rect) = node.rect else { continue };
+            let file = match &self.from {
+                Some(from) => std::path::Path::new(&from.0).join(&stream),
+                None => std::path::Path::new(&stream).to_path_buf(),
+            };
+            match draw_picture(&mut raster, &file, format, rect) {
+                Ok(()) => drawn += 1,
+                Err(message) => skipped.push(message),
+            }
+        }
         let png = raster.image().to_png();
         std::fs::write(&path, png).map_err(|error| EngineError::Failed {
             id: "doc.snapshot".to_string(),
@@ -524,6 +547,36 @@ impl DocSnapshot {
             "path": path,
             "width": width,
             "height": height,
+            "pictures": drawn,
+            "skipped": skipped,
         })))
     }
+}
+
+/// Draw a picture into the picture.
+///
+/// The bytes are in the file, the pixels are in the decoder, and the
+/// place is the node's own rectangle. A picture that cannot be decoded
+/// is **reported** and not drawn: the snapshot is of the document, and a
+/// broken picture is not a reason to refuse the whole of it.
+fn draw_picture(
+    raster: &mut craftkit_raster::Raster,
+    file: &std::path::Path,
+    format: &str,
+    rect: craftkit_sdk::Rect,
+) -> Result<(), String> {
+    if format != "jpeg" {
+        return Err(format!("`{}` is a `{format}`, and this snapshot reads JPEG", file.display()));
+    }
+    let bytes = craftkit_sdk::files::read_bounded(file, 64 * 1024 * 1024)?;
+    let mut limits = craftkit_jpeg::Limits::default();
+    limits.max_pixels = 64 * 1024 * 1024;
+    let decoded = craftkit_jpeg::decode(&bytes, &limits, None)
+        .map_err(|error| format!("`{}` could not be decoded: {error}", file.display()))?;
+    let samples: Vec<u8> = match &decoded.samples {
+        craftkit_jpeg::Samples::U8(samples) => samples.clone(),
+        craftkit_jpeg::Samples::U16(samples) => samples.iter().map(|sample| (sample >> 8) as u8).collect(),
+    };
+    raster.blit(&samples, decoded.width, decoded.height, decoded.components, rect);
+    Ok(())
 }

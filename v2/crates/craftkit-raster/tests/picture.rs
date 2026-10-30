@@ -140,6 +140,21 @@ fn text_is_drawn_as_boxes() {
     assert!(count_painted(image) > 0, "the text drew nothing at all");
 }
 
+/// A picture is drawn into the picture.
+///
+/// The samples are the decoder's: one byte for a grey picture, three for
+/// a colour one, and the rows are top to bottom.
+#[test]
+fn a_picture_is_drawn_into_the_picture() {
+    let mut canvas = a_canvas(100, 100);
+    // A picture of two by two pixels: black, white, white, black.
+    let samples = [0u8, 255, 255, 0];
+    canvas.blit(&samples, 2, 2, 1, Rect { x: -5.0, y: -5.0, w: 10.0, h: 10.0 });
+    let image = canvas.image();
+    assert_eq!(pixel(image, 45, 45), Some([0, 0, 0, 255]), "the black corner is drawn");
+    assert_eq!(pixel(image, 55, 45), Some([255, 255, 255, 255]), "the white corner is drawn");
+}
+
 /// A picture that is too big is refused.
 #[test]
 fn a_picture_that_is_too_big_is_refused() {

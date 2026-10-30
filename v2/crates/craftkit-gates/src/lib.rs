@@ -79,6 +79,8 @@ pub const LAYERS: &[(&str, u8)] = &[
     // carries. It knows nothing about the SDK and nothing about a
     // document: it reads a JSON value within limits.
     ("craftkit-image", 0),
+    // The JPEG decoder: the family's own, and it depends on nothing.
+    ("craftkit-jpeg", 0),
     ("craftkit-payload", 0),
     ("craftkit-sound-time", 0),
     // The line breaker: arithmetic over the widths a caller brings. It

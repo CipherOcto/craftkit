@@ -46,6 +46,84 @@ fn a_snapshot_does_not_change_the_document() {
     assert_eq!(session.history().len(), 1, "the snapshot made an undo step");
 }
 
+/// A snapshot draws the pictures in the document.
+///
+/// The bytes are in the file and the pixels are in the decoder, and the
+/// picture lands where the node says it does.
+#[cfg(feature = "image")]
+#[test]
+fn a_snapshot_draws_the_pictures_in_the_document() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let directory = directory("drawn");
+    let picture = format!("{directory}/grey.jpg");
+    std::fs::write(&picture, a_grey_jpeg()).expect("the picture is written");
+    session
+        .execute("image.add", &json!({ "path": picture, "rect": { "x": -5, "y": -5, "w": 10, "h": 10 } }))
+        .expect("the picture is added");
+    let with_picture = format!("{directory}/with.png");
+    let outcome = session
+        .execute("doc.snapshot", &json!({ "path": with_picture, "width": 64, "height": 64 }))
+        .expect("the picture is written");
+    assert_eq!(outcome.data.get("pictures").and_then(|pictures| pictures.as_u64()), Some(1));
+
+    // The picture is drawn: the file is not the same as a snapshot of an
+    // empty document.
+    let mut empty = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let without = format!("{directory}/without.png");
+    empty
+        .execute("doc.snapshot", &json!({ "path": without, "width": 64, "height": 64 }))
+        .expect("the picture is written");
+    assert_ne!(
+        std::fs::read(&with_picture).expect("the file is there"),
+        std::fs::read(&without).expect("the file is there"),
+        "the picture was not drawn"
+    );
+}
+
+/// A baseline JPEG of one grey block, written by hand.
+///
+/// The decoder is the family's own, and this is the smallest picture it
+/// will take: one block, one coefficient, and the average is zero.
+#[cfg(feature = "image")]
+fn a_grey_jpeg() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0xFF, 0xD8]);
+    bytes.extend_from_slice(&[0xFF, 0xDB]);
+    bytes.extend_from_slice(&67u16.to_be_bytes());
+    bytes.push(0x00);
+    bytes.extend_from_slice(&[16u8; 64]);
+    bytes.extend_from_slice(&[0xFF, 0xC0]);
+    bytes.extend_from_slice(&11u16.to_be_bytes());
+    bytes.push(8);
+    bytes.extend_from_slice(&8u16.to_be_bytes());
+    bytes.extend_from_slice(&8u16.to_be_bytes());
+    bytes.push(1);
+    bytes.push(1);
+    bytes.push(0x11);
+    bytes.push(0);
+    bytes.extend_from_slice(&[0xFF, 0xC4]);
+    bytes.extend_from_slice(&20u16.to_be_bytes());
+    bytes.push(0x00);
+    bytes.extend_from_slice(&[0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    bytes.push(0);
+    bytes.extend_from_slice(&[0xFF, 0xC4]);
+    bytes.extend_from_slice(&20u16.to_be_bytes());
+    bytes.push(0x10);
+    bytes.extend_from_slice(&[0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    bytes.push(0x00);
+    bytes.extend_from_slice(&[0xFF, 0xDA]);
+    bytes.extend_from_slice(&8u16.to_be_bytes());
+    bytes.push(1);
+    bytes.push(1);
+    bytes.push(0x00);
+    bytes.push(0);
+    bytes.push(63);
+    bytes.push(0);
+    bytes.push(0x0F);
+    bytes.extend_from_slice(&[0xFF, 0xD9]);
+    bytes
+}
+
 /// A picture that is too big is refused, and nothing is written.
 #[test]
 fn a_picture_that_is_too_big_is_refused() {

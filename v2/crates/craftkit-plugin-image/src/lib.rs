@@ -101,6 +101,11 @@ pub struct AddPicture {
     pub path: Text,
     /// What to call it.
     pub name: Option<Text>,
+    /// Where it goes, if it goes somewhere: `{"x": 0, "y": 0, "w": 10, "h": 10}`.
+    ///
+    /// A picture without a place is a picture that is not in the
+    /// document's space, and one that is cannot be drawn.
+    pub rect: Option<craftkit_sdk::serde_json::Value>,
 }
 
 impl AddPicture {
@@ -112,6 +117,7 @@ impl AddPicture {
             None => file_name(&path),
         };
         let id = session.document_mut()?.add_node(name.clone(), "image.picture", None);
+        let rect = read_rect(self.rect.as_ref())?;
         if let Some(node) = session.document_mut()?.node_mut(id) {
             node.data = json!({
                 "width": size.width,
@@ -120,6 +126,7 @@ impl AddPicture {
             });
             // The bytes are in the file, and the document says where.
             node.stream = Some(path.clone());
+            node.rect = rect;
         }
         Ok(Outcome::changed(format!("added a picture `{name}`")).with_data(json!({
             "id": id,
@@ -130,6 +137,37 @@ impl AddPicture {
             "path": path,
         })))
     }
+}
+
+/// Read the place a picture goes.
+///
+/// The shape is the core's own: four numbers, and every one of them
+/// finite. A place with a number that is not a number is not a place.
+fn read_rect(value: Option<&Json>) -> Result<Option<craftkit_sdk::Rect>, EngineError> {
+    let Some(value) = value else { return Ok(None) };
+    let Some(object) = value.as_object() else {
+        return Err(EngineError::Failed {
+            id: "image.add".to_string(),
+            message: "a place is four numbers".to_string(),
+        });
+    };
+    let mut numbers = [0.0f64; 4];
+    for (index, key) in ["x", "y", "w", "h"].into_iter().enumerate() {
+        let Some(number) = object.get(key).and_then(|number| number.as_f64()) else {
+            return Err(EngineError::Failed {
+                id: "image.add".to_string(),
+                message: format!("a place has a `{key}`"),
+            });
+        };
+        if !number.is_finite() {
+            return Err(EngineError::Failed {
+                id: "image.add".to_string(),
+                message: format!("the `{key}` of a place is a number"),
+            });
+        }
+        numbers[index] = number;
+    }
+    Ok(Some(craftkit_sdk::Rect { x: numbers[0], y: numbers[1], w: numbers[2], h: numbers[3] }))
 }
 
 /// How big a picture is.

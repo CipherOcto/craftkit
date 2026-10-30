@@ -78,6 +78,70 @@ impl Raster {
         self.camera
     }
 
+    /// Draw a picture into the picture.
+    ///
+    /// The samples are the **decoder's**: interleaved by pixel — one
+    /// byte for a grey picture, three for a colour one — and the rows
+    /// are top to bottom. The picture is scaled into the rectangle, and
+    /// the scaling is the simplest one there is: the **nearest** pixel
+    /// is taken, and there is no filtering.
+    ///
+    /// A picture that does not fit the samples it was given is drawn as
+    /// far as it goes: a picture with fewer samples than it says is a
+    /// picture that is not all there.
+    pub fn blit(&mut self, samples: &[u8], width: u32, height: u32, components: u8, rect: Rect) {
+        if width == 0 || height == 0 || components == 0 {
+            return;
+        }
+        let (x0, y0) = self.to_pixels(Point::new(rect.x, rect.y + rect.h));
+        let (x1, y1) = self.to_pixels(Point::new(rect.x + rect.w, rect.y));
+        let left = x0.min(x1);
+        let right = x0.max(x1);
+        let top = y0.min(y1);
+        let bottom = y0.max(y1);
+        let first = (left.floor().max(0.0)) as usize;
+        let last = (right.ceil().min(self.image.width() as f64)) as usize;
+        let top_row = (top.floor().max(0.0)) as usize;
+        let bottom_row = (bottom.ceil().min(self.image.height() as f64)) as usize;
+        let span_x = right - left;
+        let span_y = bottom - top;
+        if span_x <= 0.0 || span_y <= 0.0 {
+            return;
+        }
+        for row in top_row..bottom_row {
+            let source_y = (((row as f64 + 0.5 - top) / span_y) * height as f64) as u32;
+            let source_y = source_y.min(height - 1);
+            for column in first..last {
+                let source_x = (((column as f64 + 0.5 - left) / span_x) * width as f64) as u32;
+                let source_x = source_x.min(width - 1);
+                let at = ((source_y as usize * width as usize) + source_x as usize) * components as usize;
+                let Some(pixel) = samples.get(at..at + components as usize) else { continue };
+                let colour = match components {
+                    1 => Colour([
+                        pixel[0] as f32 / 255.0,
+                        pixel[0] as f32 / 255.0,
+                        pixel[0] as f32 / 255.0,
+                        1.0,
+                    ]),
+                    3 => Colour([
+                        pixel[0] as f32 / 255.0,
+                        pixel[1] as f32 / 255.0,
+                        pixel[2] as f32 / 255.0,
+                        1.0,
+                    ]),
+                    4 => Colour([
+                        pixel[0] as f32 / 255.0,
+                        pixel[1] as f32 / 255.0,
+                        pixel[2] as f32 / 255.0,
+                        1.0,
+                    ]),
+                    _ => continue,
+                };
+                self.image.blend(column, row, colour);
+            }
+        }
+    }
+
     /// Where a point of the world is on the picture.
     ///
     /// The world's **up** is the picture's **down**: the document is

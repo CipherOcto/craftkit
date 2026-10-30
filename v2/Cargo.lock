@@ -79,6 +79,10 @@ name = "craftkit-image"
 version = "0.2.0"
 
 [[package]]
+name = "craftkit-jpeg"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-link"
 version = "0.2.0"
 
@@ -275,6 +279,7 @@ version = "0.2.0"
 dependencies = [
  "craftkit-alloc",
  "craftkit-derive",
+ "craftkit-jpeg",
  "craftkit-link",
  "craftkit-plugin-art",
  "craftkit-plugin-cad",

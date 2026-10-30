@@ -29,6 +29,10 @@ craftkit-payload = { path = "crates/craftkit-payload", version = "0.2.0" }
 craftkit-text-layout = { path = "crates/craftkit-text-layout", version = "0.2.0" }
 # The MCP door: the registry, spoken to an agent. One tool per command.
 craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
+# The **JPEG decoder**: the family's own, clean-room from ITU-T T.81. A
+# **library**, not a plugin: it contributes nothing to the registry and
+# the linker does not wire it in.
+craftkit-jpeg = { path = "crates/craftkit-jpeg", version = "0.2.0" }
 # The **picture's size**: read from a picture's header. A **library**,
 # not a plugin: it contributes nothing to the registry and the linker
 # does not wire it in.
