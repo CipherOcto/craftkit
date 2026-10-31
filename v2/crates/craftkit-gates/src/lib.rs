@@ -114,6 +114,16 @@ pub const LAYERS: &[(&str, u8)] = &[
     // entry the host looks for. It is a fixture, and it is here because
     // a host that has never opened a real plugin has not been tested.
     ("craftkit-clap-fixture", 1),
+    // The **VST3 host**: the same door, in another format's language.
+    // A VST3 plugin's entry is a **function**, so this door calls one
+    // where the other one reads a pointer. One `unsafe` module, and it
+    // is named.
+    ("craftkit-vst3", 1),
+    // A **reference VST3 plugin**: a shared library that exports the
+    // entry the host looks for. It is a fixture, and it is here
+    // because a host that has never opened a real plugin has not been
+    // tested.
+    ("craftkit-vst3-fixture", 1),
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),

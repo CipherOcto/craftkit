@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-vst3"
+description = "The VST3 host: open a plugin, read its factory, and drive the component inside it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The shapes of the format, and nothing else.
+craftkit-vst3-abi = { workspace = true }
+
+[dev-dependencies]
+# A VST3 plugin that is **not part of the program**: a shared library,
+# built by cargo and opened by the tests. It is a dev dependency, so
+# nothing that ships links it.
+craftkit-vst3-fixture = { path = "../craftkit-vst3-fixture" }

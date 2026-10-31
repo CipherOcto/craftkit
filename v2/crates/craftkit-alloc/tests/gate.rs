@@ -15,7 +15,7 @@
 //! - the only `unsafe impl` in the tree is the counting allocator's.
 //!
 //! The list is one list, here, and it is the whole of the exceptions.
-//! A seventh exception is a line in this file and a reason in it.
+//! A ninth exception is a line in this file and a reason in it.
 
 use std::path::{Path, PathBuf};
 
@@ -29,6 +29,8 @@ const ALLOWED: &[(&str, &str)] = &[
     ("craftkit-plugin-shared", "a shared library's entry point, which is found by name"),
     ("craftkit-clap", "the CLAP host: opening a plugin and reading the entry it exports"),
     ("craftkit-clap-fixture", "a reference CLAP plugin: the entry point is a data symbol, found by name"),
+    ("craftkit-vst3", "the VST3 host: opening a plugin and calling the factory it exports"),
+    ("craftkit-vst3-fixture", "a reference VST3 plugin: the entry point is a function, called by name"),
     ("craftkit-wasm", "the browser door: the exports are found by name"),
 ];
 
