@@ -898,9 +898,10 @@ different commands with one id.
   contributes nothing to the registry and the linker does not wire it in
   (§128).
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
-  words, the measure it sits in, the **metric** it is set in, and the
-  lines it breaks into — ported into v2's seams, and what it found
-  (§58, §59, §60). It is optional, like the others.
+  words, the measure it sits in, the **metric** it is set in, the lines
+  it breaks into and the **letters** it is drawn with — ported into v2's
+  seams, and what it found (§58, §59, §60, §129). It is optional, like
+  the others.
 - `crates/craftkit-jpeg` — the **JPEG decoder**: the family's own,
   clean-room from ITU-T T.81, ported here whole — the twelve-bit and the
   arithmetic-coded files that the common decoders refuse. A **library**,
@@ -3550,7 +3551,7 @@ so.
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
 | a **control channel** | **built**: the session behind a token-authenticated socket, with the family's wire format and the family's methods — and no `ui.*`, because this tree has no window | §55 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
-| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller and the **letters** from the kit's own typeface (§128); **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
+| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller and the **letters** from the kit's own typeface (§128, §129); **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
@@ -3566,7 +3567,7 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
-| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The widths are still the caller's | §58, §59, §60, §128 |
+| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The paragraph is **drawn** with those letters (§129) | §58, §59, §60, §128, §129 |
 | **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
 
 ### The list of things that are honestly not there: empty
@@ -5467,9 +5468,10 @@ the kit from a document model into something a person can look at.
 - **The canvas has no font of its own, and the kit says so.** The kit
   has its own typeface now (§128), but the **canvas** takes a string
   and a point and draws the box the string would occupy. A typeface is
-  a library that a *battery* draws with, and no battery has drawn one
-  yet: the canvas's own text is a placeholder — a typewriter's worth of
-  rectangles. The picture says *there is text here* and not what it
+  a library that a *battery* draws with, and a battery draws its
+  letters as paths (§129): a paragraph is drawn with real letters,
+  while the canvas's own text is a placeholder — a typewriter's worth
+  of rectangles. The picture says *there is text here* and not what it
   says, which is honest in a way that a fake glyph would not be.
 - **A picture without soft edges is a picture a machine can reason
   about.** There is no anti-aliasing: a pixel is either painted or it is
@@ -5504,7 +5506,8 @@ the kit from a document model into something a person can look at.
 - **The canvas's text is a box and not a letter.** The boxes are a
   placeholder that says where text would be; the kit's own typeface
   (§128) is a table of strokes and the rasteriser does not draw it, so
-  the canvas's text is still a box, and the seam is not changed.
+  the canvas's text is still a box. A battery that wants letters draws
+  them as paths (§129), and the seam is not changed.
 - **The canvas is a raster, and not a display list.** Everything is
   painted into pixels as it happens; a program that wanted to zoom in
   after the fact would have to paint again. The camera is applied while
@@ -7391,7 +7394,9 @@ blocks, entities, extents — and **no picture at all**.
   is drawn as a polygon of straight lines.
 - **The canvas's text has no letters.** The canvas draws the box each
   character would occupy, and the picture says *there is text here* and
-  not what it says.
+  not what it says. — **Partly answered in §129**: a paragraph is drawn
+  with the kit's own typeface, as paths, and the canvas's own text is
+  still a box.
 - **Nothing can be picked.** The entity's hit test still says no, so a
   line cannot be clicked in the window.
 - **The layer's old `color` field is still there.** An index or a name
@@ -9017,3 +9022,62 @@ first picture. The letters had simply never been asked for.
   hinting, and a document that wanted them would want a **family** of
   typefaces rather than one.
 
+---
+
+## 129. The paragraph is drawn, and a letter can be hit
+
+§58's battery had a paragraph that was broken into lines and was **not
+drawn**: the letters had no outlines. Now they have some.
+
+### What was built
+
+- **The paragraph is drawn** with the kit's own typeface, and the
+  drawing is the letters' **strokes** — paths, one per stroke.
+- **The metric says how wide a letter is, and the typeface says what it
+  looks like.** The glyph is stretched by whatever the metric says
+  against what the typeface would have had: a metric that agrees with
+  the typeface stretches nothing, and a monospaced one stretches every
+  letter to the same width, which is what monospaced text looks like.
+- **The metric gained a size** — the **em**, in millimetres, the height
+  of the capitals — and a metric that does not say has the default size.
+- **A letter is a line and not a box, and the hit says so.** A pointer
+  is on a letter when it is within half a stroke's width of one of the
+  letter's lines: the middle of an `o` is a hole, and a pointer in the
+  middle of an `o` is on nothing.
+- **The paragraph has a place**: the block of its lines, as wide as the
+  measure and as tall as the lines. So the snapshot frames a paragraph
+  and the selection chrome can point at it.
+
+### What the port found
+
+- **A hit test has to ask the right question.** The first version hit
+  the **box** of a letter, and the box of an `o` has a hole in it — so
+  a pointer in the middle of a letter was not on the letter. The
+  question is not "is the point inside" but "is the point **on** the
+  line", and the answer is a **distance** — the same question the CAD
+  battery asks of a line (§97), and the same answer.
+- **The drawing and the measuring are two different things.** The
+  breaker measures a word with the metric's **runs** and **pairs**, so a
+  metric with a kerning pair measures the word a little narrower than
+  the letters are drawn. The drawing places one glyph per character.
+  The divergence is written down rather than hidden.
+- **A letter's cell is wider than its ink.** The cell is the advance —
+  the space from one pen to the next — and the ink is usually narrower,
+  because that is what the space at the side of a letter is. So a
+  letter is hit on its ink and not on its cell.
+
+### What it cost
+
+- four tests in the battery — the paragraph is drawn, the letter is as
+  wide as the metric says, the letter is hit and the margin is not, and
+  the paragraph is framed by its lines — and **two** in the studio.
+
+### What it does not settle
+
+- **The drawing is rebuilt every time.** A paragraph is broken, laid
+  out and drawn again for every picture, and a document with many
+  paragraphs pays for it every frame. The lines are derived (§58) and
+  so are the letters; what a bigger document would want is the
+  derivation done **once** per frame.
+- **The ruler still has no scale** (§126). The kit has a typeface now,
+  so the bar numbers are within reach — and they are not drawn.
