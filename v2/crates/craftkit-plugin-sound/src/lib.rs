@@ -1199,6 +1199,135 @@ impl AddSource {
     }
 }
 
+/// Render the document into a **sound file**.
+///
+/// The renderer is the first thing in this tree that makes a sound: it
+/// reads the sources the clips play, mixes them and writes the file.
+/// It is **offline** — it writes a file and it stops — because the kit
+/// has no audio device and no audio thread (§ the kit's own notes), and
+/// a file is a thing a program can make without a device.
+///
+/// What it does:
+/// - the clips are the **tracks**: each clip plays a source from an
+///   offset, for a length, at a gain;
+/// - the sources are read from the **files** the document names, and
+///   the samples are the ones the WAV reader gives back (§133);
+/// - the tracks are mixed (§134) and the mix is written as a WAV.
+#[derive(Command)]
+#[command(id = "sound.render", area = "sound", layer = "sound", icon = "play", menu("Render"))]
+pub struct RenderSound {
+    /// Where to write the sound.
+    pub path: Text,
+}
+
+impl RenderSound {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        let rate = session_of(session.document()).sample_rate;
+        // The clips are the tracks: each one plays a source from an
+        // offset, for a length, at a gain.
+        let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
+        for clip in session.document().walk().filter(|node| node.kind == "sound.clip") {
+            let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
+            let Some(source_id) = payload.source else { continue };
+            clips.push((source_id, payload));
+        }
+        // The sources are read once each, and the clips that play one
+        // share it.
+        let mut sources: Vec<(u64, craftkit_wav::Sound)> = Vec::new();
+        let mut channels = 0_u16;
+        for (source_id, _) in &clips {
+            if sources.iter().any(|(id, _)| id == source_id) {
+                continue;
+            }
+            let Some(node) = session.document().node(*source_id) else { continue };
+            let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
+            if source.sample_rate != rate {
+                return Err(EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: format!(
+                        "the source `{}` is at {} samples a second and the session is at {rate}",
+                        source.path, source.sample_rate
+                    ),
+                });
+            }
+            let sound = read_sound(&source.path)?;
+            if channels == 0 {
+                channels = sound.channels;
+            } else if channels != sound.channels {
+                return Err(EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: "the sources do not have the same number of channels".to_string(),
+                });
+            }
+            sources.push((*source_id, sound));
+        }
+        let mut tracks: Vec<craftkit_audio::Track<'_>> = Vec::new();
+        for (source_id, payload) in &clips {
+            let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else { continue };
+            let width = sound.channels as usize;
+            let from = (payload.offset.max(0) as usize * width).min(sound.samples.len());
+            let to = ((payload.offset.max(0) + payload.length.max(0)) as usize * width)
+                .min(sound.samples.len())
+                .max(from);
+            tracks.push(craftkit_audio::Track {
+                start: payload.start.max(0),
+                samples: &sound.samples[from..to],
+                gain: craftkit_audio::db_to_linear(payload.gain_db),
+            });
+        }
+        let channels = channels.max(1);
+        let mix =
+            craftkit_audio::mix(&tracks, rate, &craftkit_audio::Limits::default()).map_err(|error| {
+                EngineError::Failed { id: "sound.render".to_string(), message: error.to_string() }
+            })?;
+        let bytes = craftkit_wav::write(channels, rate, &mix.samples);
+        write_file(&path, &bytes)?;
+        Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
+            "path": path,
+            "frames": mix.frames,
+            "rate": rate,
+            "channels": channels,
+            "clips": tracks.len(),
+        })))
+    }
+}
+
+/// Read a sound file, within limits.
+///
+/// The file came from outside — it is named by a document that came
+/// from outside — so it is read **within limits** and a file that is
+/// too big is refused before a byte of it is read.
+fn read_sound(path: &str) -> Result<craftkit_wav::Sound, EngineError> {
+    let limits = craftkit_wav::Limits::default();
+    let metadata = std::fs::metadata(path).map_err(|error| EngineError::Failed {
+        id: "sound.render".to_string(),
+        message: format!("the source `{path}` cannot be read: {error}"),
+    })?;
+    if metadata.len() as usize > limits.max_bytes {
+        return Err(EngineError::Failed {
+            id: "sound.render".to_string(),
+            message: format!("the source `{path}` is larger than the limits allow"),
+        });
+    }
+    let bytes = std::fs::read(path).map_err(|error| EngineError::Failed {
+        id: "sound.render".to_string(),
+        message: format!("the source `{path}` cannot be read: {error}"),
+    })?;
+    craftkit_wav::read(&bytes, &limits).map_err(|error| EngineError::Failed {
+        id: "sound.render".to_string(),
+        message: format!("the source `{path}` is not a sound the kit reads: {error}"),
+    })
+}
+
+/// Write the sound to a file.
+fn write_file(path: &str, bytes: &[u8]) -> Result<(), EngineError> {
+    std::fs::write(path, bytes).map_err(|error| EngineError::Failed {
+        id: "sound.render".to_string(),
+        message: format!("the sound cannot be written to `{path}`: {error}"),
+    })
+}
+
 /// Set the session: the sample rate and the timecode.
 ///
 /// These are the settings that belong to the session and not to any one
@@ -1269,6 +1398,7 @@ pub struct ClipTool;
         "sound.marker.add",
         "sound.ruler.add",
         "sound.source.add",
+        "sound.render",
         "sound.session.set"
     )
 )]
@@ -1735,6 +1865,74 @@ mod tests {
             .execute("sound.ruler.add", &json!({ "name": "ruler", "scale": "eighths" }))
             .expect_err("that is not a scale");
         assert!(error.to_string().contains("bars"), "the refusal says what is wrong: {error}");
+    }
+
+    /// The document is **rendered**: the clips are played and the sound
+    /// is written to a file.
+    ///
+    /// The renderer is offline — it makes a file and it stops — and the
+    /// file it makes is a sound the kit can read back.
+    #[test]
+    fn the_document_is_rendered_into_a_file() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-render-source.wav");
+        let output_path = directory.join("craftkit-v2-render-out.wav");
+        // A source: four samples of half.
+        let bytes = craftkit_wav::write(1, 48_000, &[0.5, 0.5, 0.5, 0.5]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 4, "source": source }))
+            .expect("the clip is added");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        assert_eq!(sound.frames, 4, "the clip is four samples long");
+        assert!((sound.samples[0] - 0.5).abs() < 0.001, "the sample is the source's: {}", sound.samples[0]);
+    }
+
+    /// A source that is **not there** is refused: the renderer does not
+    /// make a sound out of nothing.
+    #[test]
+    fn a_source_that_is_not_there_is_refused() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.source.add", &json!({ "path": "/nowhere/at/all.wav" }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 4, "source": source }))
+            .expect("the clip is added");
+        let directory = std::env::temp_dir();
+        let output_path = directory.join("craftkit-v2-render-missing.wav");
+        let error = session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect_err("the source is not there");
+        assert!(error.to_string().contains("source"), "the refusal says what is wrong: {error}");
     }
 
     /// The kind of a track is a string, and it is open.

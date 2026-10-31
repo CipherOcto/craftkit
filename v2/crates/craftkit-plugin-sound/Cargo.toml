@@ -21,3 +21,8 @@ craftkit-sound-time = { workspace = true }
 # not a plugin: it contributes nothing to the registry and the linker
 # does not wire it in.
 craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
+# The **WAV reader** and the **mixer**: the samples of a sound, and the
+# sum of many tracks. A **library** each, and the linker does not wire
+# them in.
+craftkit-wav = { path = "../craftkit-wav", version = "0.2.0" }
+craftkit-audio = { path = "../craftkit-audio", version = "0.2.0" }
