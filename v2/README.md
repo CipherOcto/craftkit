@@ -991,7 +991,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1035 tests.** The MCP server links **all fifteen batteries** in, so the
+**1038 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1093,7 +1093,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1035 tests
+cargo test          # 1038 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9365,7 +9365,8 @@ missing pieces were two: the **sum**, and the **file**.
   another, and neither is built.
 - **The mix has one rate.** Tracks are added sample for sample, and a
   track at another rate is a track at the wrong rate. The renderer
-  refuses such a source (§135) rather than resampling it.
+  refuses such a source (§135) rather than resampling it. — **Answered
+  in §137**: the renderer resamples it.
 - **There is no device.** A mix is a buffer of numbers, and something
   has to play it: the kit has no audio device and no playhead.
 
@@ -9422,7 +9423,9 @@ the tracks are mixed, and the mix is written to a file.
   the render: the render sums the clips.
 - **There is no resampler and no time stretch.** A source at another
   rate is refused, and a clip that should be slower than its source is
-  not made.
+  not made. — **Answered in §137**: the resampler is linear and the
+  render uses it. What is still missing is a **time stretch** — a clip
+  that should be slower than its source is not made.
 
 ---
 
@@ -9477,3 +9480,49 @@ it** the sound was.
   **view** in the design. It is the same trade as the ruler's scale
   (§131): the setting is somewhere, and the document is where the
   settings are.
+
+---
+
+## 137. The resampler
+
+The render refused a source that was at another rate than the session,
+because there was no resampler and — the render said it plainly — a
+resampled clip is not the clip that was asked for.
+
+### What was built
+
+- **A linear resampler** in the mixer: the sample at a place in the
+  new rate is the line between the two samples it lies between.
+- The **channels are kept apart**: a frame of the new sound is a frame
+  of the old one, so each channel is resampled on its own.
+- The **render uses it**: a source at another rate is resampled to the
+  session's rate, and the sound is the same sound.
+
+### What the port found
+
+- **A resampler is arithmetic**, and so it is a library: it takes
+  samples and a pair of rates and gives back samples. The tree's
+  resampler is a **plug-in** — a plugin that changes the rate — and
+  here it is a function, because the thing that needs it is a
+  *render*, and a render is a command.
+- **Linear is honest.** It is not the best resampler and it does not
+  pretend to be: a sound resampled by a line has the softness that a
+  line has. The tree's plugins are better and they are **plugins** —
+  and a plugin needs a device, or at least a host, and v2 has neither
+  yet (§ the audio thread).
+
+### What it cost
+
+- one function and **three tests**: the resampler keeps the sound and
+  changes its rate, it keeps the channels apart, and the render writes
+  a source at another rate at the session's rate.
+
+### What it does not settle
+
+- **There is no time stretch.** A clip that should be *slower* than its
+  source is not made: the resampler changes the rate of the sound, and
+  a stretch is a change of rate with the time held still, which is a
+  different thing.
+- **The resampler is linear**, so a sound resampled to a much higher
+  rate loses its top. A better resampler is a **filter**, and a filter
+  is a plugin.
