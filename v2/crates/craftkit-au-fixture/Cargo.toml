@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-au-fixture"
+description = "A reference AU: a shared library that exports the symbols a host looks for."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# A **shared library**, and an rlib as well: the rlib is what the
+# loader's tests link against, so that the shared library is built
+# before the tests run.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The shapes of the format, and nothing else.
+craftkit-au-abi = { workspace = true }
