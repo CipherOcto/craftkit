@@ -223,14 +223,18 @@ impl TrackKind {
             Point::new(rect.x, rect.y),
             Point::new(rect.x + rect.w, rect.y),
         ]);
-        canvas.path(
-            &line,
-            craftkit_sdk::document::Colour::NONE,
-            Some(craftkit_sdk::document::Stroke {
-                colour: craftkit_sdk::document::Colour::BLACK,
-                width: 0.01,
-            }),
-        );
+        let stroke =
+            craftkit_sdk::document::Stroke { colour: craftkit_sdk::document::Colour::BLACK, width: 0.01 };
+        canvas.path(&line, craftkit_sdk::document::Colour::NONE, Some(stroke));
+        // A **soloed** track is a double rule: the row says which
+        // track is heard alone.
+        if track_is_soloed(document, node.id) {
+            let under = craftkit_sdk::document::Path::polygon(&[
+                Point::new(rect.x, rect.y + 0.05),
+                Point::new(rect.x + rect.w, rect.y + 0.05),
+            ]);
+            canvas.path(&under, craftkit_sdk::document::Colour::NONE, Some(stroke));
+        }
     }
 
     /// Whether a point is inside a track.
@@ -690,17 +694,27 @@ struct TrackPayload {
     track_kind: String,
     /// How many channels it has.
     channels: u32,
+    /// Whether the track is **soloed**.
+    ///
+    /// A soloed track silences the others: when one track is soloed,
+    /// the rest are not heard.
+    solo: bool,
 }
 
 impl TrackPayload {
     fn to_json(&self) -> Json {
-        serde_json::json!({ "track_kind": self.track_kind, "channels": self.channels })
+        serde_json::json!({
+            "track_kind": self.track_kind,
+            "channels": self.channels,
+            "solo": self.solo,
+        })
     }
 
     fn from_json(value: &Json) -> Result<Self, String> {
         Ok(TrackPayload {
             track_kind: value.get("track_kind").and_then(|kind| kind.as_str()).unwrap_or("audio").to_string(),
             channels: value.get("channels").and_then(|channels| channels.as_u64()).unwrap_or(2) as u32,
+            solo: value.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
         })
     }
 }
@@ -980,12 +994,69 @@ impl AddTrack {
             Some(channels) => channels.0 as u32,
             None => 2,
         };
-        let payload = TrackPayload { track_kind, channels };
+        let payload = TrackPayload { track_kind, channels, solo: false };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
         document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
         Ok(Outcome::changed(format!("added a track `{name}`"))
             .with_data(serde_json::json!({ "id": track, "name": name })))
+    }
+}
+
+/// **Solo** a track.
+///
+/// A soloed track silences the others: when one track is soloed, the
+/// rest are not heard — and their sends carry the silence, because a
+/// send is a copy of the track's signal.
+///
+/// Soloing nothing is not the same as soloing everything: a document
+/// with no soloed track is heard whole, and a document with one is
+/// heard alone.
+#[derive(Command)]
+#[command(
+    id = "sound.track.solo",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Solo"),
+    mutates,
+    undoable
+)]
+pub struct SoloTrack {
+    /// The track.
+    pub track: NodeRef,
+    /// Whether the track is soloed.
+    pub solo: Bool,
+}
+
+impl SoloTrack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let solo = self.solo.0;
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        let mut payload = TrackPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.track.solo".to_string(), message: error })?;
+        payload.solo = solo;
+        node.data = payload.to_json();
+        Ok(Outcome::changed(format!("the track `{id}` is soloed: {solo}"))
+            .with_data(serde_json::json!({ "id": id, "solo": solo })))
     }
 }
 
@@ -1802,6 +1873,16 @@ impl RenderSound {
             }
             tracks.push((track.id, signal));
         }
+        // The **solo**: a soloed track silences the others, and their
+        // sends carry the silence, because a send is a copy of the
+        // track's signal.
+        if tracks.iter().any(|(id, _)| track_is_soloed(session.document(), *id)) {
+            for (id, signal) in &mut tracks {
+                if !track_is_soloed(session.document(), *id) {
+                    signal.iter_mut().for_each(|sample| *sample = 0.0);
+                }
+            }
+        }
         // The **buses**: each bus is fed by the sends that name it, and
         // a send carries a copy of its track's signal at its own level.
         let mut buses: Vec<(u64, Vec<f32>)> = Vec::new();
@@ -1855,6 +1936,12 @@ impl RenderSound {
             "clips": tracks.len(),
         })))
     }
+}
+
+/// Whether a track is **soloed**.
+fn track_is_soloed(document: &Document, track: u64) -> bool {
+    let Some(node) = document.node(track) else { return false };
+    TrackPayload::from_json(&node.data).map(|payload| payload.solo).unwrap_or(false)
 }
 
 /// The **mix** of a sound document, as a **lane job**.
@@ -2549,6 +2636,7 @@ craftkit_sdk::plugin_anchor!(
     MarkerKind,
     SourceKind,
     AddTrack,
+    SoloTrack,
     AddClip,
     SetClipStretch,
     SetClipFade,
