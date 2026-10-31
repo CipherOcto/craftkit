@@ -1711,6 +1711,18 @@ pub struct NodeKindSpec {
     /// The kind's own evaluation: it turns a node into a value, or says
     /// nothing, and the core never matches on a kind to work it out.
     pub evaluate: Option<fn(&Node, &Document) -> Option<serde_json::Value>>,
+    /// Where the node **is**, if the kind says.
+    ///
+    /// A node's place is the place the **document** gives it, and most
+    /// of the time that is the right answer. A kind that knows better
+    /// says where its node is: a clip in a sound document is at a
+    /// **time**, a node in a diagram is at a **point**, and neither is
+    /// a rectangle the document could hold without going stale the
+    /// moment something above it moved.
+    ///
+    /// It is `None` by default, and a kind that says nothing has the
+    /// place the document gives it.
+    pub place: Option<fn(&Node, &Document) -> Option<Rect>>,
 }
 
 // The link collects node kinds here.

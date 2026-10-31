@@ -25,6 +25,8 @@ pub struct SeamArgs {
     pub list: Vec<LitStr>,
     /// A flag: the kind has an evaluation of its own.
     pub evaluates: bool,
+    /// A flag: the kind says where its nodes are.
+    pub place: bool,
 }
 
 impl Parse for SeamArgs {
@@ -68,6 +70,10 @@ impl Parse for SeamArgs {
                 "evaluates" => {
                     // A flag: the kind brings its own evaluation.
                     args.evaluates = true;
+                }
+                "place" => {
+                    // A flag: the kind says where its nodes are.
+                    args.place = true;
                 }
                 other => {
                     // A list: `requires("core")` or `commands("a", "b")`.
@@ -156,6 +162,18 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
         }
     };
 
+    // Where the node is, if the kind says. A kind that says nothing has
+    // the place the document gives it.
+    let place = if args.place {
+        quote! {
+            place: Some(|node, document| #name::place(node, document)),
+        }
+    } else {
+        quote! {
+            place: None,
+        }
+    };
+
     Ok(quote! {
         #[doc = #doc_literal]
         pub static #static_ident: #sdk::NodeKindSpec = #sdk::NodeKindSpec {
@@ -165,6 +183,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             paint: |node, document, canvas| #name::paint(node, document, canvas),
             hit: |node, document, point| #name::hit(node, document, point),
             #evaluate
+            #place
         };
 
         #anchor

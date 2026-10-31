@@ -1003,7 +1003,10 @@ impl DocSnapshot {
         // picture is seen through either, because a document that is
         // a thousand units from the origin is not in a picture of the
         // origin.
-        let camera = match session.document().bounds() {
+        // The bounds ask the **kinds** where their nodes are, so that a
+        // document whose geometry is derived — a timeline, a diagram —
+        // is framed by what is really there.
+        let camera = match session.bounds() {
             Some(bounds) => craftkit_sdk::Camera::framing(bounds, width as f64, height as f64),
             None => *session.camera(),
         };

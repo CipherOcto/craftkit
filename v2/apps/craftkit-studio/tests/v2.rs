@@ -539,6 +539,7 @@ fn unused_kind() -> NodeKindSpec {
         paint: |_node, _document, _canvas| {},
         hit: |_node, _document, _point| false,
         evaluate: None,
+        place: None,
     }
 }
 

@@ -299,6 +299,43 @@ impl Session {
         self.document.walk().filter(|node| self.selected_ids().contains(&node.id)).collect()
     }
 
+    /// Where a node **is**.
+    ///
+    /// The kind says where its node is, if it says anything at all: a
+    /// clip in a sound document is at a **time**, and the rectangle the
+    /// document would hold for it would go stale the moment the track
+    /// above it moved. A kind that says nothing has the place the
+    /// document gives it.
+    pub fn place_of(&self, node: &crate::document::Node) -> Option<crate::document::Rect> {
+        let Some(kind) = self.kinds.get(&node.kind) else { return node.rect };
+        match kind.place {
+            Some(place) => place(node, &self.document),
+            None => node.rect,
+        }
+    }
+
+    /// The **bounds** of the document: the place that frames all of it.
+    ///
+    /// It asks the kinds where their nodes are, so that a document whose
+    /// geometry is derived — a timeline, a diagram — is framed by what
+    /// is really there and not by what the document happens to hold.
+    pub fn bounds(&self) -> Option<crate::document::Rect> {
+        let mut bounds: Option<crate::document::Rect> = None;
+        for node in self.document.walk_visible() {
+            let Some(rect) = self.place_of(node) else { continue };
+            bounds = Some(match bounds {
+                None => rect,
+                Some(current) => crate::document::Rect::new(
+                    current.x.min(rect.x),
+                    current.y.min(rect.y),
+                    (current.x + current.w).max(rect.x + rect.w) - current.x.min(rect.x),
+                    (current.y + current.h).max(rect.y + rect.h) - current.y.min(rect.y),
+                ),
+            });
+        }
+        bounds
+    }
+
     /// The camera: what is on screen, and how much of it.
     ///
     /// It is the session's state, the way the selection and the tool are:
@@ -364,7 +401,7 @@ impl Session {
         let size = HANDLE_PIXELS / zoom;
         let width = 1.0 / zoom;
         for node in self.selected_nodes() {
-            let Some(rect) = node.rect else { continue };
+            let Some(rect) = self.place_of(node) else { continue };
             let frame = crate::document::Path::polygon(&[
                 crate::document::Point::new(rect.x, rect.y),
                 crate::document::Point::new(rect.x + rect.w, rect.y),
