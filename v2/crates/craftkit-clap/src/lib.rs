@@ -268,6 +268,7 @@ impl ClapFactory<'_> {
             events: RefCell::new(EventState::default()),
             pushed: RefCell::new(EventState::default()),
             layout: RefCell::new(None),
+            transport: RefCell::new(None),
             _factory: PhantomData,
         })
     }
@@ -553,6 +554,12 @@ pub struct ClapInstance<'a> {
     /// It is `None` when the plugin does not say: the extension is
     /// optional, and a host that guesses is a host that says so.
     layout: RefCell<Option<ClapLayout>>,
+    /// Where the music is, as the host last said.
+    ///
+    /// The transport is not an event for one block: it says where the
+    /// music is, and the music does not stop between two blocks. So it
+    /// is **kept**, and offered with every block.
+    transport: RefCell<Option<ClapTransport>>,
     /// The factory it came from, so that it cannot outlive it.
     _factory: PhantomData<&'a ClapFactory<'a>>,
 }
@@ -645,6 +652,12 @@ impl ClapInstance<'_> {
         // of the call: the plugin reads them, and they may not move
         // while it does.
         let mut events = self.events.borrow_mut();
+        // The transport is offered with **every** block, because it is
+        // where the music is and the music does not stop.
+        if let Some(transport) = *self.transport.borrow() {
+            let bytes = transport.event();
+            events.push(&bytes);
+        }
         let mut pushed = self.pushed.borrow_mut();
         pushed.bytes.clear();
         pushed.offsets.clear();
@@ -687,13 +700,12 @@ impl ClapInstance<'_> {
 
     /// **Tell** the plugin where the music is.
     ///
-    /// The transport is an **event** like any other: the host offers it
-    /// and the plugin reads it while it works, so it reaches the plugin
-    /// at the next block of audio.
+    /// The transport is kept, and offered with **every** block: it says
+    /// where the music is, and the music does not stop between two
+    /// blocks. A host that offered it once would tell the plugin where
+    /// the music was, and then never again.
     pub fn set_transport(&self, transport: ClapTransport) {
-        let mut state = self.events.borrow_mut();
-        let bytes = transport.event();
-        state.push(&bytes);
+        *self.transport.borrow_mut() = Some(transport);
     }
 
     /// **Send** a MIDI message to a port.

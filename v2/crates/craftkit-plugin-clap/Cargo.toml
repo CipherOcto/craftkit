@@ -13,3 +13,7 @@ craftkit-derive = { workspace = true }
 # holds. It is a **library** and not a plugin: it contributes no command
 # and no kind, and it is at L1, so a battery at L4 may depend on it.
 craftkit-clap = { workspace = true }
+# The **time model**: a tempo map, and the arithmetic over it. It is a
+# **library** and not a plugin, and it is at L0, so a battery may use
+# it. The transport the plugin is told about is worked out with it.
+craftkit-sound-time = { workspace = true }

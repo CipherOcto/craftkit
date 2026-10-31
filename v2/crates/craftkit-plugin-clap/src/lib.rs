@@ -47,7 +47,7 @@ use craftkit_derive::{Command, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text};
 
-use craftkit_clap::{ClapDescriptor, ClapLayout, ClapParameter, ClapPlugin};
+use craftkit_clap::{ClapDescriptor, ClapLayout, ClapParameter, ClapPlugin, ClapTransport};
 
 /// The layer of the CLAP plugins.
 ///
@@ -159,6 +159,168 @@ pub struct PluginPayload {
     pub channels_in: u32,
     /// The channels coming out, as the plugin said.
     pub channels_out: u32,
+    /// Where the music is, in the kit's own time.
+    pub transport: TransportPayload,
+}
+
+/// Where the music is, and how fast it goes.
+///
+/// The position is a **tick** — the kit's own unit — and the tempo and
+/// the meter are a **map**: a list of events, because the tempo of a
+/// piece changes and a single number cannot say when.
+///
+/// What the plugin is told is **derived** from all of that: the beats,
+/// the seconds, the tempo and the meter at that tick. Nothing here is
+/// stored twice.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransportPayload {
+    /// Where the music is, in ticks.
+    pub tick: i64,
+    /// Whether the music is playing.
+    pub playing: bool,
+    /// The tempo events, in tick order.
+    pub tempos: Vec<TempoPayload>,
+    /// The meter events, in tick order.
+    pub meters: Vec<MeterPayload>,
+}
+
+/// One **tempo** event: a tempo from a tick onwards.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TempoPayload {
+    /// The tick the change happens at.
+    pub tick: i64,
+    /// The tempo, in beats a minute.
+    pub bpm: f64,
+}
+
+/// One **meter** event: a bar from a tick onwards.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeterPayload {
+    /// The tick the change happens at.
+    pub tick: i64,
+    /// How many beats are in a bar.
+    pub numerator: u32,
+    /// What a beat is worth, as the denominator of a whole note.
+    pub denominator: u32,
+}
+
+impl Default for TransportPayload {
+    /// The same as [`TransportPayload::new`]: the music at the
+    /// beginning, at a hundred and twenty beats a minute.
+    fn default() -> TransportPayload {
+        TransportPayload::new()
+    }
+}
+
+impl TempoPayload {
+    /// The tempo event as it is written.
+    pub fn to_json(&self) -> Json {
+        json!({ "tick": self.tick, "bpm": self.bpm })
+    }
+
+    /// The tempo event as it is read.
+    pub fn from_json(value: &Json) -> TempoPayload {
+        TempoPayload {
+            tick: value.get("tick").and_then(|tick| tick.as_i64()).unwrap_or(0),
+            bpm: value.get("bpm").and_then(|bpm| bpm.as_f64()).unwrap_or(120.0),
+        }
+    }
+}
+
+impl MeterPayload {
+    /// The meter event as it is written.
+    pub fn to_json(&self) -> Json {
+        json!({ "tick": self.tick, "numerator": self.numerator, "denominator": self.denominator })
+    }
+
+    /// The meter event as it is read.
+    pub fn from_json(value: &Json) -> MeterPayload {
+        MeterPayload {
+            tick: value.get("tick").and_then(|tick| tick.as_i64()).unwrap_or(0),
+            numerator: value.get("numerator").and_then(|count| count.as_u64()).unwrap_or(4) as u32,
+            denominator: value.get("denominator").and_then(|count| count.as_u64()).unwrap_or(4) as u32,
+        }
+    }
+}
+
+impl TransportPayload {
+    /// A transport at the start of the music, at 120 beats a minute.
+    pub fn new() -> TransportPayload {
+        TransportPayload {
+            tick: 0,
+            playing: true,
+            tempos: vec![TempoPayload { tick: 0, bpm: 120.0 }],
+            meters: vec![MeterPayload { tick: 0, numerator: 4, denominator: 4 }],
+        }
+    }
+
+    /// The transport as it is written.
+    pub fn to_json(&self) -> Json {
+        json!({
+            "tick": self.tick,
+            "playing": self.playing,
+            "tempos": self.tempos.iter().map(|tempo| tempo.to_json()).collect::<Vec<_>>(),
+            "meters": self.meters.iter().map(|meter| meter.to_json()).collect::<Vec<_>>(),
+        })
+    }
+
+    /// The transport as it is read.
+    pub fn from_json(value: &Json) -> TransportPayload {
+        let tempos = value
+            .get("tempos")
+            .and_then(|tempos| tempos.as_array())
+            .map(|tempos| tempos.iter().map(TempoPayload::from_json).collect())
+            .unwrap_or_default();
+        let meters = value
+            .get("meters")
+            .and_then(|meters| meters.as_array())
+            .map(|meters| meters.iter().map(MeterPayload::from_json).collect())
+            .unwrap_or_default();
+        TransportPayload {
+            tick: value.get("tick").and_then(|tick| tick.as_i64()).unwrap_or(0),
+            playing: value.get("playing").and_then(|playing| playing.as_bool()).unwrap_or(true),
+            tempos,
+            meters,
+        }
+    }
+
+    /// The **map** the payload describes.
+    ///
+    /// The map is the kit's own model — a tempo map — and the payload
+    /// is read into it. An event that the model refuses is an event the
+    /// payload does not have: the model's rules are the kit's rules.
+    pub fn to_map(&self) -> Result<craftkit_sound_time::TempoMap, String> {
+        let mut map = craftkit_sound_time::TempoMap::new();
+        for tempo in &self.tempos {
+            map.set_tempo(tempo.tick, tempo.bpm)?;
+        }
+        for meter in &self.meters {
+            map.set_meter(meter.tick, meter.numerator, meter.denominator)?;
+        }
+        Ok(map)
+    }
+
+    /// What the plugin is told: where the music is, right now.
+    ///
+    /// Everything here is **derived**: the beats and the seconds from
+    /// the tick, and the tempo and the meter from the map at that tick.
+    pub fn to_transport(&self, sample_rate: u32) -> Result<ClapTransport, String> {
+        let map = self.to_map()?;
+        let tempo = map.tempo_at_tick(self.tick);
+        let (numerator, denominator) = map.meter_at_tick(self.tick);
+        let beats = self.tick as f64 / craftkit_sound_time::TICKS_PER_QUARTER as f64;
+        let samples = map.ticks_to_samples(self.tick, sample_rate);
+        let seconds = samples as f64 / sample_rate as f64;
+        Ok(ClapTransport {
+            song_pos_beats: beats,
+            song_pos_seconds: seconds,
+            tempo,
+            tsig_num: numerator as u16,
+            tsig_denom: denominator as u16,
+            playing: self.playing,
+            recording: false,
+        })
+    }
 }
 
 impl PluginPayload {
@@ -174,6 +336,7 @@ impl PluginPayload {
             "state": self.state,
             "channels_in": self.channels_in,
             "channels_out": self.channels_out,
+            "transport": self.transport.to_json(),
         })
     }
 
@@ -202,6 +365,7 @@ impl PluginPayload {
             state: value.get("state").and_then(|state| state.as_str()).unwrap_or("").to_string(),
             channels_in: value.get("channels_in").and_then(|count| count.as_u64()).unwrap_or(0) as u32,
             channels_out: value.get("channels_out").and_then(|count| count.as_u64()).unwrap_or(0) as u32,
+            transport: value.get("transport").map(TransportPayload::from_json).unwrap_or_default(),
         })
     }
 }
@@ -243,7 +407,13 @@ struct Report {
 /// returns, and it cannot be sent between threads, and the document has
 /// no place for it. So the plugin is opened, given its state, asked, and
 /// closed — and what it said is what the document keeps.
-fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> Result<Report, EngineError> {
+fn talk(
+    id: &str,
+    path: &str,
+    state: Option<&[u8]>,
+    set: Option<(u32, f64)>,
+    transport: ClapTransport,
+) -> Result<Report, EngineError> {
     let plugin = ClapPlugin::open(path).map_err(|error| fail("clap", error.to_string()))?;
     plugin.init().map_err(|error| fail("clap", error.to_string()))?;
     let factory = plugin.factory().map_err(|error| fail("clap", error.to_string()))?;
@@ -252,6 +422,9 @@ fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> 
     instance.activate(SAMPLE_RATE, 1, MAX_FRAMES).map_err(|error| fail("clap", error.to_string()))?;
     instance.start_processing().map_err(|error| fail("clap", error.to_string()))?;
 
+    // Where the music is, is offered with every block: the plugin is
+    // told where it is, and it is told again and again.
+    instance.set_transport(transport);
     // The plugin is given the state it had, so that what it says now is
     // what it would say if it had never been closed.
     if let Some(bytes) = state {
@@ -295,6 +468,12 @@ fn fail(id: &str, message: String) -> EngineError {
 /// The kit has no audio thread and no sample rate of its own, so the
 /// rate is this program's, and it is the one every CLAP plugin accepts.
 const SAMPLE_RATE: f64 = 48_000.0;
+
+/// The same rate, as a whole number of cycles a second.
+///
+/// The kit has no audio thread, so the rate is this program's — and
+/// the transport's seconds are worked out with it.
+const SAMPLE_RATE_HZ: u32 = 48_000;
 
 /// The most frames in the block that carries a parameter to a plugin.
 ///
@@ -385,7 +564,10 @@ impl AttachPlugin {
                 }
             }
         };
-        let report = talk(&id, &path, None, None)?;
+        let transport = TransportPayload::new();
+        let transport =
+            transport.to_transport(SAMPLE_RATE_HZ).map_err(|message| fail("clap.attach", message))?;
+        let report = talk(&id, &path, None, None, transport)?;
         let payload = PluginPayload {
             library: path.clone(),
             id: report.descriptor.id.clone(),
@@ -396,6 +578,7 @@ impl AttachPlugin {
             state: encode_state(&report.state)?,
             channels_in: report.layout.map(|layout| layout.inputs).unwrap_or(0),
             channels_out: report.layout.map(|layout| layout.outputs).unwrap_or(0),
+            transport: TransportPayload::new(),
         };
         let node = session.document_mut()?.add_node(payload.name.clone(), "clap.plugin", None);
         if let Some(node) = session.document_mut()?.node_mut(node) {
@@ -477,7 +660,16 @@ impl SetParameter {
             return Err(fail("clap.parameter.set", "a value is a number".to_string()));
         }
         let state = decode_state(&payload.state, "clap.parameter.set")?;
-        let report = talk(&payload.id, &payload.library, Some(&state), Some((parameter as u32, value)))?;
+        let report = talk(
+            &payload.id,
+            &payload.library,
+            Some(&state),
+            Some((parameter as u32, value)),
+            payload
+                .transport
+                .to_transport(SAMPLE_RATE_HZ)
+                .map_err(|message| fail("clap.parameter.set", message))?,
+        )?;
         let mut payload = payload;
         payload.params = report.parameters.iter().map(parameter_of).collect();
         payload.state = encode_state(&report.state)?;
@@ -511,7 +703,13 @@ impl ReadState {
         let node = self.node.0;
         let payload = read_payload(session, node, "clap.state")?;
         let state = decode_state(&payload.state, "clap.state")?;
-        let report = talk(&payload.id, &payload.library, Some(&state), None)?;
+        let report = talk(
+            &payload.id,
+            &payload.library,
+            Some(&state),
+            None,
+            payload.transport.to_transport(SAMPLE_RATE_HZ).map_err(|message| fail("clap.state", message))?,
+        )?;
         let bytes = state.len();
         Ok(Outcome::new(format!("`{}` holds {bytes} bytes of state", payload.name)).with_data(json!({
             "id": node,
@@ -523,9 +721,188 @@ impl ReadState {
     }
 }
 
+/// **Move** the music: where it is, and whether it is playing.
+///
+/// The position is a **tick** — the kit's own unit — and the transport
+/// the plugin is told about is worked out from it: the beats, the
+/// seconds, the tempo and the meter at that tick.
+#[derive(Command)]
+#[command(
+    id = "clap.transport.set",
+    area = "clap",
+    layer = "clap",
+    icon = "list",
+    menu("CLAP"),
+    mutates,
+    undoable
+)]
+pub struct SetTransport {
+    /// The plugin node.
+    pub node: NodeRef,
+    /// Where the music is, in ticks.
+    pub tick: Number,
+    /// Whether the music is playing.
+    pub playing: Option<craftkit_sdk::Bool>,
+}
+
+impl SetTransport {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let node = self.node.0;
+        let mut payload = read_payload(session, node, "clap.transport.set")?;
+        let tick = tick_of(self.tick.0, "clap.transport.set")?;
+        payload.transport.tick = tick;
+        if let Some(playing) = self.playing {
+            payload.transport.playing = playing.0;
+        }
+        let transport = payload
+            .transport
+            .to_transport(SAMPLE_RATE_HZ)
+            .map_err(|message| fail("clap.transport.set", message))?;
+        write_payload(session, node, &payload)?;
+        Ok(Outcome::changed(format!("moved the music of `{}` to tick {tick}", payload.name))
+            .with_data(json!({ "id": node, "tick": tick, "transport": transport_data(&transport) })))
+    }
+}
+
+/// Set the **tempo** from a tick onwards.
+///
+/// The tempo of a piece changes, so the tempo is a **map** and not a
+/// number: this command says what the tempo is from a tick onwards, and
+/// the map keeps the rest.
+#[derive(Command)]
+#[command(
+    id = "clap.transport.tempo",
+    area = "clap",
+    layer = "clap",
+    icon = "list",
+    menu("CLAP"),
+    mutates,
+    undoable
+)]
+pub struct SetTempo {
+    /// The plugin node.
+    pub node: NodeRef,
+    /// The tick the change happens at.
+    pub tick: Number,
+    /// The tempo, in beats a minute.
+    pub bpm: Number,
+}
+
+impl SetTempo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let node = self.node.0;
+        let mut payload = read_payload(session, node, "clap.transport.tempo")?;
+        let tick = tick_of(self.tick.0, "clap.transport.tempo")?;
+        let mut map = payload.transport.to_map().map_err(|message| fail("clap.transport.tempo", message))?;
+        map.set_tempo(tick, self.bpm.0).map_err(|message| fail("clap.transport.tempo", message))?;
+        payload.transport.tempos =
+            map.tempos().iter().map(|tempo| TempoPayload { tick: tempo.tick, bpm: tempo.bpm }).collect();
+        let transport = payload
+            .transport
+            .to_transport(SAMPLE_RATE_HZ)
+            .map_err(|message| fail("clap.transport.tempo", message))?;
+        write_payload(session, node, &payload)?;
+        Ok(Outcome::changed(format!("set the tempo of `{}` at tick {tick}", payload.name)).with_data(
+            json!({ "id": node, "tick": tick, "bpm": self.bpm.0, "transport": transport_data(&transport) }),
+        ))
+    }
+}
+
+/// Set the **meter** from a tick onwards.
+///
+/// A meter is how many beats are in a bar and what a beat is worth, and
+/// it changes like the tempo does.
+#[derive(Command)]
+#[command(
+    id = "clap.transport.meter",
+    area = "clap",
+    layer = "clap",
+    icon = "list",
+    menu("CLAP"),
+    mutates,
+    undoable
+)]
+pub struct SetMeter {
+    /// The plugin node.
+    pub node: NodeRef,
+    /// The tick the change happens at.
+    pub tick: Number,
+    /// How many beats are in a bar.
+    pub numerator: Number,
+    /// What a beat is worth, as the denominator of a whole note.
+    pub denominator: Number,
+}
+
+impl SetMeter {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let node = self.node.0;
+        let mut payload = read_payload(session, node, "clap.transport.meter")?;
+        let tick = tick_of(self.tick.0, "clap.transport.meter")?;
+        let numerator = self.numerator.0;
+        let denominator = self.denominator.0;
+        if !numerator.is_finite() || !denominator.is_finite() {
+            return Err(fail("clap.transport.meter", "a meter is two whole numbers".to_string()));
+        }
+        let mut map = payload.transport.to_map().map_err(|message| fail("clap.transport.meter", message))?;
+        map.set_meter(tick, numerator as u32, denominator as u32)
+            .map_err(|message| fail("clap.transport.meter", message))?;
+        payload.transport.meters = map
+            .meters()
+            .iter()
+            .map(|meter| MeterPayload {
+                tick: meter.tick,
+                numerator: meter.numerator,
+                denominator: meter.denominator,
+            })
+            .collect();
+        let transport = payload
+            .transport
+            .to_transport(SAMPLE_RATE_HZ)
+            .map_err(|message| fail("clap.transport.meter", message))?;
+        write_payload(session, node, &payload)?;
+        Ok(Outcome::changed(format!("set the meter of `{}` at tick {tick}", payload.name)).with_data(json!({
+            "id": node,
+            "tick": tick,
+            "numerator": numerator,
+            "denominator": denominator,
+            "transport": transport_data(&transport),
+        })))
+    }
+}
+
+/// A tick, as the kit's own number.
+///
+/// A tick is a whole number of them, and it is not negative: the
+/// music starts at the beginning and moves forward.
+fn tick_of(value: f64, id: &str) -> Result<i64, EngineError> {
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
+        return Err(fail(id, "a tick is a whole number of them".to_string()));
+    }
+    if value > craftkit_sound_time::MAX_POSITION as f64 {
+        return Err(fail(id, format!("a tick is at most {}", craftkit_sound_time::MAX_POSITION)));
+    }
+    Ok(value as i64)
+}
+
+/// The transport, as the answer says it.
+fn transport_data(transport: &ClapTransport) -> Json {
+    json!({
+        "beats": transport.song_pos_beats,
+        "seconds": transport.song_pos_seconds,
+        "tempo": transport.tempo,
+        "meter": [transport.tsig_num, transport.tsig_denom],
+        "playing": transport.playing,
+    })
+}
+
 /// The panel that shows the plugins.
 #[derive(Panel)]
-#[panel(id = "panel.clap", label = "CLAP", layer = "clap", commands("clap.list", "clap.attach"))]
+#[panel(
+    id = "panel.clap",
+    label = "CLAP",
+    layer = "clap",
+    commands("clap.list", "clap.attach", "clap.transport.set")
+)]
 pub struct ClapPanel;
 
 /// The payload of a node, read.
@@ -597,5 +974,8 @@ craftkit_sdk::plugin_anchor!(
     DetachPlugin,
     SetParameter,
     ReadState,
+    SetTransport,
+    SetTempo,
+    SetMeter,
     ClapPanel
 );

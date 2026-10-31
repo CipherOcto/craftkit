@@ -184,3 +184,70 @@ fn the_document_is_refreshed_when_the_plugin_says_it_changed() {
         "and the document's copy is the plugin's own"
     );
 }
+
+/// The transport is **the kit's own time**.
+///
+/// The position is a tick, and the beats, the seconds, the tempo and
+/// the meter the plugin is told about are worked out from it. Nothing
+/// is stored twice: the node holds the tick and the map, and the rest
+/// is derived.
+#[cfg(feature = "clap")]
+#[test]
+fn the_transport_is_the_kits_own_time() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("clap.attach", &json!({ "path": library_path() })).expect("the plugin is attached");
+    let node = session.document().nodes.first().expect("there is a node").id;
+
+    // Two beats, at a hundred and twenty beats a minute: one second.
+    let outcome = session
+        .execute("clap.transport.set", &json!({ "node": node, "tick": 1920 }))
+        .expect("the music is moved");
+    let transport = outcome.data.get("transport").expect("there is a transport");
+    assert_eq!(transport.get("beats").and_then(|beats| beats.as_f64()), Some(2.0));
+    assert_eq!(transport.get("seconds").and_then(|seconds| seconds.as_f64()), Some(1.0));
+    assert_eq!(transport.get("tempo").and_then(|tempo| tempo.as_f64()), Some(120.0));
+    assert_eq!(transport.get("playing").and_then(|playing| playing.as_bool()), Some(true));
+}
+
+/// The **tempo** changes, and the transport follows.
+///
+/// The tempo is a map and not a number: the tempo of a piece changes,
+/// and the change happens at a tick.
+#[cfg(feature = "clap")]
+#[test]
+fn the_tempo_changes_and_the_transport_follows() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("clap.attach", &json!({ "path": library_path() })).expect("the plugin is attached");
+    let node = session.document().nodes.first().expect("there is a node").id;
+
+    // The tempo halves from the second beat onwards.
+    session
+        .execute("clap.transport.tempo", &json!({ "node": node, "tick": 1920, "bpm": 60.0 }))
+        .expect("the tempo is set");
+    // The music is still at the beginning, so the tempo there is the
+    // first one.
+    let outcome = session
+        .execute("clap.transport.set", &json!({ "node": node, "tick": 0 }))
+        .expect("the music is moved");
+    let transport = outcome.data.get("transport").expect("there is a transport");
+    assert_eq!(transport.get("tempo").and_then(|tempo| tempo.as_f64()), Some(120.0));
+
+    // And when the music reaches the change, the new tempo is the one
+    // in force.
+    let outcome = session
+        .execute("clap.transport.set", &json!({ "node": node, "tick": 1920 }))
+        .expect("the music is moved");
+    let transport = outcome.data.get("transport").expect("there is a transport");
+    assert_eq!(transport.get("tempo").and_then(|tempo| tempo.as_f64()), Some(60.0));
+
+    // And the document holds the map, not the number it worked out.
+    let node = session.document().node(node).expect("the node is there");
+    let tempos = node
+        .data
+        .get("transport")
+        .and_then(|transport| transport.get("tempos"))
+        .and_then(|tempos| tempos.as_array())
+        .expect("there are tempo events");
+    assert_eq!(tempos.len(), 2, "the map has two events: the first and the change");
+    assert_eq!(tempos[1].get("bpm").and_then(|bpm| bpm.as_f64()), Some(60.0));
+}

@@ -237,6 +237,8 @@ mod exports {
         tempo: f64,
         /// How many notes have been played.
         notes: u32,
+        /// How many blocks have carried a transport.
+        transport_blocks: u32,
     }
 
     /// The parameters the plugin holds: a gain and a tone.
@@ -572,6 +574,7 @@ mod exports {
             values: Vec::new(),
             tempo: 0.0,
             notes: 0,
+            transport_blocks: 0,
         }));
         let plugin = Box::into_raw(Box::new(ClapPlugin {
             desc: super::descriptor(),
@@ -595,7 +598,7 @@ mod exports {
     /// The events are the host's own, and every one of them begins
     /// with a head that says how long it is and what it is — so the
     /// list is read without knowing what is in it.
-    fn read_tempo(events: *const ClapInputEvents) -> Option<f64> {
+    fn read_transport(events: *const ClapInputEvents) -> Option<(u32, f64)> {
         if events.is_null() {
             return None;
         }
@@ -621,11 +624,19 @@ mod exports {
             }
             // SAFETY: the event is a transport event, and the tempo is
             // at its place.
-            return Some(unsafe {
+            let tempo = unsafe {
                 std::ptr::read_unaligned(
                     event.add(std::mem::offset_of!(ClapEventTransport, tempo)) as *const f64
                 )
-            });
+            };
+            // SAFETY: the event is a transport event, and its flags are
+            // at its place.
+            let flags = unsafe {
+                std::ptr::read_unaligned(
+                    event.add(std::mem::offset_of!(ClapEventTransport, flags)) as *const u32
+                )
+            };
+            return Some((flags, tempo));
         }
         None
     }
@@ -784,15 +795,20 @@ mod exports {
         }
         // The transport, if the host gave one: the plugin takes the
         // tempo and reports it, and the report is a parameter the host
-        // can read.
-        if let Some(tempo) = read_tempo(in_events) {
-            state.tempo = tempo;
-            set_value(state, 2, tempo);
+        // can read. It also counts the blocks that carried one, so a
+        // host can be seen to have offered it every time.
+        if let Some((flags, tempo)) = read_transport(in_events) {
+            state.transport_blocks += 1;
+            if flags & craftkit_clap_abi::TRANSPORT_HAS_TEMPO != 0 {
+                state.tempo = tempo;
+                set_value(state, 2, tempo);
+            }
         }
         // SAFETY: the block is the host's own, and it lives for the
         // length of the call.
         let out_events = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).out_events)) };
         report_value(out_events, 2, state.tempo);
+        report_value(out_events, 4, f64::from(state.transport_blocks));
         for channel in 0..output_count as usize {
             // SAFETY: the channel is one of the buffer's own, and the
             // address it holds is the host's own memory.

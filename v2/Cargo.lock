@@ -190,6 +190,7 @@ dependencies = [
  "craftkit-clap",
  "craftkit-derive",
  "craftkit-sdk",
+ "craftkit-sound-time",
 ]
 
 [[package]]
