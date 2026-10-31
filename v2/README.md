@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1126 tests.** The MCP server links **all fifteen batteries** in, so the
+**1133 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1126 tests
+cargo test          # 1133 tests
 cargo run -p craftkit-studio
 ```
 
@@ -10101,3 +10101,61 @@ own start.
 - **A clip's curve is one lane per parameter.** Two lanes of volume
   under one clip are two curves and the second wins, and nothing says
   so.
+
+## 148. The formula reads another sheet
+
+A grid's formulas could read the sheet they were in and no other, and
+the family's formulas read across the sheets of a workbook: `Sheet2!A1`
+is a cell, and it is a cell in **another** sheet.
+
+### What was built
+
+- A formula may name a **sheet**: `Sheet2!A1`, and a name with a space
+  in it is written in quotes: `'My Sheet'!A1`.
+- A **range** of another sheet may be read, and a function may take it:
+  `SUM(Sheet2!A1:A3)`.
+- The **workbook**: the sheets of a document, by name. The value of a
+  cell is a fact about the **workbook** and not about the sheet: the
+  evaluation moved there, because a formula that reads another sheet
+  needs the book.
+- The **cycle** is a cycle of the workbook: a formula in one sheet that
+  reads a cell in another that reads it back is a cell that reads
+  itself, and it is refused where it always was refused — at the point
+  the formula is set.
+- The **precedents** name their sheet, and the **dependents** of a cell
+  are the cells that read it, in any sheet of the workbook.
+
+### What the port found
+
+- **A cell's value is a fact about the workbook.** The sheet's own
+  cells were enough while a formula could read nothing else; a formula
+  that reads another sheet needs the book, and the book is where the
+  evaluation went.
+- **The cycle was a cycle of a sheet and is a cycle of a workbook.** The
+  refusal has not moved and it sees more: the cells being computed on
+  the way are named with their sheet, so a message says which sheet
+  reads itself.
+- **A range is in one sheet.** The family's notation may name the sheet
+  at both ends of a range (`Sheet1!A1:Sheet1!B4`), and the port keeps
+  that; a range that names two *different* sheets is not a range, and
+  it is refused.
+
+### What it cost
+
+- seven tests in the battery: a formula reads a cell of another sheet, a
+  quoted sheet's name is read, a range of another sheet is read, a
+  sheet that is not there is an error, a cycle across the sheets is
+  refused, the precedents name the sheet, and the dependents of a cell
+  are the cells that read it.
+
+### What it does not settle
+
+- **The sheets are named and not numbered.** `Sheet2!A1` says the
+  sheet's name, and a name is a name: two sheets with the same name are
+  one sheet as far as the workbook is concerned.
+- **A sheet's name is not checked at the point the formula is set.** A
+  formula that names a sheet that does not exist is set happily and
+  says so when it is calculated.
+- **The formulas are still small.** Five functions, arithmetic and
+  comparisons: no dates, no text functions, no lookups and no
+  conditional expressions.
