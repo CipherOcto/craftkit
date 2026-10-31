@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**908 tests.** The MCP server links **all fourteen batteries** in, so the
+**913 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 908 tests
+cargo test          # 913 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8100,10 +8100,57 @@ command with a name it already knew.
 
 ### What it does not settle
 
-- **There is no drag.** A click picks; a drag moves, resizes and
-  pans, and the drag lives in the toolkit's layer of the window: the
-  pointer's movement is the toolkit's, and the toolkit is what the
-  channel cannot see.
+- **The channel has no pointer of its own.** It can click (§112) and
+  drag (§113), but a drag is a drag from one point to another: a
+  person can hold the mouse down and see the node follow it, and the
+  channel cannot.
 - **The click does not move anything.** It selects, and a selection is
   the session's state; the agent moves a node with a command, and the
   command is the same one a person gets.
+
+---
+
+## 113. The pointer is the window's own
+
+The drag lived in the **toolkit's** layer of the window: the code that
+decided what a drag meant was next to the code that knew about
+pixels. So the channel could click in the document and could not drag
+anything in it.
+
+### What was built
+
+- The **pointer** is the front end's own: three functions — down,
+  dragged, up — that take points in the **world's** units.
+- The toolkit's layer only says where the pointer is on the screen;
+  the camera turns that into a point of the world, and the pointer
+  says what that point means.
+- The window has the pointer's state, and the channel's control handle
+  has one too, so the channel can drag what it clicks.
+
+### What the port found
+
+- **The handle's tolerance was twice as big as the handle.** The
+  handle is drawn eight pixels across, and the tolerance was the whole
+  of it, so the pointer was "on the handle" when it was up to eight
+  pixels away — and on a document whose rectangles are ten units
+  across, that is most of the node. The tolerance is **half** of the
+  handle now: the handle is a square centred on the corner, and the
+  pointer is on it when it is within half of it.
+- **The drag moves the selection when the node is selected.** That was
+  a rule in the toolkit's layer, where it belonged to nobody; it is in
+  the pointer now, and it is the same rule for the window and for the
+  channel.
+
+### What it cost
+
+- one module in the window, the toolkit's layer reduced to forwarding
+  the pointer's events, a method on the wire, **five tests**.
+
+### What it does not settle
+
+- **The drag is a drag from one point to another.** A person holds
+  the mouse down and watches the node follow it; the channel sends
+  the two ends and does not see the middle.
+- **The pointer is the front end's, and not the kit's.** A program
+  with no screen has no pointer, and the kit has no rules about what
+  a hand does.
