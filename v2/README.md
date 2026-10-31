@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1199 tests.** The MCP server links **all fifteen batteries** in, so the
+**1203 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1199 tests
+cargo test          # 1203 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3595,6 +3595,7 @@ so.
 | a **resampler with a bank** | **built.** The kernel is precomputed for every phase of a rational rate change, so an output is a dot product; a rate change with no bank worth having is read tap by tap (§158) | §155, §158 |
 | a **band for each channel** | **built.** The peaks are the peaks of each channel and the bar carries a band for each of them; the buckets and the channels share the table (§159) | §154, §159 |
 | a **send that is panned and muted** | **built.** A send's copy is panned on its way to the bus, and a muted send is a copy of nothing; a pan that is not a pan is refused (§160) | §160 |
+| a **pre-fader send** | **built.** The track's stage is the clips, the inserts, the mute and then the fader, and a send may take its copy from before the fader; a muted track is not heard anywhere (§161) | §160, §161 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10933,3 +10934,85 @@ neither.
 - **The pan is a balance between the channels and not a place in the
   room.** A sound with more than two channels is panned between the
   first and the second and the rest are left as they are.
+
+## 161. The fader comes after the inserts, and a send may be taken before it
+
+The tree's mixer runs a track's **inserts** and then its **fader**, and a
+send may be a copy of the signal from **before** the fader. Here the
+fader came before the inserts and a send was always taken after it.
+
+This settles the open point of §160, which said the pre-fader send was
+not built.
+
+### What was built
+
+- The **order of the track's stage**: the clips, the **inserts**, the
+  **mute**, the **fader**, and then the **balance** when the track is
+  routed. The fader is the track's volume and it comes after the
+  inserts — the tree's order, read out of the tree.
+- The **pre-fader send**: `sound.send.add` takes `pre_fader`, and the
+  copy is taken from the signal before the fader. A send that does not
+  say so is a copy of the signal after the fader, as it always was.
+- The **mute gates the tap**: a muted track is not heard anywhere, and
+  the copy a send takes is a copy of silence.
+- The **automation in three steps** — the mute, the fader and the
+  balance — because a send may take its copy of the signal from
+  between them.
+
+### What the port found
+
+- **The tree's order is written down in its own words.** The header of
+  the tree's mix engine reads: *clips (with clip gain and fades) →
+  trim/phase → inserts → pre-fader sends → fader and mute (with
+  automation) → pan → post-fader sends → busses → aux inputs → main →
+  master faders*. The fader is late and the balance is later still, and
+  the two sends are on either side of them.
+- **The tree keeps two copies of a track's signal**, and it says so in
+  the field's own name: the strip's buffer and a *pre-fader copy for
+  pre-fader sends*. The second copy is made only when a send asks for
+  it — a copy nobody asked for is a waste of the machine's memory.
+- **The mute is two rules.** The mute *lane* gates the audio **and** the
+  pre-fader tap; the mute *button* skips the send altogether, so a
+  muted track's sends carry nothing at all. A rule about the copy is
+  not the same as a rule about the sound, and the tree keeps them
+  apart.
+- **The balance belongs to the route and not to the signal.** The tree
+  applies the track's pan when the track is routed, and a send's copy
+  is balanced by the **send's** own pan: the track's balance does not
+  travel into the send.
+- **A wart of v2, found by the split.** The balance used to be part of
+  one step with the fader, and a track with a volume lane and no pan
+  lane lost three decibels — the middle of the constant-power law —
+  while a track with no lane at all did not. The lane that moves the
+  volume changed the level of a sound that was balanced. The stage is
+  in steps now, and the balance only happens when there is a balance to
+  apply.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/fader.rs`): a pre-fader copy is
+  taken from before the fader, a post-fader copy from after it, a
+  muted track is not heard by its own pre-fader send, and an insert is
+  heard by a pre-fader send.
+- **A second copy of a track's signal**, held only for the tracks
+  whose sends ask for it — the tree does the same.
+- **The test sound is quiet on purpose.** The master is a file and a
+  file cannot hold more than one, so a sum over one is clipped and the
+  two copies cannot be told apart. The first attempt at this arc
+  failed for exactly that reason, and the failure was in the test and
+  not in the mixer.
+
+### What it does not settle
+
+- **The master fader is not there.** The tree runs the main mix and
+  then the master faders, and v2 has no master lane and no master
+  automation.
+- **The tree's delay compensation is not there.** A strip whose inserts
+  are slow is delayed to line up with the others, and the pre-fader
+  copy has its own alignment; here every copy is aligned by
+  construction, because it is the same signal.
+- **The mute button is not the mute lane.** The tree has a mute on the
+  strip and a mute in the automation, and they are two rules; here the
+  mute is only the lane.
+- **A stereo send goes straight to the sides in the tree**, and the
+  send's pan is for a mono copy; here a stereo copy is panned as well.
