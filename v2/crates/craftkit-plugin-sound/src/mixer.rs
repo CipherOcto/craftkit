@@ -43,7 +43,7 @@ impl BusKind {
     ///
     /// Nothing: there is no mixer window and no camera (§19 of the
     /// design document).
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a bus.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -80,7 +80,7 @@ pub struct InsertKind;
 
 impl InsertKind {
     /// How an insert is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside an insert.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -109,7 +109,7 @@ pub struct SendKind;
 
 impl SendKind {
     /// How a send is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a send.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -142,7 +142,7 @@ pub struct LaneKind;
 
 impl LaneKind {
     /// How a lane is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a lane.
     fn hit(_node: &Node, _point: Point) -> bool {

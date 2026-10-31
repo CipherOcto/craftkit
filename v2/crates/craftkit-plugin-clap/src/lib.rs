@@ -71,7 +71,7 @@ impl PluginKind {
     ///
     /// A plugin is a program, and the kit cannot draw a program: what it
     /// can do is say what the plugin is and what it holds.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: Point) -> bool {

@@ -55,7 +55,7 @@ pub struct RectKind;
 
 impl RectKind {
     /// How a rectangle is drawn.
-    fn paint(node: &Node, canvas: &mut dyn Canvas) {
+    fn paint(node: &Node, _document: &craftkit_sdk::Document, canvas: &mut dyn Canvas) {
         let fill = if node.muted { Colour::NONE } else { Colour::WHITE };
         canvas.rect(node.rect.unwrap_or_default(), fill);
     }

@@ -85,7 +85,7 @@ pub struct DocumentKind;
 
 impl DocumentKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -115,7 +115,7 @@ macro_rules! block_kind {
 
         impl $struct {
             /// Not drawn.
-            fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+            fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
             /// Not hit.
             fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -149,7 +149,7 @@ pub struct StyleKind;
 
 impl StyleKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -179,7 +179,7 @@ pub struct MediaKind;
 
 impl MediaKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

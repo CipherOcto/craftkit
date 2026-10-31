@@ -172,7 +172,7 @@ impl TrackKind {
     /// clips on a time axis, and v2 has no timeline and no camera. A
     /// plugin that drew one would be the second set of camera controls in
     /// the tree, and the camera is a question for the tree.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a track.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -203,7 +203,7 @@ pub struct PlaylistKind;
 
 impl PlaylistKind {
     /// How a playlist is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a playlist.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -228,7 +228,7 @@ pub struct ClipKind;
 
 impl ClipKind {
     /// How a clip is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a clip.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -255,7 +255,7 @@ pub struct TempoKind;
 
 impl TempoKind {
     /// How a tempo event is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a tempo event.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -276,7 +276,7 @@ pub struct MeterKind;
 
 impl MeterKind {
     /// How a meter event is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a meter event.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -301,7 +301,7 @@ pub struct MarkerKind;
 
 impl MarkerKind {
     /// How a marker is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a marker.
     fn hit(_node: &Node, _point: Point) -> bool {
@@ -327,7 +327,7 @@ pub struct SourceKind;
 
 impl SourceKind {
     /// How a source is drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a source.
     fn hit(_node: &Node, _point: Point) -> bool {

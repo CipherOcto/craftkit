@@ -260,9 +260,10 @@ impl Window {
     pub fn picture(&self, width: usize, height: usize) -> Result<Picture, String> {
         let camera = *self.session.camera();
         let mut raster = craftkit_raster::Raster::new(width, height, camera)?;
-        for node in self.session.document().walk() {
+        let document = self.session.document();
+        for node in document.walk() {
             let Some(kind) = self.session.kinds().get(&node.kind) else { continue };
-            (kind.paint)(node, &mut raster);
+            (kind.paint)(node, document, &mut raster);
         }
         let image = raster.image();
         let mut pixels = Vec::with_capacity(image.width().saturating_mul(image.height()).saturating_mul(4));

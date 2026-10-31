@@ -83,6 +83,49 @@ impl Colour {
     pub const WHITE: Colour = Colour([1.0, 1.0, 1.0, 1.0]);
     /// Transparent.
     pub const NONE: Colour = Colour([0.0, 0.0, 0.0, 0.0]);
+
+    /// A colour written as `#rrggbb`.
+    ///
+    /// The way a person writes a colour, and the way a command takes
+    /// one. It is in the **kit** and not in a plugin: every battery that
+    /// takes a colour takes it this way, and a second spelling of the
+    /// same thing is a second thing to get wrong.
+    pub fn from_hex(text: &str) -> Result<Colour, String> {
+        let text = text.trim();
+        let Some(hex) = text.strip_prefix('#') else {
+            return Err(format!("`{text}` is not a colour: a colour is `#rrggbb`"));
+        };
+        if hex.len() != 6 || !hex.chars().all(|character| character.is_ascii_hexdigit()) {
+            return Err(format!("`{text}` is not a colour: a colour is `#rrggbb`"));
+        }
+        let byte = |index: usize| u8::from_str_radix(&hex[index..index + 2], 16).unwrap_or(0);
+        Ok(Colour([byte(0) as f32 / 255.0, byte(2) as f32 / 255.0, byte(4) as f32 / 255.0, 1.0]))
+    }
+}
+
+/// How a thing looks.
+///
+/// The appearance is the **kit's own**, and not a plugin's payload: a
+/// path has one, a rectangle has one, and the kit says what an
+/// appearance is, so that two kinds can be given the same one.
+///
+/// Before this, every plugin had its own fields for its own colours —
+/// the vector battery had a fill and a stroke in its payload, and
+/// nothing else could have either. The appearance is the one place a
+/// colour lives.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Appearance {
+    /// What the thing is filled with.
+    pub fill: Colour,
+    /// The line on its outline, if it has one.
+    pub stroke: Option<Stroke>,
+}
+
+impl Appearance {
+    /// An appearance that is filled with a colour and has no outline.
+    pub fn filled(fill: Colour) -> Appearance {
+        Appearance { fill, stroke: None }
+    }
 }
 
 /// One segment of a path.
@@ -333,6 +376,27 @@ impl FormatValue for Stroke {
     }
 }
 
+impl FormatValue for Appearance {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "fill": self.fill.to_json(),
+            "stroke": self.stroke.map(|stroke| stroke.to_json()),
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let fill = match value.get("fill") {
+            Some(fill) if !fill.is_null() => Colour::from_json(fill)?,
+            _ => Colour::NONE,
+        };
+        let stroke = match value.get("stroke") {
+            Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
+            _ => None,
+        };
+        Ok(Appearance { fill, stroke })
+    }
+}
+
 impl FormatValue for Segment {
     fn to_json(&self) -> serde_json::Value {
         match self {
@@ -474,6 +538,8 @@ impl FormatValue for Node {
             "kind": self.kind,
             "rect": self.rect.to_json(),
             "muted": self.muted,
+            "appearance": self.appearance.map(|appearance| appearance.to_json()),
+            "appearance_from": self.appearance_from,
             "data": self.data,
             "children": self.children.iter().map(|child| child.to_json()).collect::<Vec<_>>(),
             "stream": self.stream,
@@ -511,6 +577,14 @@ impl Node {
             None => None,
         };
         let muted = value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false);
+        // A node may have an **appearance** of its own, and it may point
+        // at one that has. A file that says nothing about either is read
+        // as a node with neither.
+        let appearance = match value.get("appearance") {
+            Some(appearance) if !appearance.is_null() => Some(Appearance::from_json(appearance)?),
+            _ => None,
+        };
+        let appearance_from = value.get("appearance_from").and_then(|from| from.as_u64());
         let data = value.get("data").cloned().unwrap_or(serde_json::Value::Null);
         let children = match value.get("children") {
             Some(children) => children
@@ -523,12 +597,23 @@ impl Node {
         };
         let unknown = crate::format::keep_unknown(
             value,
-            &["id", "name", "kind", "rect", "muted", "data", "children", "stream"],
+            &[
+                "id",
+                "name",
+                "kind",
+                "rect",
+                "muted",
+                "appearance",
+                "appearance_from",
+                "data",
+                "children",
+                "stream",
+            ],
         );
         // A node may have a **stream**: the file its bytes are in. A node
         // that does not have one says so.
         let stream = value.get("stream").and_then(|stream| stream.as_str()).map(|path| path.to_string());
-        Ok(Node { id, name, kind, rect, muted, data, children, unknown, stream })
+        Ok(Node { id, name, kind, rect, muted, appearance, appearance_from, data, children, unknown, stream })
     }
 }
 
@@ -648,6 +733,19 @@ pub struct Node {
     pub rect: Option<Rect>,
     /// Whether it is muted.
     pub muted: bool,
+    /// How it looks, if it has an appearance of its own.
+    ///
+    /// It is **optional**: most things in a document are not seen — a
+    /// sound clip is at a time and not at a place — and a thing with no
+    /// appearance says so rather than pretending to be white.
+    pub appearance: Option<Appearance>,
+    /// The node whose appearance it uses, if it uses one.
+    ///
+    /// A **reference** and not a copy: a document that keeps twenty
+    /// copies of the same blue has twenty places to change it, and one
+    /// of them will be forgotten. The reference is followed once, by
+    /// [`Document::appearance_of`].
+    pub appearance_from: Option<u64>,
     /// The kind's own data.
     ///
     /// `null` when the kind has no payload. The core never looks inside it.
@@ -959,6 +1057,8 @@ impl Document {
             kind: kind.into(),
             rect,
             muted: false,
+            appearance: None,
+            appearance_from: None,
             data,
             children: Vec::new(),
             unknown: serde_json::Value::Null,
@@ -1032,6 +1132,8 @@ impl Document {
             kind: kind.into(),
             rect,
             muted: false,
+            appearance: None,
+            appearance_from: None,
             data,
             children: Vec::new(),
             unknown: serde_json::Value::Null,
@@ -1141,6 +1243,24 @@ impl Document {
     /// The node with an id, wherever it is.
     pub fn node(&self, id: u64) -> Option<&Node> {
         self.walk().find(|node| node.id == id)
+    }
+
+    /// The **appearance** of a node: its own, or the one it points at.
+    ///
+    /// The reference is followed **once**: a chain of appearances is a
+    /// document nobody can follow, and one hop is enough for a style
+    /// that shapes use.
+    ///
+    /// A node with neither has **no** appearance, and the caller says
+    /// what to do about that — a kind that has an appearance of its own
+    /// in its payload (the vector battery's fill and stroke, before the
+    /// appearance existed) keeps it.
+    pub fn appearance_of(&self, node: &Node) -> Option<Appearance> {
+        if node.appearance.is_some() {
+            return node.appearance;
+        }
+        let from = node.appearance_from?;
+        self.node(from)?.appearance
     }
 
     /// The node with an id, wherever it is, to change.
@@ -1283,7 +1403,13 @@ pub struct NodeKindSpec {
     /// The layer that owns it.
     pub layer: &'static str,
     /// How it draws itself.
-    pub paint: fn(&Node, &mut dyn Canvas),
+    ///
+    /// It is given the **document**, and that is the point: a kind that
+    /// follows a reference — a shape that takes its colour from a style
+    /// node, an entity that takes its colour from its layer — cannot
+    /// follow it without the document, and a kind that cannot follow a
+    /// reference is a kind whose every value is a copy.
+    pub paint: fn(&Node, &Document, &mut dyn Canvas),
     /// Whether a point is inside it.
     pub hit: fn(&Node, Point) -> bool,
     /// What the node **means**, in the plan.

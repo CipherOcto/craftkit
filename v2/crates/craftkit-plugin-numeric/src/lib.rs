@@ -65,7 +65,7 @@ pub struct LengthKind;
 
 impl LengthKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -96,7 +96,7 @@ pub struct AngleKind;
 
 impl AngleKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -123,7 +123,7 @@ pub struct BoxKind;
 
 impl BoxKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

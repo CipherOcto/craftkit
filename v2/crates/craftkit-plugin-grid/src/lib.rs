@@ -79,7 +79,7 @@ pub struct WorkbookKind;
 
 impl WorkbookKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -101,7 +101,7 @@ pub struct SheetKind;
 
 impl SheetKind {
     /// Not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

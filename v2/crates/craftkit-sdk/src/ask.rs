@@ -44,7 +44,7 @@ impl NoteKind {
     /// How a note is drawn.
     ///
     /// Nothing.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &crate::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a note.
     ///

@@ -77,7 +77,7 @@ pub struct BinKind;
 
 impl BinKind {
     /// A bin is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a bin: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -100,7 +100,7 @@ pub struct ItemKind;
 
 impl ItemKind {
     /// An item is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside an item: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -125,7 +125,7 @@ pub struct TrackKind;
 
 impl TrackKind {
     /// A track is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a track: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -149,7 +149,7 @@ pub struct ClipKind;
 
 impl ClipKind {
     /// A clip is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a clip: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

@@ -64,7 +64,7 @@ impl PictureKind {
     ///
     /// A picture is a file, and the kit cannot draw a file: what it can
     /// do is say how big it is.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

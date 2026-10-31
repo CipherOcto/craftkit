@@ -97,6 +97,46 @@ impl NodeAdd {
     }
 }
 
+/// **Use** an appearance: a node takes the colours of another node.
+///
+/// The reference is a **reference** and not a copy: the node points at
+/// the appearance, and every node that points at the same one changes
+/// when it changes. A document that copied it would have twenty places
+/// to change one colour, and one of them would be forgotten.
+#[derive(Command)]
+#[command(id = "node.appearance", area = "node", icon = "pencil", menu("Node"), mutates, undoable)]
+pub struct NodeAppearance {
+    /// The node that takes the appearance.
+    pub node: NodeRef,
+    /// The node whose appearance it takes.
+    pub appearance: NodeRef,
+}
+
+impl NodeAppearance {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let node = self.node.0;
+        let appearance = self.appearance.0;
+        if session.document().node(node).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.appearance".to_string(),
+                message: format!("there is no node `{node}`"),
+            });
+        }
+        if session.document().node(appearance).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.appearance".to_string(),
+                message: format!("there is no node `{appearance}`"),
+            });
+        }
+        if let Some(node) = session.document_mut()?.node_mut(node) {
+            node.appearance = None;
+            node.appearance_from = Some(appearance);
+        }
+        Ok(Outcome::changed(format!("the node `{node}` uses the appearance `{appearance}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": node, "appearance": appearance })))
+    }
+}
+
 /// **Move** a node.
 ///
 /// A node that has **no place** cannot be moved: a clip in a sound
@@ -569,9 +609,10 @@ impl DocSnapshot {
         let camera = *session.camera();
         let mut raster = craftkit_raster::Raster::new(width, height, camera)
             .map_err(|message| EngineError::Failed { id: "doc.snapshot".to_string(), message })?;
-        for node in session.document().walk() {
+        let document = session.document();
+        for node in document.walk() {
             let Some(kind) = session.kinds().get(&node.kind) else { continue };
-            (kind.paint)(node, &mut raster);
+            (kind.paint)(node, document, &mut raster);
         }
         // The pictures are drawn too: the bytes are in the files, and the
         // decoder is the family's own.

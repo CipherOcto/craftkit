@@ -72,7 +72,7 @@ pub struct CompKind;
 
 impl CompKind {
     /// A comp is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a comp: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -96,7 +96,7 @@ pub struct LayerKind;
 
 impl LayerKind {
     /// A layer is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a layer: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

@@ -56,6 +56,7 @@
 pub use craftkit_derive::{Format, Migration};
 
 pub mod anchor;
+pub mod appearance;
 pub mod ask;
 pub mod assets;
 pub mod bundle;
@@ -94,13 +95,14 @@ pub mod tasks;
 pub mod view;
 
 pub use anchor::{Anchored, PluginAnchor};
+pub use appearance::{AddAppearance, AppearanceKind, SetAppearance};
 pub use bundle::{Bundle, File};
 pub use camera::Camera;
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{
-    Asset, Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect,
-    Relation, Segment, Stroke, SubPath,
+    Appearance, Asset, Canvas, Colour, Document, FillRule, Node, NodeKindSpec, Path, Point, RecordingCanvas,
+    Rect, Relation, Segment, Stroke, SubPath,
 };
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, MenuNode, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};

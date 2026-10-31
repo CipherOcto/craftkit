@@ -433,9 +433,10 @@ fn the_core_draws_a_node_by_asking_its_kind() {
         .expect("the rectangle is added");
 
     let mut canvas = RecordingCanvas::default();
-    for node in session.document().nodes() {
+    let document = session.document();
+    for node in document.nodes() {
         let kind = session.kinds().get(&node.kind).expect("the kind is there");
-        (kind.paint)(node, &mut canvas);
+        (kind.paint)(node, document, &mut canvas);
     }
     assert_eq!(canvas.drawn, vec!["rect(3, 4, 5, 6)".to_string()]);
 }
@@ -534,7 +535,7 @@ fn unused_kind() -> NodeKindSpec {
         kind: "test.kind",
         label: "Test",
         layer: "core",
-        paint: |_node, _canvas| {},
+        paint: |_node, _document, _canvas| {},
         hit: |_node, _point| false,
         evaluate: None,
     }

@@ -77,7 +77,7 @@ impl ObjectKind {
     ///
     /// There is no canvas in this tree, and a plugin that drew one would
     /// be a second set of camera controls (§ the README of the tree).
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside an object: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -101,7 +101,7 @@ pub struct StreamKind;
 
 impl StreamKind {
     /// A stream is not drawn either.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a stream: never.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

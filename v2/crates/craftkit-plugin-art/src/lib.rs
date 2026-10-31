@@ -98,7 +98,7 @@ macro_rules! art_kind {
 
         impl $struct {
             /// Nothing here is drawn.
-            fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+            fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
             /// Nothing here is hit.
             fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -133,7 +133,7 @@ macro_rules! track_kind {
 
         impl $struct {
             /// A track is not drawn.
-            fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+            fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
             /// A track is not hit.
             fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -173,7 +173,7 @@ pub struct ProjectKind;
 
 impl ProjectKind {
     /// A project is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A project is not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -199,7 +199,7 @@ pub struct SceneKind;
 
 impl SceneKind {
     /// A scene is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A scene is not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -227,7 +227,7 @@ pub struct StageKind;
 
 impl StageKind {
     /// A stage is not drawn.
-    fn paint(_node: &Node, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A stage is not hit.
     fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {

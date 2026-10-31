@@ -121,6 +121,9 @@ fn the_layer(args: &SeamArgs) -> LitStr {
 /// The kind's **paint** and **hit** are the kind's own methods, and the
 /// macro calls them: the core never matches on a kind, so a plugin's kind
 /// is drawn by the plugin.
+///
+/// The paint is given the **document**: a kind that follows a reference
+/// cannot follow it without one.
 pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
     let sdk = sdk_root();
     let name = input.ident.clone();
@@ -159,7 +162,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             kind: #kind,
             label: #label,
             layer: #layer,
-            paint: |node, canvas| #name::paint(node, canvas),
+            paint: |node, document, canvas| #name::paint(node, document, canvas),
             hit: |node, point| #name::hit(node, point),
             #evaluate
         };

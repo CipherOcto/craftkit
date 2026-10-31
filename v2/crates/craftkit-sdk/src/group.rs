@@ -34,7 +34,7 @@ impl GroupKind {
     /// How a group is drawn.
     ///
     /// Nothing: the core draws the group's children.
-    fn paint(_node: &Node, _canvas: &mut dyn Canvas) {}
+    fn paint(_node: &Node, _document: &crate::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a group.
     ///

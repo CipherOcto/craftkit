@@ -111,10 +111,18 @@ pub struct VectorPathKind;
 
 impl VectorPathKind {
     /// How a path is drawn.
-    fn paint(node: &Node, canvas: &mut dyn Canvas) {
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
         let Ok(vector) = VectorNode::from_json(&node.data) else { return };
-        let fill = if node.muted { Colour::NONE } else { vector.fill };
-        canvas.path(&vector.path, fill, vector.stroke);
+        // The **appearance** wins over the payload's own colours: it is
+        // the kit's own, it is the one that can be **shared**, and a
+        // path whose colours live in its own payload cannot be given
+        // the same appearance as another path.
+        let (fill, stroke) = match document.appearance_of(node) {
+            Some(appearance) => (appearance.fill, appearance.stroke),
+            None => (vector.fill, vector.stroke),
+        };
+        let fill = if node.muted { Colour::NONE } else { fill };
+        canvas.path(&vector.path, fill, stroke);
     }
 
     /// Whether a point is inside a path.
@@ -606,21 +614,10 @@ fn add_path(
 /// type: v2's parameters have no colour kind, and a plugin that needs one
 /// reads it from a text and says so.
 fn parse_colour(text: &str) -> Result<Colour, EngineError> {
-    let text = text.trim();
-    let Some(hex) = text.strip_prefix('#') else {
-        return Err(EngineError::Failed {
-            id: "vector".to_string(),
-            message: format!("`{text}` is not a colour: a colour is `#rrggbb`"),
-        });
-    };
-    if hex.len() != 6 || !hex.chars().all(|character| character.is_ascii_hexdigit()) {
-        return Err(EngineError::Failed {
-            id: "vector".to_string(),
-            message: format!("`{text}` is not a colour: a colour is `#rrggbb`"),
-        });
-    }
-    let byte = |index: usize| u8::from_str_radix(&hex[index..index + 2], 16).unwrap_or(0);
-    Ok(Colour([byte(0) as f32 / 255.0, byte(2) as f32 / 255.0, byte(4) as f32 / 255.0, 1.0]))
+    // The **kit's** spelling of a colour: every battery that takes one
+    // takes it this way, and a second spelling of the same thing is a
+    // second thing to get wrong.
+    Colour::from_hex(text).map_err(|message| EngineError::Failed { id: "vector".to_string(), message })
 }
 
 /// An ellipse, as four cubic curves.

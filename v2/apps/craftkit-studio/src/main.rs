@@ -61,11 +61,12 @@ fn main() {
 
     println!("\n── drawing the document, through the kinds");
     let mut canvas = RecordingCanvas::default();
-    for node in session.document().walk() {
+    let document = session.document();
+    for node in document.walk() {
         // A node whose kind is not linked in is **not drawn**: the core
         // does not know which kinds those are, and it asks the registry.
         let Some(kind) = session.kinds().get(&node.kind) else { continue };
-        (kind.paint)(node, &mut canvas);
+        (kind.paint)(node, document, &mut canvas);
     }
     for drawn in &canvas.drawn {
         println!("   {drawn}");
