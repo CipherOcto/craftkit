@@ -1,0 +1,10 @@
+[package]
+name = "craftkit-vst3-abi"
+description = "The VST3 ABI: the shapes a VST3 plugin is made of."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. These are shapes, and a shape is data.

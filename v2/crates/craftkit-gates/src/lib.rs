@@ -83,6 +83,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // for the same reason the other ABI is: a binary contract that two
     // sides share is data, and data belongs at the bottom.
     ("craftkit-clap-abi", 0),
+    // The **VST3 ABI**: the shapes a VST3 plugin is made of. It is here
+    // for the same reason the other ABI is: a binary contract that two
+    // sides share is data, and data belongs at the bottom.
+    ("craftkit-vst3-abi", 0),
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
     // The payload reader: a bounded reading of the values a document
