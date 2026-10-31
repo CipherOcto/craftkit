@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1174 tests.** The MCP server links **all fifteen batteries** in, so the
+**1179 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1174 tests
+cargo test          # 1179 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3588,6 +3588,7 @@ so.
 | a **caret**: where the reader is in the text | **built.** The caret is a **node** under the paragraph and it carries the character it stands before; the text is the words with a space between them, and the space is a character too; the caret's **place** is derived from the layout and not stored (§151) | §151 |
 | a **selection of characters** | **built.** The core asks a kind where the picked-out **part** of its node is, and the answer may be more than one piece; a paragraph's own unit is the character, so the SDK's span selection picks out characters and the paragraph says where they are (§152) | §22, §152 |
 | an **edit that replaces what is picked out** | **built.** Typing writes over the picked-out range and deleting takes it away; the caret stands after what was typed (§153) | §153 |
+| a **clip drawn as its sound** | **built.** The **peaks** of a source are measured once and kept in the document, and a clip's bar carries the shape of the part of the source it plays (§154) | §154 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10495,3 +10496,73 @@ processor. The two are still two things — but an **edit** reads both.
   the text and the caret back, and the selection — which was cleared —
   stays cleared. That is the honest difference between the two homes,
   and the port left it.
+
+## 154. The clip is drawn as its sound
+
+A clip on a timeline was a bar of ink: it said where a sound was and
+not what the sound was. A reader could not see a kick from a pad, and
+the tree this ports draws every clip as the **shape** of its sound.
+
+### What was built
+
+- The **peaks** of a sound: the extent of the samples in each of two
+  hundred and fifty-six buckets — a least and a most each. The peaks
+  are the shape of a sound in a small table.
+- A **command** that measures them: `sound.source.peaks` reads the
+  source's file and puts the peaks — and the file's length, its
+  channels and its rate — in the source's payload.
+- The **waveform** is drawn: a clip's bar carries the shape of the part
+  of the source the clip plays, in the paper's colour, the way the
+  fade's notch is.
+
+### What the port found
+
+- **The peaks are a measurement, and a measurement is a command.** The
+  tree's own rule for a picture is that the file is read when it is
+  drawn and not kept (§ the picture is a file). A sound is a file too,
+  but a sound is a great many numbers and a bar is a few: reading a
+  sound at every frame is reading it a hundred times a second. So the
+  shape is **measured once** and kept in the document — and the
+  measurement is undone with everything else and saved with everything
+  else.
+- **The peaks are the source's and not the clip's.** A source is a
+  file, and the file has a shape whatever plays it; the clip says
+  which part of it it plays. That is the same bargain as the picture's
+  dimensions (§ the picture is drawn): the file's facts live with the
+  file's node.
+- **A stretched clip plays less of its source.** The clip's length is
+  in the session's samples and the source speaks in its own frames,
+  and a stretched clip reads its source more slowly — so the shape on
+  the bar is the part of the source the clip really plays, and not the
+  whole of it.
+- **The gain is part of the shape.** A clip that is six decibels down
+  is drawn lower, because a reader looks at a clip to see how loud it
+  is.
+
+### What it cost
+
+- **Five tests in the battery** (`crates/craftkit-plugin-sound/tests/waveform.rs`):
+  the peaks are measured from the file, a sound shorter than the table
+  is silence for the rest of it, a clip is drawn with the shape of its
+  sound, a source whose file is not there is refused, and a node that
+  is not a source is refused.
+- **The source's payload** carries the peaks — two numbers for each
+  bucket — and the measurement is what fills them.
+
+### What it does not settle
+
+- **One band for the whole sound.** The tree draws a band for each
+  channel, one above the other, and this draws one band for the whole
+  sound: the extent of every channel together. A clip's bar is one row
+  here, and a row has room for one shape.
+- **The shape does not follow the automation.** A track's gain over
+  time changes how loud the sound is, and the shape on the bar does
+  not say so — the shape is the sound's own, and the automation is
+  heard (§ the automation is heard) and not seen.
+- **The measurement can go stale.** The peaks are the file as it was
+  when it was measured, and a file that changes afterwards is not
+  re-measured until somebody measures it again.
+- **The peaks are a table of the source, not of the clip.** A clip
+  that fades is drawn with its fade as a notch and its shape as the
+  sound's own, so the two answers are in one picture and they do not
+  agree with each other about the loudness.
