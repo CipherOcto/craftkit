@@ -77,7 +77,7 @@ use std::collections::HashMap;
 
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
-    Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
+    Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
@@ -115,11 +115,29 @@ pub struct SoundSession {
     pub sample_rate: u32,
     /// Where the document starts on a timecode, in samples.
     pub timecode_start: i64,
+    /// Whether the **metronome** is heard.
+    ///
+    /// The click is mixed in after everything else, so it reaches the
+    /// output without passing through a track, a send or an insert.
+    pub metronome: bool,
+    /// How loud the click is, in decibels.
+    pub click_volume_db: f64,
+    /// The click's pitch, as a note number.
+    pub click_note: f64,
+    /// The **accent's** pitch: the click on the first beat of a bar.
+    pub click_accent_note: f64,
 }
 
 impl Default for SoundSession {
     fn default() -> Self {
-        SoundSession { sample_rate: 48000, timecode_start: 0 }
+        SoundSession {
+            sample_rate: 48000,
+            timecode_start: 0,
+            metronome: false,
+            click_volume_db: -6.0,
+            click_note: 72.0,
+            click_accent_note: 84.0,
+        }
     }
 }
 
@@ -139,7 +157,26 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         .and_then(|settings| settings.get("timecode_start"))
         .and_then(|start| start.as_i64())
         .unwrap_or(SoundSession::default().timecode_start);
-    SoundSession { sample_rate, timecode_start }
+    let metronome = settings
+        .and_then(|settings| settings.get("metronome"))
+        .and_then(|flag| flag.as_bool())
+        .unwrap_or(false);
+    let click_volume_db = settings
+        .and_then(|settings| settings.get("click_volume_db"))
+        .and_then(|volume| volume.as_f64())
+        .filter(|volume| volume.is_finite())
+        .unwrap_or(SoundSession::default().click_volume_db);
+    let click_note = settings
+        .and_then(|settings| settings.get("click_note"))
+        .and_then(|note| note.as_f64())
+        .filter(|note| note.is_finite())
+        .unwrap_or(SoundSession::default().click_note);
+    let click_accent_note = settings
+        .and_then(|settings| settings.get("click_accent_note"))
+        .and_then(|note| note.as_f64())
+        .filter(|note| note.is_finite())
+        .unwrap_or(SoundSession::default().click_accent_note);
+    SoundSession { sample_rate, timecode_start, metronome, click_volume_db, click_note, click_accent_note }
 }
 
 /// Put the session's settings back into the document.
@@ -153,6 +190,10 @@ fn set_session(document: &mut Document, session: &SoundSession) {
         serde_json::json!({
             "sample_rate": session.sample_rate,
             "timecode_start": session.timecode_start,
+            "metronome": session.metronome,
+            "click_volume_db": session.click_volume_db,
+            "click_note": session.click_note,
+            "click_accent_note": session.click_accent_note,
         }),
     );
     document.data = Json::Object(data);
@@ -1631,7 +1672,8 @@ pub struct RenderSound {
 impl RenderSound {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let rate = session_of(session.document()).sample_rate;
+        let settings = session_of(session.document());
+        let rate = settings.sample_rate;
         // The clips: each one plays a source from an offset, for a
         // length, at a gain.
         let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
@@ -1775,6 +1817,13 @@ impl RenderSound {
             add_into(&mut master, signal, 0, 1.0);
         }
         let channels = channels.max(1);
+        // The **metronome**: the click is mixed in after the master, so
+        // it reaches the output without passing through a track, a send
+        // or an insert. The beats come from the tempo map, and the
+        // first beat of a bar is the accent.
+        if settings.metronome {
+            click_into(&mut master, channels as usize, rate, &tempo_map(session.document()), &settings);
+        }
         let mix = craftkit_audio::mix(
             &[craftkit_audio::Track { start: 0, samples: &master, gain: 1.0 }],
             rate,
@@ -1955,6 +2004,47 @@ fn fade_out_path(rect: &Rect, width: f64, fade: craftkit_audio::Fade) -> Option<
     Some(Path::single(SubPath { start: Point::new(start, rect.y), segments, closed: true }))
 }
 
+/// The **metronome**: a click at every beat.
+///
+/// The beats come from the tempo map, and the meter says how long a
+/// beat is: a click at every beat, and a different click on the first
+/// beat of a bar, because that is the beat a musician waits for.
+///
+/// The click is mixed into the master **after** everything else, so it
+/// does not pass through a track, a send or an insert: it is a voice
+/// of its own.
+fn click_into(
+    master: &mut [f32],
+    channels: usize,
+    rate: u32,
+    map: &craftkit_sound_time::TempoMap,
+    settings: &SoundSession,
+) {
+    let level = craftkit_audio::db_to_linear(settings.click_volume_db) as f32;
+    if level <= 0.0 {
+        return;
+    }
+    let frames = master.len() / channels.max(1);
+    // The walk is over the beats, and it stops when the beats are past
+    // the end of the sound. The counter is the bound: a document with
+    // a tempo of a million beats a minute would otherwise walk for a
+    // very long time.
+    let mut tick = 0_i64;
+    let mut walked = 0_u32;
+    while walked < 1_000_000 {
+        let at = map.ticks_to_samples(tick, rate);
+        if at < 0 || at as usize >= frames {
+            break;
+        }
+        let accent = map.bar_beat_at_tick(tick).beat == 1;
+        let note = if accent { settings.click_accent_note } else { settings.click_note };
+        craftkit_audio::blip(master, channels, at as usize, craftkit_audio::midi_to_hz(note), level, rate);
+        let (_, denominator) = map.meter_at_tick(tick);
+        tick += craftkit_sound_time::ticks_per_beat(denominator).max(1);
+        walked += 1;
+    }
+}
+
 /// Read a sound file, within limits.
 ///
 /// The file came from outside — it is named by a document that came
@@ -2009,6 +2099,14 @@ pub struct SetSession {
     pub sample_rate: Option<Number>,
     /// Where the document starts on a timecode, in samples.
     pub timecode_start: Option<Number>,
+    /// Whether the **metronome** is heard.
+    pub metronome: Option<Bool>,
+    /// How loud the click is, in decibels.
+    pub click_volume_db: Option<Number>,
+    /// The click's pitch, as a note number.
+    pub click_note: Option<Number>,
+    /// The **accent's** pitch: the click on the first beat of a bar.
+    pub click_accent_note: Option<Number>,
 }
 
 impl SetSession {
@@ -2026,11 +2124,45 @@ impl SetSession {
         if let Some(start) = &self.timecode_start {
             settings.timecode_start = samples(start.0, "where the timecode starts")?;
         }
+        if let Some(metronome) = &self.metronome {
+            settings.metronome = metronome.0;
+        }
+        if let Some(volume) = &self.click_volume_db {
+            if !volume.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: "sound.session.set".to_string(),
+                    message: "a level is a number of decibels".to_string(),
+                });
+            }
+            settings.click_volume_db = volume.0;
+        }
+        if let Some(note) = &self.click_note {
+            if !note.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: "sound.session.set".to_string(),
+                    message: "a pitch is a note number".to_string(),
+                });
+            }
+            settings.click_note = note.0;
+        }
+        if let Some(note) = &self.click_accent_note {
+            if !note.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: "sound.session.set".to_string(),
+                    message: "a pitch is a note number".to_string(),
+                });
+            }
+            settings.click_accent_note = note.0;
+        }
         set_session(session.document_mut()?, &settings);
         Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
             .with_data(serde_json::json!({
                 "sample_rate": settings.sample_rate,
                 "timecode_start": settings.timecode_start,
+                "metronome": settings.metronome,
+                "click_volume_db": settings.click_volume_db,
+                "click_note": settings.click_note,
+                "click_accent_note": settings.click_accent_note,
             })))
     }
 }

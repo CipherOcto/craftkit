@@ -423,3 +423,57 @@ pub fn faded(samples: &[f32], channels: usize, fade_in: Fade, fade_out: Fade) ->
     }
     out
 }
+
+/// How long a **blip** lasts, in seconds.
+///
+/// It is short enough to be a click and long enough to be heard: a
+/// tenth of a second is a knock and a thousandth is a tick.
+pub const BLIP_SECONDS: f64 = 0.03;
+
+/// The **frequency** of a note, in hertz.
+///
+/// A note is a number from 0 to 127, and the numbers are the piano's:
+/// 69 is the A above the middle C, and it is 440 hertz. The frequency
+/// doubles every twelve notes, because twelve notes are an octave and
+/// an octave is a doubling.
+pub fn midi_to_hz(note: f64) -> f64 {
+    if !note.is_finite() {
+        return 0.0;
+    }
+    440.0 * 2.0_f64.powf((note.clamp(0.0, 127.0) - 69.0) / 12.0)
+}
+
+/// A **blip**: a short tone that fades away.
+///
+/// The blip is the click of a metronome: a sine at a pitch, at a
+/// level, decaying over thirty thousandths of a second. It is **added**
+/// to the samples and not mixed in: the click is a voice of its own and
+/// it goes on top of everything else.
+///
+/// The blip starts at the sample `at` and is **one** voice: it goes to
+/// every channel, because a click in the left ear and not in the right
+/// is a click with a fault in it.
+pub fn blip(samples: &mut [f32], channels: usize, at: usize, frequency: f64, amplitude: f32, rate: u32) {
+    let channels = channels.max(1);
+    if rate == 0 || !frequency.is_finite() || frequency <= 0.0 || !amplitude.is_finite() || amplitude == 0.0 {
+        return;
+    }
+    let length = ((BLIP_SECONDS * rate as f64).round() as usize).max(1);
+    let step = std::f64::consts::TAU * frequency / rate as f64;
+    for index in 0..length {
+        let sample = at + index;
+        if sample >= samples.len() {
+            break;
+        }
+        // The envelope: an exponential decay, so the blip fades away
+        // rather than stopping.
+        let envelope = (-6.0 * index as f64 / length as f64).exp() as f32;
+        let value = ((step * index as f64).sin() as f32) * envelope * amplitude;
+        for channel in 0..channels {
+            let where_ = sample * channels + channel;
+            if let Some(sample) = samples.get_mut(where_) {
+                *sample += value;
+            }
+        }
+    }
+}

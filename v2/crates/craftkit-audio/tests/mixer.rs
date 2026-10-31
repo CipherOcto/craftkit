@@ -271,3 +271,41 @@ fn a_fade_keeps_the_channels_apart() {
     assert!((faded[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
     assert!((faded[4] - 0.5).abs() < 1e-6, "the last frame is half: {}", faded[4]);
 }
+
+/// A **note** is a frequency.
+///
+/// The notes are the piano's, and the A above the middle C is 69 and
+/// is 440 hertz; an octave up is 81 and is twice the frequency.
+#[test]
+fn a_note_is_a_frequency() {
+    assert!((craftkit_audio::midi_to_hz(69.0) - 440.0).abs() < 1e-9, "the A is 440");
+    assert!((craftkit_audio::midi_to_hz(81.0) - 880.0).abs() < 1e-9, "and the A an octave up is 880");
+    assert!((craftkit_audio::midi_to_hz(57.0) - 220.0).abs() < 1e-9, "and the A below is 220");
+}
+
+/// A **blip** is added to the samples.
+///
+/// The blip is a sine that fades away, and it is added and not mixed
+/// in: the click is a voice of its own.
+#[test]
+fn a_blip_is_added_to_the_samples() {
+    let mut samples = vec![0.0_f32; 4_800];
+    craftkit_audio::blip(&mut samples, 1, 0, 440.0, 1.0, 48_000);
+    let loudest = samples.iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()));
+    assert!(loudest > 0.5, "the blip is loud: {loudest}");
+    // The blip fades away: the end is quieter than the start.
+    let start = samples[..100].iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()));
+    let end = samples[1_300..1_400].iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()));
+    assert!(end < start, "and it fades: {end} and {start}");
+}
+
+/// A blip goes to **every channel**.
+#[test]
+fn a_blip_goes_to_every_channel() {
+    let mut samples = vec![0.0_f32; 4_800];
+    craftkit_audio::blip(&mut samples, 2, 0, 440.0, 1.0, 48_000);
+    let left = samples[0..4_800].iter().step_by(2).fold(0.0_f32, |loudest, s| loudest.max(s.abs()));
+    let right = samples[1..4_800].iter().step_by(2).fold(0.0_f32, |loudest, s| loudest.max(s.abs()));
+    assert!(left > 0.5, "the left channel is blipped: {left}");
+    assert!(right > 0.5, "and the right one: {right}");
+}

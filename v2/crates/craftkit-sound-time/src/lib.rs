@@ -397,7 +397,12 @@ struct MeterSegment {
 }
 
 /// How many ticks a beat is worth, for a meter denominator.
-fn ticks_per_beat(denominator: u32) -> i64 {
+/// The ticks in a **beat**, for a beat worth that denominator.
+///
+/// A beat of a quarter note is a quarter note's ticks, a beat of an
+/// eighth is half of them, and the denominator of a meter says what a
+/// beat is worth.
+pub fn ticks_per_beat(denominator: u32) -> i64 {
     TICKS_PER_QUARTER * 4 / denominator as i64
 }
 
