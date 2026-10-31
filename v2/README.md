@@ -966,8 +966,19 @@ different commands with one id.
   plugin in the document — an identity, a parameter list and a state,
   with the parameter named and the value in the units the plugin says
   (§120). It is optional, like the others.
+- `crates/craftkit-au-abi` — **the AU contract**: the shapes an Audio
+  Unit is made of — the four-character codes, the properties and their
+  scopes, the shape of the audio and the unit's own function
+  signatures. No dependencies and no `unsafe` (§121).
+- `crates/craftkit-au` — **the AU host**: opens a bundle, finds the six
+  symbols the format names, makes an instance and drives it. The
+  **ninth** crate that may hold `unsafe` (§123).
+- `crates/craftkit-au-fixture` — **a reference AU**: a real `cdylib`
+  that exports the symbols by name, so that the host's tests open a
+  unit and not a mock. The **tenth** crate that may hold `unsafe`
+  (§122).
 
-**950 tests.** The MCP server links **all fifteen batteries** in, so the
+**966 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1069,7 +1080,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 950 tests
+cargo test          # 966 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1261,13 +1272,15 @@ and it is the same rule the vector battery follows.
   reason its plugin trait splits the work into `process` (audio thread),
   `PluginEditor` (control thread) and `PluginStateReader` (control
   thread). v2 has none of it, and this port does not pretend otherwise.
-- **The AU plugin format is not ported.** The sound tree hosts CLAP, VST3
+- **The AU plugin format is half here.** The sound tree hosts CLAP, VST3
   and AU binaries: a user installs a plugin and it is in the session, with
   no source change. That is genuinely open there. **CLAP and VST3 are
   here now** (§76–§87 and §116–§120): a host crate, a format to host
   them in, and the decision of what a plugin's state looks like in a
-  document whose payload is JSON. **AU** is the one that is not, and it
-  is the largest of the three.
+  document whose payload is JSON. **AU**'s contract and its host are here
+  too (§121–§123), and what is missing is the **battery**: AU's
+  parameters and its state are CoreFoundation's, so there is nothing
+  portable for a document to carry yet.
 - **The mixer is not ported.** Ten insert slots and ten send slots per
   strip, a routing graph over buses, and per-track automation are a
   **model**, and the model is where the sound tree's closed enums live
@@ -1444,7 +1457,9 @@ part of the record:
   with no source change. **CLAP and VST3 are here** (§76–§87,
   §116–§120) — a host crate each, a format to host them in, and a
   decision about what a plugin's state is in a document whose payload is
-  JSON. **AU** is not, and it is the biggest of the three.
+  JSON. **AU's contract and its host are here** (§121–§123); what is
+  missing is its **battery**, because its parameters and its state are
+  CoreFoundation's.
 - **The menu catalog.** The sound tree's menu is generated from a
   **file** of five hundred and twelve paths, and a command whose path is
   not in the file never appears in the bar. v2's menu is generated from
@@ -1665,9 +1680,10 @@ not change the document.
   is **real-time** state, and it belongs to the lane (§21.1) and not to
   the session's document state.
 - **The AU plugin format.** CLAP and VST3 are ported (§76–§87,
-  §116–§120); **AU** is not, and it wants a host crate, a format to
-  host it in, and a decision about what a plugin's state is in a
-  document whose payload is JSON.
+  §116–§120), and **AU's contract and its host** are (§121–§123); what
+  is missing is AU's **battery**, and the reason is the format's own:
+  its parameters and its state are CoreFoundation's, so a document has
+  nothing portable to carry yet.
 
 ---
 
@@ -1866,10 +1882,10 @@ And the things that were never in the list, still not in it: the transport
 (which belongs to the lane), and the **AU** plugin format (it is FFI, and
 FFI is unsafe). The allocation measurement of the lane is no longer in that
 list: it is built (§32), and it cost one piece of `unsafe` in a crate of
-its own. The **door** for the plugin formats is built too (§34), and two
-of the three formats have come through it: **CLAP** (§76–§87) and **VST3**
-(§116–§120). **AU** has not, and it is a much larger piece of work than
-the door it would come through.
+its own. The **door** for the plugin formats is built too (§34), and all
+three formats have come through it: **CLAP** (§76–§87), **VST3**
+(§116–§120) and **AU** (§121–§123). What AU has not brought is its
+**battery**, and the reason is the format's own.
 
 ### What this says about the kit
 
@@ -2469,10 +2485,10 @@ The way out was not to argue about `unsafe`, but to make the exception
 `allow`, and a test that reads the tree and refuses a second one. That is
 the same discipline the outer tree uses for its own single allowed
 `unsafe`, and it is now available here for the next thing that needs it —
-the plugin formats, which are FFI, and FFI is unsafe. Two of them have
-come since — **CLAP** (§76–§87) and **VST3** (§116–§120) — and each
-landed in its own crate under the same gate, and not in the middle of the
-SDK. **AU** is the one that has not come.
+the plugin formats, which are FFI, and FFI is unsafe. All three have come
+since — **CLAP** (§76–§87), **VST3** (§116–§120) and **AU** (§121–§123) —
+and each landed in its own crate under the same gate, and not in the
+middle of the SDK.
 
 ---
 
@@ -2635,9 +2651,11 @@ It is now a **list**, and the list is the whole of the exceptions:
 | `craftkit-clap-fixture` | a reference CLAP plugin: the entry point is a data symbol, found by name |
 | `craftkit-vst3` | the VST3 host: opening a plugin and calling the factory it exports |
 | `craftkit-vst3-fixture` | a reference VST3 plugin: the entry point is a function, called by name |
+| `craftkit-au` | the AU host: opening a unit and calling the symbols it exports |
+| `craftkit-au-fixture` | a reference AU: the symbols are found by name |
 
 And the rules around it are mechanical: `unsafe` appears **only** in
-those seven crates; each of them says `deny(unsafe_code)` and **not**
+those nine crates; each of them says `deny(unsafe_code)` and **not**
 `forbid`; each has **exactly one** `allow(unsafe_code)`, so an exception
 is one marked place and not a scattering; the only `unsafe impl` in the
 tree is the allocator's; and every other crate still forbids unsafe
@@ -3521,7 +3539,7 @@ so.
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
-| the **plugin formats** (CLAP, VST3, AU) | **the door is built**, and **two of the three formats are**: CLAP (§76–§87) and VST3 (§116–§120), each a shim over the door with its own host. **AU** is not | §34, §35 |
+| the **plugin formats** (CLAP, VST3, AU) | **the door is built**, and **all three formats have come through it**: CLAP (§76–§87), VST3 (§116–§120) and AU (§121–§123), each with its own host. What AU has not brought is its **battery**: its parameters and its state are CoreFoundation's | §34, §35 |
 | the **history** that branches | **built** | §24 |
 | a **task** that may outlive the process | **built** | §28 |
 | one **camera** with its own caps | **built** | §29 |
