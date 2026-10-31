@@ -2063,7 +2063,34 @@ impl RenderSound {
                 .node(*clip_id)
                 .map(|clip| automate::automation_of(session.document(), clip))
                 .unwrap_or_default();
-            let samples = automate::apply(&own, &samples, sound.channels as usize, 0);
+            let mut samples = automate::apply(&own, &samples, sound.channels as usize, 0);
+            // The clip's **gain**: the level of the clip itself. The
+            // tree's mixer multiplies it into the clip before the
+            // track's inserts, and so does this one.
+            let clip_gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
+            if clip_gain != 1.0 {
+                samples.iter_mut().for_each(|sample| *sample *= clip_gain);
+            }
+            // The clip's **own effects**: the tree's clip effects are an
+            // equaliser and a compressor on one clip and not on the
+            // track, and they run over the clip's own sound before it
+            // is mixed into the track.
+            if let Some(clip) = session.document().node(*clip_id) {
+                for insert in inserts_of(session.document(), clip) {
+                    if insert.bypass {
+                        continue;
+                    }
+                    let mut plugin = craftkit_plugins::make(
+                        &insert.plugin,
+                        &craftkit_plugins::Params::from_map(insert.params),
+                    )
+                    .map_err(|error| EngineError::Failed {
+                        id: "sound.render".to_string(),
+                        message: error.to_string(),
+                    })?;
+                    plugin.process(&mut samples, sound.channels as usize, rate);
+                }
+            }
             prepared.push(samples);
         }
         // How long the sound is: the end of the longest clip.
@@ -2103,8 +2130,9 @@ impl RenderSound {
                 if timeline::track_of(session.document(), clip).map(|owner| owner.id) != Some(track.id) {
                     continue;
                 }
-                let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
-                add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, gain);
+                // The clip's own gain is already in its samples: the
+                // tree's mixer multiplies it into the clip.
+                add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, 1.0);
             }
             // The **trim**: the level of the track's input, and its
             // phase. The tree's mixer applies the trim to the strip

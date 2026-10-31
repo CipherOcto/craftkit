@@ -631,7 +631,14 @@ pub fn readers_of(document: &Document) -> Vec<(u64, u64)> {
 )]
 pub struct AddInsert {
     /// The track the insert is on.
-    pub track: NodeRef,
+    ///
+    /// An insert is on **one** thing: a track or a clip, and not both.
+    pub track: Option<NodeRef>,
+    /// The clip the insert is on.
+    ///
+    /// A clip may carry effects of its own: the tree's clip effects are
+    /// an equaliser and a compressor on one clip and not on the track.
+    pub clip: Option<NodeRef>,
     /// Which plugin it is.
     pub plugin: Text,
     /// Whether it is bypassed.
@@ -640,12 +647,37 @@ pub struct AddInsert {
 
 impl AddInsert {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        if session.document().node(track).is_none() {
-            return Err(EngineError::Failed {
-                id: "sound.insert.add".to_string(),
-                message: format!("there is no track `{track}`"),
-            });
+        // An insert is on **one** thing: a track or a clip.
+        let (owner, owner_id, kind) = match (self.track, self.clip) {
+            (Some(track), None) => ("track", track.0, "sound.track"),
+            (None, Some(clip)) => ("clip", clip.0, "sound.clip"),
+            (Some(_), Some(_)) => {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.add".to_string(),
+                    message: "an insert is on one thing: a track or a clip".to_string(),
+                });
+            }
+            (None, None) => {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.add".to_string(),
+                    message: "an insert is on something: which track, and which clip?".to_string(),
+                });
+            }
+        };
+        match session.document().node(owner_id) {
+            Some(node) if node.kind == kind => {}
+            Some(node) => {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.add".to_string(),
+                    message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
+                });
+            }
+            None => {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.add".to_string(),
+                    message: format!("there is no {owner} `{owner_id}`"),
+                });
+            }
         }
         let plugin = self.plugin.0.clone();
         if plugin.trim().is_empty() {
@@ -658,14 +690,14 @@ impl AddInsert {
         let payload =
             InsertPayload { plugin: plugin.clone(), params: Json::Object(Default::default()), bypass };
         let id = session.document_mut()?.add_node_with_under(
-            Some(track),
+            Some(owner_id),
             plugin.clone(),
             "sound.insert",
             None,
             payload.to_json(),
         );
-        Ok(Outcome::changed(format!("added a `{plugin}` insert on the track `{track}`"))
-            .with_data(serde_json::json!({ "id": id, "track": track, "plugin": plugin })))
+        Ok(Outcome::changed(format!("added a `{plugin}` insert on the {owner} `{owner_id}`"))
+            .with_data(serde_json::json!({ "id": id, owner: owner_id, "plugin": plugin })))
     }
 }
 
