@@ -8418,3 +8418,116 @@ disk.
   §117's shape cannot say that. The fixture gives it a state of its
   own, and says so here rather than hiding it.
 - **It is a fixture**: one class, one parameter, one bus each way.
+
+## 119. The VST3 host
+
+The last piece of the format: the door that opens the library, calls
+the entry, and drives what comes back.
+
+### What was built
+
+- **A crate `craftkit-vst3`** that opens a shared library with
+  `dlopen`, finds `GetPluginFactory` with `dlsym`, **calls** it, asks
+  the factory what it holds, makes an instance, and drives it.
+- **The table is resolved once.** The factory's pointer is the
+  factory's table; an instance's pointer is the object, and the host
+  reads the object's first word **when the instance is made** and never
+  again. The host also knows **which** of the two tables it holds, so
+  a host that asked for the processor cannot go on to call the
+  component's methods.
+- **The state travels as bytes.** The host cannot read a state — the
+  bytes are the plugin's own — so it asks for them, carries them
+  whole, and gives them back when the plugin is opened again.
+- **The stream is the host's**: four functions over the host's own
+  bytes, in a table the plugin finds in the stream's first word.
+- **Twelve tests** against the real library: the entry, the class, the
+  buses, the parameter, the state, the audio, and the two refusals.
+
+### What the port found
+
+- **A door that is called and a door that is read are different
+  doors.** The CLAP host reads a pointer out of a symbol's address;
+  this one calls the symbol. The loader is the same, and everything
+  after it is not.
+- **The host is written in the safe language, and the format's tables
+  are safe too.** The tables hold *safe* function pointers, so calling
+  one is not an unsafe operation: what is unsafe is **reading** the
+  table out of the plugin's memory, and that is the only place the
+  crate says so.
+- **The instance is never kept.** It holds addresses into a library
+  that is open, and it is destroyed when the host is finished with it.
+  A caller opens the plugin, uses the instance and lets it go; what
+  travels is the state.
+
+### What it cost
+
+- one crate, **twelve tests**, and the **sixth** crate on the list of
+  exceptions.
+
+### What it does not settle
+
+- **The processor is not the component**, for the reason §118 gives.
+- **The published FUIDs are not here**, so this host talks to the
+  plugins of this tree and not to a plugin built against the SDK.
+
+## 120. The VST3 plugin in the document
+
+§87 put a **CLAP** plugin in the document. This section puts a **VST3**
+one there, and the differences between the two are the point.
+
+### What was built
+
+- **A node kind, `vst3.plugin`.** Its payload holds the plugin's
+  identity — the library it came from, its class, its name, its vendor
+  and its version — the parameters the plugin says it holds, and **its
+  state**, as base64.
+- **Six commands.** `vst3.list` reads the classes in a library
+  without touching the document. `vst3.attach` opens the plugin and
+  puts it in the document. `vst3.detach` takes it out again.
+  `vst3.parameter.set` moves one parameter and keeps the state that
+  follows. `vst3.state` asks the plugin what it makes of the state
+  the document holds. `vst3.process` runs a block of audio through the
+  plugin and says what came out.
+- **The parameter is named.** A CLAP parameter is asked for by a
+  number and a VST3 parameter is asked for by a **name**, so the
+  command takes a name and the document keeps it, because the name is
+  what the plugin says.
+- **The value is the one a person sees.** The format's own value is
+  **normalized** — between zero and one — and the plugin says the
+  range it takes in its own units. So the document carries **both**,
+  and the command takes the plain one.
+- **The audio goes through.** `vst3.process` is a measurement and not
+  a stream: the kit has no audio thread, and the block is here to show
+  that the plugin's own path works.
+- The **MCP server links the battery in**, so an agent can drive it:
+  the server's tool list is **188 tools** with **all fifteen
+  batteries** linked, measured the same way as every other number
+  here.
+
+### What the port found
+
+- **A parameter is named, not numbered.** Two plugin formats, two
+  ways of naming the same thing, and the battery that speaks each one
+  says it in its own terms. The kit does not flatten them: the
+  document keeps what the plugin said.
+- **A normalized value and a plain value are two values.** The
+  format's value is a position between zero and one, and the plugin's
+  range is in millimetres or decibels or whatever it is. The document
+  carries both, and the command takes the plain one because that is
+  what a person has.
+- **A value outside the range is held at the end of it.** The plugin
+  would clip it anyway, and a document that says what was *asked for*
+  is not saying what the plugin *did*.
+
+### What it cost
+
+- one crate and **seven tests**.
+
+### What it does not settle
+
+- **The state is bounded at sixteen mebibytes** (`16 * 1024 * 1024`),
+  and **a block at sixty-four thousand samples** (`64 * 1024`). Both
+  are this program's, and both are private to the battery.
+- **There is no audio thread**, so `vst3.process` measures and does
+  not stream: the kit's transport is in ticks (§90), and a stream of
+  samples would be a second clock.
