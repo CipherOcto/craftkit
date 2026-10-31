@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**913 tests.** The MCP server links **all fourteen batteries** in, so the
+**914 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 913 tests
+cargo test          # 914 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8154,3 +8154,31 @@ anything in it.
 - **The pointer is the front end's, and not the kit's.** A program
   with no screen has no pointer, and the kit has no rules about what
   a hand does.
+
+---
+
+## 114. The selection is drawn
+
+The window drew the **handle** of the selected node and not the
+selection itself, so a person could not see what they had picked.
+
+### What was built
+
+- The kit draws the **frame** of the selection, around every selected
+  node that has a place, and the handle beside it.
+- The frame is **chrome**, like the handle: it is drawn by the view
+  and not by the document, so a picture of the document — a snapshot
+  for a file — has no frame in it.
+- The line is a **screen** size, like the handle: one pixel across,
+  whatever the zoom.
+
+### What it cost
+
+- one frame in the kit's chrome, **one test**.
+
+### What it does not settle
+
+- **The chrome is black.** The kit has no theme, and a selection on a
+  black drawing is a selection nobody can see.
+- **Only the nodes are framed.** A node with **no place** is selected
+  and is not framed: there is no box to frame it in.
