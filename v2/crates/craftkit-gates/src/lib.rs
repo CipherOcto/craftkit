@@ -132,6 +132,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     // rule and not a hope.
     ("craftkit-plugin-art", 4),
     ("craftkit-plugin-cad", 4),
+    ("craftkit-plugin-clap", 4),
     ("craftkit-plugin-film", 4),
     ("craftkit-plugin-fx", 4),
     ("craftkit-plugin-grid", 4),

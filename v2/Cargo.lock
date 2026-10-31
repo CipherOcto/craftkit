@@ -184,6 +184,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-plugin-clap"
+version = "0.2.0"
+dependencies = [
+ "craftkit-clap",
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-plugin-film"
 version = "0.2.0"
 dependencies = [
@@ -345,11 +354,13 @@ name = "craftkit-studio"
 version = "0.2.0"
 dependencies = [
  "craftkit-alloc",
+ "craftkit-clap-fixture",
  "craftkit-derive",
  "craftkit-jpeg",
  "craftkit-link",
  "craftkit-plugin-art",
  "craftkit-plugin-cad",
+ "craftkit-plugin-clap",
  "craftkit-plugin-film",
  "craftkit-plugin-fx",
  "craftkit-plugin-grid",

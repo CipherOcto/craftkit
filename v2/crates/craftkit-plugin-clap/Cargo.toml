@@ -1,0 +1,15 @@
+[package]
+name = "craftkit-plugin-clap"
+description = "The document model of a CLAP plugin: an identity and a state."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+# The **CLAP host**: the door that opens a plugin and asks it what it
+# holds. It is a **library** and not a plugin: it contributes no command
+# and no kind, and it is at L1, so a battery at L4 may depend on it.
+craftkit-clap = { workspace = true }

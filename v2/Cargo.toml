@@ -63,6 +63,10 @@ craftkit-ffi-abi = { path = "crates/craftkit-ffi-abi", version = "0.2.0" }
 # The **CLAP ABI**: the shapes a CLAP plugin is made of. No dependencies:
 # a binary contract is a set of shapes, and a set of shapes is data.
 craftkit-clap-abi = { path = "crates/craftkit-clap-abi", version = "0.2.0" }
+# The **CLAP host**: the door that opens a CLAP plugin and asks it what
+# it holds. A **library**, not a plugin: it contributes nothing to the
+# registry and the linker does not wire it in.
+craftkit-clap = { path = "crates/craftkit-clap", version = "0.2.0" }
 
 serde_json = "1"
 inventory = "0.3"
