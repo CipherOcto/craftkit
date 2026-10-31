@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**838 tests.** The MCP server links **all fourteen batteries** in, so the
+**839 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -7147,3 +7147,52 @@ could not touch it. This is the mouse.
   not the one a person expects.
 - **The tree and the plan are still text.** The picture is a picture
   and the rest is a list, and a person would rather have one.
+
+## 94. The node moves
+
+§93 left one thing: a click selects, and **nothing moves**. The reason
+was not the mouse. It was that the document had no way to move a thing.
+
+### What was built
+
+- **A command, `node.move`**: a node with a place goes to another
+  place, and it **keeps its size**. A node with no place is refused —
+  a clip in a sound document is at a time and not at a place, and the
+  command does not invent one.
+- The window **drags**: a drag that starts on a node moves that node,
+  and a drag that starts on the background moves the camera. What is
+  under the pointer says which of the two it is.
+- The node moves when the mouse is **let go**: the drag is many mouse
+  events, and the command is one.
+- One more test: the node moves, keeps its size, and the document says
+  so.
+
+### What the port found
+
+- **A document model where a node cannot move is a drawing and not a
+  document.** The batteries could *place* things — the vector battery's
+  rectangle says where it is — but the core's own nodes had a place and
+  nothing could change it. The gap was in the **commands**, not in the
+  mouse: the mouse was ready and the registry was not.
+- **A node with no place cannot be moved.** The rule is the sound
+  battery's: a clip is at a time, and a time is not a place. A command
+  that invented a place for it would be a command that invented a
+  document.
+- **The undo is the reason the move is one command.** The drag is many
+  events and the command is one, so the journal has one entry and the
+  undo has one step. A window that moved the node on every mouse event
+  would have a journal of a thousand entries and an undo that took a
+  thousand presses to get back.
+
+### What it cost
+
+- one command, two methods in the window, **one test**.
+
+### What it does not settle
+
+- **The shape does not follow the mouse.** It jumps when the button is
+  let go, because a document that changed on every mouse event would
+  have an undo nobody could use.
+- **Nothing is resized.** A node's size is the size it was made with,
+  and there is no command that changes it.
+- **The wheel still zooms about the middle and not about the pointer.**
