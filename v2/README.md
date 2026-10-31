@@ -978,7 +978,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**974 tests.** The MCP server links **all fifteen batteries** in, so the
+**980 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1080,7 +1080,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 974 tests
+cargo test          # 980 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8813,3 +8813,52 @@ obvious one.
   the tempo map, and that is the next arc.
 - **The mixer is still not drawn.** Its model is written (§20.4) and its
   picture is not.
+
+---
+
+## 126. The ruler: the tempo and the meter are marks above the tracks
+
+§125 left one thing on the timeline unplaced, and it was not an
+oversight: the **tempo** and **meter** events carry their time in
+**ticks**, and the world's time is in **seconds**.
+
+### What was built
+
+- **The ruler**: a row of its own, **above** the tracks, at minus one.
+  It is where the things that are not on a track live.
+- **A tick is converted, not drawn.** The event's tick is worked out
+  against the **tempo map** — the map built from the document's own tempo
+  events — and the mark is placed at the resulting second.
+- **A tempo event and a meter event are both marks**: a short vertical
+  line in the ruler's row, and both can be picked.
+
+### What the port found
+
+- **A tick is not a length.** A tick is a **musical position**: how many
+  subdivisions from the start. It becomes a length only when the tempo
+  says how fast the music is, so the ruler cannot be drawn from the
+  event's own number — it needs the map, and the map is a **derived
+  value**, derived from the very events being drawn.
+- **The map is not stored.** It is rebuilt from the document every time
+  the ruler is placed, and that is the same rule as §528: a value that
+  is derived does not live in the document, because a value in the
+  document goes stale.
+- **The tempo changes the past.** A tempo event at tick 960 changes
+  where the mark at tick 1920 lands, and it changes nothing before it.
+  So the ruler is not a table of positions — it is the map, drawn.
+
+### What it cost
+
+- one place function and two paint functions, and **one test** in the
+  battery for the tempo's mark.
+
+### What it does not settle
+
+- **The map is rebuilt per event.** Placing `n` tempo events builds the
+  map `n` times, so the ruler costs a walk per mark. A document with
+  many tempo events would want the map built **once** per frame, and
+  that is a change to the seam, not to the kinds.
+- **The ruler has no scale.** It has marks and no numbers, because the
+  kit **has no font** (§12) and a number it cannot draw is not worth
+  computing. The bar numbers of a real ruler are still missing.
+
