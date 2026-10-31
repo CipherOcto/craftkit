@@ -58,6 +58,56 @@ pub struct Drawn {
     /// The cell is the advance, and the ink is usually narrower than
     /// the cell: that is what the space at the side of a letter is.
     pub cells: Vec<Rect>,
+    /// Where every **character** of the text stands.
+    ///
+    /// The characters are the text's: the words with a space between
+    /// them, and every one of them is somewhere on a line. The letters
+    /// are drawn, but the *character* is more than the letter: a space
+    /// has no ink and is still a character, and the caret stands
+    /// before one.
+    pub chars: Vec<CharPlace>,
+}
+
+/// Where one **character** of the paragraph's text stands.
+///
+/// The character is counted in the text — the words with a space between
+/// them — and this is where that character ended up when the
+/// paragraph was broken into lines.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CharPlace {
+    /// The character's index in the paragraph's text.
+    pub index: usize,
+    /// Where the character starts, on the baseline.
+    pub x: f64,
+    /// The baseline the character stands on.
+    pub baseline: f64,
+    /// How wide the character is.
+    pub width: f64,
+    /// The top of the line the character stands on.
+    pub top: f64,
+    /// The bottom of that line.
+    pub bottom: f64,
+}
+
+/// Where the **caret** stands: a line, at a place on a baseline.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Caret {
+    /// The place of the line, on the baseline.
+    pub x: f64,
+    /// The top of the line.
+    pub top: f64,
+    /// The bottom of the line.
+    pub bottom: f64,
+}
+
+impl Caret {
+    /// The caret's **box**.
+    ///
+    /// A caret is a line and not a box, so its width is nothing: what
+    /// it has is a place on a baseline and the two ends of the line.
+    pub fn rect(&self) -> Rect {
+        Rect::new(self.x, self.top, 0.0, self.bottom - self.top)
+    }
 }
 
 /// Draw a paragraph: every letter of every line, as paths.
@@ -76,8 +126,15 @@ pub fn draw(node: &Node, document: &Document) -> Option<Drawn> {
     let breaks = break_lines(node, Some(&metric)).ok()?;
     let typeset = items_for(&words, &metric, hyphenate_of(node));
     let font = Font::builtin();
+    let ink = Ink { metric: &metric, metrics: &metrics, font };
     let top = breaks.lines.len() as f64 * metrics.line_height;
     let mut drawn = Drawn::default();
+    // Where each word's first character is, in the paragraph's text.
+    let starts = starts_of(&words);
+    // How many of each word's characters have been placed: a word that
+    // was broken is more than one box, and the pieces are the word's
+    // characters in order.
+    let mut consumed: Vec<usize> = vec![0; words.len()];
     for (index, line) in breaks.lines.iter().enumerate() {
         let baseline = top - metrics.em - index as f64 * metrics.line_height;
         let mut x = 0.0;
@@ -91,23 +148,97 @@ pub fn draw(node: &Node, document: &Document) -> Option<Drawn> {
                     if piece.is_empty() {
                         break;
                     }
-                    place_word(piece, x, baseline, &metric, &metrics, font, &mut drawn);
+                    let word = typeset.word_of.get(item_index).copied().unwrap_or(0);
+                    let start =
+                        starts.get(word).copied().unwrap_or(0) + consumed.get(word).copied().unwrap_or(0);
+                    place_word(piece, Some(start), x, baseline, &ink, &mut drawn);
+                    if let Some(count) = consumed.get_mut(word) {
+                        *count += piece.chars().count();
+                    }
                     x += item.width;
                 }
                 craftkit_text_layout::Kind::Glue => {
-                    x += glue_width(item.width, item.stretch, item.shrink, line.ratio);
+                    // A glue is the **space** between two words, and the
+                    // space is a character of the text: it has no ink,
+                    // and it is where the caret stands between two
+                    // words.
+                    let word = typeset.word_of.get(item_index).copied().unwrap_or(0);
+                    let space = starts.get(word).copied().unwrap_or(0).saturating_sub(1);
+                    let width = glue_width(item.width, item.stretch, item.shrink, line.ratio);
+                    drawn.chars.push(CharPlace {
+                        index: space,
+                        x,
+                        baseline,
+                        width,
+                        top: baseline - metrics.descent,
+                        bottom: baseline + metrics.em,
+                    });
+                    x += width;
                 }
                 craftkit_text_layout::Kind::Penalty => {}
             }
         }
+        // The **break**: a glue that was taken is a space that the
+        // line swallowed, and the space is still a character of the
+        // text.
+        if let Some(item) = typeset.items.get(line.end)
+            && item.kind == craftkit_text_layout::Kind::Glue
+        {
+            let word = typeset.word_of.get(line.end).copied().unwrap_or(0);
+            let space = starts.get(word).copied().unwrap_or(0).saturating_sub(1);
+            drawn.chars.push(CharPlace {
+                index: space,
+                x,
+                baseline,
+                width: 0.0,
+                top: baseline - metrics.descent,
+                bottom: baseline + metrics.em,
+            });
+        }
         // A line that ended at a **hyphenation point** ends in a
         // hyphen, and the hyphen is drawn: a picture of a line without
         // the hyphen is a picture of another paragraph.
+        //
+        // The hyphen is **not** a character of the text: the word was
+        // broken, and the break is the breaker's business.
         if line.flagged {
-            place_word("-", x, baseline, &metric, &metrics, font, &mut drawn);
+            place_word("-", None, x, baseline, &ink, &mut drawn);
         }
     }
     Some(drawn)
+}
+
+/// Where each word's first character is, in the paragraph's text.
+///
+/// The text is the words with a **space** between them, so a word
+/// starts after the words before it and after the spaces between them.
+fn starts_of(words: &[String]) -> Vec<usize> {
+    let mut starts = Vec::with_capacity(words.len());
+    let mut at = 0usize;
+    for word in words {
+        starts.push(at);
+        at += word.chars().count() + 1;
+    }
+    starts
+}
+
+/// Where the caret that stands before the character at `character` is.
+///
+/// The caret stands at the **place of the character it stands before**:
+/// the character before it is the last one the pen passed, and the
+/// caret is where the pen stands now. A caret at the end of the text
+/// is at the end of the last line, and a caret at a space that a line
+/// break swallowed is at the end of the line before it.
+pub fn caret(drawn: &Drawn, character: usize) -> Option<Caret> {
+    let (x, top, bottom) = match drawn.chars.iter().find(|place| place.index == character) {
+        Some(place) => (place.x, place.top, place.bottom),
+        None => {
+            let before =
+                drawn.chars.iter().filter(|place| place.index < character).max_by_key(|place| place.index)?;
+            (before.x + before.width, before.top, before.bottom)
+        }
+    };
+    Some(Caret { x, top, bottom })
 }
 
 /// Where a paragraph **is**: the block of its lines.
@@ -137,53 +268,87 @@ fn glue_width(width: f64, stretch: f64, shrink: f64, ratio: f64) -> f64 {
     if ratio >= 0.0 { width + ratio * stretch } else { width + ratio * shrink }
 }
 
+/// The things a letter is drawn **with**: the typeface that says what a
+/// letter looks like, the metric that says how wide it is, and the size
+/// the two of them are at.
+struct Ink<'a> {
+    /// The metric: the widths of the characters.
+    metric: &'a Metric,
+    /// The size: the em, the line's height and the descent.
+    metrics: &'a Metrics,
+    /// The typeface: the shape of a letter.
+    font: &'a Font,
+}
+
 /// Place one word: its letters, one after another.
 ///
 /// Each letter is drawn in the typeface's shape and takes the **metric**
 ///'s width, so a letter is stretched by the difference between the two.
-fn place_word(
-    word: &str,
-    x: f64,
-    baseline: f64,
-    metric: &Metric,
-    metrics: &Metrics,
-    font: &Font,
-    drawn: &mut Drawn,
-) {
+///
+/// The `start` is where the word's first character is in the paragraph's
+/// text, and every character of the word is placed after it. A word
+/// with no `start` — a hyphen, which the breaker drew and the text
+/// does not hold — is drawn and is not placed.
+fn place_word(word: &str, start: Option<usize>, x: f64, baseline: f64, ink: &Ink<'_>, drawn: &mut Drawn) {
+    let metric = ink.metric;
+    let metrics = ink.metrics;
+    let font = ink.font;
     let unit = metrics.unit();
     let mut cursor = x;
-    for character in word.chars() {
-        let Some(glyph) = font.glyph(character) else { continue };
-        let natural = glyph.advance * unit;
+    let mut places: Vec<CharPlace> = Vec::with_capacity(word.chars().count());
+    for (offset, character) in word.chars().enumerate() {
+        let glyph = font.glyph(character);
+        let natural = glyph.map(|glyph| glyph.advance * unit).unwrap_or(0.0);
         let wanted = metric.width_of(character, natural);
-        let scale = if natural > 0.0 { wanted / natural } else { 1.0 };
-        let mut ink: Vec<[f64; 2]> = Vec::with_capacity(glyph.strokes.len());
-        for stroke in &glyph.strokes {
-            let mut points: Vec<[f64; 2]> = Vec::with_capacity(stroke.len());
-            for point in stroke {
-                points.push([cursor + point[0] * unit * scale, baseline + point[1] * unit]);
+        if let Some(glyph) = glyph {
+            let scale = if natural > 0.0 { wanted / natural } else { 1.0 };
+            let mut ink: Vec<[f64; 2]> = Vec::with_capacity(glyph.strokes.len());
+            for stroke in &glyph.strokes {
+                let mut points: Vec<[f64; 2]> = Vec::with_capacity(stroke.len());
+                for point in stroke {
+                    points.push([cursor + point[0] * unit * scale, baseline + point[1] * unit]);
+                }
+                ink.extend(points.iter().copied());
+                if points.len() < 2 {
+                    continue;
+                }
+                let mut segments = Vec::with_capacity(points.len() - 1);
+                for point in points.iter().skip(1) {
+                    segments.push(Segment::Line { to: Point::new(point[0], point[1]) });
+                }
+                let path = Path::single(SubPath {
+                    start: Point::new(points[0][0], points[0][1]),
+                    segments,
+                    closed: false,
+                });
+                drawn.paths.push(path);
             }
-            ink.extend(points.iter().copied());
-            if points.len() < 2 {
-                continue;
+            if !ink.is_empty() {
+                drawn.strokes.push(ink);
             }
-            let mut segments = Vec::with_capacity(points.len() - 1);
-            for point in points.iter().skip(1) {
-                segments.push(Segment::Line { to: Point::new(point[0], point[1]) });
-            }
-            let path = Path::single(SubPath {
-                start: Point::new(points[0][0], points[0][1]),
-                segments,
-                closed: false,
-            });
-            drawn.paths.push(path);
+            // The **cell** of the letter: the space it takes.
+            drawn.cells.push(Rect::new(
+                cursor,
+                baseline - metrics.descent,
+                wanted,
+                metrics.em + metrics.descent,
+            ));
         }
-        if !ink.is_empty() {
-            drawn.strokes.push(ink);
-        }
-        // The **cell** of the letter: the space it takes.
-        drawn.cells.push(Rect::new(cursor, baseline - metrics.descent, wanted, metrics.em + metrics.descent));
+        // The **place** of the character: the caret stands before one,
+        // and a character the typeface has no glyph for is still a
+        // character and still takes its width.
+        places.push(CharPlace {
+            index: start.map(|start| start + offset).unwrap_or(offset),
+            x: cursor,
+            baseline,
+            width: wanted,
+            top: baseline - metrics.descent,
+            bottom: baseline + metrics.em,
+        });
         cursor += wanted;
+    }
+    if start.is_some() {
+        drawn.chars.extend(places);
     }
 }
 

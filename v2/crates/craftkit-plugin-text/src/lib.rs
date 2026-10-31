@@ -98,7 +98,8 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_payload::{Limits, Payload, Refusal};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
-    Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
+    Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem, Point, Relation,
+    Segment, Session, SubPath, Text,
 };
 use craftkit_text_layout::{Breaks, Item, LayoutError, Method, Params, Rag, break_paragraph};
 use std::collections::HashMap;
@@ -169,6 +170,7 @@ impl ParagraphKind {
             "ragged": ragged_of(node),
             "metric": metric.is_some(),
             "lines": lines,
+            "caret": caret_character(document, node),
         }))
     }
 }
@@ -207,9 +209,109 @@ impl MetricKind {
     }
 }
 
+/// A **caret**: where the reader is in the text.
+///
+/// The caret is a **node**: it is a thing with a setting — the
+/// character it stands before — and a document that keeps the caret
+/// keeps where the reader was. It is a **child** of the paragraph: the
+/// caret is in the text, and the text is in the paragraph.
+///
+/// The character is the caret's **setting** and its place is
+/// **derived**: the paragraph is broken into lines every time somebody
+/// asks, and the caret's place is wherever the character landed when
+/// it was broken. So the caret says *which* character it stands before
+/// and the layout says *where*.
+#[derive(NodeKind)]
+#[node_kind(kind = "text.caret", label = "Caret", layer = "text", evaluates, place)]
+pub struct CaretKind;
+
+impl CaretKind {
+    /// How a caret is drawn: a **line**, at the place of the character
+    /// it stands before.
+    ///
+    /// The line is in the text's colour: the caret is part of the
+    /// writing, and a caret in another colour is a mark on the page
+    /// and not a caret.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn craftkit_sdk::Canvas) {
+        let Some(paragraph) = paragraph_of(document, node) else { return };
+        let Some(caret) = caret_place(document, node) else { return };
+        // The caret is in the text, so it is in the text's colour.
+        let colour = document
+            .appearance_of(paragraph)
+            .map(|appearance| appearance.fill)
+            .unwrap_or(craftkit_sdk::document::Colour::BLACK);
+        let path = Path::single(SubPath {
+            start: Point::new(caret.x, caret.top),
+            segments: vec![Segment::Line { to: Point::new(caret.x, caret.bottom) }],
+            closed: false,
+        });
+        canvas.path(&path, craftkit_sdk::document::Colour::NONE, Some(draw::stroke(colour)));
+    }
+
+    /// Not hit: a caret is a line and not a thing a pointer is on.
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
+        false
+    }
+
+    /// Where the caret **is**: at the place of the character it stands
+    /// before.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        caret_place(document, node).map(|caret| caret.rect())
+    }
+
+    /// What a caret **means**: the character it stands before.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({ "character": character_of(node) }))
+    }
+}
+
+/// Where a caret **stands**: the line at the place of the character it
+/// stands before.
+///
+/// The character is counted in the paragraph's **text** — its words
+/// with a space between them — and the place comes from the layout:
+/// the paragraph is broken into lines, and the character is wherever
+/// the break put it.
+fn caret_place(document: &Document, caret: &Node) -> Option<draw::Caret> {
+    let paragraph = paragraph_of(document, caret)?;
+    let drawn = draw::draw(paragraph, document)?;
+    let character = character_of(caret)?;
+    draw::caret(&drawn, character)
+}
+
+/// The paragraph a caret is in: the node that **holds** it.
+///
+/// The caret is a child of the paragraph, and the document has no
+/// parent pointer, so the paragraph is found by looking for the node
+/// that holds it.
+fn paragraph_of<'a>(document: &'a Document, caret: &Node) -> Option<&'a Node> {
+    document.walk().find(|node| node.children.iter().any(|child| child.id == caret.id))
+}
+
+/// The character a caret stands before.
+fn character_of(node: &Node) -> Option<usize> {
+    let payload = Payload::new(&node.data, LIMITS);
+    let character = payload.number("character").ok()?;
+    if !character.is_finite() || character < 0.0 || character.fract() != 0.0 {
+        return None;
+    }
+    Some(character as usize)
+}
+
+/// The caret of a paragraph: the node under it that is a caret.
+fn caret_of(document: &Document, paragraph: u64) -> Option<u64> {
+    let node = document.node(paragraph)?;
+    node.children.iter().find(|child| child.kind == "text.caret").map(|child| child.id)
+}
+
+/// The character the paragraph's caret stands before, if it has one.
+fn caret_character(document: &Document, paragraph: &Node) -> Option<usize> {
+    let caret = caret_of(document, paragraph.id)?;
+    character_of(document.node(caret)?)
+}
+
 /// The kind of the edge that says a paragraph is set in a metric.
 const SET_IN: &str = "text.set_in";
-
 /// A **metric**, read from a node's payload.
 ///
 /// A metric is **three tables**, and the three are applied in three
@@ -373,6 +475,15 @@ impl Metric {
 /// words are a paragraph's worth.
 const LIMITS: Limits = Limits { entries: 1024, key_length: 64, text_length: 4096, value: 1_000_000.0 };
 
+/// The most characters a paragraph's text may hold.
+///
+/// The caret's character is a **number**, and the payload's numbers are
+/// bounded to a million, so a text longer than that could not hold a
+/// caret in it at all. Sixty-five thousand characters is far more text
+/// than a paragraph has, and the caret's number stays well inside the
+/// bound.
+const MAX_TEXT_CHARACTERS: usize = 65_536;
+
 /// A table in a payload, if it is there.
 ///
 /// A table that is **not there** is an empty table: the metric may
@@ -410,6 +521,60 @@ fn words_of(node: &Node) -> Option<Vec<String>> {
     let payload = Payload::new(&node.data, LIMITS);
     let words = payload.words("words").ok()?;
     Some(words.into_iter().map(|word| word.to_string()).collect())
+}
+
+/// The paragraph's **text**: its words with a space between them.
+///
+/// The words are the payload and the text is what they say: the text is
+/// the words joined by a single space, and the caret's character is
+/// counted in it.
+fn text_of(words: &[String]) -> String {
+    words.join(" ")
+}
+
+/// The number of characters in the paragraph's text.
+///
+/// The spaces between the words are characters too: a caret stands
+/// before one.
+fn length_of(words: &[String]) -> usize {
+    words.iter().map(|word| word.chars().count()).sum::<usize>() + words.len().saturating_sub(1)
+}
+
+/// The words of a text: the text split on whitespace.
+fn split_into_words(text: &str) -> Vec<String> {
+    text.split_whitespace().map(|word| word.to_string()).collect()
+}
+
+/// The words of the text with `typed` put in at `character`.
+///
+/// The text is the words with a space between them, so putting a
+/// character in is putting it in the text and splitting the text into
+/// words again. The answer is the new words and where the caret stands
+/// afterwards.
+fn insert_at(words: &[String], character: usize, typed: &str) -> Option<(Vec<String>, usize)> {
+    let characters: Vec<char> = text_of(words).chars().collect();
+    if character > characters.len() {
+        return None;
+    }
+    let mut text: String = characters[..character].iter().collect();
+    text.push_str(typed);
+    text.extend(characters[character..].iter());
+    Some((split_into_words(&text), character + typed.chars().count()))
+}
+
+/// The words of the text with the character **before** `character` taken
+/// away.
+fn delete_before(words: &[String], character: usize) -> Option<(Vec<String>, usize)> {
+    if character == 0 {
+        return None;
+    }
+    let characters: Vec<char> = text_of(words).chars().collect();
+    if character > characters.len() {
+        return None;
+    }
+    let mut text: String = characters[..character - 1].iter().collect();
+    text.extend(characters[character..].iter());
+    Some((split_into_words(&text), character - 1))
 }
 
 /// The width of the column, in millimetres. Zero means **not set yet**.
@@ -1087,6 +1252,338 @@ impl SetHyphenation {
     }
 }
 
+/// Put the **caret** in a paragraph.
+///
+/// The caret is a node under the paragraph: this command puts it there
+/// if it is not there, and moves it if it is. The character is counted
+/// in the paragraph's **text** — its words with a space between them —
+/// and the caret stands **before** that character.
+///
+/// A caret past the end of the text is refused: the end of the text is
+/// a place, and it is the end, and there is nothing beyond it.
+#[derive(Command)]
+#[command(id = "text.caret.set", area = "text", layer = "text", icon = "select", mutates, undoable)]
+pub struct SetCaret {
+    /// The paragraph the caret is in.
+    pub paragraph: NodeRef,
+    /// The character the caret stands before: the number of characters
+    /// before it in the paragraph's text.
+    pub character: Number,
+}
+
+impl SetCaret {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.paragraph.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let character = self.character.0;
+        if !character.is_finite() || character < 0.0 || character.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: "a character is a whole number of characters".to_string(),
+            });
+        }
+        let Some(words) = words_of(node) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: format!("the paragraph `{id}` has no words to put a caret in"),
+            });
+        };
+        let length = length_of(&words);
+        if character > length as f64 {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: format!("the caret is at {character} and the text is {length} characters long"),
+            });
+        }
+        let character = character as usize;
+        // The caret is a **child** of the paragraph: the caret is in the
+        // text, and the text is in the paragraph.
+        let caret = match caret_of(session.document(), id) {
+            Some(caret) => caret,
+            None => session.document_mut()?.add_node_with_under(
+                Some(id),
+                "the caret",
+                "text.caret",
+                None,
+                json!({ "character": character }),
+            ),
+        };
+        let Some(node) = session.document_mut()?.node_mut(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.set".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        node.data["character"] = json!(character);
+        Ok(Outcome::changed(format!("put the caret at {character} in the paragraph {id}"))
+            .with_data(json!({ "paragraph": id, "caret": caret, "character": character })))
+    }
+}
+
+/// **Move** the caret.
+///
+/// The caret moves by a **character**: one to the left, one to the
+/// right, to the start of the text or to its end. Moving past an end
+/// does not go past it: the caret stops at the end of the text, the way
+/// a cursor in a document does.
+#[derive(Command)]
+#[command(id = "text.caret.move", area = "text", layer = "text", icon = "select", mutates, undoable)]
+pub struct MoveCaret {
+    /// The paragraph the caret is in.
+    pub paragraph: NodeRef,
+    /// Which way: `left`, `right`, `start` or `end`.
+    pub by: Text,
+}
+
+impl MoveCaret {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.paragraph.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let Some(words) = words_of(node) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("the paragraph `{id}` has no words"),
+            });
+        };
+        let Some(caret) = caret_of(session.document(), id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("the paragraph `{id}` has no caret to move"),
+            });
+        };
+        let Some(caret_node) = session.document().node(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        let character = character_of(caret_node).unwrap_or(0);
+        let length = length_of(&words);
+        let by = self.by.0.as_str();
+        let moved = match by {
+            "left" => character.saturating_sub(1),
+            "right" => (character + 1).min(length),
+            "start" => 0,
+            "end" => length,
+            _ => {
+                return Err(EngineError::Failed {
+                    id: "text.caret.move".to_string(),
+                    message: format!("`{by}` is not a way to move a caret"),
+                });
+            }
+        };
+        let Some(node) = session.document_mut()?.node_mut(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.move".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        node.data["character"] = json!(moved);
+        Ok(Outcome::changed(format!("moved the caret of the paragraph {id} to {moved}"))
+            .with_data(json!({ "paragraph": id, "caret": caret, "character": moved })))
+    }
+}
+
+/// **Type** at the caret.
+///
+/// The text goes into the paragraph's **text** at the caret, and the
+/// text is the words with a space between them, so typing a letter in
+/// the middle of a word makes the word two words and typing a space
+/// makes a word end. The caret stands after what was typed.
+///
+/// The paragraph's **name** follows its words: the name is the first
+/// few words, and a paragraph whose first words changed has a name
+/// that says so.
+#[derive(Command)]
+#[command(id = "text.caret.type", area = "text", layer = "text", icon = "select", mutates, undoable)]
+pub struct TypeText {
+    /// The paragraph the caret is in.
+    pub paragraph: NodeRef,
+    /// The text to type.
+    pub text: Text,
+}
+
+impl TypeText {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.paragraph.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let Some(words) = words_of(node) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("the paragraph `{id}` has no words"),
+            });
+        };
+        let Some(caret) = caret_of(session.document(), id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("the paragraph `{id}` has no caret to type at"),
+            });
+        };
+        let Some(caret_node) = session.document().node(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        let character = character_of(caret_node).unwrap_or(0);
+        let typed = self.text.0.as_str();
+        if typed.is_empty() {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: "there is nothing to type".to_string(),
+            });
+        }
+        if length_of(&words) + typed.chars().count() > MAX_TEXT_CHARACTERS {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("a paragraph may hold {MAX_TEXT_CHARACTERS} characters and no more"),
+            });
+        }
+        let Some((new_words, moved)) = insert_at(&words, character, typed) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("the caret is at {character} and the text is shorter than that"),
+            });
+        };
+        if new_words.len() > LIMITS.entries {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("a paragraph may hold {} words and no more", LIMITS.entries),
+            });
+        }
+        let name = name_of(&new_words);
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("there is no paragraph `{id}`"),
+            });
+        };
+        node.data["words"] = json!(new_words);
+        node.name = name;
+        let Some(node) = session.document_mut()?.node_mut(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.type".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        node.data["character"] = json!(moved);
+        Ok(Outcome::changed(format!("typed into the paragraph {id}"))
+            .with_data(json!({ "paragraph": id, "caret": caret, "character": moved })))
+    }
+}
+
+/// **Delete** the character before the caret.
+///
+/// This is the backspace: the character before the caret goes and the
+/// caret stands where it was. A caret at the start of the text has
+/// nothing before it, and there is nothing to delete.
+#[derive(Command)]
+#[command(id = "text.caret.delete", area = "text", layer = "text", icon = "select", mutates, undoable)]
+pub struct DeleteBackward {
+    /// The paragraph the caret is in.
+    pub paragraph: NodeRef,
+}
+
+impl DeleteBackward {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.paragraph.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let Some(words) = words_of(node) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("the paragraph `{id}` has no words"),
+            });
+        };
+        let Some(caret) = caret_of(session.document(), id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("the paragraph `{id}` has no caret to delete at"),
+            });
+        };
+        let Some(caret_node) = session.document().node(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        let character = character_of(caret_node).unwrap_or(0);
+        if character == 0 {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: "there is nothing before the caret to delete".to_string(),
+            });
+        }
+        let Some((new_words, moved)) = delete_before(&words, character) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("the caret is at {character} and the text is shorter than that"),
+            });
+        };
+        let name = name_of(&new_words);
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("there is no paragraph `{id}`"),
+            });
+        };
+        node.data["words"] = json!(new_words);
+        node.name = name;
+        let Some(node) = session.document_mut()?.node_mut(caret) else {
+            return Err(EngineError::Failed {
+                id: "text.caret.delete".to_string(),
+                message: format!("there is no caret in the paragraph `{id}`"),
+            });
+        };
+        node.data["character"] = json!(moved);
+        Ok(Outcome::changed(format!("deleted a character in the paragraph {id}"))
+            .with_data(json!({ "paragraph": id, "caret": caret, "character": moved })))
+    }
+}
+
 /// The evaluator: the **lines** of every paragraph that has a measure.
 ///
 /// A paragraph without a measure is not in the plan: it has no lines
@@ -1157,7 +1654,13 @@ impl LinesEvaluator {
     id = "panel.text",
     label = "Text",
     layer = "text",
-    commands("text.metric.add", "text.paragraph.add", "text.paragraph.measure", "text.paragraph.metric")
+    commands(
+        "text.metric.add",
+        "text.paragraph.add",
+        "text.paragraph.measure",
+        "text.paragraph.metric",
+        "text.caret.set"
+    )
 )]
 pub struct TextPanel;
 
@@ -1166,12 +1669,17 @@ craftkit_sdk::plugin_anchor!(
     TextLayer,
     ParagraphKind,
     MetricKind,
+    CaretKind,
     AddMetric,
     AddParagraph,
     MeasureParagraph,
     SetHyphenation,
     ChangeMetric,
     SetMetric,
+    SetCaret,
+    MoveCaret,
+    TypeText,
+    DeleteBackward,
     LinesEvaluator,
     TextPanel
 );
