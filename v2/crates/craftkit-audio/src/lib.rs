@@ -301,6 +301,29 @@ pub fn resample(
     // folds back into the sound as a whistle.
     let cutoff = if ratio < 1.0 { ratio * 0.94 } else { 0.97 };
     let kernel = Sinc::new(cutoff);
+    // The **bank**: the kernel precomputed for every phase of a
+    // rational rate change, so that an output is a dot product over
+    // the samples and not a table read for every tap. A rate change
+    // with no small common ratio has no bank worth having, and the
+    // per-tap path is there for it.
+    if let Some(bank) = Polyphase::new(from_rate, to_rate, &kernel) {
+        return Ok(bank.run(samples, channels, new_frames));
+    }
+    Ok(resample_by_taps(samples, channels, frames, new_frames, ratio, &kernel))
+}
+
+/// The resampler read **one tap at a time**.
+///
+/// This is the reference: the bank reads the same kernel and the same
+/// taps, and the two agree.
+fn resample_by_taps(
+    samples: &[f32],
+    channels: usize,
+    frames: usize,
+    new_frames: usize,
+    ratio: f64,
+    kernel: &Sinc,
+) -> Vec<f32> {
     let mut out = Vec::with_capacity(new_frames * channels);
     for frame in 0..new_frames {
         // Where this frame is in the old sound.
@@ -319,7 +342,103 @@ pub fn resample(
             out.push(total);
         }
     }
-    Ok(out)
+    out
+}
+
+/// The **bank**: the kernel precomputed for every phase of a rational
+/// rate change.
+///
+/// The rates of a sound are two whole numbers, and they have a common
+/// factor: the rate change is then a whole number of phases, and each
+/// phase has its own set of weights. So an output is one dot product
+/// over the samples and the weights, with no table read and no
+/// interpolation for every tap.
+///
+/// A rate change with no small common factor has no bank worth having
+/// — the phases would be one for every output frame — and there is
+/// none: the caller falls back to the taps.
+struct Polyphase {
+    /// How many phases the rate change has.
+    phases: u64,
+    /// How far the input moves in one output frame, in phases.
+    step: u64,
+    /// Where the first tap is, from the frame's own place.
+    first: i64,
+    /// How many taps there are.
+    taps: usize,
+    /// The weights: `phases * taps` of them, phase by phase.
+    weights: Vec<f32>,
+}
+
+/// The most **weights** a bank may hold.
+///
+/// The bank is a fast path and not a requirement: a rate change whose
+/// bank would be enormous is read tap by tap instead. Sixteen thousand
+/// phases of seventy taps is four million weights — sixteen megabytes
+/// — and a rate change that needs more than that is not a rate change
+/// anybody plays.
+const MAX_POLYPHASE_WEIGHTS: usize = 1 << 22;
+
+impl Polyphase {
+    /// The bank for that change of rate, if it is worth having.
+    fn new(from: u32, to: u32, kernel: &Sinc) -> Option<Polyphase> {
+        let factor = gcd(from, to);
+        let (step, phases) = (u64::from(from / factor), u64::from(to / factor));
+        let half_width = kernel.half_width;
+        let first = (-half_width).floor() as i64;
+        let last = half_width.ceil() as i64 + 1;
+        let taps = usize::try_from(last - first + 1).ok()?;
+        if usize::try_from(phases).ok()?.checked_mul(taps)? > MAX_POLYPHASE_WEIGHTS {
+            return None;
+        }
+        let mut weights = Vec::with_capacity(taps * phases as usize);
+        for phase in 0..phases {
+            let fraction = phase as f64 / phases as f64;
+            for tap in first..first + taps as i64 {
+                let distance = fraction - tap as f64;
+                weights.push(if distance.abs() <= half_width { kernel.at(distance) } else { 0.0 });
+            }
+        }
+        Some(Polyphase { phases, step, first, taps, weights })
+    }
+
+    /// The sound at the new rate, read with the bank.
+    fn run(&self, samples: &[f32], channels: usize, new_frames: usize) -> Vec<f32> {
+        let frames = samples.len() / channels;
+        let mut out = Vec::with_capacity(new_frames * channels);
+        for frame in 0..new_frames as u64 {
+            let Some(position) = frame.checked_mul(self.step) else { break };
+            let (index, phase) = ((position / self.phases) as i64, (position % self.phases) as usize);
+            let start = index + self.first;
+            for channel in 0..channels {
+                let mut total = 0.0_f32;
+                for tap in 0..self.taps {
+                    let at = start + tap as i64;
+                    if at < 0 || at as usize >= frames {
+                        // A tap outside the sound is nothing, the same
+                        // way it is nothing when the taps are read one
+                        // at a time.
+                        continue;
+                    }
+                    let Some(weight) = self.weights.get(phase * self.taps + tap) else { continue };
+                    total += samples[at as usize * channels + channel] * weight;
+                }
+                out.push(total);
+            }
+        }
+        out.resize(new_frames * channels, 0.0);
+        out
+    }
+}
+
+/// The greatest common factor of two numbers.
+fn gcd(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        let rest = left % right;
+        left = right;
+        right = rest;
+    }
+    left.max(1)
 }
 
 /// The **windowed sinc** kernel: the shape a resampler reads with.
@@ -639,5 +758,101 @@ pub fn blip(samples: &mut [f32], channels: usize, at: usize, frequency: f64, amp
                 *sample += value;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod bank_tests {
+    use super::*;
+
+    /// A **tone** of that frequency, at that rate.
+    fn a_tone(rate: u32, frequency: f32, frames: usize) -> Vec<f32> {
+        (0..frames)
+            .map(|frame| {
+                let t = frame as f64 / f64::from(rate);
+                (2.0 * std::f64::consts::PI * f64::from(frequency) * t).sin() as f32
+            })
+            .collect()
+    }
+
+    /// The sound at the new rate, read **one tap at a time**.
+    fn by_taps(samples: &[f32], channels: usize, from: u32, to: u32) -> Vec<f32> {
+        let ratio = f64::from(to) / f64::from(from);
+        let frames = samples.len() / channels;
+        let new_frames = ((frames as f64) * ratio).round().max(1.0) as usize;
+        let cutoff = if ratio < 1.0 { ratio * 0.94 } else { 0.97 };
+        let kernel = Sinc::new(cutoff);
+        resample_by_taps(samples, channels, frames, new_frames, ratio, &kernel)
+    }
+
+    /// The **bank** and the taps are the same sound.
+    ///
+    /// The bank reads the kernel once for every phase and the taps read
+    /// it for every tap of every frame, and the two must agree — or the
+    /// fast path is a different resampler.
+    #[test]
+    fn the_bank_and_the_taps_agree() {
+        let limits = Limits::default();
+        let tone = a_tone(44_100, 1_000.0, 4_000);
+        let bank = resample(&tone, 1, 44_100, 48_000, &limits).expect("the sound is resampled");
+        let taps = by_taps(&tone, 1, 44_100, 48_000);
+        assert_eq!(bank.len(), taps.len(), "the same number of frames");
+        let mut worst = 0.0_f32;
+        for (left, right) in bank.iter().zip(taps.iter()) {
+            worst = worst.max((left - right).abs());
+        }
+        assert!(worst < 1e-5, "the same sound: the worst difference is {worst}");
+    }
+
+    /// A rate change with **no small common factor** has no bank worth
+    /// having, and the taps are there for it.
+    #[test]
+    fn a_rate_change_without_a_bank_is_read_tap_by_tap() {
+        let limits = Limits::default();
+        let kernel = Sinc::new(0.97);
+        assert!(Polyphase::new(100_000, 100_001, &kernel).is_none(), "a hundred thousand phases is no bank");
+        let tone = a_tone(100_000, 1_000.0, 4_000);
+        let resampled = resample(&tone, 1, 100_000, 100_001, &limits).expect("the sound is resampled");
+        let taps = by_taps(&tone, 1, 100_000, 100_001);
+        assert_eq!(resampled.len(), taps.len());
+        let mut worst = 0.0_f32;
+        for (left, right) in resampled.iter().zip(taps.iter()) {
+            worst = worst.max((left - right).abs());
+        }
+        assert!(worst < 1e-5, "the same sound: the worst difference is {worst}");
+    }
+}
+
+#[cfg(test)]
+mod measurement {
+    use super::*;
+
+    /// A **measurement** of the two paths, and not a test: it prints
+    /// and it asserts nothing, and it is bounded to two hundred
+    /// thousand frames.
+    #[test]
+    #[ignore]
+    fn the_two_paths() {
+        let frames = 200_000;
+        let tone: Vec<f32> = (0..frames)
+            .map(|frame| {
+                let t = frame as f64 / 44_100.0;
+                (2.0 * std::f64::consts::PI * 1_000.0 * t).sin() as f32
+            })
+            .collect();
+        let kernel = Sinc::new(0.97);
+        let bank = Polyphase::new(44_100, 48_000, &kernel).expect("there is a bank");
+        let start = std::time::Instant::now();
+        let with = bank.run(&tone, 1, 217_959);
+        let bank_time = start.elapsed();
+        let start = std::time::Instant::now();
+        let without = resample_by_taps(&tone, 1, frames, 217_959, 48_000.0 / 44_100.0, &kernel);
+        let taps_time = start.elapsed();
+        println!(
+            "the bank: {bank_time:?} for {} samples; the taps: {taps_time:?}; the speed-up: {:.1}x",
+            with.len(),
+            taps_time.as_secs_f64() / bank_time.as_secs_f64().max(1e-9)
+        );
+        assert_eq!(with.len(), without.len());
     }
 }
