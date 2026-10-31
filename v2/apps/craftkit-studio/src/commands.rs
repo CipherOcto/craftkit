@@ -171,6 +171,12 @@ impl NodeMove {
                 message: format!("the node `{id}` has no place to be moved to"),
             });
         };
+        if session.document().is_locked(node) {
+            return Err(EngineError::Failed {
+                id: "node.move".to_string(),
+                message: format!("the node `{id}` is locked"),
+            });
+        }
         let x = self.x.0;
         let y = self.y.0;
         if !x.is_finite() || !y.is_finite() {
@@ -226,6 +232,12 @@ impl NodeResize {
                 message: format!("the node `{id}` has no size to change"),
             });
         };
+        if session.document().is_locked(node) {
+            return Err(EngineError::Failed {
+                id: "node.resize".to_string(),
+                message: format!("the node `{id}` is locked"),
+            });
+        }
         let w = self.w.0;
         let h = self.h.0;
         if !w.is_finite() || !h.is_finite() {
@@ -267,10 +279,16 @@ pub struct NodeDelete {
 impl NodeDelete {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = self.node.0;
-        if session.document().node(id).is_none() {
+        let Some(node) = session.document().node(id) else {
             return Err(EngineError::Failed {
                 id: "node.delete".to_string(),
                 message: format!("there is no node `{id}`"),
+            });
+        };
+        if session.document().is_locked(node) {
+            return Err(EngineError::Failed {
+                id: "node.delete".to_string(),
+                message: format!("the node `{id}` is locked"),
             });
         }
         let removed = session.document_mut()?.remove_node(id);
@@ -349,6 +367,17 @@ impl MoveSelection {
             .iter()
             .filter_map(|node| node.rect.map(|rect| (node.id, rect)))
             .collect();
+        // One locked node refuses the whole move: a move that left the
+        // locked ones behind would be a move the person did not ask
+        // for.
+        if let Some(locked) =
+            session.selected_nodes().into_iter().find(|node| session.document().is_locked(node))
+        {
+            return Err(EngineError::Failed {
+                id: "select.move".to_string(),
+                message: format!("the node `{}` is locked", locked.id),
+            });
+        }
         let selected = session.selected_ids().len();
         if selected == 0 {
             return Err(EngineError::Failed {
@@ -455,6 +484,67 @@ impl NodeHide {
             node.hidden = true;
         }
         Ok(Outcome::changed(format!("hid the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
+/// **Lock** a node.
+///
+/// A locked node is in the document and cannot be changed: it cannot
+/// be moved, resized or deleted. Locking a **layer** locks everything
+/// on it, because the layer is the thing that is locked.
+///
+/// It is not the same as hiding: a hidden node cannot be seen and a
+/// locked node cannot be touched, and a node can be one without being
+/// the other.
+#[derive(Command)]
+#[command(id = "node.lock", area = "node", icon = "lock", menu("Node"), mutates, undoable)]
+pub struct NodeLock {
+    /// The node.
+    pub node: NodeRef,
+}
+
+impl NodeLock {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.lock".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.locked = true;
+        }
+        Ok(Outcome::changed(format!("locked the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
+/// **Unlock** a node.
+///
+/// The opposite of locking, and a command of its own: a boolean says
+/// "yes" or "no" instead of saying what to do.
+#[derive(Command)]
+#[command(id = "node.unlock", area = "node", icon = "unlock", menu("Node"), mutates, undoable)]
+pub struct NodeUnlock {
+    /// The node.
+    pub node: NodeRef,
+}
+
+impl NodeUnlock {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.unlock".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.locked = false;
+        }
+        Ok(Outcome::changed(format!("unlocked the node `{id}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
     }
 }

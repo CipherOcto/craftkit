@@ -362,6 +362,21 @@ fn without_hidden(value: &mut Json) {
     }
 }
 
+/// Take the `locked` flag off every node.
+///
+/// The flag is the **tenth** version's field: a file of an earlier
+/// version must not carry a field that version does not know.
+fn without_locked(value: &mut Json) {
+    let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+        return;
+    };
+    for node in nodes.iter_mut() {
+        if let Some(object) = node.as_object_mut() {
+            object.remove("locked");
+        }
+    }
+}
+
 fn without_streams(value: &mut Json) {
     let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
         return;
@@ -387,6 +402,7 @@ pub fn write_v1(document: &Document) -> Json {
         }
     }
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     let mut written = serde_json::json!({
         "format": "craftkit/1",
@@ -415,6 +431,7 @@ pub fn write_v2(document: &Document) -> Json {
         }
     }
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -433,6 +450,7 @@ pub fn write_v3(document: &Document) -> Json {
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -450,6 +468,7 @@ pub fn write_v4(document: &Document) -> Json {
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -470,6 +489,7 @@ pub fn write_v5(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
     });
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
@@ -493,6 +513,7 @@ pub fn write_v6(document: &Document) -> Json {
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
     without_hidden(&mut value);
+    without_locked(&mut value);
     without_streams(&mut value);
     without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
@@ -524,6 +545,7 @@ pub fn write_v7(document: &Document) -> Json {
     without_payloads(&mut value);
     // And the `hidden` flag is the **ninth** version's field.
     without_hidden(&mut value);
+    without_locked(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -756,6 +778,7 @@ pub fn write_v8(document: &Document) -> Json {
     // version does not have it: a file of the eighth version must not
     // carry a field that version cannot explain.
     without_hidden(&mut value);
+    without_locked(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -808,6 +831,9 @@ pub fn write_v9(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
+    // The `locked` flag is the **tenth** version's field, and the
+    // ninth version does not have it.
+    without_locked(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -842,6 +868,67 @@ impl V8ToV9 {
         for node in nodes.iter_mut() {
             if let Some(object) = node.as_object_mut() {
                 object.entry("hidden").or_insert(Json::Bool(false));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The tenth version of the document format.
+///
+/// It adds the `locked` flag to a node: a node may be in the document
+/// and cannot be changed. Every version before this one writes the
+/// flag away, so a file of an earlier version is a file that says
+/// nothing about locking.
+pub fn write_v10(document: &Document) -> Json {
+    let mut value = serde_json::json!({
+        "format": "craftkit/10",
+        "version": 10,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+        "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
+}
+
+/// The tenth version of the document format.
+pub static FORMAT_V10: FormatSpec = FormatSpec {
+    tag: "craftkit/10",
+    version: 10,
+    layer: "core",
+    read: Document::from_json,
+    write: write_v10,
+};
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V10 }
+}
+
+/// The step from the ninth version to the tenth.
+///
+/// A file of the ninth version has no word for locking, and **not
+/// locked** is what it gets: the reader reads a file that says nothing
+/// about the flag as a document whose nodes can all be changed.
+///
+/// The step is here because the chain must have one: a program that
+/// reads a ninth version file has to walk it forward to the version it
+/// knows, and the step says what walking forward means.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.9to10", family = "craftkit", from = 9, to = 10, layer = "core")]
+pub struct V9ToV10;
+
+impl V9ToV10 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+            return Ok(());
+        };
+        for node in nodes.iter_mut() {
+            if let Some(object) = node.as_object_mut() {
+                object.entry("locked").or_insert(Json::Bool(false));
             }
         }
         Ok(())

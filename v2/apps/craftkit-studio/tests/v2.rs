@@ -877,8 +877,8 @@ fn selecting_a_node_that_is_not_there_is_refused() {
 fn a_file_from_the_future_is_read_and_what_is_not_understood_is_kept() {
     let ecosystem = ecosystem();
     let future = json!({
-        "format": "craftkit/10",
-        "version": 10,
+        "format": "craftkit/11",
+        "version": 11,
         "name": "future",
         "views": ["one", "two"],
         "nodes": [],
@@ -886,7 +886,7 @@ fn a_file_from_the_future_is_read_and_what_is_not_understood_is_kept() {
     let (document, forward) =
         craftkit_sdk::format::read_document_noting(&future, &ecosystem.formats, &ecosystem.migrations)
             .expect("the file from the future is read");
-    assert_eq!(forward, Some(10), "the reader knows the file was newer");
+    assert_eq!(forward, Some(11), "the reader knows the file was newer");
     assert_eq!(document.unknown["views"], json!(["one", "two"]), "the views were kept");
 }
 

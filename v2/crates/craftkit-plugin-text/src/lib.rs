@@ -998,6 +998,7 @@ mod tests {
             rect: None,
             muted: false,
             hidden: false,
+            locked: false,
             appearance: None,
             appearance_from: None,
             data,

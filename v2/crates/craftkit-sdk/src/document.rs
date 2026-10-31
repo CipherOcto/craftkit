@@ -569,6 +569,7 @@ impl FormatValue for Node {
             "rect": self.rect.to_json(),
             "muted": self.muted,
             "hidden": self.hidden,
+            "locked": self.locked,
             "appearance": self.appearance.map(|appearance| appearance.to_json()),
             "appearance_from": self.appearance_from,
             "data": self.data,
@@ -613,6 +614,10 @@ impl Node {
         // that writes the field, and a file before it has no word for
         // it.
         let hidden = value.get("hidden").and_then(|hidden| hidden.as_bool()).unwrap_or(false);
+        // A node may be **locked**. A file that says nothing about it
+        // is read as a node that is not locked: the tenth version is
+        // the one that writes the flag.
+        let locked = value.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false);
         // A node may have an **appearance** of its own, and it may point
         // at one that has. A file that says nothing about either is read
         // as a node with neither.
@@ -640,6 +645,7 @@ impl Node {
                 "rect",
                 "muted",
                 "hidden",
+                "locked",
                 "appearance",
                 "appearance_from",
                 "data",
@@ -657,6 +663,7 @@ impl Node {
             rect,
             muted,
             hidden,
+            locked,
             appearance,
             appearance_from,
             data,
@@ -795,6 +802,19 @@ pub struct Node {
     /// Hiding a **group** hides what is in it: the group is the thing
     /// that is hidden, and what is inside it is behind it.
     pub hidden: bool,
+    /// Whether it is **locked**.
+    ///
+    /// A locked node is in the document and cannot be changed: it
+    /// cannot be moved, resized or deleted. Locking a **layer** locks
+    /// everything on it, because the layer is the thing that is
+    /// locked.
+    ///
+    /// It is a separate flag from `hidden` and not the other way
+    /// round: a thing can be shown and not be touched (a layer that is
+    /// turned off), and it can be touched and not be seen (a
+    /// reference that is behind another thing). One flag cannot say
+    /// both.
+    pub locked: bool,
     /// How it looks, if it has an appearance of its own.
     ///
     /// It is **optional**: most things in a document are not seen — a
@@ -1120,6 +1140,7 @@ impl Document {
             rect,
             muted: false,
             hidden: false,
+            locked: false,
             appearance: None,
             appearance_from: None,
             data,
@@ -1247,6 +1268,18 @@ impl Document {
         Visible { document: self, stack: self.nodes.iter().rev().map(|node| &**node).collect() }
     }
 
+    /// Whether a node is **locked**.
+    ///
+    /// A node is locked when it is locked itself, or when the **layer**
+    /// it is on is locked: the layer is the thing that is locked, and
+    /// what is on it is behind it.
+    pub fn is_locked(&self, node: &Node) -> bool {
+        if node.locked {
+            return true;
+        }
+        self.layer_of(node).map(|layer| layer.locked).unwrap_or(false)
+    }
+
     /// Whether a node is **shown**.
     ///
     /// A node is shown when it is not hidden itself and when the layer
@@ -1308,6 +1341,7 @@ impl Document {
             rect,
             muted: false,
             hidden: false,
+            locked: false,
             appearance: None,
             appearance_from: None,
             data,

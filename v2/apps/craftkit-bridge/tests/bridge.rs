@@ -91,8 +91,13 @@ fn the_resources_are_the_rest_of_the_registry() {
     assert!(kinds.iter().any(|kind| kind["kind"] == "geometry.rect"), "{answer}");
     assert_eq!(
         answer["result"]["formats"],
+        // The tags are sorted as **strings**, so the tenth version
+        // comes after the first and before the second: a version
+        // number that reaches two digits does not sort where a person
+        // expects it.
         json!([
             "craftkit/1",
+            "craftkit/10",
             "craftkit/2",
             "craftkit/3",
             "craftkit/4",
