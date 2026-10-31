@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1196 tests.** The MCP server links **all fifteen batteries** in, so the
+**1199 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1196 tests
+cargo test          # 1199 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3594,6 +3594,7 @@ so.
 | a **caret that moves a word and a line at a time** | **built.** The word is in the words and the line is in the layout, and the caret keeps its place across a line (§157) | §151, §157 |
 | a **resampler with a bank** | **built.** The kernel is precomputed for every phase of a rational rate change, so an output is a dot product; a rate change with no bank worth having is read tap by tap (§158) | §155, §158 |
 | a **band for each channel** | **built.** The peaks are the peaks of each channel and the bar carries a band for each of them; the buckets and the channels share the table (§159) | §154, §159 |
+| a **send that is panned and muted** | **built.** A send's copy is panned on its way to the bus, and a muted send is a copy of nothing; a pan that is not a pan is refused (§160) | §160 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10878,3 +10879,57 @@ channel, one above the other.
   channels has many bands in it, and the shape of each is a sliver.
 - **The pan is still not on the bar.** A sound that is panned is drawn
   as if it were not (§156).
+
+## 160. The send is panned, and it may be muted
+
+The send's payload had a **pan** in it and the command could not set
+it; the tree's send has a pan and a **mute** as well, and v2 had
+neither.
+
+### What was built
+
+- The send's **pan**: `sound.send.add` takes it, and the copy is
+  panned on its way to the bus. A pan is a number between minus one
+  and one, and a number that is not one is refused.
+- The send's **mute**: a muted send is a copy of **nothing** — the
+  track is still heard on its own and the bus hears nothing.
+
+### What the port found
+
+- **The field was there and the door was not.** The send's payload
+  already carried a pan — the mixer already panned the copy with it —
+  and the command wrote a zero there every time. The port had read
+  the mixer and found the pan working, and had not asked who could set
+  it: a field that is always zero is a field nobody has looked at.
+- **A muted send is a copy of nothing, and not a copy of silence.**
+  The two are the same sound, and the difference is in the *rule* and
+  not in the sound: a copy of silence is still a copy, and a copy of
+  nothing is not a copy at all. So the mute skips the copy rather
+  than making it silent — which is the same shape as the soloed track
+  (§ the track is soloed), where the rule is about the other thing.
+- **The pan is a **balance** and not a place.** The pan law here is
+  the constant-power one: the sound in the middle is three decibels
+  down, and a sound at the side is as loud as it can be. It is the
+  tree's default law and it was read out of the tree.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/send.rs`): a panned send is
+  heard on its side, a muted send is a copy of nothing, and a pan that
+  is not a pan is refused.
+- **Two fields**: the pan was there and the mute is new — and a new
+  field is additive, so a file written before this arc has no mute in
+  it and its send is not muted.
+
+### What it does not settle
+
+- **The pre-fader send is not built.** The payload carries the flag
+  and the mixer ignores it: a pre-fader send is a copy of the track's
+  signal *before* the fader, and the mixer keeps one signal per track
+  — so a pre-fader send is a second copy of it, and the tree does not
+  keep two.
+- **The pan does not follow the track's pan.** The tree's send has a
+  *follow main pan* flag; here a send's pan is its own.
+- **The pan is a balance between the channels and not a place in the
+  room.** A sound with more than two channels is panned between the
+  first and the second and the rest are left as they are.
