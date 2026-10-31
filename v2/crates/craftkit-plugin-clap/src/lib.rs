@@ -232,6 +232,8 @@ struct Report {
     state: Vec<u8>,
     /// The shape of its audio, as the plugin said.
     layout: Option<ClapLayout>,
+    /// Whether the plugin said its state had changed.
+    dirty: bool,
 }
 
 /// **Open** the plugin, hand it the state it had, and ask it what it holds.
@@ -268,6 +270,9 @@ fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> 
 
     let descriptor = instance.descriptor().map_err(|error| fail("clap", error.to_string()))?;
     let parameters = instance.parameters().map_err(|error| fail("clap", error.to_string()))?;
+    // The plugin's **word**, taken before the state is saved: saving is
+    // what answers it.
+    let dirty = instance.state_dirty();
     let saved = instance.save_state().map_err(|error| fail("clap", error.to_string()))?;
     let layout = instance.layout();
 
@@ -277,7 +282,7 @@ fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> 
     instance.deactivate().map_err(|error| fail("clap", error.to_string()))?;
     instance.destroy();
 
-    Ok(Report { descriptor, parameters, state: saved, layout })
+    Ok(Report { descriptor, parameters, state: saved, layout, dirty })
 }
 
 /// An error, in the kit's own shape.
@@ -482,6 +487,7 @@ impl SetParameter {
                 "id": node,
                 "parameter": parameter,
                 "value": value,
+                "dirty": report.dirty,
                 "params": payload.params.iter().map(|param| param.to_json()).collect::<Vec<_>>(),
             }),
         ))
@@ -511,6 +517,7 @@ impl ReadState {
             "id": node,
             "plugin": payload.id,
             "state_bytes": bytes,
+            "dirty": report.dirty,
             "params": report.parameters.iter().map(parameter_of_json).collect::<Vec<_>>(),
         })))
     }

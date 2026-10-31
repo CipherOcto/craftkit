@@ -153,3 +153,34 @@ fn a_file_that_is_not_a_plugin_is_refused() {
     assert!(error.to_string().contains("clap"), "{error}");
     assert!(session.document().nodes.is_empty(), "the node was added anyway");
 }
+
+/// The plugin says its state has **changed**, and the document is
+/// refreshed.
+///
+/// The word comes from the plugin, through the host's own state
+/// extension: a value that moves is a state that changed, and a host
+/// that does not hear it would keep a state that is out of date.
+#[cfg(feature = "clap")]
+#[test]
+fn the_document_is_refreshed_when_the_plugin_says_it_changed() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("clap.attach", &json!({ "path": library_path() })).expect("the plugin is attached");
+    let node = session.document().nodes.first().expect("there is a node").id;
+
+    let outcome = session
+        .execute("clap.parameter.set", &json!({ "node": node, "parameter": 1, "value": 0.5 }))
+        .expect("the parameter is set");
+    assert_eq!(
+        outcome.data.get("dirty").and_then(|dirty| dirty.as_bool()),
+        Some(true),
+        "the plugin said its state had changed"
+    );
+
+    // And the document holds what the plugin holds: the copy is current.
+    let outcome = session.execute("clap.state", &json!({ "node": node })).expect("the state is read");
+    assert_eq!(
+        outcome.data.get("dirty").and_then(|dirty| dirty.as_bool()),
+        Some(false),
+        "and the document's copy is the plugin's own"
+    );
+}

@@ -768,18 +768,30 @@ impl ClapInstance<'_> {
     /// keeps it, without knowing what is in it. That is what makes it
     /// a thing a document can carry.
     pub fn save_state(&self) -> Result<Vec<u8>> {
-        foreign::plugin_save_state(self.plugin).map_err(ClapError::new)
+        let bytes = foreign::plugin_save_state(self.plugin).map_err(ClapError::new)?;
+        // The state is saved, so it is not out of date any more: the
+        // plugin's word that it had changed is answered.
+        self.state.dirty.store(false, Ordering::SeqCst);
+        Ok(bytes)
     }
 
     /// Give the plugin its **state** back.
     pub fn load_state(&self, bytes: &[u8]) -> Result<()> {
-        foreign::plugin_load_state(self.plugin, bytes).map_err(ClapError::new)
+        foreign::plugin_load_state(self.plugin, bytes).map_err(ClapError::new)?;
+        // The plugin has been given its state, so what the host holds
+        // is what the plugin holds.
+        self.state.dirty.store(false, Ordering::SeqCst);
+        Ok(())
     }
 
     /// Whether the plugin says its state has **changed**.
     ///
     /// A plugin says so through the host's own state extension, and a
     /// host that ignores that would save a state that is out of date.
+    ///
+    /// The word is good until the host saves the state or gives it
+    /// back: after that, what the host holds is what the plugin holds,
+    /// and the flag is cleared.
     pub fn state_dirty(&self) -> bool {
         self.state.dirty.load(Ordering::SeqCst)
     }
@@ -843,10 +855,10 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapAudioPortInfo, ClapEventHeader, ClapHost, ClapIStream, ClapInputEvents,
-        ClapOStream, ClapOutputEvents, ClapParamInfo, ClapPlugin as ClapPluginInstance, ClapPluginAudioPorts,
-        ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapPluginParams, ClapPluginState,
-        ClapProcess, ClapProcessStatus, ClapVersion,
+        ClapAudioBuffer, ClapAudioPortInfo, ClapEventHeader, ClapHost, ClapHostState, ClapIStream,
+        ClapInputEvents, ClapOStream, ClapOutputEvents, ClapParamInfo, ClapPlugin as ClapPluginInstance,
+        ClapPluginAudioPorts, ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapPluginParams,
+        ClapPluginState, ClapProcess, ClapProcessStatus, ClapVersion,
     };
 
     use super::{ClapDescriptor, HostState, StreamState};
@@ -1617,8 +1629,37 @@ mod foreign {
     /// The format's extensions are the state, the log, the parameters
     /// and the ports; this host has none of them, and says so by
     /// answering with nothing.
-    pub extern "C" fn get_extension(_host: *const ClapHost, _extension_id: *const c_char) -> *const c_void {
+    pub extern "C" fn get_extension(host: *const ClapHost, extension_id: *const c_char) -> *const c_void {
+        if host.is_null() || extension_id.is_null() {
+            return std::ptr::null();
+        }
+        // SAFETY: the plugin asks for an extension by its id, and the
+        // id is a C string the plugin owns.
+        let wanted = unsafe { std::ffi::CStr::from_ptr(extension_id) };
+        if wanted.to_bytes() == craftkit_clap_abi::STATE_EXTENSION.as_bytes() {
+            return &HOST_STATE_TABLE as *const ClapHostState as *const c_void;
+        }
         std::ptr::null()
+    }
+
+    /// The host's **state** table: what a plugin may say about its own
+    /// state.
+    ///
+    /// The extension id is the **same** on both sides of the format:
+    /// the plugin's table saves and loads, and the host's table marks
+    /// the state dirty. A plugin asks the host for it by name, exactly
+    /// as it asks the host for anything else.
+    static HOST_STATE_TABLE: ClapHostState = ClapHostState { mark_dirty: Some(mark_dirty) };
+
+    /// The plugin says its state has changed.
+    ///
+    /// The host **notices**: it keeps the word until it saves the state
+    /// or gives it back, and after that what the host holds is what the
+    /// plugin holds.
+    pub extern "C" fn mark_dirty(host: *const ClapHost) {
+        if let Some(state) = host_state(host) {
+            state.dirty.store(true, Ordering::SeqCst);
+        }
     }
 
     /// The plugin asked the host to restart it.

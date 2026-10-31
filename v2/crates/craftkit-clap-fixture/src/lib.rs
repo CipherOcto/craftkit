@@ -190,10 +190,10 @@ mod exports {
 
     use craftkit_clap_abi::{
         AUDIO_PORTS_EXTENSION, ClapAudioPortInfo, ClapEventHeader, ClapEventMidi, ClapEventParamValue,
-        ClapEventTransport, ClapHost, ClapIStream, ClapInputEvents, ClapOStream, ClapOutputEvents,
-        ClapParamInfo, ClapPlugin, ClapPluginAudioPorts, ClapPluginFactory, ClapPluginParams,
-        ClapPluginState, ClapProcess, ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
-        STATE_EXTENSION,
+        ClapEventTransport, ClapHost, ClapHostState, ClapIStream, ClapInputEvents, ClapOStream,
+        ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginAudioPorts, ClapPluginFactory,
+        ClapPluginParams, ClapPluginState, ClapProcess, ClapProcessStatus, PARAMS_EXTENSION,
+        PLUGIN_FACTORY_ID, STATE_EXTENSION,
     };
 
     /// The entry point of this plugin, found by name.
@@ -244,10 +244,43 @@ mod exports {
         [(1, "gain", 0.0, 2.0, 1.0), (2, "tone", 0.0, 1000.0, 0.5), (3, "notes", 0.0, 1000.0, 0.0)];
 
     /// Set the value of a parameter.
+    ///
+    /// And **say so**: a value that changes is a state that changed,
+    /// and the format says the plugin tells the host by marking its
+    /// state dirty.
     fn set_value(state: &mut State, id: u32, value: f64) {
         match state.values.iter_mut().find(|(other, _)| *other == id) {
             Some(entry) => entry.1 = value,
             None => state.values.push((id, value)),
+        }
+        mark_dirty(state);
+    }
+
+    /// Tell the host that the plugin's state has changed.
+    ///
+    /// The plugin asks the **host** for its own state extension — the
+    /// extension id is the same on both sides of the format — and marks
+    /// the state dirty. That is how a host knows to save it.
+    fn mark_dirty(state: &mut State) {
+        let host = state.host;
+        if host.is_null() {
+            return;
+        }
+        // SAFETY: the host is the host's own, and the table it answers
+        // with is the host's own. The plugin lives for the length of
+        // the call, and so does the host it was given.
+        unsafe {
+            let get_extension = std::ptr::read_unaligned(std::ptr::addr_of!((*host).get_extension));
+            let Some(get_extension) = get_extension else { return };
+            let id = b"clap.state\0";
+            let extension = get_extension(host, id.as_ptr() as *const c_char);
+            if extension.is_null() {
+                return;
+            }
+            let table = extension as *const ClapHostState;
+            let mark = std::ptr::read_unaligned(std::ptr::addr_of!((*table).mark_dirty));
+            let Some(mark) = mark else { return };
+            mark(host);
         }
     }
 
