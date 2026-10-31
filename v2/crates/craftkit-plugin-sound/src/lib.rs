@@ -332,6 +332,11 @@ impl ClipKind {
             return;
         }
         let paper = craftkit_sdk::document::Colour::WHITE;
+        // The **waveform**: the shape of the sound the clip plays, drawn
+        // on the bar in the paper's colour, the way the fade's notch is.
+        if let Some(path) = waveform_of(document, &payload, &rect) {
+            canvas.path(&path, paper, None);
+        }
         let width = payload.fade_in.len as f64 / rate;
         if width > 0.0
             && width < rect.w
@@ -936,6 +941,15 @@ struct SourcePayload {
     frames: i64,
     /// The rate it was recorded at.
     sample_rate: u32,
+    /// The **peaks** of the sound: the extent of the samples in each
+    /// bucket, as a flat table of a least and a most.
+    ///
+    /// The sound is a great many numbers and a drawing needs few: the
+    /// peaks are the shape of the sound, and the shape is what a reader
+    /// sees. They are **measured** — a command reads the file and puts
+    /// them here — because a file that is read at every frame is a file
+    /// that is read a hundred times a second.
+    peaks: Vec<f32>,
 }
 
 impl SourcePayload {
@@ -945,15 +959,31 @@ impl SourcePayload {
             "channels": self.channels,
             "frames": self.frames,
             "sample_rate": self.sample_rate,
+            "peaks": self.peaks,
         })
     }
 
     fn from_json(value: &Json) -> Result<Self, String> {
+        // The peaks are **bounded**: the table comes from outside, and
+        // a table of a million numbers is not a shape of a sound.
+        let peaks = value
+            .get("peaks")
+            .and_then(|peaks| peaks.as_array())
+            .map(|peaks| {
+                peaks
+                    .iter()
+                    .filter_map(|peak| peak.as_f64())
+                    .take(PEAK_BUCKETS * 2)
+                    .map(|peak| peak as f32)
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(SourcePayload {
             path: value.get("path").and_then(|path| path.as_str()).unwrap_or("").to_string(),
             channels: value.get("channels").and_then(|channels| channels.as_u64()).unwrap_or(2) as u32,
             frames: value.get("frames").and_then(|frames| frames.as_i64()).unwrap_or(0),
             sample_rate: value.get("sample_rate").and_then(|rate| rate.as_u64()).unwrap_or(48000) as u32,
+            peaks,
         })
     }
 }
@@ -1604,14 +1634,80 @@ impl AddSource {
             None => 0,
         };
         let session_settings = session_of(session.document());
-        let payload =
-            SourcePayload { path: path.clone(), channels, frames, sample_rate: session_settings.sample_rate };
+        let payload = SourcePayload {
+            path: path.clone(),
+            channels,
+            frames,
+            sample_rate: session_settings.sample_rate,
+            peaks: Vec::new(),
+        };
         let id = session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
         // The document now says that it needs this file. The bytes are
         // not in the document: they travel beside it, in a bundle.
         session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
         Ok(Outcome::changed(format!("added a source `{path}`"))
             .with_data(serde_json::json!({ "id": id, "path": path })))
+    }
+}
+
+/// **Measure** the peaks of a source.
+///
+/// The peaks are the shape of the sound in a small table, and the shape
+/// is what a clip's bar is drawn from.
+///
+/// Measuring them reads the file, so it is a **command** and not a
+/// thing that happens at every frame: a file that is read a hundred
+/// times a second is a file that is read a hundred times too often.
+/// The measurement is in the document, so it is undone with everything
+/// else and it is saved with the document.
+#[derive(Command)]
+#[command(id = "sound.source.peaks", area = "sound", layer = "sound", icon = "list", mutates, undoable)]
+pub struct MeasurePeaks {
+    /// The source to measure.
+    pub source: NodeRef,
+}
+
+impl MeasurePeaks {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.source.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.source.peaks".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "sound.source" {
+            return Err(EngineError::Failed {
+                id: "sound.source.peaks".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a source", node.kind),
+            });
+        }
+        let payload = SourcePayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.source.peaks".to_string(),
+            message: format!("the source `{id}` cannot be read: {error}"),
+        })?;
+        let sound = read_sound("sound.source.peaks", &payload.path)?;
+        let peaks = peaks_of(&sound);
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.source.peaks".to_string(),
+                message: format!("there is no source `{id}`"),
+            });
+        };
+        // The file says what it is: how long it is, how many channels
+        // it has and the rate it was recorded at. A source that has
+        // not been measured does not know.
+        node.data["frames"] = serde_json::json!(sound.frames as i64);
+        node.data["channels"] = serde_json::json!(sound.channels as u32);
+        node.data["sample_rate"] = serde_json::json!(sound.rate);
+        node.data["peaks"] = serde_json::json!(peaks);
+        Ok(Outcome::changed(format!("measured the peaks of the source {id}")).with_data(serde_json::json!({
+            "id": id,
+            "buckets": PEAK_BUCKETS,
+            "frames": sound.frames as i64,
+            "channels": sound.channels as u32,
+            "sample_rate": sound.rate,
+        })))
     }
 }
 
@@ -1769,7 +1865,7 @@ impl RenderSound {
             }
             let Some(node) = session.document().node(*source_id) else { continue };
             let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
-            let sound = read_sound(&source.path)?;
+            let sound = read_sound("sound.render", &source.path)?;
             if channels == 0 {
                 channels = sound.channels;
             } else if channels != sound.channels {
@@ -2145,6 +2241,160 @@ fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload, rate: u32) -> (u
 /// notch is a hint and not the sound.
 const FADE_SEGMENTS: usize = 8;
 
+/// How many **buckets** a sound's peaks have.
+///
+/// The peaks are the shape of a sound in a small table, and the table
+/// has to be small enough to live in a payload: two hundred and fifty
+/// six buckets is a shape that a reader can see and a document can
+/// carry.
+const PEAK_BUCKETS: usize = 256;
+
+/// The **peaks** of a sound: the extent of the samples in each bucket.
+///
+/// A sound is a great many numbers and a drawing needs few. The peaks
+/// are the least and the most of each bucket of samples, and they are
+/// what a clip's bar is drawn from.
+fn peaks_of(sound: &craftkit_wav::Sound) -> Vec<f32> {
+    let channels = sound.channels.max(1) as usize;
+    let frames = sound.frames as usize;
+    let per_bucket = (frames / PEAK_BUCKETS).max(1);
+    let mut out = Vec::with_capacity(PEAK_BUCKETS * 2);
+    for bucket in 0..PEAK_BUCKETS {
+        let from = bucket * per_bucket;
+        if from >= frames {
+            // A sound shorter than the table: the rest of the table is
+            // silence, and silence is a shape too.
+            out.push(0.0);
+            out.push(0.0);
+            continue;
+        }
+        let to = (from + per_bucket).min(frames);
+        let mut least = f32::MAX;
+        let mut most = f32::MIN;
+        for frame in from..to {
+            for channel in 0..channels {
+                let Some(sample) = sound.samples.get(frame * channels + channel) else { continue };
+                if *sample < least {
+                    least = *sample;
+                }
+                if *sample > most {
+                    most = *sample;
+                }
+            }
+        }
+        out.push(least);
+        out.push(most);
+    }
+    out
+}
+
+/// The **peaks** of a source, as the payload holds them.
+///
+/// The peaks are a flat table — a least and a most for each bucket —
+/// and the source says how many frames of the sound the table covers.
+struct Peaks {
+    /// The buckets: the least and the most of each.
+    buckets: Vec<(f32, f32)>,
+    /// How many frames of the sound the table covers.
+    frames: u64,
+}
+
+/// The peaks of a source, if it has been measured.
+fn peaks_of_source(document: &Document, source: u64) -> Option<Peaks> {
+    let node = document.node(source)?;
+    let payload = SourcePayload::from_json(&node.data).ok()?;
+    let mut buckets = Vec::with_capacity(payload.peaks.len() / 2);
+    for pair in payload.peaks.chunks(2) {
+        let least = pair.first().copied().unwrap_or(0.0);
+        let most = pair.get(1).copied().unwrap_or(least);
+        buckets.push((least, most));
+    }
+    if buckets.is_empty() {
+        return None;
+    }
+    Some(Peaks { buckets, frames: payload.frames.max(0) as u64 })
+}
+
+/// The **waveform** of a clip: the shape of the sound it plays.
+///
+/// The clip plays a **part** of a source, from its offset, for as long
+/// as its length says — and a stretched clip reads its source more
+/// slowly, so it plays less of it. The bar is the clip, and the shape
+/// drawn on the bar is the part of the source the clip plays.
+fn waveform_path(
+    rect: &Rect,
+    peaks: &Peaks,
+    from_frame: usize,
+    span_frames: usize,
+    gain: f32,
+) -> Option<Path> {
+    if peaks.buckets.is_empty() || peaks.frames == 0 {
+        return None;
+    }
+    let count = peaks.buckets.len();
+    let from_bucket = from_frame.saturating_mul(count) / peaks.frames as usize;
+    let to_bucket = ((from_frame + span_frames).saturating_mul(count) / peaks.frames as usize)
+        .min(count)
+        .max(from_bucket + 1);
+    if from_bucket >= count {
+        return None;
+    }
+    // The **upper** edge of the shape, left to right, and then the
+    // lower edge, right to left: the shape is the sound between them.
+    let mut segments: Vec<Segment> = Vec::new();
+    let width = rect.w;
+    let mut upper: Vec<Point> = Vec::new();
+    let mut lower: Vec<Point> = Vec::new();
+    for (index, bucket) in peaks.buckets[from_bucket..to_bucket].iter().enumerate() {
+        let x = rect.x + (index as f64 + 0.5) * width / (to_bucket - from_bucket) as f64;
+        let (least, most) = (bucket.0 * gain, bucket.1 * gain);
+        upper.push(Point::new(x, level_y(rect, most)));
+        lower.push(Point::new(x, level_y(rect, least)));
+    }
+    if upper.is_empty() {
+        return None;
+    }
+    for point in upper.iter().skip(1) {
+        segments.push(Segment::Line { to: *point });
+    }
+    for point in lower.iter().rev().skip(1) {
+        segments.push(Segment::Line { to: *point });
+    }
+    let start = *upper.first()?;
+    Some(Path::single(SubPath { start, segments, closed: true }))
+}
+
+/// The **waveform** of a clip: the shape of the sound it plays.
+///
+/// The clip plays a part of a source, and the part is in the source's
+/// own frames: the offset is turned into the source's frames, and the
+/// length is turned into the frames the source is read in — which is
+/// less than the length when the clip is stretched, because a stretched
+/// clip reads its source more slowly.
+fn waveform_of(document: &Document, payload: &ClipPayload, rect: &Rect) -> Option<Path> {
+    let source = payload.source?;
+    let peaks = peaks_of_source(document, source)?;
+    let source_node = document.node(source)?;
+    let source_payload = SourcePayload::from_json(&source_node.data).ok()?;
+    let session_rate = session_of(document).sample_rate.max(1) as f64;
+    let ratio = source_payload.sample_rate.max(1) as f64 / session_rate;
+    let from_frame = (payload.offset.max(0) as f64 * ratio).round() as usize;
+    let span_frames =
+        ((payload.length.max(0) as f64 / payload.stretch.max(f64::EPSILON)) * ratio).round() as usize;
+    let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
+    waveform_path(rect, &peaks, from_frame, span_frames, gain)
+}
+
+/// Where a **level** of the sound stands in a bar.
+///
+/// The sound runs from minus one to one, and the bar is the height it
+/// has: the top of the bar is the loudest sound and the bottom is the
+/// quietest.
+fn level_y(rect: &Rect, level: f32) -> f64 {
+    let level = level.clamp(-1.0, 1.0) as f64;
+    rect.y + (1.0 - level) * rect.h / 2.0
+}
+
 /// The **notch** of a fade at the head of a bar.
 ///
 /// The notch is the part of the clip that is quiet: it is the region
@@ -2224,24 +2474,24 @@ fn click_into(
 /// The file came from outside — it is named by a document that came
 /// from outside — so it is read **within limits** and a file that is
 /// too big is refused before a byte of it is read.
-fn read_sound(path: &str) -> Result<craftkit_wav::Sound, EngineError> {
+fn read_sound(id: &str, path: &str) -> Result<craftkit_wav::Sound, EngineError> {
     let limits = craftkit_wav::Limits::default();
     let metadata = std::fs::metadata(path).map_err(|error| EngineError::Failed {
-        id: "sound.render".to_string(),
+        id: id.to_string(),
         message: format!("the source `{path}` cannot be read: {error}"),
     })?;
     if metadata.len() as usize > limits.max_bytes {
         return Err(EngineError::Failed {
-            id: "sound.render".to_string(),
+            id: id.to_string(),
             message: format!("the source `{path}` is larger than the limits allow"),
         });
     }
     let bytes = std::fs::read(path).map_err(|error| EngineError::Failed {
-        id: "sound.render".to_string(),
+        id: id.to_string(),
         message: format!("the source `{path}` cannot be read: {error}"),
     })?;
     craftkit_wav::read(&bytes, &limits).map_err(|error| EngineError::Failed {
-        id: "sound.render".to_string(),
+        id: id.to_string(),
         message: format!("the source `{path}` is not a sound the kit reads: {error}"),
     })
 }
@@ -2644,6 +2894,7 @@ craftkit_sdk::plugin_anchor!(
     SetMeter,
     AddMarker,
     AddSource,
+    MeasurePeaks,
     SetSession,
     ClipTool,
     SoundPanel,
