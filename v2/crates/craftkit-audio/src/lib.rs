@@ -160,3 +160,42 @@ pub fn mix(tracks: &[Track<'_>], rate: u32, limits: &Limits) -> Result<Mix, Erro
 pub fn clipped(samples: &[f32]) -> Vec<f32> {
     samples.iter().map(|sample| sample.clamp(-1.0, 1.0)).collect()
 }
+
+/// Resample the samples of a sound from one rate to another.
+///
+/// The resampling is **linear**: the sample at a place in the new rate
+/// is the line between the two samples it lies between. That is not the
+/// best resampler and it is honest about what it is — a sound that has
+/// been resampled by a line is a sound that has been resampled.
+///
+/// The **channels** are kept: a frame of the new sound is a frame of
+/// the old one, so the samples of each channel are resampled on their
+/// own.
+pub fn resample(samples: &[f32], channels: usize, from_rate: u32, to_rate: u32) -> Vec<f32> {
+    let channels = channels.max(1);
+    if from_rate == 0 || to_rate == 0 || channels == 0 {
+        return samples.to_vec();
+    }
+    let frames = samples.len() / channels;
+    if frames == 0 {
+        return Vec::new();
+    }
+    let ratio = f64::from(to_rate) / f64::from(from_rate);
+    let new_frames = ((frames as f64) * ratio).round().max(1.0) as usize;
+    let mut out = Vec::with_capacity(new_frames * channels);
+    for frame in 0..new_frames {
+        // Where this frame is in the old sound.
+        let position = frame as f64 / ratio;
+        let index = position.floor() as usize;
+        let fraction = (position - index as f64) as f32;
+        let next = (index + 1).min(frames.saturating_sub(1));
+        for channel in 0..channels {
+            let at = index * channels + channel;
+            let after = next * channels + channel;
+            let first = samples.get(at).copied().unwrap_or(0.0);
+            let second = samples.get(after).copied().unwrap_or(first);
+            out.push(first + (second - first) * fraction);
+        }
+    }
+    out
+}

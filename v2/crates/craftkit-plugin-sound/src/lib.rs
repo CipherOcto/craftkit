@@ -1346,15 +1346,6 @@ impl RenderSound {
             }
             let Some(node) = session.document().node(*source_id) else { continue };
             let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
-            if source.sample_rate != rate {
-                return Err(EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: format!(
-                        "the source `{}` is at {} samples a second and the session is at {rate}",
-                        source.path, source.sample_rate
-                    ),
-                });
-            }
             let sound = read_sound(&source.path)?;
             if channels == 0 {
                 channels = sound.channels;
@@ -1366,17 +1357,36 @@ impl RenderSound {
             }
             sources.push((*source_id, sound));
         }
-        let mut tracks: Vec<craftkit_audio::Track<'_>> = Vec::new();
+        // The clips are the tracks. A source at another rate than the
+        // session is **resampled**: the sound is the same sound, at the
+        // rate the session plays at.
+        let mut resampled: Vec<Option<Vec<f32>>> = Vec::with_capacity(clips.len());
         for (source_id, payload) in &clips {
+            let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else {
+                resampled.push(None);
+                continue;
+            };
+            let (from, to) = the_span(sound, payload);
+            let slice = &sound.samples[from..to];
+            let samples = if sound.rate == rate {
+                None
+            } else {
+                Some(craftkit_audio::resample(slice, sound.channels as usize, sound.rate, rate))
+            };
+            resampled.push(samples);
+        }
+        let mut tracks: Vec<craftkit_audio::Track<'_>> = Vec::new();
+        for (index, (source_id, payload)) in clips.iter().enumerate() {
             let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else { continue };
-            let width = sound.channels as usize;
-            let from = (payload.offset.max(0) as usize * width).min(sound.samples.len());
-            let to = ((payload.offset.max(0) + payload.length.max(0)) as usize * width)
-                .min(sound.samples.len())
-                .max(from);
+            let (from, to) = the_span(sound, payload);
+            let slice = &sound.samples[from..to];
+            let samples: &[f32] = match &resampled[index] {
+                Some(samples) => samples,
+                None => slice,
+            };
             tracks.push(craftkit_audio::Track {
                 start: payload.start.max(0),
-                samples: &sound.samples[from..to],
+                samples,
                 gain: craftkit_audio::db_to_linear(payload.gain_db),
             });
         }
@@ -1395,6 +1405,20 @@ impl RenderSound {
             "clips": tracks.len(),
         })))
     }
+}
+
+/// The span of a source's samples a clip plays: from its offset, for
+/// its length.
+///
+/// The span is in **samples**, and the clip's offset and length are in
+/// the source's own frames, so the frames are multiplied by the number
+/// of channels.
+fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload) -> (usize, usize) {
+    let width = sound.channels as usize;
+    let from = (payload.offset.max(0) as usize * width).min(sound.samples.len());
+    let to =
+        ((payload.offset.max(0) + payload.length.max(0)) as usize * width).min(sound.samples.len()).max(from);
+    (from, to)
 }
 
 /// Read a sound file, within limits.
@@ -2011,6 +2035,45 @@ mod tests {
             craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
         assert_eq!(sound.frames, 4, "the clip is four samples long");
         assert!((sound.samples[0] - 0.5).abs() < 0.001, "the sample is the source's: {}", sound.samples[0]);
+    }
+
+    /// A source at **another rate** is resampled: the sound is the same
+    /// sound, at the rate the session plays at.
+    #[test]
+    fn a_source_at_another_rate_is_resampled() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-render-rate.wav");
+        let output_path = directory.join("craftkit-v2-render-rate-out.wav");
+        // A source of eight thousand samples a second, four frames.
+        let bytes = craftkit_wav::write(1, 8_000, &[0.5, 0.5, 0.5, 0.5]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 16_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 4, "source": source }))
+            .expect("the clip is added");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        assert_eq!(sound.rate, 16_000, "the sound is at the session's rate");
+        assert_eq!(sound.frames, 8, "and it is as long as the resampled clip: {}", sound.frames);
+        assert!((sound.samples[0] - 0.5).abs() < 0.001, "and it holds the source's samples");
     }
 
     /// A source that is **not there** is refused: the renderer does not

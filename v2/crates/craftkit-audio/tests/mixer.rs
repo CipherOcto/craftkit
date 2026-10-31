@@ -91,3 +91,33 @@ fn the_clipped_samples_are_within_the_range() {
     assert_eq!(clipped[1], -1.0);
     assert_eq!(clipped[2], 0.5, "and what fits is untouched");
 }
+
+/// The **resampler** keeps the sound and changes its rate.
+///
+/// The resampling is linear, and the test says what that means: a ramp
+/// stays a ramp, and the number of frames is in proportion.
+#[test]
+fn the_resampler_keeps_the_sound_and_changes_its_rate() {
+    // A ramp: a quarter, a half, three quarters.
+    let samples = vec![0.25_f32, 0.5, 0.75];
+    let faster = craftkit_audio::resample(&samples, 1, 8_000, 16_000);
+    assert_eq!(faster.len(), 6, "twice the rate is twice the frames");
+    // The ramp is still a ramp: the first sample is the first, and the
+    // second is between the first and the second.
+    assert!((faster[0] - 0.25).abs() < 1e-6, "the first sample is the first");
+    assert!((faster[1] - 0.375).abs() < 1e-6, "the second is between: {}", faster[1]);
+    let slower = craftkit_audio::resample(&samples, 1, 16_000, 8_000);
+    assert_eq!(slower.len(), 2, "half the rate is half the frames");
+    assert!((slower[0] - 0.25).abs() < 1e-6, "and the sound is the same one");
+}
+
+/// The resampler keeps the **channels** apart.
+#[test]
+fn the_resampler_keeps_the_channels_apart() {
+    // Two channels: a ramp on the left and silence on the right.
+    let samples = vec![0.25_f32, 0.0, 0.5, 0.0, 0.75, 0.0];
+    let faster = craftkit_audio::resample(&samples, 2, 8_000, 16_000);
+    assert_eq!(faster.len(), 12, "two channels of six frames");
+    assert!((faster[0] - 0.25).abs() < 1e-6, "the left channel is the ramp");
+    assert!((faster[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
+}
