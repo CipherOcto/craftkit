@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1142 tests.** The MCP server links **all fifteen batteries** in, so the
+**1156 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1142 tests
+cargo test          # 1156 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3585,6 +3585,7 @@ so.
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
 | a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The paragraph is **drawn** with those letters (§129) | §58, §59, §60, §128, §129 |
 | **hyphenation**: where a word may be broken | **built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other (§58); and now the kit **finds** them: the patterns say where the words of the language break, the heuristic answers for the words the patterns do not know, and the limits say how careful the answer is (§145) | §58, §145 |
+| a **caret**: where the reader is in the text | **built.** The caret is a **node** under the paragraph and it carries the character it stands before; the text is the words with a space between them, and the space is a character too; the caret's **place** is derived from the layout and not stored (§151) | §151 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10262,3 +10263,91 @@ mixer's one rule that is about the *other* tracks.
   file (§146) and its solo is a playback rule; here the solo is in the
   document and the render honours it, which is the same difference and
   the same answer.
+
+## 151. The caret is in the text
+
+A paragraph could be read and could not be edited: there was no caret,
+so there was no place to type at and no way to say where in the text
+the reader was.
+
+### What was built
+
+- A **caret**: a node of kind `text.caret`, a **child** of the
+  paragraph. Its payload carries the **character** it stands before.
+- Four commands: `text.caret.set` puts the caret where it is asked
+  for, `text.caret.move` moves it a character at a time or to the ends
+  of the text, `text.caret.type` types at it, and `text.caret.delete`
+  takes the character before it away.
+- The caret's **place** is derived and not stored: the drawing places
+  every character of the text as it draws it, and the caret stands
+  where the character it stands before stands. The place is the kind's
+  **place**, so a front end can ask where the caret is.
+- The caret is **drawn**: a line at that place, in the text's colour.
+
+### What the port found
+
+- **The caret is a node and not the session's business.** The family's
+  caret is part of the selection, and the selection is the session's
+  (§22). But a document that keeps the caret keeps where the reader
+  was, and the tree's own rule — a view with a setting is a node, the
+  ruler's scale (§131), the paragraph's measure (§58) — says the same
+  thing. So the caret is a node under the paragraph, and the
+  selection is still the session's.
+- **The space is a character.** The text is the words with a space
+  between them, and the space is a character of the text: it has no
+  ink and it is still a place a caret can be. The port found that when
+  it tried to place the caret from the letters it had drawn — a letter
+  is a letter, and a space is not one.
+- **The character is counted in the text, and the text is the words.**
+  The words are the payload and the text is what they say, so a
+  caret's character is a number of characters in a text that is made
+  when the words are made.
+- **Typing is the text, and the words are made again out of it.** The
+  paragraph does not keep a string: typing puts the characters into
+  the text and the text is split into words again. A letter in the
+  middle of a word makes the word two words, and a space ends a word
+  — that is the payload's rule and not the command's.
+
+### What it cost
+
+- **Fourteen tests** in the battery (`tests/caret.rs`): the caret is a
+  node under the paragraph, it is put where it is asked for and moved
+  a character at a time, it stops at the ends of the text, a caret
+  past the end and a way that is not a way are refused, typing puts
+  the text into the paragraph and makes the words again, deleting
+  takes the character back, the caret stands where its character
+  stands, the caret is drawn, the paragraph says where its caret is,
+  and the undo takes the typing back with the caret.
+- **The text is bounded at 65 536 characters** (`MAX_TEXT_CHARACTERS`,
+  a private cap). The caret's character is a **number**, and the
+  payload's numbers are bounded to a million, so a text longer than
+  that could not hold a caret in it at all; sixty-five thousand
+  characters is far more text than a paragraph has.
+- **The drawing now places every character of the text.** The walk
+  over the broken lines already knew which word and which piece each
+  box belongs to — that is how the words of a line are reported
+  (§58) — and the caret wanted the characters as well. The hyphen is
+  **not** a character of the text: the word was broken, and the break
+  is the breaker's business.
+
+### What it does not settle
+
+- **There is no selection of characters.** The SDK's selection is a
+  node and a part of it in the node's own units (§22), and a
+  paragraph's own unit is not yet the character. A selection of
+  characters would be the caret and the selection in one, and here the
+  caret is a node of its own.
+- **There is no word-wise movement.** The caret moves a character at a
+  time; the family's caret moves a word at a time and a line at a
+  time.
+- **The caret does not blink.** A caret that blinks is a caret whose
+  drawing depends on the clock, and this tree has no clock — the same
+  reason the click is not printed into a file (§146).
+- **A paragraph with a caret is laid out twice for every frame**: once
+  for the letters and once for the caret's line. The port measured the
+  cost as small and left it, and that is a measurement and not a
+  proof.
+- **A caret at a hyphenation break stands at the start of the next
+  line.** The hyphen is drawn at the end of the line and the text
+  continues on the next one, and the caret stands where the next piece
+  starts.
