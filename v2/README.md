@@ -904,6 +904,10 @@ different commands with one id.
 - `crates/craftkit-audio` — the **mixer**: the samples of many tracks,
   summed into one. A **library**, not a plugin: it contributes nothing
   to the registry and the linker does not wire it in (§134).
+- `crates/craftkit-plugins` — the kit's own **audio plugins**: a
+  catalogue of small programs that change a signal — a gain, a low pass
+  and a delay. A **library**, not a plugin: it contributes nothing to
+  the registry and the linker does not wire it in (§141).
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
   words, the measure it sits in, the **metric** it is set in, the lines
   it breaks into and the **letters** it is drawn with — ported into v2's
@@ -991,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1041 tests.** The MCP server links **all fifteen batteries** in, so the
+**1051 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1093,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1041 tests
+cargo test          # 1051 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9587,7 +9591,9 @@ that no sound obeyed.
 - **The inserts are not rendered.** An insert is a plugin's name (§ the
   insert's payload) and the render does not load plugins. A plugin is a
   **program** (§ the plugin's own section) and a program needs a host,
-  and the render is not one.
+  and the render is not one. — **Answered in §141**: there is a
+  catalogue of the kit's own plugins, and the render runs the inserts
+  of a track over its signal.
 - **The lane's curve and the lane's sound are two things.** The curve
   is drawn scaled to its row (§127) — the kit does not know what range
   a parameter takes — and the sound uses the parameter's own units. A
@@ -9640,10 +9646,73 @@ no sound: the render summed the clips and stopped.
 - **The inserts are not rendered.** An insert is a plugin's *name* and
   the render does not load plugins: a plugin is a **program** (§ the
   plugin's own section) and a program needs a host, and the render is
-  not one.
+  not one. — **Answered in §141**: the catalogue is the host's own
+  small one.
 - **There is no master of its own.** The file is the master, so a
   document cannot have two outputs and cannot say that one bus is a
   master and another is not.
 - **The pre-fader flag does nothing.** A send says whether it is before
   the fader, and the model has no fader: the tree's mixer has one and
   this one does not, so both kinds of send carry the same signal.
+
+---
+
+## 141. The insert is a program
+
+An insert named a **plugin** and no plugin was ever run: the tree's
+mixer has a table of thirty built-in plugins and a hard-coded match on
+the id, and v2 had the name and nothing else.
+
+### What was built
+
+- **`craftkit-plugins`**: a catalogue of the kit's own **audio
+  plugins** — a gain, a one-pole low pass and a delay. A name and a set
+  of parameters make one.
+- The **render runs the inserts**: a track's signal goes through them,
+  in the **order of the tree**, because the order of the tree is the
+  order of the drawing and it is the order of the processing too.
+- The insert's parameters could not be set at all before this, so there
+  is a **command** for it: `sound.insert.set`. A document may not
+  change its own parameters; the change is a command, like every other
+  change.
+
+### What the port found
+
+- **"Plugin" means two things in this kit, and they are two different
+  things.** A **plugin of the registry** is a crate that contributes
+  kinds and commands; a **plugin of the audio** is a program that
+  changes a signal. The first is wired in at build time by the linker
+  (§ the linker); the second is named by a document and made at run
+  time, and the catalogue is where the names are. Writing both in one
+  crate would have hidden that they are different questions.
+- **A plugin that is not in the catalogue is refused.** The tree's rule
+  is that a plugin that is not in the table cannot be created at all,
+  and here it is a refusal with a name: a plugin that cannot be made
+  cannot be run.
+- **The parameters are hostile, like everything else.** A parameter that
+  is not a number is **left out** — the reader's rule — and a
+  parameter that is not a **size** is refused: a cutoff of nothing is
+  not a cutoff, and a delay of minus five is not a delay.
+
+### What it cost
+
+- one crate, one trait, three plugins and **eight tests** in the
+  catalogue, and **two** in the battery: the gain is a gain, the low
+  pass is smooth, the delay is later, a name that is not in the
+  catalogue is refused with its name, and an insert changes the sound
+  it is on.
+
+### What it does not settle
+
+- **The catalogue is three plugins long.** The tree has thirty, and
+  they are the tree's own code; a catalogue is a place to put them, and
+  what is in it is a decision about which are worth porting.
+- **A plugin here is not a plugin there.** The kit's CLAP and VST3
+  batteries carry a **host** that opens a real plugin from a real file
+  (§76–§120), and those plugins are programs in a shared library. The
+  catalogue here is programs in a source file: they are made at run
+  time from a name, and they cannot be anything but what the tree
+  wrote.
+- **The low pass is one pole.** It is the simplest filter there is that
+  changes a signal, and it is honest about what it is; a better filter
+  is more poles and a filter with a state.
