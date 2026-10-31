@@ -197,16 +197,49 @@ pub enum Expr {
     Text(String),
     /// A boolean.
     Bool(bool),
-    /// One cell.
-    Cell(CellRef),
-    /// A range of cells.
-    Range(Area),
+    /// One cell, in a sheet — or in the sheet the formula is in.
+    Cell {
+        /// The sheet the cell is in, when the formula names one.
+        sheet: Option<String>,
+        /// The cell.
+        cell: CellRef,
+    },
+    /// A range of cells, in a sheet — or in the sheet the formula is in.
+    Range {
+        /// The sheet the range is in, when the formula names one.
+        sheet: Option<String>,
+        /// The range.
+        area: Area,
+    },
     /// A function and its arguments.
     Call(String, Vec<Expr>),
     /// A negation.
     Negate(Box<Expr>),
     /// A binary operation.
     Binary(String, Box<Expr>, Box<Expr>),
+}
+
+/// A **reference**: a sheet, maybe, and an area of cells in it.
+///
+/// A formula's precedents are areas, and an area is in a sheet: the
+/// cells `A1:B4` of the sheet the formula is in, or the cells
+/// `A1:B4` of the sheet the formula names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reference {
+    /// The sheet, when the reference names one.
+    pub sheet: Option<String>,
+    /// The area of cells.
+    pub area: Area,
+}
+
+impl Reference {
+    /// The reference, as it is written: `Sheet1!A1:B4`.
+    pub fn to_text(&self) -> String {
+        match &self.sheet {
+            Some(sheet) => format!("{sheet}!{}", self.area.to_text()),
+            None => self.area.to_text(),
+        }
+    }
 }
 
 /// A formula that did not parse.
@@ -238,16 +271,18 @@ pub fn parse(text: &str) -> Result<Expr, FormulaError> {
 }
 
 /// The cells and ranges a formula reads.
-pub fn precedents(expression: &Expr) -> Vec<Area> {
-    let mut found: Vec<Area> = Vec::new();
+pub fn precedents(expression: &Expr) -> Vec<Reference> {
+    let mut found: Vec<Reference> = Vec::new();
     collect_precedents(expression, &mut found);
     found
 }
 
-fn collect_precedents(expression: &Expr, found: &mut Vec<Area>) {
+fn collect_precedents(expression: &Expr, found: &mut Vec<Reference>) {
     match expression {
-        Expr::Cell(cell) => found.push(Area::new(*cell, *cell)),
-        Expr::Range(area) => found.push(*area),
+        Expr::Cell { sheet, cell } => {
+            found.push(Reference { sheet: sheet.clone(), area: Area::new(*cell, *cell) })
+        }
+        Expr::Range { sheet, area } => found.push(Reference { sheet: sheet.clone(), area: *area }),
         Expr::Call(_, arguments) => {
             for argument in arguments {
                 collect_precedents(argument, found);
@@ -412,6 +447,33 @@ impl Parser {
             }
             return Ok(inner);
         }
+        // A **quoted sheet name**: `'My Sheet'!A1`. The quote is the
+        // sheet's, and the name inside it may hold anything but another
+        // quote.
+        if character == '\'' {
+            self.at += 1;
+            let mut name = String::new();
+            loop {
+                match self.peek() {
+                    None => return Err(self.error("the sheet's name is not closed")),
+                    Some('\'') => {
+                        self.at += 1;
+                        break;
+                    }
+                    Some(character) => {
+                        name.push(character);
+                        self.at += 1;
+                    }
+                }
+            }
+            if name.is_empty() {
+                return Err(self.error("the sheet has no name"));
+            }
+            if !self.take('!') {
+                return Err(self.error("the sheet's name is not followed by a cell"));
+            }
+            return self.reference(Some(name));
+        }
         if character == '"' {
             self.at += 1;
             let mut text = String::new();
@@ -479,25 +541,11 @@ impl Parser {
         if word.eq_ignore_ascii_case("FALSE") {
             return Ok(Expr::Bool(false));
         }
-        // A range: `A1:B4`.
-        let mut after = self.at;
-        while after < self.characters.len() && self.characters[after].is_whitespace() {
-            after += 1;
-        }
-        if self.characters.get(after) == Some(&':') {
-            let mut end = after + 1;
-            while end < self.characters.len()
-                && (self.characters[end].is_ascii_alphanumeric() || self.characters[end] == '$')
-            {
-                end += 1;
-            }
-            let second: String = self.characters[after + 1..end].iter().collect();
-            self.at = end;
-            let first_cell = CellRef::parse(&word)
-                .ok_or_else(|| FormulaError { message: format!("`{word}` is not a cell") })?;
-            let second_cell = CellRef::parse(&second)
-                .ok_or_else(|| FormulaError { message: format!("`{second}` is not a cell") })?;
-            return Ok(Expr::Range(Area::new(first_cell, second_cell)));
+        // A **sheet**: `Sheet1!A1`. The word is the sheet's name and
+        // the reference that follows is in it.
+        if self.peek() == Some('!') {
+            self.at += 1;
+            return self.reference(Some(word));
         }
         // A function: a name and a bracket.
         if self.peek() == Some('(') {
@@ -519,8 +567,71 @@ impl Parser {
             }
             return Ok(Expr::Call(word.to_ascii_uppercase(), arguments));
         }
+        self.reference_to(word, None)
+    }
+
+    /// A **reference**: the word that follows, in the sheet (maybe).
+    fn reference(&mut self, sheet: Option<String>) -> Result<Expr, FormulaError> {
+        let start = self.at;
+        while self.at < self.characters.len()
+            && (self.characters[self.at].is_ascii_alphanumeric() || self.characters[self.at] == '$')
+        {
+            self.at += 1;
+        }
+        let word: String = self.characters[start..self.at].iter().collect();
+        if word.is_empty() {
+            return Err(self.error("there is nothing there"));
+        }
+        self.reference_to(word, sheet)
+    }
+
+    /// A **reference**: a cell or a range, in the sheet (maybe).
+    ///
+    /// A range is in one sheet: `Sheet1!A1:Sheet1!B4` is the range
+    /// `A1:B4` of `Sheet1`, and a range that names two sheets is not a
+    /// range and is refused.
+    fn reference_to(&mut self, word: String, sheet: Option<String>) -> Result<Expr, FormulaError> {
+        // A range: `A1:B4`.
+        let mut after = self.at;
+        while after < self.characters.len() && self.characters[after].is_whitespace() {
+            after += 1;
+        }
+        if self.characters.get(after) == Some(&':') {
+            let mut end = after + 1;
+            while end < self.characters.len()
+                && (self.characters[end].is_ascii_alphanumeric() || self.characters[end] == '$')
+            {
+                end += 1;
+            }
+            let mut second: String = self.characters[after + 1..end].iter().collect();
+            self.at = end;
+            // The second corner may name its sheet: `Sheet1!A1:Sheet1!B4`.
+            if self.peek() == Some('!') {
+                self.at += 1;
+                let other = second.clone();
+                let start = self.at;
+                while self.at < self.characters.len()
+                    && (self.characters[self.at].is_ascii_alphanumeric() || self.characters[self.at] == '$')
+                {
+                    self.at += 1;
+                }
+                second = self.characters[start..self.at].iter().collect();
+                if Some(&other) != sheet.as_ref() {
+                    return Err(FormulaError {
+                        message: format!(
+                            "a range is in one sheet, and this one names `{other}` and `{other}`"
+                        ),
+                    });
+                }
+            }
+            let first_cell = CellRef::parse(&word)
+                .ok_or_else(|| FormulaError { message: format!("`{word}` is not a cell") })?;
+            let second_cell = CellRef::parse(&second)
+                .ok_or_else(|| FormulaError { message: format!("`{second}` is not a cell") })?;
+            return Ok(Expr::Range { sheet, area: Area::new(first_cell, second_cell) });
+        }
         match CellRef::parse(&word) {
-            Some(cell) => Ok(Expr::Cell(cell)),
+            Some(cell) => Ok(Expr::Cell { sheet, cell }),
             None => Err(FormulaError { message: format!("`{word}` is not a cell or a function") }),
         }
     }
@@ -577,75 +688,166 @@ impl Cells {
     pub fn len(&self) -> usize {
         self.cells.len()
     }
+}
 
-    /// The **value** of a cell: what it holds, or what its formula says.
+/// The **sheets** of a workbook: the cells of each sheet, by name.
+///
+/// A formula may read another sheet, and the value of a cell is then
+/// not a fact about the sheet but a fact about the **workbook**: the
+/// value of a cell in `Sheet2` is the value of `Sheet1!A1` and the
+/// value of `Sheet2!A1` at the same time.
+///
+/// The cycle is a cycle of the workbook too: a formula in one sheet
+/// that reads a cell in another sheet that reads it back is a cycle,
+/// and the workbook is where that is seen.
+#[derive(Debug, Clone, Default)]
+pub struct Book {
+    /// The sheets, by name.
+    sheets: BTreeMap<String, Cells>,
+}
+
+impl Book {
+    /// A workbook with no sheets in it.
+    pub fn new() -> Book {
+        Book { sheets: BTreeMap::new() }
+    }
+
+    /// Put a sheet in the workbook.
+    pub fn add(&mut self, name: &str, cells: Cells) {
+        self.sheets.insert(name.to_string(), cells);
+    }
+
+    /// Whether a cell's formula reads itself, directly or through
+    /// others — in this sheet or in another.
     ///
-    /// A formula's value is **derived**: it is computed from the cells it
-    /// reads, every time, and it is never written down.
-    pub fn value_of(&self, cell: CellRef) -> Value {
-        self.value_of_guarded(cell, &mut Vec::new())
+    /// The cycle is a cycle of the **workbook**: a formula in one sheet
+    /// that reads a cell in another sheet that reads it back is a
+    /// cycle, and it is a cycle because the sheets are in one book.
+    pub fn reads_itself(&self, sheet: &str, cell: CellRef) -> bool {
+        self.reads_itself_guarded(sheet, cell, &mut Vec::new())
+    }
+
+    /// Whether a cell reads itself, with the cells being read on the way.
+    fn reads_itself_guarded(&self, sheet: &str, cell: CellRef, being: &mut Vec<(String, CellRef)>) -> bool {
+        let Some(cells) = self.sheets.get(sheet) else { return false };
+        let Some(entry) = cells.get(cell) else { return false };
+        let Some(formula) = &entry.formula else { return false };
+        let Ok(expression) = parse(formula) else { return false };
+        if being.contains(&(sheet.to_string(), cell)) {
+            return true;
+        }
+        being.push((sheet.to_string(), cell));
+        let mut found = false;
+        for reference in precedents(&expression) {
+            let name = reference.sheet.as_deref().unwrap_or(sheet);
+            for row in reference.area.start.row..=reference.area.end.row {
+                for col in reference.area.start.col..=reference.area.end.col {
+                    let other = CellRef { col, row };
+                    if name == sheet && other == cell {
+                        found = true;
+                        break;
+                    }
+                    if self.reads_itself_guarded(name, other, being) {
+                        found = true;
+                        break;
+                    }
+                }
+                if found {
+                    break;
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        being.pop();
+        found
+    }
+
+    /// The sheet of that name, for writing.
+    pub fn sheet_mut(&mut self, name: &str) -> Option<&mut Cells> {
+        self.sheets.get_mut(name)
+    }
+
+    /// The **value** of a cell in a sheet.
+    pub fn value_of(&self, sheet: &str, cell: CellRef) -> Value {
+        self.value_of_guarded(sheet, cell, &mut Vec::new())
     }
 
     /// The value of a cell, with the cells being computed on the way.
-    fn value_of_guarded(&self, cell: CellRef, being: &mut Vec<CellRef>) -> Value {
-        let Some(entry) = self.cells.get(&cell) else { return Value::Empty };
+    fn value_of_guarded(&self, sheet: &str, cell: CellRef, being: &mut Vec<(String, CellRef)>) -> Value {
+        let Some(cells) = self.sheets.get(sheet) else {
+            return Value::Error(format!("there is no sheet `{sheet}`"));
+        };
+        let Some(entry) = cells.get(cell) else { return Value::Empty };
         if let Some(value) = &entry.value {
             return value.clone();
         }
         let Some(formula) = &entry.formula else { return Value::Empty };
-        if being.contains(&cell) {
-            return Value::Error(format!("{} reads itself", cell.to_text()));
+        if being.contains(&(sheet.to_string(), cell)) {
+            return Value::Error(format!("{sheet}!{} reads itself", cell.to_text()));
         }
         let expression = match parse(formula) {
             Ok(expression) => expression,
             Err(error) => return Value::Error(error.message),
         };
-        being.push(cell);
-        let value = self.evaluate(&expression, being);
+        being.push((sheet.to_string(), cell));
+        let value = self.evaluate(sheet, &expression, being);
         being.pop();
         value
     }
 
-    /// Evaluate an expression against the sheet.
-    pub fn evaluate(&self, expression: &Expr, being: &mut Vec<CellRef>) -> Value {
+    /// Evaluate an expression in a sheet.
+    pub fn evaluate(&self, sheet: &str, expression: &Expr, being: &mut Vec<(String, CellRef)>) -> Value {
         match expression {
             Expr::Number(number) => Value::Number(*number),
             Expr::Text(text) => Value::Text(text.clone()),
             Expr::Bool(value) => Value::Bool(*value),
-            Expr::Cell(cell) => self.value_of_guarded(*cell, being),
-            Expr::Range(area) => {
+            Expr::Cell { sheet: named, cell } => {
+                let name = named.as_deref().unwrap_or(sheet);
+                self.value_of_guarded(name, *cell, being)
+            }
+            Expr::Range { sheet: named, area } => {
+                let name = named.as_deref().unwrap_or(sheet);
+                if !self.sheets.contains_key(name) {
+                    return Value::Error(format!("there is no sheet `{name}`"));
+                }
                 let mut values = Vec::new();
                 for row in area.start.row..=area.end.row {
                     for col in area.start.col..=area.end.col {
-                        values.push(self.value_of_guarded(CellRef { col, row }, being));
+                        values.push(self.value_of_guarded(name, CellRef { col, row }, being));
                     }
                 }
                 Value::Text(format!("{} values", values.len()))
             }
-            Expr::Negate(inner) => match self.evaluate(inner, being).as_number() {
+            Expr::Negate(inner) => match self.evaluate(sheet, inner, being).as_number() {
                 Some(number) => Value::Number(-number),
                 None => Value::Error("#VALUE!".to_string()),
             },
             Expr::Binary(operator, left, right) => {
-                let left = self.evaluate(left, being);
-                let right = self.evaluate(right, being);
+                let left = self.evaluate(sheet, left, being);
+                let right = self.evaluate(sheet, right, being);
                 binary(operator, &left, &right)
             }
-            Expr::Call(name, arguments) => self.call(name, arguments, being),
+            Expr::Call(name, arguments) => self.call(sheet, name, arguments, being),
         }
     }
 
     /// Call a function.
-    fn call(&self, name: &str, arguments: &[Expr], being: &mut Vec<CellRef>) -> Value {
+    fn call(&self, sheet: &str, name: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
         for argument in arguments {
             match argument {
-                Expr::Range(area) => {
+                Expr::Range { sheet: named, area } => {
+                    let name = named.as_deref().unwrap_or(sheet);
+                    if !self.sheets.contains_key(name) {
+                        return Value::Error(format!("there is no sheet `{name}`"));
+                    }
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
-                            let value = self.value_of_guarded(CellRef { col, row }, being);
+                            let value = self.value_of_guarded(name, CellRef { col, row }, being);
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             }
@@ -653,7 +855,7 @@ impl Cells {
                     }
                 }
                 other => {
-                    let value = self.evaluate(other, being);
+                    let value = self.evaluate(sheet, other, being);
                     if let Some(number) = value.as_number() {
                         numbers.push(number);
                     }

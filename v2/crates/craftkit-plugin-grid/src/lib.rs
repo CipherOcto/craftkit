@@ -63,7 +63,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
 
-use formula::{CellRef, Cells, Value};
+use formula::{Book, CellRef, Cells, Value};
 
 /// The grid layer.
 ///
@@ -118,6 +118,19 @@ impl SheetKind {
             "formulas": formulas,
         }))
     }
+}
+
+/// The **workbook**: the sheets of the document, by name.
+///
+/// A formula may read another sheet, and the value of a cell is then a
+/// fact about the workbook and not about the sheet: the sheets are
+/// gathered here, once, and the evaluation reads them.
+fn book_of(document: &Document) -> Book {
+    let mut book = Book::new();
+    for node in document.walk().filter(|node| node.kind == "grid.sheet") {
+        book.add(&node.name, cells_of(node));
+    }
+    book
 }
 
 /// The cells of a sheet, from its payload.
@@ -289,7 +302,7 @@ impl SetFormula {
             id: "grid.formula.set".to_string(),
             message: error.message,
         })?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+        let Some(node) = session.document().node(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.formula.set".to_string(),
                 message: format!("there is no sheet `{sheet}`"),
@@ -301,16 +314,27 @@ impl SetFormula {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
-        let mut cells = sheet_cells_mut(node);
+        let name = node.name.clone();
+        let mut cells = cells_of(node);
         // The cycle check: with the new formula in place, does the cell
-        // read itself?
+        // read itself — in this sheet or in another?
         cells.set_formula(cell, text.clone());
-        if reads_itself(&cells, cell, &mut Vec::new()) {
+        let mut book = book_of(session.document());
+        if let Some(sheet_cells) = book.sheet_mut(&name) {
+            *sheet_cells = cells.clone();
+        }
+        if book.reads_itself(&name, cell) {
             return Err(EngineError::Failed {
                 id: "grid.formula.set".to_string(),
-                message: format!("the formula in {} reads itself", cell.to_text()),
+                message: format!("the formula in {name}!{} reads itself", cell.to_text()),
             });
         }
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: "grid.formula.set".to_string(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
         node.data["cells"] = cells_into(&cells);
         let precedents = formula::precedents(&expression);
         Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
@@ -396,9 +420,10 @@ impl ReadPrecedents {
             "cell": cell.to_text(),
             "precedents": areas
                 .iter()
-                .map(|area| json!({
-                    "area": area.to_text(),
-                    "cells": area.count(),
+                .map(|reference| json!({
+                    "area": reference.area.to_text(),
+                    "sheet": reference.sheet,
+                    "cells": reference.area.count(),
                 }))
                 .collect::<Vec<_>>(),
         })))
@@ -425,18 +450,29 @@ impl ReadDependents {
                 message: format!("there is no sheet `{sheet}`"),
             });
         };
-        let cells = cells_of(node);
+        let name = node.name.clone();
+        // The dependents of a cell are the cells that read it, in this
+        // sheet **or in another**: a formula in `Sheet2` that reads
+        // `Sheet1!A1` depends on it.
         let mut dependents: Vec<Json> = Vec::new();
-        for (other, entry) in cells.iter() {
-            let Some(formula) = &entry.formula else { continue };
-            let Ok(expression) = formula::parse(formula) else { continue };
-            for area in formula::precedents(&expression) {
-                if area.covers(cell) {
-                    dependents.push(json!({
-                        "cell": other.to_text(),
-                        "reads": area.to_text(),
-                    }));
-                    break;
+        for sheet_node in session.document().walk().filter(|node| node.kind == "grid.sheet") {
+            let cells = cells_of(sheet_node);
+            for (other, entry) in cells.iter() {
+                let Some(formula) = &entry.formula else { continue };
+                let Ok(expression) = formula::parse(formula) else { continue };
+                for reference in formula::precedents(&expression) {
+                    // A reference in another sheet does not read this cell.
+                    if reference.sheet.as_deref().is_some_and(|other| other != name) {
+                        continue;
+                    }
+                    if reference.area.covers(cell) {
+                        dependents.push(json!({
+                            "sheet": sheet_node.name,
+                            "cell": other.to_text(),
+                            "reads": reference.to_text(),
+                        }));
+                        break;
+                    }
                 }
             }
         }
@@ -469,13 +505,15 @@ impl CalcSheet {
                 message: format!("there is no sheet `{sheet}`"),
             });
         };
+        let name = node.name.clone();
         let cells = cells_of(node);
+        let book = book_of(session.document());
         let mut values = serde_json::Map::new();
         for (cell, entry) in cells.iter() {
             if entry.formula.is_none() {
                 continue;
             }
-            values.insert(cell.to_text(), cells.value_of(cell).to_json());
+            values.insert(cell.to_text(), book.value_of(&name, cell).to_json());
         }
         let count = values.len();
         Ok(Outcome::new(format!("{count} value(s)")).with_data(json!({
@@ -483,41 +521,6 @@ impl CalcSheet {
             "cells": Json::Object(values),
         })))
     }
-}
-
-/// Whether a cell's formula reads itself, directly or through others.
-fn reads_itself(cells: &Cells, cell: CellRef, being: &mut Vec<CellRef>) -> bool {
-    let Some(entry) = cells.get(cell) else { return false };
-    let Some(formula) = &entry.formula else { return false };
-    let Ok(expression) = formula::parse(formula) else { return false };
-    if being.contains(&cell) {
-        return true;
-    }
-    being.push(cell);
-    let mut found = false;
-    for area in formula::precedents(&expression) {
-        for row in area.start.row..=area.end.row {
-            for col in area.start.col..=area.end.col {
-                let other = CellRef { col, row };
-                if other == cell {
-                    found = true;
-                    break;
-                }
-                if reads_itself(cells, other, being) {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                break;
-            }
-        }
-        if found {
-            break;
-        }
-    }
-    being.pop();
-    found
 }
 
 /// The evaluator: the **values** of a sheet.
@@ -537,12 +540,13 @@ impl CalcEvaluator {
                 continue;
             }
             let cells = cells_of(node);
+            let book = book_of(document);
             let mut values = serde_json::Map::new();
             for (cell, entry) in cells.iter() {
                 if entry.formula.is_none() {
                     continue;
                 }
-                let value = cells.value_of(cell);
+                let value = book.value_of(&node.name, cell);
                 values.insert(cell.to_text(), value.to_json());
             }
             plan.items.push(PlanItem {
