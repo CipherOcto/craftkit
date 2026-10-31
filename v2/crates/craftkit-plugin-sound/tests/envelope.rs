@@ -164,7 +164,7 @@ fn the_clips_curve_is_drawn_on_the_clips_bar() {
     // The lane's **place**: the clip starts half a second in, so the
     // curve is drawn from there and not from the beginning.
     let lane = session.document().walk().find(|node| node.kind == "sound.lane").expect("the lane is there");
-    let place = session.place_of(&lane).expect("the lane has a place");
+    let place = session.place_of(lane).expect("the lane has a place");
     assert!((place.x - 0.5).abs() < 1e-9, "the curve starts with the clip: {}", place.x);
 }
 
@@ -186,6 +186,6 @@ fn a_tracks_lane_is_still_the_tracks() {
         )
         .expect("the track is automated");
     let lane = session.document().walk().find(|node| node.kind == "sound.lane").expect("the lane is there");
-    let place = session.place_of(&lane).expect("the lane has a place");
+    let place = session.place_of(lane).expect("the lane has a place");
     assert!((place.x - 0.0).abs() < 1e-9, "the curve starts at the track's beginning: {}", place.x);
 }
