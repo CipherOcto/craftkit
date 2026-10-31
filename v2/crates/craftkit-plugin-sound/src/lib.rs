@@ -15,11 +15,12 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-four commands**, one for each thing a person does to a
-//!   sound document: make a track, make a clip, set the tempo, set the
-//!   meter, make a marker, make a source, set the session, and the rest
-//!   that came with the mixer — the bus, the send, the insert, the lane,
-//!   the route, the input, the peaks and the render;
+//! - **twenty-five commands**, one for each thing a person does to a
+//!   sound document: make a track, set a track, make a clip, set the
+//!   tempo, set the meter, make a marker, make a source, set the
+//!   session, and the rest that came with the mixer — the bus, the
+//!   send, the insert, the lane, the route, the input, the peaks and
+//!   the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
 //! - an **evaluator**, `sound.timeline`, which says what the document
@@ -708,6 +709,18 @@ struct TrackPayload {
     /// A soloed track silences the others: when one track is soloed,
     /// the rest are not heard.
     solo: bool,
+    /// The track's **trim**, in decibels: the gain of the track's
+    /// input, before its inserts.
+    ///
+    /// The tree's trim runs from minus one hundred and forty-four
+    /// decibels to twenty-four; it is the level of the input and not
+    /// the level of the output.
+    trim_db: f64,
+    /// Whether the track's **phase is inverted**.
+    ///
+    /// The phase is a sign and not a level: the sound is the same and
+    /// upside down.
+    phase_invert: bool,
 }
 
 impl TrackPayload {
@@ -716,6 +729,8 @@ impl TrackPayload {
             "track_kind": self.track_kind,
             "channels": self.channels,
             "solo": self.solo,
+            "trim_db": self.trim_db,
+            "phase_invert": self.phase_invert,
         })
     }
 
@@ -724,6 +739,8 @@ impl TrackPayload {
             track_kind: value.get("track_kind").and_then(|kind| kind.as_str()).unwrap_or("audio").to_string(),
             channels: value.get("channels").and_then(|channels| channels.as_u64()).unwrap_or(2) as u32,
             solo: value.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
+            trim_db: value.get("trim_db").and_then(|trim| trim.as_f64()).unwrap_or(0.0),
+            phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
         })
     }
 }
@@ -1038,12 +1055,85 @@ impl AddTrack {
             Some(channels) => channels.0 as u32,
             None => 2,
         };
-        let payload = TrackPayload { track_kind, channels, solo: false };
+        let payload = TrackPayload { track_kind, channels, solo: false, trim_db: 0.0, phase_invert: false };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
         document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
         Ok(Outcome::changed(format!("added a track `{name}`"))
             .with_data(serde_json::json!({ "id": track, "name": name })))
+    }
+}
+
+/// Set a track's **trim** and **phase**.
+///
+/// The trim is the level of the track's **input**, before its inserts,
+/// and the phase is a sign and not a level: the sound is the same and
+/// upside down.
+#[derive(Command)]
+#[command(
+    id = "sound.track.set",
+    area = "sound",
+    layer = "sound",
+    icon = "sliders",
+    menu("Track", "Trim"),
+    mutates,
+    undoable
+)]
+pub struct SetTrack {
+    /// The track to set.
+    pub track: NodeRef,
+    /// Its trim, in decibels: from minus one hundred and forty-four to
+    /// twenty-four.
+    pub trim_db: Option<Number>,
+    /// Whether its phase is inverted.
+    pub phase: Option<Bool>,
+}
+
+impl SetTrack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.set".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.set".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.set".to_string(),
+            message: error.to_string(),
+        })?;
+        if let Some(trim) = &self.trim_db {
+            let trim = trim.0;
+            if !trim.is_finite() || !(-144.0..=24.0).contains(&trim) {
+                return Err(EngineError::Failed {
+                    id: "sound.track.set".to_string(),
+                    message:
+                        "a trim is a number of decibels from minus one hundred and forty-four to twenty-four"
+                            .to_string(),
+                });
+            }
+            payload.trim_db = trim;
+        }
+        if let Some(phase) = &self.phase {
+            payload.phase_invert = phase.0;
+        }
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.set".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(
+            serde_json::json!({ "id": id, "trim_db": payload.trim_db, "phase": payload.phase_invert }),
+        ))
     }
 }
 
@@ -2015,6 +2105,19 @@ impl RenderSound {
                 }
                 let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
                 add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, gain);
+            }
+            // The **trim**: the level of the track's input, and its
+            // phase. The tree's mixer applies the trim to the strip
+            // before the inserts, so an insert sees the trimmed sound.
+            let trim = TrackPayload::from_json(&track.data)
+                .map(|payload| {
+                    let gain = craftkit_audio::db_to_linear(payload.trim_db) as f32;
+                    let phase = if payload.phase_invert { -1.0 } else { 1.0 };
+                    gain * phase
+                })
+                .unwrap_or(1.0);
+            if trim != 1.0 {
+                signal.iter_mut().for_each(|sample| *sample *= trim);
             }
             for insert in inserts_of(session.document(), track) {
                 if insert.bypass {
