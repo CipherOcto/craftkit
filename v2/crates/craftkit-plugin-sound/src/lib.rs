@@ -15,12 +15,12 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-five commands**, one for each thing a person does to a
-//!   sound document: make a track, set a track, make a clip, set the
-//!   tempo, set the meter, make a marker, make a source, set the
-//!   session, and the rest that came with the mixer — the bus, the
-//!   send, the insert, the lane, the route, the input, the peaks and
-//!   the render;
+//! - **twenty-seven commands**, one for each thing a person does to a
+//!   sound document: make a track, set a track, make a clip, make a
+//!   take, choose the take that is played, set the tempo, set the
+//!   meter, make a marker, make a source, set the session, and the rest
+//!   that came with the mixer — the bus, the send, the insert, the
+//!   lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
 //! - an **evaluator**, `sound.timeline`, which says what the document
@@ -721,6 +721,12 @@ struct TrackPayload {
     /// The phase is a sign and not a level: the sound is the same and
     /// upside down.
     phase_invert: bool,
+    /// The name of the **take** that is heard.
+    ///
+    /// A track may have several takes — the tree's playlists — and one
+    /// of them is the one that is played. A track with no name here
+    /// plays its first take.
+    active_playlist: Option<String>,
 }
 
 impl TrackPayload {
@@ -731,6 +737,7 @@ impl TrackPayload {
             "solo": self.solo,
             "trim_db": self.trim_db,
             "phase_invert": self.phase_invert,
+            "active_playlist": self.active_playlist,
         })
     }
 
@@ -741,7 +748,31 @@ impl TrackPayload {
             solo: value.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
             trim_db: value.get("trim_db").and_then(|trim| trim.as_f64()).unwrap_or(0.0),
             phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
+            active_playlist: value
+                .get("active_playlist")
+                .and_then(|playlist| playlist.as_str())
+                .map(|playlist| playlist.to_string()),
         })
+    }
+}
+
+/// The **take** that is heard: the track's active playlist, or the
+/// first one it has.
+///
+/// A track may have several takes and one of them is played; a track
+/// whose active take is not there plays its first one, so that a track
+/// is never silent by accident.
+fn active_playlist(_document: &Document, track: &Node) -> Option<u64> {
+    let playlists: Vec<&Node> =
+        track.children.iter().filter(|child| child.kind == "sound.playlist").map(|child| &**child).collect();
+    let wanted = TrackPayload::from_json(&track.data).ok().and_then(|payload| payload.active_playlist);
+    match wanted {
+        Some(name) => playlists
+            .iter()
+            .find(|playlist| playlist.name == name)
+            .map(|playlist| playlist.id)
+            .or_else(|| playlists.first().map(|playlist| playlist.id)),
+        None => playlists.first().map(|playlist| playlist.id),
     }
 }
 
@@ -1055,12 +1086,142 @@ impl AddTrack {
             Some(channels) => channels.0 as u32,
             None => 2,
         };
-        let payload = TrackPayload { track_kind, channels, solo: false, trim_db: 0.0, phase_invert: false };
+        let payload = TrackPayload {
+            track_kind,
+            channels,
+            solo: false,
+            trim_db: 0.0,
+            phase_invert: false,
+            active_playlist: None,
+        };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
         document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
         Ok(Outcome::changed(format!("added a track `{name}`"))
             .with_data(serde_json::json!({ "id": track, "name": name })))
+    }
+}
+
+/// Add a **take** to a track.
+///
+/// A take is the tree's playlist: an alternative set of clips on the
+/// same track, and one of the takes is the one that is played.
+#[derive(Command)]
+#[command(
+    id = "sound.playlist.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "Takes"),
+    mutates,
+    undoable
+)]
+pub struct AddPlaylist {
+    /// The track the take is on.
+    pub track: NodeRef,
+    /// What to call it.
+    pub name: Text,
+}
+
+impl AddPlaylist {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let name = self.name.0.clone();
+        if name.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.add".to_string(),
+                message: "a take says what it is called".to_string(),
+            });
+        }
+        let Some(node) = session.document().node(track) else {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.add".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.add".to_string(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        if node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.add".to_string(),
+                message: format!("the track `{track}` already has a take called `{name}`"),
+            });
+        }
+        let id = session.document_mut()?.add_node_with_under(
+            Some(track),
+            name.clone(),
+            "sound.playlist",
+            None,
+            Json::Null,
+        );
+        Ok(Outcome::changed(format!("the track `{track}` has a take called `{name}`"))
+            .with_data(serde_json::json!({ "id": id, "track": track, "name": name })))
+    }
+}
+
+/// Say which **take** of a track is played.
+///
+/// The tree's track has several playlists and an index of the one that
+/// is played; here the take is named, because a name is what a person
+/// says and an index is what a program says.
+#[derive(Command)]
+#[command(
+    id = "sound.playlist.active",
+    area = "sound",
+    layer = "sound",
+    icon = "check",
+    menu("Track", "Takes"),
+    mutates,
+    undoable
+)]
+pub struct SetActivePlaylist {
+    /// The track the take is on.
+    pub track: NodeRef,
+    /// The take that is played.
+    pub playlist: Text,
+}
+
+impl SetActivePlaylist {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let name = self.playlist.0.clone();
+        let Some(node) = session.document().node(track) else {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.active".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.active".to_string(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        if !node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.active".to_string(),
+                message: format!("the track `{track}` has no take called `{name}`"),
+            });
+        }
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.playlist.active".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.active_playlist = Some(name.clone());
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(track) else {
+            return Err(EngineError::Failed {
+                id: "sound.playlist.active".to_string(),
+                message: format!("there is no track `{track}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the track `{track}` plays the take `{name}`"))
+            .with_data(serde_json::json!({ "track": track, "playlist": name })))
     }
 }
 
@@ -1977,6 +2138,18 @@ impl RenderSound {
                 message: format!("the clip `{}` cannot be read: {error}", clip.id),
             })?;
             let Some(source_id) = payload.source else { continue };
+            // The **take**: a clip that is not in the take that is
+            // played is not heard, and the tree's tracks have takes for
+            // exactly that reason.
+            if let Some(track) = timeline::track_of(session.document(), clip) {
+                let active = active_playlist(session.document(), track);
+                let take = timeline::parent_of(session.document(), clip.id).map(|playlist| playlist.id);
+                if let (Some(active), Some(take)) = (active, take)
+                    && active != take
+                {
+                    continue;
+                }
+            }
             clips.push((source_id, clip.id, payload));
         }
         // The sources are read once each, and the clips that play one
