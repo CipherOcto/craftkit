@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1187 tests.** The MCP server links **all fifteen batteries** in, so the
+**1192 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1187 tests
+cargo test          # 1192 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3591,6 +3591,7 @@ so.
 | a **clip drawn as its sound** | **built.** The **peaks** of a source are measured once and kept in the document, and a clip's bar carries the shape of the part of the source it plays (§154) | §154 |
 | a **better resampler** | **built.** The resampler is a **windowed sinc** — an ideal low-pass with a Kaiser window — so what was above the new half of the rate is taken away instead of folding back as a whistle; a sound too long for the limits is refused (§155) | §137, §155 |
 | a **shape that follows the automation** | **built.** The gain of a clip's sound at a time is the clip's own gain and the track's curve, and the shape on the bar is drawn with it (§156) | §156 |
+| a **caret that moves a word and a line at a time** | **built.** The word is in the words and the line is in the layout, and the caret keeps its place across a line (§157) | §151, §157 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10694,3 +10695,62 @@ the sound is, and the shape on the bar did not say so.
 - **The shape is the sound's own extent, and the gain scales it.** A
   sound that is six decibels down is drawn six decibels lower, which
   is what the reader wants; it is not what a meter would say.
+
+## 157. The caret moves a word and a line at a time
+
+§151 said that the caret moved a character at a time and that the
+family's caret moves a word at a time and a line at a time.
+
+### What was built
+
+- The caret moves a **word** at a time: `word_right` goes to the end
+  of the word the caret is in and then to the start of the next one,
+  and `word_left` goes to the start of the word the caret is in and
+  then to the start of the one before it.
+- The caret moves a **line** at a time: `up` and `down` keep the
+  caret's **place** across the line, so the caret goes to the
+  character of the line above whose place is nearest its own.
+
+### What the port found
+
+- **A line is a thing of the layout, and the layout is not always
+  there.** A paragraph with no measure has no lines, so there is
+  nothing to move between, and the command says so. The port found
+  this because the caret's *character* needs nothing but the payload —
+  the caret can stand in a paragraph that has never been measured —
+  and a movement that needs lines needs a layout that may not be
+  there.
+- **The word is in the words, and the line is in the drawing.** The
+  word-wise movement reads the payload's words: a word is a run of
+  characters with no space in it, and the spaces are the gaps. The
+  line-wise movement reads the drawing: the characters are placed as
+  the paragraph is drawn, and the lines are the runs of characters
+  that share a baseline. Two different homes for two different
+  movements, and the caret does not care which is which.
+- **The caret keeps its place across a line.** The rule is not "the
+  same character number on the line above" — that is the same *place*
+  only if the lines are the same width — but "the character whose
+  place is nearest", which is what a reader means by "up".
+
+### What it cost
+
+- **Five tests** in the battery (`tests/movement.rs`): the caret moves
+  a word at a time, a line at a time, it keeps its place across a
+  line, it stays where there is no line, and a paragraph with no
+  measure has no lines to move between.
+- **Two functions** in the battery and one more place of the drawing's
+  made public to the crate.
+
+### What it does not settle
+
+- **The word is a word and not a piece of punctuation.** The text is
+  split on whitespace and nothing else, so a word with a comma in it
+  is a word with a comma in it, and there is no rule that says where
+  the word ends and the punctuation begins.
+- **The line is the line of the layout and not the line of the
+  reader.** A paragraph that is set ragged has lines of different
+  lengths, and the caret moves to the nearest place on the line
+  above — which is the line the layout made, not the line the reader
+  thinks is there.
+- **There is no selection to move.** The caret moves alone; the
+  selection is the session's and it is not moved with it (§152).
