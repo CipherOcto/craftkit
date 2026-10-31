@@ -334,7 +334,7 @@ impl ClipKind {
         let paper = craftkit_sdk::document::Colour::WHITE;
         // The **waveform**: the shape of the sound the clip plays, drawn
         // on the bar in the paper's colour, the way the fade's notch is.
-        if let Some(path) = waveform_of(document, &payload, &rect) {
+        if let Some(path) = waveform_of(document, node, &payload, &rect) {
             canvas.path(&path, paper, None);
         }
         let width = payload.fade_in.len as f64 / rate;
@@ -2335,12 +2335,12 @@ fn peaks_of_source(document: &Document, source: u64) -> Option<Peaks> {
 /// as its length says — and a stretched clip reads its source more
 /// slowly, so it plays less of it. The bar is the clip, and the shape
 /// drawn on the bar is the part of the source the clip plays.
-fn waveform_path(
+fn waveform_path<F: Fn(usize, usize) -> f32>(
     rect: &Rect,
     peaks: &Peaks,
     from_frame: usize,
     span_frames: usize,
-    gain: f32,
+    gain: F,
 ) -> Option<Path> {
     if peaks.buckets.is_empty() || peaks.frames == 0 {
         return None;
@@ -2359,8 +2359,10 @@ fn waveform_path(
     let width = rect.w;
     let mut upper: Vec<Point> = Vec::new();
     let mut lower: Vec<Point> = Vec::new();
+    let count = to_bucket - from_bucket;
     for (index, bucket) in peaks.buckets[from_bucket..to_bucket].iter().enumerate() {
-        let x = rect.x + (index as f64 + 0.5) * width / (to_bucket - from_bucket) as f64;
+        let x = rect.x + (index as f64 + 0.5) * width / count as f64;
+        let gain = gain(index, count);
         let (least, most) = (bucket.0 * gain, bucket.1 * gain);
         upper.push(Point::new(x, level_y(rect, most)));
         lower.push(Point::new(x, level_y(rect, least)));
@@ -2385,7 +2387,7 @@ fn waveform_path(
 /// length is turned into the frames the source is read in — which is
 /// less than the length when the clip is stretched, because a stretched
 /// clip reads its source more slowly.
-fn waveform_of(document: &Document, payload: &ClipPayload, rect: &Rect) -> Option<Path> {
+fn waveform_of(document: &Document, clip: &Node, payload: &ClipPayload, rect: &Rect) -> Option<Path> {
     let source = payload.source?;
     let peaks = peaks_of_source(document, source)?;
     let source_node = document.node(source)?;
@@ -2395,8 +2397,37 @@ fn waveform_of(document: &Document, payload: &ClipPayload, rect: &Rect) -> Optio
     let from_frame = (payload.offset.max(0) as f64 * ratio).round() as usize;
     let span_frames =
         ((payload.length.max(0) as f64 / payload.stretch.max(f64::EPSILON)) * ratio).round() as usize;
-    let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
-    waveform_path(rect, &peaks, from_frame, span_frames, gain)
+    // The **gain** of the sound at each place: the clip's own gain and
+    // the track's automation. A clip that runs across a breakpoint is
+    // loud at one end and quiet at the other, and the shape on the bar
+    // says so — the shape is the sound as it is heard and not the
+    // sound as it is on the disk.
+    let length = payload.length.max(0);
+    waveform_path(rect, &peaks, from_frame, span_frames, |index, count| {
+        let at = payload.start + (length * index as i64) / count.max(1) as i64;
+        gain_at(document, clip, payload, at) as f32
+    })
+}
+
+/// The **gain** of a clip's sound at that time.
+///
+/// The clip's own gain and the track's **automation**: the volume lane
+/// is in decibels and the mute lane is one or less, and a muted track
+/// is silent however loud its sound is.
+fn gain_at(document: &Document, clip: &Node, payload: &ClipPayload, at: i64) -> f64 {
+    let mut decibels = payload.gain_db;
+    if let Some(track) = timeline::track_of(document, clip) {
+        let automation = automate::automation_of(document, track);
+        if let Some(points) = &automation.volume {
+            decibels += automate::value_at(points, at);
+        }
+        if let Some(points) = &automation.mute
+            && automate::value_at(points, at) >= 1.0
+        {
+            return 0.0;
+        }
+    }
+    craftkit_audio::db_to_linear(decibels)
 }
 
 /// Where a **level** of the sound stands in a bar.
@@ -3647,6 +3678,95 @@ mod tests {
         let track = document.nodes[0].clone();
         let payload = TrackPayload::from_json(&track.data).expect("the payload is read");
         assert_eq!(payload.track_kind, "quantum");
+    }
+}
+
+#[cfg(test)]
+mod waveform_tests {
+    use super::*;
+
+    use craftkit_sdk::Ecosystem;
+    use craftkit_sdk::serde_json::json;
+
+    /// The ecosystem of this plugin alone.
+    fn ecosystem() -> Ecosystem {
+        Ecosystem::from_inventory().expect("the ecosystem is built")
+    }
+
+    /// A session over the plugin's own contributions.
+    fn session() -> Session {
+        let ecosystem = ecosystem();
+        Session::with_formats(
+            ecosystem.commands,
+            ecosystem.kinds,
+            ecosystem.formats,
+            ecosystem.migrations,
+            ecosystem.evaluators,
+        )
+    }
+
+    /// A track with a clip on it, and the clip's payload.
+    fn a_clip(session: &mut Session) -> (u64, u64, ClipPayload) {
+        session.execute("sound.track.add", &json!({ "name": "track" })).expect("the track is added");
+        let track = session.document().node_by_name("track").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 48_000 }))
+            .expect("the clip is added");
+        let clip =
+            session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip is there").id;
+        let node = session.document().node(clip).expect("the clip is there");
+        let payload = ClipPayload::from_json(&node.data).expect("the payload is read");
+        (track, clip, payload)
+    }
+
+    /// The **gain** of a clip's sound at that time, with the track's
+    /// volume lane saying what it says.
+    #[test]
+    fn the_gain_follows_the_automation() {
+        let mut session = session();
+        let (track, clip, payload) = a_clip(&mut session);
+        session
+            .execute(
+                "sound.lane.add",
+                &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [48_000, -20.0]] }),
+            )
+            .expect("the track is automated");
+        let node = session.document().node(clip).expect("the clip is there");
+        let document = session.document();
+        let loud = gain_at(document, node, &payload, 0);
+        let quiet = gain_at(document, node, &payload, 48_000);
+        assert!((loud - 1.0).abs() < 1e-6, "the sound starts as it is: {loud}");
+        assert!((quiet - 0.1).abs() < 1e-3, "and is twenty decibels down at the end: {quiet}");
+    }
+
+    /// A **muted** track is silent however loud its sound is.
+    #[test]
+    fn a_muted_track_is_silent() {
+        let mut session = session();
+        let (track, clip, payload) = a_clip(&mut session);
+        session
+            .execute("sound.lane.add", &json!({ "track": track, "param": "mute", "points": [[0, 1.0]] }))
+            .expect("the track is muted");
+        let node = session.document().node(clip).expect("the clip is there");
+        let document = session.document();
+        assert_eq!(gain_at(document, node, &payload, 0), 0.0, "the sound is silent");
+    }
+
+    /// The **shape** on the bar is the shape of the sound as it is
+    /// heard: a gain that falls makes the shape fall.
+    #[test]
+    fn the_shape_follows_the_gain() {
+        let peaks = Peaks { buckets: vec![(-0.5, 0.5), (-0.5, 0.5)], frames: 2 };
+        let rect = Rect::new(0.0, 0.0, 2.0, 1.0);
+        let loud = waveform_path(&rect, &peaks, 0, 2, |_index, _count| 1.0).expect("the shape is drawn");
+        let quiet = waveform_path(&rect, &peaks, 0, 2, |_index, _count| 0.25).expect("the shape is drawn");
+        // The shape is a path: the upper edge first, and the lower edge
+        // after it. The upper edge of the loud shape is at the top of
+        // the bar, and the quiet one is a quarter of the way down.
+        let loud_top = loud.subpaths.first().map(|subpath| subpath.start.y).unwrap_or(0.0);
+        let quiet_top = quiet.subpaths.first().map(|subpath| subpath.start.y).unwrap_or(0.0);
+        assert!((loud_top - 0.25).abs() < 1e-6, "half a sound is at the top of the bar: {loud_top}");
+        assert!(quiet_top > loud_top, "and a quarter of it is lower: {quiet_top}");
     }
 }
 
