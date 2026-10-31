@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**875 tests.** The MCP server links **all fourteen batteries** in, so the
+**880 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **211** of them, and **225** with
+on its own, with no features, carries **214** of them, and **228** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -990,8 +990,10 @@ wrong.)
   the port showed is missing: a typed body, text, and images. The
   **geometry** has a home (§13), the document is a **tree** (§14), and the
   **selection** is the session's state (§14). What is still missing is the
-  rest of a document model: layers with a meaning of their own, an
-  appearance that is not a plugin's payload, and images. **Text** is no
+  rest of a document model: images. Two of the three are not missing any
+  more: the **appearance** is the kit's own (§95) and the **layer** is
+  the kit's own too (§103) — a node with no appearance of its own takes
+  the layer's, and a hidden layer hides what is on it. **Text** is no
   longer on that list: a paragraph and its runs are in the prose battery
   (§49), and a paragraph **laid out** — broken into lines — is in the
   text battery (§58), and the **metric** it is set in is a node of its
@@ -1049,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 875 tests
+cargo test          # 880 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7631,3 +7633,61 @@ holding it back.
   their own layers, and an insert of a block of red lines is drawn in
   the colour of the insert's layer and not in the colours of the
   lines.
+
+---
+
+## 103. The layer is the kit's own
+
+The CAD battery had layers: a layer was a node, an entity was *on* a
+layer by an edge, and the rule that said "an entity is drawn in its
+layer's colour" lived in that battery. Every other battery that wanted
+a layer would have wanted the same rule and written it again, and two
+rules that say the same thing drift apart.
+
+### What was built
+
+- The **edge** that says a node is on a layer is the kit's own:
+  `core.on_layer`. The kit says what follows from it:
+  - a node with **no appearance of its own** takes the **layer's**;
+  - a node on a **hidden** layer is **hidden**;
+  - the layer is followed **once**.
+- The **appearance** rule is now one rule: own appearance, then the
+  one it points at, then the layer's.
+- Three commands: `core.layer.add`, `core.layer.on` and
+  `core.layer.off`, and a kind of the kit's own, `core.layer`.
+- The **CAD battery** uses the kit's edge and the kit's rule: its own
+  `colour_of` is gone, and the entity is drawn in the colour the
+  appearance rule gives it.
+
+### What the port found
+
+- **The layer's kind is not the kit's business.** The first version of
+  this made the CAD battery's layers into `core.layer` nodes, and
+  that was two kinds of layer and one more place for a rule to live.
+  Now the kit cares about the **edge**: a CAD layer is a CAD table
+  row, an artist's layer is an artist's node, and the kit's own
+  `core.layer` is a plain node with a name. Every kind of layer works
+  with the kit's rule.
+- **A node is on one layer.** The edge says which, and a second edge
+  would be two answers to one question — so the second one is refused,
+  and taking a node off takes it off every layer.
+- **The appearance rule was already the layer's rule.** §95 said the
+  appearance wins over the payload, and the layer was the next step
+  that nobody had taken: the fallback chain was own, then the one it
+  points at, and then nothing. Now it is own, then the one it points
+  at, then the **layer's**.
+
+### What it cost
+
+- one module in the kit, three commands, one kind, two rules in the
+  document, and the CAD battery's own rule taken away,
+  **five tests**.
+
+### What it does not settle
+
+- **A layer has no order.** Layers are in the order the document holds
+  them and that is all: a layer that is above another one, a layer
+  that is locked, a layer that is printed — none of that is here.
+- **A node is on one layer and not many.** A drawing that puts a
+  shape on two layers has to say which one it is on, and the kit says
+  there is one.
