@@ -348,6 +348,25 @@ name = "craftkit-alloc"
 version = "0.2.0"
 
 [[package]]
+name = "craftkit-au"
+version = "0.2.0"
+dependencies = [
+ "craftkit-au-abi",
+ "craftkit-au-fixture",
+]
+
+[[package]]
+name = "craftkit-au-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-au-fixture"
+version = "0.2.0"
+dependencies = [
+ "craftkit-au-abi",
+]
+
+[[package]]
 name = "craftkit-bridge"
 version = "0.2.0"
 dependencies = [

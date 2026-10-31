@@ -53,6 +53,17 @@ craftkit-control = { path = "crates/craftkit-control", version = "0.2.0" }
 # The **VST3 ABI**: the shapes a VST3 plugin is made of. A crate of
 # data, with no `unsafe` in it at all.
 craftkit-vst3-abi = { path = "crates/craftkit-vst3-abi", version = "0.2.0" }
+# The **AU ABI**: the shapes an Audio Unit is made of. A crate of data,
+# with no `unsafe` in it at all.
+craftkit-au-abi = { path = "crates/craftkit-au-abi", version = "0.2.0" }
+# The **AU host**: the door that opens a unit and drives it. A
+# **library**, not a plugin: it contributes nothing to the registry and
+# the linker does not wire it in.
+craftkit-au = { path = "crates/craftkit-au", version = "0.2.0" }
+# A **reference AU**: a shared library that exports the symbols the host
+# looks for. It is a fixture, and it is here because a host that has
+# never opened a real unit has not been tested.
+craftkit-au-fixture = { path = "crates/craftkit-au-fixture", version = "0.2.0" }
 # The **VST3 host**: the door that opens a VST3 plugin and drives the
 # component inside it. A **library**, not a plugin: it contributes
 # nothing to the registry and the linker does not wire it in.

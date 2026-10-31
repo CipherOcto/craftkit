@@ -1,0 +1,9 @@
+[package]
+name = "craftkit-au-abi"
+description = "The AU ABI: the shapes an Audio Unit is made of, written down as data."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
