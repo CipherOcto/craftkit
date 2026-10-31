@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**897 tests.** The MCP server links **all fourteen batteries** in, so the
+**903 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **226** of them, and **240** with
+on its own, with no features, carries **232** of them, and **246** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1051,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 897 tests
+cargo test          # 903 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7869,3 +7869,54 @@ and not twenty.
 - **A node that is in a group is moved on its own.** Moving a group
   moves what is in it, because the group is what is in the tree; but
   moving a node that is inside a group does not move the group.
+
+---
+
+## 108. The document can be emptied
+
+The kit could add nodes, move them, hide them and resize them, and it
+could not take one out. A document that cannot be emptied is a
+document that grows for ever.
+
+### What was built
+
+- A command `node.delete`: the node goes out of the document and its
+  **edges** go with it.
+- A command `select.delete`: the whole selection, in **one** undo
+  step.
+- A command `relation.add`: the kit could not make an edge either,
+  and an edge that no command can make is an edge that only a battery
+  can make — which is the thing the batteries were for before the kit
+  had one.
+- The document's removal takes the edges of the **whole subtree**: a
+  node that is deleted takes what is in it, and their edges go with
+  them.
+
+### What the port found
+
+- **An edge to nothing is an edge that says something false.** The
+  document could lose a node and keep the edges that pointed at it: a
+  clip that plays a source that is not in the document any more. The
+  removal was in the core and the edges were in the core, and they
+  were not together.
+- **The kit could not make an edge.** Every battery that needed one
+  wrote its own command — `cad.entity.layer`, the sound battery's
+  edges — and a program that wanted an edge of its own had no way to
+  make one. So the core has the command now, and the batteries' edges
+  are the same edges.
+- **The undo brought the edge back**, because the history keeps the
+  document as it was and an edge is part of the document. That was
+  already true; it had just never been asked.
+
+### What it cost
+
+- one method on the document changed, three commands, one module in the
+  kit, **six tests**.
+
+### What it does not settle
+
+- **The edges of a node that is deleted by a battery are that
+  battery's business.** The core's removal takes the edges; a battery
+  that deletes a node by another way must take them itself.
+- **There is no undelete.** The undo is the undelete, and a document
+  that was saved and closed is gone.
