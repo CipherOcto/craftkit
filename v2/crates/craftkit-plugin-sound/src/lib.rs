@@ -75,6 +75,7 @@ mod mixer;
 
 use std::collections::HashMap;
 
+use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
@@ -262,6 +263,10 @@ impl ClipKind {
     /// The bar is the clip's **span**: where it starts and how long it
     /// is, in the world's seconds. A muted clip is drawn as nothing,
     /// which is what a muted clip is.
+    ///
+    /// The **fades** are notches in the bar: the quiet part of a clip
+    /// is the paper showing through the ink, and the notch is the
+    /// fade's own curve.
     fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
         let Some(rect) = timeline::clip_rect(document, node) else { return };
         let fill = if node.muted {
@@ -273,6 +278,29 @@ impl ClipKind {
                 .unwrap_or(craftkit_sdk::document::Colour::BLACK)
         };
         canvas.rect(rect, fill);
+        if node.muted {
+            return;
+        }
+        let Ok(payload) = ClipPayload::from_json(&node.data) else { return };
+        let rate = session_of(document).sample_rate as f64;
+        if rate <= 0.0 {
+            return;
+        }
+        let paper = craftkit_sdk::document::Colour::WHITE;
+        let width = payload.fade_in.len as f64 / rate;
+        if width > 0.0
+            && width < rect.w
+            && let Some(path) = fade_in_path(&rect, width, payload.fade_in.fade())
+        {
+            canvas.path(&path, paper, None);
+        }
+        let width = payload.fade_out.len as f64 / rate;
+        if width > 0.0
+            && width < rect.w
+            && let Some(path) = fade_out_path(&rect, width, payload.fade_out.fade())
+        {
+            canvas.path(&path, paper, None);
+        }
     }
 
     /// Whether a point is inside a clip.
@@ -294,6 +322,8 @@ impl ClipKind {
             "end": clip.start.saturating_add(clip.length),
             "source": clip.source,
             "gain_db": clip.gain_db,
+            "fade_in": clip.fade_in.to_json(),
+            "fade_out": clip.fade_out.to_json(),
         }))
     }
 }
@@ -634,6 +664,57 @@ impl TrackPayload {
     }
 }
 
+/// What a **fade** says about itself.
+///
+/// A fade is a length, a shape and a bend, and it is the same thing at
+/// both ends of a clip: the head fades in and the tail fades out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct FadePayload {
+    /// How long it is, in samples. Zero is no fade at all.
+    len: i64,
+    /// The curve it follows.
+    shape: craftkit_audio::FadeShape,
+    /// How much the curve is bent, from -1 to 1.
+    curvature: f32,
+}
+
+impl FadePayload {
+    /// No fade at all.
+    fn none() -> FadePayload {
+        FadePayload { len: 0, shape: craftkit_audio::FadeShape::default(), curvature: 0.0 }
+    }
+
+    fn to_json(self) -> Json {
+        serde_json::json!({
+            "len": self.len,
+            "shape": self.shape.label(),
+            "curvature": self.curvature,
+        })
+    }
+
+    fn from_json(value: &Json) -> Result<Self, String> {
+        let len = value.get("len").and_then(|len| len.as_i64()).unwrap_or(0);
+        if len < 0 {
+            return Err("a fade does not run backwards".to_string());
+        }
+        let shape = match value.get("shape").and_then(|shape| shape.as_str()) {
+            Some(label) => craftkit_audio::FadeShape::from_label(label)
+                .ok_or_else(|| format!("there is no fade shape called `{label}`"))?,
+            None => craftkit_audio::FadeShape::default(),
+        };
+        let curvature = value.get("curvature").and_then(|curvature| curvature.as_f64()).unwrap_or(0.0);
+        if !curvature.is_finite() {
+            return Err("a bend is a number".to_string());
+        }
+        Ok(FadePayload { len, shape, curvature: curvature as f32 })
+    }
+
+    /// The fade itself, as the audio crate has it.
+    fn fade(&self) -> craftkit_audio::Fade {
+        craftkit_audio::Fade { len: self.len.max(0) as u64, shape: self.shape, curvature: self.curvature }
+    }
+}
+
 /// What a clip says about itself.
 ///
 /// Every number here is in the **session's samples**: the clip's place
@@ -652,6 +733,10 @@ pub(crate) struct ClipPayload {
     offset: i64,
     /// Its gain, in decibels.
     gain_db: f64,
+    /// The fade at its head.
+    fade_in: FadePayload,
+    /// The fade at its tail.
+    fade_out: FadePayload,
     /// How much **longer** it is played than the source it plays.
     ///
     /// One is none. Two is twice as long and an octave lower, because
@@ -675,6 +760,8 @@ impl ClipPayload {
             "source": self.source,
             "offset": self.offset,
             "gain_db": self.gain_db,
+            "fade_in": self.fade_in.to_json(),
+            "fade_out": self.fade_out.to_json(),
             "stretch": self.stretch,
         })
     }
@@ -697,6 +784,14 @@ impl ClipPayload {
             source: value.get("source").and_then(|source| source.as_u64()),
             offset: value.get("offset").and_then(|offset| offset.as_i64()).unwrap_or(0),
             gain_db: value.get("gain_db").and_then(|gain| gain.as_f64()).unwrap_or(0.0),
+            fade_in: match value.get("fade_in") {
+                Some(fade) => FadePayload::from_json(fade)?,
+                None => FadePayload::none(),
+            },
+            fade_out: match value.get("fade_out") {
+                Some(fade) => FadePayload::from_json(fade)?,
+                None => FadePayload::none(),
+            },
             stretch,
         })
     }
@@ -905,6 +1000,8 @@ impl AddClip {
             source: self.source.map(|source| source.0),
             offset: 0,
             gain_db: 0.0,
+            fade_in: FadePayload::none(),
+            fade_out: FadePayload::none(),
             stretch,
         };
         let name = match &self.name {
@@ -981,6 +1078,118 @@ impl SetClipStretch {
         }
         Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
             .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
+    }
+}
+
+/// Fade a clip.
+///
+/// A fade is a **curve from silence to full**, and it is at the two
+/// ends of a clip: the head fades in and the tail fades out. A fade
+/// that is longer than the clip it fades is **refused**: a fade that
+/// does not finish is a fade that is not there, and a fade that is
+/// quietly shortened is a fade the caller did not ask for.
+///
+/// The **shape** is the curve: linear, equal_power, s_curve,
+/// exponential or logarithmic. The **bend** pushes the curve away from
+/// itself, and a bend of zero is the shape exactly.
+///
+/// A fade does not change the clip's length and does not change its
+/// place: it changes how the clip is heard.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.fade",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Fade"),
+    mutates,
+    undoable
+)]
+pub struct SetClipFade {
+    /// The clip to fade.
+    pub clip: NodeRef,
+    /// How long the fade in is, in samples.
+    pub fade_in: Option<Number>,
+    /// How long the fade out is, in samples.
+    pub fade_out: Option<Number>,
+    /// The shape of the curve: linear, equal_power, s_curve, exponential or logarithmic.
+    pub shape: Option<Text>,
+    /// How much the curve is bent, from -1 to 1.
+    pub curvature: Option<Number>,
+}
+
+impl SetClipFade {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.fade".to_string(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.fade".to_string(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.clip.fade".to_string(), message: error })?;
+        if self.fade_in.is_none() && self.fade_out.is_none() {
+            return Err(EngineError::Failed {
+                id: "sound.clip.fade".to_string(),
+                message: "a fade needs a length: how long is the fade in, and how long is the fade out?"
+                    .to_string(),
+            });
+        }
+        // The **shape** and the **bend** are the curve, and they are
+        // read once: they apply to the fades that are being set.
+        let shape = match &self.shape {
+            Some(shape) => {
+                craftkit_audio::FadeShape::from_label(&shape.0).ok_or_else(|| EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: format!("there is no fade shape called `{}`", shape.0),
+                })?
+            }
+            None => craftkit_audio::FadeShape::default(),
+        };
+        let curvature = match self.curvature {
+            Some(curvature) => {
+                if !curvature.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.fade".to_string(),
+                        message: "a bend is a number".to_string(),
+                    });
+                }
+                curvature.0.clamp(-1.0, 1.0) as f32
+            }
+            None => 0.0,
+        };
+        if let Some(fade_in) = self.fade_in {
+            let len = samples(fade_in.0, "how long the fade in is")?;
+            if len > payload.length {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: format!("the fade in is {len} samples long and the clip is {}", payload.length),
+                });
+            }
+            payload.fade_in = FadePayload { len, shape, curvature };
+        }
+        if let Some(fade_out) = self.fade_out {
+            let len = samples(fade_out.0, "how long the fade out is")?;
+            if len > payload.length {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: format!("the fade out is {len} samples long and the clip is {}", payload.length),
+                });
+            }
+            payload.fade_out = FadePayload { len, shape, curvature };
+        }
+        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("faded the clip `{}`", self.clip.0)).with_data(serde_json::json!({
+            "id": self.clip.0,
+            "fade_in": payload.fade_in.to_json(),
+            "fade_out": payload.fade_out.to_json(),
+        })))
     }
 }
 
@@ -1484,6 +1693,15 @@ impl RenderSound {
             } else {
                 samples
             };
+            // The **fades**: the head of the clip fades in and the tail
+            // fades out, and a fade is a gain and not a thing that
+            // belongs to a channel.
+            let samples = craftkit_audio::faded(
+                &samples,
+                sound.channels as usize,
+                payload.fade_in.fade(),
+                payload.fade_out.fade(),
+            );
             let automation = session
                 .document()
                 .node(*clip_id)
@@ -1695,6 +1913,46 @@ fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload, rate: u32) -> (u
     let from = (from_frame * width).min(sound.samples.len());
     let to = ((from_frame + span_frames) * width).min(sound.samples.len()).max(from);
     (from, to)
+}
+
+/// How many **segments** a drawn fade has.
+///
+/// A fade is a curve, and a curve drawn with two points is a line. The
+/// number is small because a notch in a bar is small, and because the
+/// notch is a hint and not the sound.
+const FADE_SEGMENTS: usize = 8;
+
+/// The **notch** of a fade at the head of a bar.
+///
+/// The notch is the part of the clip that is quiet: it is the region
+/// under the fade's curve, and the curve is the fade's own shape.
+fn fade_in_path(rect: &Rect, width: f64, fade: craftkit_audio::Fade) -> Option<Path> {
+    let mut segments = Vec::with_capacity(FADE_SEGMENTS);
+    for step in 1..=FADE_SEGMENTS {
+        let t = step as f64 / FADE_SEGMENTS as f64;
+        let x = rect.x + t * width;
+        let y = rect.y + rect.h - fade.gain(t as f32) as f64 * rect.h;
+        segments.push(Segment::Line { to: Point::new(x, y) });
+    }
+    Some(Path::single(SubPath { start: Point::new(rect.x, rect.y + rect.h), segments, closed: true }))
+}
+
+/// The **notch** of a fade at the tail of a bar.
+///
+/// The notch is the part of the clip that is quiet, and at the tail the
+/// quiet part is **above** the curve: the curve falls from the full
+/// height to nothing, and what is left of the bar above it is the
+/// silence.
+fn fade_out_path(rect: &Rect, width: f64, fade: craftkit_audio::Fade) -> Option<Path> {
+    let start = rect.x + rect.w - width;
+    let mut segments = Vec::with_capacity(FADE_SEGMENTS);
+    for step in 1..=FADE_SEGMENTS {
+        let t = step as f64 / FADE_SEGMENTS as f64;
+        let x = start + t * width;
+        let y = rect.y + rect.h - fade.gain((1.0 - t) as f32) as f64 * rect.h;
+        segments.push(Segment::Line { to: Point::new(x, y) });
+    }
+    Some(Path::single(SubPath { start: Point::new(start, rect.y), segments, closed: true }))
 }
 
 /// Read a sound file, within limits.
@@ -2074,6 +2332,7 @@ craftkit_sdk::plugin_anchor!(
     AddTrack,
     AddClip,
     SetClipStretch,
+    SetClipFade,
     SetTempo,
     SetMeter,
     AddMarker,

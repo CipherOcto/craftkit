@@ -246,3 +246,180 @@ pub fn resample(samples: &[f32], channels: usize, from_rate: u32, to_rate: u32) 
     }
     out
 }
+
+/// The **shape** of a fade.
+///
+/// A fade is a curve from silence to full, and there is more than one
+/// curve. The shape is the curve itself, and it is a **choice**, not a
+/// number: a linear fade is a straight line, an equal-power fade is
+/// quiet for longer, an S-curve is gentle at both ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FadeShape {
+    /// A straight line from silence to full.
+    Linear,
+    /// The **default**: the two halves of a fade carry the same power.
+    ///
+    /// The curve is the sine of a quarter turn, and that is what makes
+    /// a crossfade of two equal-power fades hold its power in the
+    /// middle.
+    #[default]
+    EqualPower,
+    /// A smooth curve that is gentle at both ends.
+    SCurve,
+    /// Slow at the start and quick at the end.
+    Exponential,
+    /// Quick at the start and slow at the end.
+    Logarithmic,
+}
+
+impl FadeShape {
+    /// Every shape, in the order they are offered.
+    pub const ALL: [FadeShape; 5] = [
+        FadeShape::Linear,
+        FadeShape::EqualPower,
+        FadeShape::SCurve,
+        FadeShape::Exponential,
+        FadeShape::Logarithmic,
+    ];
+
+    /// The **gain** at a place in the fade, from nothing to full.
+    ///
+    /// The place is a number from zero to one, and a place outside the
+    /// fade is the end it is past: a fade that has ended is full, and a
+    /// fade that has not begun is nothing.
+    pub fn gain(self, t: f32) -> f32 {
+        let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
+        match self {
+            FadeShape::Linear => t,
+            FadeShape::EqualPower => (t * std::f32::consts::FRAC_PI_2).sin(),
+            FadeShape::SCurve => 0.5 - 0.5 * (t * std::f32::consts::PI).cos(),
+            FadeShape::Exponential => t * t * t,
+            FadeShape::Logarithmic => 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t),
+        }
+    }
+
+    /// The **name** of the shape.
+    pub fn label(self) -> &'static str {
+        match self {
+            FadeShape::Linear => "linear",
+            FadeShape::EqualPower => "equal_power",
+            FadeShape::SCurve => "s_curve",
+            FadeShape::Exponential => "exponential",
+            FadeShape::Logarithmic => "logarithmic",
+        }
+    }
+
+    /// The shape of that **name**.
+    ///
+    /// The name is read the way a person writes it: the case does not
+    /// matter, and a space, a dash and an underscore are the same
+    /// separator. A name that is not a shape is **nothing**, and not a
+    /// shape that is close to it.
+    pub fn from_label(label: &str) -> Option<FadeShape> {
+        let wanted = normalise(label);
+        FadeShape::ALL.into_iter().find(|shape| normalise(shape.label()) == wanted)
+    }
+}
+
+/// The name of a shape, as a person writes it: no case, and no
+/// difference between a space, a dash and an underscore.
+fn normalise(label: &str) -> String {
+    label.to_ascii_lowercase().replace(['-', '_', ' '], "")
+}
+
+/// A **fade**: a length, a shape and a bend.
+///
+/// The length is in **samples**, the shape is the curve, and the bend
+/// is how much the curve is pushed away from itself: a bend of zero is
+/// the shape exactly, and a bend of one makes the curve steeper in the
+/// middle.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Fade {
+    /// How long it is, in samples. Zero is no fade at all.
+    pub len: u64,
+    /// The curve it follows.
+    pub shape: FadeShape,
+    /// How much the curve is bent, from -1 to 1.
+    pub curvature: f32,
+}
+
+impl Fade {
+    /// A fade of that length, with the default shape.
+    pub fn of(len: u64) -> Fade {
+        Fade { len, shape: FadeShape::default(), curvature: 0.0 }
+    }
+
+    /// The **gain** at a place in the fade.
+    ///
+    /// The bend is applied to the shape's own gain, and it is applied as
+    /// a **weight**: a bent curve is the shape's curve pushed towards
+    /// the middle, and the ends of the curve stay where they were, so
+    /// that a fade still begins at nothing and still ends at full.
+    pub fn gain(self, t: f32) -> f32 {
+        let base = self.shape.gain(t);
+        let curvature = if self.curvature.is_finite() { self.curvature.clamp(-1.0, 1.0) } else { 0.0 };
+        if curvature == 0.0 || base <= 0.0 || base >= 1.0 {
+            return base;
+        }
+        let weighted = base * (curvature * 4.0).exp2();
+        weighted / (weighted + 1.0 - base)
+    }
+
+    /// The gain at a sample at the **head** of a clip.
+    ///
+    /// A sample that is past the fade is full, and a fade of no length
+    /// is full everywhere.
+    pub fn gain_at_head(self, rel: u64) -> f32 {
+        if self.len == 0 || rel >= self.len {
+            return 1.0;
+        }
+        self.gain(rel as f32 / self.len as f32)
+    }
+
+    /// The gain at a sample at the **tail** of a clip of that many
+    /// frames.
+    ///
+    /// The tail is counted **from the end**, because that is where the
+    /// silence is: the last sample of a fade of two is a half of the
+    /// way down, and the sample before the fade is full.
+    pub fn gain_at_tail(self, rel: u64, frames: u64) -> f32 {
+        if self.len == 0 {
+            return 1.0;
+        }
+        let from_end = frames.saturating_sub(rel);
+        if from_end > self.len {
+            return 1.0;
+        }
+        self.gain(from_end as f32 / self.len as f32)
+    }
+}
+
+/// The samples with a **fade** at each end.
+///
+/// The fade is in **frames of the clip**, and the samples are the
+/// clip's own: the head fades in and the tail fades out, and the two
+/// overlap when the clip is shorter than they are.
+///
+/// The **channels** are kept: every channel is faded the same way, and
+/// a fade is a gain and not a thing that belongs to a channel.
+pub fn faded(samples: &[f32], channels: usize, fade_in: Fade, fade_out: Fade) -> Vec<f32> {
+    let channels = channels.max(1);
+    if fade_in.len == 0 && fade_out.len == 0 {
+        return samples.to_vec();
+    }
+    let frames = samples.len() / channels;
+    let mut out = samples.to_vec();
+    for frame in 0..frames {
+        let gain = fade_in.gain_at_head(frame as u64) * fade_out.gain_at_tail(frame as u64, frames as u64);
+        if gain == 1.0 {
+            continue;
+        }
+        for channel in 0..channels {
+            let at = frame * channels + channel;
+            if let Some(sample) = out.get_mut(at) {
+                *sample *= gain;
+            }
+        }
+    }
+    out
+}

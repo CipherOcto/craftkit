@@ -169,3 +169,105 @@ fn a_factor_that_is_not_a_number_changes_nothing() {
     assert_eq!(craftkit_audio::varispeed(&samples, 1, 0.0), samples, "and not a speed at all");
     assert_eq!(craftkit_audio::varispeed(&samples, 1, -2.0), samples, "and not backwards");
 }
+
+/// A fade shape is a **curve** from nothing to full.
+///
+/// The shape says how the curve bends, and a straight line is one of
+/// the shapes and not the only one.
+#[test]
+fn a_fade_shape_is_a_curve_from_nothing_to_full() {
+    use craftkit_audio::FadeShape;
+    assert!((FadeShape::Linear.gain(0.0) - 0.0).abs() < 1e-6, "a fade begins at nothing");
+    assert!((FadeShape::Linear.gain(0.5) - 0.5).abs() < 1e-6, "and a straight line is halfway");
+    assert!((FadeShape::Linear.gain(1.0) - 1.0).abs() < 1e-6, "and ends at full");
+    // The equal-power fade is quiet for longer: at the middle it is
+    // the sine of a quarter turn.
+    let equal = FadeShape::EqualPower.gain(0.5);
+    assert!(
+        (equal - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-5,
+        "the equal-power fade is quieter in the middle: {equal}"
+    );
+    // A place outside the fade is the end it is past.
+    assert!((FadeShape::Linear.gain(-1.0) - 0.0).abs() < 1e-6, "before the fade is nothing");
+    assert!((FadeShape::Linear.gain(2.0) - 1.0).abs() < 1e-6, "and after it is full");
+}
+
+/// A fade shape is read by its **name**.
+///
+/// The name is read the way a person writes it: the case does not
+/// matter, and a space, a dash and an underscore are the same thing.
+#[test]
+fn a_fade_shape_is_read_by_its_name() {
+    use craftkit_audio::FadeShape;
+    assert_eq!(FadeShape::from_label("equal_power"), Some(FadeShape::EqualPower));
+    assert_eq!(FadeShape::from_label("Equal Power"), Some(FadeShape::EqualPower));
+    assert_eq!(FadeShape::from_label("equal-power"), Some(FadeShape::EqualPower));
+    assert_eq!(FadeShape::from_label("s-curve"), Some(FadeShape::SCurve));
+    assert_eq!(FadeShape::from_label("wobble"), None, "and a name that is not a shape is nothing");
+}
+
+/// A **bend** pushes the curve away from itself.
+///
+/// A bend of zero is the shape exactly, and a bend of one makes the
+/// curve steeper in the middle: the ends stay where they were, so that
+/// a fade still begins at nothing and still ends at full.
+#[test]
+fn a_bend_pushes_the_curve_away_from_itself() {
+    use craftkit_audio::Fade;
+    let straight = Fade { len: 100, shape: craftkit_audio::FadeShape::Linear, curvature: 0.0 };
+    let bent = Fade { len: 100, shape: craftkit_audio::FadeShape::Linear, curvature: 1.0 };
+    let bent_back = Fade { len: 100, shape: craftkit_audio::FadeShape::Linear, curvature: -1.0 };
+    assert!((straight.gain(0.5) - 0.5).abs() < 1e-6, "the straight fade is halfway");
+    assert!(bent.gain(0.5) > 0.5, "the bent fade is louder in the middle: {}", bent.gain(0.5));
+    assert!(bent_back.gain(0.5) < 0.5, "and the other way is quieter: {}", bent_back.gain(0.5));
+    assert!((bent.gain(0.0) - 0.0).abs() < 1e-6, "and it still begins at nothing");
+    assert!((bent.gain(1.0) - 1.0).abs() < 1e-6, "and still ends at full");
+}
+
+/// The samples are **faded** at the head.
+///
+/// A fade in is the sound coming up: the first sample is nothing and
+/// the last is full.
+#[test]
+fn the_samples_are_faded_at_the_head() {
+    let samples = vec![1.0_f32; 4];
+    let fade = craftkit_audio::Fade { len: 2, shape: craftkit_audio::FadeShape::Linear, curvature: 0.0 };
+    let faded = craftkit_audio::faded(&samples, 1, fade, craftkit_audio::Fade::default());
+    assert!((faded[0] - 0.0).abs() < 1e-6, "the first sample is nothing");
+    assert!((faded[1] - 0.5).abs() < 1e-6, "the second is halfway: {}", faded[1]);
+    assert!((faded[2] - 1.0).abs() < 1e-6, "and the third is full");
+    assert!((faded[3] - 1.0).abs() < 1e-6, "and so is the last");
+}
+
+/// The samples are **faded** at the tail.
+#[test]
+fn the_samples_are_faded_at_the_tail() {
+    let samples = vec![1.0_f32; 4];
+    let fade = craftkit_audio::Fade { len: 2, shape: craftkit_audio::FadeShape::Linear, curvature: 0.0 };
+    let faded = craftkit_audio::faded(&samples, 1, craftkit_audio::Fade::default(), fade);
+    assert!((faded[0] - 1.0).abs() < 1e-6, "the first sample is full");
+    assert!((faded[2] - 1.0).abs() < 1e-6, "the third is full");
+    assert!((faded[3] - 0.5).abs() < 1e-6, "and the last is halfway down: {}", faded[3]);
+}
+
+/// A fade of **no length** changes nothing.
+#[test]
+fn a_fade_of_no_length_changes_nothing() {
+    let samples = vec![0.25_f32, 0.5, 0.75];
+    let faded =
+        craftkit_audio::faded(&samples, 1, craftkit_audio::Fade::default(), craftkit_audio::Fade::default());
+    assert_eq!(faded, samples, "the sound is the sound it was");
+}
+
+/// A fade keeps the **channels** apart.
+#[test]
+fn a_fade_keeps_the_channels_apart() {
+    // Two channels: a ramp on the left and silence on the right.
+    let samples = vec![0.25_f32, 0.0, 0.5, 0.0, 0.75, 0.0];
+    let fade = craftkit_audio::Fade { len: 3, shape: craftkit_audio::FadeShape::Linear, curvature: 0.0 };
+    let faded = craftkit_audio::faded(&samples, 2, fade, craftkit_audio::Fade::default());
+    assert_eq!(faded.len(), 6, "the fade does not change the sound's length");
+    assert!((faded[0] - 0.0).abs() < 1e-6, "the left channel is faded");
+    assert!((faded[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
+    assert!((faded[4] - 0.5).abs() < 1e-6, "the last frame is half: {}", faded[4]);
+}
