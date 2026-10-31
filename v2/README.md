@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1194 tests.** The MCP server links **all fifteen batteries** in, so the
+**1196 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1194 tests
+cargo test          # 1196 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3593,6 +3593,7 @@ so.
 | a **shape that follows the automation** | **built.** The gain of a clip's sound at a time is the clip's own gain and the track's curve, and the shape on the bar is drawn with it (§156) | §156 |
 | a **caret that moves a word and a line at a time** | **built.** The word is in the words and the line is in the layout, and the caret keeps its place across a line (§157) | §151, §157 |
 | a **resampler with a bank** | **built.** The kernel is precomputed for every phase of a rational rate change, so an output is a dot product; a rate change with no bank worth having is read tap by tap (§158) | §155, §158 |
+| a **band for each channel** | **built.** The peaks are the peaks of each channel and the bar carries a band for each of them; the buckets and the channels share the table (§159) | §154, §159 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10817,3 +10818,63 @@ over the samples, and this resampler read the kernel for every tap.
   million weights is sixteen megabytes, and a rate change that needs
   more than that is read tap by tap. The tree's cap is the same
   number, and neither of the two ports measured it.
+
+## 159. The bar has a band for each channel
+
+§154 drew the shape of a clip's sound and said that there was **one
+band for the whole sound**, where the tree draws a band for each
+channel, one above the other.
+
+### What was built
+
+- The **peaks** are the peaks of each **channel**: the table holds, for
+  each bucket, the least and the most of every channel.
+- The **bands**: a clip's bar is as tall as the channels it holds, and
+  each channel's sound is drawn in its own band.
+- The buckets and the channels **share** the table: it is a thousand
+  numbers however many channels there are, so a stereo sound has half
+  the buckets of a mono one.
+
+### What the port found
+
+- **The channels share the table, and that is a rule and not a
+  detail.** The peaks live in a payload, and a payload's table is
+  bounded; a sound with eight channels and two hundred and fifty-six
+  buckets each would be four thousand numbers and would not be read at
+  all. So the buckets are counted so that the table is the same size
+  whatever the sound is — and a sound with many channels has a coarser
+  shape, which is the honest bargain.
+- **The band is a **band**, not a fraction of a band.** The tree
+  draws a lane for each channel and the sound in it; here the bar is
+  one row tall and the channels are stacked in it, so a stereo clip's
+  two bands are each half a row. The shape is right and the room is
+  not: a sound with eight channels in one row is eight thin bands.
+- **The shape of a channel is the shape of that channel.** The port
+  had been measuring the least and the most of *every* channel
+  together, so a stereo sound with a tone on the left and silence on
+  the right was drawn as a sound that was half as loud as it was. The
+  test that found it is one line: the left channel's numbers and the
+  right channel's numbers are not the same numbers.
+
+### What it cost
+
+- **Two tests** in the battery: the peaks are told apart by channel,
+  and a stereo clip has a band for each channel.
+- **Two tests changed**: the table is a thousand numbers now, and not
+  five hundred and twelve, because the buckets and the channels share
+  it.
+- The peaks' **shape** in the payload changed — the table is per
+  channel now — and a file written before this arc holds a table of
+  one band and is read as a table of one channel.
+
+### What it does not settle
+
+- **A file written before this arc holds the old table.** The format
+  writes a payload as it is and knows nothing of what is in it, so a
+  sound measured before this arc is read as a mono sound with half
+  the buckets it should have. The tree's format has no version for
+  the payload's meaning, and this arc did not make one.
+- **The band is thin.** A row is one unit tall and a sound with many
+  channels has many bands in it, and the shape of each is a sliver.
+- **The pan is still not on the bar.** A sound that is panned is drawn
+  as if it were not (§156).
