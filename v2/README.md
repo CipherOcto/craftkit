@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**839 tests.** The MCP server links **all fourteen batteries** in, so the
+**847 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **199** of them, and **213** with
+on its own, with no features, carries **201** of them, and **215** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -6725,7 +6725,7 @@ section joins them, and the join is a **battery** — the fourteenth one,
   state, does its work and closes it. What the document keeps is what
   the plugin *said*.
 - The **MCP server links the battery in**, so an agent can drive it: the
-  server's tool list is **159 tools** with **all fourteen batteries**
+  server's tool list is **166 tools** with **all fourteen batteries**
   linked, measured the same way as every other number here.
 
 ### What the port found
@@ -7196,3 +7196,69 @@ was not the mouse. It was that the document had no way to move a thing.
 - **Nothing is resized.** A node's size is the size it was made with,
   and there is no command that changes it.
 - **The wheel still zooms about the middle and not about the pointer.**
+
+## 95. The appearance is the kit's own
+
+The README has said for a long time that a document model is missing an
+**appearance that is not a plugin's payload**. This is that, and the
+thing it needed first: a kind that can **see** the document.
+
+### What was built
+
+- **The paint carries the document.** A kind's paint is given the
+  document as well as the node, and that is the whole change: a kind
+  that follows a reference — a path that takes its colour from a style,
+  an entity that takes its colour from its layer — cannot follow it
+  without the document.
+- The **appearance** is the kit's own: an `Appearance` is a fill and a
+  stroke, a node carries one, and a node may point at the node that
+  holds one.
+- The **kind** "core.appearance" and two commands in the SDK
+  (`core.appearance.add`, `core.appearance.set`), and one in the studio
+  (`node.appearance`) — a thing that uses an appearance points at it.
+- The **vector battery** uses it: the appearance wins over the colours
+  in the path's own payload.
+- The **colour** is written one way: `Colour::from_hex` is the kit's,
+  and the vector battery's own `#rrggbb` parser is gone.
+- **Eight tests**: four in the SDK (the resolution, the precedence, the
+  absence and the round trip) and four in the studio (the command, the
+  refusal, the shared appearance and the colour in the picture).
+
+### What the port found
+
+- **A kind that cannot see the document cannot follow a reference** —
+  and a document model in which every value is a copy is a document
+  model in which twenty shapes are twenty colours to change, and one of
+  them will be forgotten. The paint was the seam that had to change:
+  not the payload, not the node, the **paint**.
+- **The appearance does not replace the payload; it wins over it.** A
+  path whose colours live in its own payload keeps them, and an
+  appearance overrides them. Nothing is lost and nothing has to be
+  migrated, and the new thing is there for the documents that want it.
+- **A reference is followed once.** A chain of appearances is a document
+  nobody can follow, and one hop is enough for a style that shapes use.
+- **The colour is the kit's, not the plugin's.** The vector battery had
+  its own `#rrggbb` parser, and every battery that took a colour would
+  have had its own: the same spelling, written twice, is two things to
+  get wrong.
+
+### What it cost
+
+- one field and one reference on the node, one type in the SDK, one
+  module, three commands, twelve signatures in twelve batteries, one
+  parser removed and **eight tests**.
+
+### What it does not settle
+
+- **The appearance is a fill and a stroke.** There is no opacity of its
+  own, no dash pattern, no gradient, and no shadow: the kit says what
+  an appearance is, and it says it in two colours and a width.
+- **Only the vector battery uses it.** The other kinds keep their
+  colours in their own payloads, and the next one to move is the CAD
+  battery's layers.
+- **An appearance is a plain node.** There is no stylesheet, no
+  inheritance, and no "everything on this layer is this blue" — the
+  reference is one thing pointing at another thing.
+- **The window does not show the appearances.** It shows them in the
+  **picture**, which is where they are, and a list of them would be a
+  second thing to keep right.
