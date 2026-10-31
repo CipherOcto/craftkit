@@ -984,7 +984,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**996 tests.** The MCP server links **all fifteen batteries** in, so the
+**998 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1086,7 +1086,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 996 tests
+cargo test          # 998 tests
 cargo run -p craftkit-studio
 ```
 
@@ -5465,14 +5465,12 @@ the kit from a document model into something a person can look at.
   rasteriser takes the camera and applies it: the world's **up** is the
   picture's **down**, because a document is drawn the way it is looked
   at and not the way it is stored.
-- **The canvas has no font of its own, and the kit says so.** The kit
-  has its own typeface now (§128), but the **canvas** takes a string
-  and a point and draws the box the string would occupy. A typeface is
-  a library that a *battery* draws with, and a battery draws its
-  letters as paths (§129): a paragraph is drawn with real letters,
-  while the canvas's own text is a placeholder — a typewriter's worth
-  of rectangles. The picture says *there is text here* and not what it
-  says, which is honest in a way that a fake glyph would not be.
+- **The canvas has no font of its own — and that is answered in §540.**
+  The kit has its own typeface (§128), so the canvas draws **letters**
+  now: a character is a stroke and not the box it would occupy. The
+  cell is still one for every character, so a line of text is still
+  monospaced; what changed is that the cell holds a letter. A battery
+  draws its own letters as paths (§129), and the two agree.
 - **A picture without soft edges is a picture a machine can reason
   about.** There is no anti-aliasing: a pixel is either painted or it is
   not, and the fill is a scanline over the flattened curves. That is a
@@ -5503,11 +5501,11 @@ the kit from a document model into something a person can look at.
   staircase, and a circle is a polygon. A picture for a person to look
   at would want both, and the choice here was a machine-readable
   picture.
-- **The canvas's text is a box and not a letter.** The boxes are a
-  placeholder that says where text would be; the kit's own typeface
-  (§128) is a table of strokes and the rasteriser does not draw it, so
-  the canvas's text is still a box. A battery that wants letters draws
-  them as paths (§129), and the seam is not changed.
+- **The canvas's text was a box and not a letter.** The boxes were a
+  placeholder that said where text would be; the kit's own typeface
+  (§128) is a table of strokes and the rasteriser draws them now
+  (§540). The seam did not change: the canvas still takes a string and
+  a point.
 - **The canvas is a raster, and not a display list.** Everything is
   painted into pixels as it happens; a program that wanted to zoom in
   after the fact would have to paint again. The camera is applied while
@@ -7394,9 +7392,8 @@ blocks, entities, extents — and **no picture at all**.
   is drawn as a polygon of straight lines.
 - **The canvas's text has no letters.** The canvas draws the box each
   character would occupy, and the picture says *there is text here* and
-  not what it says. — **Partly answered in §129**: a paragraph is drawn
-  with the kit's own typeface, as paths, and the canvas's own text is
-  still a box.
+  not what it says. — **Answered in §540**: the canvas draws the kit's
+  own letters.
 - **Nothing can be picked.** The entity's hit test still says no, so a
   line cannot be clicked in the window.
 - **The layer's old `color` field is still there.** An index or a name
@@ -9081,3 +9078,53 @@ drawn**: the letters had no outlines. Now they have some.
   derivation done **once** per frame.
 - **The ruler still has no scale** (§126). The kit has a typeface now,
   so the bar numbers are within reach — and they are not drawn.
+
+---
+
+## 130. The canvas's text is a letter
+
+The canvas drew a character as the **box** it would occupy — a
+typewriter's worth of rectangles — and the picture said *there is text
+here* and not what it says. That was honest, and it was a placeholder.
+
+### What was built
+
+- The canvas's `text` draws the kit's **own letters**: the typeface is
+  a table of strokes (§128) and a character is drawn by its strokes.
+- The **cell** is still one for every character, so a line of text is
+  still monospaced — but the cell holds a letter and not a rectangle.
+- The **baseline** is the point the text is drawn at, and the capitals
+  are two thirds of the line height: a line needs room below the
+  baseline for the letters that hang there.
+
+### What the port found
+
+- **The letter is stretched to the cell.** The cell says how wide the
+  character is and the typeface says what it looks like, so the glyph
+  is scaled to fit — the same rule the text battery follows (§129). One
+  rule, two places, and the canvas did not need a metric: the cell is
+  the metric.
+- **The canvas's seam did not change.** It still takes a string and a
+  point. What changed is what the **backend** does with them, and the
+  backend is the one place a typeface belongs.
+- **A box and a letter are different things to a machine.** A box says
+  where a character is; a letter says what it is. The kit had the first
+  because the second was missing, and the first was a poor substitute
+  for the second.
+
+### What it cost
+
+- one dependency, one function rewritten and two constants, and **two
+  tests**: a letter is a line and not a box — the ink in its cell is a
+  fraction of what a box would cover — and a space takes a cell and
+  draws nothing.
+
+### What it does not settle
+
+- **The canvas's text is still monospaced.** The cell is fixed, so a
+  narrow letter and a wide one take the same room. A canvas that
+  measured its text would want the advance of each character, and the
+  seam would need a number it does not have.
+- **The picture has no anti-aliasing** (§67), so a letter is a
+  staircase like everything else. A letter is thinner than a rectangle,
+  so it shows the staircase more.
