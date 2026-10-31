@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1212 tests.** The MCP server links **all fifteen batteries** in, so the
+**1215 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1212 tests
+cargo test          # 1215 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3598,6 +3598,7 @@ so.
 | a **pre-fader send** | **built.** The track's stage is the clips, the inserts, the mute and then the fader, and a send may take its copy from before the fader; a muted track is not heard anywhere (§161) | §160, §161 |
 | a **master with a fader** | **built.** A track whose kind is `master` holds the fader of the whole mix: its inserts are run over the mix, its lanes move it, and the metronome is summed after it (§162) | §162 |
 | a **bus that is read** | **built.** A track may read a bus, and a bus that is read is heard through the reader and not by itself; a reader holds no clips, has no sends and is not routed (§163) | §163 |
+| a **route that is honoured** | **built.** A track that feeds a bus is heard on that bus and not in the main mix, and a bus that feeds another bus is heard there; the buses are fed in the order they are read in (§164) | §164 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11153,3 +11154,63 @@ is a strip that reads a bus, and v2 had no reader at all.
 - **The bus's channel format does not fold.** The tree's matrix folds a
   mono bus into a stereo aux with the pan law; here the copy is the
   copy.
+
+## 164. The route says where a track is heard
+
+The tree's strip goes to its **output** and to nowhere else: a track
+that feeds a bus is heard on that bus and not in the main mix. Here the
+route was a relation that the mixer drew and the render ignored, so
+every track was heard in the main mix whatever it fed.
+
+### What was built
+
+- The **route is honoured** in the render: a track that feeds a bus is
+  heard on that bus and not in the main mix.
+- A bus that **feeds another bus** is heard there and not by itself,
+  and the buses are fed in the order they are read in, so a bus is fed
+  before it is read.
+- The **order of the buses** is a helper of its own now, shared by the
+  routing evaluator and the render — the evaluator worked it out and
+  the render needed it too.
+
+### What the port found
+
+- **The route was drawn and never read.** The mixer drew the route as a
+  line from the track to the bus, the evaluator listed who feeds whom
+  and even worked out the order the buses are fed in — and the render
+  summed every track into the main mix whatever it fed. A relation
+  that two other parts of the tree use and the part that makes the
+  sound does not is a relation that was never finished.
+- **The tree's strip has one output.** The tree's route is a field on
+  the strip and it is either the main mix or a bus, never both: a
+  track that feeds a bus is not heard in the main mix, and a track that
+  feeds nothing is heard there. Here a track could be fed into a bus
+  and still be heard whole, which is the sound of a mixer that has not
+  decided where the track goes.
+- **The order of the buses was already there.** The routing evaluator
+  sorts the buses so that a bus that feeds another comes before it —
+  the order in which a bus must be fed before it is read. The render
+  wanted exactly that order and did not have it, and the port had read
+  the evaluator and not the render.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/route.rs`): a routed track is
+  heard on its bus, an unrouted track is heard in the main mix, and a
+  bus that feeds a bus is heard there.
+- **The render grew a step**: the tracks, then the routed tracks, then
+  the buses, then the buses in order, then the readers, then the
+  master. The order of the steps is the order of the sound.
+
+### What it does not settle
+
+- **A track may not feed a bus and be read at the same time.** The
+  tree's strip may be read by an aux and feed a bus; here the two
+  would be a loop, and only one of them is allowed.
+- **The route does not change the level.** The tree's matrix folds a
+  mono bus into a stereo bus with the pan law and the channel format
+  of the destination; here the copy is the copy.
+- **A cycle in the routing is not a hang and not an error.** The order
+  is worked out by walking it, so a bus that is already in the order is
+  left where it is; a cycle is therefore a routing that means nothing,
+  and nothing says so.
