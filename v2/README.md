@@ -892,6 +892,11 @@ different commands with one id.
   penalty model, and the two breakers — the optimal one and the greedy
   one. A **library**, not a plugin: it contributes nothing to the
   registry and the linker does not wire it in (§58).
+- `crates/craftkit-font` — the **kit's own typeface**: a table of
+  glyphs, each a set of strokes, drawn in code — the same rule the
+  icons follow, and for the same reason. A **library**, not a plugin: it
+  contributes nothing to the registry and the linker does not wire it in
+  (§128).
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
   words, the measure it sits in, the **metric** it is set in, and the
   lines it breaks into — ported into v2's seams, and what it found
@@ -978,7 +983,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**980 tests.** The MCP server links **all fifteen batteries** in, so the
+**996 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1080,7 +1085,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 980 tests
+cargo test          # 996 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3545,7 +3550,7 @@ so.
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
 | a **control channel** | **built**: the session behind a token-authenticated socket, with the family's wire format and the family's methods — and no `ui.*`, because this tree has no window | §55 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
-| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller, because the kit has no font; **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
+| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller and the **letters** from the kit's own typeface (§128); **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
@@ -3561,7 +3566,7 @@ so.
 | the **guard** around evaluation | **built** | §38 |
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
-| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the **kit has no font**: the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60) | §58, §59, §60 |
+| a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The widths are still the caller's | §58, §59, §60, §128 |
 | **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
 
 ### The list of things that are honestly not there: empty
@@ -4031,7 +4036,7 @@ growing.
 | the **word processor** | a run is an **interval**; the words it covers are **derived**; a cell that holds a tree is not a payload | nothing |
 | the **page layout application** | the typed id fields are **edges**; a relation's **inverse is derived**; the file's version is **derived from what is in it** | nothing |
 | the **typed value** | the unit is a **plugin's** business; the typed value is **not a command parameter** | a library and a plugin |
-| the **line breaker** | the kit has **no font**, so the widths come from the caller; the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
+| the **line breaker** | the widths come from the caller and the **letters** from the kit's own typeface (§128); the measure is the paragraph's **place**; the lines are **derived**, and the derivation says which breaker ran | a library and a plugin |
 | the **metric** | a typeface is **few**, so it is a **node**, and the paragraph's typeface is an **edge**; a monospaced paragraph is a metric with an empty table | an edge and a kind |
 | the **metric's runs** | a width belongs to a **run** of characters, not to a character: a ligature replaces its characters and a kerning pair adjusts the gap between them | two tables in a payload |
 | the **payload** | the core bounds a command's parameters and says nothing about a **payload**, so every plugin that reads one has to write its own bounds | a library and two core bounds |
@@ -4553,7 +4558,10 @@ that answer is in the plan.
   character) and a **space**, in millimetres, and the caller says what
   they are. The moment a font arrives it supplies those two numbers and
   nothing else changes: the breaker, the plugin, the document model and
-  the file format are all untouched by it.
+  the file format are all untouched by it. — **Answered in §128**: the
+  kit has its own typeface now, drawn in code, and the widths **still**
+  come from the caller — because the widths that matter to a paragraph
+  are the ones in its metric.
   This is the first time in this kit that a **missing asset** shaped a
   document model, and the shape it took is honest: the metric is a
   **value in the payload**, not a hidden assumption.
@@ -4696,7 +4704,8 @@ because a paragraph is set in one metric and not in two.
   is what makes the port legal: the metric is **numbers**, and numbers
   are data and not artwork, so the tree's no-asset rule and the missing
   font do not fight each other. The moment a font arrives it supplies
-  the table, and nothing in the model moves.
+  the table, and nothing in the model moves. — **Answered in §128**:
+  the typeface arrived, and nothing in the model moved.
 - **A table's key is one character, and the reader keeps what it does
   not understand.** The command refuses a key that is not a single
   character and a width that is not a width; the **reader** — which may
@@ -4729,7 +4738,9 @@ because a paragraph is set in one metric and not in two.
   (characters, width) pairs. That is the port's next step, and it is a
   port.
 - **There is no font *file* and no font *name* that means anything.**
-  The metric is called what the caller calls it.
+  The metric is called what the caller calls it. — **Still true in
+  §128**: the kit's typeface is a table of strokes in a source file and
+  has no name to speak of.
 
 ---
 
@@ -5453,11 +5464,13 @@ the kit from a document model into something a person can look at.
   rasteriser takes the camera and applies it: the world's **up** is the
   picture's **down**, because a document is drawn the way it is looked
   at and not the way it is stored.
-- **There is no font, and the kit says so.** The kit has the *metrics*
-  of a typeface (§59) and not its glyphs — so a character is drawn as
-  the **box it would occupy**, a typewriter's worth of rectangles. The
-  picture says *there is text here* and not what it says, which is
-  honest in a way that a fake glyph would not be.
+- **The canvas has no font of its own, and the kit says so.** The kit
+  has its own typeface now (§128), but the **canvas** takes a string
+  and a point and draws the box the string would occupy. A typeface is
+  a library that a *battery* draws with, and no battery has drawn one
+  yet: the canvas's own text is a placeholder — a typewriter's worth of
+  rectangles. The picture says *there is text here* and not what it
+  says, which is honest in a way that a fake glyph would not be.
 - **A picture without soft edges is a picture a machine can reason
   about.** There is no anti-aliasing: a pixel is either painted or it is
   not, and the fill is a scanline over the flattened curves. That is a
@@ -5488,9 +5501,10 @@ the kit from a document model into something a person can look at.
   staircase, and a circle is a polygon. A picture for a person to look
   at would want both, and the choice here was a machine-readable
   picture.
-- **There is no font, so there is no text.** The boxes are a placeholder
-  that says where text would be; a real glyph needs a real typeface, and
-  a typeface is a file this kit does not carry.
+- **The canvas's text is a box and not a letter.** The boxes are a
+  placeholder that says where text would be; the kit's own typeface
+  (§128) is a table of strokes and the rasteriser does not draw it, so
+  the canvas's text is still a box, and the seam is not changed.
 - **The canvas is a raster, and not a display list.** Everything is
   painted into pixels as it happens; a program that wanted to zoom in
   after the fact would have to paint again. The camera is applied while
@@ -7375,9 +7389,9 @@ blocks, entities, extents — and **no picture at all**.
 - **The circle is a polygon of sixty-four segments.** The kit has no
   curves in its drawing except the ones a path carries, and a circle
   is drawn as a polygon of straight lines.
-- **The text has no font.** The canvas draws the box each character
-  would occupy, and the picture says *there is text here* and not what
-  it says.
+- **The canvas's text has no letters.** The canvas draws the box each
+  character would occupy, and the picture says *there is text here* and
+  not what it says.
 - **Nothing can be picked.** The entity's hit test still says no, so a
   line cannot be clicked in the window.
 - **The layer's old `color` field is still there.** An index or a name
@@ -7421,9 +7435,11 @@ be picked, and a drawing nobody can touch is a picture.
 
 ### What it does not settle
 
-- **The text is not hit.** The kit has no font, so the box a text
-  occupies is not a thing the battery knows: the canvas draws the box
-  of each character from its own metrics, and the battery cannot ask.
+- **The text is not hit.** The box a text occupies is not a thing the
+  battery knows: the canvas draws the box of each character from its own
+  metrics, and the battery cannot ask. The kit's typeface (§128) makes
+  the box knowable in principle — a battery could ask the typeface how
+  wide a character is — and this battery does not.
 - **The tolerance does not follow the zoom.** A line is a pixel wide at
   a high zoom and is hard to hit, and a line is thin at a low zoom and
   is easy to hit by accident. The hit test has no camera.
@@ -8864,9 +8880,10 @@ oversight: the **tempo** and **meter** events carry their time in
   map `n` times, so the ruler costs a walk per mark. A document with
   many tempo events would want the map built **once** per frame, and
   that is a change to the seam, not to the kinds.
-- **The ruler has no scale.** It has marks and no numbers, because the
-  kit **has no font** (§12) and a number it cannot draw is not worth
-  computing. The bar numbers of a real ruler are still missing.
+- **The ruler has no scale.** It has marks and no numbers, because a
+  number it cannot draw is not worth computing. The kit **has a
+  typeface** now (§128), so the bar numbers of a real ruler are within
+  reach — and they are not drawn yet.
 
 ---
 
@@ -8926,3 +8943,77 @@ model.
 - **There is no audio.** The mixer is a picture of a mixer: the routing
   is in the plan (§20.4) and the sound is not made. That is the audio
   engine, and it is not built.
+
+---
+
+## 128. The kit's own typeface, drawn in code
+
+The kit had **no font**, and that was not an oversight and not a
+principle: it was a **missing thing**. The rule of the tree is that
+nothing on screen is an asset — no artwork, no font file, nothing that
+is not drawn in code — and the icons have followed that rule since the
+first picture. The letters had simply never been asked for.
+
+### What was built
+
+- **`craftkit-font`**: the kit's own typeface, a table of **glyphs**,
+  each a set of **strokes** on a shared grid.
+- **The grid**: the baseline at zero, the **cap height** at two, the
+  **x-height** at one and a half, the **descender** at minus a half.
+  Every letter is drawn on it, so the letters line up with each other
+  and a caller does not have to know where a letter starts.
+- **The em is the cap height**: a caller that says ten gets capitals
+  ten tall, and one grid unit is therefore half the em.
+- **The letters**: the capitals and the small letters, the ten figures,
+  and the marks a sentence needs — a full stop, a comma, a colon, a
+  semicolon, a dash, a bracket, a quote and the rest.
+- **The typeface is a library and not a plugin**: a typeface is data —
+  strokes and numbers — and it knows nothing about a document, a canvas
+  or the kit. The caller brings the size and the place, and the library
+  brings the outlines.
+
+### What the port found
+
+- **The no-asset rule was never about the letters.** It was about not
+  shipping a file, and a letter is a few numbers in a source file —
+  exactly like an icon. The rule that kept the artwork out kept the
+  typeface out too, and nobody had noticed that a typeface drawn in code
+  is not artwork at all.
+- **A typeface is not a metric.** The port's own text battery had said
+  for a long time that "the kit has no font, so the widths come from
+  the caller" (§58) — and that was **right**, and is still right. What a
+  line breaker needs is a width, and a width is a number in a document.
+  What a **drawing** needs is an outline, and an outline is a shape.
+  The two are separable, and the separation is what let the typeface
+  arrive without touching the model, the breaker or the format.
+- **The letters are a monoline.** A capital is a skeleton of straight
+  strokes and a small letter is the same skeleton at two thirds of the
+  height. That is what a plotter font is and what a monoline engraving
+  is, and it is what a tree that draws its own icons is already good at.
+- **A typeface has no name and no file.** The kit's letters are called
+  what the tree calls them, and there is nothing to install.
+
+### What it cost
+
+- one crate, one module of strokes and one of tests: **ten tests**, and
+  they are the rules a table has to keep — every letter and figure is
+  there, every glyph is wider than nothing, no two characters share an
+  entry, the letters are proportional, a string is as wide as the sum
+  of its letters, an unknown letter is **left out** rather than drawn
+  as a box, and no letter is taller than the em or hangs below the
+  descender.
+
+### What it does not settle
+
+- **The typeface does not kern and does not shape.** A pair of letters
+  is not adjusted against each other, and there is no ligature and no
+  substitution. A caller that wants kerning applies it to the advance,
+  which is what a metric is for.
+- **The canvas still has no font of its own.** The kit's typeface is a
+  library that a *battery* draws with, and the canvas's `text` is still
+  a box (§67). The rasteriser could draw the kit's typeface for it, and
+  does not: that is a change to a seam and not to a kind.
+- **The letters are plain.** There is no bold, no italic and no
+  hinting, and a document that wanted them would want a **family** of
+  typefaces rather than one.
+
