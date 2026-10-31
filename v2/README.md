@@ -8304,3 +8304,67 @@ contract.
 - **The FUIDs are not here.** A program that talks to another program
   of this tree uses the ones its own plugin says, and a program that
   talks to a real plugin brings its own.
+
+## 117. The VST3 stream and the tree's own interface ids
+
+§116 wrote the VST3 ABI down as shapes, and said plainly that the
+contract was there and **the two sides of it** were not. This section
+fills in the three shapes that neither side could do without: the
+stream a state travels through, the instance the factory hands back,
+and the names the two sides ask each other by.
+
+### What was built
+
+- **The stream** (`IBStream` and `Stream`): a state is a set of bytes,
+  and the format does not say "give me the bytes" — it says "read from
+  this stream" and "write to this one". The stream is the **host's**
+  own, and its **first word is the address of its table**, so the
+  plugin can find the functions and the host can keep the bytes behind
+  them.
+- **The instance** (`Instance`): the factory hands back an **object**,
+  and the object's first word is the address of its table. That is how
+  a virtual table is laid out, and it is what the format means when it
+  says that an object implements an interface.
+- **The tree's own interface ids** (`COMPONENT_FUID`,
+  `AUDIO_PROCESSOR_FUID`, `EDIT_CONTROLLER_FUID`): the published bytes
+  belong to the SDK's headers, which this tree does not copy. So the
+  tree names its **own** interfaces, and the host and the fixture agree
+  on them because both of them are written here.
+- **The reference count**: every interface counts references the same
+  way, and the pair comes **first** in the table, because the format
+  puts it there.
+- **The audio buffers**: the **wide** shape, with the addresses of the
+  channels in it. The SDK has a narrow field for the same thing beside
+  it, and this tree holds the one a program can actually use.
+
+### What the port found
+
+- **A binary contract has parts that are not the contract.** The
+  published FUID bytes are numbers the format's own headers hold, and
+  copying them would have put a file this tree was not written for
+  inside it. The **shape** of the contract — sixteen bytes that stand
+  for an interface, asked for by value — is what a tree can write down
+  without copying anything, and it is enough for two programs of this
+  tree to talk.
+- **An object implements an interface by its first word.** The
+  factory's pointer is the factory's table, because the factory has
+  one interface and no state of its own; an instance's pointer is the
+  **object**, and the object carries its table. Two rules, and a host
+  that mixed them up would read the wrong function.
+- **A state is a stream and not a buffer.** The format says "read from
+  this stream", so the shape is a **table of four functions** and not
+  a byte array, and the host is the one that owns the bytes.
+
+### What it cost
+
+- four shapes and **three tests** about the layout.
+
+### What it does not settle
+
+- **One object cannot hold two tables.** The component and the audio
+  processor are one object in the format, and this shape cannot say
+  so: the table is the first word, and the first word is one thing.
+  §120 says what the tree does about it.
+- **The FUIDs are not the SDK's.** A program that talks to a real
+  plugin asks for the SDK's bytes instead, and the shape of the call
+  is the same either way.
