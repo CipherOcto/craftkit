@@ -139,10 +139,9 @@ fn commands(app: &mut App, ui: &mut egui::Ui) {
     // The commands are **copied** out of the registry before they are
     // drawn: the window draws them and then runs one, and the two
     // cannot borrow the same registry at once.
-    let areas: Vec<String> = app.window.areas().iter().map(|area| area.to_string()).collect();
     let commands: Vec<(String, String, String, String)> = app
         .window
-        .commands()
+        .commands_outside_panels()
         .iter()
         .map(|command| {
             (
@@ -154,6 +153,28 @@ fn commands(app: &mut App, ui: &mut egui::Ui) {
         })
         .collect();
     egui::ScrollArea::vertical().show(ui, |ui| {
+        // The **panels** first: a panel is a battery's own window of
+        // commands, and the commands it names are shown together.
+        let panels = app.window.panels();
+        for panel in &panels {
+            egui::CollapsingHeader::new(&panel.label).default_open(true).show(ui, |ui| {
+                for id in &panel.commands {
+                    let Some(command) = app.window.command(id) else { continue };
+                    let label = format!("{} — {}", command.label, command.id);
+                    if ui.button(label).clicked() {
+                        app.open(command.id);
+                    }
+                }
+            });
+        }
+        // And then the commands that no panel shows, by area.
+        let mut areas: Vec<String> = Vec::new();
+        for command in &commands {
+            if !areas.contains(&command.0) {
+                areas.push(command.0.clone());
+            }
+        }
+        areas.sort();
         for area in &areas {
             let mut commands: Vec<&(String, String, String, String)> =
                 commands.iter().filter(|command| command.0 == *area).collect();

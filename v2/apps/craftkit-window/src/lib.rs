@@ -46,6 +46,11 @@ use craftkit_sdk::{CommandSpec, Doc, EcosystemError, EngineError, Outcome, Sessi
 pub struct Window {
     /// The session: the document, the history and the registry.
     session: Session,
+    /// The **panels** the ecosystem brought.
+    ///
+    /// A panel is a contribution and not a session's state: the session
+    /// is what a person changes, and a panel is what a battery shows.
+    panels: Vec<craftkit_sdk::PanelSpec>,
     /// The command being filled in, if one is.
     form: Option<Form>,
     /// What the window has to say.
@@ -66,7 +71,8 @@ impl Window {
     /// linked in — and the session is built from it.
     pub fn new() -> Result<Window, EcosystemError> {
         let ecosystem = craftkit_studio::ecosystem()?;
-        Ok(Window { session: ecosystem.session(), form: None, log: Vec::new(), runs: 0 })
+        let panels = ecosystem.panels.all().to_vec();
+        Ok(Window { session: ecosystem.session(), panels, form: None, log: Vec::new(), runs: 0 })
     }
 
     /// The session the window draws.
@@ -79,6 +85,49 @@ impl Window {
         let mut found: Vec<&CommandSpec> = self.session.registry().all().iter().collect();
         found.sort_by(|left, right| left.id.cmp(right.id));
         found
+    }
+
+    /// The **panels**: the groups of commands a battery brings.
+    ///
+    /// A panel is a **contribution**: it names the commands it shows,
+    /// and a front end shows them together. The commands that are not
+    /// linked in are left out: a panel that names a command this
+    /// program does not have is a panel with a hole in it, and the hole
+    /// is not drawn.
+    pub fn panels(&self) -> Vec<PanelRow> {
+        let mut panels: Vec<&craftkit_sdk::PanelSpec> = self.panels.iter().collect();
+        panels.sort_by(|left, right| left.id.cmp(right.id));
+        panels
+            .into_iter()
+            .map(|panel| PanelRow {
+                id: panel.id.to_string(),
+                label: panel.label.to_string(),
+                commands: panel
+                    .commands
+                    .iter()
+                    .filter(|id| self.session.registry().all().iter().any(|command| command.id == **id))
+                    .map(|id| id.to_string())
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// The **command** with this id, if it is linked in.
+    pub fn command(&self, id: &str) -> Option<&CommandSpec> {
+        self.session.registry().all().iter().find(|command| command.id == id)
+    }
+
+    /// The **commands** that no panel shows.
+    ///
+    /// The panels are the batteries' own windows of commands, and what
+    /// is left over is the kit's own: a front end shows both, and a
+    /// command that is shown twice is a command with two doors.
+    pub fn commands_outside_panels(&self) -> Vec<&CommandSpec> {
+        let mut shown: Vec<&str> = Vec::new();
+        for panel in &self.panels {
+            shown.extend(panel.commands.iter().copied());
+        }
+        self.commands().into_iter().filter(|command| !shown.contains(&command.id)).collect()
     }
 
     /// The **areas** the commands belong to, in order.
@@ -360,6 +409,17 @@ pub struct Picture {
     pub height: usize,
     /// The pixels: red, green, blue and alpha, four bytes each.
     pub pixels: Vec<u8>,
+}
+
+/// One **panel**, as the window shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelRow {
+    /// Its id.
+    pub id: String,
+    /// What it is called.
+    pub label: String,
+    /// The commands it shows, in order.
+    pub commands: Vec<String>,
 }
 
 /// One **node** of the document, as the window shows it.

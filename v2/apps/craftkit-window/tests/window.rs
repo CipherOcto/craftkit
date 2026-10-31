@@ -350,3 +350,30 @@ fn the_selection_moves_as_one() {
         assert_eq!(rect.x, 7.0, "the node moved across");
     }
 }
+
+/// The **panels** are shown, and their commands are shown once.
+///
+/// A panel is a battery's own window of commands: it names the
+/// commands it shows, and a front end shows them together. A command
+/// that is shown twice is a command with two doors.
+#[test]
+fn the_panels_are_shown_and_their_commands_once() {
+    let window = window();
+    let panels = window.panels();
+    assert!(!panels.is_empty(), "there are panels");
+
+    let mut shown: Vec<String> = Vec::new();
+    for panel in &panels {
+        for id in &panel.commands {
+            assert!(!shown.contains(id), "the command `{id}` is shown twice");
+            shown.push(id.clone());
+            assert!(window.command(id).is_some(), "the command `{id}` is linked in");
+        }
+    }
+
+    // And the commands that no panel shows are the rest.
+    let outside: Vec<&str> = window.commands_outside_panels().iter().map(|command| command.id).collect();
+    for id in &shown {
+        assert!(!outside.contains(&id.as_str()), "the command `{id}` is shown twice");
+    }
+}

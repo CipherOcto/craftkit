@@ -980,20 +980,25 @@ wrong.)
   with its one-file-per-change discipline, is untouched. What v2 has is a
   format that is a **contribution**, with migrations that are contributions,
   and a version chain the ecosystem checks.
-- **The old tree's front ends.** No toolbar, no control channel. The **MCP
-  server is built** (§41: one tool per command, generated from the
-  registry), the **bridge** is built (§35), the **terminal door** is built
-  (§75) and the **browser door** is built (§78) — and what v2 has besides
-  those is the **projection** every front end would read.
+- **The old tree's front ends.** The **MCP server is built** (§41: one
+  tool per command, generated from the registry), the **bridge** is built
+  (§35), the **terminal door** is built (§75) and the **browser door** is
+  built (§78) — and what v2 has besides those is the **projection** every
+  front end would read. The **window** is built too (§91: a thin front
+  end over the same registry), and the **control channel** is a crate
+  with its own tests — but no application opens it yet, because the
+  channel serves a session of its own and the window has one already.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
   the port showed is missing: a typed body, text, and images. The
   **geometry** has a home (§13), the document is a **tree** (§14), and the
   **selection** is the session's state (§14). What is still missing is the
-  rest of a document model: images. Two of the three are not missing any
-  more: the **appearance** is the kit's own (§95) and the **layer** is
-  the kit's own too (§103) — a node with no appearance of its own takes
-  the layer's, and a hidden layer hides what is on it. **Text** is no
+  rest of a document model: images — and even that is nearly there: the
+  image battery puts a picture in the document and the snapshot draws it
+  (§ the picture is a size and a file). Two of the three are not missing
+  any more: the **appearance** is the kit's own (§95) and the **layer**
+  is the kit's own too (§103) — a node with no appearance of its own
+  takes the layer's, and a hidden layer hides what is on it. **Text** is no
   longer on that list: a paragraph and its runs are in the prose battery
   (§49), and a paragraph **laid out** — broken into lines — is in the
   text battery (§58), and the **metric** it is set in is a node of its
