@@ -436,25 +436,30 @@ impl Window {
     }
 }
 
-/// The window's **picture**, for the channel to show.
+/// The window's **picture** and its **clicks**, for the channel.
 ///
 /// The channel knows the session and the window knows the screen, so
 /// the channel asks the window for the picture and hands it over. The
 /// picture is the **document** as the window draws it — the panels and
 /// the form are chrome, and chrome is not what an agent is checking.
-pub struct WindowPicture {
-    /// The session the picture is drawn from.
+///
+/// A **click** is the same: the point is in the world's units, the
+/// node under it is picked through the kinds, and it is selected
+/// through the registry — so a click over the channel is the same
+/// click a person makes, and not a second way into the design.
+pub struct WindowControl {
+    /// The session the window draws and the channel drives.
     session: Arc<Mutex<Session>>,
 }
 
-impl WindowPicture {
-    /// A picture of the session, at this size.
-    pub fn new(session: Arc<Mutex<Session>>) -> WindowPicture {
-        WindowPicture { session }
+impl WindowControl {
+    /// The window's own session, shared.
+    pub fn new(session: Arc<Mutex<Session>>) -> WindowControl {
+        WindowControl { session }
     }
 }
 
-impl craftkit_control::Render for WindowPicture {
+impl craftkit_control::Render for WindowControl {
     fn render(&mut self) -> Result<Vec<u8>, String> {
         let session = match self.session.lock() {
             Ok(session) => session,
@@ -464,6 +469,32 @@ impl craftkit_control::Render for WindowPicture {
         let mut raster = craftkit_raster::Raster::new(WINDOW_PICTURE_WIDTH, WINDOW_PICTURE_HEIGHT, camera)?;
         session.paint_view(&mut raster);
         Ok(raster.image().to_png())
+    }
+
+    fn click(&mut self, at: craftkit_sdk::Point) -> Result<craftkit_sdk::serde_json::Value, String> {
+        let mut session = match self.session.lock() {
+            Ok(session) => session,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        // The node under the pointer, through the kinds: the deepest
+        // hit wins, as it does for a person.
+        let document = session.document();
+        let picked = document
+            .walk_visible()
+            .filter(|node| {
+                session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, document, at)).unwrap_or(false)
+            })
+            .last()
+            .map(|node| node.id);
+        let Some(node) = picked else {
+            return Ok(craftkit_sdk::serde_json::json!({ "clicked": craftkit_sdk::serde_json::Value::Null }));
+        };
+        // And it is selected through the registry, like every other
+        // change.
+        session
+            .execute("select.node", &craftkit_sdk::serde_json::json!({ "node": node }))
+            .map_err(|error| error.to_string())?;
+        Ok(craftkit_sdk::serde_json::json!({ "clicked": node }))
     }
 }
 

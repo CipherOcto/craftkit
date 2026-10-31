@@ -80,6 +80,13 @@ pub const MAX_LINE: usize = 1 << 20;
 pub trait Render: Send {
     /// The picture of what the program is showing, as a PNG.
     fn render(&mut self) -> Result<Vec<u8>, String>;
+
+    /// **Click** at a point of the world, and say what was clicked.
+    ///
+    /// The point is in the **world's** units, the way the document is:
+    /// a click at a point of the screen is a click at a point of the
+    /// world that the camera has already found.
+    fn click(&mut self, at: craftkit_sdk::Point) -> Result<Json, String>;
 }
 
 /// What a client is asking for.
@@ -103,6 +110,8 @@ pub enum Method {
     Shutdown,
     /// What the program is showing, as a picture.
     UiRender,
+    /// Click in the document, at a point of the world.
+    UiClick,
 }
 
 impl Method {
@@ -116,6 +125,7 @@ impl Method {
             Method::Ping => "ping",
             Method::Shutdown => "shutdown",
             Method::UiRender => "ui.render",
+            Method::UiClick => "ui.click",
         }
     }
 
@@ -129,6 +139,7 @@ impl Method {
             "ping" => Method::Ping,
             "shutdown" => Method::Shutdown,
             "ui.render" => Method::UiRender,
+            "ui.click" => Method::UiClick,
             _ => return None,
         })
     }
@@ -143,6 +154,7 @@ impl Method {
             Method::Ping,
             Method::Shutdown,
             Method::UiRender,
+            Method::UiClick,
         ]
     }
 }
@@ -553,6 +565,34 @@ fn answer(
     };
     match method {
         Method::Ping => Response::ok(&request.id, "pong", Some(json!({ "pong": true }))),
+        Method::UiClick => {
+            let Some(render) = render else {
+                return Response::error(&request.id, "no-window", "this program has no window to click in");
+            };
+            let x = request.params.get("x").and_then(|x| x.as_f64());
+            let y = request.params.get("y").and_then(|y| y.as_f64());
+            let (Some(x), Some(y)) = (x, y) else {
+                return Response::error(
+                    &request.id,
+                    "bad-request",
+                    "a click is a point: `params.x` and `params.y` are the world's units",
+                );
+            };
+            if !x.is_finite() || !y.is_finite() {
+                return Response::error(
+                    &request.id,
+                    "bad-request",
+                    "a click is a point in the world's units",
+                );
+            }
+            let Ok(mut render) = render.lock() else {
+                return Response::error(&request.id, "internal", "the window is poisoned");
+            };
+            match render.click(craftkit_sdk::Point::new(x, y)) {
+                Ok(answer) => Response::ok(&request.id, "the click", Some(answer)),
+                Err(message) => Response::error(&request.id, "failed", message),
+            }
+        }
         Method::UiRender => {
             // The picture is what the program is showing, and the
             // program is the only one that knows: the channel asks it
@@ -838,7 +878,13 @@ mod tests {
         assert_eq!(Method::Diagnostics.as_str(), "diagnostics.list");
         assert_eq!(Method::Ping.as_str(), "ping");
         assert_eq!(Method::Shutdown.as_str(), "shutdown");
-        assert!(Method::parse("ui.click").is_none(), "there is no window in this tree");
+        // The family names the window's methods `ui.*`, and this tree
+        // has two of the three: a click and a picture. The family's
+        // third is a **screenshot** — the picture of the screen and not
+        // of the document — and this tree has no screen to take one of.
+        assert_eq!(Method::UiClick.as_str(), "ui.click");
+        assert_eq!(Method::UiRender.as_str(), "ui.render");
+        assert!(Method::parse("ui.screenshot").is_none(), "there is no screen in this tree");
     }
 
     #[test]

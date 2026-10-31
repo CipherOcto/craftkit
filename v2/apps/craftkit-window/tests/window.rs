@@ -434,7 +434,7 @@ fn the_channel_can_show_the_windows_document() {
     window.set("fill", json!("#3366cc"));
     window.run().expect("the command runs");
 
-    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowPicture::new(
+    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowControl::new(
         window.shared_session(),
     )));
     let options = craftkit_control::Options {
@@ -453,5 +453,51 @@ fn the_channel_can_show_the_windows_document() {
     assert_eq!(answer["format"], "png", "the picture is a PNG");
     let bytes = craftkit_sdk::bytes::decode(data).expect("the picture is base64");
     assert_eq!(&bytes[1..4], b"PNG", "and the bytes say so");
+    server.shutdown();
+}
+
+/// The channel can **click** in the document.
+///
+/// The click is the same click a person makes: the node under the
+/// pointer is picked through the kinds and selected through the
+/// registry, so a click over the channel is not a second way into the
+/// design.
+#[test]
+fn the_channel_can_click_in_the_document() {
+    let mut window = window();
+    window.open("geometry.rectangle");
+    window.set("x", json!(0.0));
+    window.set("y", json!(0.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.run().expect("the rectangle is added");
+
+    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowControl::new(
+        window.shared_session(),
+    )));
+    let options = craftkit_control::Options {
+        token: "a-secret".to_string(),
+        address: "127.0.0.1:0".parse().expect("an address"),
+        announce: None,
+        render: Some(render),
+    };
+    let mut server =
+        craftkit_control::Server::serve_shared(window.shared_session(), options).expect("the channel opens");
+    let mut client =
+        craftkit_control::Client::connect(server.address(), "a-secret").expect("the client connects");
+
+    let answer = client
+        .call(craftkit_control::Method::UiClick, json!({ "x": 5.0, "y": 5.0 }))
+        .expect("the click comes");
+    assert_eq!(answer["clicked"], json!(1), "the rectangle was clicked");
+
+    // And it is selected, through the registry.
+    assert!(window.is_selected(1), "the node is selected");
+
+    // A click on nothing says so.
+    let answer = client
+        .call(craftkit_control::Method::UiClick, json!({ "x": 500.0, "y": 500.0 }))
+        .expect("the click comes");
+    assert!(answer["clicked"].is_null(), "nothing was clicked: {answer}");
     server.shutdown();
 }
