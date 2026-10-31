@@ -935,6 +935,9 @@ different commands with one id.
 - `apps/craftkit-wasm` — **the browser door**: the kit in a page, as a
   WebAssembly module and the page that loads it. No bundler is involved:
   the module is the file cargo built (§78).
+- `apps/craftkit-window` — **the window**: the same registry, the same
+  document and the same plan, in a window a person can look at. It is
+  thin, and the gate holds it thin (§91).
 - `crates/craftkit-clap-abi` — **the CLAP contract**: the shapes a CLAP
   plugin is made of — the version, the entry, the factory and the
   descriptor — and the two names a host looks for. No dependencies and
@@ -952,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**826 tests.** The MCP server links **all fourteen batteries** in, so the
+**834 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -6972,3 +6975,70 @@ where the music **was**.
 - **The host still offers the plugin nothing but "clap.state".** The
   host's own parameters and the request to rescan the ports are still
   not answered.
+
+## 91. The window
+
+The kit had four doors — the terminal, the agent, the bridge and the
+browser — and **no window**. A kit that a person cannot look at is a
+kit that a person cannot use, and the README has said for a long time
+that the front ends were not built.
+
+### What was built
+
+- **A window**: `apps/craftkit-window`, an `eframe` application over the
+  same ecosystem the studio has. Three panes: the **commands** (every
+  command in the registry, by area), the **document** (the tree of
+  nodes), and the **plan** (what the document means).
+- A **form** built from the command's own parameters: a number is a
+  drag, a text is a line, a flag is a box, a node reference is a list
+  of the document's nodes, and a kind is a list of the registry's
+  kinds.
+- **One way to run a command.** The window calls `Session::execute` and
+  nothing else; the answer goes to the log.
+- **A sixth rule in v2's own gate**: *a front end is thin*. It does not
+  name `document_mut`, it does not name the evaluator's registry, and it
+  does not hold the plan — with three tests that show the rule bites.
+
+### What the port found
+
+- **A front end that shows the plan must not keep it.** The plan is
+  the evaluator's own value, and a window that holds one holds a value
+  that goes stale the moment the document changes. So the window reads
+  the plan when it draws and copies what it shows into rows of its own
+  — and the gate refuses the word `Plan` in its source.
+- **An optional parameter that nobody filled in is not sent.** The
+  window's first version sent every field, and `node.add` refused:
+  the *parent* was node zero, and zero is a node that is not there. The
+  zero of a node reference is not "no parent" — it is a reference to
+  nothing — so a field that was never filled in is **left out**, and
+  the command's own default is the right answer.
+- **The commands are the registry's, and the window has no list.** A
+  command that is added to the registry appears in the window without
+  the window being told, because the window asks the registry and
+  draws what it says. That is the whole of "one way in", seen from the
+  front.
+- **A rule needs a name to bite on.** The gate reads the front end's
+  **text**, because that is what a gate can read: the names are whole
+  words, so `PlanRow` is not `Plan`, and a name inside a string is not
+  a call. The gate is a function over a tree (§54), so a test can point
+  it at a tree that is broken on purpose and say that the rule bites.
+
+### What it cost
+
+- one crate, one gate rule, **three gate tests** and **five tests of
+  its own**, and one dependency the tree did not have: `eframe`.
+
+### What it does not settle
+
+- **There is no canvas.** The window draws a tree of nodes and a plan;
+  the kit's document has no space to draw in, and a canvas would need
+  its own camera controls (§ the outer tree's rule).
+- **The window shows the plan as text.** The values are JSON, and a
+  person would rather have a picture of them.
+- **The window cannot open a file.** The commands are there —
+  `doc.open` and `doc.open.bundle` are in the registry — but the form
+  for a path is a line of text, and nothing checks it until the
+  command does.
+- **Nothing here is a drawing program.** The window is a way to *see*
+  the kit and to run its commands; it is not the kit's canvas, and it
+  does not pretend to be.
