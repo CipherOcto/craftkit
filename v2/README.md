@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**888 tests.** The MCP server links **all fourteen batteries** in, so the
+**892 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **220** of them, and **234** with
+on its own, with no features, carries **222** of them, and **236** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1051,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 888 tests
+cargo test          # 892 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7777,3 +7777,53 @@ the drawing and no way to change the order.
 - **There is no "bring the selection to the front".** The commands
   take one node, and the selection is the session's state and not a
   parameter.
+
+---
+
+## 106. The snapshot frames the document
+
+`doc.snapshot` wrote a PNG — and the picture was empty when the
+document was not at the origin.
+
+### What was built
+
+- The snapshot is seen through a camera **worked out from the bounds
+  of the document** and the size that was asked for. The session's own
+  camera is not moved: a picture made for somebody else must not move
+  what somebody else is looking through.
+- The snapshot is drawn by the **kit**, so a node that is hidden is not
+  in it.
+- The kit says which of its two drawings is the **document** and which
+  is the **view**: `paint` draws the document and `paint_view` draws
+  the document and the chrome. The handle is chrome, so a picture of
+  the document has no handle in it and the picture on the screen has
+  one.
+- The document grows a **bounds**: the box that holds everything that
+  is somewhere. A node with no place is in none of it — a clip in a
+  sound document is at a time and not at a place.
+
+### What the port found
+
+- **A picture of the origin is not a picture of the document.** The
+  snapshot was seen through the session's camera, which is right for
+  the screen and wrong for a file: a person who has panned away and
+  asks for a snapshot gets a picture of where they were looking.
+- **The chrome is not the document.** The first version of this drew
+  the snapshot with the same method the window draws with, and the
+  snapshot had the handle in it — a little square that means "this can
+  be dragged" in a picture that is going into a file. So the kit has
+  two drawings now: the document, and the view of it.
+
+### What it cost
+
+- one method on the session, one on the document, one on the camera,
+  the snapshot changed in two lines, **four tests**.
+
+### What it does not settle
+
+- **The bounds are the bounds of the places.** A node that is drawn
+  outside its own rectangle — a stroke that goes past the edge, a
+  picture that is drawn larger than its node — is not in the bounds,
+  and a snapshot may cut it off.
+- **The snapshot has no background.** The picture is white where
+  nothing is drawn, and there is no colour for the page.
