@@ -233,6 +233,21 @@ impl Window {
         self.run_id("node.move", json!({ "node": node, "x": x, "y": y }))
     }
 
+    /// **Move** the selection, through the registry.
+    ///
+    /// The selection is the session's state, and a person who drags one
+    /// of the nodes they picked means the whole of them.
+    pub fn move_selection(&mut self, across: f64, up: f64) -> Result<Outcome, EngineError> {
+        self.run_id("select.move", json!({ "x": across, "y": up }))
+    }
+
+    /// Whether a node is **selected**.
+    ///
+    /// It is the session's state and the window asks it.
+    pub fn is_selected(&self, node: u64) -> bool {
+        self.session.selected_ids().contains(&node)
+    }
+
     /// **Resize** a node, through the registry.
     ///
     /// The node keeps its place: a resize changes the size and not

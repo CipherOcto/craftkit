@@ -249,6 +249,68 @@ impl NodeResize {
     }
 }
 
+/// **Move** the selection.
+///
+/// The selection is the session's state, and a person means "the things
+/// I picked" when they say "move these". So the command takes no node:
+/// it takes the selection, and moves every node in it that has a
+/// place.
+///
+/// It is **one** command and so **one** undo step: a person who moves
+/// twenty nodes and undoes it expects the twenty nodes to come back,
+/// and not twenty undos.
+///
+/// A node with **no place** is left alone: a clip in a sound document
+/// is at a time and not at a place, and the command does not invent
+/// one.
+#[derive(Command)]
+#[command(id = "select.move", area = "select", icon = "move", menu("Select"), mutates, undoable)]
+pub struct MoveSelection {
+    /// How far it goes, across.
+    pub x: Number,
+    /// How far it goes, up.
+    pub y: Number,
+}
+
+impl MoveSelection {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let x = self.x.0;
+        let y = self.y.0;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(EngineError::Failed {
+                id: "select.move".to_string(),
+                message: "a place is two numbers".to_string(),
+            });
+        }
+        // The places are read first and the document is changed after:
+        // the document cannot be borrowed and written at the same time,
+        // and a list of places is a list of places.
+        let places: Vec<(u64, Rect)> = session
+            .selected_nodes()
+            .iter()
+            .filter_map(|node| node.rect.map(|rect| (node.id, rect)))
+            .collect();
+        let selected = session.selected_ids().len();
+        if selected == 0 {
+            return Err(EngineError::Failed {
+                id: "select.move".to_string(),
+                message: "nothing is selected".to_string(),
+            });
+        }
+        let mut moved = 0usize;
+        for (id, rect) in places {
+            let place = Rect::new(rect.x + x, rect.y + y, rect.w, rect.h);
+            if let Some(node) = session.document_mut()?.node_mut(id) {
+                node.rect = Some(place);
+            }
+            moved += 1;
+        }
+        let still = selected - moved;
+        Ok(Outcome::changed(format!("moved {moved} of the selected nodes"))
+            .with_data(craftkit_sdk::serde_json::json!({ "moved": moved, "without_place": still })))
+    }
+}
+
 /// **Bring** a node to the front.
 ///
 /// The **order of the tree is the order of the drawing**: a node that

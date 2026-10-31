@@ -323,3 +323,30 @@ fn the_handle_is_drawn_where_the_drag_finds_it() {
     let pixel = &picture.pixels[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
     assert_eq!(pixel, &[0, 0, 0, 0xff], "the handle is drawn at the corner");
 }
+
+/// The **selection** moves as one.
+///
+/// A drag on a node that is selected moves the whole of the selection:
+/// that is what a person means when they drag one of the things they
+/// picked, and the command that does it is the registry's.
+#[test]
+fn the_selection_moves_as_one() {
+    let mut window = window();
+    for name in ["one", "two"] {
+        window.open("geometry.rectangle");
+        window.set("name", json!(name));
+        window.set("x", json!(0.0));
+        window.set("y", json!(0.0));
+        window.set("width", json!(10.0));
+        window.set("height", json!(10.0));
+        window.run().expect("the rectangle is added");
+    }
+    window.run_id("select.all", json!({})).expect("everything is selected");
+    assert!(window.is_selected(1), "the first node is selected");
+
+    window.move_selection(7.0, 0.0).expect("the selection moves");
+    for id in [1, 2] {
+        let rect = window.session().document().node(id).and_then(|node| node.rect).expect("it has a place");
+        assert_eq!(rect.x, 7.0, "the node moved across");
+    }
+}

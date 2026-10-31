@@ -281,7 +281,14 @@ fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
             What::Move { node, place } => {
                 let across = world.x - drag.from.x;
                 let up = world.y - drag.from.y;
-                let _ = app.window.move_node(node, place.x + across, place.y + up);
+                // A drag on a node that is **selected** moves the whole
+                // selection: that is what a person means when they drag
+                // one of the things they picked.
+                if app.window.is_selected(node) {
+                    let _ = app.window.move_selection(across, up);
+                } else {
+                    let _ = app.window.move_node(node, place.x + across, place.y + up);
+                }
             }
             What::Resize { node, place } => {
                 let resized = place.resized_to(world);
