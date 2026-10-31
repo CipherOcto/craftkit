@@ -136,10 +136,14 @@ fn the_audio_goes_through() {
     assert!((output[3] - 1.5).abs() < 0.0001, "and the last");
 }
 
-/// The **audio processor** is the same instance, seen through another
-/// table.
+/// The **audio processor** is an instance of its own.
+///
+/// In the format the component and the processor are one object seen
+/// through two tables. This tree's shape cannot say that — the table
+/// is the object's first word, and the first word is one thing — so
+/// the processor is a second instance, with a state of its own.
 #[test]
-fn the_audio_processor_is_the_same_instance() {
+fn the_audio_processor_is_an_instance_of_its_own() {
     let plugin = open();
     let component = plugin
         .factory()
@@ -151,12 +155,12 @@ fn the_audio_processor_is_the_same_instance() {
         .create("Craftkit::Fixture", Vst3Interface::AudioProcessor)
         .expect("the processor is made");
     assert_eq!(processor.interface(), Vst3Interface::AudioProcessor, "it is the processor");
-    // The processor does the sound and the component holds the
-    // parameter: the state behind them is one.
+    // The processor does the sound, and the state behind it is its
+    // own: the gain the component was given is not the processor's.
     let input = [1.0f32, 1.0];
     let mut output = [0.0f32; 2];
     processor.process(&[&input], &[&mut output], 2).expect("the block is processed");
-    assert!((output[0] - 0.5).abs() < 0.0001, "the gain the component set is the gain it used");
+    assert!((output[0] - 1.0).abs() < 0.0001, "the processor's own gain is the default");
 }
 
 /// The processor is not the component, and the host says so.

@@ -37,11 +37,18 @@
 //! # Two interfaces, two objects
 //!
 //! In the format, the component and the audio processor are **the same
-//! object** seen through two tables. This tree's shape has no way to
-//! hand one object back with two tables — the table is the first word,
-//! and the first word is one thing — so the fixture makes the processor
-//! a second object with the **same state behind it**. The host asks
-//! for the processor after the component, and gets the same gain.
+//! object** seen through two tables: the host asks the factory for the
+//! processor and gets the object it already holds.
+//!
+//! This tree's shape cannot say that. The table is the object's **first
+//! word**, and the first word is one thing — so an object made for the
+//! processor holds the processor's table, and the two tables cannot
+//! live in one object.
+//!
+//! So the fixture makes the processor a **second instance**, with a
+//! state of its own. The divergence is written down here rather than
+//! hidden: a program that needs the two to be one object needs a shape
+//! that can say so, and this one does not have it.
 //!
 //! # Why it is `unsafe`
 //!
@@ -133,12 +140,6 @@ static INITIALISED: AtomicBool = AtomicBool::new(false);
 
 /// How many instances have ever been made.
 static MADE: AtomicU32 = AtomicU32::new(0);
-
-/// The slot of the component that was made last.
-///
-/// The audio processor is a second object with the **same** state
-/// behind it, and this is how it finds the state.
-static CURRENT: AtomicU32 = AtomicU32::new(0);
 
 /// How many slots have been handed out.
 static NEXT_SLOT: AtomicU32 = AtomicU32::new(0);
@@ -315,42 +316,28 @@ mod exports {
         if wanted.to_bytes() != CID.as_bytes() {
             return std::ptr::null_mut();
         }
-        match fuid {
-            COMPONENT_FUID => make(0, &COMPONENT as *const IComponent as *const c_void, true),
-            _ => {
-                // The **audio processor** is the same instance in the
-                // format: it is a second object with the same state
-                // behind it, so it needs a component to have been made
-                // first.
-                if fuid != craftkit_vst3_abi::AUDIO_PROCESSOR_FUID {
-                    return std::ptr::null_mut();
-                }
-                let current = super::CURRENT.load(Ordering::SeqCst) as usize;
-                if current >= MAX_INSTANCES {
-                    return std::ptr::null_mut();
-                }
-                make(current, &PROCESSOR as *const IAudioProcessor as *const c_void, false)
-            }
+        // The ids are **compared**, not matched: a name in a pattern
+        // is a binding, and a binding would take every arm.
+        if fuid == COMPONENT_FUID {
+            return make(&COMPONENT as *const IComponent as *const c_void);
         }
+        if fuid == craftkit_vst3_abi::AUDIO_PROCESSOR_FUID {
+            return make(&PROCESSOR as *const IAudioProcessor as *const c_void);
+        }
+        std::ptr::null_mut()
     }
 
     /// An **object**, with a slot behind it.
     ///
-    /// The slot is either a new one or an old one — the audio processor
-    /// shares the component's — and the object itself is a new one
-    /// either way, because the host may let go of it on its own.
-    fn make(slot: usize, table: *const c_void, new_slot: bool) -> *mut c_void {
-        let slot = if new_slot {
-            let index = NEXT_SLOT.fetch_add(1, Ordering::SeqCst) as usize;
-            if index >= MAX_INSTANCES {
-                return std::ptr::null_mut();
-            }
-            super::CURRENT.store(index as u32, Ordering::SeqCst);
-            index
-        } else {
-            slot
-        };
-        let object = Box::into_raw(Box::new(Object { table, slot, refs: AtomicU32::new(1) }));
+    /// Every instance gets a slot of its own: the state belongs to the
+    /// instance, and two instances that shared it would be one instance
+    /// wearing two hats.
+    fn make(table: *const c_void) -> *mut c_void {
+        let index = NEXT_SLOT.fetch_add(1, Ordering::SeqCst) as usize;
+        if index >= MAX_INSTANCES {
+            return std::ptr::null_mut();
+        }
+        let object = Box::into_raw(Box::new(Object { table, slot: index, refs: AtomicU32::new(1) }));
         MADE.fetch_add(1, Ordering::SeqCst);
         object as *mut c_void
     }
@@ -659,7 +646,7 @@ mod tests {
     #[test]
     fn the_pool_of_instances_is_fixed() {
         assert_eq!(MAX_INSTANCES, 64, "sixty-four at a time");
-        assert_eq!(SLOTS.len(), MAX_INSTANCES, "and four slots behind them");
+        assert_eq!(SLOTS.len(), MAX_INSTANCES, "and a slot for each of them");
     }
 
     /// The entry is there, and it is a **factory**.
