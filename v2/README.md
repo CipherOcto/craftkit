@@ -991,7 +991,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1038 tests.** The MCP server links **all fifteen batteries** in, so the
+**1040 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1093,7 +1093,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1038 tests
+cargo test          # 1040 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9420,7 +9420,10 @@ the tracks are mixed, and the mix is written to a file.
   clock to move it.
 - **The mixer's graph is not rendered.** The buses, the sends, the
   inserts and the automation lanes (§127) are in the plan and not in
-  the render: the render sums the clips.
+  the render: the render sums the clips. — **Partly answered in §138**:
+  the **automation** is rendered — the lanes move the volume, the pan
+  and the mute. What is still missing is the **routing**: the buses
+  and the sends.
 - **There is no resampler and no time stretch.** A source at another
   rate is refused, and a clip that should be slower than its source is
   not made. — **Answered in §137**: the resampler is linear and the
@@ -9526,3 +9529,61 @@ resampled clip is not the clip that was asked for.
 - **The resampler is linear**, so a sound resampled to a much higher
   rate loses its top. A better resampler is a **filter**, and a filter
   is a plugin.
+
+---
+
+## 138. The automation is heard
+
+The lanes were drawn (§127) and moved nothing: a curve on a track's row
+that no sound obeyed.
+
+### What was built
+
+- The **render applies the lanes**, per sample, because that is what a
+  curve is: the volume at the sample's own time.
+- **Three parameters** are worked out, because a sound is made of them:
+  - **volume**, in **decibels** — like the gain of a clip;
+  - **pan**, between minus one and one — the balance between the
+    channels, and a **mono** sound is not balanced, so a lane of pan
+    over a mono track does nothing;
+  - **mute** — a value of one or more mutes the track, and a value of
+    less than one does not.
+- The value **before the first breakpoint** is the first value and the
+  value **after the last** is the last one: a lane holds the value it
+  has until the lane says otherwise. Between two breakpoints the value
+  is the **line** between them.
+
+### What the port found
+
+- **A curve is per sample, and not per clip.** A clip that runs across
+  a breakpoint is loud at one end and quiet at the other, and the sound
+  says so: the automation is worked out at each sample's own time and
+  not at the clip's start.
+- **The parameter's unit comes from the parameter.** The volume is in
+  decibels because the gain of a clip is in decibels (§ the clip's
+  payload) and the two are the same parameter of the same track. The
+  pan is a balance because a balance is what a pan is.
+- **A lane of an unknown parameter is drawn and is not heard.** The kit
+  does not know what the parameter means, and it does not guess: the
+  parameter is a **string** (§20.4), so a third party may automate
+  anything, and the kit's renderer works out the three that a sound is
+  made of.
+
+### What it cost
+
+- one module, one function and **two tests**: a lane of volume is
+  heard sample by sample, and a mute lane mutes the track.
+
+### What it does not settle
+
+- **The routing is still not rendered.** The buses and the sends are in
+  the plan and not in the sound: the render sums the clips, and a
+  track's send to a bus changes nothing that is heard. The model has
+  no **master bus**, so what a track outputs to has no answer yet.
+- **The inserts are not rendered.** An insert is a plugin's name (§ the
+  insert's payload) and the render does not load plugins.
+- **The lane's curve and the lane's sound are two things.** The curve
+  is drawn scaled to its row (§127) — the kit does not know what range
+  a parameter takes — and the sound uses the parameter's own units. A
+  lane that is drawn one way and heard another is a lane whose drawing
+  says the shape and not the values.
