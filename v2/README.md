@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**892 tests.** The MCP server links **all fourteen batteries** in, so the
+**897 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **222** of them, and **236** with
+on its own, with no features, carries **226** of them, and **240** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1051,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 892 tests
+cargo test          # 897 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7827,3 +7827,45 @@ document was not at the origin.
   and a snapshot may cut it off.
 - **The snapshot has no background.** The picture is white where
   nothing is drawn, and there is no colour for the page.
+
+---
+
+## 107. The selection moves as one
+
+A person who picks twenty nodes and moves them expects **one** undo,
+and not twenty.
+
+### What was built
+
+- A command `select.move`: it takes **no node**, because the
+  selection is the session's state, and it moves every node in the
+  selection that has a place.
+- The window follows: a drag on a node that is selected moves the
+  whole selection, because that is what a person means when they drag
+  one of the things they picked.
+
+### What the port found
+
+- **A command that takes a list is a command that takes a list.** The
+  first thought was `node.move` with a list of nodes in it, and the
+  second was a loop of `node.move` in the front end. The loop is
+  twenty undo steps and the front end holding a rule; the list is one
+  command and one step, and the thing it moves is the selection —
+  which the session already has.
+- **A node with no place is left alone, and the command says how many
+  were left.** A clip in a sound document is at a time and not at a
+  place: the command does not invent one, and it says how many of the
+  selected nodes had none, so that a person is not left wondering why
+  one of them did not move.
+
+### What it cost
+
+- one command, two methods on the window, **five tests**.
+
+### What it does not settle
+
+- **Only the move.** A selection that is resized, deleted or brought
+  to the front is still one node at a time.
+- **A node that is in a group is moved on its own.** Moving a group
+  moves what is in it, because the group is what is in the tree; but
+  moving a node that is inside a group does not move the group.
