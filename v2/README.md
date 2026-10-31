@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**907 tests.** The MCP server links **all fourteen batteries** in, so the
+**908 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 907 tests
+cargo test          # 908 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8007,11 +8007,11 @@ them was a copy.
 
 ### What it does not settle
 
-- **The channel cannot click.** The old tree's channel had `ui.click`,
-  `ui.screenshot` and `ui.render`. v2's channel has `ui.render` now
-  (§111) — the agent can see the document the window is drawing — but
-  not `ui.click`: a click needs a name to click, and the window has no
-  names on its buttons.
+- **The channel cannot drag.** The old tree's channel had `ui.click`,
+  `ui.screenshot` and `ui.render`. v2's channel has `ui.render` (§111)
+  and `ui.click` (§112) — the agent can see the document and click in
+  it — but not a drag, and not the family's `ui.screenshot`: this
+  tree has no screen to take one of, only a document to draw.
 - **The window redraws when it is told to.** The picture is drawn again
   when the document, the camera or the command count has changed, and
   a command that arrived over the channel changes the document — so
@@ -8063,3 +8063,47 @@ agent that cannot see the result is an agent that has to believe it.
 - **The picture is drawn at a fixed size.** The window draws at the
   size of its panel, and the channel's picture is three hundred and
   twenty by two hundred and forty whatever the window is.
+
+---
+
+## 112. The channel can click in the document
+
+The channel could show the window but not touch it. So an agent could
+look at the document and could not do anything to it except run a
+command with a name it already knew.
+
+### What was built
+
+- A method `ui.click`: the point is in the **world's** units, and the
+  node under it is picked through the kinds and selected through the
+  registry.
+- The window's control handle now does two things: it shows the
+  picture and it clicks.
+
+### What the port found
+
+- **A click over the channel is the same click a person makes.** The
+  first thought was a click by the *name* of a button, and the
+  buttons of a window are the commands — so a click by name would have
+  been `engine.execute` with extra steps. A click at a **point** is
+  different: it goes through the kinds' hit test and the selection,
+  which is the thing a person does and the thing an agent wants.
+- **The point is in the world's units.** A click at a point of the
+  screen is a click at a point of the world that the camera has
+  already found, and the camera is the session's — so the click and
+  the drawing agree.
+
+### What it cost
+
+- a method on the wire, a method on the window's control handle,
+  **one test**.
+
+### What it does not settle
+
+- **There is no drag.** A click picks; a drag moves, resizes and
+  pans, and the drag lives in the toolkit's layer of the window: the
+  pointer's movement is the toolkit's, and the toolkit is what the
+  channel cannot see.
+- **The click does not move anything.** It selects, and a selection is
+  the session's state; the agent moves a node with a command, and the
+  command is the same one a person gets.
