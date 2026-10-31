@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**873 tests.** The MCP server links **all fourteen batteries** in, so the
+**875 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1049,7 +1049,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 873 tests
+cargo test          # 875 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7581,3 +7581,53 @@ taking it out loses it.
 - **Nothing is hidden by default.** A document that a program opens has
   everything shown, and a program that wants a layer turned off has to
   turn it off.
+
+---
+
+## 102. The hit test sees the document
+
+§97 left the insert undrawn, and drawing it found the seam that was
+holding it back.
+
+### What was built
+
+- The **hit test** is given the **document**, like the paint has been
+  since §95. Every kind in the tree was changed with it.
+- The **insert** draws the block it inserts: the block's own entities,
+  moved by the insertion point.
+- The insert is **hit as the block it inserts**, for the same reason it
+  is drawn as the block.
+
+### What the port found
+
+- **A kind that cannot see the document cannot follow a reference.**
+  That is what §95 said about the paint, and it was true of the hit as
+  well: the paint seam had been changed for the same reason, and the
+  hit seam was left behind. The insert was the thing that found it,
+  because an insert is a reference and a reference is followed by
+  looking at the document.
+- **A drawing and a picking that disagree are worse than either of
+  them alone.** The insert was drawn as a block and hit as a point: the
+  picture showed a line and the click found nothing on it. Whichever
+  way the seam went, the two had to agree.
+- **A reference is followed once.** An insert of an insert draws the
+  block and stops: the second insert is not drawn, and the drawing
+  does not go on forever. The rule of §89 — a reference is followed
+  once — held for the picture as it does for the appearance.
+
+### What it cost
+
+- one parameter on every kind's hit test (**twenty-seven files**), the
+  insert's paint and hit, a move that moves every point of a geometry,
+  **two tests**.
+
+### What it does not settle
+
+- **The block's own entities are still drawn where they are.** A block
+  in a drawing is drawn as well as inserted, so a line in a block is
+  on the screen twice: once where the block is and once where the
+  insert puts it. Real drawings keep the definition out of the way.
+- **The insert is drawn in its own colour.** The block's entities keep
+  their own layers, and an insert of a block of red lines is drawn in
+  the colour of the insert's layer and not in the colours of the
+  lines.
