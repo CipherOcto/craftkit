@@ -74,7 +74,7 @@ impl PluginKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 

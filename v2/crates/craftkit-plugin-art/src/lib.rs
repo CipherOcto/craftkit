@@ -101,7 +101,7 @@ macro_rules! art_kind {
             fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
             /// Nothing here is hit.
-            fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+            fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
                 false
             }
 
@@ -136,7 +136,7 @@ macro_rules! track_kind {
             fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
             /// A track is not hit.
-            fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+            fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
                 false
             }
 
@@ -176,7 +176,7 @@ impl ProjectKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A project is not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -202,7 +202,7 @@ impl SceneKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A scene is not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -230,7 +230,7 @@ impl StageKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// A stage is not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 

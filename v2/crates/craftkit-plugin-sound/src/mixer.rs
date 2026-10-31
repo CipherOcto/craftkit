@@ -46,7 +46,7 @@ impl BusKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a bus.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -83,7 +83,7 @@ impl InsertKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside an insert.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -112,7 +112,7 @@ impl SendKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a send.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -145,7 +145,7 @@ impl LaneKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a lane.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 

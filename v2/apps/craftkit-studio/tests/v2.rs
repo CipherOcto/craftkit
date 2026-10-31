@@ -450,9 +450,10 @@ fn the_core_hit_tests_a_node_by_asking_its_kind() {
         .expect("the rectangle is added");
 
     let point = craftkit_sdk::Point::new(4.0, 5.0);
-    let hit = session.document().nodes().find(|node| {
+    let document = session.document();
+    let hit = document.nodes().find(|node| {
         let kind = session.kinds().get(&node.kind).expect("the kind is there");
-        (kind.hit)(node, point)
+        (kind.hit)(node, document, point)
     });
     assert!(hit.is_some());
 }
@@ -536,7 +537,7 @@ fn unused_kind() -> NodeKindSpec {
         label: "Test",
         layer: "core",
         paint: |_node, _document, _canvas| {},
-        hit: |_node, _point| false,
+        hit: |_node, _document, _point| false,
         evaluate: None,
     }
 }

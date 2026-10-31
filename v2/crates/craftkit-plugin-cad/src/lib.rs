@@ -74,7 +74,7 @@ impl DrawingKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -97,7 +97,7 @@ impl LayerKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -120,7 +120,7 @@ impl BlockKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -155,6 +155,10 @@ macro_rules! entity_kind {
             fn paint(node: &Node, document: &Document, canvas: &mut dyn craftkit_sdk::Canvas) {
                 let Some(geometry) = node.data.get("geometry") else { return };
                 let colour = colour_of(document, node);
+                if $kind == "cad.entity.insert" {
+                    paint_insert(node, document, geometry, colour, canvas);
+                    return;
+                }
                 draw_geometry($kind, geometry, colour, canvas);
             }
 
@@ -164,8 +168,11 @@ macro_rules! entity_kind {
             /// and a point is on one when it is **near** it — within the
             /// tolerance, which is this program's number and not the
             /// core's.
-            fn hit(node: &Node, point: Point) -> bool {
+            fn hit(node: &Node, document: &Document, point: Point) -> bool {
                 let Some(geometry) = node.data.get("geometry") else { return false };
+                if $kind == "cad.entity.insert" {
+                    return hit_insert(node, document, geometry, point);
+                }
                 hit_geometry($kind, geometry, point)
             }
 
@@ -206,6 +213,101 @@ fn colour_of(document: &Document, node: &Node) -> Colour {
 /// circle, and a text is a text. The circle is a **polygon** of
 /// straight segments — the kit has no curves in its drawing except the
 /// ones a path carries — and the number of them is the circle's own.
+/// The **block** an insert refers to, if it is there.
+///
+/// The reference is an **edge** — an instance and its definition are two
+/// things — and it is followed once, here.
+fn inserted_block<'a>(document: &'a Document, node: &Node) -> Option<&'a Node> {
+    let relations = document.relations_from(node.id, Some("cad.inserts"));
+    let relation = relations.first()?;
+    document.node(relation.to)
+}
+
+/// The entities of the block an insert refers to.
+///
+/// They are the block's **children**: a block contains its entities and
+/// an insert references one.
+fn inserted_entities<'a>(document: &'a Document, node: &Node) -> Vec<&'a Node> {
+    let Some(block) = inserted_block(document, node) else { return Vec::new() };
+    block
+        .children
+        .iter()
+        .map(|child| &**child)
+        .filter(|child| child.kind.starts_with("cad.entity."))
+        .collect()
+}
+
+/// Draw an **insert**: the block it inserts, drawn where it is put.
+///
+/// An insert is a **reference**, and a reference that is drawn as
+/// nothing is a reference the person cannot see. So the block's own
+/// entities are drawn, moved by the insertion point.
+///
+/// The colour is the **insert's**: the insert is on a layer, and the
+/// layer says what colour that is. The block's entities keep their own
+/// layers for the rest, and an insert of an insert is not followed a
+/// second time: a reference is followed once.
+fn paint_insert(node: &Node, document: &Document, geometry: &Json, colour: Colour, canvas: &mut dyn Canvas) {
+    let Some(at) = point_in(geometry, "at") else { return };
+    for entity in inserted_entities(document, node) {
+        let Some(own) = entity.data.get("geometry") else { continue };
+        if entity.kind == "cad.entity.insert" {
+            continue;
+        }
+        draw_geometry(&entity.kind, &translated(own, at), colour, canvas);
+    }
+}
+
+/// Whether a point is **on** an insert.
+///
+/// It is on one when it is on the block it inserts: the insert is drawn
+/// as the block, so it is hit as the block.
+///
+/// This is the reason the hit test is given the **document** (§102): a
+/// kind that follows a reference cannot follow it without the
+/// document, and an insert that is drawn as a block and hit as a point
+/// is a drawing and a picking that disagree.
+fn hit_insert(node: &Node, document: &Document, geometry: &Json, point: Point) -> bool {
+    let Some(at) = point_in(geometry, "at") else { return false };
+    inserted_entities(document, node).into_iter().any(|entity| {
+        if entity.kind == "cad.entity.insert" {
+            return false;
+        }
+        let Some(own) = entity.data.get("geometry") else { return false };
+        hit_geometry(&entity.kind, &translated(own, at), point)
+    })
+}
+
+/// Move every **point** of a geometry by an offset.
+///
+/// A geometry is points and numbers — a radius is a number and a point
+/// is a point — so the move is done by looking for the things that are
+/// points: an object with an `x` and a `y` in it.
+fn translated(geometry: &Json, offset: Point) -> Json {
+    match geometry {
+        Json::Object(map) => {
+            let mut moved = craftkit_sdk::serde_json::Map::new();
+            let is_point = map.get("x").and_then(|x| x.as_f64()).is_some()
+                && map.get("y").and_then(|y| y.as_f64()).is_some();
+            for (key, value) in map.iter() {
+                if is_point {
+                    moved.insert(key.clone(), value.clone());
+                } else {
+                    moved.insert(key.clone(), translated(value, offset));
+                }
+            }
+            if is_point {
+                let x = map.get("x").and_then(|x| x.as_f64()).unwrap_or(0.0) + offset.x;
+                let y = map.get("y").and_then(|y| y.as_f64()).unwrap_or(0.0) + offset.y;
+                moved.insert("x".to_string(), Json::from(x));
+                moved.insert("y".to_string(), Json::from(y));
+            }
+            Json::Object(moved)
+        }
+        Json::Array(list) => Json::Array(list.iter().map(|value| translated(value, offset)).collect()),
+        other => other.clone(),
+    }
+}
 fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn Canvas) {
     match kind {
         "cad.entity.line" => {

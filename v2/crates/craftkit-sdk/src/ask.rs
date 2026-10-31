@@ -49,7 +49,7 @@ impl NoteKind {
     /// Whether a point is inside a note.
     ///
     /// Nothing.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &crate::document::Document, _point: Point) -> bool {
         false
     }
 }

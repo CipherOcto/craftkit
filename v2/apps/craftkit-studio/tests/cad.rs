@@ -334,12 +334,16 @@ fn a_line_can_be_hit() {
         .get("id")
         .and_then(|id| id.as_u64())
         .expect("there is an id");
-    let line = session.document().node(id).expect("the line is there");
+    let document = session.document();
+    let line = document.node(id).expect("the line is there");
     let kind = session.kinds().get(&line.kind).expect("the kind is there");
 
-    assert!((kind.hit)(line, craftkit_sdk::Point::new(0.0, 0.0)), "the middle of the line is on it");
-    assert!((kind.hit)(line, craftkit_sdk::Point::new(4.9, 0.2)), "and so is a point near it");
-    assert!(!(kind.hit)(line, craftkit_sdk::Point::new(0.0, 20.0)), "and a point far away is not");
+    assert!(
+        (kind.hit)(line, document, craftkit_sdk::Point::new(0.0, 0.0)),
+        "the middle of the line is on it"
+    );
+    assert!((kind.hit)(line, document, craftkit_sdk::Point::new(4.9, 0.2)), "and so is a point near it");
+    assert!(!(kind.hit)(line, document, craftkit_sdk::Point::new(0.0, 20.0)), "and a point far away is not");
 }
 
 /// A circle is hit **on its edge**, not in its middle.
@@ -360,9 +364,85 @@ fn a_circle_is_hit_on_its_edge() {
         .get("id")
         .and_then(|id| id.as_u64())
         .expect("there is an id");
-    let circle = session.document().node(id).expect("the circle is there");
+    let document = session.document();
+    let circle = document.node(id).expect("the circle is there");
     let kind = session.kinds().get(&circle.kind).expect("the kind is there");
 
-    assert!((kind.hit)(circle, craftkit_sdk::Point::new(5.0, 0.0)), "the edge is on it");
-    assert!(!(kind.hit)(circle, craftkit_sdk::Point::new(0.0, 0.0)), "and the middle is not");
+    assert!((kind.hit)(circle, document, craftkit_sdk::Point::new(5.0, 0.0)), "the edge is on it");
+    assert!(!(kind.hit)(circle, document, craftkit_sdk::Point::new(0.0, 0.0)), "and the middle is not");
+}
+
+/// An **insert draws the block it inserts**.
+///
+/// The insert is a **reference**, and a reference that is drawn as
+/// nothing is a reference nobody can see. So the block's own entities
+/// are drawn, moved by the insertion point.
+#[cfg(feature = "cad")]
+#[test]
+fn an_insert_draws_the_block_it_inserts() {
+    let mut session = a_drawing();
+    session.execute("cad.block.add", &json!({ "drawing": 1, "name": "door" })).expect("the block is added");
+    session
+        .execute(
+            "cad.entity.line.add",
+            &json!({ "block": 4, "name": "the jamb", "from": { "x": -2, "y": 0 }, "to": { "x": 2, "y": 0 } }),
+        )
+        .expect("the line is added");
+    // The insert goes in the other block, at a place of its own.
+    session
+        .execute(
+            "cad.entity.insert.add",
+            &json!({ "block": 3, "name": "the door", "inserts": 4, "at": { "x": 0, "y": 10 } }),
+        )
+        .expect("the insert is added");
+
+    let picture = draw(&session, 64);
+    // The line of the block is drawn twice: once where it is, and once
+    // where the insert puts it. The one at the top is the insert's.
+    let drawn: Vec<usize> = picture
+        .iter()
+        .enumerate()
+        .filter(|(_, pixel)| pixel[3] > 0 && pixel[0] < 40)
+        .map(|(index, _)| index)
+        .collect();
+    assert!(!drawn.is_empty(), "something was drawn");
+    let rows: Vec<usize> = drawn.iter().map(|index| index / 64).collect();
+    let lowest = rows.iter().min().expect("there are rows");
+    let highest = rows.iter().max().expect("there are rows");
+    assert!(highest - lowest > 8, "the line is drawn twice, in two places: {lowest} to {highest}");
+}
+
+/// An insert is **hit as the block it inserts**.
+///
+/// The insert is drawn as the block, so it is hit as the block: this is
+/// why the hit test is given the document.
+#[cfg(feature = "cad")]
+#[test]
+fn an_insert_is_hit_as_the_block_it_inserts() {
+    let mut session = a_drawing();
+    session.execute("cad.block.add", &json!({ "drawing": 1, "name": "door" })).expect("the block is added");
+    session
+        .execute(
+            "cad.entity.line.add",
+            &json!({ "block": 4, "name": "the jamb", "from": { "x": -2, "y": 0 }, "to": { "x": 2, "y": 0 } }),
+        )
+        .expect("the line is added");
+    session
+        .execute(
+            "cad.entity.insert.add",
+            &json!({ "block": 3, "name": "the door", "inserts": 4, "at": { "x": 0, "y": 10 } }),
+        )
+        .expect("the insert is added");
+
+    let document = session.document();
+    let insert = document.walk().find(|node| node.kind == "cad.entity.insert").expect("there is an insert");
+    let kind = session.kinds().get(&insert.kind).expect("the kind is there");
+    assert!(
+        (kind.hit)(insert, document, craftkit_sdk::Point::new(0.0, 10.0)),
+        "the middle of the inserted line is on the insert"
+    );
+    assert!(
+        !(kind.hit)(insert, document, craftkit_sdk::Point::new(0.0, 40.0)),
+        "and a point far away is not"
+    );
 }

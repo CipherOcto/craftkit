@@ -130,7 +130,7 @@ impl VectorPathKind {
     /// The path is flattened to a polygon and the point is tested against
     /// it. A curve is tested by its samples, which is an approximation, and
     /// it is written down rather than hidden.
-    fn hit(node: &Node, point: Point) -> bool {
+    fn hit(node: &Node, _document: &Document, point: Point) -> bool {
         let Ok(vector) = VectorNode::from_json(&node.data) else { return false };
         vector.path.subpaths.iter().any(|subpath| polygon_contains(&geom::flatten(subpath, 0.05), point))
     }
@@ -856,9 +856,10 @@ mod tests {
         session
             .execute("vector.rectangle", &json!({ "x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0 }))
             .expect("the rectangle is added");
-        let node = session.document().nodes.first().expect("there is a node");
-        assert!(VectorPathKind::hit(node, Point::new(5.0, 5.0)), "the middle is inside");
-        assert!(!VectorPathKind::hit(node, Point::new(50.0, 5.0)), "the far side is outside");
+        let document = session.document();
+        let node = document.nodes.first().expect("there is a node");
+        assert!(VectorPathKind::hit(node, document, Point::new(5.0, 5.0)), "the middle is inside");
+        assert!(!VectorPathKind::hit(node, document, Point::new(50.0, 5.0)), "the far side is outside");
     }
 
     /// Two paths can be united, and the second one is gone.

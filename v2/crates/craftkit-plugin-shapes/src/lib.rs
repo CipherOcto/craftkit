@@ -61,7 +61,7 @@ impl RectKind {
     }
 
     /// Whether a point is inside a rectangle.
-    fn hit(node: &Node, point: Point) -> bool {
+    fn hit(node: &Node, _document: &Document, point: Point) -> bool {
         node.rect.is_some_and(|rect| rect.contains(point))
     }
 

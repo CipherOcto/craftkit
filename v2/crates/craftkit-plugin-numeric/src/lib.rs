@@ -68,7 +68,7 @@ impl LengthKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -99,7 +99,7 @@ impl AngleKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -126,7 +126,7 @@ impl BoxKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Not hit.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 

@@ -203,11 +203,15 @@ impl Window {
     /// **deepest** hit wins: a thing in a group is in front of the group
     /// that holds it.
     pub fn pick(&self, point: craftkit_sdk::Point) -> Option<u64> {
-        self.session
-            .document()
+        let document = self.session.document();
+        document
             .walk_visible()
             .filter(|node| {
-                self.session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false)
+                self.session
+                    .kinds()
+                    .get(&node.kind)
+                    .map(|kind| (kind.hit)(node, document, point))
+                    .unwrap_or(false)
             })
             .last()
             .map(|node| node.id)

@@ -175,7 +175,7 @@ impl TrackKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a track.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -206,7 +206,7 @@ impl PlaylistKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a playlist.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -231,7 +231,7 @@ impl ClipKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a clip.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -258,7 +258,7 @@ impl TempoKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a tempo event.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -279,7 +279,7 @@ impl MeterKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a meter event.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -304,7 +304,7 @@ impl MarkerKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a marker.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 
@@ -330,7 +330,7 @@ impl SourceKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a source.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
         false
     }
 

@@ -40,7 +40,7 @@ impl GroupKind {
     ///
     /// Nothing: the core asks the kinds of the nodes in the group, and
     /// they answer for themselves.
-    fn hit(_node: &Node, _point: Point) -> bool {
+    fn hit(_node: &Node, _document: &crate::document::Document, _point: Point) -> bool {
         false
     }
 }

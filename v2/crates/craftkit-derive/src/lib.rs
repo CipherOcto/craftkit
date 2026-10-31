@@ -34,7 +34,7 @@
 //!
 //! impl RectKind {
 //!     fn paint(&self, node: &Node, document: &Document, canvas: &mut dyn Canvas) { … }
-//!     fn hit(&self, node: &Node, point: Point) -> bool { … }
+//!     fn hit(&self, node: &Node, document: &Document, point: Point) -> bool { … }
 //! }
 //! ```
 //!

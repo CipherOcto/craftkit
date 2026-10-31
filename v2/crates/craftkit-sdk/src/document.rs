@@ -1511,7 +1511,13 @@ pub struct NodeKindSpec {
     /// reference is a kind whose every value is a copy.
     pub paint: fn(&Node, &Document, &mut dyn Canvas),
     /// Whether a point is inside it.
-    pub hit: fn(&Node, Point) -> bool,
+    ///
+    /// It is given the **document**, and that is the point: a kind that
+    /// follows a reference — an insert that draws the block it
+    /// inserts, a shape that takes its size from a style — cannot
+    /// follow it without the document, and a kind that cannot follow a
+    /// reference is a kind whose every value is a copy.
+    pub hit: fn(&Node, &Document, Point) -> bool,
     /// What the node **means**, in the plan.
     ///
     /// The kind's own evaluation: it turns a node into a value, or says

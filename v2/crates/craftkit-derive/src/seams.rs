@@ -163,7 +163,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             label: #label,
             layer: #layer,
             paint: |node, document, canvas| #name::paint(node, document, canvas),
-            hit: |node, point| #name::hit(node, point),
+            hit: |node, document, point| #name::hit(node, document, point),
             #evaluate
         };
 

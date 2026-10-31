@@ -80,7 +80,7 @@ impl ObjectKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside an object: never.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 
@@ -104,7 +104,7 @@ impl StreamKind {
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
 
     /// Whether a point is inside a stream: never.
-    fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
         false
     }
 

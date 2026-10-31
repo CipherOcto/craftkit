@@ -79,7 +79,9 @@ fn main() {
     let hit = session
         .document()
         .walk()
-        .filter(|node| session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false))
+        .filter(|node| {
+            session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, document, point)).unwrap_or(false)
+        })
         .last();
     match hit {
         Some(node) => println!("   the point is inside `{}`", node.name),
