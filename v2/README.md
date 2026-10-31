@@ -954,12 +954,24 @@ different commands with one id.
   document — a node whose payload holds the plugin's identity and its
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
+- `crates/craftkit-vst3` — **the VST3 host**: opens a shared library,
+  **calls** the entry the format names, asks the factory what it can
+  make, makes an instance and drives it. The sixth crate that may hold
+  `unsafe` (§119).
+- `crates/craftkit-vst3-fixture` — **a reference VST3 plugin**: a real
+  `cdylib` that exports the entry by name, so that the host's tests
+  open a plugin and not a mock. The seventh crate that may hold
+  `unsafe` (§118).
+- `crates/craftkit-plugin-vst3` — the **VST3 battery**: the second
+  plugin in the document — an identity, a parameter list and a state,
+  with the parameter named and the value in the units the plugin says
+  (§120). It is optional, like the others.
 
-**924 tests.** The MCP server links **all fourteen batteries** in, so the
+**950 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
-`/clap`) — and the studio
+`/clap`, `/vst3`) — and the studio
 on its own, with no features, carries **238** of them, and **252** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
@@ -1057,7 +1069,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 924 tests
+cargo test          # 950 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1249,12 +1261,13 @@ and it is the same rule the vector battery follows.
   reason its plugin trait splits the work into `process` (audio thread),
   `PluginEditor` (control thread) and `PluginStateReader` (control
   thread). v2 has none of it, and this port does not pretend otherwise.
-- **The plugin formats are not ported.** The sound tree hosts CLAP, VST3
+- **The AU plugin format is not ported.** The sound tree hosts CLAP, VST3
   and AU binaries: a user installs a plugin and it is in the session, with
-  no source change. That is genuinely open there and it needs **three**
-  new crates here (or one with three modules), a format to host them in, and
-  the decision of what a plugin's state looks like in a document whose
-  payload is JSON.
+  no source change. That is genuinely open there. **CLAP and VST3 are
+  here now** (§76–§87 and §116–§120): a host crate, a format to host
+  them in, and the decision of what a plugin's state looks like in a
+  document whose payload is JSON. **AU** is the one that is not, and it
+  is the largest of the three.
 - **The mixer is not ported.** Ten insert slots and ten send slots per
   strip, a routing graph over buses, and per-track automation are a
   **model**, and the model is where the sound tree's closed enums live
@@ -1426,11 +1439,12 @@ part of the record:
 - **View state.** Zoom, scroll and the tool in the hand are the
   **session's** state in the sound tree and not the document's, and v2
   keeps the selection that way but has nowhere for the rest.
-- **The plugin formats.** CLAP, VST3 and AU binaries are genuinely open
-  in the sound tree: a user installs one and it is in the session, with
-  no source change. Porting that needs a host crate per format, a
-  format to host them in, and a decision about what a plugin's state is
-  in a document whose payload is JSON.
+- **The AU plugin format.** CLAP, VST3 and AU binaries are genuinely
+  open in the sound tree: a user installs one and it is in the session,
+  with no source change. **CLAP and VST3 are here** (§76–§87,
+  §116–§120) — a host crate each, a format to host them in, and a
+  decision about what a plugin's state is in a document whose payload is
+  JSON. **AU** is not, and it is the biggest of the three.
 - **The menu catalog.** The sound tree's menu is generated from a
   **file** of five hundred and twelve paths, and a command whose path is
   not in the file never appears in the bar. v2's menu is generated from
@@ -1650,9 +1664,10 @@ not change the document.
 - **The transport.** Where the playhead is, and whether it is playing,
   is **real-time** state, and it belongs to the lane (§21.1) and not to
   the session's document state.
-- **The plugin formats.** CLAP, VST3 and AU are still not ported, and
-  they want a host crate each, a format to host them in, and a decision
-  about what a plugin's state is in a document whose payload is JSON.
+- **The AU plugin format.** CLAP and VST3 are ported (§76–§87,
+  §116–§120); **AU** is not, and it wants a host crate, a format to
+  host it in, and a decision about what a plugin's state is in a
+  document whose payload is JSON.
 
 ---
 
@@ -1848,12 +1863,13 @@ One of the three is still there, and it is the smallest:
   third more space and a format version when it arrives.
 
 And the things that were never in the list, still not in it: the transport
-(which belongs to the lane), and the CLAP, VST3 and AU plugin formats (they
-are FFI, and FFI is unsafe). The allocation measurement of the lane is no
-longer in that list: it is built (§32), and it cost one piece of `unsafe`
-in a crate of its own. The **door** for the plugin formats is built too
-(§34): the formats themselves are not, and they are a much larger piece
-of work than the door they would come through.
+(which belongs to the lane), and the **AU** plugin format (it is FFI, and
+FFI is unsafe). The allocation measurement of the lane is no longer in that
+list: it is built (§32), and it cost one piece of `unsafe` in a crate of
+its own. The **door** for the plugin formats is built too (§34), and two
+of the three formats have come through it: **CLAP** (§76–§87) and **VST3**
+(§116–§120). **AU** has not, and it is a much larger piece of work than
+the door it would come through.
 
 ### What this says about the kit
 
@@ -2453,9 +2469,10 @@ The way out was not to argue about `unsafe`, but to make the exception
 `allow`, and a test that reads the tree and refuses a second one. That is
 the same discipline the outer tree uses for its own single allowed
 `unsafe`, and it is now available here for the next thing that needs it —
-the CLAP, VST3 and AU plugin formats, which are FFI, and FFI is unsafe.
-When that port comes, it should land in its own crate under the same gate,
-not in the middle of the SDK.
+the plugin formats, which are FFI, and FFI is unsafe. Two of them have
+come since — **CLAP** (§76–§87) and **VST3** (§116–§120) — and each
+landed in its own crate under the same gate, and not in the middle of the
+SDK. **AU** is the one that has not come.
 
 ---
 
@@ -2616,9 +2633,11 @@ It is now a **list**, and the list is the whole of the exceptions:
 | `craftkit-plugin-shared` | a shared library's entry point, found by name |
 | `craftkit-clap` | the CLAP host: opening a plugin and reading the entry it exports |
 | `craftkit-clap-fixture` | a reference CLAP plugin: the entry point is a data symbol, found by name |
+| `craftkit-vst3` | the VST3 host: opening a plugin and calling the factory it exports |
+| `craftkit-vst3-fixture` | a reference VST3 plugin: the entry point is a function, called by name |
 
 And the rules around it are mechanical: `unsafe` appears **only** in
-those five crates; each of them says `deny(unsafe_code)` and **not**
+those seven crates; each of them says `deny(unsafe_code)` and **not**
 `forbid`; each has **exactly one** `allow(unsafe_code)`, so an exception
 is one marked place and not a scattering; the only `unsafe impl` in the
 tree is the allocator's; and every other crate still forbids unsafe
@@ -2639,7 +2658,9 @@ contract, the version check, and the proof that a plugin in another
 shared library can be reached from a program that has never seen it.
 (CLAP came later, in §76: a **shim over the same idea**, with its own
 door, because its entry point is a data symbol and not a function. And
-in §79 the host **makes** plugins, not only reads them.)
+in §79 the host **makes** plugins, not only reads them. **VST3 came in
+§116–§120**, and it needed the same shim and its own door, because its
+entry point is a function and the CLAP one was not.)
 
 ---
 
@@ -3500,7 +3521,7 @@ so.
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
-| the **plugin formats** (CLAP, VST3, AU) | **the door is built**; the formats are not, and each would be a shim over the door | §34, §35 |
+| the **plugin formats** (CLAP, VST3, AU) | **the door is built**, and **two of the three formats are**: CLAP (§76–§87) and VST3 (§116–§120), each a shim over the door with its own host. **AU** is not | §34, §35 |
 | the **history** that branches | **built** | §24 |
 | a **task** that may outlive the process | **built** | §28 |
 | one **camera** with its own caps | **built** | §29 |
@@ -6034,7 +6055,8 @@ entry point found by name, a versioned table (§34). The real formats —
 CLAP, VST3, AU — were "not built", and the reason given was that each
 is a large ABI in another language. CLAP is the one of the three whose
 ABI is **published and open**, so it is the one that could be written
-down from a specification rather than guessed at.
+down from a specification rather than guessed at. (VST3's is published
+too, and it came four arcs later: §116–§120.)
 
 ### What was built
 
@@ -6099,7 +6121,9 @@ down from a specification rather than guessed at.
   there is no audio path here: no processing, no ports, no events.
 - **VST3 and AU are still not here.** CLAP was the one with an open,
   published C ABI that could be written down from its specification.
-  The other two are larger, and each would be its own arc.
+  The other two are larger, and each would be its own arc. (VST3's was
+  its own arc, four sections later: §116–§120. **AU** is still to
+  come.)
 - **The fixture does nothing.** It holds one plugin, and its
   `create_plugin` answers with nothing. A host that has read a plugin
   has not yet used one, and the difference is the whole of the next
@@ -6735,7 +6759,7 @@ section joins them, and the join is a **battery** — the fourteenth one,
   state, does its work and closes it. What the document keeps is what
   the plugin *said*.
 - The **MCP server links the battery in**, so an agent can drive it: the
-  server's tool list is **166 tools** with **all fourteen batteries**
+  server's tool list is **188 tools** with **all fifteen batteries**
   linked, measured the same way as every other number here.
 
 ### What the port found
@@ -7069,7 +7093,7 @@ drawing into it.
   same controls every other front end uses — and the window draws it
   again only when the document, the camera or the command count has
   changed.
-- The window links in **all fourteen batteries**, so the picture and
+- The window links in **all fifteen batteries**, so the picture and
   the plan are of the whole kit and not of half of it.
 - One more test: the picture is the size it was asked for, it is four
   bytes a pixel, and **the shape is in it**, in the colour it was
