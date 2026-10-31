@@ -161,6 +161,53 @@ pub fn clipped(samples: &[f32]) -> Vec<f32> {
     samples.iter().map(|sample| sample.clamp(-1.0, 1.0)).collect()
 }
 
+/// Play the samples at **another speed**.
+///
+/// A factor of two makes the sound **twice as long** and an octave
+/// lower, because the pitch follows the speed: the sound is read at
+/// half the rate it was written at. This is a **varispeed**, and it is
+/// not the same thing as a time stretch: a time stretch keeps the
+/// pitch and changes the length, and that is a much harder thing to do
+/// well.
+///
+/// The factor is therefore a **length ratio**: the new sound is
+/// `factor` times as long as the old one.
+///
+/// The reading is **linear**: the sample at a place in the new sound is
+/// the line between the two samples it lies between, which is the same
+/// line the resampler draws.
+///
+/// The **channels** are kept: each channel is played on its own.
+pub fn varispeed(samples: &[f32], channels: usize, factor: f64) -> Vec<f32> {
+    let channels = channels.max(1);
+    if !factor.is_finite() || factor <= 0.0 {
+        return samples.to_vec();
+    }
+    let frames = samples.len() / channels;
+    if frames == 0 {
+        return Vec::new();
+    }
+    let new_frames = ((frames as f64) * factor).round().max(1.0) as usize;
+    let mut out = Vec::with_capacity(new_frames * channels);
+    for frame in 0..new_frames {
+        // Where this frame is in the old sound: the new sound is
+        // `factor` times longer, so the old sound is read at `factor`
+        // times less than the new sound is played.
+        let position = frame as f64 / factor;
+        let index = position.floor() as usize;
+        let fraction = (position - index as f64) as f32;
+        let next = (index + 1).min(frames.saturating_sub(1));
+        for channel in 0..channels {
+            let at = index * channels + channel;
+            let after = next * channels + channel;
+            let first = samples.get(at).copied().unwrap_or(0.0);
+            let second = samples.get(after).copied().unwrap_or(first);
+            out.push(first + (second - first) * fraction);
+        }
+    }
+    out
+}
+
 /// Resample the samples of a sound from one rate to another.
 ///
 /// The resampling is **linear**: the sample at a place in the new rate

@@ -121,3 +121,51 @@ fn the_resampler_keeps_the_channels_apart() {
     assert!((faster[0] - 0.25).abs() < 1e-6, "the left channel is the ramp");
     assert!((faster[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
 }
+
+/// The **varispeed** makes the sound longer and lower.
+///
+/// The factor is a length ratio: twice the factor is twice the frames,
+/// and the sound is read at half the rate, so the pitch falls with it.
+#[test]
+fn the_varispeed_makes_the_sound_longer_and_lower() {
+    // One cycle of a wave: up, down, up, down.
+    let samples = vec![0.0_f32, 1.0, 0.0, -1.0];
+    let slower = craftkit_audio::varispeed(&samples, 1, 2.0);
+    assert_eq!(slower.len(), 8, "twice the factor is twice the frames");
+    // The sound is read at half the rate: the second frame is halfway
+    // between the first and the second.
+    assert!((slower[0] - 0.0).abs() < 1e-6, "the first frame is the first");
+    assert!((slower[1] - 0.5).abs() < 1e-6, "the second is halfway: {}", slower[1]);
+    assert!((slower[2] - 1.0).abs() < 1e-6, "and the third is the second");
+}
+
+/// The varispeed keeps the **channels** apart.
+#[test]
+fn the_varispeed_keeps_the_channels_apart() {
+    // Two channels: a ramp on the left and silence on the right.
+    let samples = vec![0.25_f32, 0.0, 0.5, 0.0];
+    let slower = craftkit_audio::varispeed(&samples, 2, 2.0);
+    assert_eq!(slower.len(), 8, "two channels of four frames");
+    assert!((slower[0] - 0.25).abs() < 1e-6, "the left channel is the ramp");
+    assert!((slower[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
+}
+
+/// A factor of **one** is no stretch at all.
+#[test]
+fn a_factor_of_one_changes_nothing() {
+    let samples = vec![0.25_f32, 0.5, 0.75];
+    let same = craftkit_audio::varispeed(&samples, 1, 1.0);
+    assert_eq!(same, samples, "the sound is the sound it was");
+}
+
+/// A factor that is **not a number** plays the sound as it is.
+///
+/// The number came from outside, and a number that makes no sense is
+/// not a reason to lose the sound.
+#[test]
+fn a_factor_that_is_not_a_number_changes_nothing() {
+    let samples = vec![0.25_f32, 0.5, 0.75];
+    assert_eq!(craftkit_audio::varispeed(&samples, 1, f64::NAN), samples, "not a number");
+    assert_eq!(craftkit_audio::varispeed(&samples, 1, 0.0), samples, "and not a speed at all");
+    assert_eq!(craftkit_audio::varispeed(&samples, 1, -2.0), samples, "and not backwards");
+}

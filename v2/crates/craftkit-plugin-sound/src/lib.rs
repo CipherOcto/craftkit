@@ -635,6 +635,11 @@ impl TrackPayload {
 }
 
 /// What a clip says about itself.
+///
+/// Every number here is in the **session's samples**: the clip's place
+/// on the timeline, how long it is there, and how far into its source
+/// it starts. The source has its own rate, and the render works out
+/// the difference; the document speaks the timeline's language.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ClipPayload {
     /// Where it starts, in samples.
@@ -647,7 +652,20 @@ pub(crate) struct ClipPayload {
     offset: i64,
     /// Its gain, in decibels.
     gain_db: f64,
+    /// How much **longer** it is played than the source it plays.
+    ///
+    /// One is none. Two is twice as long and an octave lower, because
+    /// the pitch follows the speed.
+    stretch: f64,
 }
+
+/// The most a clip may be stretched.
+///
+/// A stretch is a length ratio, and a clip that is stretched a
+/// thousandfold would read a thousandth of a sample of its source and
+/// hold it for a thousand times as long. The bound is here so that a
+/// number from outside cannot ask for an absurd thing.
+const MAX_STRETCH: f64 = 64.0;
 
 impl ClipPayload {
     fn to_json(&self) -> Json {
@@ -657,6 +675,7 @@ impl ClipPayload {
             "source": self.source,
             "offset": self.offset,
             "gain_db": self.gain_db,
+            "stretch": self.stretch,
         })
     }
 
@@ -666,12 +685,19 @@ impl ClipPayload {
         if start < 0 || length < 0 {
             return Err("a clip does not start before the beginning and does not run backwards".to_string());
         }
+        let stretch = value.get("stretch").and_then(|stretch| stretch.as_f64()).unwrap_or(1.0);
+        if !stretch.is_finite() || stretch <= 0.0 || stretch > MAX_STRETCH {
+            return Err(format!(
+                "a stretch is greater than zero and no more than {MAX_STRETCH}, and this one is {stretch}"
+            ));
+        }
         Ok(ClipPayload {
             start,
             length,
             source: value.get("source").and_then(|source| source.as_u64()),
             offset: value.get("offset").and_then(|offset| offset.as_i64()).unwrap_or(0),
             gain_db: value.get("gain_db").and_then(|gain| gain.as_f64()).unwrap_or(0.0),
+            stretch,
         })
     }
 }
@@ -850,6 +876,8 @@ pub struct AddClip {
     pub start: Number,
     /// How long it is, in samples.
     pub length: Number,
+    /// How much **longer** it is played than its source: one is none.
+    pub stretch: Option<Number>,
     /// The source it plays.
     pub source: Option<NodeRef>,
     /// What to call it.
@@ -866,6 +894,10 @@ impl AddClip {
                 message: "a clip with no length is not a clip".to_string(),
             });
         }
+        let stretch = match self.stretch {
+            Some(stretch) => stretch_of(stretch.0, "sound.clip.add")?,
+            None => 1.0,
+        };
         let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
         let payload = ClipPayload {
             start,
@@ -873,6 +905,7 @@ impl AddClip {
             source: self.source.map(|source| source.0),
             offset: 0,
             gain_db: 0.0,
+            stretch,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -893,6 +926,61 @@ impl AddClip {
         Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
             serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
         ))
+    }
+}
+
+/// Stretch a clip.
+///
+/// A stretched clip is **longer and lower**: the source is read more
+/// slowly, so the sound lasts longer and the pitch falls with it. This
+/// is a **varispeed**, and it is not a time stretch — a time stretch
+/// keeps the pitch and changes the length, and that is a much harder
+/// thing to do well.
+///
+/// The clip keeps its place and its length: the stretch says **how the
+/// source is played**, and not how long the clip is. One is no stretch.
+///
+/// The clip's place in the source moves with it: trimming a stretched
+/// clip moves the content by the delta **divided by the stretch**,
+/// because the source is read that much more slowly.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.stretch",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Stretch"),
+    mutates,
+    undoable
+)]
+pub struct SetClipStretch {
+    /// The clip to stretch.
+    pub clip: NodeRef,
+    /// How much longer it is played than its source: one is none.
+    pub stretch: Number,
+}
+
+impl SetClipStretch {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let stretch = stretch_of(self.stretch.0, "sound.clip.stretch")?;
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.stretch".to_string(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.stretch".to_string(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.clip.stretch".to_string(), message: error })?;
+        payload.stretch = stretch;
+        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
+            .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
     }
 }
 
@@ -991,8 +1079,12 @@ impl TrimClip {
         trimmed.start = from as i64;
         trimmed.length = (to - from) as i64;
         // The content moves with the start: a clip trimmed at its head
-        // starts later in the source.
-        trimmed.offset = payload.offset + (from as i64 - payload.start);
+        // starts later in the source. A stretched clip's source is read
+        // more slowly, so the content moves by the delta **divided by
+        // the stretch**: the same stretch that makes the clip longer
+        // makes it slower, and the two are the same fact.
+        let delta = from as i64 - payload.start;
+        trimmed.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
         if let Some(node) = session.document_mut()?.node_mut(clip_id) {
             node.data = trimmed.to_json();
         }
@@ -1335,7 +1427,13 @@ impl RenderSound {
         // length, at a gain.
         let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
         for clip in session.document().walk().filter(|node| node.kind == "sound.clip") {
-            let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
+            // A clip that cannot be read is **refused**, and not left
+            // out: a sound that is missing a clip without saying so is
+            // a sound that is wrong in a way nobody can hear.
+            let payload = ClipPayload::from_json(&clip.data).map_err(|error| EngineError::Failed {
+                id: "sound.render".to_string(),
+                message: format!("the clip `{}` cannot be read: {error}", clip.id),
+            })?;
             let Some(source_id) = payload.source else { continue };
             clips.push((source_id, clip.id, payload));
         }
@@ -1361,20 +1459,30 @@ impl RenderSound {
             sources.push((*source_id, sound));
         }
         // Each clip's samples are **prepared**: a source at another rate
-        // is resampled, and the track's **automation** is applied to
-        // them, sample by sample.
+        // is resampled, a **stretched** clip is played at another
+        // speed, and the track's **automation** is applied to them,
+        // sample by sample.
         let mut prepared: Vec<Vec<f32>> = Vec::with_capacity(clips.len());
         for (source_id, clip_id, payload) in &clips {
             let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else {
                 prepared.push(Vec::new());
                 continue;
             };
-            let (from, to) = the_span(sound, payload);
+            let (from, to) = the_span(sound, payload, rate);
             let slice = &sound.samples[from..to];
             let samples = if sound.rate == rate {
                 slice.to_vec()
             } else {
                 craftkit_audio::resample(slice, sound.channels as usize, sound.rate, rate)
+            };
+            // The **stretch**: the source is read more slowly, so the
+            // sound is longer and the pitch is lower. The clip's own
+            // length does not change: the stretch says how the source
+            // is played.
+            let samples = if (payload.stretch - 1.0).abs() > f64::EPSILON {
+                craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
+            } else {
+                samples
             };
             let automation = session
                 .document()
@@ -1567,16 +1675,25 @@ fn panned(signal: &[f32], pan: f64, channels: usize) -> Vec<f32> {
 }
 
 /// The span of a source's samples a clip plays: from its offset, for
-/// its length.
+/// the part of the source its length covers.
 ///
-/// The span is in **samples**, and the clip's offset and length are in
-/// the source's own frames, so the frames are multiplied by the number
-/// of channels.
-fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload) -> (usize, usize) {
+/// The clip speaks in the **session's samples** and the source speaks in
+/// **its own**, and the span is where the two meet: the offset is
+/// turned into the source's frames, and the length is turned into the
+/// frames the source is read in — which is **less** than the length
+/// when the clip is stretched, because a stretched clip reads its
+/// source more slowly.
+///
+/// The span is in **frames**, and the samples of the source are
+/// interleaved, so the frames are multiplied by the number of channels.
+fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload, rate: u32) -> (usize, usize) {
     let width = sound.channels as usize;
-    let from = (payload.offset.max(0) as usize * width).min(sound.samples.len());
-    let to =
-        ((payload.offset.max(0) + payload.length.max(0)) as usize * width).min(sound.samples.len()).max(from);
+    // How many frames of the source one sample of the session is.
+    let ratio = sound.rate as f64 / rate.max(1) as f64;
+    let from_frame = (payload.offset.max(0) as f64 * ratio).round() as usize;
+    let span_frames = ((payload.length.max(0) as f64 / payload.stretch) * ratio).round() as usize;
+    let from = (from_frame * width).min(sound.samples.len());
+    let to = ((from_frame + span_frames) * width).min(sound.samples.len()).max(from);
     (from, to)
 }
 
@@ -1906,6 +2023,28 @@ fn samples(value: f64, what: &str) -> Result<i64, EngineError> {
     Ok(rounded as i64)
 }
 
+/// A stretch, from a number a caller sent.
+///
+/// The stretch is a **length ratio**, and it is bounded: it is greater
+/// than zero, because a clip that plays nothing is not a clip, and it
+/// is no more than [`MAX_STRETCH`], because a clip stretched a
+/// thousandfold would hold a thousandth of a sample for a thousand
+/// times as long.
+fn stretch_of(value: f64, id: &str) -> Result<f64, EngineError> {
+    if !value.is_finite() {
+        return Err(EngineError::Failed { id: id.to_string(), message: "a stretch is a number".to_string() });
+    }
+    if value <= 0.0 || value > MAX_STRETCH {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "a stretch is greater than zero and no more than {MAX_STRETCH}, and this one is {value}"
+            ),
+        });
+    }
+    Ok(value)
+}
+
 /// A number of ticks, from a number a caller sent.
 fn ticks(value: f64) -> Result<i64, EngineError> {
     let ticks = samples(value, "where the event happens")?;
@@ -1934,6 +2073,7 @@ craftkit_sdk::plugin_anchor!(
     SourceKind,
     AddTrack,
     AddClip,
+    SetClipStretch,
     SetTempo,
     SetMeter,
     AddMarker,
@@ -2199,6 +2339,14 @@ mod tests {
 
     /// A source at **another rate** is resampled: the sound is the same
     /// sound, at the rate the session plays at.
+    ///
+    /// The clip's length is in the **session's** samples, so a clip of
+    /// four is four samples long whatever the source's rate is — and
+    /// it is four samples long in the picture too, because the
+    /// timeline draws the clip's length in the session's samples. The
+    /// source is read at the rate it was written at and played at the
+    /// rate the session plays at, and the clip takes the part of it
+    /// that fits.
     #[test]
     fn a_source_at_another_rate_is_resampled() {
         let directory = std::env::temp_dir();
@@ -2232,7 +2380,7 @@ mod tests {
         let sound =
             craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
         assert_eq!(sound.rate, 16_000, "the sound is at the session's rate");
-        assert_eq!(sound.frames, 8, "and it is as long as the resampled clip: {}", sound.frames);
+        assert_eq!(sound.frames, 4, "and it is as long as the clip says: {}", sound.frames);
         assert!((sound.samples[0] - 0.5).abs() < 0.001, "and it holds the source's samples");
     }
 
