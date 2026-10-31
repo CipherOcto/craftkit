@@ -8549,3 +8549,57 @@ one there, and the differences between the two are the point.
 - **There is no audio thread**, so `vst3.process` measures and does
   not stream: the kit's transport is in ticks (§90), and a stream of
   samples would be a second clock.
+
+## 121. The AU ABI, written down as shapes
+
+The third plugin format, and the first whose door is the **operating
+system's**.
+
+### What was built
+
+- A crate `craftkit-au-abi` with **no `unsafe` in it at all**: the
+  four-character codes, the properties and their scopes, the shape of
+  the audio, the buffer list, and the unit's own **function
+  signatures**.
+- The codes are written out as the characters they are: a code is a
+  name, and a number is not readable.
+- A unit is asked about itself with **three numbers** — what is
+  wanted, where, and which one — and the **scope** is the interesting
+  one: the same property id means different things on the input, on
+  the output and on the unit as a whole.
+- The audio is a **buffer list**: a count and the buffers, each with
+  the address of its samples. The format's list is variable in length,
+  and this shape holds **two**, because the kit drives one bus in and
+  one bus out. A bound is not negotiable and a shape is (§9): the tree
+  says what it can carry and refuses the rest.
+- The crate is in the layering table at **L0**, beside the other two
+  ABIs.
+
+### What the port found
+
+- **A format's door can be the operating system's.** CLAP's door is
+  the plugin's own entry; VST3's is a function the plugin exports; AU's
+  is the **component manager**, which finds a unit and makes an
+  instance of it, and which is the platform's. A tree that is not on
+  that platform has no component manager, and the shape cannot hold
+  one.
+- **The strings are the platform's too.** Several of AU's properties
+  answer with a **CoreFoundation string** — the name of a unit, the
+  name of a parameter — and CoreFoundation is macOS's. So the names are
+  not in this shape at all, and a program that wants them reads them
+  where the platform has them.
+- **A code is four characters and not a number.** Every OSType in the
+  format is a four-character code, and the numbers are only how the
+  codes travel.
+
+### What it cost
+
+- one crate of shapes and **five tests** about the layout.
+
+### What it does not settle
+
+- **There is no component manager here**, and there is not going to be
+  one: it is the platform's. §123 says what the tree does instead.
+- **There is no battery**, and the reason is the format's own: AU's
+  parameters and its state are CoreFoundation's, so a document has
+  nothing portable to carry yet.
