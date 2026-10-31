@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1179 tests.** The MCP server links **all fifteen batteries** in, so the
+**1184 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1179 tests
+cargo test          # 1184 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3589,6 +3589,7 @@ so.
 | a **selection of characters** | **built.** The core asks a kind where the picked-out **part** of its node is, and the answer may be more than one piece; a paragraph's own unit is the character, so the SDK's span selection picks out characters and the paragraph says where they are (§152) | §22, §152 |
 | an **edit that replaces what is picked out** | **built.** Typing writes over the picked-out range and deleting takes it away; the caret stands after what was typed (§153) | §153 |
 | a **clip drawn as its sound** | **built.** The **peaks** of a source are measured once and kept in the document, and a clip's bar carries the shape of the part of the source it plays (§154) | §154 |
+| a **better resampler** | **built.** The resampler is a **windowed sinc** — an ideal low-pass with a Kaiser window — so what was above the new half of the rate is taken away instead of folding back as a whistle; a sound too long for the limits is refused (§155) | §137, §155 |
 
 ### The list of things that are honestly not there: empty
 
@@ -9516,14 +9517,16 @@ resampled clip is not the clip that was asked for.
 
 - **A resampler is arithmetic**, and so it is a library: it takes
   samples and a pair of rates and gives back samples. The tree's
-  resampler is a **plug-in** — a plugin that changes the rate — and
-  here it is a function, because the thing that needs it is a
-  *render*, and a render is a command.
+  resampler was read as a **plug-in** — a plugin that changes the
+  rate — and here it is a function, because the thing that needs it is
+  a *render*, and a render is a command. **§155 found that the tree's
+  resampler is not a plug-in**: it is a library in the tree's own dsp
+  crate, and the reason the port could not have had a better one was
+  not that a filter is a plugin but that nobody had gone to look.
 - **Linear is honest.** It is not the best resampler and it does not
   pretend to be: a sound resampled by a line has the softness that a
-  line has. The tree's plugins are better and they are **plugins** —
-  and a plugin needs a device, or at least a host, and v2 has neither
-  yet (§ the audio thread).
+  line has. **§155 replaced the line with a filter**, and the filter
+  is a library here for the reason the resampler was.
 
 ### What it cost
 
@@ -9539,7 +9542,8 @@ resampled clip is not the clip that was asked for.
   different thing.
 - **The resampler is linear**, so a sound resampled to a much higher
   rate loses its top. A better resampler is a **filter**, and a filter
-  is a plugin.
+  is a plugin. — **§155 settled this**: the filter is here, and it is
+  a library and not a plugin.
 
 ---
 
@@ -10566,3 +10570,77 @@ the tree this ports draws every clip as the **shape** of its sound.
   that fades is drawn with its fade as a notch and its shape as the
   sound's own, so the two answers are in one picture and they do not
   agree with each other about the loudness.
+
+## 155. The resampler is a windowed sinc
+
+§137 said that the resampler was **linear**, that a sound resampled by
+a line has the softness a line has, and that a better resampler is a
+filter — and that a filter is a plugin. Then it went to look for the
+tree's own resampler, and the tree's resampler is **not a plugin**: it
+is a windowed sinc in a library, in the tree's own dsp crate. Nobody
+had gone to look.
+
+### What was built
+
+- A **windowed sinc** resampler in the audio crate: the sample at a
+  place in the new rate is the old sound read with a low-pass filter,
+  and the filter's shape is the ideal one — a sinc — with a **Kaiser**
+  window over it, so that the filter's edge falls to nothing instead
+  of ringing.
+- The **anti-alias**: what was above the new half of the rate is taken
+  away. A sound that is played at a lower rate has less room, and what
+  does not fit folds back into the sound as a whistle.
+- The resampler **refuses** a sound that would be longer than the
+  limits allow at the new rate: it is not truncated, because a
+  truncated sound is wrong in a way nobody can hear.
+
+### What the port found
+
+- **The tree's resampler is a library, and the port's reason not to
+  have one was wrong.** §137 read the tree's resampler as a plug-in
+  and concluded that a better resampler needed a device and v2 has
+  none. The tree's resampler is `dsp`'s `resample`: a Kaiser-windowed
+  sinc, a polyphase bank and a per-tap fallback, in a **library** that
+  knows nothing about devices. The port had been told a thing about
+  the tree that the tree did not say, and it had believed it — and
+  the belief was in the README, where a reader would have found it.
+- **A filter is not a plugin.** The port's reason was that the tree's
+  plugins are better and are plugins. They are: the tree's *effects*
+  are plugins. The tree's *resampler* is arithmetic in a library, and
+  the same is true here: the resampler is a function in the audio
+  crate, and the thing that needs it is a render, and a render is a
+  command.
+- **The edge of a sound shorter than the kernel is the kernel's, not
+  the sound's.** A sinc kernel is wider than a few samples, so at the
+  start and the end of a short sound the kernel reads outside it and
+  the sound is quieter there. The tests changed when the resampler
+  changed: the old ones measured the first sample of a three-sample
+  ramp, which is the one place a kernel cannot be right.
+
+### What it cost
+
+- **Five tests** in the audio crate (`crates/craftkit-audio/tests/resample.rs`):
+  a tone keeps its pitch, what was above the new half is taken away, a
+  tone inside the new half is kept, a sound that would be too long is
+  refused, and the channels are kept apart.
+- **Two tests changed**: the ramp tests measured the edges, which are
+  the kernel's now, and they measure the middle instead.
+- The resampler takes the **limits** and answers with a refusal, like
+  the mixer does.
+
+### What it does not settle
+
+- **The polyphase bank is not ported.** The tree precomputes the
+  kernel for every phase of a rational rate change, so that an output
+  is one dot product over contiguous memory; this resampler reads the
+  kernel per tap and interpolates it. The sound is the same and the
+  time is not: a long render is slower here.
+- **The kernel's constants are the tree's** — thirty-two zero
+  crossings, a Kaiser beta of nine, a cutoff of 0.94 when the rate
+  falls and 0.97 when it rises — and they were read out of the tree
+  rather than worked out here. They are the usual choices and the
+  port did not measure them.
+- **A stretched clip is still a varispeed** (§143): the sound is
+  played more slowly and the pitch falls with it, and a resampler
+  that changed the rate without changing the time would be a
+  different thing.
