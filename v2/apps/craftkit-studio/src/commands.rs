@@ -188,6 +188,67 @@ impl NodeMove {
     }
 }
 
+/// **Resize** a node.
+///
+/// The node keeps its **place**: a resize changes the size and not
+/// where the node is, and the handle that a front end drags is the
+/// corner opposite the anchor.
+///
+/// A node that has **no place** has no size either, and cannot be
+/// resized: the command does not invent one.
+///
+/// A size must be **more than nothing**: a node with no area cannot be
+/// drawn and cannot be picked, so the command refuses it rather than
+/// making a node that is nothing.
+#[derive(Command)]
+#[command(id = "node.resize", area = "node", icon = "resize", menu("Node"), mutates, undoable)]
+pub struct NodeResize {
+    /// The node to resize.
+    pub node: NodeRef,
+    /// How wide it becomes.
+    pub w: Number,
+    /// How tall it becomes.
+    pub h: Number,
+}
+
+impl NodeResize {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "node.resize".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        let Some(rect) = node.rect else {
+            return Err(EngineError::Failed {
+                id: "node.resize".to_string(),
+                message: format!("the node `{id}` has no size to change"),
+            });
+        };
+        let w = self.w.0;
+        let h = self.h.0;
+        if !w.is_finite() || !h.is_finite() {
+            return Err(EngineError::Failed {
+                id: "node.resize".to_string(),
+                message: "a size is two numbers".to_string(),
+            });
+        }
+        if w <= 0.0 || h <= 0.0 {
+            return Err(EngineError::Failed {
+                id: "node.resize".to_string(),
+                message: "a node with no area cannot be drawn".to_string(),
+            });
+        }
+        let resized = Rect::new(rect.x, rect.y, w, h);
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.rect = Some(resized);
+        }
+        Ok(Outcome::changed(format!("resized the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "w": w, "h": h })))
+    }
+}
+
 /// Mute or unmute a node.
 ///
 /// The node may be given as an **id** or as a **name**: one parameter, two

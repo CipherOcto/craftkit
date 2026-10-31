@@ -224,6 +224,41 @@ impl Window {
         self.run_id("node.move", json!({ "node": node, "x": x, "y": y }))
     }
 
+    /// **Resize** a node, through the registry.
+    ///
+    /// The node keeps its place: a resize changes the size and not
+    /// where the node is.
+    pub fn resize_node(&mut self, node: u64, w: f64, h: f64) -> Result<Outcome, EngineError> {
+        self.run_id("node.resize", json!({ "node": node, "w": w, "h": h }))
+    }
+
+    /// The node whose **resize handle** is under a point, if there is
+    /// one.
+    ///
+    /// The handle is the corner opposite the anchor — the kit's own
+    /// [`craftkit_sdk::Rect::resize_handle`] — and the tolerance is in
+    /// the **world's** units: the caller says how near is near, in the
+    /// units it is working in.
+    ///
+    /// The **deepest** handle wins, as it does for a pick: a thing in a
+    /// group is in front of the group that holds it.
+    pub fn handle_at(&self, point: craftkit_sdk::Point, tolerance: f64) -> Option<u64> {
+        let tolerance = tolerance.max(0.0);
+        self.session
+            .document()
+            .walk()
+            .filter(|node| {
+                node.rect
+                    .map(|rect| {
+                        let handle = rect.resize_handle();
+                        (handle.x - point.x).abs() <= tolerance && (handle.y - point.y).abs() <= tolerance
+                    })
+                    .unwrap_or(false)
+            })
+            .last()
+            .map(|node| node.id)
+    }
+
     /// **Zoom** the camera.
     ///
     /// The camera is the session's state, and it has its own caps: a

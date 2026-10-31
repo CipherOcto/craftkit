@@ -228,3 +228,45 @@ fn the_wheel_zooms_about_the_pointer() {
     assert!((after.x - before.x).abs() < 1e-9, "the world under the pointer did not move across");
     assert!((after.y - before.y).abs() < 1e-9, "and it did not move up");
 }
+
+/// The **handle** that resizes a node is the kit's own.
+///
+/// Every front end that resizes a node puts its handle in the same
+/// corner, and the window finds it through the kit's rectangle and not
+/// through a rule of its own.
+#[test]
+fn the_handle_is_the_kits_own() {
+    let mut window = window();
+    window.open("geometry.rectangle");
+    window.set("x", json!(0.0));
+    window.set("y", json!(0.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.run().expect("the rectangle is added");
+
+    let handle = craftkit_sdk::Point::new(10.0, 0.0);
+    assert_eq!(window.handle_at(handle, 0.5), Some(1), "the handle is under the pointer");
+    assert_eq!(window.handle_at(craftkit_sdk::Point::new(5.0, 5.0), 0.5), None, "and not elsewhere");
+}
+
+/// A node **resizes**, through the registry.
+///
+/// The node keeps its place: a resize changes the size and not where
+/// the node is.
+#[test]
+fn a_node_resizes_through_the_registry() {
+    let mut window = window();
+    window.open("geometry.rectangle");
+    window.set("x", json!(0.0));
+    window.set("y", json!(0.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.run().expect("the rectangle is added");
+
+    window.resize_node(1, 20.0, 30.0).expect("the resize runs");
+    let rect = window.session().document().node(1).and_then(|node| node.rect).expect("it has a place");
+    assert_eq!(rect.x, 0.0, "the node did not move across");
+    assert_eq!(rect.y, 0.0, "and it did not move up");
+    assert_eq!(rect.w, 20.0, "the width changed");
+    assert_eq!(rect.h, 30.0, "and the height");
+}

@@ -70,6 +70,31 @@ impl Rect {
             && self.y < other.y + other.h
             && other.y < self.y + self.h
     }
+
+    /// The point that **resizes** the rectangle.
+    ///
+    /// It is the corner opposite the one the rectangle is anchored at:
+    /// a drag on it changes the size and keeps the place.
+    ///
+    /// The point is in the **kit** and not in a front end, because every
+    /// front end that resizes a node has to put its handle in the same
+    /// corner, and a handle that moved would resize the other way.
+    pub fn resize_handle(&self) -> Point {
+        Point::new(self.x + self.w, self.y)
+    }
+
+    /// The rectangle that a resize handle at this point would make.
+    ///
+    /// The **anchor** stays where it is: the rectangle grows and shrinks
+    /// from its corner and does not walk across the world.
+    ///
+    /// A handle on the wrong side of the anchor gives an **empty**
+    /// rectangle and not a negative one: a size is not a direction, and
+    /// a rectangle with a negative width is a rectangle that cannot be
+    /// drawn and cannot be picked.
+    pub fn resized_to(&self, handle: Point) -> Rect {
+        Rect::new(self.x, self.y, (handle.x - self.x).max(0.0), (handle.y - self.y).max(0.0))
+    }
 }
 
 /// A colour, at paint time.

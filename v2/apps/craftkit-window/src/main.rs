@@ -10,19 +10,53 @@ use craftkit_sdk::Doc;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_window::Window;
 
+/// How near the pointer is to a **resize handle**, in pixels of the
+/// screen.
+///
+/// The handle is a thing on the screen and not a thing in the world: it
+/// is the same size whatever the zoom, and how near it is in the
+/// world's units is worked out from the camera.
+const HANDLE_PIXELS: f32 = 8.0;
+
+/// The smallest a node may be, in the world's units.
+///
+/// A node with no area cannot be drawn and cannot be picked, and the
+/// command that resizes it refuses such a size: the drag stops here
+/// instead of asking for something the kit will not do.
+const MIN_SIZE: f64 = 1.0;
+
 /// A **drag** on the picture.
 ///
-/// A drag that starts on a node **moves** the node, and a drag that
-/// starts on the background **moves the camera**. That is the rule
-/// every drawing program uses, and it is one rule and not two: what is
-/// under the pointer says which of the two it is.
+/// A drag that starts on a **handle** resizes the node, a drag that
+/// starts on a node **moves** the node, and a drag that starts on the
+/// background **moves the camera**. That is the rule every drawing
+/// program uses, and it is one rule and not three: what is under the
+/// pointer says which of them it is.
 struct Drag {
-    /// The node being moved, if there is one.
-    node: Option<u64>,
-    /// The node's own place, when a node is being moved.
-    place: Option<craftkit_sdk::Rect>,
+    /// What the drag is doing.
+    what: What,
     /// Where the drag started, in the world.
     from: craftkit_sdk::Point,
+}
+
+/// What a drag is doing.
+enum What {
+    /// The node is being moved.
+    Move {
+        /// The node.
+        node: u64,
+        /// The node's own place, when the drag started.
+        place: craftkit_sdk::Rect,
+    },
+    /// The node is being resized.
+    Resize {
+        /// The node.
+        node: u64,
+        /// The node's own place, when the drag started.
+        place: craftkit_sdk::Rect,
+    },
+    /// The camera is being moved.
+    Camera,
 }
 
 /// The window's own state, and the values being edited.
@@ -189,39 +223,72 @@ fn picture(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui) {
 /// drawn and what is clicked are the same thing.
 fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
     let camera = *app.window.session().camera();
-    // A drag that starts on a node moves the node, and a drag that
-    // starts on the background moves the camera.
+    // A drag that starts on a handle resizes the node, a drag that
+    // starts on a node moves the node, and a drag that starts on the
+    // background moves the camera.
     if response.drag_started() {
         let pointer = response.interact_pointer_pos().unwrap_or(response.rect.center());
         let centre = response.rect.center();
         let world = camera
             .to_world(craftkit_sdk::Point::new((pointer.x - centre.x) as f64, (centre.y - pointer.y) as f64));
-        let picked = app.window.pick(world);
-        let place =
-            picked.and_then(|node| app.window.session().document().node(node).and_then(|node| node.rect));
-        // A node with **no place** is not moved: there is nowhere to
-        // move it to.
-        let node = if place.is_some() { picked } else { None };
-        app.drag = Some(Drag { node, place, from: world });
+        // The handle is a **screen** size, so how near it is in the
+        // world depends on the zoom.
+        let tolerance = HANDLE_PIXELS as f64 / camera.zoom();
+        let what = match app.window.handle_at(world, tolerance) {
+            Some(node) => {
+                let place = app
+                    .window
+                    .session()
+                    .document()
+                    .node(node)
+                    .and_then(|node| node.rect)
+                    .map(|place| What::Resize { node, place });
+                place.unwrap_or(What::Camera)
+            }
+            None => {
+                let place = app.window.pick(world).and_then(|node| {
+                    app.window
+                        .session()
+                        .document()
+                        .node(node)
+                        .and_then(|node| node.rect)
+                        .map(|place| (node, place))
+                });
+                match place {
+                    Some((node, place)) => What::Move { node, place },
+                    None => What::Camera,
+                }
+            }
+        };
+        app.drag = Some(Drag { what, from: world });
     }
-    if response.dragged() && app.drag.as_ref().map(|drag| drag.node.is_none()).unwrap_or(true) {
+    if response.dragged() && app.drag.as_ref().map(|drag| matches!(drag.what, What::Camera)).unwrap_or(false)
+    {
         let delta = response.drag_delta();
         let zoom = camera.zoom();
         app.window.pan(-delta.x as f64 / zoom, delta.y as f64 / zoom);
     }
-    // The node moves when the mouse is let go: every move is a command,
-    // and every command is an undo step.
+    // The node moves or resizes when the mouse is let go: every change
+    // is a command, and every command is an undo step.
     if response.drag_stopped()
         && let Some(drag) = app.drag.take()
-        && let (Some(node), Some(place)) = (drag.node, drag.place)
     {
         let pointer = response.interact_pointer_pos().unwrap_or(response.rect.center());
         let centre = response.rect.center();
         let world = camera
             .to_world(craftkit_sdk::Point::new((pointer.x - centre.x) as f64, (centre.y - pointer.y) as f64));
-        let across = world.x - drag.from.x;
-        let up = world.y - drag.from.y;
-        let _ = app.window.move_node(node, place.x + across, place.y + up);
+        match drag.what {
+            What::Move { node, place } => {
+                let across = world.x - drag.from.x;
+                let up = world.y - drag.from.y;
+                let _ = app.window.move_node(node, place.x + across, place.y + up);
+            }
+            What::Resize { node, place } => {
+                let resized = place.resized_to(world);
+                let _ = app.window.resize_node(node, resized.w.max(MIN_SIZE), resized.h.max(MIN_SIZE));
+            }
+            What::Camera => {}
+        }
     }
     // The wheel zooms **about the pointer**, and the camera clamps it.
     if response.hovered() {
