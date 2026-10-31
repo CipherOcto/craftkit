@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**854 tests.** The MCP server links **all fourteen batteries** in, so the
+**866 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **202** of them, and **216** with
+on its own, with no features, carries **205** of them, and **219** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1049,7 +1049,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 854 tests
+cargo test          # 866 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7415,3 +7415,105 @@ a front end with a second way into the design.
   panel's form would show; the undo and the redo are on the window
   itself, and the menu that would hold them beside everything else is
   not built.
+
+---
+
+## 99. The wheel zooms about the pointer
+
+The camera had a zoom and the window had a wheel, and the wheel zoomed
+about the **middle** of the screen. That is how a camera behaves when
+nobody has thought about it, and it is wrong in the way that only a
+person at the keyboard can feel: the world slides out from under the
+hand while the hand is busy turning the wheel.
+
+### What was built
+
+- The camera gains a zoom **about a point of the screen**. The point is
+  in screen units measured from the middle — the same units
+  `to_screen` gives and `to_world` takes — and the camera works out
+  for itself which point of the world is under the pointer and puts it
+  back under the pointer.
+- The window's wheel uses it, and the window gains a `zoom_at` of its
+  own so that a front end with a pointer can say where it is without
+  working out the world's mapping a second time.
+
+### What the port found
+
+- **A zoom that is clamped still holds the pointer.** The wheel hits
+  the cap at the top and at the bottom, and the naive version moves
+  the anchor when it clamps: the zoom stops and the world jumps. So
+  the anchor is put back **after** the clamp, and a wheel that hits
+  the cap changes the zoom as far as it goes and not one step further.
+- **The camera already knew the answer.** The mapping from the screen
+  to the world was `to_world`, and the whole of the new method is
+  that one call and one subtraction: the new rule was not new
+  geometry, it was the old geometry used in a second place.
+
+### What it cost
+
+- one method on the camera, one on the window, **four tests** (three
+  on the camera and one on the window).
+
+### What it does not settle
+
+- **The handle is not scaled.** A resize handle drawn at every zoom
+  would need the camera's zoom in the drawing, and the picture is
+  drawn by the kinds and not by the window.
+- **The wheel does not pinch.** A touch screen has two fingers, and
+  the camera has one factor: a pinch is two wheels at once, and the
+  kit has no gesture of its own.
+
+---
+
+## 100. The node can be resized
+
+A move was a command and a resize was not: the window could drag a
+node across the world and could not make it bigger, and a drawing
+program that cannot resize is a drawing program that cannot draw.
+
+### What was built
+
+- A command `node.resize`, beside `node.move`: a resize changes the
+  size and keeps the place, and a move changes the place and keeps the
+  size. Two commands and not one, because a command that did both
+  would be two commands wearing one name and its undo would take back
+  more than the person asked for.
+- The **handle** is the kit's own: `Rect::resize_handle` says where it
+  is and `Rect::resized_to` says what a drag of it makes. The anchor
+  stays where it is, and the rectangle grows and shrinks from its
+  corner.
+- The window grows a third kind of drag: a drag on a **handle**
+  resizes the node, a drag on the node moves it, and a drag on the
+  background moves the camera. The handle is a screen size, so how
+  near it is in the world's units comes from the camera's zoom.
+
+### What the port found
+
+- **The handle has to be in the kit and not in the front end.** The
+  first version put the handle in the window, and the window is a
+  front end: two front ends would have put it in different corners,
+  and a handle that moved would resize the other way round. The
+  rectangle in the kit now says where the handle is.
+- **A size is not a direction.** A drag past the left edge would make
+  a rectangle with a negative width, and a rectangle with a negative
+  width cannot be drawn and cannot be picked. So the kit gives an
+  **empty** rectangle and not a negative one, and the command refuses
+  a size of nothing.
+- **A node with no place has no size either.** The command refuses it
+  for the same reason the move does: a note in a document is at a time
+  and not at a place, and the kit does not invent one.
+
+### What it cost
+
+- two methods on the rectangle, one command, three kinds of drag,
+  **eight tests** (three on the rectangle, three on the command and
+  two on the window).
+
+### What it does not settle
+
+- **The handle is not drawn.** The picture is drawn by the kinds, and
+  a kind does not know it has a handle: the window can drag a handle
+  it cannot see.
+- **Only one handle.** A rectangle has four corners and the kit knows
+  one of them: a resize that keeps the anchor keeps one corner still,
+  and the other three would each need their own rule.
