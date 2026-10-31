@@ -1320,7 +1320,10 @@ and it is the same rule the vector battery follows.
 ### What this does not claim
 
 - **No sound was made.** Nothing here decodes audio, mixes it or plays
-  it. A source is a path and a length.
+  it. A source is a path and a length. — **Answered in §133–§135**: the
+  sources are read, the clips are mixed and the document is rendered
+  into a file. What is still missing is a **device** and a
+  **playhead**.
 - **The battery is not the sound tree.** It is a handful of kinds and
   commands that show where a sound document fits in v2's seams. The tree
   it comes from has 482 commands; this has seven.
