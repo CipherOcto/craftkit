@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1203 tests.** The MCP server links **all fifteen batteries** in, so the
+**1207 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1203 tests
+cargo test          # 1207 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3596,6 +3596,7 @@ so.
 | a **band for each channel** | **built.** The peaks are the peaks of each channel and the bar carries a band for each of them; the buckets and the channels share the table (§159) | §154, §159 |
 | a **send that is panned and muted** | **built.** A send's copy is panned on its way to the bus, and a muted send is a copy of nothing; a pan that is not a pan is refused (§160) | §160 |
 | a **pre-fader send** | **built.** The track's stage is the clips, the inserts, the mute and then the fader, and a send may take its copy from before the fader; a muted track is not heard anywhere (§161) | §160, §161 |
+| a **master with a fader** | **built.** A track whose kind is `master` holds the fader of the whole mix: its inserts are run over the mix, its lanes move it, and the metronome is summed after it (§162) | §162 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11016,3 +11017,74 @@ not built.
   mute is only the lane.
 - **A stereo send goes straight to the sides in the tree**, and the
   send's pan is for a mono copy; here a stereo copy is panned as well.
+
+## 162. The master has a fader of its own
+
+The tree's mixer runs the **master faders** over the main mix, and the
+metronome is summed after them. Here a master was a track like any
+other, and its fader moved nothing but its own — empty — signal.
+
+### What was built
+
+- A track whose kind is `master` is the **fader of the whole mix**: it
+  holds no clips, and its lanes move the mix.
+- The **master's inserts** are run over the mix, before its fader — the
+  tree's order.
+- **Two masters are a stack**: each one moves what the one before it
+  left, in the order of the tree.
+- The **metronome is summed after the master fader**, so the click
+  reaches the speakers without passing through it.
+- A **clip on a master is refused by name**: a master holds a fader and
+  not a playlist.
+
+### What the port found
+
+- **The name was already there and nobody read it.** The kinds of a
+  track are open — a string in the track's payload — and `master` was
+  one of the names `sound.track.add` took and wrote down in its own
+  documentation. The mixer never asked a track what it was, so the
+  name was accepted, stored and ignored. A name that is taken and
+  never read is a name nobody has looked at, and the port had read the
+  *kinds* of the tree and not the *meanings* of the names.
+- **The tree's master is a strip over the mix and not a track that sums
+  clips.** The main mix is copied into the master's strip, the master's
+  inserts are run over that copy, and then the fader moves it. The
+  master's clips are not the mix: the mix is the sum of the tracks and
+  the buses, and the master is over all of it.
+- **The metronome is after the fader, and it was after it by accident.**
+  The tree sums the click after the master fader so that it reaches the
+  speakers without passing through a fader, a track, a send or an
+  insert. Here the click was already mixed in after the master sum —
+  the right place for the wrong reason, and now it is the right place
+  for the right reason too.
+- **The tree allows several masters.** Each one is a strip over the
+  mix, and they run in the order of the tree, so the last one is the
+  one that is heard last. A stack of faders is not a mistake to be
+  prevented; it is a thing a person may want.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/master.rs`): a master fader
+  moves the whole mix, it comes after the buses, two masters are a
+  stack, and a master holds no clips.
+- **No new command and no new kind**: the master is a track whose
+  payload says `master`, and the open kinds are what make that
+  possible. The command that made it — `sound.track.add` with
+  `track_kind` — was already there.
+- **The crate's own header was stale**, and is now true: it said
+  *seven kinds* and *seven commands*, and there are **thirteen** and
+  **twenty-three**. The header had not been read since the mixer was
+  built.
+
+### What it does not settle
+
+- **The master's meter is not there.** The tree measures the main mix
+  at the master, and v2's meters are a different thing.
+- **The master has no balance.** The tree's master fader moves the
+  level and not the pan, and here the master has a mute lane and a
+  volume lane and no balance — which is the tree's shape.
+- **An aux input is not there.** The tree's track of the kind `aux`
+  reads a bus and is a strip like any other; v2's tracks hold clips,
+  and nothing reads a bus back.
+- **The delay compensation of the main mix is not there.** The tree
+  delays the main mix by the slowest insert on the master.
