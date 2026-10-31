@@ -99,3 +99,33 @@ fn a_command_that_refuses_says_so() {
     );
     assert!(error.to_string().contains("group"), "{error}");
 }
+
+/// The window **draws** the document, through the kinds.
+///
+/// Every node is offered to the kind that says what it is, and the
+/// camera is the session's — so the picture is seen through the same
+/// controls every other front end uses.
+#[test]
+fn the_window_draws_the_document_through_the_kinds() {
+    let mut window = window();
+    // A rectangle with a colour of its own: the shapes plugin's own
+    // rectangle is white, and a white rectangle on a white picture is
+    // a rectangle nobody sees.
+    window.open("vector.rectangle");
+    window.set("x", json!(-5.0));
+    window.set("y", json!(-5.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.set("fill", json!("#3366cc"));
+    window.run().expect("the command runs");
+
+    let picture = window.picture(64, 64).expect("the document is drawn");
+    assert_eq!(picture.width, 64, "the picture is the size it was asked for");
+    assert_eq!(picture.height, 64);
+    assert_eq!(picture.pixels.len(), 64 * 64 * 4, "four bytes a pixel");
+
+    // The shape is **in** the picture: some pixel carries the colour it
+    // was given.
+    let painted = picture.pixels.chunks(4).any(|pixel| pixel[2] > 200 && pixel[0] < 100);
+    assert!(painted, "the shape was drawn in its own colour");
+}

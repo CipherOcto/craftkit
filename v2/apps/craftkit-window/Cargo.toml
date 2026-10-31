@@ -9,8 +9,28 @@ license.workspace = true
 [dependencies]
 craftkit-sdk = { workspace = true }
 # The **application's ecosystem**: every battery the window links in is
-# in it, and the window names none of them.
-craftkit-studio = { path = "../craftkit-studio" }
+# in it, and the window names none of them. All of them are linked in:
+# a window that showed half the kit would be a window with a hole in it.
+craftkit-studio = { path = "../craftkit-studio", features = [
+    "vector",
+    "sound",
+    "pdf",
+    "film",
+    "fx",
+    "art",
+    "grid",
+    "cad",
+    "prose",
+    "layout",
+    "numeric",
+    "text",
+    "image",
+    "clap",
+] }
+# The **rasteriser**: the canvas that draws a document into a picture.
+# It is a **library** and not a plugin: it contributes no command and
+# no kind.
+craftkit-raster = { workspace = true }
 # The **toolkit** the window is drawn with, and the window itself. The
 # toolkit is a **library** and not a plugin: it contributes no command
 # and no kind.

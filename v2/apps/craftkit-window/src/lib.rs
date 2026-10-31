@@ -50,6 +50,13 @@ pub struct Window {
     form: Option<Form>,
     /// What the window has to say.
     log: Vec<String>,
+    /// How many commands the window has run.
+    ///
+    /// It is a **counter**, and it is what the drawing knows: the
+    /// picture is drawn again when the document or the camera has
+    /// changed, and the counter is how the window knows that a command
+    /// has run.
+    runs: u64,
 }
 
 impl Window {
@@ -59,7 +66,7 @@ impl Window {
     /// linked in — and the session is built from it.
     pub fn new() -> Result<Window, EcosystemError> {
         let ecosystem = craftkit_studio::ecosystem()?;
-        Ok(Window { session: ecosystem.session(), form: None, log: Vec::new() })
+        Ok(Window { session: ecosystem.session(), form: None, log: Vec::new(), runs: 0 })
     }
 
     /// The session the window draws.
@@ -166,6 +173,7 @@ impl Window {
             Ok(outcome) => {
                 self.log.push(outcome.message.clone());
                 self.form = None;
+                self.runs += 1;
                 Ok(outcome)
             }
             Err(error) => {
@@ -179,6 +187,54 @@ impl Window {
     pub fn log(&self) -> &[String] {
         &self.log
     }
+
+    /// How many commands the window has run.
+    pub fn runs(&self) -> u64 {
+        self.runs
+    }
+
+    /// A **picture** of the document, as pixels.
+    ///
+    /// The document is drawn **through the kinds**: every node is
+    /// offered to the kind that says what it is, and a node whose kind
+    /// is not linked in is not drawn — the core does not know which
+    /// kinds those are.
+    ///
+    /// The camera is the **session's**, so the picture is seen through
+    /// the same controls every other front end uses.
+    pub fn picture(&self, width: usize, height: usize) -> Result<Picture, String> {
+        let camera = *self.session.camera();
+        let mut raster = craftkit_raster::Raster::new(width, height, camera)?;
+        for node in self.session.document().walk() {
+            let Some(kind) = self.session.kinds().get(&node.kind) else { continue };
+            (kind.paint)(node, &mut raster);
+        }
+        let image = raster.image();
+        let mut pixels = Vec::with_capacity(image.width().saturating_mul(image.height()).saturating_mul(4));
+        for y in 0..image.height() {
+            for x in 0..image.width() {
+                match image.pixel(x, y) {
+                    Some(pixel) => pixels.extend_from_slice(&pixel),
+                    None => pixels.extend_from_slice(&[0, 0, 0, 0]),
+                }
+            }
+        }
+        Ok(Picture { width: image.width(), height: image.height(), pixels })
+    }
+}
+
+/// A **picture** of the document: pixels, and nothing else.
+///
+/// It is the window's own shape, and not the rasteriser's: the window
+/// shows a picture and does not know what drew it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Picture {
+    /// How wide it is.
+    pub width: usize,
+    /// How tall it is.
+    pub height: usize,
+    /// The pixels: red, green, blue and alpha, four bytes each.
+    pub pixels: Vec<u8>,
 }
 
 /// One **node** of the document, as the window shows it.

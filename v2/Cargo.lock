@@ -702,6 +702,7 @@ dependencies = [
 name = "craftkit-window"
 version = "0.2.0"
 dependencies = [
+ "craftkit-raster",
  "craftkit-sdk",
  "craftkit-studio",
  "eframe",

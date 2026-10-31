@@ -22,6 +22,15 @@ struct App {
     /// are handed back the moment they change: the form in the window
     /// is the one the command is run with.
     values: Vec<(String, Json)>,
+    /// The picture of the document, and the texture it is shown as.
+    picture: Option<egui::TextureHandle>,
+    /// What the picture was drawn from.
+    ///
+    /// The picture is drawn again when the document, the camera or the
+    /// command count has changed — and not on every frame, because
+    /// drawing a document is work and a window that draws it sixty
+    /// times a second is a window that is always busy.
+    drawn: Option<(usize, u64, f64, f64, f64)>,
 }
 
 impl App {
@@ -29,7 +38,7 @@ impl App {
     fn new() -> Result<App, Box<dyn std::error::Error + Send + Sync>> {
         let window =
             Window::new().map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
-        Ok(App { window, open: None, values: Vec::new() })
+        Ok(App { window, open: None, values: Vec::new(), picture: None, drawn: None })
     }
 
     /// **Open** a command: the form of what it wants.
@@ -113,7 +122,8 @@ fn commands(app: &mut App, ui: &mut egui::Ui) {
     });
 }
 
-/// The **document**, in the middle: the tree of nodes.
+/// The **document**, in the middle: the tree of nodes, and the picture
+/// of it.
 fn tree(app: &App, ui: &mut egui::Ui) {
     ui.heading("the document");
     let rows = app.window.tree();
@@ -122,6 +132,35 @@ fn tree(app: &App, ui: &mut egui::Ui) {
             ui.label(format!("{}  {}  [{}]", row.id, row.name, row.kind));
         }
     });
+}
+
+/// The **picture** of the document, drawn through the kinds.
+fn picture(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui) {
+    let camera = app.window.session().camera();
+    let offset = camera.offset();
+    let drawn = (app.window.tree().len(), app.window.runs(), camera.zoom(), offset.x, offset.y);
+    if app.drawn != Some(drawn) {
+        let size = ui.available_size();
+        let width = size.x.max(1.0) as usize;
+        let height = size.y.max(1.0) as usize;
+        app.picture = match app.window.picture(width, height) {
+            Ok(picture) => {
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [picture.width, picture.height],
+                    &picture.pixels,
+                );
+                Some(ctx.load_texture("the document", image, egui::TextureOptions::LINEAR))
+            }
+            Err(_) => None,
+        };
+        app.drawn = Some(drawn);
+    }
+    let Some(texture) = app.picture.clone() else {
+        ui.label("the document cannot be drawn");
+        return;
+    };
+    let size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+    ui.image((texture.id(), size));
 }
 
 /// The **plan**, on the right: what the document means.
@@ -244,6 +283,7 @@ impl eframe::App for App {
             log(self, ui);
         });
         egui::CentralPanel::default().show(ctx, |ui| {
+            picture(self, ctx, ui);
             tree(self, ui);
         });
     }
