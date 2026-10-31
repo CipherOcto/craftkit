@@ -70,7 +70,8 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 // The mixer: buses, routes, inserts, sends and automation lanes. It is
 // the part of a sound document that is a **graph** and not a tree, so it
 // is written in relations.
-pub mod mixer;
+mod automate;
+mod mixer;
 
 use craftkit_sdk::{
     Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
@@ -1330,17 +1331,17 @@ impl RenderSound {
         let rate = session_of(session.document()).sample_rate;
         // The clips are the tracks: each one plays a source from an
         // offset, for a length, at a gain.
-        let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
+        let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
         for clip in session.document().walk().filter(|node| node.kind == "sound.clip") {
             let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
             let Some(source_id) = payload.source else { continue };
-            clips.push((source_id, payload));
+            clips.push((source_id, clip.id, payload));
         }
         // The sources are read once each, and the clips that play one
         // share it.
         let mut sources: Vec<(u64, craftkit_wav::Sound)> = Vec::new();
         let mut channels = 0_u16;
-        for (source_id, _) in &clips {
+        for (source_id, _, _) in &clips {
             if sources.iter().any(|(id, _)| id == source_id) {
                 continue;
             }
@@ -1357,33 +1358,36 @@ impl RenderSound {
             }
             sources.push((*source_id, sound));
         }
-        // The clips are the tracks. A source at another rate than the
-        // session is **resampled**: the sound is the same sound, at the
-        // rate the session plays at.
-        let mut resampled: Vec<Option<Vec<f32>>> = Vec::with_capacity(clips.len());
-        for (source_id, payload) in &clips {
+        // Each clip's samples are **prepared**: a source at another rate
+        // is resampled, and the track's **automation** is applied to
+        // them, sample by sample.
+        let mut prepared: Vec<Vec<f32>> = Vec::with_capacity(clips.len());
+        for (source_id, clip_id, payload) in &clips {
             let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else {
-                resampled.push(None);
+                prepared.push(Vec::new());
                 continue;
             };
             let (from, to) = the_span(sound, payload);
             let slice = &sound.samples[from..to];
             let samples = if sound.rate == rate {
-                None
+                slice.to_vec()
             } else {
-                Some(craftkit_audio::resample(slice, sound.channels as usize, sound.rate, rate))
+                craftkit_audio::resample(slice, sound.channels as usize, sound.rate, rate)
             };
-            resampled.push(samples);
+            let automation = session
+                .document()
+                .node(*clip_id)
+                .and_then(|clip| timeline::track_of(session.document(), clip))
+                .map(|track| automate::automation_of(session.document(), track))
+                .unwrap_or_default();
+            prepared.push(automate::apply(&automation, &samples, sound.channels as usize, payload.start));
         }
         let mut tracks: Vec<craftkit_audio::Track<'_>> = Vec::new();
-        for (index, (source_id, payload)) in clips.iter().enumerate() {
-            let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else { continue };
-            let (from, to) = the_span(sound, payload);
-            let slice = &sound.samples[from..to];
-            let samples: &[f32] = match &resampled[index] {
-                Some(samples) => samples,
-                None => slice,
-            };
+        for (index, (_, _, payload)) in clips.iter().enumerate() {
+            let samples = &prepared[index];
+            if samples.is_empty() {
+                continue;
+            }
             tracks.push(craftkit_audio::Track {
                 start: payload.start.max(0),
                 samples,
@@ -2074,6 +2078,101 @@ mod tests {
         assert_eq!(sound.rate, 16_000, "the sound is at the session's rate");
         assert_eq!(sound.frames, 8, "and it is as long as the resampled clip: {}", sound.frames);
         assert!((sound.samples[0] - 0.5).abs() < 0.001, "and it holds the source's samples");
+    }
+
+    /// The **automation** moves the volume: a lane of volume is heard.
+    ///
+    /// The lane is applied **per sample**, because that is what a curve
+    /// is: the volume at the sample's own time.
+    #[test]
+    fn the_automation_moves_the_volume() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-auto-source.wav");
+        let output_path = directory.join("craftkit-v2-auto-out.wav");
+        let bytes = craftkit_wav::write(1, 48_000, &[0.5; 4]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 4, "source": source }))
+            .expect("the clip is added");
+        // A lane of volume: half of it is six decibels down, and the
+        // last of it is loud again.
+        session
+            .execute(
+                "sound.lane.add",
+                &json!({
+                    "track": track,
+                    "param": "volume",
+                    "points": [[0, -6.0], [3, 0.0]],
+                }),
+            )
+            .expect("the lane is added");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        assert_eq!(sound.frames, 4);
+        // The first sample is at the lane's first point: six decibels
+        // down is about half.
+        assert!((sound.samples[0] - 0.25).abs() < 0.01, "the first sample is quieter: {}", sound.samples[0]);
+        // The last is at the second point: nothing down at all.
+        assert!((sound.samples[3] - 0.5).abs() < 0.01, "the last sample is loud again: {}", sound.samples[3]);
+    }
+
+    /// A **mute** lane mutes the track, and a lane of a parameter the
+    /// kit does not know is drawn and not heard.
+    #[test]
+    fn a_mute_lane_mutes_the_track() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-mute-source.wav");
+        let output_path = directory.join("craftkit-v2-mute-out.wav");
+        let bytes = craftkit_wav::write(1, 48_000, &[0.5; 2]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 2, "source": source }))
+            .expect("the clip is added");
+        session
+            .execute("sound.lane.add", &json!({ "track": track, "param": "mute", "points": [[0, 1.0]] }))
+            .expect("the lane is added");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        assert_eq!(sound.frames, 2);
+        assert!((sound.samples[0] - 0.0).abs() < 0.001, "the track is muted: {}", sound.samples[0]);
     }
 
     /// A source that is **not there** is refused: the renderer does not

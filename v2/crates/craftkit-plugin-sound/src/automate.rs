@@ -1,0 +1,144 @@
+//! The **automation**: the lanes of a track, and what they do to its
+//! sound.
+//!
+//! A lane is a curve on the track's row (§127) and it is **derived**:
+//! the breakpoints are in the document and the curve is worked out every
+//! time somebody asks. This module is the other half of that — the
+//! value of a lane **at a time**, and the gain and the balance that
+//! value means.
+//!
+//! # The parameters
+//!
+//! The parameter of a lane is a **string**, so anybody may automate
+//! anything a node's payload names. Three are worked out here, because
+//! a sound is made of them:
+//!
+//! - **volume**, in **decibels** — like the gain of a clip (§ the
+//!   clip's payload);
+//! - **pan**, between minus one and one — the balance between the
+//!   channels, and a **mono** sound is not balanced, so a lane of pan
+//!   over a mono track does nothing;
+//! - **mute** — a value of one or more mutes the track, and a value of
+//!   less than one does not.
+//!
+//! A lane of any other parameter is **drawn** and is not **heard**: the
+//! kit does not know what the parameter means, and it does not guess.
+
+use crate::mixer::LanePayload;
+use craftkit_sdk::{Document, Node};
+
+/// The **automation** of a track: its lanes, by parameter.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Automation {
+    /// The volume, in decibels, over time.
+    pub volume: Option<Vec<(i64, f64)>>,
+    /// The pan, between minus one and one, over time.
+    pub pan: Option<Vec<(i64, f64)>>,
+    /// The mute, over time: one mutes and less does not.
+    pub mute: Option<Vec<(i64, f64)>>,
+}
+
+impl Automation {
+    /// Whether the automation says anything at all.
+    pub fn is_empty(&self) -> bool {
+        self.volume.is_none() && self.pan.is_none() && self.mute.is_none()
+    }
+}
+
+/// The automation of a track: the lanes under it.
+pub fn automation_of(document: &Document, track: &Node) -> Automation {
+    let mut automation = Automation::default();
+    for lane in document.walk().filter(|node| node.kind == "sound.lane") {
+        // A lane automates the track it is under.
+        if crate::timeline::parent_of(document, lane.id).map(|parent| parent.id) != Some(track.id) {
+            continue;
+        }
+        let Ok(payload) = LanePayload::from_json(&lane.data) else { continue };
+        if payload.points.is_empty() {
+            continue;
+        }
+        match payload.param.as_str() {
+            "volume" => automation.volume = Some(payload.points),
+            "pan" => automation.pan = Some(payload.points),
+            "mute" => automation.mute = Some(payload.points),
+            _ => {}
+        }
+    }
+    automation
+}
+
+/// The value of a curve **at a time**.
+///
+/// The value before the first breakpoint is the first value, and the
+/// value after the last is the last one: a lane holds the value it has
+/// until the lane says otherwise. Between two breakpoints the value is
+/// the **line** between them.
+pub fn value_at(points: &[(i64, f64)], at: i64) -> f64 {
+    let Some((first_at, first_value)) = points.first() else { return 0.0 };
+    if at <= *first_at {
+        return *first_value;
+    }
+    let Some((last_at, last_value)) = points.last() else { return 0.0 };
+    if at >= *last_at {
+        return *last_value;
+    }
+    for window in points.windows(2) {
+        let (from_at, from_value) = window[0];
+        let (to_at, to_value) = window[1];
+        if at >= from_at && at <= to_at {
+            let span = (to_at - from_at) as f64;
+            if span <= 0.0 {
+                return to_value;
+            }
+            let fraction = (at - from_at) as f64 / span;
+            return from_value + (to_value - from_value) * fraction;
+        }
+    }
+    *last_value
+}
+
+/// The samples of a track, with the automation **applied**.
+///
+/// The automation is worked out **per sample**, because that is what a
+/// curve is: the volume at the sample's own time, and not the volume at
+/// the start of the clip. A clip that runs across a breakpoint is loud
+/// at one end and quiet at the other, and the sound says so.
+pub fn apply(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
+    if automation.is_empty() || channels == 0 {
+        return samples.to_vec();
+    }
+    let mut out = samples.to_vec();
+    for index in 0..samples.len() / channels {
+        let at = start + index as i64;
+        let volume = match &automation.volume {
+            Some(points) => craftkit_audio::db_to_linear(value_at(points, at)) as f32,
+            None => 1.0,
+        };
+        let muted = match &automation.mute {
+            Some(points) => value_at(points, at) >= 0.5,
+            None => false,
+        };
+        // The pan is a balance between the channels, and a **mono**
+        // sound has one channel and is not balanced.
+        let pan = match &automation.pan {
+            Some(points) if channels >= 2 => value_at(points, at).clamp(-1.0, 1.0),
+            _ => 0.0,
+        };
+        let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI;
+        let left = angle.cos() as f32;
+        let right = angle.sin() as f32;
+        for channel in 0..channels {
+            let at_index = index * channels + channel;
+            if muted {
+                out[at_index] = 0.0;
+                continue;
+            }
+            let mut value = samples[at_index] * volume;
+            if channels >= 2 {
+                value *= if channel % 2 == 0 { left } else { right };
+            }
+            out[at_index] = value;
+        }
+    }
+    out
+}
