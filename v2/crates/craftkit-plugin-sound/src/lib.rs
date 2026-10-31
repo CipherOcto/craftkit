@@ -1329,8 +1329,8 @@ impl RenderSound {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
         let rate = session_of(session.document()).sample_rate;
-        // The clips are the tracks: each one plays a source from an
-        // offset, for a length, at a gain.
+        // The clips: each one plays a source from an offset, for a
+        // length, at a gain.
         let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
         for clip in session.document().walk().filter(|node| node.kind == "sound.clip") {
             let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
@@ -1382,23 +1382,65 @@ impl RenderSound {
                 .unwrap_or_default();
             prepared.push(automate::apply(&automation, &samples, sound.channels as usize, payload.start));
         }
-        let mut tracks: Vec<craftkit_audio::Track<'_>> = Vec::new();
+        // How long the sound is: the end of the longest clip.
+        let mut frames = 0_i64;
         for (index, (_, _, payload)) in clips.iter().enumerate() {
-            let samples = &prepared[index];
-            if samples.is_empty() {
-                continue;
+            let end = payload.start.max(0) + prepared[index].len() as i64 / channels.max(1) as i64;
+            if end > frames {
+                frames = end;
             }
-            tracks.push(craftkit_audio::Track {
-                start: payload.start.max(0),
-                samples,
-                gain: craftkit_audio::db_to_linear(payload.gain_db),
-            });
+        }
+        let frames = frames.max(0) as usize;
+        // The **tracks**: each track's signal is the sum of its clips.
+        let mut tracks: Vec<(u64, Vec<f32>)> = Vec::new();
+        for track in session.document().walk().filter(|node| node.kind == "sound.track") {
+            let mut signal = vec![0.0_f32; frames];
+            for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
+                let Some(clip) = session.document().node(*clip_id) else { continue };
+                if timeline::track_of(session.document(), clip).map(|owner| owner.id) != Some(track.id) {
+                    continue;
+                }
+                let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
+                add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, gain);
+            }
+            tracks.push((track.id, signal));
+        }
+        // The **buses**: each bus is fed by the sends that name it, and
+        // a send carries a copy of its track's signal at its own level.
+        let mut buses: Vec<(u64, Vec<f32>)> = Vec::new();
+        for bus in session.document().walk().filter(|node| node.kind == "sound.bus") {
+            let mut signal = vec![0.0_f32; frames];
+            for send in sends_of(session.document()) {
+                if send.bus != bus.id {
+                    continue;
+                }
+                let Some((_, track_signal)) = tracks.iter().find(|(id, _)| *id == send.track) else {
+                    continue;
+                };
+                let level = craftkit_audio::db_to_linear(send.level_db) as f32;
+                let panned = panned(track_signal, send.pan, channels as usize);
+                add_into(&mut signal, &panned, 0, level);
+            }
+            buses.push((bus.id, signal));
+        }
+        // The **master** is the file: every track and every bus.
+        let mut master = vec![0.0_f32; frames];
+        for (_, signal) in &tracks {
+            add_into(&mut master, signal, 0, 1.0);
+        }
+        for (_, signal) in &buses {
+            add_into(&mut master, signal, 0, 1.0);
         }
         let channels = channels.max(1);
-        let mix =
-            craftkit_audio::mix(&tracks, rate, &craftkit_audio::Limits::default()).map_err(|error| {
-                EngineError::Failed { id: "sound.render".to_string(), message: error.to_string() }
-            })?;
+        let mix = craftkit_audio::mix(
+            &[craftkit_audio::Track { start: 0, samples: &master, gain: 1.0 }],
+            rate,
+            &craftkit_audio::Limits::default(),
+        )
+        .map_err(|error| EngineError::Failed {
+            id: "sound.render".to_string(),
+            message: error.to_string(),
+        })?;
         let bytes = craftkit_wav::write(channels, rate, &mix.samples);
         write_file(&path, &bytes)?;
         Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
@@ -1409,6 +1451,66 @@ impl RenderSound {
             "clips": tracks.len(),
         })))
     }
+}
+
+/// A **send**: the level and the pan with which a track feeds a bus.
+struct Send {
+    /// The track that feeds.
+    track: u64,
+    /// The bus that is fed.
+    bus: u64,
+    /// Its level, in decibels.
+    level_db: f64,
+    /// Its pan, from minus one to one.
+    pan: f64,
+}
+
+/// The sends of the document: the tracks that feed the buses.
+fn sends_of(document: &Document) -> Vec<Send> {
+    let mut sends = Vec::new();
+    for node in document.walk().filter(|node| node.kind == "sound.send") {
+        let Ok(payload) = SendPayload::from_json(&node.data) else { continue };
+        let Some(track) = timeline::parent_of(document, node.id) else { continue };
+        let Some(relation) = document.relations_from(node.id, Some("send")).into_iter().next() else {
+            continue;
+        };
+        sends.push(Send { track: track.id, bus: relation.to, level_db: payload.level_db, pan: payload.pan });
+    }
+    sends
+}
+
+/// Add a signal into another, at a place, at a gain.
+fn add_into(target: &mut [f32], source: &[f32], at: usize, gain: f32) {
+    for (index, sample) in source.iter().enumerate() {
+        let position = at + index;
+        if position >= target.len() {
+            break;
+        }
+        target[position] += sample * gain;
+    }
+}
+
+/// The signal of a track, **panned** between its channels.
+///
+/// The pan is a balance: minus one is all to the left and one is all
+/// to the right, and the middle is the middle. A **mono** signal is
+/// not balanced and is left alone.
+fn panned(signal: &[f32], pan: f64, channels: usize) -> Vec<f32> {
+    let pan = pan.clamp(-1.0, 1.0);
+    if channels < 2 || pan == 0.0 {
+        return signal.to_vec();
+    }
+    let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI;
+    let left = angle.cos() as f32;
+    let right = angle.sin() as f32;
+    let mut out = signal.to_vec();
+    for index in 0..signal.len() / channels {
+        for channel in 0..channels {
+            let at = index * channels + channel;
+            out[at] *= if channel % 2 == 0 { left } else { right };
+        }
+    }
+    out
 }
 
 /// The span of a source's samples a clip plays: from its offset, for
@@ -2173,6 +2275,54 @@ mod tests {
             craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
         assert_eq!(sound.frames, 2);
         assert!((sound.samples[0] - 0.0).abs() < 0.001, "the track is muted: {}", sound.samples[0]);
+    }
+
+    /// The **routing** is heard: a track that sends to a bus is heard
+    /// twice — once on its own and once through the bus.
+    #[test]
+    fn the_routing_is_heard() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-send-source.wav");
+        let output_path = directory.join("craftkit-v2-send-out.wav");
+        let bytes = craftkit_wav::write(1, 48_000, &[0.25, 0.25]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 2, "source": source }))
+            .expect("the clip is added");
+        // The track sends to a bus, at six decibels down: about half.
+        session.execute("sound.bus.add", &json!({ "name": "fx" })).expect("the bus is added");
+        let bus = session.document().node_by_name("fx").expect("the bus is there").id;
+        session
+            .execute("sound.send.add", &json!({ "track": track, "bus": bus, "level_db": -6.0 }))
+            .expect("the send is added");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        // A quarter on its own and a quarter at half: about three
+        // eighths.
+        assert!(
+            (sound.samples[0] - 0.375).abs() < 0.01,
+            "the track and the bus are both heard: {}",
+            sound.samples[0]
+        );
     }
 
     /// A source that is **not there** is refused: the renderer does not
