@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1079 tests.** The MCP server links **all fifteen batteries** in, so the
+**1096 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1079 tests
+cargo test          # 1096 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9837,3 +9837,70 @@ rendered processing"* — and v2's did not.
   refused, and the bound is a number in the tree and not a law.
 - **There is no time stretch at all.** A clip that keeps its pitch and
   changes its length is a WSOLA, and it is not here.
+
+## 144. The clip fades
+
+A clip could be placed, trimmed, given a gain and stretched, and there
+was no way to say that it should come up slowly or go down slowly. The
+family's clips carry a fade at each end, and v2's did not.
+
+### What was built
+
+- **`FadeShape` and `Fade`** in the audio crate: the curve of a fade —
+  linear, equal power, S-curve, exponential, logarithmic — and a fade
+  is a length, a shape and a **bend**. The bend pushes the curve away
+  from itself, and its ends stay where they were, so that a fade still
+  begins at nothing and still ends at full.
+- **`faded`**: the samples with a fade at the head and a fade at the
+  tail. The channels are kept, and a fade is a gain and not a thing
+  that belongs to a channel.
+- The clip's **payload** carries a `fade_in` and a `fade_out`.
+- **`sound.clip.fade`**: the command that sets them. The shape and the
+  bend are read once, and they apply to the fades that are being set.
+- The **render** honours the fades: the head of the clip comes up and
+  the tail goes down.
+- The **picture** honours them too: the quiet part of a clip is a
+  **notch** in its bar — the paper showing through the ink, and the
+  notch is the fade's own curve.
+
+### What the port found
+
+- **A fade is one curve and two ends.** The tail's curve is the head's
+  curve read backwards, because the silence is at the end, and the
+  gain at the last sample of a fade of two is a half of the way down
+  and not nothing: the curve reaches nothing one sample later.
+- **The bend is a weight and not an offset.** The family's bend pushes
+  the curve towards the middle and leaves its ends alone, and the
+  port kept that: a bend of one makes a linear fade steeper in the
+  middle, and a bend of minus one makes it flatter.
+- **A fade that does not fit is refused.** The family clamps a fade to
+  the length of the clip it fades; v2 refuses it, because a fade that
+  is quietly shortened is a fade the caller did not ask for.
+- **The quiet part of a clip is a hole in its bar.** Drawing the fade
+  needed a colour that is not ink, and the paper is the only one the
+  kit has.
+
+### What it cost
+
+- one type and one function in the audio crate with **seven tests**, one
+  field in the payload, one command, and **ten tests** in the battery: a
+  fade shape is a curve from nothing to full, a fade shape is read by
+  its name, a bend pushes the curve away from itself, the samples are
+  faded at the head, the samples are faded at the tail, a fade of no
+  length changes nothing, a fade keeps the channels apart, a clip
+  carries its fades, a fade is set on the clip, a fade longer than the
+  clip is refused, a fade with no length is refused, a shape that is not
+  a shape is refused with its name, a faded clip starts quiet, a faded
+  clip ends quiet, the default shape is the equal-power one, the fade is
+  drawn, and a clip with no fade is drawn with no notch.
+
+### What it does not settle
+
+- **The curve is drawn with eight segments.** A notch in a bar is
+  small, and the notch is a hint and not the sound.
+- **Equal power is the default, and equal power is right for a pair of
+  fades and not for every pair.** The family's default is the same,
+  and the default is a choice and not a law.
+- **A fade is on a clip and not on a source.** A source played by two
+  clips is faded twice, once for each clip, and a fade that belongs to
+  the source would be a different thing.
