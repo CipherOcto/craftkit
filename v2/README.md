@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**914 tests.** The MCP server links **all fourteen batteries** in, so the
+**919 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **232** of them, and **246** with
+on its own, with no features, carries **238** of them, and **252** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 914 tests
+cargo test          # 919 tests
 cargo run -p craftkit-studio
 ```
 
@@ -4389,6 +4389,7 @@ derivation says:
 | a stream | **7** |
 | a relation that says something | **8** — the payload of a relation is the eighth version's field |
 | a hidden node | **9** — the flag is the ninth version's field |
+| a locked node | **10** — the flag is the tenth version's field |
 
 A plain document is written at the **first** version. A document with a
 stream is written at the seventh. And the bundle says which version it
@@ -8182,3 +8183,50 @@ selection itself, so a person could not see what they had picked.
   black drawing is a selection nobody can see.
 - **Only the nodes are framed.** A node with **no place** is selected
   and is not framed: there is no box to frame it in.
+
+---
+
+## 115. A locked node cannot be changed
+
+The document had a way to say "do not show this" and no way to say
+"do not touch this".
+
+### What was built
+
+- A **locked** flag on a node: it cannot be moved, resized or deleted.
+- Locking a **layer** locks everything on it, because the layer is the
+  thing that is locked.
+- Two commands: `node.lock` and `node.unlock`.
+- The flag is the **tenth** version of the format, and the version was
+  derived by the rule itself: a document with a locked node comes back
+  smaller from the ninth version, so it is written at the tenth.
+- One locked node refuses the whole of a **selection** move: a move
+  that left the locked ones behind would be a move the person did not
+  ask for.
+
+### What the port found
+
+- **Locked is not hidden.** The first thought was one flag with two
+  meanings, and the two meanings are not the same thing: a hidden
+  node cannot be **seen** and a locked node cannot be **touched**, and
+  a node can be one without being the other. So they are two flags.
+- **The version tag sorts as a string.** The tenth version is
+  `craftkit/10`, and the registry sorts its ids as strings: so
+  `craftkit/10` comes *after* `craftkit/1` and *before* `craftkit/2`.
+  The bridge's list of formats says so, and a version number that
+  reaches two digits does not sort where a person expects it.
+
+### What it cost
+
+- one flag, one version of the format, one step, two commands, the
+  commands that change a node now check the lock,
+  **five tests**.
+
+### What it does not settle
+
+- **A locked node can still be selected.** The lock says the node
+  cannot be changed, and not that it cannot be picked: a person can
+  look at a locked thing and see what it is.
+- **The lock does not reach the payload.** A node with a payload of
+  its own — a grid cell, a clip — may have a command of its own that
+  changes it, and that command has to ask the lock itself.
