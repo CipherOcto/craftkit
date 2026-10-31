@@ -336,6 +336,17 @@ impl Session {
             let Some(kind) = self.kinds.get(&node.kind) else { continue };
             (kind.paint)(node, document, canvas);
         }
+    }
+
+    /// **Draw** the document **and the chrome**.
+    ///
+    /// The chrome is the **handle** of the selected node: a thing that
+    /// belongs to the view and not to the document. So a picture of the
+    /// document — a snapshot for a file — is drawn with
+    /// [`Session::paint`], and the picture on the screen is drawn with
+    /// this one.
+    pub fn paint_view(&self, canvas: &mut dyn crate::document::Canvas) {
+        self.paint(canvas);
         self.paint_handles(canvas);
     }
 

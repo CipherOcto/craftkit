@@ -784,16 +784,23 @@ impl DocSnapshot {
         }
         let width = width as usize;
         let height = height as usize;
-        // The camera is the session's own: one set of camera controls,
-        // and the picture is seen through them.
-        let camera = *session.camera();
+        // The picture shows **all** of the document: the camera is
+        // worked out from the bounds of the document and the size that
+        // was asked for. The session's own camera is not moved — a
+        // picture made for somebody else must not move what somebody
+        // else is looking through — but it is not the camera the
+        // picture is seen through either, because a document that is
+        // a thousand units from the origin is not in a picture of the
+        // origin.
+        let camera = match session.document().bounds() {
+            Some(bounds) => craftkit_sdk::Camera::framing(bounds, width as f64, height as f64),
+            None => *session.camera(),
+        };
         let mut raster = craftkit_raster::Raster::new(width, height, camera)
             .map_err(|message| EngineError::Failed { id: "doc.snapshot".to_string(), message })?;
-        let document = session.document();
-        for node in document.walk() {
-            let Some(kind) = session.kinds().get(&node.kind) else { continue };
-            (kind.paint)(node, document, &mut raster);
-        }
+        // The **kit** draws: a node that is hidden is not drawn, and a
+        // node whose kind is not linked in is not drawn.
+        session.paint(&mut raster);
         // The pictures are drawn too: the bytes are in the files, and the
         // decoder is the family's own.
         let mut skipped: Vec<String> = Vec::new();

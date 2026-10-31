@@ -172,6 +172,29 @@ impl Camera {
         )
     }
 
+    /// The camera that **frames** a rectangle.
+    ///
+    /// A picture of a document wants to show all of it: the zoom is
+    /// worked out from the rectangle and the size of the picture, and
+    /// the middle of the rectangle is the middle of the picture.
+    ///
+    /// It is a **new** camera and not a change: the camera a person is
+    /// looking through is theirs, and a picture that is made for
+    /// somebody else must not move it.
+    ///
+    /// The zoom is **clamped** as everywhere else, and a rectangle with
+    /// no size in it — a document with nothing in it — is looked at
+    /// with no zoom at all.
+    pub fn framing(rect: Rect, width: f64, height: f64) -> Camera {
+        let width = if width.is_finite() && width > 0.0 { width } else { 1.0 };
+        let height = if height.is_finite() && height > 0.0 { height } else { 1.0 };
+        let across = if rect.w > 0.0 && rect.w.is_finite() { width / rect.w } else { 1.0 };
+        let down = if rect.h > 0.0 && rect.h.is_finite() { height / rect.h } else { 1.0 };
+        let zoom = clamp_zoom(across.min(down));
+        let centre = Point::new(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+        Camera { zoom, offset: centre }
+    }
+
     /// Whether a rectangle of the world is on screen.
     ///
     /// It is a test and not a list: a front end that draws a thousand

@@ -318,7 +318,7 @@ impl Window {
         // is offered to the kind that says what it is, and the handle of
         // the selected node is drawn on top. The window does not have a
         // rule of its own about what is seen.
-        self.session.paint(&mut raster);
+        self.session.paint_view(&mut raster);
         let image = raster.image();
         let mut pixels = Vec::with_capacity(image.width().saturating_mul(image.height()).saturating_mul(4));
         for y in 0..image.height() {

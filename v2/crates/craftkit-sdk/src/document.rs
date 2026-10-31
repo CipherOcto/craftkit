@@ -1150,6 +1150,32 @@ impl Document {
         None
     }
 
+    /// The **bounds** of the document: the box that holds everything
+    /// that is somewhere.
+    ///
+    /// It is the union of the places of the nodes, and a node with no
+    /// place is in none of it: a clip in a sound document is at a time
+    /// and not at a place.
+    ///
+    /// A document with nothing in it has **no** bounds, and the caller
+    /// says what to do about that.
+    pub fn bounds(&self) -> Option<Rect> {
+        let mut bounds: Option<Rect> = None;
+        for node in self.walk() {
+            let Some(rect) = node.rect else { continue };
+            bounds = Some(match bounds {
+                None => rect,
+                Some(current) => Rect::new(
+                    current.x.min(rect.x),
+                    current.y.min(rect.y),
+                    (current.x + current.w).max(rect.x + rect.w) - current.x.min(rect.x),
+                    (current.y + current.h).max(rect.y + rect.h) - current.y.min(rect.y),
+                ),
+            });
+        }
+        bounds
+    }
+
     /// The nodes at the top level.
     pub fn roots(&self) -> &[Arc<Node>] {
         &self.nodes

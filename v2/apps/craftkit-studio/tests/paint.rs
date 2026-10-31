@@ -35,13 +35,18 @@ fn the_document_is_drawn_through_the_kinds() {
 /// The **handle** of the selected node is drawn.
 ///
 /// A resize handle that nobody can see is a handle nobody can grab.
+///
+/// The handle is **chrome**: it belongs to the view and not to the
+/// document, so it is drawn by `paint_view` and not by `paint`. A
+/// snapshot for a file is a picture of the document, and a picture of
+/// the document has no handle in it.
 #[test]
 fn the_handle_of_the_selected_node_is_drawn() {
     let mut session = a_rectangle();
     session.execute("select.node", &json!({ "node": 1 })).expect("the node is selected");
 
     let mut canvas = RecordingCanvas::default();
-    session.paint(&mut canvas);
+    session.paint_view(&mut canvas);
     // The handle is the corner opposite the anchor, and it is a screen
     // size: eight pixels across, whatever the zoom.
     assert!(
@@ -56,7 +61,7 @@ fn the_handle_of_the_selected_node_is_drawn() {
 fn no_handle_is_drawn_when_nothing_is_selected() {
     let session = a_rectangle();
     let mut canvas = RecordingCanvas::default();
-    session.paint(&mut canvas);
+    session.paint_view(&mut canvas);
     assert!(
         !canvas.drawn.iter().any(|drawn| drawn == "rect(6, -4, 8, 8)"),
         "there is no handle: {:?}",
@@ -77,4 +82,23 @@ fn a_hidden_node_is_not_drawn() {
     session.paint(&mut canvas);
     assert_eq!(canvas.drawn.len(), 0, "nothing is drawn: {:?}", canvas.drawn);
     assert!(before > 0, "and something was drawn before");
+}
+
+/// The picture of the **document** has no handle in it.
+///
+/// The handle is chrome: it belongs to the view. A snapshot for a file
+/// is a picture of the document, and a picture of the document is
+/// drawn without it.
+#[test]
+fn the_picture_of_the_document_has_no_handle() {
+    let mut session = a_rectangle();
+    session.execute("select.node", &json!({ "node": 1 })).expect("the node is selected");
+
+    let mut canvas = RecordingCanvas::default();
+    session.paint(&mut canvas);
+    assert!(
+        !canvas.drawn.iter().any(|drawn| drawn == "rect(6, -4, 8, 8)"),
+        "there is no handle: {:?}",
+        canvas.drawn
+    );
 }
