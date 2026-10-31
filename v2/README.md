@@ -952,7 +952,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**814 tests.** The MCP server links **all fourteen batteries** in, so the
+**818 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -6778,3 +6778,71 @@ section joins them, and the join is a **battery** — the fourteenth one,
 - **The audio path is still not a document.** There is no sample rate,
   no block size and no transport in a document; the rate here is this
   program's, and a plugin's audio goes nowhere.
+
+## 88. The ports
+
+The host asked the plugin for everything else — its name, its
+parameters, its state — and never asked it how many channels it has.
+It guessed: one.
+
+### What was built
+
+- The ABI gained the **audio ports** extension: what one port is (its
+  id, its name, its flags, its channel count, its type and the port it
+  shares a buffer with) and the plugin's own table of them.
+- The host **asks**: `audio_ports` and `channels`, and it remembers the
+  answer when the plugin is activated — once, because a layout is not a
+  thing to ask for on the audio thread.
+- The host **builds the block**: `ClapInstance::block(frames)` makes a
+  block in the plugin's own shape, so a caller does not have to know it.
+- The **reference plugin declares** one stereo port in and one stereo
+  port out, and **refuses a block that is not its shape**: it says it
+  did not process the block, and it writes nothing.
+- The **document says the shape**: a plugin node carries the channels
+  in and the channels out, as the plugin said them.
+
+### What the port found
+
+- **A port is a group of channels, and the channel count is the
+  plugin's own.** One stereo port is *two* channels: the number of
+  ports and the number of channels are different numbers, and a host
+  that reads the first as the second is a host that gives a plugin half
+  its audio.
+- **The plugin is the one who refuses.** The format says the plugin is
+  activated with the layout it asked for, and a plugin that checks says
+  it did not process the block. So the host's job is to **ask and to
+  build**, and the plugin's job is to **refuse** — and a host that
+  checks on the plugin's behalf is a host that has decided what the
+  plugin wanted.
+- **The extension is optional, and a host that cannot know says so.**
+  The layout is `None` when the plugin does not have the extension: the
+  host does not pretend to know, and a block cannot be built for it.
+  That is a refusal in the right place — at the command, in words —
+  rather than a wrong answer on the audio thread.
+- **A Rust string is not a C string.** The port's type is a string the
+  plugin owns, and the reference plugin's first answer was read *past
+  its end*: the fixture's type was a `&str`, and a `&str` has no zero
+  byte at the end of it. The format says C string, the fixture now ends
+  its string with a zero byte, and the test says what the type is.
+
+### What it cost
+
+- one extension in the ABI, one method and one field in the host, one
+  extension and one check in the fixture, one constructor in the block,
+  **four tests**, and four lines in the battery.
+
+### What it does not settle
+
+- **The host still has no audio thread.** The layout is known and
+  honoured, but nothing plays and nothing is recorded.
+- **The in-place pair is read and not used.** A plugin can say that two
+  ports share one buffer, and the host reads the number and does
+  nothing with it.
+- **The ports are not in the document as ports.** A plugin node carries
+  two numbers — the channels in and out — and not the ports themselves:
+  a port has a name and a type, and the kit has no place for those
+  yet.
+- **The host's own extensions are still nothing.** `get_extension`
+  answers nothing at all: a plugin that asks the host for its
+  parameters, for its state, or to rescan its ports is not heard. That
+  is the next gap, and it is the other side of this one.
