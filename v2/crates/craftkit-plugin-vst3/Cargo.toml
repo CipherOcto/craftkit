@@ -1,0 +1,16 @@
+[package]
+name = "craftkit-plugin-vst3"
+description = "The document model of a VST3 plugin: an identity, a parameter list and a state."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+craftkit-derive = { workspace = true }
+# The **VST3 host**: the door that opens a plugin and drives the
+# component inside it. It is a **library** and not a plugin: it
+# contributes no command and no kind, and it is at L1, so a battery at
+# L4 may depend on it.
+craftkit-vst3 = { workspace = true }

@@ -161,6 +161,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-plugin-shared", 4),
     ("craftkit-plugin-sound", 4),
     ("craftkit-plugin-vector", 4),
+    ("craftkit-plugin-vst3", 4),
     // L5 — the applications. They depend on everything, and the layering
     // rule does not apply to them.
     ("craftkit-bridge", 5),

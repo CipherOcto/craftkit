@@ -57,6 +57,9 @@ craftkit-vst3-abi = { path = "crates/craftkit-vst3-abi", version = "0.2.0" }
 # component inside it. A **library**, not a plugin: it contributes
 # nothing to the registry and the linker does not wire it in.
 craftkit-vst3 = { path = "crates/craftkit-vst3", version = "0.2.0" }
+# The **VST3 battery**: the document model of a VST3 plugin — an
+# identity, a parameter list and a state. A plugin, and not a library.
+craftkit-plugin-vst3 = { path = "crates/craftkit-plugin-vst3", version = "0.2.0" }
 # A **reference VST3 plugin**: a shared library that exports the entry
 # the host looks for. It is a fixture, and it is here because a host
 # that has never opened a real plugin has not been tested.

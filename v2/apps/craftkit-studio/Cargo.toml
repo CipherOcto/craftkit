@@ -78,6 +78,10 @@ craftkit-plugin-text = { path = "../../crates/craftkit-plugin-text", optional = 
 # identity and a state. Off by default as well: a program that wants
 # plugins says so.
 craftkit-plugin-clap = { path = "../../crates/craftkit-plugin-clap", optional = true }
+# The **fifteenth battery**: the document model of a VST3 plugin — an
+# identity, a parameter list and a state. Off by default as well: a
+# program that wants plugins says so.
+craftkit-plugin-vst3 = { path = "../../crates/craftkit-plugin-vst3", optional = true }
 
 [features]
 default = []
@@ -121,6 +125,8 @@ text = ["dep:craftkit-plugin-text"]
 image = ["dep:craftkit-plugin-image"]
 # The CLAP battery. Off by default: a program that wants plugins says so.
 clap = ["dep:craftkit-plugin-clap"]
+# The VST3 battery. Off by default: a program that wants plugins says so.
+vst3 = ["dep:craftkit-plugin-vst3"]
 
 [dev-dependencies]
 # The counting allocator: the one piece of unsafe in v2, and what makes
@@ -136,6 +142,10 @@ craftkit-plugin-shared = { path = "../../crates/craftkit-plugin-shared" }
 # built by cargo and opened by the CLAP battery's tests. It is a dev
 # dependency, so nothing that ships links it.
 craftkit-clap-fixture = { path = "../../crates/craftkit-clap-fixture" }
+# A **VST3 plugin that is not part of the program**: a shared library,
+# built by cargo and opened by the VST3 battery's tests. It is a dev
+# dependency, so nothing that ships links it.
+craftkit-vst3-fixture = { path = "../../crates/craftkit-vst3-fixture" }
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
