@@ -96,32 +96,55 @@ fn the_clipped_samples_are_within_the_range() {
 
 /// The **resampler** keeps the sound and changes its rate.
 ///
-/// The resampling is linear, and the test says what that means: a ramp
-/// stays a ramp, and the number of frames is in proportion.
+/// The number of frames is in proportion, and the sound is the same
+/// sound: a ramp is still a ramp, read with the kernel instead of a
+/// line.
+///
+/// The ramp is long enough for the kernel: the kernel is wider than a
+/// few samples, and at the **edges** of a sound shorter than the
+/// kernel the kernel reads outside the sound — which is why the
+/// middle is what is measured. And the ramp is a ramp only to within
+/// the filter: a ramp has something at every frequency, and the
+/// filter takes the top away.
 #[test]
 fn the_resampler_keeps_the_sound_and_changes_its_rate() {
-    // A ramp: a quarter, a half, three quarters.
-    let samples = vec![0.25_f32, 0.5, 0.75];
-    let faster = craftkit_audio::resample(&samples, 1, 8_000, 16_000);
-    assert_eq!(faster.len(), 6, "twice the rate is twice the frames");
-    // The ramp is still a ramp: the first sample is the first, and the
-    // second is between the first and the second.
-    assert!((faster[0] - 0.25).abs() < 1e-6, "the first sample is the first");
-    assert!((faster[1] - 0.375).abs() < 1e-6, "the second is between: {}", faster[1]);
-    let slower = craftkit_audio::resample(&samples, 1, 16_000, 8_000);
-    assert_eq!(slower.len(), 2, "half the rate is half the frames");
-    assert!((slower[0] - 0.25).abs() < 1e-6, "and the sound is the same one");
+    // A ramp: sixty-four samples, a hundredth apart.
+    let samples: Vec<f32> = (0..64).map(|index| 0.25 + index as f32 * 0.01).collect();
+    let limits = craftkit_audio::Limits::default();
+    let faster =
+        craftkit_audio::resample(&samples, 1, 8_000, 16_000, &limits).expect("the sound is resampled");
+    assert_eq!(faster.len(), 128, "twice the rate is twice the frames");
+    // The ramp is still a ramp: the middle of the new sound is the
+    // middle of the old one, read at the new rate.
+    let middle = faster.len() / 2;
+    let wanted = 0.25 + (middle as f32 / 2.0) * 0.01;
+    assert!((faster[middle] - wanted).abs() < 5e-3, "the ramp is the ramp: {}", faster[middle]);
+    let slower =
+        craftkit_audio::resample(&samples, 1, 16_000, 8_000, &limits).expect("the sound is resampled");
+    assert_eq!(slower.len(), 32, "half the rate is half the frames");
+    let middle = slower.len() / 2;
+    let wanted = 0.25 + (middle as f32 * 2.0) * 0.01;
+    assert!((slower[middle] - wanted).abs() < 5e-3, "and the sound is the same one: {}", slower[middle]);
 }
 
 /// The resampler keeps the **channels** apart.
 #[test]
 fn the_resampler_keeps_the_channels_apart() {
     // Two channels: a ramp on the left and silence on the right.
-    let samples = vec![0.25_f32, 0.0, 0.5, 0.0, 0.75, 0.0];
-    let faster = craftkit_audio::resample(&samples, 2, 8_000, 16_000);
-    assert_eq!(faster.len(), 12, "two channels of six frames");
-    assert!((faster[0] - 0.25).abs() < 1e-6, "the left channel is the ramp");
-    assert!((faster[1] - 0.0).abs() < 1e-6, "and the right channel is silent");
+    let ramp: Vec<f32> = (0..64).map(|index| 0.25 + index as f32 * 0.01).collect();
+    let mut samples = Vec::with_capacity(ramp.len() * 2);
+    for sample in &ramp {
+        samples.push(*sample);
+        samples.push(0.0);
+    }
+    let limits = craftkit_audio::Limits::default();
+    let faster =
+        craftkit_audio::resample(&samples, 2, 8_000, 16_000, &limits).expect("the sound is resampled");
+    assert_eq!(faster.len(), 256, "two channels of a hundred and twenty-eight frames");
+    let frame = (faster.len() / 2) / 2;
+    let wanted = 0.25 + (frame as f32 / 2.0) * 0.01;
+    assert!((faster[frame * 2] - wanted).abs() < 5e-3, "the left channel is the ramp");
+    assert!((faster[frame * 2 + 1] - 0.0).abs() < 1e-6, "and the right channel is silent");
 }
 
 /// The **varispeed** makes the sound longer and lower.

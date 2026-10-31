@@ -1891,7 +1891,21 @@ impl RenderSound {
             let samples = if sound.rate == rate {
                 slice.to_vec()
             } else {
-                craftkit_audio::resample(slice, sound.channels as usize, sound.rate, rate)
+                // A source that cannot be played at the session's rate
+                // is **refused**, and not truncated: a sound that is
+                // missing its tail is a sound that is wrong in a way
+                // nobody can hear.
+                craftkit_audio::resample(
+                    slice,
+                    sound.channels as usize,
+                    sound.rate,
+                    rate,
+                    &craftkit_audio::Limits::default(),
+                )
+                .map_err(|error| EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: format!("the source cannot be played at {rate} Hz: {error}"),
+                })?
             };
             // The **stretch**: the source is read more slowly, so the
             // sound is longer and the pitch is lower. The clip's own

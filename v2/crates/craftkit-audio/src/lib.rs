@@ -65,6 +65,11 @@ pub enum Error {
         /// The number of frames the mix would have had.
         frames: i64,
     },
+    /// The sound would be longer than the limits allow at the new rate.
+    SoundTooLong {
+        /// The number of frames the sound would have had.
+        frames: i64,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -74,6 +79,9 @@ impl std::fmt::Display for Error {
             Error::BadGain => write!(f, "a gain is not a number"),
             Error::TooLong { frames } => {
                 write!(f, "a mix of {frames} frames is longer than the limits allow")
+            }
+            Error::SoundTooLong { frames } => {
+                write!(f, "a sound of {frames} frames is longer than the limits allow")
             }
         }
     }
@@ -245,41 +253,162 @@ pub fn varispeed(samples: &[f32], channels: usize, factor: f64) -> Vec<f32> {
 
 /// Resample the samples of a sound from one rate to another.
 ///
-/// The resampling is **linear**: the sample at a place in the new rate
-/// is the line between the two samples it lies between. That is not the
-/// best resampler and it is honest about what it is — a sound that has
-/// been resampled by a line is a sound that has been resampled.
+/// The resampling is a **windowed sinc**: the sample at a place in the
+/// new rate is the old sound read with a low-pass filter, and the
+/// filter's shape is the ideal one — a sinc — with a Kaiser window
+/// over it so that the filter's edge falls to nothing instead of
+/// ringing.
+///
+/// The reason for the filter is the **aliasing**: a sound that is
+/// played at a lower rate has less room, and what was above the new
+/// half of the rate folds back into the sound as a whistle if it is
+/// not taken away. A line cannot take it away — a line has no edge to
+/// take it with — and that is why the resampler is not a line.
 ///
 /// The **channels** are kept: a frame of the new sound is a frame of
 /// the old one, so the samples of each channel are resampled on their
 /// own.
-pub fn resample(samples: &[f32], channels: usize, from_rate: u32, to_rate: u32) -> Vec<f32> {
+///
+/// A sound that would be longer than the limits allow at the new rate
+/// is **refused**: it is not truncated, because a truncated sound is a
+/// sound that is wrong in a way nobody can hear.
+pub fn resample(
+    samples: &[f32],
+    channels: usize,
+    from_rate: u32,
+    to_rate: u32,
+    limits: &Limits,
+) -> Result<Vec<f32>, Error> {
     let channels = channels.max(1);
     if from_rate == 0 || to_rate == 0 || channels == 0 {
-        return samples.to_vec();
+        return Ok(samples.to_vec());
     }
     let frames = samples.len() / channels;
     if frames == 0 {
-        return Vec::new();
+        return Ok(Vec::new());
+    }
+    if from_rate == to_rate {
+        return Ok(samples.to_vec());
     }
     let ratio = f64::from(to_rate) / f64::from(from_rate);
     let new_frames = ((frames as f64) * ratio).round().max(1.0) as usize;
+    if new_frames as i64 > limits.max_frames {
+        return Err(Error::SoundTooLong { frames: new_frames as i64 });
+    }
+    // The **cutoff**: below the old rate's half, with a little room for
+    // the kernel's own skirt. A sound that is played at a lower rate
+    // has less room, and what was above the new half has to go or it
+    // folds back into the sound as a whistle.
+    let cutoff = if ratio < 1.0 { ratio * 0.94 } else { 0.97 };
+    let kernel = Sinc::new(cutoff);
     let mut out = Vec::with_capacity(new_frames * channels);
     for frame in 0..new_frames {
         // Where this frame is in the old sound.
         let position = frame as f64 / ratio;
-        let index = position.floor() as usize;
-        let fraction = (position - index as f64) as f32;
-        let next = (index + 1).min(frames.saturating_sub(1));
+        let first = (position - kernel.half_width).ceil().max(0.0) as i64;
+        let last = ((position + kernel.half_width).floor() as i64).min(frames as i64 - 1);
         for channel in 0..channels {
-            let at = index * channels + channel;
-            let after = next * channels + channel;
-            let first = samples.get(at).copied().unwrap_or(0.0);
-            let second = samples.get(after).copied().unwrap_or(first);
-            out.push(first + (second - first) * fraction);
+            let mut total = 0.0_f32;
+            let mut index = first;
+            while index <= last {
+                if let Some(value) = samples.get(index as usize * channels + channel) {
+                    total += value * kernel.at(position - index as f64);
+                }
+                index += 1;
+            }
+            out.push(total);
         }
     }
-    out
+    Ok(out)
+}
+
+/// The **windowed sinc** kernel: the shape a resampler reads with.
+///
+/// A resampler that reads with a **line** throws away everything above
+/// half the old rate, and a sound resampled to a much higher rate loses
+/// its top. The kernel here is a sinc — the shape of an ideal low-pass
+/// — with a **Kaiser** window over it, so that the kernel falls to
+/// nothing at its edges and does not ring.
+struct Sinc {
+    /// The kernel, one side of it, sampled finely.
+    table: Vec<f32>,
+    /// How far the kernel reaches, in samples.
+    half_width: f64,
+}
+
+/// How many **zero crossings** of the sinc the kernel spans.
+///
+/// The sinc is cut where it is small enough to be nothing: thirty-two
+/// zero crossings is far past anything a listener can hear, and it is
+/// what makes the kernel's edge quiet.
+const SINC_ZERO_CROSSINGS: f64 = 32.0;
+
+/// How finely the kernel is **sampled**.
+///
+/// The kernel is read between two samples as well as at them, so it is
+/// sampled finely and the reading is interpolated.
+const SINC_RESOLUTION: usize = 512;
+
+/// The **Kaiser** window's beta: how sharp the kernel's edge is.
+///
+/// Nine is the usual choice for a resampler: the edge falls away
+/// quickly enough to stop the ringing and slowly enough to keep the
+/// band the sound is in flat.
+const KAISER_BETA: f64 = 9.0;
+
+impl Sinc {
+    /// The kernel for that **cutoff**, which is a part of the old rate.
+    fn new(cutoff: f64) -> Self {
+        let cutoff = cutoff.clamp(0.01, 1.0);
+        let half_width = SINC_ZERO_CROSSINGS / cutoff;
+        let count = (half_width * SINC_RESOLUTION as f64).ceil() as usize + 2;
+        let scale = bessel_i0(KAISER_BETA);
+        let table = (0..count)
+            .map(|index| {
+                let t = index as f64 / SINC_RESOLUTION as f64;
+                let x = t / half_width;
+                if x >= 1.0 {
+                    return 0.0;
+                }
+                let argument = std::f64::consts::PI * cutoff * t;
+                let sinc = if argument.abs() < 1e-12 { 1.0 } else { argument.sin() / argument };
+                let window = bessel_i0(KAISER_BETA * (1.0 - x * x).max(0.0).sqrt()) / scale;
+                (cutoff * sinc * window) as f32
+            })
+            .collect();
+        Sinc { table, half_width }
+    }
+
+    /// The kernel's weight at that **distance** from its centre.
+    fn at(&self, distance: f64) -> f32 {
+        let position = distance.abs() * SINC_RESOLUTION as f64;
+        let index = position as usize;
+        let fraction = (position - index as f64) as f32;
+        match (self.table.get(index), self.table.get(index + 1)) {
+            (Some(a), Some(b)) => a + (b - a) * fraction,
+            (Some(a), None) => *a,
+            _ => 0.0,
+        }
+    }
+}
+
+/// The **Bessel** function of the first kind, of order zero.
+///
+/// It is the Kaiser window's shape: the window is the Bessel function
+/// of the distance from the centre, and the series is the way to work
+/// it out.
+fn bessel_i0(x: f64) -> f64 {
+    let mut sum = 1.0;
+    let mut term = 1.0;
+    let y = x * x / 4.0;
+    for k in 1..64 {
+        term *= y / (k as f64 * k as f64);
+        sum += term;
+        if term < sum * 1e-12 {
+            break;
+        }
+    }
+    sum
 }
 
 /// The **shape** of a fade.
