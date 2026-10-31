@@ -952,7 +952,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**818 tests.** The MCP server links **all fourteen batteries** in, so the
+**822 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -6846,3 +6846,60 @@ It guessed: one.
   answers nothing at all: a plugin that asks the host for its
   parameters, for its state, or to rescan its ports is not heard. That
   is the next gap, and it is the other side of this one.
+
+## 89. The word that the state has changed
+
+§86 listed a gap: *"the host's state extension answers nothing. A
+plugin that says 'my state has changed' is not heard."* This is the
+other side of the state: the host's own extension, and the plugin's
+word.
+
+### What was built
+
+- The host's `get_extension` answers **"clap.state"** — the **same id
+  on both sides of the format** — with the host's own table, whose
+  `mark_dirty` the plugin calls.
+- The **reference plugin says so**: a value that changes is a state
+  that changed, and the plugin asks the host to remember it.
+- The word is good until the host **saves** the state or **gives it
+  back**: after that, what the host holds is what the plugin holds,
+  and the flag is cleared.
+- The **document follows**: the battery says whether the plugin said it
+  had changed, and the node's copy of the state is what the plugin
+  saved.
+
+### What the port found
+
+- **The extension id is the same on both sides.** The plugin's table
+  saves and loads; the host's table marks the state dirty. A host that
+  knew only the plugin's side of the extension would hear nothing at
+  all — which is exactly what happened.
+- **"Dirty" is a word, not a state.** The format has no "clean" to say:
+  the host clears its own flag when it saves the state or gives it
+  back. So the rule is not "the plugin is clean" but **"what the host
+  holds is what the plugin holds"** — and the flag is only the way the
+  plugin says that is no longer true.
+- **A host that does not hear it keeps a state that is out of date.**
+  The family hit this too: a plugin that moved a parameter and a host
+  that saved the state before the plugin said so had a document that
+  lied about the plugin.
+
+### What it cost
+
+- one table and one function in the host, one call in the fixture, three
+  lines in the battery, **four tests**.
+
+### What it does not settle
+
+- **The host's other extensions are still nothing.** The host answers
+  "clap.state" and nothing else: a plugin that asks the host for its
+  own parameters, or to rescan its ports, is not heard. The shapes are
+  in the ABI and the tables are not in the host.
+- **The word is nearly always "no" by the time the battery reads it.**
+  The battery opens the plugin afresh, gives it the document's state,
+  and reads the flag — and a plugin that has just been given its state
+  has nothing to say. A live instance would keep the word between
+  commands, and that is the instance the tree decided not to keep.
+- **Nothing here runs on an audio thread.** The flag is an atomic, so
+  it is safe to set from one, and the kit has no audio thread to prove
+  it on.
