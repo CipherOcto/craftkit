@@ -212,7 +212,7 @@ pub fn draw(node: &Node, document: &Document) -> Option<Drawn> {
 ///
 /// The text is the words with a **space** between them, so a word
 /// starts after the words before it and after the spaces between them.
-fn starts_of(words: &[String]) -> Vec<usize> {
+pub(crate) fn starts_of(words: &[String]) -> Vec<usize> {
     let mut starts = Vec::with_capacity(words.len());
     let mut at = 0usize;
     for word in words {

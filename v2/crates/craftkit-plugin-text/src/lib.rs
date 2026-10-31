@@ -642,6 +642,94 @@ fn delete_range(words: &[String], from: usize, to: usize) -> Option<(Vec<String>
     Some((split_into_words(&text), from))
 }
 
+/// Where the caret goes when it moves a **word** at a time.
+///
+/// A word is a run of characters with no space in it. Moving right
+/// goes to the **end** of the word the caret is in, and then to the
+/// start of the next one; moving left goes to the start of the word
+/// the caret is in, and then to the start of the one before it.
+fn word_move(words: &[String], character: usize, right: bool) -> Option<usize> {
+    let starts = draw::starts_of(words);
+    if starts.is_empty() {
+        return None;
+    }
+    let length = length_of(words);
+    // The word the caret is in, if it is in one: the last word that
+    // begins at or before the caret.
+    let word = starts.iter().rposition(|start| *start <= character);
+    match word {
+        Some(word) => {
+            let end = starts[word] + words[word].chars().count();
+            if right {
+                // The end of the word, and then the start of the next.
+                if character < end {
+                    return Some(end);
+                }
+                return Some(starts.get(word + 1).copied().unwrap_or(length));
+            }
+            // The start of the word, and then the start of the one
+            // before it.
+            if character > starts[word] {
+                return Some(starts[word]);
+            }
+            Some(word.checked_sub(1).map(|before| starts[before]).unwrap_or(0))
+        }
+        None => Some(0),
+    }
+}
+
+/// Where the caret goes when it moves a **line** at a time.
+///
+/// The caret keeps its **place** across the line: it goes to the
+/// character of the line above whose place is nearest the caret's own
+/// — and a line that is shorter than the caret's place ends at its
+/// last character.
+fn line_move(drawn: &draw::Drawn, character: usize, up: bool) -> Option<usize> {
+    let (x, baseline) = place_of(drawn, character)?;
+    // The lines, in the order they come: each is a run of characters
+    // that share a baseline.
+    let mut lines: Vec<f64> = Vec::new();
+    for place in &drawn.chars {
+        if lines.last() != Some(&place.baseline) {
+            lines.push(place.baseline);
+        }
+    }
+    let line = lines.iter().position(|line| *line == baseline)?;
+    let target = if up {
+        line.checked_sub(1)?
+    } else {
+        let next = line + 1;
+        if next >= lines.len() {
+            return None;
+        }
+        next
+    };
+    // The character of that line whose place is nearest the caret's.
+    drawn
+        .chars
+        .iter()
+        .filter(|place| place.baseline == lines[target])
+        .min_by(|left, right| {
+            let distance = |place: &draw::CharPlace| (place.x - x).abs();
+            distance(left).partial_cmp(&distance(right)).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|place| place.index)
+}
+
+/// The **place** of a character in a drawn paragraph: where it is, and
+/// the line it is on.
+///
+/// A caret at the end of the text has no character of its own, and it
+/// stands where the last character ended.
+fn place_of(drawn: &draw::Drawn, character: usize) -> Option<(f64, f64)> {
+    if let Some(place) = drawn.chars.iter().find(|place| place.index == character) {
+        return Some((place.x, place.baseline));
+    }
+    let before =
+        drawn.chars.iter().filter(|place| place.index < character).max_by_key(|place| place.index)?;
+    Some((before.x + before.width, before.baseline))
+}
+
 /// The width of the column, in millimetres. Zero means **not set yet**.
 fn measure_of(node: &Node) -> f64 {
     node.data.get("measure_mm").and_then(|value| value.as_f64()).unwrap_or(0.0)
@@ -1402,12 +1490,17 @@ impl SetCaret {
 /// right, to the start of the text or to its end. Moving past an end
 /// does not go past it: the caret stops at the end of the text, the way
 /// a cursor in a document does.
+///
+/// It moves by a **word** too — `word_left` and `word_right` — and by a
+/// **line**: `up` and `down` keep the caret's place across the line,
+/// and a paragraph with no measure has no lines to move between.
 #[derive(Command)]
 #[command(id = "text.caret.move", area = "text", layer = "text", icon = "select", mutates, undoable)]
 pub struct MoveCaret {
     /// The paragraph the caret is in.
     pub paragraph: NodeRef,
-    /// Which way: `left`, `right`, `start` or `end`.
+    /// Which way: `left`, `right`, `start` or `end` for a character, or
+    /// `word_left`, `word_right`, `up` or `down` for a word and a line.
     pub by: Text,
 }
 
@@ -1452,6 +1545,23 @@ impl MoveCaret {
             "right" => (character + 1).min(length),
             "start" => 0,
             "end" => length,
+            "word_left" => word_move(&words, character, false).unwrap_or(character),
+            "word_right" => word_move(&words, character, true).unwrap_or(character),
+            "up" | "down" => {
+                // A line is a line of the **layout**, and a paragraph
+                // with no measure has no lines to move between.
+                let Some(drawn) = draw::draw(node, session.document()) else {
+                    return Err(EngineError::Failed {
+                        id: "text.caret.move".to_string(),
+                        message: format!("the paragraph `{id}` has no lines to move between"),
+                    });
+                };
+                match line_move(&drawn, character, by == "up") {
+                    Some(moved) => moved,
+                    // There is no line that way, so the caret stays.
+                    None => character,
+                }
+            }
             _ => {
                 return Err(EngineError::Failed {
                     id: "text.caret.move".to_string(),
