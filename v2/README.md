@@ -8708,3 +8708,108 @@ what comes back.
 - **The component manager is still not here.** The tree's own door
   makes an instance; the platform's would make one from a unit it
   found, and that is the piece this tree does not have.
+
+## 124. A kind may say where its node is
+
+A node's place is the place the **document** gives it, and that is the
+right answer most of the time. The arc before this one found the case
+where it is not: a clip in a sound document is at a **time**, and a
+time is not a place.
+
+### What was built
+
+- **The kind spec grows a `place`**: `Option<fn(&Node, &Document) ->
+  Option<Rect>>`, and `None` by default. A kind that says nothing has
+  the place the document gives it.
+- **The derive writes it** from a flag on the attribute —
+  `#[node_kind(..., place)]` — the same way the evaluation is written
+  from its own flag. A kind with the flag must have the method, and the
+  compiler says so.
+- **`Session::place_of`** asks the kind and falls back to the document.
+- **`Session::bounds`** asks **every** kind: the bounds that frame a
+  document whose geometry is derived and not in the file.
+- **The chrome asks** — the frame of the selected node — so that a node
+  whose place is derived can be seen to be selected.
+- **The snapshot frames the derived bounds**, so a document whose
+  geometry is not in the file is still pictured properly.
+
+### What the port found
+
+- **A derived value in the document is a value that goes stale.** The
+  obvious way to give a clip a rectangle is to write it into the
+  document when the clip is added. And then a track added above it
+  moves every clip below it, and the document has to be rewritten to
+  match — a value that is worked out twice, once by the person and once
+  by the program, and the two will not agree.
+- **The core never matches on a kind, and this seam keeps it that
+  way.** The core asks the kind where its node is, and the kind
+  answers. It is the same shape as the paint seam and the hit seam: the
+  core does not know what a clip is, and it does not need to.
+- **The selection needed the seam too.** The chrome reads the node's
+  rectangle. Without the seam, a node whose place is derived could be
+  picked but not *seen* to be picked — the frame would be drawn around
+  nothing.
+
+### What it cost
+
+- one field, one flag, two methods, and the studio's snapshot asking
+  the session instead of the document.
+
+### What it does not settle
+
+- **A kind that says where its node is says it every time.** The place
+  is worked out when it is asked for and not when it is stored, so a
+  kind that works is asked more than once. §125 says what that costs.
+- **A kind that says nothing still has the document's answer**, and the
+  two are not compared: a kind that derives a place and a document that
+  holds one are two different places, and the kind's wins.
+
+## 125. The timeline: the sound document gets a place
+
+§19 found that a sound document has no place in it, and left it there
+with the reason written down. This arc is the answer, and it is not the
+obvious one.
+
+### What was built
+
+- **The timeline**: across is **time** — one world unit is one second,
+  and the document's own sample rate says how many samples that is —
+  and down is the **row**, which is a track's place among the tracks.
+- **The place is derived.** A clip's rectangle is worked out from its
+  span and from the row of the track it is under, and it is **not** in
+  the document.
+- **A clip is a bar**, a track is the line along the top of its row, a
+  marker is a line down the timeline, and a clip can be **picked**.
+- **The snapshot frames the timeline**, because the bounds ask the
+  kinds.
+
+### What the port found
+
+- **The order of the tracks is the order of the tree**, and there is no
+  other order to be had: the row of a track is its place among the
+  tracks, the tracks are the document's roots, and the order of the
+  tree is the order of the drawing (§105).
+- **A playlist is a row with a different set of clips on it**, so it
+  has the row of its track and draws nothing: the row is already drawn.
+- **The mixer and the timeline are two different pictures.** The
+  timeline shows the tracks and their clips; the mixer shows the
+  strips and the buses and the routing between them. A document can be
+  both, and the kit does not confuse them.
+
+### What it cost
+
+- one module, **three tests** in the battery and **three** in the
+  studio.
+
+### What it does not settle
+
+- **The derived row costs a walk.** Finding the row of a track means
+  walking the document, so drawing a document of `n` sound nodes costs
+  `n` walks — a few tens of thousands of comparisons for a document of
+  a few hundred nodes. A document big enough for that to hurt would
+  want the rows **stored**, and that is a different design.
+- **The tempo and meter events are not drawn.** Their time is in
+  **ticks** and the world is in **seconds**, so placing them would need
+  the tempo map, and that is the next arc.
+- **The mixer is still not drawn.** Its model is written (§20.4) and its
+  picture is not.
