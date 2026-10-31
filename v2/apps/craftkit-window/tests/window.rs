@@ -206,3 +206,25 @@ fn a_node_moves_through_the_registry() {
     assert_eq!(rect.w, 10.0, "and it kept its size");
     assert_eq!(rect.h, 10.0);
 }
+
+/// The wheel zooms **about the pointer**.
+///
+/// The thing under the pointer stays under the pointer: a camera that
+/// zooms about the middle of the screen slides the world out from under
+/// the hand.
+#[test]
+fn the_wheel_zooms_about_the_pointer() {
+    let mut window = window();
+    window.pan(10.0, 10.0);
+    let pointer = craftkit_sdk::Point::new(40.0, 20.0);
+    let camera = *window.session().camera();
+    let before = camera.to_world(pointer);
+
+    window.zoom_at(2.0, pointer);
+
+    let camera = *window.session().camera();
+    assert_eq!(camera.zoom(), 2.0, "the zoom happened");
+    let after = camera.to_world(pointer);
+    assert!((after.x - before.x).abs() < 1e-9, "the world under the pointer did not move across");
+    assert!((after.y - before.y).abs() < 1e-9, "and it did not move up");
+}

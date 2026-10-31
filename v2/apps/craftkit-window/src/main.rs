@@ -223,11 +223,14 @@ fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
         let up = world.y - drag.from.y;
         let _ = app.window.move_node(node, place.x + across, place.y + up);
     }
-    // The wheel zooms, and the camera clamps it.
+    // The wheel zooms **about the pointer**, and the camera clamps it.
     if response.hovered() {
         let scroll = ui.input(|input| input.smooth_scroll_delta);
         if scroll.y != 0.0 {
-            app.window.zoom_by(1.0 + scroll.y as f64 * 0.1);
+            let pointer = response.interact_pointer_pos().unwrap_or(response.rect.center());
+            let centre = response.rect.center();
+            let at = craftkit_sdk::Point::new((pointer.x - centre.x) as f64, (centre.y - pointer.y) as f64);
+            app.window.zoom_at(1.0 + scroll.y as f64 * 0.1, at);
         }
     }
     // A click picks the node under it, and selects it through the

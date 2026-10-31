@@ -238,6 +238,16 @@ impl Window {
         self.session.camera_mut().pan(across, down);
     }
 
+    /// **Zoom about a point of the screen.**
+    ///
+    /// The point is measured from the **middle** of the picture, the
+    /// way the camera measures it, so a front end that has a pointer
+    /// can say where it is without working out the world's mapping a
+    /// second time.
+    pub fn zoom_at(&mut self, factor: f64, at: craftkit_sdk::Point) {
+        self.session.camera_mut().zoom_at(factor, at);
+    }
+
     /// What the window has to say.
     pub fn log(&self) -> &[String] {
         &self.log

@@ -97,6 +97,33 @@ impl Camera {
         self.zoom = clamp_zoom(self.zoom * factor);
     }
 
+    /// **Zoom about a point of the screen.**
+    ///
+    /// The wheel does not zoom about the middle of the screen: it zooms
+    /// about the **pointer**, and the thing under the pointer stays under
+    /// the pointer. A camera that zooms about the middle makes the world
+    /// slide out from under the hand, and the hand is what the person
+    /// is looking at.
+    ///
+    /// The point is in **screen units measured from the middle**, the
+    /// same way [`Camera::to_screen`] gives them and
+    /// [`Camera::to_world`] takes them: the camera works out for itself
+    /// which point of the world is under the pointer, and puts it back
+    /// under the pointer.
+    ///
+    /// The zoom is **clamped** as everywhere else, and the anchor still
+    /// holds: a wheel that hits the cap changes the zoom as far as it
+    /// goes and not one step further.
+    pub fn zoom_at(&mut self, factor: f64, at: Point) {
+        if !factor.is_finite() || factor <= 0.0 {
+            return;
+        }
+        let anchor = self.to_world(at);
+        let zoom = clamp_zoom(self.zoom * factor);
+        self.zoom = zoom;
+        self.offset = Point::new(anchor.x - at.x / zoom, anchor.y - at.y / zoom);
+    }
+
     /// Move the camera, in the world's units.
     pub fn pan(&mut self, across: f64, down: f64) {
         if !across.is_finite() || !down.is_finite() {
@@ -272,5 +299,48 @@ mod tests {
         assert_eq!(camera.offset().y, -5.0);
         camera.pan(f64::NAN, 0.0);
         assert_eq!(camera.offset().x, 10.0, "a pan that is not a number does not move it");
+    }
+
+    /// The wheel zooms about the pointer, and the thing under the
+    /// pointer stays under the pointer.
+    #[test]
+    fn the_wheel_zooms_about_the_pointer() {
+        let mut camera = camera();
+        camera.look_at(point(10.0, 10.0));
+        // The pointer is to the right of the middle and above it.
+        let pointer = point(40.0, 20.0);
+        let before = camera.to_world(pointer);
+        camera.zoom_at(2.0, pointer);
+        assert_eq!(camera.zoom(), 2.0, "the zoom happened");
+        let after = camera.to_world(pointer);
+        assert!((after.x - before.x).abs() < 1e-9, "the world under the pointer did not move");
+        assert!((after.y - before.y).abs() < 1e-9);
+    }
+
+    /// A zoom about the pointer that hits the cap still holds the
+    /// pointer.
+    #[test]
+    fn a_zoom_about_the_pointer_that_hits_the_cap_holds_the_pointer() {
+        let mut camera = camera();
+        camera.look_at(point(3.0, 4.0));
+        let pointer = point(10.0, 0.0);
+        let before = camera.to_world(pointer);
+        for _ in 0..20 {
+            camera.zoom_at(10.0, pointer);
+        }
+        assert_eq!(camera.zoom(), Camera::MAX_ZOOM, "the cap holds");
+        let after = camera.to_world(pointer);
+        assert!((after.x - before.x).abs() < 1e-9, "the world under the pointer did not move");
+        assert!((after.y - before.y).abs() < 1e-9);
+    }
+
+    /// A zoom factor that is not a number moves nothing.
+    #[test]
+    fn a_zoom_about_the_pointer_that_is_not_a_number_moves_nothing() {
+        let mut camera = camera();
+        camera.look_at(point(3.0, 4.0));
+        camera.zoom_at(f64::NAN, point(10.0, 10.0));
+        assert_eq!(camera.zoom(), 1.0, "the zoom did not happen");
+        assert_eq!(camera.offset().x, 3.0, "and the camera did not move");
     }
 }
