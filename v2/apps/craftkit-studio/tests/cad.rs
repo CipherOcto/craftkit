@@ -226,3 +226,86 @@ fn the_undo_takes_the_entity_and_its_edge() {
     session.undo().expect("the undo works again");
     assert_eq!(session.document().walk().count(), 3, "and so is the entity");
 }
+
+/// A line is drawn in **its layer's colour**.
+///
+/// The entity is *on* a layer, the layer holds an appearance, and the
+/// appearance is the kit's own — so the line is drawn in the colour the
+/// layer says, and not in a colour it carries itself.
+#[cfg(feature = "cad")]
+#[test]
+fn a_line_is_drawn_in_its_layers_colour() {
+    let mut session = a_drawing();
+    // The layer says what colour it is.
+    let layer = session
+        .execute("cad.layer.add", &json!({ "drawing": 1, "name": "blue", "fill": "#3366cc" }))
+        .expect("the layer is added")
+        .data
+        .get("id")
+        .and_then(|id| id.as_u64())
+        .expect("there is an id");
+    let line = session
+        .execute(
+            "cad.entity.line.add",
+            &json!({
+                "block": 3,
+                "name": "a wall",
+                "from": { "x": -5.0, "y": -5.0 },
+                "to": { "x": 5.0, "y": 5.0 },
+            }),
+        )
+        .expect("the line is added")
+        .data
+        .get("id")
+        .and_then(|id| id.as_u64())
+        .expect("there is an id");
+    session
+        .execute("cad.entity.layer", &json!({ "entity": line, "layer": layer }))
+        .expect("the line is on the layer");
+
+    let picture = draw(&session, 64);
+    assert!(picture.contains(&[0x33, 0x66, 0xcc, 0xff]), "the line is in the layer's colour");
+}
+
+/// An entity with **no layer** is drawn in black.
+///
+/// Black is what a drawing is drawn in when it says nothing else.
+#[cfg(feature = "cad")]
+#[test]
+fn an_entity_with_no_layer_is_drawn_in_black() {
+    let mut session = a_drawing();
+    session
+        .execute(
+            "cad.entity.line.add",
+            &json!({
+                "block": 3,
+                "name": "a wall",
+                "from": { "x": -5.0, "y": -5.0 },
+                "to": { "x": 5.0, "y": 5.0 },
+            }),
+        )
+        .expect("the line is added");
+
+    let picture = draw(&session, 64);
+    assert!(picture.contains(&[0, 0, 0, 0xff]), "the line is in black");
+}
+
+/// The picture of a document, as the pixels it has.
+#[cfg(feature = "cad")]
+fn draw(session: &craftkit_sdk::Session, size: usize) -> Vec<[u8; 4]> {
+    let camera = *session.camera();
+    let mut raster = craftkit_raster::Raster::new(size, size, camera).expect("the picture is made");
+    let document = session.document();
+    for node in document.walk() {
+        let Some(kind) = session.kinds().get(&node.kind) else { continue };
+        (kind.paint)(node, document, &mut raster);
+    }
+    let image = raster.image();
+    let mut pixels = Vec::new();
+    for y in 0..image.height() {
+        for x in 0..image.width() {
+            pixels.push(image.pixel(x, y).unwrap_or([0, 0, 0, 0]));
+        }
+    }
+    pixels
+}

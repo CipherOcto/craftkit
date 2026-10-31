@@ -135,7 +135,7 @@ fn a_stroke_is_drawn_on_the_outline() {
 #[test]
 fn text_is_drawn_as_boxes() {
     let mut canvas = a_canvas(100, 100);
-    canvas.text(Point::new(-10.0, 0.0), "hi");
+    canvas.text(Point::new(-10.0, 0.0), "hi", craftkit_sdk::Colour::BLACK);
     let image = canvas.image();
     assert!(count_painted(image) > 0, "the text drew nothing at all");
 }

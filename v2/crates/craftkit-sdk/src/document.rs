@@ -291,7 +291,11 @@ pub trait Canvas {
     /// Draw a rectangle.
     fn rect(&mut self, rect: Rect, fill: Colour);
     /// Draw a line of text.
-    fn text(&mut self, at: Point, text: &str);
+    ///
+    /// The text takes a **colour**, like everything else that is
+    /// drawn: a canvas that could only draw text in one colour was a
+    /// canvas that could not draw a layer's text.
+    fn text(&mut self, at: Point, text: &str, colour: Colour);
     /// Draw a path: filled, and stroked on its outline.
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>);
 }
@@ -312,8 +316,9 @@ impl Canvas for RecordingCanvas {
         let _ = fill;
     }
 
-    fn text(&mut self, at: Point, text: &str) {
+    fn text(&mut self, at: Point, text: &str, colour: Colour) {
         self.drawn.push(format!("text({}, {}, {text})", at.x, at.y));
+        let _ = colour;
     }
 
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {

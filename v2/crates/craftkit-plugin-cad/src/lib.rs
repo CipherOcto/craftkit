@@ -53,7 +53,8 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
-    Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
+    Appearance, Canvas, Colour, Document, EngineError, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
+    Point, Relation, Session, Stroke, Text,
 };
 
 /// The CAD layer.
@@ -140,8 +141,22 @@ macro_rules! entity_kind {
         pub struct $struct;
 
         impl $struct {
-            /// Not drawn.
-            fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+            /// How the entity is drawn.
+            ///
+            /// The **colour** is the layer's: an entity is *on* a layer,
+            /// and the layer says what colour that is. An entity with no
+            /// layer is drawn in black, because black is what a drawing
+            /// is drawn in when it says nothing else.
+            ///
+            /// The document is here because the layer is **in** it: an
+            /// entity that cannot see the document cannot know which
+            /// layer it is on, and a colour it cannot know is a colour
+            /// it has to carry itself.
+            fn paint(node: &Node, document: &Document, canvas: &mut dyn craftkit_sdk::Canvas) {
+                let Some(geometry) = node.data.get("geometry") else { return };
+                let colour = colour_of(document, node);
+                draw_geometry($kind, geometry, colour, canvas);
+            }
 
             /// Not hit.
             fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
@@ -166,6 +181,76 @@ entity_kind!(CircleKind, "cad.entity.circle", "Circle");
 entity_kind!(ArcKind, "cad.entity.arc", "Arc");
 entity_kind!(TextKind, "cad.entity.text", "Text");
 entity_kind!(InsertKind, "cad.entity.insert", "Insert");
+
+/// The colour an entity is drawn in.
+///
+/// It is the **layer's** colour: the entity is on a layer, the layer
+/// holds an appearance, and the appearance is the kit's own. An entity
+/// with no layer — or a layer with no appearance — is drawn in black.
+fn colour_of(document: &Document, node: &Node) -> Colour {
+    let relations = document.relations_from(node.id, Some("cad.on_layer"));
+    let Some(relation) = relations.first() else { return Colour::BLACK };
+    let Some(layer) = document.node(relation.to) else { return Colour::BLACK };
+    document.appearance_of(layer).map(|appearance| appearance.fill).unwrap_or(Colour::BLACK)
+}
+
+/// Draw an entity's **geometry**.
+///
+/// Each kind draws its own shape: a line is a line, a circle is a
+/// circle, and a text is a text. The circle is a **polygon** of
+/// straight segments — the kit has no curves in its drawing except the
+/// ones a path carries — and the number of them is the circle's own.
+fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn Canvas) {
+    match kind {
+        "cad.entity.line" => {
+            let (Some(from), Some(to)) = (point_in(geometry, "from"), point_in(geometry, "to")) else {
+                return;
+            };
+            let path = Path::polygon(&[from, to]);
+            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0 }));
+        }
+        "cad.entity.circle" => {
+            let Some(center) = point_in(geometry, "center") else { return };
+            let Some(radius) = geometry
+                .get("radius")
+                .and_then(|radius| radius.as_f64())
+                .filter(|r| r.is_finite() && *r > 0.0)
+            else {
+                return;
+            };
+            let mut points = Vec::with_capacity(CIRCLE_SEGMENTS);
+            for step in 0..CIRCLE_SEGMENTS {
+                let angle = step as f64 / CIRCLE_SEGMENTS as f64 * std::f64::consts::TAU;
+                points.push(Point::new(center.x + radius * angle.cos(), center.y + radius * angle.sin()));
+            }
+            let path = Path::polygon(&points);
+            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0 }));
+        }
+        "cad.entity.text" => {
+            let Some(at) = point_in(geometry, "at") else { return };
+            let Some(text) = geometry.get("text").and_then(|text| text.as_str()) else { return };
+            canvas.text(at, text, colour);
+        }
+        _ => {}
+    }
+}
+
+/// How many straight segments a circle is drawn with.
+///
+/// Sixty-four is enough that a circle looks like a circle at the sizes
+/// a picture is drawn at, and few enough that the picture is quick.
+const CIRCLE_SEGMENTS: usize = 64;
+
+/// A point of a geometry, read from the caller's JSON.
+fn point_in(geometry: &Json, name: &str) -> Option<Point> {
+    let value = geometry.get(name)?;
+    let x = value.get("x").and_then(|x| x.as_f64())?;
+    let y = value.get("y").and_then(|y| y.as_f64())?;
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    Some(Point::new(x, y))
+}
 
 /// The **extents** of an entity: the box its geometry covers.
 ///
@@ -282,6 +367,12 @@ pub struct AddLayer {
     pub name: Text,
     /// Its colour, as an index or a name.
     pub color: Option<Text>,
+    /// The colour it is drawn in, as `#rrggbb`.
+    ///
+    /// It is the kit's own **appearance**, and the entities on the
+    /// layer are drawn in it. A layer that says nothing is drawn in
+    /// black.
+    pub fill: Option<Text>,
 }
 
 impl AddLayer {
@@ -301,6 +392,14 @@ impl AddLayer {
             });
         }
         let color = self.color.as_ref().map(|color| color.0.clone());
+        let appearance = match &self.fill {
+            Some(fill) => Some(Appearance {
+                fill: Colour::from_hex(&fill.0)
+                    .map_err(|message| EngineError::Failed { id: "cad.layer.add".to_string(), message })?,
+                stroke: None,
+            }),
+            None => None,
+        };
         let id = session.document_mut()?.add_node_with_under(
             Some(drawing),
             name.clone(),
@@ -308,6 +407,9 @@ impl AddLayer {
             None,
             json!({ "color": color }),
         );
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.appearance = appearance;
+        }
         Ok(Outcome::changed(format!("added the layer `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
 }

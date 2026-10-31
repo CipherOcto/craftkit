@@ -34,13 +34,11 @@ const ADVANCE: f64 = 8.0;
 /// How tall a character is, in the world's units, before the zoom.
 const LINE_HEIGHT: f64 = 12.0;
 
-/// The colour of a character's box.
-///
-/// The canvas is given no colour for text — the seam does not have one —
-/// so the canvas chooses: the ink is dark, and it is dark on purpose.
-const INK: Colour = Colour([0.15, 0.15, 0.15, 1.0]);
-
 /// A canvas that draws into a picture.
+///
+/// The text takes the colour it is given, like everything else: the
+/// seam has one colour for everything that is drawn, and a canvas that
+/// chose its own would be a canvas that could not draw a layer's text.
 #[derive(Debug, Clone)]
 pub struct Raster {
     image: Image,
@@ -268,7 +266,7 @@ impl Canvas for Raster {
     /// typeface and not its glyphs. So a character is drawn as the box it
     /// would occupy — a typewriter's worth of rectangles — and the
     /// picture says *there is text here* and not what it says.
-    fn text(&mut self, at: Point, text: &str) {
+    fn text(&mut self, at: Point, text: &str, colour: Colour) {
         let (origin_x, origin_y) = self.to_pixels(at);
         let zoom = self.camera.zoom();
         let advance = ADVANCE * zoom;
@@ -285,7 +283,7 @@ impl Canvas for Raster {
             let bottom = ((y + height).ceil().min(self.image.height() as f64)) as usize;
             for row in top..bottom {
                 for column in first..last {
-                    self.image.blend(column, row, INK);
+                    self.image.blend(column, row, colour);
                 }
             }
         }
