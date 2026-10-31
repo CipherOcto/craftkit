@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1136 tests.** The MCP server links **all fifteen batteries** in, so the
+**1142 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1136 tests
+cargo test          # 1142 tests
 cargo run -p craftkit-studio
 ```
 
@@ -10213,3 +10213,52 @@ written for — the **mixing** — was not in the lane.
 - **The click is not in the lane.** The metronome is mixed in after the
   master, in the render, and a lane that plays a document with a
   metronome would have to mix the click block by block.
+
+## 150. The track is soloed
+
+A track could be muted and could not be soloed, and the family's mixer
+silences the other tracks when one of them is soloed: the solo is the
+mixer's one rule that is about the *other* tracks.
+
+### What was built
+
+- The track's **payload** carries a `solo`, and `sound.track.solo` sets
+  it. The solo is in the document, and a payload is what is saved and
+  what is shared.
+- The **render** honours it: when a track is soloed, the others are
+  silent — and their sends carry the silence, because a send is a copy
+  of the track's signal.
+- The **picture** honours it: a soloed track's row is a **double
+  rule**, so the timeline says which track is heard alone.
+
+### What the port found
+
+- **The solo is a rule about the other tracks.** A mute is about the
+  track it is on; a solo is about every track that is not it, and that
+  is why the rule lives in the **mix** and not in the track: the track
+  says "I am soloed" and the mixer works out what that means.
+- **The sends follow.** The family's sends take the track's signal, and
+  a silenced track's send is a copy of silence — so the solo does not
+  need a second rule for the sends. The port found that when it looked
+  for one.
+
+### What it cost
+
+- six tests in the battery: a soloed track silences the others, a track
+  that is not soloed is heard with the others, unsoloing a track puts
+  the others back, the solo is in the document, the soloed track is
+  drawn as a double rule, and a node that is not a track is refused.
+
+### What it does not settle
+
+- **There is no "solo safe".** The family's track has a flag that says
+  it is heard even when another track is soloed, and there is no such
+  flag here.
+- **There is no solo mode.** The family has a setting for what a solo
+  does to the tracks that were already soloed — the classic "soloing
+  the second track mutes the first" — and there is no setting here: a
+  soloed track is heard until it is not.
+- **The solo is in the file.** The family's click is not printed into a
+  file (§146) and its solo is a playback rule; here the solo is in the
+  document and the render honours it, which is the same difference and
+  the same answer.
