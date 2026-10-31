@@ -2005,6 +2005,12 @@ impl RenderSound {
                 let Some((_, track_signal)) = tracks.iter().find(|(id, _)| *id == send.track) else {
                     continue;
                 };
+                if send.mute {
+                    // A muted send is a copy of **nothing**: the track
+                    // is still heard on its own and the bus hears
+                    // nothing.
+                    continue;
+                }
                 let level = craftkit_audio::db_to_linear(send.level_db) as f32;
                 let panned = panned(track_signal, send.pan, channels as usize);
                 add_into(&mut signal, &panned, 0, level);
@@ -2175,6 +2181,8 @@ struct Send {
     level_db: f64,
     /// Its pan, from minus one to one.
     pan: f64,
+    /// Whether it is silent.
+    mute: bool,
 }
 
 /// The sends of the document: the tracks that feed the buses.
@@ -2186,7 +2194,13 @@ fn sends_of(document: &Document) -> Vec<Send> {
         let Some(relation) = document.relations_from(node.id, Some("send")).into_iter().next() else {
             continue;
         };
-        sends.push(Send { track: track.id, bus: relation.to, level_db: payload.level_db, pan: payload.pan });
+        sends.push(Send {
+            track: track.id,
+            bus: relation.to,
+            level_db: payload.level_db,
+            pan: payload.pan,
+            mute: payload.mute,
+        });
     }
     sends
 }

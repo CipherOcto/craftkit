@@ -25,7 +25,9 @@
 
 use craftkit_derive::{Command, NodeKind};
 
-use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text};
+use craftkit_sdk::{
+    Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text,
+};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -313,6 +315,12 @@ pub struct SendPayload {
     pub level_db: f64,
     /// Its pan, from -1 to 1.
     pub pan: f64,
+    /// Whether it is silent.
+    ///
+    /// A send is a **copy** of the track's signal, and a muted send is
+    /// a copy of nothing: the track is still heard on its own and the
+    /// bus hears nothing.
+    pub mute: bool,
     /// Whether it is before the fader.
     pub pre_fader: bool,
 }
@@ -323,6 +331,7 @@ impl SendPayload {
         serde_json::json!({
             "level_db": self.level_db,
             "pan": self.pan,
+            "mute": self.mute,
             "pre_fader": self.pre_fader,
         })
     }
@@ -332,6 +341,7 @@ impl SendPayload {
         Ok(SendPayload {
             level_db: value.get("level_db").and_then(|level| level.as_f64()).unwrap_or(0.0),
             pan: value.get("pan").and_then(|pan| pan.as_f64()).unwrap_or(0.0),
+            mute: value.get("mute").and_then(|mute| mute.as_bool()).unwrap_or(false),
             pre_fader: value.get("pre_fader").and_then(|pre| pre.as_bool()).unwrap_or(false),
         })
     }
@@ -597,6 +607,10 @@ pub struct AddSend {
     pub bus: NodeRef,
     /// Its level, in decibels.
     pub level_db: Option<Number>,
+    /// Its pan, from minus one to one.
+    pub pan: Option<Number>,
+    /// Whether the send is silent.
+    pub mute: Option<Bool>,
 }
 
 impl AddSend {
@@ -621,7 +635,18 @@ impl AddSend {
                 message: "a level is a number".to_string(),
             });
         }
-        let payload = SendPayload { level_db, pan: 0.0, pre_fader: false };
+        let pan = match &self.pan {
+            Some(pan) => pan.0,
+            None => 0.0,
+        };
+        if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
+            return Err(EngineError::Failed {
+                id: "sound.send.add".to_string(),
+                message: "a pan is a number between minus one and one".to_string(),
+            });
+        }
+        let mute = self.mute.map(|mute| mute.0).unwrap_or(false);
+        let payload = SendPayload { level_db, pan, mute, pre_fader: false };
         let id = session.document_mut()?.add_node_with_under(
             Some(track),
             format!("send to {bus}"),
