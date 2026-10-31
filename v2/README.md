@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1224 tests.** The MCP server links **all fifteen batteries** in, so the
+**1227 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1224 tests
+cargo test          # 1227 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3602,6 +3602,7 @@ so.
 | a **track with a trim** | **built.** The trim is the level of the track's input and it comes before the inserts; the phase is a sign and not a level, and a trim outside the tree's range is refused (§165) | §165 |
 | a **clip with effects of its own** | **built.** An insert is on one thing — a track or a clip — and a clip's chain runs over the clip's own sound, after the clip's gain and before the track's inserts (§166) | §166 |
 | a **track with takes** | **built.** A track may have several takes and one of them is the one that is played; the take is named, and a track whose active take is gone plays its first (§167) | §167 |
+| a **muted clip** | **built.** A clip may be muted: the render skips it and the clip stays in the document, so a quiet clip is a clip that may be loud again (§168) | §168 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11141,7 +11142,7 @@ is a strip that reads a bus, and v2 had no reader at all.
   is heard through the reader, a reader holds no clips, a reader has no
   sends, a reader is not routed, and a track reads one bus.
 - **One command** (`sound.track.input`) and **one relation kind**
-  (`input`). The MCP server now carries **205** commands.
+  (`input`). The MCP server now carries **206** commands.
 
 ### What it does not settle
 
@@ -11387,3 +11388,53 @@ two takes of a track were the same sound twice.
 - **A take is not a clip.** The tree's clips belong to a playlist and
   are moved between takes; here a clip belongs to the take it was
   added to, and there is no command that moves it.
+
+## 168. A clip may be muted
+
+The tree's renderer **skips** a muted clip and the tree's editor keeps
+it, so that a clip that is quiet is a clip that may be loud again. v2
+had no way to say that a clip is quiet.
+
+### What was built
+
+- The command `sound.clip.mute` says whether a clip is **muted**, and
+  the render skips the clips that are muted.
+- The clip stays in the document: a muted clip is a clip that is not
+  played and not a clip that is gone.
+- A node that is not a clip is **refused by name**.
+
+### What the port found
+
+- **The tree's mute is a flag and not a level.** The tree's clip has a
+  `muted` field and the renderer skips the clip outright — the sound is
+  not made quieter, it is not made. A port that reads the mixer and
+  finds a gain on every clip has read the clip's gain and not the
+  clip's mute.
+- **The mute is not the clip's gain at minus infinity.** A gain of
+  minus a hundred and forty-four decibels is a number, and the tree's
+  mute is a decision: the clip is not read from the source at all. The
+  difference is heard in the file: a muted clip that is the only clip
+  renders an **empty** file, because the render's length is the end of
+  the last clip that is heard.
+- **The tree keeps the muted clip in the document and on the row.** A
+  clip that is muted is still a clip, and it is still where it was; the
+  tree draws it quiet and says nothing about it being gone. The port
+  that reads a file and finds a muted clip in it has found a clip that
+  was muted and not a clip that was deleted.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/clipmute.rs`): a muted clip is
+  not heard and is still there, a clip that is unmuted is heard again,
+  and a node that is not a clip is refused.
+- **One field** in the clip's payload and **one command**, and the
+  field is additive: a clip written before this arc is not muted.
+
+### What it does not settle
+
+- **The tree's rating, colour and sync point are not there.** The
+  tree's clip carries a rating, a colour override and a sync point, and
+  they are what the tree's editor reads them for.
+- **The tree's locked clips are not here.** The tree's clip has an
+  `edit_locked` and a `time_locked`; the kit has its own lock on a node
+  (§115), which is a lock on the node and not on the clip's time.
