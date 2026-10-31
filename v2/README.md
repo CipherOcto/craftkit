@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1133 tests.** The MCP server links **all fifteen batteries** in, so the
+**1136 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1133 tests
+cargo test          # 1136 tests
 cargo run -p craftkit-studio
 ```
 
@@ -10159,3 +10159,57 @@ is a cell, and it is a cell in **another** sheet.
 - **The formulas are still small.** Five functions, arithmetic and
   comparisons: no dates, no text functions, no lookups and no
   conditional expressions.
+
+## 149. The mix does not allocate
+
+The lane's rule is that its work must not allocate, and the tree said
+plainly that the rule was a rule and not a measurement: the work it was
+written for — the **mixing** — was not in the lane.
+
+### What was built
+
+- The audio crate's **`Track` owns its samples**. A track that borrowed
+  its samples could not be handed to a lane whole, and the mixing that
+  may run on a lane may not borrow.
+- **`mix_into`**: the mixing, **into a buffer the caller owns**. It
+  allocates nothing, it waits for nothing and it does bounded work, and
+  `mix` — the one that hands back a mix — is built on it.
+- The sound battery's **`MixJob`**: the mix of a document as a **lane
+  job**. The tracks are prepared on the control thread — the sources
+  are read, the clips are prepared, the tracks' signals are built — and
+  the lane does the rest: the block's samples are the sum of the
+  tracks, block after block, and nothing is allocated while it happens.
+- The lane's work may be **had back**: `LaneJob` is `Any`, so a caller
+  may take the work when the lane stops and read what it made. A lane
+  that swallowed its job would be a lane that swallowed the samples.
+
+### What the port found
+
+- **The rule was a rule, and the work it was written for is the
+  mixing.** The tree's own design document said the measurement had not
+  been made because nothing needed it — and now something does: the
+  mixing is measured on a **real lane thread**, and the number is
+  **zero**.
+- **A track that borrows its samples cannot cross the thread.** The
+  family's mixer owns its buffers, and the port now says why: the
+  buffers are made on the control thread and the lane only reads them.
+- **The lane erased its own work.** The seam handed the job back as a
+  `Box<dyn LaneJob>`, and a caller that could not name the job could
+  not read the samples it had paid for. `Any` gives the work back.
+
+### What it cost
+
+- three tests in the studio: the mixing does not allocate on the lane
+  thread, the mix is the sum of the tracks, and the work is had back
+  when the lane stops.
+
+### What it does not settle
+
+- **There is no device.** The tree's own seam says so, and the job is
+  driven by the caller: the blocks are run and the samples are read.
+- **The inserts are not in the lane.** A track's inserts are processed
+  over the whole signal, and the family's plugins process a **block**,
+  so a document with inserts is not lane-ready yet.
+- **The click is not in the lane.** The metronome is mixed in after the
+  master, in the render, and a lane that plays a document with a
+  metronome would have to mix the click block by block.

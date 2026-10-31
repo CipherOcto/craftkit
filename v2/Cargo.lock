@@ -705,6 +705,7 @@ name = "craftkit-studio"
 version = "0.2.0"
 dependencies = [
  "craftkit-alloc",
+ "craftkit-audio",
  "craftkit-clap-fixture",
  "craftkit-derive",
  "craftkit-jpeg",
