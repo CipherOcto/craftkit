@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1096 tests.** The MCP server links **all fifteen batteries** in, so the
+**1113 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1096 tests
+cargo test          # 1113 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3567,7 +3567,7 @@ so.
 | a **toolbar** | **not built.** v2 has no UI toolkit and no window | §16 |
 | a **control channel** | **built**: the session behind a token-authenticated socket, with the family's wire format and the family's methods — and no `ui.*`, because this tree has no window | §55 |
 | the **MCP server** | **built**: one tool per command, generated from the registry, with the tool list being the command list | §41 |
-| a **real document model**: layers, text, images, an appearance of its own | **partly.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller and the **letters** from the kit's own typeface (§128, §129); **images are not ported**, and an appearance is still a plugin's payload | §44, §49, §58 |
+| a **real document model**: layers, text, images, an appearance of its own | **built.** Layers are nodes and edges (§44); text is an element in two batteries (§33, §44), a paragraph's own text and runs in a third (§49), and a paragraph **broken into lines** in a fourth (§58) — with the widths coming from the caller and the **letters** from the kit's own typeface (§128, §129); **images are ported** (§142) and the **appearance** is the kit's own (§95) | §44, §49, §58, §95, §142 |
 | a **selection of spans** | **built** | §22 |
 | the **view state** | **built**, and it is the session's | §37 |
 | the **bundle** the application writes, and the bundle a plugin fills | **built**, both | §25.1, §33 |
@@ -3584,7 +3584,7 @@ so.
 | a **shared library** a program opens and a plugin in it answers | **built**, and it is a command | §35, §36 |
 | the **version a file is written at**, derived from what the document holds | **built.** A file is written at the oldest version that loses nothing, and the version is **tried** rather than declared: each version is written and read back, and the one that keeps everything wins. The round trip that decides it found a bug — a relation's payload was lost from every file (§57) | §51, §57 |
 | a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The paragraph is **drawn** with those letters (§129) | §58, §59, §60, §128, §129 |
-| **hyphenation**: where a word may be broken | **not built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other, but **finding** them is a dictionary's business, and no dictionary is here | §58 |
+| **hyphenation**: where a word may be broken | **built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other (§58); and now the kit **finds** them: the patterns say where the words of the language break, the heuristic answers for the words the patterns do not know, and the limits say how careful the answer is (§145) | §58, §145 |
 
 ### The list of things that are honestly not there: empty
 
@@ -4621,15 +4621,16 @@ that answer is in the plan.
   the measure of a line depends on how many lines came before it. The
   library says so in its own documentation rather than pretending, and
   the greedy breaker — which does not care — can already do it.
-- **Hyphenation is a dictionary's business.** The breaker knows a
-  **hyphenation point** — a flagged penalty — and it enforces the limit
-  on how many flagged breaks may follow each other, as a **hard
-  constraint**: a break that would exceed it is not taken, in both
-  breakers. But *finding* the points is the dictionary's work, and the
-  family's dictionary carries forty-eight languages — one of them under
-  a licence that is not this tree's. So the point is in the model and
-  the dictionary is not, and the two are separated in the same way the
-  font is.
+- **Hyphenation was a dictionary's business, and now the kit does one
+  language of it.** The breaker knows a **hyphenation point** — a
+  flagged penalty — and it enforces the limit on how many flagged
+  breaks may follow each other, as a **hard constraint**: a break that
+  would exceed it is not taken, in both breakers. *Finding* the points
+  was the dictionary's work, and the family's dictionary carries
+  forty-eight languages — one of them under a licence that is not this
+  tree's. So the dictionary is not here, and the kit does the next
+  thing: it carries the **patterns** for English and asks them where a
+  word breaks (§145).
 
 ### What it cost
 
@@ -9904,3 +9905,90 @@ family's clips carry a fade at each end, and v2's did not.
 - **A fade is on a clip and not on a source.** A source played by two
   clips is faded twice, once for each clip, and a fade that belongs to
   the source would be a different thing.
+
+## 145. The word is broken
+
+The line breaker knew a **hyphenation point** — a flagged penalty that
+adds a hyphen's width when it is taken — and nothing could say where
+the points were. The caller had to, and the caller had no dictionary,
+so no paragraph in the tree could be hyphenated at all.
+
+### What was built
+
+- **`craftkit-hyphen`**, a library: the **patterns**, the **limits**
+  and the **heuristic**.
+  - The **patterns** are a set that says where the words of a language
+    break. They are written in the notation the family uses — a word
+    with digits in it, and a digit says how many letters are on that
+    side of the break — and where many patterns meet, the **biggest**
+    digit wins.
+  - The **English set** is in the tree as **source**: a few thousand
+    patterns in a file of its own, because the way this kit holds data
+    is as code.
+  - The **heuristic** answers for the words the patterns do not know: a
+    word is split into syllables by rule, and the rule is right often
+    enough to break a line with.
+  - The **limits** say how careful the answer is: how short a word
+    must be, how many letters must stay at each end, and whether a
+    word in capitals may be broken at all.
+- The **text battery** asks the kit: the paragraph's payload carries
+  `hyphenate`, and **`text.paragraph.hyphenate`** sets it. A paragraph
+  is not hyphenated until somebody says so — a hyphen in a line is a
+  thing a reader sees.
+- The **breaker** gets the points as **hyphens**: a broken word is
+  more than one box, and the hyphen between the pieces is a break
+  opportunity that costs a hyphen's width.
+- The **drawing** draws the hyphen, because the typeface has had one
+  all along and a line that ends at a hyphenation point ends in a
+  hyphen.
+
+### What the port found
+
+- **The patterns are data, and this tree has no assets.** The family
+  holds its set in a file; this tree holds it in source, and the
+  reason is the rule the tree already follows: a program that reads a
+  file it ships is a program with an asset, and a pattern set is data
+  the program reads.
+- **The trained set is not the thesis's set.** Liang's thesis breaks
+  "hyphenation" as *hy-phen-ation*; the trained set breaks it as
+  *hy-phenat-ion*. Both are English, and the port keeps the trained
+  one: a set trained from a word list knows more words than a set
+  written by hand.
+- **A broken word is more than one item.** The breaker's items were
+  boxes and glue in strict alternation, so a word's item index was
+  twice its word index — and a word that may be broken breaks that
+  arithmetic. The lines are now reported through a map of which word
+  each item belongs to, and the picture draws the **pieces**.
+- **The hyphen was in the typeface all along.** The picture did not
+  show it because nothing drew it: a line that ended at a
+  hyphenation point ended in nothing.
+
+### What it cost
+
+- a new crate with **eleven tests**, one field in the paragraph's
+  payload, one command, and **six tests** in the battery: the patterns
+  break a word where the thesis says, the trained set breaks it in its
+  own way, a word is broken by the patterns, a short word is not
+  broken, a break leaves two letters at each end, the limits are the
+  caller's, a word in capitals is not broken, a capital word may be
+  broken, a capital word may be kept whole, an apostrophe is not a
+  break, a word with an unknown letter is split by the heuristic, a
+  paragraph is not hyphenated until it is asked to be, a hyphenated
+  paragraph breaks the word, the line that ends at a hyphenation point
+  is flagged, the words of a line are the words of the paragraph, the
+  hyphen is drawn, and a node that is not a paragraph is refused.
+
+### What it does not settle
+
+- **The set is English, and it is one set.** The family has Polish,
+  Portuguese, Italian, German and Bulgarian, and a rule for Turkish;
+  none of them is here, and the engine is the same for all of them.
+- **There is no dictionary.** The family's first answer for a word is
+  its dictionary — a hundred and sixty thousand words — and this tree
+  has none: the patterns answer, and the heuristic answers what the
+  patterns do not know. A word whose spelling is unusual may break in
+  the wrong place, and the caller may still say where a word breaks.
+- **The limits are the kit's and not the paragraph's.** The library
+  takes the limits from the caller and the paragraph uses the
+  defaults; a paragraph cannot yet say that it wants three letters
+  left at the end.

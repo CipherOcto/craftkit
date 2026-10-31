@@ -447,6 +447,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-hyphen"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-image"
 version = "0.2.0"
 
@@ -628,6 +632,7 @@ version = "0.2.0"
 dependencies = [
  "craftkit-derive",
  "craftkit-font",
+ "craftkit-hyphen",
  "craftkit-payload",
  "craftkit-sdk",
  "craftkit-text-layout",
