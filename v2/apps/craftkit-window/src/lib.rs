@@ -217,6 +217,13 @@ impl Window {
         self.run_id("select.node", json!({ "node": node }))
     }
 
+    /// **Move** a node, through the registry.
+    ///
+    /// The node keeps its size: a move is a move.
+    pub fn move_node(&mut self, node: u64, x: f64, y: f64) -> Result<Outcome, EngineError> {
+        self.run_id("node.move", json!({ "node": node, "x": x, "y": y }))
+    }
+
     /// **Zoom** the camera.
     ///
     /// The camera is the session's state, and it has its own caps: a

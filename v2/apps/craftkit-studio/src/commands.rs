@@ -6,7 +6,8 @@
 
 use craftkit_derive::{Command, Panel};
 use craftkit_sdk::{
-    Bool, CommandRun, CommandSpec, Doc, Either, EngineError, NodeRef, Outcome, ParamDoc, Rect, Session, Text,
+    Bool, CommandRun, CommandSpec, Doc, Either, EngineError, NodeRef, Number, Outcome, ParamDoc, Rect,
+    Session, Text,
 };
 
 /// Give the document a name.
@@ -93,6 +94,57 @@ impl NodeAdd {
         let id = session.document_mut()?.add_node_with_under(parent, name.clone(), kind.clone(), rect, data);
         Ok(Outcome::changed(format!("added a {kind} `{name}`"))
             .with_data(craftkit_sdk::serde_json::json!({ "id": id, "kind": kind })))
+    }
+}
+
+/// **Move** a node.
+///
+/// A node that has **no place** cannot be moved: a clip in a sound
+/// document is at a time and not at a place, and the command does not
+/// invent one.
+///
+/// The node keeps its size: a move is a move, and a command that
+/// changed the size as well would be two commands wearing one name.
+#[derive(Command)]
+#[command(id = "node.move", area = "node", icon = "move", menu("Node"), mutates, undoable)]
+pub struct NodeMove {
+    /// The node to move.
+    pub node: NodeRef,
+    /// Where it goes, across.
+    pub x: Number,
+    /// Where it goes, up.
+    pub y: Number,
+}
+
+impl NodeMove {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "node.move".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        let Some(rect) = node.rect else {
+            return Err(EngineError::Failed {
+                id: "node.move".to_string(),
+                message: format!("the node `{id}` has no place to be moved to"),
+            });
+        };
+        let x = self.x.0;
+        let y = self.y.0;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(EngineError::Failed {
+                id: "node.move".to_string(),
+                message: "a place is two numbers".to_string(),
+            });
+        }
+        let moved = Rect::new(x, y, rect.w, rect.h);
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.rect = Some(moved);
+        }
+        Ok(Outcome::changed(format!("moved the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "x": x, "y": y })))
     }
 }
 

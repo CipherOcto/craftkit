@@ -184,3 +184,25 @@ fn the_camera_is_the_sessions_and_it_clamps() {
     window.zoom_by(1_000_000.0);
     assert_eq!(window.session().camera().zoom(), craftkit_sdk::Camera::MAX_ZOOM, "and it is capped");
 }
+
+/// A node **moves**, through the registry.
+///
+/// The node keeps its size: a move is a move, and a command that
+/// changed the size as well would be two commands wearing one name.
+#[test]
+fn a_node_moves_through_the_registry() {
+    let mut window = window();
+    window.open("node.add");
+    window.set("name", json!("a shape"));
+    window.set("kind", json!("geometry.rect"));
+    window.set("rect", json!({ "x": 0.0, "y": 0.0, "w": 10.0, "h": 10.0 }));
+    window.run().expect("the command runs");
+
+    window.move_node(1, 20.0, 30.0).expect("the move runs");
+    let node = window.session().document().node(1).expect("the node is there");
+    let rect = node.rect.expect("the node has a place");
+    assert_eq!(rect.x, 20.0, "the node moved across");
+    assert_eq!(rect.y, 30.0, "and up");
+    assert_eq!(rect.w, 10.0, "and it kept its size");
+    assert_eq!(rect.h, 10.0);
+}
