@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1227 tests.** The MCP server links **all fifteen batteries** in, so the
+**1231 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1227 tests
+cargo test          # 1231 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3603,6 +3603,7 @@ so.
 | a **clip with effects of its own** | **built.** An insert is on one thing — a track or a clip — and a clip's chain runs over the clip's own sound, after the clip's gain and before the track's inserts (§166) | §166 |
 | a **track with takes** | **built.** A track may have several takes and one of them is the one that is played; the take is named, and a track whose active take is gone plays its first (§167) | §167 |
 | a **muted clip** | **built.** A clip may be muted: the render skips it and the clip stays in the document, so a quiet clip is a clip that may be loud again (§168) | §168 |
+| a **path that may be edited** | **built.** A point of a path may be moved and the handles of its curves set; the handles move with the point, and a handle on a straight segment makes it a curve (§169) | §169 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11142,7 +11143,7 @@ is a strip that reads a bus, and v2 had no reader at all.
   is heard through the reader, a reader holds no clips, a reader has no
   sends, a reader is not routed, and a track reads one bus.
 - **One command** (`sound.track.input`) and **one relation kind**
-  (`input`). The MCP server now carries **206** commands.
+  (`input`). The MCP server now carries **208** commands.
 
 ### What it does not settle
 
@@ -11438,3 +11439,67 @@ had no way to say that a clip is quiet.
 - **The tree's locked clips are not here.** The tree's clip has an
   `edit_locked` and a `time_locked`; the kit has its own lock on a node
   (§115), which is a lock on the node and not on the clip's time.
+
+## 169. A path's points may be moved
+
+The tree's path is a list of **anchors**, and each anchor carries two
+handles: the one the curve leaves by and the one it arrives by. v2 had
+a path that could be created and combined and **not edited**: nothing
+touched a point of it.
+
+### What was built
+
+- The command `vector.path.move` moves a **point** of a contour, and
+  the handles of the curves move with it, as they do in the tree.
+- The command `vector.path.handle` sets the two handles of a point, and
+  a handle on a straight segment makes it a **curve**.
+- A point that is not there, and a number that is not a point at all,
+  are **refused by name** — an index is a whole number and is not
+  rounded into one.
+
+### What the port found
+
+- **The kit's path is segments and not anchors.** The tree's path is a
+  list of anchors and each anchor carries its handles; v2's path is a
+  list of segments, and a segment is a line or a curve with two
+  control points. The anchors are therefore **derived**: the points of
+  a contour are the point it starts at and the point each segment ends
+  at, and a point's outgoing handle is the control point of the curve
+  that leaves it and its incoming handle the control point of the curve
+  that arrives. The tree's model and the kit's model say the same
+  thing in two shapes, and the port had to say which shape it is.
+- **A closed contour's last curve has no handles here.** The tree's
+  anchors hold the handles of the curve that closes the contour; v2's
+  closed contour closes with an implicit line, so the handles of that
+  curve are not in the path at all. A port that reads the family and
+  sees the handles of a closing curve has seen the family's model and
+  not the kit's.
+- **The battery could make a path and could not touch it.** The five
+  path operations — unite, subtract, intersect, simplify, offset — all
+  work on whole paths, and not one of them moved a point. A shape that
+  cannot be edited is a shape that can only be replaced, and the tree
+  is a program for editing shapes.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/points.rs`): a point may be
+  moved, a handle makes a curve, the handles move with the point, and a
+  point that is not there is refused.
+- **Two commands** (`vector.path.move` and `vector.path.handle`) and no
+  change to the SDK: the points are worked out from the segments, and
+  the kit's path is what it was.
+
+### What it does not settle
+
+- **A path may not be given a new point.** The tree's
+  `path.insertAnchor` and `path.appendAnchor` put an anchor in and
+  take one out; here a point is moved and a handle is set, and the
+  number of points is the number the path was made with.
+- **The tree's path is one kind and v2's is a payload.** The tree's
+  path is a closed enum of what a path may be — a polygon, a
+  rectangle, an ellipse, a star, a custom outline — and every one of
+  them is matched in the tree's editor. Here the path is one thing and
+  the shape is a property of it.
+- **The tree's anchor is a point with two handles and a type.** The
+  tree's anchor says what it is — a corner, a smooth point — and the
+  editor draws it differently. v2's points have no kind.
