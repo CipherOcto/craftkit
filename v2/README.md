@@ -901,6 +901,9 @@ different commands with one id.
   from the file — the header and the numbers, read within limits. A
   **library**, not a plugin: it contributes nothing to the registry and
   the linker does not wire it in (§133).
+- `crates/craftkit-audio` — the **mixer**: the samples of many tracks,
+  summed into one. A **library**, not a plugin: it contributes nothing
+  to the registry and the linker does not wire it in (§134).
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
   words, the measure it sits in, the **metric** it is set in, the lines
   it breaks into and the **letters** it is drawn with — ported into v2's
@@ -988,7 +991,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1020 tests.** The MCP server links **all fifteen batteries** in, so the
+**1032 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1090,7 +1093,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1020 tests
+cargo test          # 1032 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1278,7 +1281,8 @@ and it is the same rule the vector battery follows.
   second set of camera controls in the tree. The camera is a question for
   the tree, not for a plugin: one module owns it, with its own caps, and
   every canvas goes through it.
-- **There is no audio thread.** A command in v2 runs on the caller's
+- **There is no audio thread.** The kit renders a document offline
+  (§135) and it has no device and no playhead; a command in v2 runs on the caller's
   thread, which is the wrong thread for a block of audio: a real-time
   door needs its own seam, its own rules about locking and allocation, and
   its own tests. The sound tree has that seam already, and it is the
@@ -8951,7 +8955,8 @@ model.
   per send would need a way to say which is which.
 - **There is no audio.** The mixer is a picture of a mixer: the routing
   is in the plan (§20.4) and the sound is not made. That is the audio
-  engine, and it is not built.
+  engine, and it is not built. — **Answered in §135**: the sound is
+  made, offline — the document is rendered into a file.
 
 ---
 
@@ -9301,8 +9306,115 @@ first thing that was missing was a way to get the **samples** in.
 - **There is still no audio.** The reader gives back samples and
   stops: there is no engine that mixes them, no device that plays them
   and no playhead that moves. The mixer is a picture of a mixer
-  (§127), and now the samples are in the room.
+  (§127), and now the samples are in the room. — **Answered in §134
+  and §135**: the engine is the mixer, and the document is rendered
+  into a file. What is still missing is a **device** and a
+  **playhead**.
 - **Only WAV.** A sound file may be in AIFF or in FLAC, and those are
   refusals with names.
 - **The file's own extras are left in it.** A WAV may carry a list of
   markers or a name, and the reader does not look for them.
+
+---
+
+## 134. The mixer, and a file the kit can write
+
+The kit could draw a mixer (§127) and could not make a sound, and the
+missing pieces were two: the **sum**, and the **file**.
+
+### What was built
+
+- **`craftkit-audio`**: the mixer. It takes **tracks** — a stretch of
+  samples that starts somewhere, at a gain — and gives back the sum.
+- The gain in **decibels** becomes the gain of a ratio: twenty times
+  the logarithm, because a bel is a factor of ten of **power** and
+  power is the square of a gain.
+- **`craftkit-wav` writes**: a sound it wrote is a file it can read
+  back, at sixteen bits, because that is the width every tool reads.
+- The **clipped** samples are a decision about the **output**: a mix
+  may be louder than one, and a file cannot say how loud it is.
+
+### What the port found
+
+- **A mixer is a graph, and a graph of arithmetic is arithmetic.** The
+  kit's mixer is buses, sends, inserts and automation (§20.4) — a
+  *graph* of routing — and the graph is the caller's business. So the
+  library here **sums**, and it does sums: no bus, no send, no insert.
+  That is a smaller thing than a mixer and it is the part of one that
+  is arithmetic.
+- **A track that starts before the beginning is refused.** A start came
+  from a document and a document can say anything, and a track that
+  starts at −1 is not a track — it is a number that was not checked.
+- **The mixer does not clip.** The sum of two loud tracks may be louder
+  than one, and the clip is a decision about the file, so it happens
+  when the file is written.
+
+### What it cost
+
+- one crate, one module and **ten tests**: the sum, the gain, the
+  length, the decibel, the three refusals, the clip — and the round
+  trip, because a sound the kit writes is a sound the kit reads.
+
+### What it does not settle
+
+- **There is no bus and no send.** The sum is the sum; a bus is a track
+  that other tracks feed, and a send is a track that is fed from
+  another, and neither is built.
+- **The mix has one rate.** Tracks are added sample for sample, and a
+  track at another rate is a track at the wrong rate. The renderer
+  refuses such a source (§135) rather than resampling it.
+- **There is no device.** A mix is a buffer of numbers, and something
+  has to play it: the kit has no audio device and no playhead.
+
+---
+
+## 135. The document is rendered into a sound
+
+The mixer summed numbers and nothing summed them. Now the **document**
+is rendered: the sources it names are read, the clips are the tracks,
+the tracks are mixed, and the mix is written to a file.
+
+### What was built
+
+- **`sound.render`**: the renderer. It is **offline** — it writes a file
+  and it stops — because the kit has no audio device and no audio
+  thread, and a file is a thing a program can make without a device.
+- The **clips are the tracks**: each clip plays a source from an
+  offset, for a length, at a gain, and the gain in decibels becomes the
+  gain of a ratio (§134).
+- The **sources are read once** and the clips that play one share it.
+
+### What the port found
+
+- **A renderer is a command and not a thread.** The kit's rule is that
+  everything a user can do is a command (§ the registry), and a render
+  is something a user asks for: *make me this file*. A thread that
+  renders while the window draws is a different thing, and the kit does
+  not have it — the **audio thread** is still in the not-built list.
+- **The refusals are the interesting part.** A source that is not there
+  is refused; a source at **another rate** than the session is refused,
+  because there is no resampler here and a resampled clip is not the
+  clip that was asked for; sources that do not have the same number of
+  channels are refused; and a file larger than the limits allow is
+  refused **before a byte of it is read**.
+- **The file is the deliverable.** The render does not return a buffer
+  to a caller that cannot play one; it writes a file, and the file is
+  a sound any tool can open.
+
+### What it cost
+
+- one command, two helpers and **two tests**: the document is rendered
+  and the file it wrote is read back and holds the source's samples,
+  and a source that is not there is refused.
+
+### What it does not settle
+
+- **There is no device and no playhead.** The render makes a file; the
+  kit cannot play it, cannot show where it is and cannot move a cursor
+  along it.
+- **The mixer's graph is not rendered.** The buses, the sends, the
+  inserts and the automation lanes (§127) are in the plan and not in
+  the render: the render sums the clips.
+- **There is no resampler and no time stretch.** A source at another
+  rate is refused, and a clip that should be slower than its source is
+  not made.
