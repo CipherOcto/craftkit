@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**905 tests.** The MCP server links **all fourteen batteries** in, so the
+**907 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 905 tests
+cargo test          # 907 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8008,10 +8008,58 @@ them was a copy.
 ### What it does not settle
 
 - **The channel cannot click.** The old tree's channel had `ui.click`,
-  `ui.screenshot` and `ui.render`, and an agent that could see the
-  screen could check what it had done. v2's channel has the six
-  methods of the protocol and not the three of the screen.
+  `ui.screenshot` and `ui.render`. v2's channel has `ui.render` now
+  (§111) — the agent can see the document the window is drawing — but
+  not `ui.click`: a click needs a name to click, and the window has no
+  names on its buttons.
 - **The window redraws when it is told to.** The picture is drawn again
   when the document, the camera or the command count has changed, and
   a command that arrived over the channel changes the document — so
   the window redraws — but nothing says so out loud.
+
+---
+
+## 111. The channel can show the window
+
+The channel could change the document and could not see the result. An
+agent that cannot see the result is an agent that has to believe it.
+
+### What was built
+
+- The window gives the channel a way to ask for the **picture**, and
+  the channel has a method that asks: `ui.render`.
+- The picture travels as **base64 in one line**, and a line is
+  bounded — so the picture is three hundred and twenty by two hundred
+  and forty, which fits in the line and is big enough to see what
+  changed.
+- A program with **no window** says so: the answer names the reason,
+  and it is not an empty picture.
+
+### What the port found
+
+- **The channel knows the session; the window knows the screen.** The
+  two are different things and the seam between them is a trait the
+  window implements: the channel asks for a picture and hands the
+  answer over, and it never asks the session to draw one.
+- **A picture that does not fit in the line is a picture that cannot
+  be sent.** The first version drew at eight hundred by six hundred,
+  and the answer was refused by the reader before the client saw it —
+  the line is the bound and the picture has to live inside it.
+- **The token was printed.** The options had a derived `Debug`, and it
+  printed the token: a token in a log is a token in the world. So the
+  options say "a token" and not what it is.
+
+### What it cost
+
+- a trait in the channel, a method on the wire, a picture in the
+  window, the options' `Debug` written by hand, **two tests**.
+
+### What it does not settle
+
+- **The picture is the document and not the window.** The panels, the
+  form and the log are chrome, and they are not in the picture: an
+  agent sees what the document looks like and not what the program
+  looks like.
+- **The picture is drawn at a fixed size.** The window draws at the
+  size of its panel, and the channel's picture is three hundred and
+  twenty by two hundred and forty whatever the window is.
