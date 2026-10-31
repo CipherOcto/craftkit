@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**835 tests.** The MCP server links **all fourteen batteries** in, so the
+**838 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -7097,3 +7097,53 @@ drawing into it.
   controls before the picture can be moved.
 - **The window still shows the tree and the plan as text.** They are
   the same information twice, and a person would rather have one.
+
+## 93. The window you can use
+
+§92 left the picture as a picture: a person could look at it and
+could not touch it. This is the mouse.
+
+### What was built
+
+- The window **picks**: a point of the world is offered to every node's
+  kind, and the **deepest** hit wins — a thing in a group is in front
+  of the group that holds it.
+- A click **selects**, through the registry: the window runs
+  `select.node` like every other command, and the selection is the
+  session's state.
+- The **camera** moves and zooms: dragging pans it, the wheel zooms
+  it, and the camera's own caps clamp the zoom.
+- The rasteriser now uses the **camera's own mapping** instead of
+  working it out again, so what is drawn and what is clicked are the
+  same mapping.
+- Four more tests: the pick, the selection, the camera and its caps.
+
+### What the port found
+
+- **There were two mappings, and they agreed by hand.** The camera
+  already knew the way back from the screen to the world, and the
+  rasteriser worked it out again from the camera's zoom and its
+  offset. Two copies of one rule is two answers to every question, and
+  they agree until a round number is in one of them. The rasteriser now
+  asks the camera — and the tree's rule about **one set of camera
+  controls** is the same rule, seen from the other side.
+- **A click is a command.** The selection is the session's state, and
+  the command that sets it is in the registry like everything else: the
+  window has no way to select a node that the registry does not know.
+- **The hit is the kind's own.** The window does not know what a shape
+  is or where its edges are: it offers a point to the kind, and the
+  kind says whether the point is inside it.
+
+### What it cost
+
+- two methods in the window, one line in the rasteriser, **four tests**.
+
+### What it does not settle
+
+- **Nothing can be dragged.** A click selects, and a shape does not
+  move: the document's own commands for that are not there yet.
+- **The wheel zooms about the middle and not about the pointer.** The
+  camera's zoom is about its own middle, which is the simplest rule and
+  not the one a person expects.
+- **The tree and the plan are still text.** The picture is a picture
+  and the rest is a list, and a person would rather have one.
