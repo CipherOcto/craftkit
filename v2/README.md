@@ -947,12 +947,17 @@ different commands with one id.
   open a plugin and not a mock. The fifth crate that may hold `unsafe`,
   and the only thing in it that is unsafe is the attribute that gives
   the symbol its name (§76).
+- `crates/craftkit-plugin-clap` — the **CLAP battery**: a plugin in the
+  document — a node whose payload holds the plugin's identity and its
+  state, the state as base64 and the state as the plugin's own bytes
+  (§87). It is optional, like the others.
 
-**808 tests.** The MCP server links **all twelve batteries** in, so the
+**814 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
-`/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`) — and the studio
-on its own, with no features, carries **196** of them, and **210** with
+`/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
+`/clap`) — and the studio
+on its own, with no features, carries **199** of them, and **213** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -6691,3 +6696,85 @@ sampler. The host does not know what is in it — and that is the point:
 - **The state is bounded at sixty-four mebibytes.** A plugin that
   writes more than that is refused, and the bound is private to this
   host.
+
+## 87. The plugin in the document
+
+§86 ended with a gap: the host could save a plugin's state and the
+document could carry opaque bytes, and **nothing joined them**. This
+section joins them, and the join is a **battery** — the fourteenth one,
+`craftkit-plugin-clap`, and the first one whose subject is a *program*.
+
+### What was built
+
+- **A node kind, `clap.plugin`.** Its payload holds the plugin's
+  identity — the library it came from, its id, its name, its vendor and
+  its version — the parameters the plugin says it holds, and **its
+  state**, as base64.
+- **Five commands.** `clap.list` reads the plugins in a library without
+  touching the document. `clap.attach` opens the plugin and puts it in
+  the document. `clap.detach` takes it out again. `clap.parameter.set`
+  moves one parameter and keeps the state that follows. `clap.state`
+  asks the plugin what it makes of the state the document holds.
+- **The state travels as base64 in the payload** — the same answer the
+  PDF battery gives for a stream, and the same answer the SDK's own
+  `bytes` module gives.
+- **No instance is ever kept.** A command opens the plugin, hands it the
+  state, does its work and closes it. What the document keeps is what
+  the plugin *said*.
+- The **MCP server links the battery in**, so an agent can drive it: the
+  server's tool list is **159 tools** with **all fourteen batteries**
+  linked, measured the same way as every other number here.
+
+### What the port found
+
+- **A plugin is a program, and a document cannot hold a program.** So
+  the document holds the *state* and the *name*, and the library is a
+  file on disk like a picture: the document says where it is. The
+  family's own mixer does the same thing — an insert names its plugin
+  and carries its state, and the plugin itself is somewhere else.
+- **The instance cannot be in the document, and it does not need to be.**
+  A CLAP instance holds addresses into a library that is open, it cannot
+  be sent between threads, and it is destroyed when the host is finished
+  with it. A session is `Send` — the control channel holds one behind a
+  mutex — so an instance in a session would be a `Send` problem before
+  it was a document problem. The way out is the honest one: **the
+  instance is an implementation detail of a command**, and what survives
+  the command is the plugin's own bytes.
+- **The state is opaque, and that is exactly what makes it carryable.**
+  The host never looks inside it; the plugin writes it and the plugin
+  reads it. So the document can hold it without pretending to
+  understand it, and the plugin that gets it back finds its own memory
+  exactly as it left it.
+- **A parameter is set by offering an event, so the plugin has to work
+  once.** The value does not arrive by being written into the plugin;
+  it arrives in the block of audio. So `clap.parameter.set` runs **one
+  frame of one channel** through the plugin, and the frame is not here
+  to make a sound: it is here to deliver an event. The kit still has no
+  audio thread, no sample rate of its own and no transport — this is a
+  **seam**, and the block is the smallest thing that fills it.
+
+### What it cost
+
+- one crate, one node kind, five commands, one panel, **six tests**, and
+  the state bound below.
+
+### What it does not settle
+
+- **The state is bounded at sixteen mebibytes** (`16 * 1024 * 1024`),
+  and the bound is private to this battery. The base64 costs a third
+  more than the bytes, and the host's own bound is sixty-four mebibytes
+  (§86) — so the document's bound is the smaller one, and it is the one
+  that decides what a document may carry.
+- **The library path is in the payload and nothing checks it.** The
+  document's own machinery for a file that is not there — the asset
+  list, the stream list — does not see a plugin's library, so a
+  document that names a plugin that is not installed is not refused at
+  the door. It is refused when a command opens it, which is later and
+  less clear.
+- **Every command opens the plugin again.** A `dlopen` and a `dlclose`
+  per command is cheap, and a plugin that takes a second to open pays
+  that second every time. Keeping the instance alive would fix it, and
+  it is exactly what the tree decided not to do.
+- **The audio path is still not a document.** There is no sample rate,
+  no block size and no transport in a document; the rate here is this
+  program's, and a plugin's audio goes nowhere.
