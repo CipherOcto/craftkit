@@ -501,3 +501,46 @@ fn the_channel_can_click_in_the_document() {
     assert!(answer["clicked"].is_null(), "nothing was clicked: {answer}");
     server.shutdown();
 }
+
+/// The channel can **drag** in the document.
+///
+/// It is the same drag a person makes: what is under the pointer says
+/// whether the node moves, resizes, or the camera slides.
+#[test]
+fn the_channel_can_drag_in_the_document() {
+    let mut window = window();
+    window.open("geometry.rectangle");
+    window.set("x", json!(0.0));
+    window.set("y", json!(0.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.run().expect("the rectangle is added");
+
+    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowControl::new(
+        window.shared_session(),
+    )));
+    let options = craftkit_control::Options {
+        token: "a-secret".to_string(),
+        address: "127.0.0.1:0".parse().expect("an address"),
+        announce: None,
+        render: Some(render),
+    };
+    let mut server =
+        craftkit_control::Server::serve_shared(window.shared_session(), options).expect("the channel opens");
+    let mut client =
+        craftkit_control::Client::connect(server.address(), "a-secret").expect("the client connects");
+
+    // A drag that starts on the node moves it.
+    client
+        .call(
+            craftkit_control::Method::UiDrag,
+            json!({ "from": { "x": 5.0, "y": 5.0 }, "to": { "x": 15.0, "y": 25.0 } }),
+        )
+        .expect("the drag comes");
+
+    let session = window.session();
+    let rect = session.document().node(1).and_then(|node| node.rect).expect("the node has a place");
+    assert_eq!(rect.x, 10.0, "the node moved across");
+    assert_eq!(rect.y, 20.0, "and up");
+    server.shutdown();
+}

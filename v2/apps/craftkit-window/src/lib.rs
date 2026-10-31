@@ -35,6 +35,8 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod pointer;
+
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -64,6 +66,12 @@ pub struct Window {
     form: Option<Form>,
     /// What the window has to say.
     log: Vec<String>,
+    /// The **pointer**: what the hand is doing, if it is doing
+    /// something.
+    ///
+    /// It is the front end's own state and not the session's: it is a
+    /// hand, and it is over when the mouse is let go.
+    pointer: Option<Pointer>,
     /// How many commands the window has run.
     ///
     /// It is a **counter**, and it is what the drawing knows: the
@@ -86,6 +94,7 @@ impl Window {
             panels,
             form: None,
             log: Vec::new(),
+            pointer: None,
             runs: 0,
         })
     }
@@ -293,15 +302,7 @@ impl Window {
     /// **deepest** hit wins: a thing in a group is in front of the group
     /// that holds it.
     pub fn pick(&self, point: craftkit_sdk::Point) -> Option<u64> {
-        let session = self.session();
-        let document = session.document();
-        document
-            .walk_visible()
-            .filter(|node| {
-                session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, document, point)).unwrap_or(false)
-            })
-            .last()
-            .map(|node| node.id)
+        pointer::pick(&self.session(), point)
     }
 
     /// **Select** a node, through the registry.
@@ -354,20 +355,7 @@ impl Window {
     /// The **deepest** handle wins, as it does for a pick: a thing in a
     /// group is in front of the group that holds it.
     pub fn handle_at(&self, point: craftkit_sdk::Point, tolerance: f64) -> Option<u64> {
-        let tolerance = tolerance.max(0.0);
-        self.session()
-            .document()
-            .walk_visible()
-            .filter(|node| {
-                node.rect
-                    .map(|rect| {
-                        let handle = rect.resize_handle();
-                        (handle.x - point.x).abs() <= tolerance && (handle.y - point.y).abs() <= tolerance
-                    })
-                    .unwrap_or(false)
-            })
-            .last()
-            .map(|node| node.id)
+        pointer::handle_at(&self.session(), point, tolerance)
     }
 
     /// **Zoom** the camera.
@@ -392,6 +380,61 @@ impl Window {
     /// second time.
     pub fn zoom_at(&mut self, factor: f64, at: craftkit_sdk::Point) {
         self.session().camera_mut().zoom_at(factor, at);
+    }
+
+    /// **Begin** a drag at a point of the world.
+    ///
+    /// What is under the pointer says what the drag is: a handle
+    /// resizes, a node moves, and the background moves the camera.
+    pub fn pointer_down(&mut self, at: craftkit_sdk::Point) -> pointer::Drag {
+        let drag = pointer::down(&self.session(), at);
+        self.pointer = Some(Pointer { drag: drag.clone(), from: at, last: at });
+        drag
+    }
+
+    /// **Continue** a drag, at a point of the world.
+    ///
+    /// The camera moves when the drag is the camera's, and the world
+    /// slides under the hand with it.
+    pub fn pointer_dragged(&mut self, at: craftkit_sdk::Point) {
+        let Some(pointer) = self.pointer.as_ref() else { return };
+        let (drag, last) = (pointer.drag.clone(), pointer.last);
+        pointer::dragged(&mut self.session(), &drag, last, at);
+        if let Some(pointer) = self.pointer.as_mut() {
+            pointer.last = at;
+        }
+    }
+
+    /// **End** a drag, at a point of the world.
+    ///
+    /// The node moves or resizes, through the registry, and what the
+    /// command said is what the window says.
+    pub fn pointer_up(&mut self, at: craftkit_sdk::Point) -> Option<Outcome> {
+        let pointer = self.pointer.take()?;
+        let outcome = pointer::up(&mut self.session(), &pointer.drag, pointer.from, at);
+        match outcome {
+            Ok(outcome) => {
+                self.log.push(outcome.message.clone());
+                self.runs += 1;
+                Some(outcome)
+            }
+            Err(error) => {
+                self.log.push(format!("the drag refused: {error}"));
+                None
+            }
+        }
+    }
+
+    /// **Click** at a point of the world.
+    ///
+    /// The node under the pointer is picked through the kinds and
+    /// selected through the registry: the same click a person makes.
+    pub fn click_at(&mut self, at: craftkit_sdk::Point) -> Option<u64> {
+        let node = pointer::pick(&self.session(), at)?;
+        match self.run_id("select.node", json!({ "node": node })) {
+            Ok(_) => Some(node),
+            Err(_) => None,
+        }
     }
 
     /// What the window has to say.
@@ -471,6 +514,23 @@ impl craftkit_control::Render for WindowControl {
         Ok(raster.image().to_png())
     }
 
+    fn drag(
+        &mut self,
+        from: craftkit_sdk::Point,
+        to: craftkit_sdk::Point,
+    ) -> Result<craftkit_sdk::serde_json::Value, String> {
+        let mut session = match self.session.lock() {
+            Ok(session) => session,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        // The same drag a person makes: what is under the pointer says
+        // whether the node moves, resizes, or the camera slides.
+        let drag = pointer::down(&session, from);
+        pointer::dragged(&mut session, &drag, from, to);
+        let outcome = pointer::up(&mut session, &drag, from, to).map_err(|error| error.to_string())?;
+        Ok(craftkit_sdk::serde_json::json!({ "message": outcome.message }))
+    }
+
     fn click(&mut self, at: craftkit_sdk::Point) -> Result<craftkit_sdk::serde_json::Value, String> {
         let mut session = match self.session.lock() {
             Ok(session) => session,
@@ -522,6 +582,16 @@ pub struct Picture {
     pub height: usize,
     /// The pixels: red, green, blue and alpha, four bytes each.
     pub pixels: Vec<u8>,
+}
+
+/// The **pointer**: the drag that is going on.
+struct Pointer {
+    /// What the drag is doing.
+    drag: pointer::Drag,
+    /// Where the drag began, in the world.
+    from: craftkit_sdk::Point,
+    /// Where the pointer was the last time it moved.
+    last: craftkit_sdk::Point,
 }
 
 /// One **panel**, as the window shows it.

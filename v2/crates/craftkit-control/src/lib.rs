@@ -87,6 +87,12 @@ pub trait Render: Send {
     /// a click at a point of the screen is a click at a point of the
     /// world that the camera has already found.
     fn click(&mut self, at: craftkit_sdk::Point) -> Result<Json, String>;
+
+    /// **Drag** from one point of the world to another.
+    ///
+    /// It is the same drag a person makes: what is under the pointer
+    /// says whether the node moves, resizes, or the camera slides.
+    fn drag(&mut self, from: craftkit_sdk::Point, to: craftkit_sdk::Point) -> Result<Json, String>;
 }
 
 /// What a client is asking for.
@@ -112,6 +118,8 @@ pub enum Method {
     UiRender,
     /// Click in the document, at a point of the world.
     UiClick,
+    /// Drag in the document, from one point of the world to another.
+    UiDrag,
 }
 
 impl Method {
@@ -126,6 +134,7 @@ impl Method {
             Method::Shutdown => "shutdown",
             Method::UiRender => "ui.render",
             Method::UiClick => "ui.click",
+            Method::UiDrag => "ui.drag",
         }
     }
 
@@ -140,6 +149,7 @@ impl Method {
             "shutdown" => Method::Shutdown,
             "ui.render" => Method::UiRender,
             "ui.click" => Method::UiClick,
+            "ui.drag" => Method::UiDrag,
             _ => return None,
         })
     }
@@ -155,6 +165,7 @@ impl Method {
             Method::Shutdown,
             Method::UiRender,
             Method::UiClick,
+            Method::UiDrag,
         ]
     }
 }
@@ -565,6 +576,35 @@ fn answer(
     };
     match method {
         Method::Ping => Response::ok(&request.id, "pong", Some(json!({ "pong": true }))),
+        Method::UiDrag => {
+            let Some(render) = render else {
+                return Response::error(&request.id, "no-window", "this program has no window to drag in");
+            };
+            let point = |name: &str| {
+                request.params.get(name).and_then(|point| {
+                    let x = point.get("x").and_then(|x| x.as_f64())?;
+                    let y = point.get("y").and_then(|y| y.as_f64())?;
+                    if !x.is_finite() || !y.is_finite() {
+                        return None;
+                    }
+                    Some(craftkit_sdk::Point::new(x, y))
+                })
+            };
+            let (Some(from), Some(to)) = (point("from"), point("to")) else {
+                return Response::error(
+                    &request.id,
+                    "bad-request",
+                    "a drag is two points: `params.from` and `params.to` are the world's units",
+                );
+            };
+            let Ok(mut render) = render.lock() else {
+                return Response::error(&request.id, "internal", "the window is poisoned");
+            };
+            match render.drag(from, to) {
+                Ok(answer) => Response::ok(&request.id, "the drag", Some(answer)),
+                Err(message) => Response::error(&request.id, "failed", message),
+            }
+        }
         Method::UiClick => {
             let Some(render) = render else {
                 return Response::error(&request.id, "no-window", "this program has no window to click in");
