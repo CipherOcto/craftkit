@@ -616,6 +616,7 @@ name = "craftkit-plugin-text"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-font",
  "craftkit-payload",
  "craftkit-sdk",
  "craftkit-text-layout",

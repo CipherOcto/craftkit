@@ -3,8 +3,9 @@
 //! What is proved here: the words are the payload, the measure is the
 //! paragraph's **place** and not the paragraph, the **metric** is a node
 //! and the paragraph's typeface is an **edge**, the lines are
-//! **derived**, and the kit has no font — so the widths come from the
-//! caller.
+//! **derived**, the widths come from the caller — and the letters come
+//! from the kit's **own typeface**, which is drawn in code like the
+//! icons are.
 
 use craftkit_sdk::Ecosystem;
 #[cfg(feature = "text")]
@@ -178,8 +179,9 @@ fn the_ragged_setting_is_kept() {
     assert_eq!(node.data["measure_mm"], json!(30.0));
 }
 
-/// The kit has **no font**: the widths come from the caller, and the
-/// **metric** is where they live.
+/// The **widths** come from the caller, and the **metric** is where
+/// they live. The typeface says the shape of a letter and the metric
+/// says how wide it is.
 #[cfg(feature = "text")]
 #[test]
 fn the_widths_come_from_the_caller() {
@@ -191,6 +193,50 @@ fn the_widths_come_from_the_caller() {
     assert_eq!(node.kind, "text.metric");
     assert_eq!(node.data["default_mm"], json!(2.0), "the advance is the metric");
     assert_eq!(node.data["space_mm"], json!(2.0));
+    assert_eq!(node.data["em_mm"], json!(4.0), "and the size of the typeface");
+}
+
+/// A paragraph is **drawn**: with the kit's own letters.
+///
+/// The typeface is the tree's own — no font file, no asset — and the
+/// drawing is the letters' strokes.
+#[cfg(feature = "text")]
+#[test]
+fn a_paragraph_is_drawn_with_the_kits_own_letters() {
+    let mut session = ecosystem().session();
+    session
+        .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 2.0 }))
+        .expect("the metric is added");
+    session
+        .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
+        .expect("the paragraph is added");
+    session
+        .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 20.0 }))
+        .expect("the paragraph is measured");
+    let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+    session.paint(&mut canvas);
+    let lines = canvas.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
+    assert!(lines > 0, "the paragraph drew no letters: {:?}", canvas.drawn);
+}
+
+/// The paragraph is **framed** by its lines: as wide as the measure
+/// and as tall as the lines.
+#[cfg(feature = "text")]
+#[test]
+fn a_paragraph_is_framed_by_its_lines() {
+    let mut session = ecosystem().session();
+    session
+        .execute("text.metric.add", &json!({ "name": "mono", "default_mm": 2.0, "space_mm": 2.0 }))
+        .expect("the metric is added");
+    session
+        .execute("text.paragraph.add", &json!({ "text": "one two", "metric": 1 }))
+        .expect("the paragraph is added");
+    session
+        .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 20.0 }))
+        .expect("the paragraph is measured");
+    let bounds = session.bounds().expect("the document has bounds");
+    assert_eq!(bounds.w, 20.0, "the block is as wide as the measure");
+    assert!(bounds.h > 0.0, "and as tall as the lines");
 }
 
 /// A **metric** is a node and a paragraph's typeface is an **edge**: the

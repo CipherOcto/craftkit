@@ -12,6 +12,8 @@ license.workspace = true
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
 craftkit-text-layout = { path = "../craftkit-text-layout", version = "0.2.0" }
+# The kit's own typeface: the letters the paragraph is drawn with.
+craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
 # The **payload reader**: a bounded reading of the values a node
 # carries. The plugin's own bounds, and the mechanism that holds them.
 craftkit-payload = { path = "../craftkit-payload", version = "0.2.0" }

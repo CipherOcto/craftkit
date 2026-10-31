@@ -92,6 +92,8 @@
 )]
 #![forbid(unsafe_code)]
 
+mod draw;
+
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_payload::{Limits, Payload, Refusal};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -110,16 +112,40 @@ pub struct TextLayer;
 
 /// A **paragraph**: a run of words that is broken into lines.
 #[derive(NodeKind)]
-#[node_kind(kind = "text.paragraph", label = "Paragraph", layer = "text", evaluates)]
+#[node_kind(kind = "text.paragraph", label = "Paragraph", layer = "text", evaluates, place)]
 pub struct ParagraphKind;
 
 impl ParagraphKind {
-    /// Not drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    /// How a paragraph is drawn: **its letters**, as paths.
+    ///
+    /// The letters come from the kit's own typeface and their widths
+    /// from the paragraph's metric: the typeface says what a letter
+    /// looks like and the metric says how wide it is, and the drawing
+    /// is the two of them together (§129).
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn craftkit_sdk::Canvas) {
+        let Some(drawn) = draw::draw(node, document) else { return };
+        let colour = document
+            .appearance_of(node)
+            .map(|appearance| appearance.fill)
+            .unwrap_or(craftkit_sdk::document::Colour::BLACK);
+        for path in &drawn.paths {
+            canvas.path(path, craftkit_sdk::document::Colour::NONE, Some(draw::stroke(colour)));
+        }
+    }
 
-    /// Not hit.
-    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
-        false
+    /// Whether a point is on a **letter**.
+    ///
+    /// The letters are hit by their **ink**, and not by the box of the
+    /// line: a space has no ink and is not something a pointer is on,
+    /// and the space between two words is not the words.
+    fn hit(node: &Node, document: &Document, point: craftkit_sdk::Point) -> bool {
+        let Some(drawn) = draw::draw(node, document) else { return false };
+        draw::hits(&drawn, point)
+    }
+
+    /// Where a paragraph **is**: the block of its lines.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        draw::block(node, document)
     }
 
     /// What a paragraph **means**: its words, its measure, its setting,
@@ -172,6 +198,7 @@ impl MetricKind {
         Some(json!({
             "default_mm": metric.default_mm,
             "space_mm": metric.space_mm,
+            "em_mm": metric.em_mm,
             "characters": metric.advances.len(),
             "runs": metric.runs.len(),
             "pairs": metric.pairs.len(),
@@ -211,6 +238,12 @@ struct Metric {
     pairs: HashMap<String, f64>,
     /// The width of the space between two words.
     space_mm: f64,
+    /// The size of the typeface: the **em**, in millimetres.
+    ///
+    /// A metric is a typeface at a size, and the size is what the
+    /// letters are drawn at. A metric that does not say has the
+    /// default size.
+    em_mm: f64,
 }
 
 /// The longest run a metric may hold: eight characters.
@@ -260,12 +293,32 @@ impl Metric {
             }
             pairs.insert(key.to_string(), adjust);
         }
-        Some(Metric { default_mm, advances, runs, pairs, space_mm })
+        let em_mm = match payload.number("em_mm") {
+            Ok(size) if size.is_finite() && size > 0.0 => size,
+            // A metric that does not say how big it is is not refused:
+            // it is set at the default size.
+            _ => draw::DEFAULT_EM_MM,
+        };
+        Some(Metric { default_mm, advances, runs, pairs, space_mm, em_mm })
     }
 
     /// The width of one character.
     fn advance(&self, character: char) -> f64 {
         self.advances.get(&character).copied().unwrap_or(self.default_mm)
+    }
+
+    /// The width of one character, for the **drawing**.
+    ///
+    /// The metric's own width wins: a character that has one is that
+    /// wide. A character that has none is the **default** wide — and
+    /// if the default is nothing, then the character is as wide as the
+    /// typeface says it is, because a metric that says nothing at all
+    /// is not a setting, it is an absence.
+    fn width_of(&self, character: char, natural: f64) -> f64 {
+        if let Some(width) = self.advances.get(&character) {
+            return *width;
+        }
+        if self.default_mm > 0.0 { self.default_mm } else { natural }
     }
 
     /// The longest run that starts at `index`, and its width.
@@ -427,6 +480,9 @@ pub struct AddMetric {
     pub default_mm: Number,
     /// The width of the space between two words, in millimetres.
     pub space_mm: Number,
+    /// The size of the typeface: the **em**, in millimetres. The
+    /// capitals are this tall.
+    pub em_mm: Option<Number>,
     /// The widths of the characters that have one: a table of character
     /// to millimetres.
     pub advances: Option<Json>,
@@ -456,6 +512,18 @@ impl AddMetric {
                 message: "a space is not narrower than nothing".to_string(),
             });
         }
+        let em_mm = match self.em_mm.map(|size| size.0) {
+            Some(size) if size.is_finite() && size > 0.0 => size,
+            // A metric that does not say how big it is is not refused:
+            // it is set at the default size.
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: "text.metric.add".to_string(),
+                    message: "a typeface is not smaller than nothing".to_string(),
+                });
+            }
+            None => draw::DEFAULT_EM_MM,
+        };
         let advances = read_advances("text.metric.add", self.advances.as_ref())?;
         let runs = read_runs("text.metric.add", self.runs.as_ref())?;
         let pairs = read_pairs("text.metric.add", self.pairs.as_ref())?;
@@ -467,6 +535,7 @@ impl AddMetric {
             json!({
                 "default_mm": default_mm,
                 "space_mm": space_mm,
+                "em_mm": em_mm,
                 "advances": Json::Object(advances),
                 "runs": Json::Object(runs),
                 "pairs": Json::Object(pairs),
@@ -494,6 +563,8 @@ pub struct ChangeMetric {
     pub default_mm: Option<Number>,
     /// The width of the space between two words, in millimetres.
     pub space_mm: Option<Number>,
+    /// The size of the typeface: the **em**, in millimetres.
+    pub em_mm: Option<Number>,
     /// The widths of the characters that have one: a table of character
     /// to millimetres.
     pub advances: Option<Json>,
@@ -536,6 +607,15 @@ impl ChangeMetric {
                 message: "a space is not narrower than nothing".to_string(),
             });
         }
+        let em_mm = self.em_mm.map(|size| size.0);
+        if let Some(em_mm) = em_mm
+            && (!em_mm.is_finite() || em_mm <= 0.0)
+        {
+            return Err(EngineError::Failed {
+                id: "text.metric.set".to_string(),
+                message: "a typeface is not smaller than nothing".to_string(),
+            });
+        }
         let advances = match &self.advances {
             Some(table) => Some(read_advances("text.metric.change", Some(table))?),
             None => None,
@@ -559,6 +639,9 @@ impl ChangeMetric {
         }
         if let Some(space_mm) = space_mm {
             node.data["space_mm"] = json!(space_mm);
+        }
+        if let Some(em_mm) = em_mm {
+            node.data["em_mm"] = json!(em_mm);
         }
         if let Some(advances) = advances {
             node.data["advances"] = Json::Object(advances);
@@ -1026,6 +1109,7 @@ mod tests {
             runs: HashMap::new(),
             pairs: HashMap::new(),
             space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
         };
         let words = vec!["one".to_string(), "two".to_string(), "three".to_string()];
         let items = items_for(&words, &metric);
@@ -1049,8 +1133,14 @@ mod tests {
     fn a_character_with_a_width_of_its_own_is_wider() {
         let mut advances = HashMap::new();
         advances.insert('i', 1.0);
-        let metric =
-            Metric { default_mm: 2.0, advances, runs: HashMap::new(), pairs: HashMap::new(), space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances,
+            runs: HashMap::new(),
+            pairs: HashMap::new(),
+            space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
+        };
         assert_eq!(metric.word_width("iii"), 3.0, "three narrow letters");
         assert_eq!(metric.word_width("abc"), 6.0, "three ordinary ones");
     }
@@ -1064,6 +1154,7 @@ mod tests {
             runs: HashMap::new(),
             pairs: HashMap::new(),
             space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
         };
         assert!(items_for(&[], &metric).is_empty());
     }
@@ -1292,8 +1383,14 @@ mod tests {
     fn a_run_replaces_its_characters() {
         let mut runs = HashMap::new();
         runs.insert("fi".to_string(), 3.0);
-        let metric =
-            Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs: HashMap::new(), space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs,
+            pairs: HashMap::new(),
+            space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
+        };
         assert_eq!(metric.word_width("fi"), 3.0, "the ligature is one glyph");
         assert_eq!(metric.word_width("fl"), 4.0, "and the other pair is two letters");
     }
@@ -1305,8 +1402,14 @@ mod tests {
         let mut runs = HashMap::new();
         runs.insert("fi".to_string(), 3.0);
         runs.insert("fij".to_string(), 4.0);
-        let metric =
-            Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs: HashMap::new(), space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs,
+            pairs: HashMap::new(),
+            space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
+        };
         assert_eq!(metric.word_width("fij"), 4.0, "the longer run is taken");
         assert_eq!(metric.word_width("fig"), 5.0, "and where there is none, the letters are");
     }
@@ -1317,8 +1420,14 @@ mod tests {
     fn a_pair_is_an_adjustment() {
         let mut pairs = HashMap::new();
         pairs.insert("AV".to_string(), -0.5);
-        let metric =
-            Metric { default_mm: 2.0, advances: HashMap::new(), runs: HashMap::new(), pairs, space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs: HashMap::new(),
+            pairs,
+            space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
+        };
         assert_eq!(metric.word_width("AV"), 3.5, "the pair is closer together");
         assert_eq!(metric.word_width("VA"), 4.0, "and the other way round it is not");
     }
@@ -1331,7 +1440,14 @@ mod tests {
         runs.insert("fi".to_string(), 3.0);
         let mut pairs = HashMap::new();
         pairs.insert("iV".to_string(), -0.5);
-        let metric = Metric { default_mm: 2.0, advances: HashMap::new(), runs, pairs, space_mm: 1.0 };
+        let metric = Metric {
+            default_mm: 2.0,
+            advances: HashMap::new(),
+            runs,
+            pairs,
+            space_mm: 1.0,
+            em_mm: draw::DEFAULT_EM_MM,
+        };
         assert_eq!(metric.word_width("fiV"), 4.5, "the ligature, and the pair after it");
     }
 
@@ -1410,6 +1526,89 @@ mod tests {
         let document = Document::new("empty");
         let value = kind(&node, &document).expect("the paragraph says what it means");
         assert_eq!(value["words"], Json::Null, "the words were not read");
+    }
+
+    /// A paragraph is drawn with **the kit's own letters**.
+    ///
+    /// The typeface is the tree's own — drawn in code, no asset — and
+    /// the drawing is the letters' paths.
+    #[test]
+    fn a_paragraph_is_drawn_with_the_kits_own_letters() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 40.0 }))
+            .expect("the paragraph is measured");
+        let node = session.document().node(2).expect("the paragraph is there").clone();
+        let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+        (PARAGRAPH_KIND.paint)(&node, session.document(), &mut canvas);
+        assert!(!canvas.drawn.is_empty(), "the paragraph drew nothing");
+    }
+
+    /// The **metric** says how wide a letter is, and the letter is
+    /// drawn at that width: the typeface says the shape and the metric
+    /// says the size of the shape.
+    #[test]
+    fn a_letter_is_as_wide_as_the_metric_says() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 40.0 }))
+            .expect("the paragraph is measured");
+        let node = session.document().node(2).expect("the paragraph is there").clone();
+        let drawn = draw::draw(&node, session.document()).expect("the paragraph is drawn");
+        assert!(drawn.cells.len() >= 2, "there are not two letters");
+        let first = drawn.cells[0];
+        let second = drawn.cells[1];
+        let step = second.x - first.x;
+        assert!((step - 2.0).abs() < 1e-9, "the letter is not two millimetres wide");
+    }
+
+    /// A letter can be **hit**, and the margin around it cannot.
+    #[test]
+    fn a_letter_can_be_hit_and_the_margin_cannot() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 40.0 }))
+            .expect("the paragraph is measured");
+        let node = session.document().node(2).expect("the paragraph is there").clone();
+        let drawn = draw::draw(&node, session.document()).expect("the paragraph is drawn");
+        let letter = drawn.strokes.first().expect("the letter has strokes");
+        let on = letter.first().expect("the stroke has a point");
+        let inside = craftkit_sdk::Point::new(on[0], on[1]);
+        assert!((PARAGRAPH_KIND.hit)(&node, session.document(), inside), "the letter was not hit");
+        let outside = craftkit_sdk::Point::new(on[0] - 5.0, on[1] - 5.0);
+        assert!(!(PARAGRAPH_KIND.hit)(&node, session.document(), outside), "the margin was hit");
+    }
+
+    /// A paragraph is **where its lines are**: as wide as the measure
+    /// and as tall as the lines.
+    #[test]
+    fn a_paragraph_is_the_block_of_its_lines() {
+        let mut session = session();
+        let metric = monospaced(&mut session, 2.0);
+        session
+            .execute("text.paragraph.add", &json!({ "text": "one two", "metric": metric }))
+            .expect("the paragraph is added");
+        session
+            .execute("text.paragraph.measure", &json!({ "paragraph": 2, "measure_mm": 40.0 }))
+            .expect("the paragraph is measured");
+        let node = session.document().node(2).expect("the paragraph is there").clone();
+        let place =
+            (PARAGRAPH_KIND.place).expect("the kind says where its node is")(&node, session.document())
+                .expect("the paragraph has a place");
+        assert_eq!(place.w, 40.0, "the block is not as wide as the measure");
+        assert!(place.h > 0.0, "the block has no height");
     }
 
     /// A paragraph that is set in a node that is not a metric is
