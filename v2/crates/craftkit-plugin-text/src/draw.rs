@@ -20,7 +20,7 @@
 //! pair measures the word a little narrower than the letters are drawn.
 //! The drawing places one glyph per character, and says so.
 
-use crate::{Metric, break_lines, items_for, measure_of, metric_of, words_of};
+use crate::{Metric, break_lines, hyphenate_of, items_for, measure_of, metric_of, words_of};
 use craftkit_font::{Font, Metrics};
 use craftkit_sdk::document::{Colour, Path, Point, Rect, Segment, Stroke, SubPath};
 use craftkit_sdk::{Document, Node};
@@ -74,22 +74,24 @@ pub fn draw(node: &Node, document: &Document) -> Option<Drawn> {
     }
     let metrics = Metrics::new(metric.em_mm)?;
     let breaks = break_lines(node, Some(&metric)).ok()?;
-    let items = items_for(&words, &metric);
+    let typeset = items_for(&words, &metric, hyphenate_of(node));
     let font = Font::builtin();
     let top = breaks.lines.len() as f64 * metrics.line_height;
     let mut drawn = Drawn::default();
     for (index, line) in breaks.lines.iter().enumerate() {
         let baseline = top - metrics.em - index as f64 * metrics.line_height;
         let mut x = 0.0;
-        for (offset, item) in items[line.start..line.end].iter().enumerate() {
+        for (offset, item) in typeset.items[line.start..line.end].iter().enumerate() {
             let item_index = line.start + offset;
             match item.kind {
                 craftkit_text_layout::Kind::Box => {
-                    // The items alternate box and glue, so a box is
-                    // every other item and its word is half its index.
-                    let word_index = item_index / 2;
-                    let Some(word) = words.get(word_index) else { break };
-                    place_word(word, x, baseline, &metric, &metrics, font, &mut drawn);
+                    // A box holds a **piece** of a word: the whole word,
+                    // or the piece a broken word was cut into.
+                    let Some(piece) = typeset.text_of.get(item_index) else { break };
+                    if piece.is_empty() {
+                        break;
+                    }
+                    place_word(piece, x, baseline, &metric, &metrics, font, &mut drawn);
                     x += item.width;
                 }
                 craftkit_text_layout::Kind::Glue => {
@@ -97,6 +99,12 @@ pub fn draw(node: &Node, document: &Document) -> Option<Drawn> {
                 }
                 craftkit_text_layout::Kind::Penalty => {}
             }
+        }
+        // A line that ended at a **hyphenation point** ends in a
+        // hyphen, and the hyphen is drawn: a picture of a line without
+        // the hyphen is a picture of another paragraph.
+        if line.flagged {
+            place_word("-", x, baseline, &metric, &metrics, font, &mut drawn);
         }
     }
     Some(drawn)

@@ -422,6 +422,22 @@ fn ragged_of(node: &Node) -> bool {
     node.data.get("ragged").and_then(|value| value.as_bool()).unwrap_or(false)
 }
 
+/// The **typeset** of a paragraph: the items the breaker reads, and
+/// what each of them is.
+///
+/// A word that is broken is more than one item, so the items alone do
+/// not say which word they belong to or what they hold: the two maps
+/// beside the items say it.
+struct Typeset {
+    /// The items the breaker reads.
+    items: Vec<Item>,
+    /// The word each item belongs to.
+    word_of: Vec<usize>,
+    /// The text each **box** holds: the word, or the piece of a broken
+    /// word. The glue and the penalties hold nothing.
+    text_of: Vec<String>,
+}
+
 /// The paragraph's words, as the library's **items**.
 ///
 /// A word is a **box** as wide as the **metric** says its characters
@@ -429,20 +445,68 @@ fn ragged_of(node: &Node) -> bool {
 /// little and shrinks a little; and after the last word is a **forced
 /// break**, so that the paragraph ends where it ends.
 ///
-/// The items alternate box and glue, so the item index of a word is
-/// twice its word index.
-fn items_for(words: &[String], metric: &Metric) -> Vec<Item> {
+/// A word that may be **broken** is more than one box: the pieces are
+/// boxes and a **hyphen** between them, and the hyphen is a break
+/// opportunity that costs a hyphen's width when it is taken.
+fn items_for(words: &[String], metric: &Metric, hyphenate: bool) -> Typeset {
     let mut items: Vec<Item> = Vec::with_capacity(words.len() * 2);
+    let mut word_of: Vec<usize> = Vec::with_capacity(words.len() * 2);
+    let mut text_of: Vec<String> = Vec::with_capacity(words.len() * 2);
     for (index, word) in words.iter().enumerate() {
         if index > 0 {
             items.push(Item::glue(metric.space_mm, metric.space_mm / 2.0, metric.space_mm / 3.0));
+            word_of.push(index);
+            text_of.push(String::new());
         }
-        items.push(Item::boxed(metric.word_width(word)));
+        let parts = parts_of(word, hyphenate);
+        for (part, piece) in parts.iter().enumerate() {
+            if part > 0 {
+                items.push(Item::hyphen(metric.advance('-')));
+                word_of.push(index);
+                text_of.push(String::new());
+            }
+            items.push(Item::boxed(metric.word_width(piece)));
+            word_of.push(index);
+            text_of.push(piece.clone());
+        }
     }
     if !words.is_empty() {
         items.push(Item::forced());
+        word_of.push(words.len().saturating_sub(1));
+        text_of.push(String::new());
     }
-    items
+    Typeset { items, word_of, text_of }
+}
+
+/// The **pieces** of a word: the word itself, or the pieces it may be
+/// broken into.
+///
+/// The breaks are the places the hyphenation library says, and they are
+/// **character indexes**: a hyphen goes before the character, and the
+/// pieces are the parts between the hyphens.
+fn parts_of(word: &str, hyphenate: bool) -> Vec<String> {
+    if !hyphenate {
+        return vec![word.to_string()];
+    }
+    let breaks = craftkit_hyphen::points(word, &craftkit_hyphen::Limits::default());
+    if breaks.is_empty() {
+        return vec![word.to_string()];
+    }
+    let characters: Vec<char> = word.chars().collect();
+    let mut parts = Vec::with_capacity(breaks.len() + 1);
+    let mut start = 0;
+    for point in breaks {
+        if point <= start || point >= characters.len() {
+            continue;
+        }
+        parts.push(characters[start..point].iter().collect());
+        start = point;
+    }
+    parts.push(characters[start..].iter().collect());
+    if parts.len() < 2 {
+        return vec![word.to_string()];
+    }
+    parts
 }
 
 /// The library's parameters for a paragraph: ragged, or justified.
@@ -457,9 +521,18 @@ fn layout_params(ragged: bool) -> Params {
 fn break_lines(node: &Node, metric: Option<&Metric>) -> Result<Breaks, LayoutError> {
     let Some(metric) = metric else { return Err(LayoutError::BadMeasure) };
     let Some(words) = words_of(node) else { return Err(LayoutError::BadMeasure) };
-    let items = items_for(&words, metric);
+    let typeset = items_for(&words, metric, hyphenate_of(node));
     let params = layout_params(ragged_of(node));
-    break_paragraph(&items, measure_of(node), &params)
+    break_paragraph(&typeset.items, measure_of(node), &params)
+}
+
+/// Whether a paragraph's words may be **broken**.
+///
+/// A paragraph is not hyphenated until somebody says so: a hyphen in a
+/// line is a thing a reader sees, and a reader who did not ask for one
+/// did not get one.
+fn hyphenate_of(node: &Node) -> bool {
+    node.data.get("hyphenate").and_then(|value| value.as_bool()).unwrap_or(false)
 }
 
 /// Put a **metric** in the document: the widths of the characters.
@@ -817,6 +890,7 @@ impl AddParagraph {
                 "words": words,
                 "measure_mm": 0.0,
                 "ragged": false,
+                "hyphenate": false,
             }),
         );
         // The paragraph is set **in** the metric: an edge, and the edge
@@ -959,6 +1033,60 @@ impl MeasureParagraph {
     }
 }
 
+/// Say whether a paragraph's words may be **broken**.
+///
+/// A paragraph is not hyphenated until somebody says so: a hyphen in a
+/// line is a thing a reader sees, and a reader who did not ask for one
+/// did not get one.
+///
+/// Where the words may be broken is the **kit's** work: the patterns
+/// say where the words of the language break, and the limits say how
+/// careful the answer is.
+#[derive(Command)]
+#[command(
+    id = "text.paragraph.hyphenate",
+    area = "text",
+    layer = "text",
+    icon = "list",
+    menu("Paragraph", "Hyphenate"),
+    mutates,
+    undoable
+)]
+pub struct SetHyphenation {
+    /// The paragraph.
+    pub paragraph: NodeRef,
+    /// Whether the paragraph's words may be broken.
+    pub hyphenate: Bool,
+}
+
+impl SetHyphenation {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.paragraph.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.hyphenate".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "text.paragraph" {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.hyphenate".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let hyphenate = self.hyphenate.0;
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "text.paragraph.hyphenate".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        node.data["hyphenate"] = json!(hyphenate);
+        Ok(Outcome::changed(format!("the paragraph {id} hyphenates: {hyphenate}"))
+            .with_data(json!({ "id": id, "hyphenate": hyphenate })))
+    }
+}
+
 /// The evaluator: the **lines** of every paragraph that has a measure.
 ///
 /// A paragraph without a measure is not in the plan: it has no lines
@@ -980,14 +1108,25 @@ impl LinesEvaluator {
             }
             let Some(metric) = metric_of(document, node) else { continue };
             let Some(words) = words_of(node) else { continue };
-            let Ok(breaks) = break_lines(node, Some(&metric)) else { continue };
+            let typeset = items_for(&words, &metric, hyphenate_of(node));
+            let Ok(breaks) =
+                break_paragraph(&typeset.items, measure_of(node), &layout_params(ragged_of(node)))
+            else {
+                continue;
+            };
+            let word_of = &typeset.word_of;
             let lines: Vec<Json> = breaks
                 .lines
                 .iter()
                 .map(|line| {
+                    // The line is reported in **words**, and a word that
+                    // was broken is more than one item: the map says
+                    // which word each item belongs to.
+                    let first = word_of.get(line.start).copied().unwrap_or(0);
+                    let last = word_of.get(line.end.saturating_sub(1)).copied().unwrap_or(first);
                     json!({
-                        "start": line.start / 2,
-                        "end": (line.end / 2 + 1).min(words.len()),
+                        "start": first,
+                        "end": (last + 1).min(words.len()),
                         "width": line.width,
                         "ratio": line.ratio,
                         "excess": line.excess,
@@ -1030,6 +1169,7 @@ craftkit_sdk::plugin_anchor!(
     AddMetric,
     AddParagraph,
     MeasureParagraph,
+    SetHyphenation,
     ChangeMetric,
     SetMetric,
     LinesEvaluator,
@@ -1112,7 +1252,8 @@ mod tests {
             em_mm: draw::DEFAULT_EM_MM,
         };
         let words = vec!["one".to_string(), "two".to_string(), "three".to_string()];
-        let items = items_for(&words, &metric);
+        let typeset = items_for(&words, &metric, false);
+        let items = &typeset.items;
         assert_eq!(items.len(), 6, "a box, a glue, a box, a glue, a box and a forced break");
         assert_eq!(items[0].kind, craftkit_text_layout::Kind::Box);
         assert_eq!(items[0].width, 6.0, "three characters of two millimetres");
@@ -1156,7 +1297,7 @@ mod tests {
             space_mm: 1.0,
             em_mm: draw::DEFAULT_EM_MM,
         };
-        assert!(items_for(&[], &metric).is_empty());
+        assert!(items_for(&[], &metric, false).items.is_empty());
     }
 
     /// A measure that is negative is refused, and nothing is measured.

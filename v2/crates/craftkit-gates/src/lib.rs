@@ -106,6 +106,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The line breaker: arithmetic over the widths a caller brings. It
     // knows nothing about a document, a font or the kit.
     ("craftkit-text-layout", 0),
+    // The **hyphenation**: where a word may be broken. It knows nothing
+    // about a document, a paragraph or the kit.
+    ("craftkit-hyphen", 0),
     // The kit's own typeface: glyphs as strokes, drawn in code. It
     // knows nothing about a document, a canvas or the kit.
     ("craftkit-font", 0),

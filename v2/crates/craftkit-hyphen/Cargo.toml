@@ -1,0 +1,9 @@
+[package]
+name = "craftkit-hyphen"
+description = "Where a word may be broken: the patterns, and the rules that read them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
