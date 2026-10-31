@@ -64,7 +64,18 @@ impl PictureKind {
     ///
     /// A picture is a file, and the kit cannot draw a file: what it can
     /// do is say how big it is.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+    /// How a picture is drawn: its **pixels**, in its place.
+    ///
+    /// The pixels are in the **file** and not in the document, so they
+    /// are read when the picture is drawn: the file is read, decoded
+    /// and put on the canvas. That is a cost every frame, and it is the
+    /// honest one — a document that held the pixels would be a
+    /// document of a different kind.
+    fn paint(node: &Node, _document: &craftkit_sdk::Document, canvas: &mut dyn craftkit_sdk::Canvas) {
+        let Some(picture) = picture_of(node) else { return };
+        let Some(rect) = node.rect else { return };
+        canvas.picture(rect, &picture);
+    }
 
     /// Not hit.
     fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
@@ -216,6 +227,46 @@ fn measure(path: &str) -> Result<craftkit_image::Size, EngineError> {
     let head = craftkit_sdk::files::read_prefix_bounded(std::path::Path::new(path), MAX_HEAD_BYTES)
         .map_err(|message| EngineError::Failed { id: "image".to_string(), message })?;
     craftkit_image::size(&head).map_err(|message| EngineError::Failed { id: "image".to_string(), message })
+}
+
+/// The **pixels** of a picture, read from its file.
+///
+/// The file is read whole and decoded: the PNG reader and the JPEG
+/// decoder are the tree's own (§ the picture's own section), and the
+/// picture comes back as four bytes a pixel.
+fn picture_of(node: &Node) -> Option<craftkit_sdk::picture::Picture> {
+    let path = node.stream.clone()?;
+    let format = node.data.get("format").and_then(|format| format.as_str())?;
+    let bytes = std::fs::read(path).ok()?;
+    match format {
+        "png" => {
+            let picture = craftkit_png::read(&bytes, &craftkit_png::Limits::default()).ok()?;
+            Some(craftkit_sdk::picture::Picture::from_samples(
+                picture.width,
+                picture.height,
+                picture.channels,
+                picture.samples,
+            ))
+        }
+        "jpeg" => {
+            let decoded = craftkit_jpeg::decode(&bytes, &craftkit_jpeg::Limits::default(), None).ok()?;
+            // A JPEG may be eight or twelve bits a sample, and a
+            // canvas wants eight.
+            let samples = match decoded.samples {
+                craftkit_jpeg::Samples::U8(samples) => samples,
+                craftkit_jpeg::Samples::U16(samples) => {
+                    samples.into_iter().map(|sample| (sample >> 8) as u8).collect()
+                }
+            };
+            Some(craftkit_sdk::picture::Picture::from_samples(
+                decoded.width,
+                decoded.height,
+                decoded.components,
+                samples,
+            ))
+        }
+        _ => None,
+    }
 }
 
 /// The name of a file, without the folders it is in.

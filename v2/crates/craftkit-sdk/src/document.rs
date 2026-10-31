@@ -329,6 +329,14 @@ pub trait Canvas {
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64);
     /// Draw a path: filled, and stroked on its outline.
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>);
+    /// Draw a **picture**: its pixels, in a rectangle.
+    ///
+    /// The picture is drawn at the rectangle it is given, and it is
+    /// scaled to fill it: the pixels are read one by one and the
+    /// nearest one is put in each place. A backend that draws a
+    /// document may be a raster, a PDF writer or a recorder, and all of
+    /// them need the picture in the same shape.
+    fn picture(&mut self, at: Rect, picture: &crate::picture::Picture);
 }
 
 /// A backend that records what it was asked to draw.
@@ -350,6 +358,10 @@ impl Canvas for RecordingCanvas {
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64) {
         self.drawn.push(format!("text({}, {}, {text}, {size})", at.x, at.y));
         let _ = colour;
+    }
+
+    fn picture(&mut self, at: Rect, picture: &crate::picture::Picture) {
+        self.drawn.push(format!("picture({}, {}, {} pixel(s))", at.x, at.y, picture.pixels_count()));
     }
 
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {

@@ -267,6 +267,48 @@ impl Canvas for Raster {
     /// takes a cell and a letter takes a cell — so a line of text is
     /// still monospaced; what changed is that the cell now holds a
     /// letter and not a rectangle.
+    /// Draw a **picture**: its pixels, in a rectangle.
+    ///
+    /// The picture is **scaled** to fill the rectangle: every pixel of
+    /// the picture is read and the nearest one is put in each place of
+    /// the rectangle. There is no smoothing, because the kit has no
+    /// anti-aliasing (§67) and a picture that is smoothed and a picture
+    /// that is not are two different pictures.
+    fn picture(&mut self, at: Rect, picture: &craftkit_sdk::picture::Picture) {
+        if picture.is_empty() {
+            return;
+        }
+        let (left, top) = self.to_pixels(Point::new(at.x, at.y + at.h));
+        let (right, bottom) = self.to_pixels(Point::new(at.x + at.w, at.y));
+        let first_column = left.floor().max(0.0) as usize;
+        let last_column = (right.ceil().max(0.0) as usize).min(self.image.width());
+        let first_row = top.floor().max(0.0) as usize;
+        let last_row = (bottom.ceil().max(0.0) as usize).min(self.image.height());
+        let width = right - left;
+        let height = bottom - top;
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+        for row in first_row..last_row {
+            for column in first_column..last_column {
+                let along = (column as f64 + 0.5 - left) / width;
+                let down = (row as f64 + 0.5 - top) / height;
+                let x = (along * f64::from(picture.width)) as u32;
+                let y = (down * f64::from(picture.height)) as u32;
+                let Some([r, g, b, a]) = picture.pixel(x.min(picture.width.saturating_sub(1)), y) else {
+                    continue;
+                };
+                let colour = Colour([
+                    f32::from(r) / 255.0,
+                    f32::from(g) / 255.0,
+                    f32::from(b) / 255.0,
+                    f32::from(a) / 255.0,
+                ]);
+                self.image.blend(column, row, colour);
+            }
+        }
+    }
+
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64) {
         let font = Font::builtin();
         let Some(metrics) = Metrics::new(size) else { return };

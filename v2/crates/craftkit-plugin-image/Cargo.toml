@@ -12,3 +12,13 @@ craftkit-derive = { workspace = true }
 # The **size reader**: a library, and not a plugin. It reads a picture's
 # header and says how big the picture is.
 craftkit-image = { workspace = true }
+# The **PNG reader** and the **JPEG decoder**: the tree's own, and the
+# pixels come from them. A **library** each, and the linker does not
+# wire them in.
+craftkit-png = { workspace = true }
+craftkit-jpeg = { workspace = true }
+
+[dev-dependencies]
+# The **rasteriser**, and only for the tests: it writes the PNG the
+# tests draw. Nothing that ships links it.
+craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }

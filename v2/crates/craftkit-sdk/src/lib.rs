@@ -80,6 +80,7 @@ pub mod layer;
 pub mod lines;
 pub mod link;
 pub mod params;
+pub mod picture;
 pub mod plan;
 pub mod plugin;
 pub mod plugincmds;

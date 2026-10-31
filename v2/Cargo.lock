@@ -554,6 +554,9 @@ version = "0.2.0"
 dependencies = [
  "craftkit-derive",
  "craftkit-image",
+ "craftkit-jpeg",
+ "craftkit-png",
+ "craftkit-raster",
  "craftkit-sdk",
 ]
 

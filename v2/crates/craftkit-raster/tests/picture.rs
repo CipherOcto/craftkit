@@ -340,3 +340,52 @@ fn the_size_is_the_callers() {
     let large_right = rightmost_ink(large.image());
     assert!(large_right > small_right + 5, "the big letter is not bigger: {small_right} and {large_right}");
 }
+
+/// A **picture** is drawn into the picture, pixel for pixel.
+///
+/// The picture is a red and a blue square, and it is drawn at twice its
+/// size: the nearest pixel is taken, so the red square covers a quarter
+/// of the place and the blue square the other half.
+#[test]
+fn a_picture_is_drawn_pixel_for_pixel() {
+    let mut canvas = a_canvas(100, 100);
+    let picture = craftkit_sdk::picture::Picture::from_samples(2, 1, 3, vec![255, 0, 0, 0, 0, 255]);
+    canvas.picture(Rect { x: -10.0, y: -10.0, w: 20.0, h: 10.0 }, &picture);
+    let image = canvas.image();
+    // The world's origin is the picture's middle, so the place starts
+    // ten pixels to the left of it and is twenty wide.
+    assert_eq!(pixel(image, 44, 50), Some([255, 0, 0, 255]), "the red half is drawn");
+    assert_eq!(pixel(image, 55, 50), Some([0, 0, 255, 255]), "the blue half is drawn");
+    assert_eq!(pixel(image, 38, 50), Some([255, 255, 255, 255]), "the outside is not painted");
+}
+
+/// A picture with an **alpha** is blended over what is under it.
+///
+/// A picture that is half see-through is half the picture and half the
+/// background: a picture that covers its background entirely has lost
+/// the transparency it was given.
+#[test]
+fn a_picture_with_an_alpha_is_blended() {
+    let mut canvas = a_canvas(100, 100);
+    canvas.rect(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, Colour::BLACK);
+    let picture = craftkit_sdk::picture::Picture::from_samples(1, 1, 4, vec![255, 255, 255, 128]);
+    canvas.picture(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, &picture);
+    let image = canvas.image();
+    let mixed = pixel(image, 50, 50);
+    let [r, g, b, _] = mixed.expect("the pixel is there");
+    assert!(r > 100 && r < 160, "the white is not half over the black: {r}");
+    assert_eq!((r, g, b), (r, g, b), "the colour is grey");
+}
+
+/// A picture with **no pixels** is not drawn at all.
+///
+/// A picture that is not all there is a picture that is not there: half
+/// a picture would be a picture of the wrong thing.
+#[test]
+fn a_picture_with_no_pixels_is_not_drawn() {
+    let mut canvas = a_canvas(100, 100);
+    let picture = craftkit_sdk::picture::Picture::new(2, 2, Vec::new());
+    canvas.picture(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, &picture);
+    let image = canvas.image();
+    assert_eq!(pixel(image, 50, 50), Some([255, 255, 255, 255]), "something was drawn");
+}
