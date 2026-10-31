@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1156 tests.** The MCP server links **all fifteen batteries** in, so the
+**1169 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1156 tests
+cargo test          # 1169 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3586,6 +3586,7 @@ so.
 | a **typeset** paragraph: a line breaker and the widths it needs | **built, and the widths are the caller's.** The breaker is a **library** (§58) and the paragraph is a **battery**, and the kit now has **its own typeface** (§128): the widths live in a **metric node** — advances, runs and pairs (§60) — the paragraph's typeface is an **edge**, and the caller says what the widths are (§58, §59, §60). The paragraph is **drawn** with those letters (§129) | §58, §59, §60, §128, §129 |
 | **hyphenation**: where a word may be broken | **built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other (§58); and now the kit **finds** them: the patterns say where the words of the language break, the heuristic answers for the words the patterns do not know, and the limits say how careful the answer is (§145) | §58, §145 |
 | a **caret**: where the reader is in the text | **built.** The caret is a **node** under the paragraph and it carries the character it stands before; the text is the words with a space between them, and the space is a character too; the caret's **place** is derived from the layout and not stored (§151) | §151 |
+| a **selection of characters** | **built.** The core asks a kind where the picked-out **part** of its node is, and the answer may be more than one piece; a paragraph's own unit is the character, so the SDK's span selection picks out characters and the paragraph says where they are (§152) | §22, §152 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10351,3 +10352,79 @@ the reader was.
   line.** The hyphen is drawn at the end of the line and the text
   continues on the next one, and the caret stands where the next piece
   starts.
+
+## 152. The part is picked out
+
+§151 said that there was no selection of characters, and the reason was
+in the core: the selection holds a **part** of a node, and the core had
+no way to ask a kind where that part is.
+
+### What was built
+
+- A **seam**: a kind may say where the picked-out **part** of its node
+  is. The core asks, the way it asks where the node is, and the answer
+  is a **list** — a part may be in more than one piece.
+- The **chrome** marks the part: the picked-out piece is **washed
+  over**, and it has no resize handle, because a part cannot be
+  resized. A kind that cannot place its part leaves the node's frame to
+  say that something is picked out.
+- The **paragraph** answers for its characters: a paragraph's own unit
+  is the character, so the SDK's own span selection picks out
+  characters, and the paragraph says where they are.
+
+### What the port found
+
+- **The core was right and the seam was missing.** The selection has
+  held a part of a node since §22, and the part is in the node's own
+  units — the very bargain the place is asked under. What was missing
+  was the *question*: the core had no way to ask, so it drew the
+  node's frame for a part it could not place, and the sound
+  application's edit range was a frame around a clip rather than a
+  range.
+- **A part is in pieces, and the pieces are the point.** A range of
+  characters that crosses a line is two boxes, not one box around two
+  lines: the part is what a reader picks out, and a reader picks out
+  one line's worth at a time. So the seam answers with a list, and the
+  chrome washes over each piece.
+- **A paragraph's own unit is the character — and the SDK's span
+  selection was already the right command.** Nothing new was needed to
+  select characters: `select.span` holds a range in the node's own
+  units, and the paragraph says what its units are. The port found that
+  when it looked for a text-specific command and did not need one.
+- **The selection is still the session's, and the caret is still the
+  document's.** The two are different things and the port left them
+  different: the caret says where the reader *is* and it is saved with
+  the text; the selection says what is *picked out* and it is the
+  screen's. The family's caret is the selection, and here it is not.
+
+### What it cost
+
+- **Seven tests in the SDK** (`crates/craftkit-sdk/tests/part.rs`): a
+  picked-out part is washed over in as many pieces as the kind says,
+  a whole node is framed and has a handle, a kind that cannot place
+  its part leaves the frame, the picture of the document has no
+  selection in it, the core asks the kind, a kind that says nothing
+  has no part, and the core does not match on the kind.
+- **Six tests in the battery** (`crates/craftkit-plugin-text/tests/selection.rs`):
+  the characters are picked out with the span selection, they are where
+  they are, a range that crosses a line is more than one piece, they
+  are washed over, the picture of the document has no selection in it,
+  and a range that is not a range of characters is not a part.
+- **One field on the kind's spec**, and one flag on the derive.
+
+### What it does not settle
+
+- **The caret and the selection are two things.** A reader who picks
+  out a range has a caret at one end of it in every word processor, and
+  here the two are separate: the caret is a node and the selection is
+  the session's. Making them one is a change to what the caret *is*.
+- **The wash is over the text, not under it.** The chrome is drawn
+  after the document, so the picked-out characters are greyed rather
+  than highlighted. The order of the drawing is the order of the tree
+  (§13), and changing that order is a change to the core's contract.
+- **The wash is a fixed colour.** The core has no notion of a
+  selection colour, and the appearance of a node is the node's own
+  (§95), so the wash is the core's and not the document's.
+- **A part is a range and not a set.** The selection holds one range
+  per node, so two ranges in one paragraph are two selections and the
+  second replaces the first.
