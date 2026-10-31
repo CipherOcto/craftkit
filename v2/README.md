@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1184 tests.** The MCP server links **all fifteen batteries** in, so the
+**1187 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1184 tests
+cargo test          # 1187 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3590,6 +3590,7 @@ so.
 | an **edit that replaces what is picked out** | **built.** Typing writes over the picked-out range and deleting takes it away; the caret stands after what was typed (§153) | §153 |
 | a **clip drawn as its sound** | **built.** The **peaks** of a source are measured once and kept in the document, and a clip's bar carries the shape of the part of the source it plays (§154) | §154 |
 | a **better resampler** | **built.** The resampler is a **windowed sinc** — an ideal low-pass with a Kaiser window — so what was above the new half of the rate is taken away instead of folding back as a whistle; a sound too long for the limits is refused (§155) | §137, §155 |
+| a **shape that follows the automation** | **built.** The gain of a clip's sound at a time is the clip's own gain and the track's curve, and the shape on the bar is drawn with it (§156) | §156 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10644,3 +10645,52 @@ had gone to look.
   played more slowly and the pitch falls with it, and a resampler
   that changed the rate without changing the time would be a
   different thing.
+
+## 156. The shape follows the automation
+
+§154 drew the shape of a clip's sound, and said that the shape does
+not follow the automation: a track's gain over time changes how loud
+the sound is, and the shape on the bar did not say so.
+
+### What was built
+
+- The **gain** of a clip's sound at a time: the clip's own gain and
+  the track's **automation** — the volume lane in decibels and the
+  mute lane, which is one or less.
+- The shape on the bar is drawn with that gain, so a clip that runs
+  across a breakpoint is **loud at one end and quiet at the other**.
+
+### What the port found
+
+- **The shape is the sound as it is heard, and not the sound as it is
+  on the disk.** The tree's waveform multiplies the gain in at every
+  pixel, and the gain is the clip's own *and* the track's curve. The
+  port had drawn the sound as it is on the disk, which is the sound
+  before the mixer has had it — and the mixer is what a reader is
+  looking at the timeline to understand.
+- **A muted track is silent however loud its sound is.** The mute lane
+  is not a gain of minus a hundred decibels: it is one or less, and
+  the shape of a muted track is flat.
+- **The clip's own curve is not on the bar.** A clip may carry a curve
+  of its own (§147), and that curve moves the clip's sound; the shape
+  on the bar follows the *track's* curve and not the clip's, because
+  the clip's curve is a thing the clip draws for itself.
+
+### What it cost
+
+- **Three tests** in the crate (`waveform_tests`): the gain follows
+  the automation, a muted track is silent, and the shape on the bar
+  falls when the gain does.
+
+### What it does not settle
+
+- **The gain is worked out per bucket, and not per sample.** The shape
+  has two hundred and fifty-six buckets and the curve is read at the
+  middle of each; a curve that moves inside a bucket is a curve the
+  shape cannot show.
+- **The shape does not follow the pan.** A track's pan lane says where
+  the sound is and the shape is in the middle of the bar, so a sound
+  that is panned is drawn as if it were not.
+- **The shape is the sound's own extent, and the gain scales it.** A
+  sound that is six decibels down is drawn six decibels lower, which
+  is what the reader wants; it is not what a meter would say.
