@@ -1744,13 +1744,25 @@ impl RenderSound {
                 payload.fade_in.fade(),
                 payload.fade_out.fade(),
             );
+            // The **track's** automation: the lanes under the track,
+            // and their times are the track's timeline.
             let automation = session
                 .document()
                 .node(*clip_id)
                 .and_then(|clip| timeline::track_of(session.document(), clip))
                 .map(|track| automate::automation_of(session.document(), track))
                 .unwrap_or_default();
-            prepared.push(automate::apply(&automation, &samples, sound.channels as usize, payload.start));
+            let samples = automate::apply(&automation, &samples, sound.channels as usize, payload.start);
+            // The **clip's own** automation: the lanes under the clip,
+            // and their times are the clip's own — a clip carries a
+            // curve of its own, and the family's does.
+            let own = session
+                .document()
+                .node(*clip_id)
+                .map(|clip| automate::automation_of(session.document(), clip))
+                .unwrap_or_default();
+            let samples = automate::apply(&own, &samples, sound.channels as usize, 0);
+            prepared.push(samples);
         }
         // How long the sound is: the end of the longest clip.
         let mut frames = 0_i64;

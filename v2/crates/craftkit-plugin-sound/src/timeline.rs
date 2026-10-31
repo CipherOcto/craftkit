@@ -49,6 +49,7 @@ use craftkit_sound_time::TempoMap;
 
 /// The kind of a **track**.
 const TRACK_KIND: &str = "sound.track";
+const CLIP_KIND: &str = "sound.clip";
 
 /// The kind of a **playlist**.
 const PLAYLIST_KIND: &str = "sound.playlist";
@@ -258,16 +259,46 @@ pub fn send_rect(document: &Document, send: &Node) -> Option<Rect> {
     Some(Rect::new(index as f64 * SEND_SPACING, row, SEND_SPACING, (bus_row - row).max(ROW_HEIGHT)))
 }
 
+/// The **owner** of an automation lane: the node the lane automates.
+///
+/// The owner is the lane's **parent**, and it is a track or a clip: a
+/// lane under a track is the track's curve, and a lane under a clip is
+/// the clip's own curve — and its times are the clip's own, not the
+/// track's.
+pub fn lane_owner<'a>(document: &'a Document, lane: &Node) -> Option<&'a Node> {
+    let owner = parent_of(document, lane.id)?;
+    if owner.kind == TRACK_KIND || owner.kind == CLIP_KIND {
+        return Some(owner);
+    }
+    None
+}
+
+/// The row a lane is drawn on, and the time its points are measured
+/// from.
+///
+/// A track's lane is drawn on the track's row and its times are the
+/// track's timeline; a clip's lane is drawn on the clip's row and its
+/// times are the clip's own.
+fn lane_row_and_offset(document: &Document, lane: &Node) -> Option<(f64, f64)> {
+    let owner = lane_owner(document, lane)?;
+    if owner.kind == TRACK_KIND {
+        return Some((row_of(document, owner)?, 0.0));
+    }
+    let track = track_of(document, owner)?;
+    let row = row_of(document, track)?;
+    let payload = ClipPayload::from_json(&owner.data).ok()?;
+    Some((row, payload.start as f64))
+}
+
 /// The rectangle of an **automation lane**: the curve on the track's row.
 pub fn lane_rect(document: &Document, lane: &Node) -> Option<Rect> {
-    let track = track_of(document, lane)?;
-    let row = row_of(document, track)?;
+    let (row, offset) = lane_row_and_offset(document, lane)?;
     let payload = LanePayload::from_json(&lane.data).ok()?;
     let rate = session_of(document).sample_rate as f64;
     let mut first: Option<f64> = None;
     let mut last: Option<f64> = None;
     for (at, _value) in &payload.points {
-        let x = *at as f64 / rate;
+        let x = (offset + *at as f64) / rate;
         first = Some(first.map_or(x, |current: f64| current.min(x)));
         last = Some(last.map_or(x, |current: f64| current.max(x)));
     }
@@ -284,8 +315,7 @@ pub fn lane_rect(document: &Document, lane: &Node) -> Option<Rect> {
 /// automation and not the absolute values.
 pub fn lane_points(document: &Document, lane: &Node) -> Vec<(f64, f64)> {
     let Ok(payload) = LanePayload::from_json(&lane.data) else { return Vec::new() };
-    let Some(track) = track_of(document, lane) else { return Vec::new() };
-    let Some(row) = row_of(document, track) else { return Vec::new() };
+    let Some((row, offset)) = lane_row_and_offset(document, lane) else { return Vec::new() };
     if payload.points.is_empty() {
         return Vec::new();
     }
@@ -297,7 +327,7 @@ pub fn lane_points(document: &Document, lane: &Node) -> Vec<(f64, f64)> {
         .points
         .iter()
         .map(|(at, value)| {
-            let x = *at as f64 / rate;
+            let x = (offset + *at as f64) / rate;
             let y = if span > 0.0 {
                 row + (value - smallest) / span * ROW_HEIGHT
             } else {

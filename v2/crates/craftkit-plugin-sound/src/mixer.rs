@@ -652,8 +652,11 @@ impl AddSend {
     undoable
 )]
 pub struct AddLane {
-    /// The track whose parameter is automated.
-    pub track: NodeRef,
+    /// The track whose parameter is automated. A lane automates **one**
+    /// thing: a track or a clip, and not both.
+    pub track: Option<NodeRef>,
+    /// The clip whose parameter is automated.
+    pub clip: Option<NodeRef>,
     /// Which parameter: `volume`, `pan`, `mute`, …
     pub param: Text,
     /// The breakpoints: a list of `[at, value]`, where `at` is a time in
@@ -663,12 +666,40 @@ pub struct AddLane {
 
 impl AddLane {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        if session.document().node(track).is_none() {
-            return Err(EngineError::Failed {
-                id: "sound.lane.add".to_string(),
-                message: format!("there is no track `{track}`"),
-            });
+        // A lane automates **one** thing: a track or a clip. The
+        // family's clip carries a curve of its own, and the tree's
+        // lane is that curve when it is under a clip.
+        let (owner, owner_id) = match (self.track, self.clip) {
+            (Some(track), None) => ("track", track.0),
+            (None, Some(clip)) => ("clip", clip.0),
+            (Some(_), Some(_)) => {
+                return Err(EngineError::Failed {
+                    id: "sound.lane.add".to_string(),
+                    message: "a lane automates one thing: a track or a clip".to_string(),
+                });
+            }
+            (None, None) => {
+                return Err(EngineError::Failed {
+                    id: "sound.lane.add".to_string(),
+                    message: "a lane automates something: which track, and which clip?".to_string(),
+                });
+            }
+        };
+        let kind = if owner == "track" { "sound.track" } else { "sound.clip" };
+        match session.document().node(owner_id) {
+            Some(node) if node.kind == kind => {}
+            Some(node) => {
+                return Err(EngineError::Failed {
+                    id: "sound.lane.add".to_string(),
+                    message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
+                });
+            }
+            None => {
+                return Err(EngineError::Failed {
+                    id: "sound.lane.add".to_string(),
+                    message: format!("there is no {owner} `{owner_id}`"),
+                });
+            }
         }
         let param = self.param.0.clone();
         if param.trim().is_empty() {
@@ -691,14 +722,14 @@ impl AddLane {
         };
         let payload = LanePayload { param: param.clone(), points };
         let id = session.document_mut()?.add_node_with_under(
-            Some(track),
+            Some(owner_id),
             format!("{param} automation"),
             "sound.lane",
             None,
             payload.to_json(),
         );
-        Ok(Outcome::changed(format!("the track `{track}` automates `{param}`"))
-            .with_data(serde_json::json!({ "id": id, "track": track, "param": param })))
+        Ok(Outcome::changed(format!("the {owner} `{owner_id}` automates `{param}`"))
+            .with_data(serde_json::json!({ "id": id, "owner": owner_id, "param": param })))
     }
 }
 
