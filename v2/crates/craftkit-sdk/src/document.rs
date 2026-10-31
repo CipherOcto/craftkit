@@ -1169,7 +1169,19 @@ impl Document {
     /// This is the walk a front end draws with and the walk it picks
     /// with, so that "hidden" means one thing and not two.
     pub fn walk_visible(&self) -> Visible<'_> {
-        Visible { stack: self.nodes.iter().rev().map(|node| &**node).collect() }
+        Visible { document: self, stack: self.nodes.iter().rev().map(|node| &**node).collect() }
+    }
+
+    /// Whether a node is **shown**.
+    ///
+    /// A node is shown when it is not hidden itself and when the layer
+    /// it is on is not hidden: a layer that is turned off takes its
+    /// members with it, and that is what turning a layer off means.
+    pub fn is_visible(&self, node: &Node) -> bool {
+        if node.hidden {
+            return false;
+        }
+        self.layer_of(node).map(|layer| !layer.hidden).unwrap_or(true)
     }
 
     /// Take a node out of the document, and say whether it was there.
@@ -1335,8 +1347,43 @@ impl Document {
         if node.appearance.is_some() {
             return node.appearance;
         }
-        let from = node.appearance_from?;
-        self.node(from)?.appearance
+        if let Some(from) = node.appearance_from
+            && let Some(appearance) = self.node(from).and_then(|node| node.appearance)
+        {
+            return Some(appearance);
+        }
+        // And the **layer's**: a node with no appearance of its own, on
+        // a layer that has one, is drawn as the layer says. The layer
+        // is followed **once**: a layer on a layer is not a chain to
+        // walk.
+        self.layer_of(node).and_then(|layer| layer.appearance)
+    }
+
+    /// The **layer** a node is on, if it is on one.
+    ///
+    /// The membership is an **edge** — `core.on_layer` — and the layer
+    /// is the node at the other end of it.
+    ///
+    /// A node is on **one** layer: the edge says which, and a second
+    /// edge would be two answers to one question. So the first edge is
+    /// the one that is read.
+    pub fn layer_of(&self, node: &Node) -> Option<&Node> {
+        let relations = self.relations_from(node.id, Some(crate::layer::ON_LAYER));
+        let relation = relations.first()?;
+        self.node(relation.to)
+    }
+
+    /// The **layers** of the document: the nodes that things are put on.
+    pub fn layers(&self) -> Vec<&Node> {
+        let mut found: Vec<&Node> = Vec::new();
+        for relation in self.relations.iter().filter(|relation| relation.kind == crate::layer::ON_LAYER) {
+            if let Some(layer) = self.node(relation.to)
+                && !found.iter().any(|found| found.id == layer.id)
+            {
+                found.push(layer);
+            }
+        }
+        found
     }
 
     /// The node with an id, wherever it is, to change.
@@ -1387,6 +1434,10 @@ impl<'a> Iterator for Descendants<'a> {
 
 /// The nodes of a document that are **not hidden**.
 pub struct Visible<'a> {
+    /// The document the nodes are in: a node's **layer** is in it, and
+    /// a layer that is hidden hides what is on it.
+    document: &'a Document,
+    /// The nodes still to come.
     stack: Vec<&'a Node>,
 }
 
@@ -1396,9 +1447,10 @@ impl<'a> Iterator for Visible<'a> {
     fn next(&mut self) -> Option<&'a Node> {
         loop {
             let node = self.stack.pop()?;
-            if node.hidden {
+            if !self.document.is_visible(node) {
                 // The node is hidden, and so is everything in it: the
-                // walk does not go into a hidden group.
+                // walk does not go into a hidden group. And a node on a
+                // hidden layer is hidden too.
                 continue;
             }
             for child in node.children.iter().rev() {

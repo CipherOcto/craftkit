@@ -71,7 +71,12 @@ fn an_entitys_layer_is_an_edge() {
         .expect("the line is added");
     session.execute("cad.entity.layer", &json!({ "entity": 4, "layer": 2 })).expect("it is on the layer");
     let relations = &session.document().relations;
-    let edge = relations.iter().find(|relation| relation.kind == "cad.on_layer").expect("there is an edge");
+    // The edge is the **kit's** edge: every battery that has layers
+    // uses it, so that the rule that follows from it is one rule.
+    let edge = relations
+        .iter()
+        .find(|relation| relation.kind == craftkit_sdk::layer::ON_LAYER)
+        .expect("there is an edge");
     assert_eq!(edge.from, 4, "the edge is from the entity");
     assert_eq!(edge.to, 2, "the edge is to the layer");
     assert_eq!(edge.payload["layer"], json!("Walls"), "and the edge says which layer");

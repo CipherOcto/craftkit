@@ -201,10 +201,10 @@ entity_kind!(InsertKind, "cad.entity.insert", "Insert");
 /// holds an appearance, and the appearance is the kit's own. An entity
 /// with no layer — or a layer with no appearance — is drawn in black.
 fn colour_of(document: &Document, node: &Node) -> Colour {
-    let relations = document.relations_from(node.id, Some("cad.on_layer"));
-    let Some(relation) = relations.first() else { return Colour::BLACK };
-    let Some(layer) = document.node(relation.to) else { return Colour::BLACK };
-    document.appearance_of(layer).map(|appearance| appearance.fill).unwrap_or(Colour::BLACK)
+    // The rule is the **kit's**: a node with no appearance of its own
+    // takes the appearance of the layer it is on (§103), and the
+    // membership is the kit's edge.
+    document.appearance_of(node).map(|appearance| appearance.fill).unwrap_or(Colour::BLACK)
 }
 
 /// Draw an entity's **geometry**.
@@ -813,7 +813,7 @@ impl PutOnLayer {
         let added = session.document_mut()?.add_relation(Relation::with_payload(
             entity,
             layer,
-            "cad.on_layer",
+            craftkit_sdk::layer::ON_LAYER,
             json!({ "layer": name.clone() }),
         ));
         if !added {
