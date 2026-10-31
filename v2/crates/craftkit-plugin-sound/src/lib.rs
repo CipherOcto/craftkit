@@ -1199,6 +1199,110 @@ impl AddSource {
     }
 }
 
+/// The kind of a **playhead**: where the sound is.
+///
+/// The playhead is a **node** because the playhead has a **setting** —
+/// the position — and a setting is a thing in a document, and a node is
+/// where settings live: the same rule as the ruler's scale (§131).
+///
+/// The position is a **number of samples** and not an event: the
+/// transport is not a stream of "and then" messages, it is a place,
+/// and everything else is worked out from it.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.playhead", label = "Playhead", layer = "sound", evaluates, place)]
+pub struct PlayheadKind;
+
+impl PlayheadKind {
+    /// How a playhead is drawn: a **line** down the timeline.
+    ///
+    /// The line runs from the ruler's row through the tracks, because a
+    /// playhead is where the sound is and the sound is under the ruler.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::playhead_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x + rect.w / 2.0, rect.y),
+            Point::new(rect.x + rect.w / 2.0, rect.y + rect.h),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
+
+    /// Whether a point is on the playhead.
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::playhead_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where the playhead **is**: the line at the position.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::playhead_rect(document, node)
+    }
+
+    /// What a playhead **means**: where it is, in samples and in
+    /// seconds.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let position = timeline::playhead_position(node)?;
+        let rate = session_of(document).sample_rate;
+        Some(serde_json::json!({
+            "position": position,
+            "seconds": position as f64 / rate as f64,
+        }))
+    }
+}
+
+/// Put the **playhead** where it is, or move it.
+///
+/// The playhead is a **node**, so there is one of it and it is moved.
+#[derive(Command)]
+#[command(
+    id = "sound.playhead.set",
+    area = "sound",
+    layer = "sound",
+    icon = "play",
+    menu("Playhead"),
+    mutates,
+    undoable
+)]
+pub struct SetPlayhead {
+    /// Where it is, in samples.
+    pub position: Number,
+}
+
+impl SetPlayhead {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let position = samples(self.position.0, "where the playhead is")?;
+        if position < 0 {
+            return Err(EngineError::Failed {
+                id: "sound.playhead.set".to_string(),
+                message: "a playhead cannot be before the beginning".to_string(),
+            });
+        }
+        let existing =
+            session.document().walk().find(|node| node.kind == "sound.playhead").map(|node| node.id);
+        let id = match existing {
+            Some(id) => {
+                if let Some(node) = session.document_mut()?.node_mut(id) {
+                    node.data = serde_json::json!({ "position": position });
+                }
+                id
+            }
+            None => session.document_mut()?.add_node_with(
+                "playhead".to_string(),
+                "sound.playhead",
+                None,
+                serde_json::json!({ "position": position }),
+            ),
+        };
+        Ok(Outcome::changed(format!("the playhead is at {position} samples"))
+            .with_data(serde_json::json!({ "id": id, "position": position })))
+    }
+}
+
 /// Render the document into a **sound file**.
 ///
 /// The renderer is the first thing in this tree that makes a sound: it
@@ -1397,6 +1501,7 @@ pub struct ClipTool;
         "sound.meter.set",
         "sound.marker.add",
         "sound.ruler.add",
+        "sound.playhead.set",
         "sound.source.add",
         "sound.render",
         "sound.session.set"
@@ -1933,6 +2038,52 @@ mod tests {
             .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
             .expect_err("the source is not there");
         assert!(error.to_string().contains("source"), "the refusal says what is wrong: {error}");
+    }
+
+    /// The playhead is **where the sound is**: a line at the position.
+    #[test]
+    fn the_playhead_is_a_line_at_the_position() {
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.playhead.set", &json!({ "position": 24_000 })).expect("the playhead is set");
+        let playhead = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.playhead")
+            .expect("the playhead is there");
+        let rect = PlayheadKind::place(playhead, session.document()).expect("the playhead has a place");
+        // Twenty four thousand samples at forty eight thousand a second
+        // is half a second.
+        assert!((rect.x + rect.w / 2.0 - 0.5).abs() < 0.001, "the playhead is half a second in: {}", rect.x);
+        // And it runs from the ruler's row through the tracks.
+        assert_eq!(rect.y, -timeline::RULER_HEIGHT, "it starts at the ruler");
+        assert!(rect.h > timeline::RULER_HEIGHT, "and it reaches the tracks");
+    }
+
+    /// The playhead is **moved**, and there is still only one of it.
+    #[test]
+    fn the_playhead_is_moved_and_not_duplicated() {
+        let mut session = session();
+        session.execute("sound.playhead.set", &json!({ "position": 0 })).expect("the playhead is set");
+        session.execute("sound.playhead.set", &json!({ "position": 960 })).expect("the playhead is moved");
+        let playheads: Vec<_> =
+            session.document().walk().filter(|node| node.kind == "sound.playhead").collect();
+        assert_eq!(playheads.len(), 1, "there is one playhead");
+        assert_eq!(playheads[0].data["position"], json!(960), "and it is where it was moved");
+    }
+
+    /// A position that is **before the beginning** is refused.
+    #[test]
+    fn a_position_before_the_beginning_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute("sound.playhead.set", &json!({ "position": -1 }))
+            .expect_err("that is before the beginning");
+        assert!(
+            error.to_string().contains("before the beginning"),
+            "the refusal says what is wrong: {error}"
+        );
     }
 
     /// The kind of a track is a string, and it is open.

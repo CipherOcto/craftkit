@@ -449,3 +449,22 @@ fn tick_of_bar(map: &TempoMap, bar: i64, last_tick: i64) -> i64 {
     }
     low
 }
+
+/// The rectangle of the **playhead**: a line at the position.
+///
+/// The position is in **samples**, and the world is in seconds, so the
+/// position is worked out against the session's rate. The playhead is a
+/// **line** and not a box: it has no width of its own, only a place.
+pub fn playhead_rect(document: &Document, playhead: &Node) -> Option<Rect> {
+    let position = playhead_position(playhead)?;
+    let rate = session_of(document).sample_rate as f64;
+    let x = position as f64 / rate;
+    let height = track_count(document) as f64 * ROW_HEIGHT + RULER_HEIGHT;
+    Some(Rect::new(x - MINIMUM_WIDTH / 2.0, -RULER_HEIGHT, MINIMUM_WIDTH, height))
+}
+
+/// Where the **playhead** is, in samples.
+pub fn playhead_position(playhead: &Node) -> Option<i64> {
+    let value = playhead.data.get("position")?;
+    value.as_i64()
+}
