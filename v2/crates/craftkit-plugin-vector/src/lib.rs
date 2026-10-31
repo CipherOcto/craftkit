@@ -500,7 +500,246 @@ impl OffsetPath {
     }
 }
 
+/// Move a **point** of a path.
+///
+/// The points of a contour are the point it starts at and the point
+/// each segment ends at, counting from zero. The handles of the curves
+/// move with the point they belong to, as they do in the tree: an
+/// anchor carries its two handles.
+#[derive(Command)]
+#[command(
+    id = "vector.path.move",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Points"),
+    mutates,
+    undoable
+)]
+pub struct MovePoint {
+    /// The path.
+    pub path: NodeRef,
+    /// Which contour of the path, counting from zero. The first one if
+    /// it is left out.
+    pub contour: Option<Number>,
+    /// Which point of the contour, counting from zero.
+    pub point: Number,
+    /// Where the point goes: a point, `{"x": …, "y": …}`.
+    pub to: Json,
+}
+
+impl MovePoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let contour = index_of(self.contour, "the contour")
+            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+        let point = index_of(Some(self.point), "the point")
+            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+        let to = Point::from_json(&self.to).map_err(|reason| EngineError::Failed {
+            id: "vector.path.move".to_string(),
+            message: format!("where the point goes is not a point: {reason}"),
+        })?;
+        move_point(&mut vector.path, contour, point, to)
+            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the point has moved")
+            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+    }
+}
+
+/// Set the **handles** of a point.
+///
+/// The two handles of a point are the one the curve leaves by and the
+/// one the curve arrives by, and a point with handles on it is a
+/// curve: a straight segment with a handle on it becomes a curve, as
+/// it does in the tree.
+#[derive(Command)]
+#[command(
+    id = "vector.path.handle",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Points"),
+    mutates,
+    undoable
+)]
+pub struct HandlePoint {
+    /// The path.
+    pub path: NodeRef,
+    /// Which contour of the path, counting from zero. The first one if
+    /// it is left out.
+    pub contour: Option<Number>,
+    /// Which point of the contour, counting from zero.
+    pub point: Number,
+    /// The handle the curve leaves the point by.
+    pub c1: Option<Json>,
+    /// The handle the curve arrives at the point by.
+    pub c2: Option<Json>,
+}
+
+impl HandlePoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let contour = index_of(self.contour, "the contour").map_err(|reason| EngineError::Failed {
+            id: "vector.path.handle".to_string(),
+            message: reason,
+        })?;
+        let point = index_of(Some(self.point), "the point").map_err(|reason| EngineError::Failed {
+            id: "vector.path.handle".to_string(),
+            message: reason,
+        })?;
+        let c1 = match &self.c1 {
+            Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: format!("the handle is not a point: {reason}"),
+            })?),
+            None => None,
+        };
+        let c2 = match &self.c2 {
+            Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: format!("the handle is not a point: {reason}"),
+            })?),
+            None => None,
+        };
+        if c1.is_none() && c2.is_none() {
+            return Err(EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: "a handle says where the curve goes: c1, c2, or both".to_string(),
+            });
+        }
+        handle_point(&mut vector.path, contour, point, c1, c2).map_err(|reason| EngineError::Failed {
+            id: "vector.path.handle".to_string(),
+            message: reason,
+        })?;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the handles have moved")
+            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+    }
+}
+
 // ------------------------------------------------------------- the helpers --
+
+/// A number that is an **index**: a whole number and not a negative
+/// one.
+///
+/// A number that is not an index is **refused** and not rounded: an
+/// index of one and a half is a question, and the answer is that the
+/// kit has no such point.
+fn index_of(value: Option<Number>, what: &str) -> Result<usize, String> {
+    let number = value.map(|number| number.0).unwrap_or(0.0);
+    if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+        return Err(format!("{what} is a whole number and not {number}"));
+    }
+    Ok(number as usize)
+}
+
+/// Which segment **leaves** a point, if there is one.
+///
+/// The point at the start of a contour is left by the first segment,
+/// and every other point is left by the segment that starts there. The
+/// last point of a contour is left by nothing: the curve that closes a
+/// closed contour is not in the kit's path.
+fn leaving_segment(_closed: bool, point: usize, segments: usize) -> Option<usize> {
+    if point < segments { Some(point) } else { None }
+}
+
+/// Which segment **arrives** at a point, if there is one.
+///
+/// Every point but the first is arrived at by the segment before it,
+/// and the first point of a **closed** contour is arrived at by the
+/// last segment.
+fn arriving_segment(closed: bool, point: usize, segments: usize) -> Option<usize> {
+    if point > 0 {
+        Some(point - 1)
+    } else if closed && segments > 0 {
+        Some(segments - 1)
+    } else {
+        None
+    }
+}
+
+/// Move a point of a path, and the handles that belong to it.
+fn move_point(path: &mut Path, contour: usize, point: usize, to: Point) -> Result<(), String> {
+    let Some(subpath) = path.subpaths.get_mut(contour) else {
+        return Err(format!("the path has no contour {contour}"));
+    };
+    let count = subpath.segments.len() + 1;
+    if point >= count {
+        return Err(format!("the contour has {count} points and not a point {point}"));
+    }
+    let from = if point == 0 { subpath.start } else { subpath.segments[point - 1].end() };
+    let delta = Point::new(to.x - from.x, to.y - from.y);
+    // The **point** itself.
+    if point == 0 {
+        subpath.start = to;
+    } else if let Segment::Line { to: end } = &mut subpath.segments[point - 1] {
+        *end = to;
+    } else if let Segment::Cubic { to: end, .. } = &mut subpath.segments[point - 1] {
+        *end = to;
+    }
+    // The **handles** move with it: an anchor carries its handles.
+    let leaving = leaving_segment(subpath.closed, point, subpath.segments.len());
+    let arriving = arriving_segment(subpath.closed, point, subpath.segments.len());
+    if let Some(index) = leaving
+        && let Segment::Cubic { c1, .. } = &mut subpath.segments[index]
+    {
+        *c1 = Point::new(c1.x + delta.x, c1.y + delta.y);
+    }
+    if let Some(index) = arriving
+        && let Segment::Cubic { c2, .. } = &mut subpath.segments[index]
+    {
+        *c2 = Point::new(c2.x + delta.x, c2.y + delta.y);
+    }
+    Ok(())
+}
+
+/// Set the handles of a point of a path.
+///
+/// A handle on a straight segment makes it a curve, and the handle it
+/// did not have is the point itself: a curve whose two handles are its
+/// end points is a straight line.
+fn handle_point(
+    path: &mut Path,
+    contour: usize,
+    point: usize,
+    c1: Option<Point>,
+    c2: Option<Point>,
+) -> Result<(), String> {
+    let Some(subpath) = path.subpaths.get_mut(contour) else {
+        return Err(format!("the path has no contour {contour}"));
+    };
+    let count = subpath.segments.len() + 1;
+    if point >= count {
+        return Err(format!("the contour has {count} points and not a point {point}"));
+    }
+    let closed = subpath.closed;
+    let segments = subpath.segments.len();
+    if let Some(handle) = c1 {
+        let Some(index) = leaving_segment(closed, point, segments) else {
+            return Err(format!("the point {point} has no curve leaving it"));
+        };
+        let end = subpath.segments[index].end();
+        let old_c2 = match &subpath.segments[index] {
+            Segment::Line { .. } => end,
+            Segment::Cubic { c2, .. } => *c2,
+        };
+        subpath.segments[index] = Segment::Cubic { c1: handle, c2: old_c2, to: end };
+    }
+    if let Some(handle) = c2 {
+        let Some(index) = arriving_segment(closed, point, segments) else {
+            return Err(format!("the point {point} has no curve arriving at it"));
+        };
+        let start = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
+        let end = subpath.segments[index].end();
+        let old_c1 = match &subpath.segments[index] {
+            Segment::Line { .. } => start,
+            Segment::Cubic { c1, .. } => *c1,
+        };
+        subpath.segments[index] = Segment::Cubic { c1: old_c1, c2: handle, to: end };
+    }
+    Ok(())
+}
 
 /// The path a node carries.
 fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
