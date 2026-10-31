@@ -135,7 +135,7 @@ fn a_stroke_is_drawn_on_the_outline() {
 #[test]
 fn text_is_drawn_at_all() {
     let mut canvas = a_canvas(100, 100);
-    canvas.text(Point::new(-10.0, 0.0), "hi", craftkit_sdk::Colour::BLACK);
+    canvas.text(Point::new(-10.0, 0.0), "hi", craftkit_sdk::Colour::BLACK, 8.0);
     let image = canvas.image();
     assert!(count_painted(image) > 0, "the text drew nothing at all");
 }
@@ -267,7 +267,7 @@ fn unstore(stream: &[u8]) -> Vec<u8> {
 #[test]
 fn the_text_is_drawn_with_letters_and_not_with_boxes() {
     let mut canvas = a_canvas(100, 100);
-    canvas.text(Point::new(0.0, 0.0), "I", Colour::BLACK);
+    canvas.text(Point::new(0.0, 0.0), "I", Colour::BLACK, 8.0);
     let image = canvas.image();
     // The `I` is one vertical stroke: the middle of its cell is empty.
     let mut ink = 0;
@@ -287,7 +287,7 @@ fn the_text_is_drawn_with_letters_and_not_with_boxes() {
 #[test]
 fn a_space_takes_a_cell_and_draws_nothing() {
     let mut canvas = a_canvas(100, 100);
-    canvas.text(Point::new(0.0, 0.0), " ", Colour::BLACK);
+    canvas.text(Point::new(0.0, 0.0), " ", Colour::BLACK, 8.0);
     let image = canvas.image();
     let mut ink = 0;
     for column in 40..70 {
@@ -298,4 +298,45 @@ fn a_space_takes_a_cell_and_draws_nothing() {
         }
     }
     assert_eq!(ink, 0, "the space drew something: {ink} pixels");
+}
+
+/// The rightmost column of the ink, in the picture.
+fn rightmost_ink(image: &Image) -> usize {
+    let mut rightmost = 0;
+    for column in 0..image.width() {
+        for row in 0..image.height() {
+            if pixel(image, column, row) == Some([0, 0, 0, 255]) {
+                rightmost = rightmost.max(column);
+            }
+        }
+    }
+    rightmost
+}
+
+/// The text is **proportional**: a narrow letter takes less room than a
+/// wide one.
+///
+/// The advance is the typeface's own, so a line of `i` is narrower than
+/// a line of `m` — and not by the difference of two boxes.
+#[test]
+fn the_text_is_proportional() {
+    let mut narrow = a_canvas(200, 100);
+    narrow.text(Point::new(-50.0, 0.0), "iii", Colour::BLACK, 8.0);
+    let mut wide = a_canvas(200, 100);
+    wide.text(Point::new(-50.0, 0.0), "mmm", Colour::BLACK, 8.0);
+    let narrow_right = rightmost_ink(narrow.image());
+    let wide_right = rightmost_ink(wide.image());
+    assert!(wide_right > narrow_right + 5, "the wide letters are not wider: {narrow_right} and {wide_right}");
+}
+
+/// The **size** is the caller's: the capitals are as tall as it says.
+#[test]
+fn the_size_is_the_callers() {
+    let mut small = a_canvas(200, 200);
+    small.text(Point::new(-50.0, 0.0), "I", Colour::BLACK, 4.0);
+    let mut large = a_canvas(200, 200);
+    large.text(Point::new(-50.0, 0.0), "I", Colour::BLACK, 16.0);
+    let small_right = rightmost_ink(small.image());
+    let large_right = rightmost_ink(large.image());
+    assert!(large_right > small_right + 5, "the big letter is not bigger: {small_right} and {large_right}");
 }

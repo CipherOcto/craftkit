@@ -337,7 +337,10 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
         "cad.entity.text" => {
             let Some(at) = point_in(geometry, "at") else { return };
             let Some(text) = geometry.get("text").and_then(|text| text.as_str()) else { return };
-            canvas.text(at, text, colour);
+            // The text's **height** is its own: a text that says how
+            // tall it is knows how big it is drawn.
+            let height = geometry.get("height").and_then(|height| height.as_f64()).unwrap_or(TEXT_HEIGHT);
+            canvas.text(at, text, colour, height);
         }
         _ => {}
     }
@@ -397,6 +400,10 @@ fn distance_to_segment(point: Point, from: Point, to: Point) -> f64 {
 /// Sixty-four is enough that a circle looks like a circle at the sizes
 /// a picture is drawn at, and few enough that the picture is quick.
 const CIRCLE_SEGMENTS: usize = 64;
+
+/// How tall a text is drawn when it does not say: the **em**, in the
+/// world's units.
+const TEXT_HEIGHT: f64 = 4.0;
 
 /// A point of a geometry, read from the caller's JSON.
 fn point_in(geometry: &Json, name: &str) -> Option<Point> {

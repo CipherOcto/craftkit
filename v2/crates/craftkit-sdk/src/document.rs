@@ -320,7 +320,13 @@ pub trait Canvas {
     /// The text takes a **colour**, like everything else that is
     /// drawn: a canvas that could only draw text in one colour was a
     /// canvas that could not draw a layer's text.
-    fn text(&mut self, at: Point, text: &str, colour: Colour);
+    ///
+    /// And it takes a **size**: the height of the capitals, in the
+    /// world's units — the **em**. The size is the caller's because the
+    /// size is the caller's business: a text that says how tall it is
+    /// knows its own size, and a canvas that had a size of its own
+    /// would be a canvas that could not draw a text of another size.
+    fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64);
     /// Draw a path: filled, and stroked on its outline.
     fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>);
 }
@@ -341,8 +347,8 @@ impl Canvas for RecordingCanvas {
         let _ = fill;
     }
 
-    fn text(&mut self, at: Point, text: &str, colour: Colour) {
-        self.drawn.push(format!("text({}, {}, {text})", at.x, at.y));
+    fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64) {
+        self.drawn.push(format!("text({}, {}, {text}, {size})", at.x, at.y));
         let _ = colour;
     }
 
