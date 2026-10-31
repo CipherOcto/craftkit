@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1121 tests.** The MCP server links **all fifteen batteries** in, so the
+**1126 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1121 tests
+cargo test          # 1126 tests
 cargo run -p craftkit-studio
 ```
 
@@ -10051,3 +10051,53 @@ document should have one.
   clips has no click, because there is no sound to put it in.
 - **There is one click and one accent.** The family has a velocity for
   each of them and a "only while recording" flag; neither is here.
+
+## 147. The clip has a curve of its own
+
+A track had a curve and a clip had a gain, and the family's clip
+carries a curve of its own — a gain envelope, measured from the clip's
+own start.
+
+### What was built
+
+- **A lane automates one thing: a track or a clip.** `sound.lane.add`
+  takes a `track` or a `clip`, and exactly one of them: two owners is
+  two lanes, and a lane with two curves is a lane that means two
+  things.
+- The **render** applies the clip's own lanes to that clip, and their
+  times are measured from the **clip's** start.
+- The **picture** draws the clip's curve on the clip's bar, at the
+  clip's place: a clip's curve is drawn where the clip is and not
+  where the track's timeline is.
+
+### What the port found
+
+- **A lane belongs to the node it automates.** The tree's lane was a
+  lane of a track, and the family's clip carries a curve of its own;
+  the tree's answer is that a lane is **under** its owner and that the
+  owner may be a clip.
+- **The times are the owner's.** A track's lane is measured from the
+  track's timeline and a clip's from the clip's own start, and the two
+  are drawn where they belong. One lane, one owner, one clock.
+- **The curve is a node and not a number in the payload.** The family
+  keeps the envelope in the clip's payload; this tree keeps it in a
+  lane, because a curve is a thing with a place and a shape, and the
+  payload is for the things that are only numbers.
+
+### What it cost
+
+- five tests in the battery: a lane may automate a clip, a lane
+  automates one thing, the clip's curve is heard, the clip's curve is
+  drawn on the clip's bar, and a track's lane is still the track's.
+
+### What it does not settle
+
+- **The clip's curve multiplies the track's.** The two are separate
+  gains and both are applied; a curve that is meant to *replace* the
+  track's is not a thing here.
+- **Only volume, pan and mute are heard.** A lane of any other
+  parameter is drawn and not heard, and that is true of a clip's lane
+  as much as of a track's.
+- **A clip's curve is one lane per parameter.** Two lanes of volume
+  under one clip are two curves and the second wins, and nothing says
+  so.
