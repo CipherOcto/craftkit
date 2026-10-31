@@ -11,11 +11,15 @@
 //! It contributes:
 //!
 //! - a **layer**, `sound`, which the rest of it is in;
-//! - **seven kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
-//!   `sound.tempo`, `sound.meter`, `sound.marker` and `sound.source`;
-//! - **seven commands**, one for each thing a person does to a sound
-//!   document: make a track, make a clip, set the tempo, set the meter,
-//!   make a marker, make a source, set the session;
+//! - **thirteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
+//!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
+//!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
+//!   `sound.playhead` and `sound.source`;
+//! - **twenty-three commands**, one for each thing a person does to a
+//!   sound document: make a track, make a clip, set the tempo, set the
+//!   meter, make a marker, make a source, set the session, and the rest
+//!   that came with the mixer — the bus, the send, the insert, the lane,
+//!   the route, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
 //! - an **evaluator**, `sound.timeline`, which says what the document
@@ -724,6 +728,16 @@ impl TrackPayload {
     }
 }
 
+/// Whether a track is a **master**: a track whose fader is over the
+/// whole mix and not over a part of it.
+///
+/// The kinds of a track are open — they are a string in the track's
+/// payload — and `master` is one of them: the tree's mixer runs the
+/// master faders over the main mix, and a master holds no clips.
+fn is_master(node: &Node) -> bool {
+    TrackPayload::from_json(&node.data).map(|payload| payload.track_kind == "master").unwrap_or(false)
+}
+
 /// What a **fade** says about itself.
 ///
 /// A fade is a length, a shape and a bend, and it is the same thing at
@@ -1135,6 +1149,17 @@ impl AddClip {
             Some(stretch) => stretch_of(stretch.0, "sound.clip.add")?,
             None => 1.0,
         };
+        // A **master** holds a fader and not a playlist: a clip on a
+        // master would be a clip that is never heard.
+        match session.document().node(self.track.0) {
+            Some(node) if node.kind == "sound.track" && is_master(node) => {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.add".to_string(),
+                    message: "a master holds no clips: it has a fader and not a playlist".to_string(),
+                });
+            }
+            _ => {}
+        }
         let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
         let payload = ClipPayload {
             start,
@@ -1963,7 +1988,7 @@ impl RenderSound {
         // it.
         let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
         let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
-        for track in session.document().walk().filter(|node| node.kind == "sound.track") {
+        for track in session.document().walk().filter(|node| node.kind == "sound.track" && !is_master(node)) {
             let mut signal = vec![0.0_f32; frames];
             for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
                 let Some(clip) = session.document().node(*clip_id) else { continue };
@@ -2059,6 +2084,33 @@ impl RenderSound {
         }
         for (_, signal) in &buses {
             add_into(&mut master, signal, 0, 1.0);
+        }
+        // The **master faders**: a track of the kind `master` holds a
+        // fader for the whole mix and not for a part of it. The tree's
+        // mixer runs the master faders over the main mix, in the order
+        // of the tree, and the metronome is summed after them.
+        for master_track in
+            session.document().walk().filter(|node| node.kind == "sound.track" && is_master(node))
+        {
+            for insert in inserts_of(session.document(), master_track) {
+                if insert.bypass {
+                    continue;
+                }
+                let mut plugin = craftkit_plugins::make(
+                    &insert.plugin,
+                    &craftkit_plugins::Params::from_map(insert.params),
+                )
+                .map_err(|error| EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: error.to_string(),
+                })?;
+                plugin.process(&mut master, channels.max(1) as usize, rate);
+            }
+            // The **fader** of the master: its own lanes, over the whole
+            // mix.
+            let automation = automate::automation_of(session.document(), master_track);
+            master = automate::apply_mute(&automation, &master, channels.max(1) as usize, 0);
+            master = automate::apply_fader(&automation, &master, channels.max(1) as usize, 0);
         }
         let channels = channels.max(1);
         // The **metronome**: the click is mixed in after the master, so
