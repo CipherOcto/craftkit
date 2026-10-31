@@ -995,12 +995,12 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1065 tests.** The MCP server links **all fifteen batteries** in, so the
+**1079 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`, `/vst3`) — and the studio
-on its own, with no features, carries **238** of them, and **252** with
+on its own, with no features, carries **238** of them, and **254** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1065 tests
+cargo test          # 1079 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9771,3 +9771,69 @@ pixels were in the file, and the file was nowhere.
 - **Only the formats the tree can read are drawn.** The PNG reader and
   the JPEG decoder are here; a TIFF or a WebP is not, and a picture in
   one of those is measured by its header and not drawn.
+
+## 143. The clip is stretched
+
+A clip could be placed, trimmed and given a gain, and there was no way
+to say that it should be played at another speed. The family's clips
+carry one — *"Elastic / Vari-speed ratio (1.0 = none) — applied by
+rendered processing"* — and v2's did not.
+
+### What was built
+
+- **`varispeed`** in the audio crate: a sound played at another speed.
+  The factor is a **length ratio**, the reading is **linear** — the
+  sample at a place in the new sound is the line between the two
+  samples it lies between — and the channels are kept apart.
+- The clip's **payload** carries a `stretch`: one is none, and it is a
+  number in the document, so it is saved, undone and shared like any
+  other part of the clip.
+- **`sound.clip.stretch`**: the command that sets it, and
+  `sound.clip.add` takes it as well.
+- The **render** honours it: the source is read more slowly, so the
+  sound is longer and lower. The clip keeps its place and its length —
+  the stretch says *how the source is played*, and not how long the
+  clip is.
+- The **trim** honours it: the content moves by the delta **divided by
+  the stretch**, exactly as the family's trim does.
+
+### What the port found
+
+- **A stretch is a varispeed, and not a time stretch.** The difference
+  is the whole point: a time stretch keeps the pitch and changes the
+  length, and that is a WSOLA and much harder to do well. v2 does the
+  varispeed and says so in the name of the function.
+- **The picture and the sound disagreed about a clip's length.** The
+  timeline drew the clip's length in the **session's** samples and the
+  render measured it in the **source's** frames, so a source at
+  another rate was drawn one length and heard another. The payload now
+  speaks the session's samples — the timeline's language — and the
+  render works out the difference where it reads the source. One test
+  changed its mind, and it was the test that was wrong.
+- **The stretch is one fact and it says two things.** The clip is
+  longer and the content moves more slowly: those are the same
+  number, and the trim uses it as `delta / stretch`.
+- **A clip that cannot be read is refused, and not left out.** The
+  render used to skip a clip whose payload it could not parse, which
+  is a sound that is missing something without saying so.
+
+### What it cost
+
+- one function with **four tests** in the audio crate, one field in the
+  payload, one command, and **ten tests** in the battery: a clip
+  carries its stretch, a stretch is set on a clip, a clip may be added
+  already stretched, a stretch that is not a number is refused, a
+  stretch of zero is refused, a stretch that is too large is refused, a
+  stretched clip is longer and lower, a stretch of one is no stretch, a
+  trimmed stretched clip moves its content by the delta over the
+  stretch, and the picture and the sound agree.
+
+### What it does not settle
+
+- **The reading is a line.** A varispeed read by a line is not a
+  varispeed read by a good filter: the top of the sound is a little
+  rough, and a sound played very slowly is very rough.
+- **The stretch is bounded at 64.** A clip stretched more than that is
+  refused, and the bound is a number in the tree and not a law.
+- **There is no time stretch at all.** A clip that keeps its pitch and
+  changes its length is a WSOLA, and it is not here.
