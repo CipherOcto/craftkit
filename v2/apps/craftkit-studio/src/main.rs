@@ -61,13 +61,10 @@ fn main() {
 
     println!("\n── drawing the document, through the kinds");
     let mut canvas = RecordingCanvas::default();
-    let document = session.document();
-    for node in document.walk() {
-        // A node whose kind is not linked in is **not drawn**: the core
-        // does not know which kinds those are, and it asks the registry.
-        let Some(kind) = session.kinds().get(&node.kind) else { continue };
-        (kind.paint)(node, document, &mut canvas);
-    }
+    // The **kit** draws: a node whose kind is not linked in is not
+    // drawn, a node that is hidden is not drawn, and the handle of the
+    // selected node is drawn on top.
+    session.paint(&mut canvas);
     for drawn in &canvas.drawn {
         println!("   {drawn}");
     }
@@ -76,8 +73,8 @@ fn main() {
     let point = craftkit_sdk::Point::new(4.0, 5.0);
     // The **deepest** hit wins: a thing in a group is in front of the
     // group that holds it.
-    let hit = session
-        .document()
+    let document = session.document();
+    let hit = document
         .walk()
         .filter(|node| {
             session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, document, point)).unwrap_or(false)

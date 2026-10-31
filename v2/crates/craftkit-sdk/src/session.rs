@@ -129,6 +129,12 @@ impl Memory {
     }
 }
 
+/// How wide the **resize handle** is, in pixels of the screen.
+///
+/// It is a thing on the screen and not a thing in the world: it is the
+/// same size whatever the zoom.
+pub const HANDLE_PIXELS: f64 = 8.0;
+
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -308,6 +314,46 @@ impl Session {
     /// The camera, to change.
     pub fn camera_mut(&mut self) -> &mut Camera {
         &mut self.camera
+    }
+
+    /// **Draw** the document.
+    ///
+    /// The kit draws it and not the front end: every node that is not
+    /// hidden is offered to the kind that says what it is, and the
+    /// **resize handle** of the selected node is drawn on top.
+    ///
+    /// A front end that drew the document itself would have a second
+    /// rule for what is seen, and the second rule would drift from the
+    /// first — the way the CAD's colour rule drifted from the
+    /// appearance rule until §103 joined them.
+    ///
+    /// The handle is a **screen** size: it is the same size whatever
+    /// the zoom, and how big it is in the world's units comes from the
+    /// camera.
+    pub fn paint(&self, canvas: &mut dyn crate::document::Canvas) {
+        let document = self.document();
+        for node in document.walk_visible() {
+            let Some(kind) = self.kinds.get(&node.kind) else { continue };
+            (kind.paint)(node, document, canvas);
+        }
+        self.paint_handles(canvas);
+    }
+
+    /// The **resize handles** of the selected nodes.
+    ///
+    /// One handle each: the corner opposite the anchor, where the
+    /// rectangle says it is.
+    fn paint_handles(&self, canvas: &mut dyn crate::document::Canvas) {
+        let zoom = self.camera().zoom();
+        let size = HANDLE_PIXELS / zoom;
+        for node in self.selected_nodes() {
+            let Some(rect) = node.rect else { continue };
+            let handle = rect.resize_handle();
+            canvas.rect(
+                crate::document::Rect::new(handle.x - size / 2.0, handle.y - size / 2.0, size, size),
+                crate::document::Colour::BLACK,
+            );
+        }
     }
 
     /// The tasks: work that may outlive the process.

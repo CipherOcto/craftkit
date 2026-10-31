@@ -314,11 +314,11 @@ impl Window {
     pub fn picture(&self, width: usize, height: usize) -> Result<Picture, String> {
         let camera = *self.session.camera();
         let mut raster = craftkit_raster::Raster::new(width, height, camera)?;
-        let document = self.session.document();
-        for node in document.walk_visible() {
-            let Some(kind) = self.session.kinds().get(&node.kind) else { continue };
-            (kind.paint)(node, document, &mut raster);
-        }
+        // The **kit** draws the document: every node that is not hidden
+        // is offered to the kind that says what it is, and the handle of
+        // the selected node is drawn on top. The window does not have a
+        // rule of its own about what is seen.
+        self.session.paint(&mut raster);
         let image = raster.image();
         let mut pixels = Vec::with_capacity(image.width().saturating_mul(image.height()).saturating_mul(4));
         for y in 0..image.height() {

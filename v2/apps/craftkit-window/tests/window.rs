@@ -295,3 +295,31 @@ fn a_hidden_node_is_neither_drawn_nor_picked() {
     assert_eq!(rows.len(), 1, "the node is in the document");
     assert!(rows[0].hidden, "and the tree says it is hidden");
 }
+
+/// The **handle** is drawn where the drag finds it.
+///
+/// A handle that is drawn somewhere else is a handle that lies, and the
+/// kit draws it: the session paints the document and the handle of the
+/// selected node with it.
+#[test]
+fn the_handle_is_drawn_where_the_drag_finds_it() {
+    let mut window = window();
+    window.open("geometry.rectangle");
+    window.set("x", json!(0.0));
+    window.set("y", json!(0.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.run().expect("the rectangle is added");
+    window.select_node(1).expect("the node is selected");
+
+    // The handle is the corner opposite the anchor.
+    let handle = window.handle_at(craftkit_sdk::Point::new(10.0, 0.0), 0.5);
+    assert_eq!(handle, Some(1), "the handle is under the pointer");
+
+    // And it is **drawn**: the picture has a black pixel where the
+    // handle is.
+    let picture = window.picture(64, 64).expect("the document is drawn");
+    let (x, y) = (32 + 10, 32);
+    let pixel = &picture.pixels[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
+    assert_eq!(pixel, &[0, 0, 0, 0xff], "the handle is drawn at the corner");
+}
