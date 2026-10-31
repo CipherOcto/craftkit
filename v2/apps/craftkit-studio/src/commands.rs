@@ -249,6 +249,63 @@ impl NodeResize {
     }
 }
 
+/// **Bring** a node to the front.
+///
+/// The **order of the tree is the order of the drawing**: a node that
+/// is drawn later is on top. So bringing a node to the front is moving
+/// it to the end of the list of its brothers, and the command says so.
+///
+/// The command does not say "it was already at the front": it says what
+/// it did, and a command that did nothing in silence is a command a
+/// person cannot trust.
+#[derive(Command)]
+#[command(id = "node.front", area = "node", icon = "front", menu("Node"), mutates, undoable)]
+pub struct NodeFront {
+    /// The node.
+    pub node: NodeRef,
+}
+
+impl NodeFront {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.front".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        session.document_mut()?.bring_to_front(id);
+        Ok(Outcome::changed(format!("the node `{id}` is at the front"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
+/// **Send** a node to the back.
+///
+/// The other end of the same order: a node that is drawn first is
+/// behind everything that is drawn after it.
+#[derive(Command)]
+#[command(id = "node.back", area = "node", icon = "back", menu("Node"), mutates, undoable)]
+pub struct NodeBack {
+    /// The node.
+    pub node: NodeRef,
+}
+
+impl NodeBack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.back".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        session.document_mut()?.send_to_back(id);
+        Ok(Outcome::changed(format!("the node `{id}` is at the back"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
 /// **Hide** a node.
 ///
 /// A hidden node is in the document and not on the screen: it is not

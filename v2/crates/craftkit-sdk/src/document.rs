@@ -1155,6 +1155,55 @@ impl Document {
         &self.nodes
     }
 
+    /// Bring a node to the **front**: the last of its brothers.
+    ///
+    /// The **order of the tree is the order of the drawing**: a node
+    /// that is drawn later is on top, and the picture and the picking
+    /// agree because both walk the tree in this order.
+    ///
+    /// So the order is not a number a node carries: it is where the
+    /// node is among its brothers, and bringing a node to the front is
+    /// moving it to the end of the list it is in.
+    ///
+    /// A node that is the only one of its brothers is already at the
+    /// front, and the command says so rather than doing nothing in
+    /// silence.
+    pub fn bring_to_front(&mut self, id: u64) -> bool {
+        self.reorder(id, true)
+    }
+
+    /// Send a node to the **back**: the first of its brothers.
+    pub fn send_to_back(&mut self, id: u64) -> bool {
+        self.reorder(id, false)
+    }
+
+    /// Move a node to the front or to the back of its brothers.
+    fn reorder(&mut self, id: u64, front: bool) -> bool {
+        if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
+            let node = unwrap(self.nodes.remove(index));
+            let node = Arc::new(node);
+            if front {
+                self.nodes.push(node);
+            } else {
+                self.nodes.insert(0, node);
+            }
+            return true;
+        }
+        for node in self.nodes.iter_mut() {
+            let parent = Arc::make_mut(node);
+            let Some(index) = parent.children.iter().position(|child| child.id == id) else { continue };
+            let child = unwrap(parent.children.remove(index));
+            let child = Arc::new(child);
+            if front {
+                parent.children.push(child);
+            } else {
+                parent.children.insert(0, child);
+            }
+            return true;
+        }
+        false
+    }
+
     /// Every node, in the order they are drawn: a node, then what is in it.
     pub fn walk(&self) -> Descendants<'_> {
         Descendants { stack: self.nodes.iter().rev().map(|node| &**node).collect() }
