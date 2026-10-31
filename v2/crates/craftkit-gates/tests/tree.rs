@@ -333,3 +333,42 @@ fn a_thin_front_end_is_not_caught() {
     let findings = check(&tree.root);
     assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
 }
+
+/// A front end that **mentions** a door is not caught.
+///
+/// The gate reads the code and not the comments: a front end that says
+/// "a front end never calls `document_mut`" in a comment is not a front
+/// end that calls it.
+#[test]
+fn a_front_end_that_mentions_a_door_is_not_caught() {
+    let tree = Tree::new("frontend-mentions");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str(
+        "\n/// A front end never calls `document_mut`, and never keeps a `Plan`.\n\
+         pub fn say() -> &'static str { \"document_mut\" }\n",
+    );
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
+}
+
+/// A front end that **changes the design** without a command is caught.
+///
+/// The undo is the history's own door, and everything is a command: a
+/// front end that opens the door itself is a front end with a second
+/// way into the design.
+#[test]
+fn a_front_end_that_undoes_itself_is_caught() {
+    let tree = Tree::new("frontend-undo");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub fn back(session: &mut Session) { let _ = session.undo(); }\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    let front = findings_of(&findings, "front-end");
+    assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
+    assert!(front[0].message.contains("undo"), "{}", front[0].message);
+}

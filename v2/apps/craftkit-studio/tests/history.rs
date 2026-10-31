@@ -167,3 +167,23 @@ fn undoing_with_nothing_to_undo_is_refused() {
     let error = session.undo().expect_err("there is nothing to undo");
     assert!(error.to_string().contains("nothing to undo"), "{error}");
 }
+
+/// The undo is a **command**.
+///
+/// Everything a person or an agent can do is a command, and the history
+/// is not an exception: the undo and the redo are in the registry, and
+/// a front end that opened the session's own door would be a front end
+/// with a second way into the design.
+#[test]
+fn the_undo_is_a_command() {
+    let ecosystem = ecosystem();
+    assert!(ecosystem.commands.get("doc.undo").is_some(), "the undo is a command");
+    assert!(ecosystem.commands.get("doc.redo").is_some(), "and so is the redo");
+
+    let mut session = three_nodes();
+    assert_eq!(session.document().nodes.len(), 3);
+    session.execute("doc.undo", &json!({})).expect("the undo runs");
+    assert_eq!(session.document().nodes.len(), 2, "one node went");
+    session.execute("doc.redo", &json!({})).expect("the redo runs");
+    assert_eq!(session.document().nodes.len(), 3, "the node came back");
+}

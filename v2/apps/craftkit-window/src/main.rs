@@ -352,6 +352,14 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.heading("craftkit");
             ui.label("the registry, the document and the plan — and nothing else");
+            // The history is reached the way everything else is: by
+            // running a command.
+            if ui.button("undo").clicked() {
+                let _ = self.window.run_id("doc.undo", json!({}));
+            }
+            if ui.button("redo").clicked() {
+                let _ = self.window.run_id("doc.redo", json!({}));
+            }
         });
         egui::SidePanel::left("commands").default_width(320.0).show(ctx, |ui| {
             ui.heading("the commands");

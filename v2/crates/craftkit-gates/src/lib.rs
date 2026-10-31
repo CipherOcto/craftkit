@@ -180,11 +180,18 @@ pub const FRONT_ENDS: &[&str] = &["craftkit-window"];
 ///   reaches it is a front end that evaluates the document itself;
 /// - `Plan` and `PlanItem` are the plan's own types: a front end that
 ///   holds one is a front end that keeps a value the evaluator
-///   computed.
+///   computed;
+/// - `undo` and `redo` are the history's own doors: a front end that
+///   opens one is a front end that changes the design without a
+///   command, and **everything** is a command.
 ///
 /// The plan itself is not forbidden: the session hands it out, and a
 /// front end may read it. What it may not do is **keep** it.
-pub const FRONT_END_FORBIDDEN: &[&str] = &["document_mut", "evaluators", "Plan", "PlanItem"];
+///
+/// The names are read from the **code** and not from the comments and
+/// the strings: a name in a comment is not a call, and a name in a
+/// string is not a call either.
+pub const FRONT_END_FORBIDDEN: &[&str] = &["document_mut", "evaluators", "Plan", "PlanItem", "undo", "redo"];
 
 /// What the gate found.
 #[derive(Debug, Clone, PartialEq)]
@@ -387,7 +394,8 @@ fn front_ends_are_thin(root: &Path, findings: &mut Vec<Finding>) {
             continue;
         }
         for file in rust_files(&crate_.dir) {
-            let Ok(code) = std::fs::read_to_string(&file) else { continue };
+            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            let code = code_only(&text);
             for name in FRONT_END_FORBIDDEN {
                 if !has_word(&code, name) {
                     continue;
@@ -403,6 +411,148 @@ fn front_ends_are_thin(root: &Path, findings: &mut Vec<Finding>) {
                 });
             }
         }
+    }
+}
+
+/// The **code** of a file: what is left when the comments and the
+/// strings are taken away.
+///
+/// A gate reads what a program **does**, and not what it says about
+/// itself: a name inside a comment is not a call, and a name inside a
+/// string is not a call either — a front end that runs the command
+/// `doc.undo` says "undo" in a string, and that is the one way it is
+/// allowed to.
+///
+/// The comments and the strings keep their **lines**, so that a
+/// message that names a line names the file's line.
+pub fn code_only(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut characters = source.chars().peekable();
+    let mut in_line = false;
+    let mut in_block = false;
+    let mut in_string = false;
+    let mut in_raw = false;
+    let mut escaped = false;
+    let mut raw_hashes = 0usize;
+    while let Some(character) = characters.next() {
+        if in_line {
+            if character == '\n' {
+                in_line = false;
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_block {
+            if character == '*' && characters.peek() == Some(&'/') {
+                characters.next();
+                in_block = false;
+                out.push(' ');
+                out.push(' ');
+            } else if character == '\n' {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        if in_string {
+            if escaped {
+                escaped = false;
+                out.push(' ');
+                continue;
+            }
+            match character {
+                '\\' => {
+                    escaped = true;
+                    out.push(' ');
+                }
+                '"' => {
+                    in_string = false;
+                    out.push(' ');
+                }
+                '\n' => out.push('\n'),
+                _ => out.push(' '),
+            }
+            continue;
+        }
+        if in_raw {
+            if character == '"' {
+                let mut hashes = 0;
+                while hashes < raw_hashes && characters.peek() == Some(&'#') {
+                    characters.next();
+                    hashes += 1;
+                    out.push(' ');
+                }
+                if hashes == raw_hashes {
+                    in_raw = false;
+                } else {
+                    out.push(' ');
+                }
+            } else if character == '\n' {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+        match character {
+            '/' if characters.peek() == Some(&'/') => {
+                characters.next();
+                in_line = true;
+                out.push(' ');
+                out.push(' ');
+            }
+            '/' if characters.peek() == Some(&'*') => {
+                characters.next();
+                in_block = true;
+                out.push(' ');
+                out.push(' ');
+            }
+            'r' if !ends_with_word(&out) => {
+                // A raw string: `r"…"`, `r#"…"#`. The scanner that
+                // blanks an ordinary string would end a raw one at the
+                // first quote inside it and read the rest of the file
+                // as code.
+                let mut ahead = characters.clone();
+                let mut hashes = 0;
+                while ahead.peek() == Some(&'#') {
+                    ahead.next();
+                    hashes += 1;
+                }
+                if ahead.peek() != Some(&'"') {
+                    // An identifier that starts with `r`.
+                    out.push('r');
+                    continue;
+                }
+                for _ in 0..hashes {
+                    characters.next();
+                    out.push(' ');
+                }
+                characters.next();
+                out.push(' ');
+                in_raw = true;
+                raw_hashes = hashes;
+            }
+            '"' => {
+                in_string = true;
+                out.push(' ');
+            }
+            _ => out.push(character),
+        }
+    }
+    out
+}
+
+/// Whether the text so far ends in a word.
+///
+/// A `r` after a word is part of it — `bar` is not a raw string — and
+/// a `r` after a space or a bracket is.
+fn ends_with_word(out: &str) -> bool {
+    match out.chars().last() {
+        Some(last) => last.is_alphanumeric() || last == '_',
+        None => false,
     }
 }
 

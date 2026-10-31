@@ -543,3 +543,39 @@ impl HistoryTree {
         ))
     }
 }
+
+/// **Undo** the last change.
+///
+/// The undo is a **command**, and not an exception to the rule: a
+/// person and an agent both reach the history this way, and a front end
+/// that opened the session's own door would be a front end with a
+/// second way into the design.
+///
+/// It is not **undoable** itself: it moves along the tree of states and
+/// it adds nothing to it.
+#[derive(Command)]
+#[command(id = "doc.undo", area = "doc", icon = "undo", menu("Edit"), mutates)]
+pub struct Undo {}
+
+impl Undo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        session.undo()
+    }
+}
+
+/// **Redo**: go forward into a branch of the history.
+///
+/// The **newest** branch is taken. A change made after an undo starts a
+/// **new** branch, and the old one is still there — the session can go
+/// into it, and this command does not yet say which one: a branch is a
+/// number, and a number is not a parameter the kit's own types can
+/// carry.
+#[derive(Command)]
+#[command(id = "doc.redo", area = "doc", icon = "redo", menu("Edit"), mutates)]
+pub struct Redo {}
+
+impl Redo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        session.redo(None)
+    }
+}
