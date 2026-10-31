@@ -1925,15 +1925,12 @@ impl RenderSound {
                 payload.fade_in.fade(),
                 payload.fade_out.fade(),
             );
-            // The **track's** automation: the lanes under the track,
-            // and their times are the track's timeline.
-            let automation = session
-                .document()
-                .node(*clip_id)
-                .and_then(|clip| timeline::track_of(session.document(), clip))
-                .map(|track| automate::automation_of(session.document(), track))
-                .unwrap_or_default();
-            let samples = automate::apply(&automation, &samples, sound.channels as usize, payload.start);
+            // The **track's** automation is **not** applied here: the
+            // fader comes after the track's inserts, the way the
+            // tree's mixer runs it, and a send may be taken before the
+            // fader. The lanes under the track move the track's sound
+            // and not one clip's.
+            //
             // The **clip's own** automation: the lanes under the clip,
             // and their times are the clip's own — a clip carries a
             // curve of its own, and the family's does.
@@ -1955,8 +1952,17 @@ impl RenderSound {
         }
         let frames = frames.max(0) as usize;
         // The **tracks**: each track's signal is the sum of its clips,
-        // and its **inserts** are run over it, in the order of the tree.
-        let mut tracks: Vec<(u64, Vec<f32>)> = Vec::new();
+        // its **inserts** are run over that sum in the order of the
+        // tree, and its **fader** comes after them — the fader is the
+        // track's automation, and the tree's mixer runs the fader
+        // last.
+        //
+        // The signal before the fader is kept for the tracks whose
+        // sends ask for it: a **pre-fader** send is a copy of the
+        // signal before the fader, and the copy is the whole point of
+        // it.
+        let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
+        let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
         for track in session.document().walk().filter(|node| node.kind == "sound.track") {
             let mut signal = vec![0.0_f32; frames];
             for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
@@ -1981,13 +1987,31 @@ impl RenderSound {
                 })?;
                 plugin.process(&mut signal, channels as usize, rate);
             }
-            tracks.push((track.id, signal));
+            // The **mute** gates the audio and the track's pre-fader
+            // tap: a muted track is not heard anywhere.
+            let automation = automate::automation_of(session.document(), track);
+            let gated = automate::apply_mute(&automation, &signal, channels as usize, 0);
+            // The **fader**: the track's volume, over the whole signal
+            // and not over one clip.
+            let faded = automate::apply_fader(&automation, &gated, channels as usize, 0);
+            if sends_of(session.document()).iter().any(|send| send.track == track.id && send.pre_fader) {
+                pre_fader.push((track.id, gated));
+            }
+            tracks.push((track.id, faded, automation));
         }
         // The **solo**: a soloed track silences the others, and their
         // sends carry the silence, because a send is a copy of the
         // track's signal.
-        if tracks.iter().any(|(id, _)| track_is_soloed(session.document(), *id)) {
-            for (id, signal) in &mut tracks {
+        if tracks.iter().any(|(id, _, _)| track_is_soloed(session.document(), *id)) {
+            for (id, signal, _) in &mut tracks {
+                if !track_is_soloed(session.document(), *id) {
+                    signal.iter_mut().for_each(|sample| *sample = 0.0);
+                }
+            }
+            // A soloed-out track's **pre-fader** copy is silent too: the
+            // tree's mixer skips the send of a track that is muted, and
+            // the copy is not heard.
+            for (id, signal) in &mut pre_fader {
                 if !track_is_soloed(session.document(), *id) {
                     signal.iter_mut().for_each(|sample| *sample = 0.0);
                 }
@@ -2002,7 +2026,14 @@ impl RenderSound {
                 if send.bus != bus.id {
                     continue;
                 }
-                let Some((_, track_signal)) = tracks.iter().find(|(id, _)| *id == send.track) else {
+                // A **pre-fader** send takes the signal from before the
+                // fader, and a post-fader send takes it from after.
+                let source: Option<&[f32]> = if send.pre_fader {
+                    pre_fader.iter().find(|(id, _)| *id == send.track).map(|(_, signal)| signal.as_slice())
+                } else {
+                    tracks.iter().find(|(id, _, _)| *id == send.track).map(|(_, signal, _)| signal.as_slice())
+                };
+                let Some(track_signal) = source else {
                     continue;
                 };
                 if send.mute {
@@ -2019,8 +2050,12 @@ impl RenderSound {
         }
         // The **master** is the file: every track and every bus.
         let mut master = vec![0.0_f32; frames];
-        for (_, signal) in &tracks {
-            add_into(&mut master, signal, 0, 1.0);
+        for (_, signal, automation) in &tracks {
+            // The **balance**: the track's own pan is the track's, and
+            // it is applied when the track is routed. A copy that a
+            // send takes is balanced by the **send's** own pan.
+            let own = automate::apply_pan(automation, signal, channels.max(1) as usize, 0);
+            add_into(&mut master, &own, 0, 1.0);
         }
         for (_, signal) in &buses {
             add_into(&mut master, signal, 0, 1.0);
@@ -2183,6 +2218,8 @@ struct Send {
     pan: f64,
     /// Whether it is silent.
     mute: bool,
+    /// Whether it is taken before the track's fader.
+    pre_fader: bool,
 }
 
 /// The sends of the document: the tracks that feed the buses.
@@ -2200,6 +2237,7 @@ fn sends_of(document: &Document) -> Vec<Send> {
             level_db: payload.level_db,
             pan: payload.pan,
             mute: payload.mute,
+            pre_fader: payload.pre_fader,
         });
     }
     sends

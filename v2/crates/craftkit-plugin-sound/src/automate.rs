@@ -38,13 +38,6 @@ pub struct Automation {
     pub mute: Option<Vec<(i64, f64)>>,
 }
 
-impl Automation {
-    /// Whether the automation says anything at all.
-    pub fn is_empty(&self) -> bool {
-        self.volume.is_none() && self.pan.is_none() && self.mute.is_none()
-    }
-}
-
 /// The automation of a track: the lanes under it.
 pub fn automation_of(document: &Document, track: &Node) -> Automation {
     let mut automation = Automation::default();
@@ -103,41 +96,92 @@ pub fn value_at(points: &[(i64, f64)], at: i64) -> f64 {
 /// curve is: the volume at the sample's own time, and not the volume at
 /// the start of the clip. A clip that runs across a breakpoint is loud
 /// at one end and quiet at the other, and the sound says so.
+///
+/// The stage is in the tree's order: the **mute**, then the **fader**,
+/// then the **balance**. Each of the three is a step of its own, and
+/// the steps are separate functions, because a send may take its copy
+/// of the signal from between them.
 pub fn apply(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
-    if automation.is_empty() || channels == 0 {
+    let muted = apply_mute(automation, samples, channels, start);
+    let faded = apply_fader(automation, &muted, channels, start);
+    apply_pan(automation, &faded, channels, start)
+}
+
+/// The **mute**: a value of one or more silences the track.
+///
+/// The mute gates the audio **and** the track's pre-fader tap: a
+/// track that is muted is not heard anywhere, and a copy of it is a
+/// copy of silence.
+pub fn apply_mute(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
+    let Some(points) = &automation.mute else { return samples.to_vec() };
+    if channels == 0 {
         return samples.to_vec();
     }
     let mut out = samples.to_vec();
     for index in 0..samples.len() / channels {
         let at = start + index as i64;
-        let volume = match &automation.volume {
-            Some(points) => craftkit_audio::db_to_linear(value_at(points, at)) as f32,
-            None => 1.0,
-        };
-        let muted = match &automation.mute {
-            Some(points) => value_at(points, at) >= 0.5,
-            None => false,
-        };
-        // The pan is a balance between the channels, and a **mono**
-        // sound has one channel and is not balanced.
-        let pan = match &automation.pan {
-            Some(points) if channels >= 2 => value_at(points, at).clamp(-1.0, 1.0),
-            _ => 0.0,
-        };
+        if value_at(points, at) < 0.5 {
+            continue;
+        }
+        for channel in 0..channels {
+            let at_index = index * channels + channel;
+            if at_index < out.len() {
+                out[at_index] = 0.0;
+            }
+        }
+    }
+    out
+}
+
+/// The **fader**: the volume lane, in decibels.
+///
+/// The fader is the track's own level, and it comes after the track's
+/// inserts: the tree's mixer runs the inserts and then the fader.
+pub fn apply_fader(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
+    let Some(points) = &automation.volume else { return samples.to_vec() };
+    if channels == 0 {
+        return samples.to_vec();
+    }
+    let mut out = samples.to_vec();
+    for index in 0..samples.len() / channels {
+        let at = start + index as i64;
+        let volume = craftkit_audio::db_to_linear(value_at(points, at)) as f32;
+        if volume == 1.0 {
+            continue;
+        }
+        for channel in 0..channels {
+            let at_index = index * channels + channel;
+            if at_index < out.len() {
+                out[at_index] *= volume;
+            }
+        }
+    }
+    out
+}
+
+/// The **balance**: the pan lane, between the channels.
+///
+/// The balance is the track's own, and it is applied when the track is
+/// **routed**: a copy that a send takes is balanced by the **send's**
+/// own pan, and not by the track's.
+pub fn apply_pan(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
+    let Some(points) = &automation.pan else { return samples.to_vec() };
+    // A **mono** sound has one channel and is not balanced.
+    if channels < 2 {
+        return samples.to_vec();
+    }
+    let mut out = samples.to_vec();
+    for index in 0..samples.len() / channels {
+        let at = start + index as i64;
+        let pan = value_at(points, at).clamp(-1.0, 1.0);
         let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI;
         let left = angle.cos() as f32;
         let right = angle.sin() as f32;
         for channel in 0..channels {
             let at_index = index * channels + channel;
-            if muted {
-                out[at_index] = 0.0;
-                continue;
+            if at_index < out.len() {
+                out[at_index] *= if channel % 2 == 0 { left } else { right };
             }
-            let mut value = samples[at_index] * volume;
-            if channels >= 2 {
-                value *= if channel % 2 == 0 { left } else { right };
-            }
-            out[at_index] = value;
         }
     }
     out

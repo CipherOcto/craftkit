@@ -611,6 +611,8 @@ pub struct AddSend {
     pub pan: Option<Number>,
     /// Whether the send is silent.
     pub mute: Option<Bool>,
+    /// Whether the send is taken before the track's fader.
+    pub pre_fader: Option<Bool>,
 }
 
 impl AddSend {
@@ -646,7 +648,8 @@ impl AddSend {
             });
         }
         let mute = self.mute.map(|mute| mute.0).unwrap_or(false);
-        let payload = SendPayload { level_db, pan, mute, pre_fader: false };
+        let pre_fader = self.pre_fader.map(|pre| pre.0).unwrap_or(false);
+        let payload = SendPayload { level_db, pan, mute, pre_fader };
         let id = session.document_mut()?.add_node_with_under(
             Some(track),
             format!("send to {bus}"),
