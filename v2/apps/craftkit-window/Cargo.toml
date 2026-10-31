@@ -1,0 +1,18 @@
+[package]
+name = "craftkit-window"
+description = "A window over the kit: the registry, the document, and the plan."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+# The **application's ecosystem**: every battery the window links in is
+# in it, and the window names none of them.
+craftkit-studio = { path = "../craftkit-studio" }
+# The **toolkit** the window is drawn with, and the window itself. The
+# toolkit is a **library** and not a plugin: it contributes no command
+# and no kind.
+egui = { workspace = true }
+eframe = { workspace = true }

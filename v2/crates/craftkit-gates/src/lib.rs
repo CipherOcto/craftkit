@@ -154,6 +154,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-mcp-server", 5),
     ("craftkit-repl", 5),
     ("craftkit-studio", 5),
+    // The **window**: a front end over the same registry. It is an
+    // application, and the gate holds it thin.
+    ("craftkit-window", 5),
     // The **browser door**: the kit in a page. It is an application,
     // and it is the one application whose whole job is to be a
     // browser.
@@ -162,6 +165,26 @@ pub const LAYERS: &[(&str, u8)] = &[
 
 /// The prefix a plugin's name carries.
 const PLUGIN_PREFIX: &str = "craftkit-plugin-";
+
+/// The crates that are **front ends**: a program a person looks at.
+///
+/// A front end reads the engine's state and acts through the registry,
+/// and the rule is that it has no second path into the design.
+pub const FRONT_ENDS: &[&str] = &["craftkit-window"];
+
+/// The names a front end may **not** use.
+///
+/// - `document_mut` is the document's mutating door: a front end that
+///   opens it is a front end that writes the document itself;
+/// - `evaluators` is the evaluator's own registry: a front end that
+///   reaches it is a front end that evaluates the document itself;
+/// - `Plan` and `PlanItem` are the plan's own types: a front end that
+///   holds one is a front end that keeps a value the evaluator
+///   computed.
+///
+/// The plan itself is not forbidden: the session hands it out, and a
+/// front end may read it. What it may not do is **keep** it.
+pub const FRONT_END_FORBIDDEN: &[&str] = &["document_mut", "evaluators", "Plan", "PlanItem"];
 
 /// What the gate found.
 #[derive(Debug, Clone, PartialEq)]
@@ -342,7 +365,53 @@ pub fn check(root: &Path) -> Vec<Finding> {
     // Rule 4: the bounds are named in the prose.
     bounds_named_in_the_prose(root, &mut findings);
 
+    // Rule 6: a front end is thin.
+    front_ends_are_thin(root, &mut findings);
+
     findings
+}
+
+/// Rule 6: **a front end is thin**.
+///
+/// It reads the engine's state and acts through the registry, and it
+/// has no second path into the design: it does not write the document,
+/// it does not evaluate the document itself, and it does not keep what
+/// the evaluator computed.
+///
+/// The rule is checked against the **text**, as the outer tree's rule
+/// for its own shell is: the names are whole words, so `PlanRow` is not
+/// `Plan`, and a name inside a string is not a call.
+fn front_ends_are_thin(root: &Path, findings: &mut Vec<Finding>) {
+    for crate_ in crates(root) {
+        if !FRONT_ENDS.contains(&crate_.name.as_str()) {
+            continue;
+        }
+        for file in rust_files(&crate_.dir) {
+            let Ok(code) = std::fs::read_to_string(&file) else { continue };
+            for name in FRONT_END_FORBIDDEN {
+                if !has_word(&code, name) {
+                    continue;
+                }
+                findings.push(Finding {
+                    rule: "front-end",
+                    crate_: crate_.name.clone(),
+                    message: format!(
+                        "{} names `{name}`: a front end reads the engine's state and acts through the \
+                         registry, and it has no second path into the design",
+                        file.display()
+                    ),
+                });
+            }
+        }
+    }
+}
+
+/// Whether the code names the word, **whole**.
+///
+/// The pieces are the code's words: a name inside a longer name is a
+/// different name, and `PlanRow` is not `Plan`.
+fn has_word(code: &str, word: &str) -> bool {
+    code.split(|character: char| !character.is_alphanumeric() && character != '_').any(|piece| piece == word)
 }
 
 /// Rule 4: **the bounds are named in the prose**.

@@ -273,3 +273,63 @@ fn a_plugin_that_depends_on_the_sdk_and_a_library_is_fine() {
     let findings = check(&tree.root);
     assert!(findings.is_empty(), "the gate found: {findings:?}");
 }
+
+/// A front end that **writes the document** is caught.
+///
+/// The rule is the tree's rule for a front end: it reads the engine's
+/// state and acts through the registry, and it has no second path into
+/// the design.
+#[test]
+fn a_front_end_that_writes_the_document_is_caught() {
+    let tree = Tree::new("frontend");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub fn write(session: &mut Session) { let _ = session.document_mut(); }\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    let front = findings_of(&findings, "front-end");
+    assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
+    assert!(front[0].message.contains("document_mut"), "{}", front[0].message);
+}
+
+/// A front end that **keeps the plan** is caught.
+///
+/// The plan is the evaluator's own value, and a front end that holds
+/// one holds a value the evaluator computed — which goes stale the
+/// moment the document changes.
+#[test]
+fn a_front_end_that_keeps_the_plan_is_caught() {
+    let tree = Tree::new("frontend-plan");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub fn keep(plan: &Plan) -> usize { plan.items.len() }\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    let front = findings_of(&findings, "front-end");
+    assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
+    assert!(front[0].message.contains("Plan"), "{}", front[0].message);
+}
+
+/// A front end that is **thin** is not caught.
+///
+/// The rule bites on the doors and the plan, and on nothing else: a
+/// front end may read the plan and copy what it shows into its own
+/// rows.
+#[test]
+fn a_thin_front_end_is_not_caught() {
+    let tree = Tree::new("frontend-thin");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str(
+        "\npub struct Row { pub value: String }\n\
+         pub fn read(session: &Session) -> Vec<Row> {\n\
+         \x20   session.evaluate().items.iter().map(|item| Row { value: item.value.to_string() }).collect()\n\
+         }\n",
+    );
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
+}

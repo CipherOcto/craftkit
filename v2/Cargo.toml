@@ -73,6 +73,17 @@ craftkit-clap = { path = "crates/craftkit-clap", version = "0.2.0" }
 serde_json = "1"
 inventory = "0.3"
 
+# The **toolkit** the window is drawn with, and the window itself. They
+# are **libraries**, not plugins: they contribute no command and no
+# kind, and the linker does not wire them in.
+egui = "0.33"
+eframe = { version = "0.33", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+
 # The geometry the batteries' path operations use. Both are permissively
 # licensed and both are dependencies, not copied code: `kurbo` is the bezier
 # library and `linesweeper` is a robust sweep-line boolean operation.
