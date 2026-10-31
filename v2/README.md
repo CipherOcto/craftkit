@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**919 tests.** The MCP server links **all fourteen batteries** in, so the
+**924 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1057,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 919 tests
+cargo test          # 924 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8230,3 +8230,53 @@ The document had a way to say "do not show this" and no way to say
 - **The lock does not reach the payload.** A node with a payload of
   its own — a grid cell, a clip — may have a command of its own that
   changes it, and that command has to ask the lock itself.
+
+---
+
+## 116. The VST3 ABI, written down as shapes
+
+The second plugin format. The CLAP battery had its ABI written down as
+a crate of data (§79), and VST3's is the same idea with a different
+contract.
+
+### What was built
+
+- A crate `craftkit-vst3-abi` with **no `unsafe` in it at all**: the
+  shapes a host reads out of a plugin, the tables it calls through,
+  and the entry it looks for.
+- The shapes carry the SDK's layout: the factory's information has its
+  three **fixed-size** strings, the interface tables are the SDK's
+  thirteen, eleven and twelve pointers in the SDK's order, and the
+  tests say what the sizes are.
+- The crate is in the layering table at **L0**, beside the CLAP ABI:
+  a binary contract two sides share is data, and data belongs at the
+  bottom.
+
+### What the port found
+
+- **The entry is a function and not a data symbol.** CLAP exports the
+  address of a struct; VST3 exports `GetPluginFactory`, and calling it
+  gives back the factory. That is a different door, and the host has to
+  know which door it is opening.
+- **There is no version number in the ABI.** CLAP has one, and the
+  host checks it. VST3 has none: the host asks for the interface it
+  wants by **FUID** and the plugin either gives it or does not. What
+  there is, is the **SDK** the plugin was built against, and the crate
+  says which one it describes.
+- **The crate does not carry the published FUID bytes.** They live in
+  the SDK's published headers, and this tree does not copy files it
+  was not written for: a program that talks to a real plugin reads
+  them from the SDK it was built against.
+
+### What it cost
+
+- one crate of shapes and **five tests** about the layout.
+
+### What it does not settle
+
+- **There is no host yet.** The crate is the contract and not the two
+  sides of it: the host that opens the library and the fixture that
+  exports the shapes are the next arcs.
+- **The FUIDs are not here.** A program that talks to another program
+  of this tree uses the ones its own plugin says, and a program that
+  talks to a real plugin brings its own.
