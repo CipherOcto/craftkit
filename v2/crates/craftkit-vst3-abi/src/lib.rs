@@ -240,13 +240,13 @@ pub struct ParamInfo {
     /// The step between values.
     pub step_size: i32,
     /// The value it starts at, between zero and one.
-    pub default_normalized_value: i32,
+    pub default_normalized_value: f64,
     /// What the flags say.
     pub flags: i32,
     /// The smallest value.
-    pub min: f32,
+    pub min: f64,
     /// The largest value.
-    pub max: f32,
+    pub max: f64,
 }
 
 /// Where the **channels** of a bus go.
@@ -308,6 +308,17 @@ pub struct ProcessData {
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct IComponent {
+    /// Take a reference.
+    ///
+    /// The format counts references on the object, so that the host and
+    /// the plugin may each hold it for a while. The first two methods
+    /// are the count, and they come first because the format puts them
+    /// there.
+    pub add_ref: Option<extern "system" fn(*mut c_void) -> i32>,
+    /// Give a reference back.
+    ///
+    /// The last one to let go ends the object.
+    pub release: Option<extern "system" fn(*mut c_void) -> i32>,
     /// Set the plugin up.
     pub initialize: Option<extern "system" fn(*mut c_void, *const c_void) -> bool>,
     /// Take the plugin down.
@@ -319,7 +330,9 @@ pub struct IComponent {
     /// How many buses of this kind there are.
     pub get_bus_count: Option<extern "system" fn(*mut c_void, i32) -> i32>,
     /// What the bus at this index is.
-    pub get_bus_info: Option<extern "system" fn(*mut c_void, i32, *mut BusInfo) -> bool>,
+    ///
+    /// The direction and the index, and then the room for the answer.
+    pub get_bus_info: Option<extern "system" fn(*mut c_void, i32, i32, *mut BusInfo) -> bool>,
     /// How many parameters there are.
     pub get_param_count: Option<extern "system" fn(*mut c_void) -> i32>,
     /// What the parameter at this index is.
@@ -343,6 +356,15 @@ pub struct IComponent {
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct IAudioProcessor {
+    /// Take a reference.
+    ///
+    /// The same pair the component has, and in the same place: every
+    /// interface of the format counts references the same way, and a
+    /// host that let go of one of them wrongly would call the wrong
+    /// function.
+    pub add_ref: Option<extern "system" fn(*mut c_void) -> i32>,
+    /// Give a reference back.
+    pub release: Option<extern "system" fn(*mut c_void) -> i32>,
     /// Say how the buses are arranged.
     pub set_bus_arrangements: Option<extern "system" fn(*mut c_void, *mut c_void) -> bool>,
     /// Say how the buses are arranged.
@@ -416,6 +438,132 @@ pub struct IPlugView {
     pub on_resize: Option<extern "system" fn(*mut c_void, *mut c_void) -> bool>,
 }
 
+/// What a bus **carries**.
+///
+/// The format names a bus by two numbers — what it carries and which way
+/// it goes — and this is the first of them: audio.
+pub const MEDIA_TYPE_AUDIO: i32 = 1;
+
+/// What a bus is **for**.
+///
+/// The main bus is the one the sound goes through; the side chain is
+/// the one the plugin listens to while it works.
+pub const BUS_TYPE_AUDIO: i32 = 0;
+
+/// Which way the audio **goes**: in.
+pub const BUS_DIRECTION_INPUT: i32 = 0;
+
+/// Which way the audio **goes**: out.
+pub const BUS_DIRECTION_OUTPUT: i32 = 1;
+
+/// The bus is the **main** one.
+pub const AUDIO_BUS_TYPE_MAIN: i32 = 0;
+
+/// The bus is the **side chain**.
+pub const AUDIO_BUS_TYPE_SIDE_CHAIN: i32 = 1;
+
+/// The parameter may be **automated**.
+pub const PARAM_IS_AUTOMATABLE: i32 = 1 << 0;
+
+/// The plugin works in **real time**.
+pub const PROCESS_MODE_REALTIME: i32 = 0;
+
+/// The samples are **thirty-two** bits.
+pub const SAMPLE_SIZE_32: i32 = 4;
+
+/// The tree's own id for the **component** interface.
+///
+/// VST3 names its interfaces by FUID, and the **published** bytes belong
+/// to the SDK's headers — which this tree does not copy. So the tree
+/// names its **own** interfaces, and the host and the fixture agree on
+/// them because both of them are written here. A program that talks to
+/// a plugin built against the SDK asks for the SDK's bytes instead, and
+/// the shape of the call is the same either way.
+pub const COMPONENT_FUID: Fuid = Fuid::new(0x4352_4b54, 0x0001, 0x0000, [0; 8]);
+
+/// The tree's own id for the **audio processor** interface.
+///
+/// The same reasoning as [`COMPONENT_FUID`]: a name of this tree's own,
+/// so that the two sides of this tree can agree without the SDK's
+/// headers being copied into it.
+pub const AUDIO_PROCESSOR_FUID: Fuid = Fuid::new(0x4352_4b54, 0x0002, 0x0000, [0; 8]);
+
+/// The tree's own id for the **edit controller** interface.
+///
+/// The same reasoning as [`COMPONENT_FUID`].
+pub const EDIT_CONTROLLER_FUID: Fuid = Fuid::new(0x4352_4b54, 0x0003, 0x0000, [0; 8]);
+
+/// An **instance**: what the factory hands back.
+///
+/// The pointer is the **object**, and the object's first word is the
+/// address of its table of functions. That is how a virtual table is
+/// laid out, and it is what the format means when it says that an
+/// object implements an interface: the object *is* the interface, and
+/// the table is how the calls find their way in.
+///
+/// The factory is the one thing that is **not** like this: it has one
+/// interface and no state of its own, so the pointer it hands back is
+/// the table itself.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Instance {
+    /// The address of the object's table.
+    pub table: *const c_void,
+}
+
+/// The **stream** a state travels through.
+///
+/// A state is a set of bytes, and the format does not say "give me the
+/// bytes": it says "read from this stream" and "write to this one".
+/// The stream is the **host's** own — the host makes one, and the
+/// plugin reads and writes through it.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct IBStream {
+    /// Read that many bytes into the buffer, and say how many there were.
+    pub read: Option<extern "system" fn(stream: *mut c_void, buffer: *mut c_void, num_bytes: i32) -> i32>,
+    /// Write that many bytes from the buffer, and say how many there were.
+    pub write: Option<extern "system" fn(stream: *mut c_void, buffer: *const c_void, num_bytes: i32) -> i32>,
+    /// Move to a place in the stream.
+    pub seek: Option<extern "system" fn(stream: *mut c_void, pos: i64) -> i32>,
+    /// Where the stream is now.
+    pub tell: Option<extern "system" fn(stream: *mut c_void) -> i64>,
+}
+
+/// A **stream**: the object the host hands the plugin.
+///
+/// Its first word is the address of its table — the same convention the
+/// instances follow — so that the plugin can find the functions and the
+/// host can keep its own state behind them.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Stream {
+    /// The address of the table.
+    pub table: *const IBStream,
+}
+
+/// The **buffers** of one audio bus.
+///
+/// The bus's channels are pointed at: each entry is the address of one
+/// channel's samples. There are two entries because a bus has at most
+/// two channels in this shape, and a bus with one channel leaves the
+/// second one alone.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct AudioBusBuffers {
+    /// How many channels the bus has.
+    pub num_channels: i32,
+    /// The addresses of the channels.
+    ///
+    /// The SDK has a thirty-two bit field for the same thing and a
+    /// sixty-four bit one beside it, and this shape is the **wide** one:
+    /// a program that runs where addresses are sixty-four bits wide
+    /// cannot use the narrow field, and this tree holds no narrow one.
+    pub channel_buffers64: [*mut c_void; 2],
+    /// Which channels hold silence and need not be read.
+    pub silent_flags: [u64; 2],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,8 +606,8 @@ mod tests {
     #[test]
     fn the_interface_tables_are_pointers() {
         assert_eq!(size_of::<IPluginFactory>(), 3 * size_of::<usize>(), "three pointers");
-        assert_eq!(size_of::<IComponent>(), 13 * size_of::<usize>(), "thirteen");
-        assert_eq!(size_of::<IAudioProcessor>(), 3 * size_of::<usize>(), "three");
+        assert_eq!(size_of::<IComponent>(), 15 * size_of::<usize>(), "fifteen");
+        assert_eq!(size_of::<IAudioProcessor>(), 5 * size_of::<usize>(), "five");
         assert_eq!(size_of::<IEditController>(), 11 * size_of::<usize>(), "eleven");
         assert_eq!(size_of::<IPlugView>(), 12 * size_of::<usize>(), "twelve");
     }
@@ -479,5 +627,35 @@ mod tests {
         let arrangement = BusArrangement { direction: 0, num_channels: 2, channel_map: [0; 64] };
         assert_eq!(size_of::<BusArrangement>(), 8 + 64 * 8, "two numbers and the map");
         assert_eq!(arrangement.num_channels, 2, "and the channels are there");
+    }
+
+    /// An instance is **one word**: the object, whose first word is the
+    /// table.
+    #[test]
+    fn an_instance_is_one_word() {
+        assert_eq!(size_of::<Instance>(), size_of::<usize>(), "one word");
+        assert_eq!(size_of::<IBStream>(), 4 * size_of::<usize>(), "the stream is four pointers");
+    }
+
+    /// The audio buffers are the **wide** shape, and say so.
+    #[test]
+    fn the_audio_buffers_are_the_wide_shape() {
+        assert_eq!(
+            size_of::<AudioBusBuffers>(),
+            4 + 4 + 2 * size_of::<usize>() + 2 * 8,
+            "a number, a pad, two addresses and two flags"
+        );
+    }
+
+    /// The tree's own interface ids are **three different** names.
+    ///
+    /// Two sides of this tree have to agree on them, and the only way
+    /// they can is if the names are written down once and used twice.
+    #[test]
+    fn the_trees_own_interface_ids_are_different_names() {
+        assert_ne!(COMPONENT_FUID, AUDIO_PROCESSOR_FUID, "the component is its own interface");
+        assert_ne!(COMPONENT_FUID, EDIT_CONTROLLER_FUID, "and so is the controller");
+        assert_ne!(AUDIO_PROCESSOR_FUID, EDIT_CONTROLLER_FUID, "and so is the processor");
+        assert_eq!(COMPONENT_FUID.to_bytes().len(), 16, "and every one of them is sixteen bytes");
     }
 }
