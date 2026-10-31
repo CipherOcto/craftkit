@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1051 tests.** The MCP server links **all fifteen batteries** in, so the
+**1065 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1051 tests
+cargo test          # 1065 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9716,3 +9716,58 @@ the id, and v2 had the name and nothing else.
 - **The low pass is one pole.** It is the simplest filter there is that
   changes a signal, and it is honest about what it is; a better filter
   is more poles and a filter with a state.
+
+## 142. The picture is drawn
+
+A picture was a **size and a file** and nothing ever looked at the file:
+the image battery could measure a picture and could not show it. The
+pixels were in the file, and the file was nowhere.
+
+### What was built
+
+- **`Picture`** in the SDK: the pixels of an image — four bytes a pixel,
+  red, green, blue and alpha — and the rows top to bottom. It is in the
+  SDK and not in a rasteriser because the **canvas** is the seam that
+  draws it: a backend that draws a document may be a raster, a PDF
+  writer or a recorder, and all of them need the pixels in the same
+  shape.
+- The **canvas** gained a `picture` method: a picture is drawn at a
+  rectangle and scaled to fill it, the nearest pixel taken, and an alpha
+  blended over what is under it.
+- The image battery's **paint** reads the file, decodes it — the PNG
+  reader and the JPEG decoder are the tree's own — and puts the pixels
+  on the canvas.
+
+### What the port found
+
+- **A picture is a file, and the file is read when it is drawn.** That
+  is a cost every frame, and it is the honest one: a document that held
+  the pixels would be a document of a different kind, and the bytes
+  travel beside the document in the bundle (§25) for exactly this
+  reason.
+- **The canvas draws what the caller gives it.** The picture arrives as
+  pixels and is drawn where the node says; nothing in the drawing
+  decides for itself.
+- **A picture with no pixels is not drawn at all.** Half a picture would
+  be a picture of the wrong thing, and a picture that is not all there
+  is a picture that is not there.
+
+### What it cost
+
+- one type in the SDK with **five tests**, **three** in the rasteriser
+  and **six** in the battery: a grey picture is grey, a colour picture is
+  opaque, an alpha is kept, a pixel that is not there is not there, the
+  red half of a picture is red and the blue half is blue, the outside is
+  not painted, a half-transparent picture is half over what is under it,
+  a picture with no pixels draws nothing, the picture knows its size,
+  and a picture that is not there is refused.
+
+### What it does not settle
+
+- **The picture is read again for every frame.** A document that is
+  painted sixty times a second reads its file sixty times a second. The
+  fix is a cache, and a cache is a thing that can go stale, and a
+  picture that is stale is a picture that is wrong.
+- **Only the formats the tree can read are drawn.** The PNG reader and
+  the JPEG decoder are here; a TIFF or a WebP is not, and a picture in
+  one of those is measured by its header and not drawn.
