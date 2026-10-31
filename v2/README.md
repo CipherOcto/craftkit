@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**885 tests.** The MCP server links **all fourteen batteries** in, so the
+**888 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **218** of them, and **232** with
+on its own, with no features, carries **220** of them, and **234** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1051,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 885 tests
+cargo test          # 888 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7737,3 +7737,43 @@ so it was not drawn.
 - **Only the selected node has a handle.** A drawing program shows the
   handles of everything that is selected, and the selection here is a
   list of nodes, so every selected node has one.
+
+---
+
+## 105. The order is the tree's order
+
+A drawing program has an order: what is drawn later is on top. v2 had
+the drawing and no way to change the order.
+
+### What was built
+
+- The document can **bring a node to the front** and **send it to the
+  back**.
+- Two commands for it: `node.front` and `node.back`.
+
+### What the port found
+
+- **The order is not a number a node carries.** The first thought was a
+  `z` on the node: a number that says where it is in the drawing. But
+  a number is a number that two nodes cannot share, and a group has to
+  renumber everything under it when anything moves. The **tree already
+  has the order** — where a node is among its brothers — and the
+  picture and the picking walk it in the same order, so bringing a
+  node to the front is moving it to the end of the list it is in.
+- **The tree's order was already the drawing's order.** Nothing had to
+  change in the raster or the picker: the last node of the walk is the
+  one on top, and the picker takes the last hit. That was true before
+  this arc and was not written down anywhere; now it is.
+
+### What it cost
+
+- two methods on the document, two commands, **three tests**.
+
+### What it does not settle
+
+- **A group is one thing in the order.** A group is drawn where it is
+  in the tree, and everything in it is drawn with it: there is no way
+  to say that one thing in a group is above a thing outside it.
+- **There is no "bring the selection to the front".** The commands
+  take one node, and the selection is the session's state and not a
+  parameter.
