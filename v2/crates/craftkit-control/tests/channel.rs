@@ -14,8 +14,12 @@ use craftkit_sdk::{Ecosystem, Session};
 fn a_server(token: &str) -> (Server, SocketAddr) {
     let ecosystem = Ecosystem::from_inventory().expect("the ecosystem is built");
     let session: Session = ecosystem.session();
-    let options =
-        Options { token: token.to_string(), address: SocketAddr::from(([127, 0, 0, 1], 0)), announce: None };
+    let options = Options {
+        token: token.to_string(),
+        address: SocketAddr::from(([127, 0, 0, 1], 0)),
+        announce: None,
+        render: None,
+    };
     let server = Server::serve(session, options).expect("the server serves");
     let address = server.address();
     (server, address)
@@ -189,4 +193,17 @@ fn a_line_that_is_too_long_is_refused() {
     // The server either refuses the line or closes the connection: what
     // it does not do is read the whole line.
     assert!(read == 0 || answer.contains("longer"), "the answer was: {answer:?}");
+}
+
+/// A program with **no window** cannot show one.
+///
+/// The channel knows the session; the screen is the program's, and a
+/// program without one says so instead of sending an empty picture.
+#[test]
+fn a_program_with_no_window_cannot_show_one() {
+    let (mut server, address) = a_server("a-secret");
+    let mut client = a_client(address, "a-secret");
+    let refused = client.call(Method::UiRender, json!({})).expect_err("the picture is refused");
+    assert!(refused.to_string().contains("no window"), "the error says why: {refused}");
+    server.shutdown();
 }

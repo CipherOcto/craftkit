@@ -179,10 +179,14 @@ fn the_port() -> Option<u16> {
 /// program that opens it is the one that decides who may drive it.
 fn open_the_channel(window: &mut Window, port: u16) -> Option<craftkit_control::Server> {
     let token = std::env::var("CRAFTKIT_CONTROL_TOKEN").ok()?;
+    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowPicture::new(
+        window.shared_session(),
+    )));
     let options = craftkit_control::Options {
         token,
         address: std::net::SocketAddr::from(([127, 0, 0, 1], port)),
         announce: None,
+        render: Some(render),
     };
     match craftkit_control::Server::serve_shared(window.shared_session(), options) {
         Ok(server) => {

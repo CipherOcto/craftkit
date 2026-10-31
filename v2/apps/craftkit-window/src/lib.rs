@@ -436,6 +436,49 @@ impl Window {
     }
 }
 
+/// The window's **picture**, for the channel to show.
+///
+/// The channel knows the session and the window knows the screen, so
+/// the channel asks the window for the picture and hands it over. The
+/// picture is the **document** as the window draws it — the panels and
+/// the form are chrome, and chrome is not what an agent is checking.
+pub struct WindowPicture {
+    /// The session the picture is drawn from.
+    session: Arc<Mutex<Session>>,
+}
+
+impl WindowPicture {
+    /// A picture of the session, at this size.
+    pub fn new(session: Arc<Mutex<Session>>) -> WindowPicture {
+        WindowPicture { session }
+    }
+}
+
+impl craftkit_control::Render for WindowPicture {
+    fn render(&mut self) -> Result<Vec<u8>, String> {
+        let session = match self.session.lock() {
+            Ok(session) => session,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let camera = *session.camera();
+        let mut raster = craftkit_raster::Raster::new(WINDOW_PICTURE_WIDTH, WINDOW_PICTURE_HEIGHT, camera)?;
+        session.paint_view(&mut raster);
+        Ok(raster.image().to_png())
+    }
+}
+
+/// How wide the picture the channel asks for is, in pixels.
+///
+/// The picture travels as **base64 in one line**, and a line is
+/// bounded: a picture that is too big for the line is a picture that
+/// cannot be sent. Three hundred and twenty by two hundred and forty
+/// is a picture that fits in the line and is big enough to see what
+/// changed.
+pub const WINDOW_PICTURE_WIDTH: usize = 320;
+
+/// How tall it is.
+pub const WINDOW_PICTURE_HEIGHT: usize = 240;
+
 /// A **picture** of the document: pixels, and nothing else.
 ///
 /// It is the window's own shape, and not the rasteriser's: the window

@@ -393,6 +393,7 @@ fn the_control_channel_drives_the_windows_document() {
         token: "a-secret".to_string(),
         address: "127.0.0.1:0".parse().expect("an address"),
         announce: None,
+        render: None,
     };
     let mut server =
         craftkit_control::Server::serve_shared(window.shared_session(), options).expect("the channel opens");
@@ -413,5 +414,44 @@ fn the_control_channel_drives_the_windows_document() {
     let rows = window.tree();
     assert_eq!(rows.len(), 1, "the node is in the window's document");
     assert_eq!(rows[0].name, "a shape", "and it is the node the agent added");
+    server.shutdown();
+}
+
+/// The channel can **show** what the window is showing.
+///
+/// The channel knows the session and the window knows the screen, so
+/// the window gives the channel a way to ask for the picture. An agent
+/// that changes the document can then look at the result instead of
+/// believing it.
+#[test]
+fn the_channel_can_show_the_windows_document() {
+    let mut window = window();
+    window.open("vector.rectangle");
+    window.set("x", json!(-5.0));
+    window.set("y", json!(-5.0));
+    window.set("width", json!(10.0));
+    window.set("height", json!(10.0));
+    window.set("fill", json!("#3366cc"));
+    window.run().expect("the command runs");
+
+    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_window::WindowPicture::new(
+        window.shared_session(),
+    )));
+    let options = craftkit_control::Options {
+        token: "a-secret".to_string(),
+        address: "127.0.0.1:0".parse().expect("an address"),
+        announce: None,
+        render: Some(render),
+    };
+    let mut server =
+        craftkit_control::Server::serve_shared(window.shared_session(), options).expect("the channel opens");
+    let mut client =
+        craftkit_control::Client::connect(server.address(), "a-secret").expect("the client connects");
+
+    let answer = client.call(craftkit_control::Method::UiRender, json!({})).expect("the picture comes");
+    let data = answer["data"].as_str().unwrap_or_else(|| panic!("the picture is there: {answer}"));
+    assert_eq!(answer["format"], "png", "the picture is a PNG");
+    let bytes = craftkit_sdk::bytes::decode(data).expect("the picture is base64");
+    assert_eq!(&bytes[1..4], b"PNG", "and the bytes say so");
     server.shutdown();
 }

@@ -68,6 +68,20 @@ use craftkit_sdk::serde_json::{Map, Value as Json, json};
 /// number is now the **reader's** bound.
 pub const MAX_LINE: usize = 1 << 20;
 
+/// What the channel can ask the **window** for.
+///
+/// The channel knows the **session**; the window knows the **screen**.
+/// So the window gives the channel a way to ask for a picture, and the
+/// channel hands the picture to whoever asked for it.
+///
+/// Without this the channel can change the document and cannot see the
+/// result, and an agent that cannot see the result is an agent that
+/// has to believe it.
+pub trait Render: Send {
+    /// The picture of what the program is showing, as a PNG.
+    fn render(&mut self) -> Result<Vec<u8>, String>;
+}
+
 /// What a client is asking for.
 ///
 /// A closed set rather than a free-form string, so that a typo is an
@@ -87,6 +101,8 @@ pub enum Method {
     Ping,
     /// Stop the server.
     Shutdown,
+    /// What the program is showing, as a picture.
+    UiRender,
 }
 
 impl Method {
@@ -99,6 +115,7 @@ impl Method {
             Method::Diagnostics => "diagnostics.list",
             Method::Ping => "ping",
             Method::Shutdown => "shutdown",
+            Method::UiRender => "ui.render",
         }
     }
 
@@ -111,6 +128,7 @@ impl Method {
             "diagnostics.list" => Method::Diagnostics,
             "ping" => Method::Ping,
             "shutdown" => Method::Shutdown,
+            "ui.render" => Method::UiRender,
             _ => return None,
         })
     }
@@ -124,6 +142,7 @@ impl Method {
             Method::Diagnostics,
             Method::Ping,
             Method::Shutdown,
+            Method::UiRender,
         ]
     }
 }
@@ -325,7 +344,7 @@ impl From<ProtocolError> for ControlError {
 }
 
 /// How the server is set up.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Options {
     /// The launch token. The client has to have it.
     pub token: String,
@@ -335,11 +354,37 @@ pub struct Options {
     /// Where to write the address and the token, so that another
     /// program can find them.
     pub announce: Option<PathBuf>,
+    /// The **window**, if the program has one.
+    ///
+    /// It is how the channel can show what the program is showing: the
+    /// session is what the channel changes, and the window is what the
+    /// person — or the agent — looks at.
+    pub render: Option<Arc<Mutex<dyn Render + Send>>>,
+}
+
+impl std::fmt::Debug for Options {
+    /// The token is **not** printed.
+    ///
+    /// A token in a log is a token in the world, and the token is the
+    /// one thing that decides who may drive the program.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Options")
+            .field("token", &if self.token.is_empty() { "none" } else { "a token" })
+            .field("address", &self.address)
+            .field("announce", &self.announce)
+            .field("render", &self.render.as_ref().map(|_| "a window"))
+            .finish()
+    }
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { token: String::new(), address: SocketAddr::from(([127, 0, 0, 1], 0)), announce: None }
+        Options {
+            token: String::new(),
+            address: SocketAddr::from(([127, 0, 0, 1], 0)),
+            announce: None,
+            render: None,
+        }
     }
 }
 
@@ -374,6 +419,7 @@ impl Server {
         let address = listener.local_addr()?;
         let stop = Arc::new(AtomicBool::new(false));
         let token = options.token.clone();
+        let render = options.render.clone();
 
         if let Some(path) = &options.announce {
             let announcement = json!({
@@ -399,8 +445,9 @@ impl Server {
                 let session = Arc::clone(&session);
                 let token = token.clone();
                 let stop = Arc::clone(&thread_stop);
+                let render = render.clone();
                 std::thread::spawn(move || {
-                    let _ = serve_connection(stream, session, token, stop);
+                    let _ = serve_connection(stream, session, token, stop, render);
                 });
             }
         });
@@ -438,6 +485,7 @@ fn serve_connection(
     session: Arc<Mutex<Session>>,
     token: String,
     stop: Arc<AtomicBool>,
+    render: Option<Arc<Mutex<dyn Render + Send>>>,
 ) -> std::io::Result<()> {
     let mut writer = stream.try_clone()?;
     let reader = BufReader::new(stream);
@@ -465,7 +513,7 @@ fn serve_connection(
             }
             authenticated = true;
         }
-        let response = answer(&request, &session, &stop);
+        let response = answer(&request, &session, &stop, &render);
         writeln!(writer, "{}", response.to_line().unwrap_or_default())?;
         writer.flush()?;
         if request.method == Method::Shutdown.as_str() {
@@ -489,7 +537,12 @@ fn same(left: &str, right: &str) -> bool {
 }
 
 /// Answer one request.
-fn answer(request: &Request, session: &Arc<Mutex<Session>>, stop: &Arc<AtomicBool>) -> Response {
+fn answer(
+    request: &Request,
+    session: &Arc<Mutex<Session>>,
+    stop: &Arc<AtomicBool>,
+    render: &Option<Arc<Mutex<dyn Render + Send>>>,
+) -> Response {
     let Some(method) = Method::parse(&request.method) else {
         let names: Vec<&str> = Method::all().iter().map(|method| method.as_str()).collect();
         return Response::error(
@@ -500,6 +553,29 @@ fn answer(request: &Request, session: &Arc<Mutex<Session>>, stop: &Arc<AtomicBoo
     };
     match method {
         Method::Ping => Response::ok(&request.id, "pong", Some(json!({ "pong": true }))),
+        Method::UiRender => {
+            // The picture is what the program is showing, and the
+            // program is the only one that knows: the channel asks it
+            // and hands the answer over.
+            let Some(render) = render else {
+                return Response::error(&request.id, "no-window", "this program has no window to show");
+            };
+            let Ok(mut render) = render.lock() else {
+                return Response::error(&request.id, "internal", "the window is poisoned");
+            };
+            match render.render() {
+                Ok(bytes) => Response::ok(
+                    &request.id,
+                    "the picture",
+                    Some(json!({
+                        "format": "png",
+                        "bytes": bytes.len(),
+                        "data": craftkit_sdk::bytes::encode(&bytes),
+                    })),
+                ),
+                Err(message) => Response::error(&request.id, "failed", message),
+            }
+        }
         Method::Describe => {
             let Ok(session) = session.lock() else {
                 return Response::error(&request.id, "internal", "the session is poisoned");
