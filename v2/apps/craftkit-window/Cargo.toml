@@ -26,6 +26,7 @@ craftkit-studio = { path = "../craftkit-studio", features = [
     "text",
     "image",
     "clap",
+    "vst3",
 ] }
 # The **control channel**: the door an agent drives the window through.
 # It serves the window's own session, so a command that an agent runs

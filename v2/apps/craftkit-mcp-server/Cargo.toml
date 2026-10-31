@@ -36,4 +36,5 @@ craftkit-studio = { path = "../craftkit-studio", features = [
     "text",
     "image",
     "clap",
+    "vst3",
 ] }
