@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1215 tests.** The MCP server links **all fifteen batteries** in, so the
+**1218 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1215 tests
+cargo test          # 1218 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3599,6 +3599,7 @@ so.
 | a **master with a fader** | **built.** A track whose kind is `master` holds the fader of the whole mix: its inserts are run over the mix, its lanes move it, and the metronome is summed after it (§162) | §162 |
 | a **bus that is read** | **built.** A track may read a bus, and a bus that is read is heard through the reader and not by itself; a reader holds no clips, has no sends and is not routed (§163) | §163 |
 | a **route that is honoured** | **built.** A track that feeds a bus is heard on that bus and not in the main mix, and a bus that feeds another bus is heard there; the buses are fed in the order they are read in (§164) | §164 |
+| a **track with a trim** | **built.** The trim is the level of the track's input and it comes before the inserts; the phase is a sign and not a level, and a trim outside the tree's range is refused (§165) | §165 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11214,3 +11215,57 @@ every track was heard in the main mix whatever it fed.
   is worked out by walking it, so a bus that is already in the order is
   left where it is; a cycle is therefore a routing that means nothing,
   and nothing says so.
+
+## 165. The track has a trim and a phase
+
+The tree's mixer applies the track's **trim** to its strip before the
+inserts, and the **phase** is a sign and not a level: the sound is the
+same and upside down. v2 had neither, and a clip's gain was the only
+level a track had.
+
+### What was built
+
+- A track carries a **trim**, in decibels, and a **phase**, and the
+  command `sound.track.set` writes them.
+- The trim is the level of the track's **input**: it is applied before
+  the inserts, so an insert sees the trimmed sound, and the pre-fader
+  copy carries it.
+- The phase **inverts** the sound and changes nothing else.
+- A trim outside the tree's range — minus one hundred and forty-four
+  decibels to twenty-four — is **refused by name**, and not clipped.
+
+### What the port found
+
+- **The tree has two gains and v2 had one.** The tree's strip has a
+  *trim* at its input and a *fader* at its output, and they are
+  different things: the trim is the level of what comes in, and the
+  fader is the level of what goes out. A port that reads the mixer and
+  sees one gain in the payload has read the fader and missed the trim.
+- **The trim is before the inserts and the fader is after them.** The
+  tree's chain is *clips → trim/phase → inserts → pre-fader sends →
+  fader and mute → pan*, and the order is the tree's own. A trim that
+  came after the inserts would be a second fader and not a trim.
+- **The tree clamps the trim and v2 refuses it.** The tree's model
+  clamps the value into its range when the session is written; here a
+  number outside the range is refused and says so, because a refusal
+  that never truncates is worth more here than a value that is quietly
+  changed.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/trim.rs`): a trim is the level
+  of the input, a phase is a sign and not a level, and a trim that is
+  not a trim is refused.
+- **Two fields** in the track's payload, and a field is additive: a
+  track written before this arc has no trim and its level is one.
+
+### What it does not settle
+
+- **The master has no trim.** The tree's master is a track and could
+  have one; here the master's stage is its inserts and its fader and
+  nothing else.
+- **The trim is a number and not a lane.** The tree's trim is a field
+  on the strip and not a curve, so it cannot be automated; here it is
+  the same, and the tree's *fader* is the thing that has a lane.
+- **The tree's input monitoring is not there**: a track that is
+  monitored hears the hardware input instead of its clips.
