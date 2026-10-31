@@ -147,11 +147,13 @@ impl Raster {
     /// The world's **up** is the picture's **down**: the document is
     /// drawn the way it is looked at, and not the way it is stored.
     fn to_pixels(&self, point: Point) -> (f64, f64) {
-        let zoom = self.camera.zoom();
-        let offset = self.camera.offset();
+        // The camera's own mapping, and only the picture's own size on
+        // top of it: a front end that clicks with a different mapping
+        // clicks on the wrong thing.
+        let screen = self.camera.to_screen(point);
         let centre_x = self.image.width() as f64 / 2.0;
         let centre_y = self.image.height() as f64 / 2.0;
-        ((point.x - offset.x) * zoom + centre_x, centre_y - (point.y - offset.y) * zoom)
+        (screen.x + centre_x, centre_y - screen.y)
     }
 
     /// Fill a shape that has already been turned into a polygon.

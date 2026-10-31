@@ -122,7 +122,10 @@ impl Camera {
     /// Where a point of the screen is in the world.
     ///
     /// It is the other way round, and it is what a click is: the screen
-    /// point is turned back into the world.
+    /// point is turned back into the world. It is the way back from
+    /// [`Camera::to_screen`], and the two must agree: a front end that
+    /// draws with one and clicks with the other clicks on the wrong
+    /// thing.
     pub fn to_world(&self, point: Point) -> Point {
         Point::new(point.x / self.zoom + self.offset.x, point.y / self.zoom + self.offset.y)
     }

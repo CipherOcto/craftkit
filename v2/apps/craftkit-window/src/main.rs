@@ -160,7 +160,45 @@ fn picture(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui) {
         return;
     };
     let size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
-    ui.image((texture.id(), size));
+    let response = ui.image((texture.id(), size));
+    interact(app, ui, &response);
+}
+
+/// The **mouse** on the picture: drag to move it, the wheel to zoom it,
+/// and a click to pick what is under it.
+///
+/// The camera is the **session's**, and the mapping from a point of the
+/// screen to a point of the world is the **camera's** too — so what is
+/// drawn and what is clicked are the same thing.
+fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
+    let camera = *app.window.session().camera();
+    // Dragging moves the camera, in the world's units: the picture is
+    // bigger than the world and the drag is in the picture.
+    if response.dragged() {
+        let delta = response.drag_delta();
+        let zoom = camera.zoom();
+        app.window.pan(-delta.x as f64 / zoom, delta.y as f64 / zoom);
+    }
+    // The wheel zooms, and the camera clamps it.
+    if response.hovered() {
+        let scroll = ui.input(|input| input.smooth_scroll_delta);
+        if scroll.y != 0.0 {
+            app.window.zoom_by(1.0 + scroll.y as f64 * 0.1);
+        }
+    }
+    // A click picks the node under it, and selects it through the
+    // registry.
+    if response.clicked()
+        && let Some(position) = response.interact_pointer_pos()
+    {
+        let centre = response.rect.center();
+        let across = position.x - centre.x;
+        let down = centre.y - position.y;
+        let world = camera.to_world(craftkit_sdk::Point::new(across as f64, down as f64));
+        if let Some(node) = app.window.pick(world) {
+            let _ = app.window.select_node(node);
+        }
+    }
 }
 
 /// The **plan**, on the right: what the document means.

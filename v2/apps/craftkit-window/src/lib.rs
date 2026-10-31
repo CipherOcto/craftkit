@@ -169,11 +169,20 @@ impl Window {
         };
         let id = form.id.clone();
         let params = form.params();
-        match self.session.execute(&id, &params) {
+        let outcome = self.run_id(&id, params)?;
+        self.form = None;
+        self.runs += 1;
+        Ok(outcome)
+    }
+
+    /// **Run** a command by its id, with the parameters given.
+    ///
+    /// It is the same way in as the form's: the session's own, and
+    /// nothing else.
+    pub fn run_id(&mut self, id: &str, params: Json) -> Result<Outcome, EngineError> {
+        match self.session.execute(id, &params) {
             Ok(outcome) => {
                 self.log.push(outcome.message.clone());
-                self.form = None;
-                self.runs += 1;
                 Ok(outcome)
             }
             Err(error) => {
@@ -181,6 +190,45 @@ impl Window {
                 Err(error)
             }
         }
+    }
+
+    /// The node **under** a point of the world, if there is one.
+    ///
+    /// Every node is offered to the kind that says what it is, and the
+    /// **deepest** hit wins: a thing in a group is in front of the group
+    /// that holds it.
+    pub fn pick(&self, point: craftkit_sdk::Point) -> Option<u64> {
+        self.session
+            .document()
+            .walk()
+            .filter(|node| {
+                self.session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false)
+            })
+            .last()
+            .map(|node| node.id)
+    }
+
+    /// **Select** a node, through the registry.
+    ///
+    /// The selection is the session's state, and the command that sets
+    /// it is in the registry like every other: the window does not have
+    /// a second way in.
+    pub fn select_node(&mut self, node: u64) -> Result<Outcome, EngineError> {
+        self.run_id("select.node", json!({ "node": node }))
+    }
+
+    /// **Zoom** the camera.
+    ///
+    /// The camera is the session's state, and it has its own caps: a
+    /// zoom outside them is clamped, because the wheel can send
+    /// anything.
+    pub fn zoom_by(&mut self, factor: f64) {
+        self.session.camera_mut().zoom_by(factor);
+    }
+
+    /// **Move** the camera, in the world's units.
+    pub fn pan(&mut self, across: f64, down: f64) {
+        self.session.camera_mut().pan(across, down);
     }
 
     /// What the window has to say.

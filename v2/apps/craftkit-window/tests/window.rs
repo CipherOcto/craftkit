@@ -129,3 +129,58 @@ fn the_window_draws_the_document_through_the_kinds() {
     let painted = picture.pixels.chunks(4).any(|pixel| pixel[2] > 200 && pixel[0] < 100);
     assert!(painted, "the shape was drawn in its own colour");
 }
+
+/// The window **picks** the node under the pointer.
+///
+/// Every node is offered to the kind that says what it is, so the hit
+/// is the kind's own — and the deepest hit wins.
+#[test]
+fn the_window_picks_the_node_under_the_pointer() {
+    let mut window = window();
+    window.open("node.add");
+    window.set("name", json!("a shape"));
+    window.set("kind", json!("geometry.rect"));
+    window.set("rect", json!({ "x": 0.0, "y": 0.0, "w": 10.0, "h": 10.0 }));
+    window.run().expect("the command runs");
+
+    let inside = window.pick(craftkit_sdk::Point::new(5.0, 5.0));
+    assert_eq!(inside, Some(1), "the shape is under the pointer");
+    let outside = window.pick(craftkit_sdk::Point::new(500.0, 500.0));
+    assert_eq!(outside, None, "and nothing is under that");
+}
+
+/// A click **selects** through the registry.
+///
+/// The selection is the session's state, and the command that sets it is
+/// in the registry like every other.
+#[test]
+fn a_click_selects_through_the_registry() {
+    let mut window = window();
+    window.open("node.add");
+    window.set("name", json!("a shape"));
+    window.set("kind", json!("geometry.rect"));
+    window.set("rect", json!({ "x": 0.0, "y": 0.0, "w": 10.0, "h": 10.0 }));
+    window.run().expect("the command runs");
+
+    window.select_node(1).expect("the selection runs");
+    assert_eq!(window.session().selected_ids(), vec![1], "the node is selected");
+}
+
+/// The **camera** is the session's, and it has its own caps.
+///
+/// The wheel can send anything, and a camera that refuses to move feels
+/// broken: so a zoom outside the caps is clamped, not refused.
+#[test]
+fn the_camera_is_the_sessions_and_it_clamps() {
+    let mut window = window();
+    window.zoom_by(2.0);
+    assert_eq!(window.session().camera().zoom(), 2.0, "the zoom moved");
+
+    window.pan(3.0, -4.0);
+    let offset = window.session().camera().offset();
+    assert_eq!(offset.x, 3.0, "the camera moved across");
+    assert_eq!(offset.y, -4.0, "and down");
+
+    window.zoom_by(1_000_000.0);
+    assert_eq!(window.session().camera().zoom(), craftkit_sdk::Camera::MAX_ZOOM, "and it is capped");
+}
