@@ -249,6 +249,65 @@ impl NodeResize {
     }
 }
 
+/// **Delete** a node.
+///
+/// The node goes out of the document and its **edges** go with it: an
+/// edge to a node that is not there is an edge to nothing, and a
+/// document that keeps them says a clip plays a source that is gone.
+///
+/// The undo brings it back, edges and all: the history keeps the
+/// document as it was.
+#[derive(Command)]
+#[command(id = "node.delete", area = "node", icon = "minus", menu("Node"), mutates, undoable)]
+pub struct NodeDelete {
+    /// The node.
+    pub node: NodeRef,
+}
+
+impl NodeDelete {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.delete".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        let removed = session.document_mut()?.remove_node(id);
+        Ok(Outcome::changed(format!("deleted the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "removed": removed })))
+    }
+}
+
+/// **Delete** the selection.
+///
+/// One command and so **one** undo step: a person who deletes twenty
+/// nodes and undoes it expects the twenty nodes to come back, and not
+/// twenty undos.
+#[derive(Command)]
+#[command(id = "select.delete", area = "select", icon = "minus", menu("Select"), mutates, undoable)]
+pub struct DeleteSelection {}
+
+impl DeleteSelection {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let selected = session.selected_ids();
+        if selected.is_empty() {
+            return Err(EngineError::Failed {
+                id: "select.delete".to_string(),
+                message: "nothing is selected".to_string(),
+            });
+        }
+        let mut deleted = 0usize;
+        for id in selected {
+            if session.document_mut()?.remove_node(id) {
+                deleted += 1;
+            }
+        }
+        Ok(Outcome::changed(format!("deleted {deleted} of the selected nodes"))
+            .with_data(craftkit_sdk::serde_json::json!({ "deleted": deleted })))
+    }
+}
+
 /// **Move** the selection.
 ///
 /// The selection is the session's state, and a person means "the things

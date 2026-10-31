@@ -86,6 +86,7 @@ pub mod plugincmds;
 pub mod plugins;
 pub mod prompt;
 pub mod realtime;
+pub mod relation;
 pub mod resume;
 pub mod seams;
 pub mod select;

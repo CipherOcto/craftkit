@@ -1263,17 +1263,30 @@ impl Document {
     ///
     /// The node goes wherever it is — at the top level or under another
     /// one — and its children go with it.
+    ///
+    /// Its **edges** go with it: a relation whose end is not there is
+    /// an edge to nothing, and a document that keeps them is a document
+    /// that says a clip plays a source that is not in the document any
+    /// more. The edges are taken away in both directions: an edge from
+    /// the node and an edge to it.
     pub fn remove_node(&mut self, id: u64) -> bool {
+        let mut gone: Vec<u64> = Vec::new();
         if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
-            self.nodes.remove(index);
-            return true;
-        }
-        for node in self.nodes.iter_mut() {
-            if Arc::make_mut(node).remove_child(id) {
-                return true;
+            let node = self.nodes.remove(index);
+            gone.extend(ids_of(&node));
+        } else {
+            for node in self.nodes.iter_mut() {
+                if let Some(child) = Arc::make_mut(node).take_child(id) {
+                    gone.extend(ids_of(&child));
+                    break;
+                }
             }
         }
-        false
+        if gone.is_empty() {
+            return false;
+        }
+        self.remove_relations(|relation| gone.contains(&relation.from) || gone.contains(&relation.to));
+        true
     }
 
     /// Add a node with a payload, and give back its id.
@@ -1590,6 +1603,7 @@ impl Node {
     }
 
     /// Take a child out of this node, and say whether it was there.
+    /// Remove a child, and say whether it was there.
     pub fn remove_child(&mut self, id: u64) -> bool {
         if let Some(index) = self.children.iter().position(|node| node.id == id) {
             self.children.remove(index);
@@ -1613,6 +1627,19 @@ impl Node {
 ///
 /// A node that is still shared belongs to a state in the history, so it
 /// is copied rather than taken: the state keeps what it was.
+/// The ids of a node and of everything in it.
+///
+/// A node that is taken out of the document takes its children with it,
+/// and their edges go with them: an edge to a node that is not there is
+/// an edge to nothing.
+fn ids_of(node: &Node) -> Vec<u64> {
+    let mut ids = vec![node.id];
+    for child in node.children.iter() {
+        ids.extend(ids_of(child));
+    }
+    ids
+}
+
 fn unwrap(node: Arc<Node>) -> Node {
     Arc::try_unwrap(node).unwrap_or_else(|shared| (*shared).clone())
 }
