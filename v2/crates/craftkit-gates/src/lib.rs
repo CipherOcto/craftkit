@@ -109,6 +109,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The kit's own typeface: glyphs as strokes, drawn in code. It
     // knows nothing about a document, a canvas or the kit.
     ("craftkit-font", 0),
+    // The **WAV reader**: the samples of a sound, from the file. It
+    // knows nothing about a document, a canvas or the kit.
+    ("craftkit-wav", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),

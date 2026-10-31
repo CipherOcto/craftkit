@@ -33,6 +33,10 @@ craftkit-text-layout = { path = "crates/craftkit-text-layout", version = "0.2.0"
 # **library**, not a plugin. It contributes nothing to the registry and
 # the linker does not wire it in.
 craftkit-font = { path = "crates/craftkit-font", version = "0.2.0" }
+# The **WAV reader**: the samples of a sound, from the file. A
+# **library**, not a plugin: it contributes nothing to the registry and
+# the linker does not wire it in.
+craftkit-wav = { path = "crates/craftkit-wav", version = "0.2.0" }
 # The MCP door: the registry, spoken to an agent. One tool per command.
 craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
 # The **PNG reader**: the pixels of a picture, and the inflate they come

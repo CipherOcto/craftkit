@@ -755,6 +755,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-wav"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-window"
 version = "0.2.0"
 dependencies = [
