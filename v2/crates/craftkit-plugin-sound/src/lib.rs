@@ -86,6 +86,8 @@ use craftkit_sdk::serde_json::Value as Json;
 // The time model: a library, not a plugin.
 use craftkit_sound_time::{MAX_POSITION, TempoMap};
 
+mod timeline;
+
 /// The sound layer.
 ///
 /// It needs the core, so it says so, and the ecosystem checks the graph
@@ -121,7 +123,7 @@ impl Default for SoundSession {
 const SESSION_KEY: &str = "sound";
 
 /// The session's settings, as the document holds them.
-fn session_of(document: &Document) -> SoundSession {
+pub(crate) fn session_of(document: &Document) -> SoundSession {
     let settings = document.data.get(SESSION_KEY);
     let sample_rate = settings
         .and_then(|settings| settings.get("sample_rate"))
@@ -162,21 +164,38 @@ fn set_session(document: &mut Document, session: &SoundSession) {
 /// model and a match on them in the mixer; here a track says what it is,
 /// and a third party can say something the core has never heard of.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.track", label = "Track", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.track", label = "Track", layer = "sound", evaluates, place)]
 pub struct TrackKind;
 
 impl TrackKind {
     /// How a track is drawn.
     ///
-    /// **Nothing.** A sound document has no picture: a track is a row of
-    /// clips on a time axis, and v2 has no timeline and no camera. A
-    /// plugin that drew one would be the second set of camera controls in
-    /// the tree, and the camera is a question for the tree.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// The **row**: a line along the top of the track's band, so that
+    /// the timeline shows where one track ends and the next begins.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::track_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x + rect.w, rect.y),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a track.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::track_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a track **is**: its row.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::track_rect(document, node)
     }
 
     /// What a track **means**, in the plan.
@@ -198,16 +217,24 @@ impl TrackKind {
 /// can hold other nodes, and the alternative takes are the clips under
 /// it.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.playlist", label = "Playlist", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.playlist", label = "Playlist", layer = "sound", evaluates, place)]
 pub struct PlaylistKind;
 
 impl PlaylistKind {
     /// How a playlist is drawn.
+    ///
+    /// **Nothing.** A playlist is the track's row with a different set of
+    /// clips on it, and the row is already drawn by the track.
     fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
 
     /// Whether a point is inside a playlist.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::playlist_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a playlist **is**: the row of the track it is under.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::playlist_rect(document, node)
     }
 
     /// What a playlist **means**, in the plan.
@@ -223,16 +250,36 @@ impl PlaylistKind {
 /// into it, and a MIDI clip would hold notes — which the tree this ports
 /// keeps in a closed enum of three kinds, matched in the mixer.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.clip", label = "Clip", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.clip", label = "Clip", layer = "sound", evaluates, place)]
 pub struct ClipKind;
 
 impl ClipKind {
-    /// How a clip is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a clip is drawn: a **bar** on the track's row.
+    ///
+    /// The bar is the clip's **span**: where it starts and how long it
+    /// is, in the world's seconds. A muted clip is drawn as nothing,
+    /// which is what a muted clip is.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::clip_rect(document, node) else { return };
+        let fill = if node.muted {
+            craftkit_sdk::document::Colour::NONE
+        } else {
+            document
+                .appearance_of(node)
+                .map(|appearance| appearance.fill)
+                .unwrap_or(craftkit_sdk::document::Colour::BLACK)
+        };
+        canvas.rect(rect, fill);
+    }
 
     /// Whether a point is inside a clip.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::clip_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a clip **is**: a bar on the track's row.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::clip_rect(document, node)
     }
 
     /// What a clip **means**, in the plan.
@@ -296,16 +343,35 @@ impl MeterKind {
 
 /// The kind of a marker.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.marker", label = "Marker", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.marker", label = "Marker", layer = "sound", evaluates, place)]
 pub struct MarkerKind;
 
 impl MarkerKind {
-    /// How a marker is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a marker is drawn: a **line** down the timeline.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::marker_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x, rect.y + rect.h),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a marker.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::marker_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a marker **is**: a line at the time it is at.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::marker_rect(document, node)
     }
 
     /// What a marker **means**, in the plan.
@@ -374,11 +440,11 @@ impl TrackPayload {
 
 /// What a clip says about itself.
 #[derive(Debug, Clone, PartialEq)]
-struct ClipPayload {
+pub(crate) struct ClipPayload {
     /// Where it starts, in samples.
-    start: i64,
+    pub(crate) start: i64,
     /// How long it is, in samples.
-    length: i64,
+    pub(crate) length: i64,
     /// The source it plays, if it plays one.
     source: Option<u64>,
     /// How far into the source it starts, in samples.
@@ -467,9 +533,9 @@ impl MeterPayload {
 
 /// What a marker says.
 #[derive(Debug, Clone, PartialEq)]
-struct MarkerPayload {
+pub(crate) struct MarkerPayload {
     /// Where it is, in samples.
-    start: i64,
+    pub(crate) start: i64,
     /// Where it ends, in samples.
     end: i64,
 }
@@ -1319,6 +1385,73 @@ mod tests {
         assert_eq!(track.rect, None, "a track is at no place: it is at a time");
         assert_eq!(track.children.len(), 1, "the track has a playlist");
         assert_eq!(track.children[0].kind, "sound.playlist");
+    }
+
+    /// A clip is a **bar** on the track's row: the timeline is the sound
+    /// document's own world.
+    ///
+    /// The place is **derived** — from the clip's span and from the row
+    /// of the track it is under — and it is not in the document, because
+    /// a rectangle in the document would go stale the moment a track was
+    /// added above it.
+    #[test]
+    fn a_clip_is_a_bar_on_the_rows() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there");
+        session
+            .execute("sound.clip.add", &json!({ "track": track.id, "start": 48000, "length": 96000 }))
+            .expect("the clip is added");
+        let clip =
+            session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip is there");
+        let rect = ClipKind::place(clip, session.document()).expect("the clip has a place");
+        assert_eq!(rect.x, 1.0, "the clip starts one second in");
+        assert_eq!(rect.w, 2.0, "and it is two seconds long");
+        assert_eq!(rect.y, 0.0, "on the first row");
+        assert_eq!(rect.h, timeline::ROW_HEIGHT, "and the row is one unit tall");
+        assert_eq!(clip.rect, None, "and the document holds no rectangle for it");
+    }
+
+    /// The **second** track is on the second row, and the clip on it
+    /// moves with it.
+    #[test]
+    fn a_second_track_is_on_the_second_row() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the first track");
+        session.execute("sound.track.add", &json!({ "name": "bass" })).expect("the second track");
+        let bass = session.document().node_by_name("bass").expect("the track is there");
+        session
+            .execute("sound.clip.add", &json!({ "track": bass.id, "start": 0, "length": 48000 }))
+            .expect("the clip is added");
+        let clip =
+            session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip is there");
+        let rect = ClipKind::place(clip, session.document()).expect("the clip has a place");
+        assert_eq!(rect.y, timeline::ROW_HEIGHT, "the clip is on the second row");
+    }
+
+    /// A clip is **drawn**, and a clip is **picked**.
+    #[test]
+    fn a_clip_is_drawn_and_picked() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there");
+        session
+            .execute("sound.clip.add", &json!({ "track": track.id, "start": 0, "length": 48000 }))
+            .expect("the clip is added");
+        let clip =
+            session.document().walk().find(|node| node.kind == "sound.clip").expect("the clip is there");
+        let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+        ClipKind::paint(clip, session.document(), &mut canvas);
+        assert_eq!(canvas.drawn.len(), 1, "the clip is one bar");
+        assert!(canvas.drawn[0].starts_with("rect("), "and it is a rectangle: {}", canvas.drawn[0]);
+        assert!(
+            ClipKind::hit(clip, session.document(), Point::new(0.5, 0.5)),
+            "a point inside the bar is in the clip"
+        );
+        assert!(
+            !ClipKind::hit(clip, session.document(), Point::new(5.0, 0.5)),
+            "and a point outside it is not"
+        );
     }
 
     /// The kind of a track is a string, and it is open.
