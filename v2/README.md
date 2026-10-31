@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**849 tests.** The MCP server links **all fourteen batteries** in, so the
+**851 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -7322,3 +7322,48 @@ blocks, entities, extents — and **no picture at all**.
   in the payload, and nothing resolves it: the appearance is how a
   layer says what colour it is, and the old field has not been taken
   away.
+
+## 97. The line can be picked
+
+§96 left one thing: the CAD entities are drawn and cannot be **hit**.
+The window picks with the hit test, so a line that cannot be hit cannot
+be picked, and a drawing nobody can touch is a picture.
+
+### What was built
+
+- The CAD entities are **hit**: a line is hit by a point near it, and a
+  circle is hit by a point near its **edge**.
+- The **tolerance** is the battery's own — one unit of the world's — and
+  not the core's: the core has no unit and no opinion about how near is
+  near.
+- Two more tests: the line is hit on it and missed away from it, and
+  the circle is hit on its edge and **not** in its middle.
+
+### What the port found
+
+- **A line has no inside.** The vector battery asks "is the point inside
+  the path", and a CAD line has no area at all: the question is "is the
+  point **near** it", and the answer is a distance and not a
+  containment. The two batteries share a seam and not a question.
+- **The middle of a circle is the inside of it, and the inside is not
+  the circle.** A hit test that asks the wrong question here picks the
+  wrong thing: a click in the middle of a hole would select the hole.
+- **The tolerance belongs to the battery.** One world unit is fine for
+  a drawing in millimetres and would be wrong for a drawing in pixels,
+  and the kit does not know which one it is looking at.
+
+### What it cost
+
+- two questions answered in one macro body, one distance, one constant,
+  **two tests**.
+
+### What it does not settle
+
+- **The text is not hit.** The kit has no font, so the box a text
+  occupies is not a thing the battery knows: the canvas draws the box
+  of each character from its own metrics, and the battery cannot ask.
+- **The tolerance does not follow the zoom.** A line is a pixel wide at
+  a high zoom and is hard to hit, and a line is thin at a low zoom and
+  is easy to hit by accident. The hit test has no camera.
+- **The insert is not drawn and not hit.** It is a reference to another
+  block, and the picture says nothing about it.
