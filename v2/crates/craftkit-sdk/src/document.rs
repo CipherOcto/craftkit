@@ -1696,6 +1696,14 @@ fn unwrap(node: Arc<Node>) -> Node {
     Arc::try_unwrap(node).unwrap_or_else(|shared| (*shared).clone())
 }
 
+/// Where the **part** of a node that is picked out is.
+///
+/// A part is a range in the node's own units, and only the kind knows
+/// what those units are: samples for a clip, characters for a
+/// paragraph. The answer is a list, because a part may be in more than
+/// one piece — a range of characters that crosses a line is two.
+pub type WherePart = fn(&Node, &Document, f64, f64) -> Option<Vec<Rect>>;
+
 /// One kind of node, as the ecosystem sees it.
 ///
 /// The core owns the document and the order of the nodes; a plugin owns what
@@ -1741,6 +1749,21 @@ pub struct NodeKindSpec {
     /// It is `None` by default, and a kind that says nothing has the
     /// place the document gives it.
     pub place: Option<fn(&Node, &Document) -> Option<Rect>>,
+    /// Where the **part** of the node that is picked out is.
+    ///
+    /// A selection may hold a **part** of a node: a range in the node's
+    /// own units — samples for a clip in a sound document, characters
+    /// for a paragraph. The core does not know what those units are, so
+    /// it asks the kind, the way it asks where the node is.
+    ///
+    /// A part may be in more than one piece: a range of characters that
+    /// crosses a line is two pieces, one on each line. So the answer is
+    /// a list.
+    ///
+    /// It is `None` by default, and a kind that says nothing has no part
+    /// to pick out: the selection is then the whole node, and the node's
+    /// frame is what says so.
+    pub part: Option<WherePart>,
 }
 
 // The link collects node kinds here.

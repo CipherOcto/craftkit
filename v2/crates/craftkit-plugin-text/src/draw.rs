@@ -222,6 +222,31 @@ fn starts_of(words: &[String]) -> Vec<usize> {
     starts
 }
 
+/// Where the **part** of the paragraph that is picked out is.
+///
+/// The part is a range of **characters**, counted in the text, and the
+/// characters are placed as the paragraph is drawn. A range that
+/// crosses a line is more than one piece: one on each line, and the
+/// pieces are in the order the lines are in.
+pub fn part(drawn: &Drawn, from: usize, to: usize) -> Vec<Rect> {
+    let mut pieces: Vec<(f64, Rect)> = Vec::new();
+    for place in &drawn.chars {
+        if place.index < from || place.index >= to {
+            continue;
+        }
+        match pieces.last_mut() {
+            // The same line: the piece grows to the right.
+            Some((baseline, rect)) if *baseline == place.baseline => {
+                rect.w = place.x + place.width - rect.x;
+            }
+            // A new line: a new piece.
+            _ => pieces
+                .push((place.baseline, Rect::new(place.x, place.top, place.width, place.bottom - place.top))),
+        }
+    }
+    pieces.into_iter().map(|(_, rect)| rect).collect()
+}
+
 /// Where the caret that stands before the character at `character` is.
 ///
 /// The caret stands at the **place of the character it stands before**:

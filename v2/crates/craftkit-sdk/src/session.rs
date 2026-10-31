@@ -135,6 +135,14 @@ impl Memory {
 /// same size whatever the zoom.
 pub const HANDLE_PIXELS: f64 = 8.0;
 
+/// The colour of a **picked-out part**: a wash.
+///
+/// The part is marked with a wash and not with a frame, because a part
+/// is not a thing that can be outlined and dragged: it is a piece of
+/// something else. The wash is **thin**, so the thing under it still
+/// shows through.
+const SELECTION_WASH: crate::document::Colour = crate::document::Colour([0.0, 0.0, 0.0, 0.18]);
+
 /// The document, the commands, and the history of what happened.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -314,6 +322,22 @@ impl Session {
         }
     }
 
+    /// Where the **part** of a node is.
+    ///
+    /// A selection may hold a part of a node, and a part is in the
+    /// node's **own units**: samples for a clip, characters for a
+    /// paragraph. Only the kind knows what those units are, so the kind
+    /// is asked — the same bargain the place is asked under.
+    ///
+    /// A part may be in more than one piece: a range of characters that
+    /// crosses a line is two pieces. A kind that says nothing has no
+    /// part, and the list is empty.
+    pub fn parts_of(&self, node: &crate::document::Node, from: f64, to: f64) -> Vec<crate::document::Rect> {
+        let Some(kind) = self.kinds.get(&node.kind) else { return Vec::new() };
+        let Some(part) = kind.part else { return Vec::new() };
+        part(node, &self.document, from, to).unwrap_or_default()
+    }
+
     /// The **bounds** of the document: the place that frames all of it.
     ///
     /// It asks the kinds where their nodes are, so that a document whose
@@ -394,13 +418,30 @@ impl Session {
     /// and not to the document, so a picture of the document — a
     /// snapshot for a file — has neither.
     ///
+    /// A selection may hold a **part** of a node, and a part is marked
+    /// differently: the kind says where the part is, and the part is
+    /// washed over. A part cannot be resized, so it has no handle.
+    ///
     /// The line is a **screen** size, like the handle: one pixel
     /// across, whatever the zoom.
     fn paint_handles(&self, canvas: &mut dyn crate::document::Canvas) {
         let zoom = self.camera().zoom();
         let size = HANDLE_PIXELS / zoom;
         let width = 1.0 / zoom;
-        for node in self.selected_nodes() {
+        for item in self.selection() {
+            let Some(node) = self.document.node(item.node) else { continue };
+            // A **part** that is picked out: the kind says where it is.
+            if let (Some(from), Some(to)) = (item.from, item.to) {
+                let parts = self.parts_of(node, from, to);
+                if !parts.is_empty() {
+                    for rect in parts {
+                        canvas.rect(rect, SELECTION_WASH);
+                    }
+                    continue;
+                }
+                // The kind cannot place the part, so the node's frame is
+                // what says that something is picked out.
+            }
             let Some(rect) = self.place_of(node) else { continue };
             let frame = crate::document::Path::polygon(&[
                 crate::document::Point::new(rect.x, rect.y),

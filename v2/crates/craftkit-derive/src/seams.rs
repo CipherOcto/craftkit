@@ -27,6 +27,9 @@ pub struct SeamArgs {
     pub evaluates: bool,
     /// A flag: the kind says where its nodes are.
     pub place: bool,
+    /// A flag: the kind says where the picked-out **part** of its node
+    /// is.
+    pub part: bool,
 }
 
 impl Parse for SeamArgs {
@@ -74,6 +77,11 @@ impl Parse for SeamArgs {
                 "place" => {
                     // A flag: the kind says where its nodes are.
                     args.place = true;
+                }
+                "part" => {
+                    // A flag: the kind says where the picked-out part of
+                    // its node is.
+                    args.part = true;
                 }
                 other => {
                     // A list: `requires("core")` or `commands("a", "b")`.
@@ -174,6 +182,19 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
         }
     };
 
+    // Where the picked-out **part** of the node is, if the kind says. A
+    // part is in the node's own units, and only the kind knows what
+    // those are.
+    let part = if args.part {
+        quote! {
+            part: Some(|node, document, from, to| #name::part(node, document, from, to)),
+        }
+    } else {
+        quote! {
+            part: None,
+        }
+    };
+
     Ok(quote! {
         #[doc = #doc_literal]
         pub static #static_ident: #sdk::NodeKindSpec = #sdk::NodeKindSpec {
@@ -184,6 +205,7 @@ pub fn expand_node_kind(input: syn::DeriveInput) -> Result<TokenStream2> {
             hit: |node, document, point| #name::hit(node, document, point),
             #evaluate
             #place
+            #part
         };
 
         #anchor

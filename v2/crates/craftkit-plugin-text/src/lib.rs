@@ -113,7 +113,7 @@ pub struct TextLayer;
 
 /// A **paragraph**: a run of words that is broken into lines.
 #[derive(NodeKind)]
-#[node_kind(kind = "text.paragraph", label = "Paragraph", layer = "text", evaluates, place)]
+#[node_kind(kind = "text.paragraph", label = "Paragraph", layer = "text", evaluates, place, part)]
 pub struct ParagraphKind;
 
 impl ParagraphKind {
@@ -147,6 +147,29 @@ impl ParagraphKind {
     /// Where a paragraph **is**: the block of its lines.
     fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
         draw::block(node, document)
+    }
+
+    /// Where the **part** of the paragraph that is picked out is.
+    ///
+    /// A paragraph's own unit is the **character**: the selection holds
+    /// a range in the node's own units, and for a paragraph that is the
+    /// characters of the text. So the part is a range of characters, and
+    /// the characters are placed as the paragraph is drawn.
+    ///
+    /// A range that crosses a line is more than one piece — one on each
+    /// line — because a piece is a thing that can be washed over, and a
+    /// box around two lines is not that.
+    fn part(
+        node: &Node,
+        document: &Document,
+        from: f64,
+        to: f64,
+    ) -> Option<Vec<craftkit_sdk::document::Rect>> {
+        let from = character_index(from)?;
+        let to = character_index(to)?;
+        let drawn = draw::draw(node, document)?;
+        let parts = draw::part(&drawn, from, to);
+        if parts.is_empty() { None } else { Some(parts) }
     }
 
     /// What a paragraph **means**: its words, its measure, its setting,
@@ -296,6 +319,18 @@ fn character_of(node: &Node) -> Option<usize> {
         return None;
     }
     Some(character as usize)
+}
+
+/// A character index, if the number is one.
+///
+/// The selection's range is in the node's own units, and those units
+/// come from outside: a number that is not a whole number of
+/// characters is not a character at all.
+fn character_index(value: f64) -> Option<usize> {
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
+        return None;
+    }
+    Some(value as usize)
 }
 
 /// The caret of a paragraph: the node under it that is a caret.

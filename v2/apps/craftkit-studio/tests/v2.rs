@@ -540,6 +540,7 @@ fn unused_kind() -> NodeKindSpec {
         hit: |_node, _document, _point| false,
         evaluate: None,
         place: None,
+        part: None,
     }
 }
 
