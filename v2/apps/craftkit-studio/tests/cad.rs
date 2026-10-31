@@ -309,3 +309,60 @@ fn draw(session: &craftkit_sdk::Session, size: usize) -> Vec<[u8; 4]> {
     }
     pixels
 }
+
+/// A line can be **hit**.
+///
+/// A line has no inside: it is an outline, and a point is on it when
+/// it is near it. The window picks with this, so a line that cannot be
+/// hit cannot be picked.
+#[cfg(feature = "cad")]
+#[test]
+fn a_line_can_be_hit() {
+    let mut session = a_drawing();
+    let id = session
+        .execute(
+            "cad.entity.line.add",
+            &json!({
+                "block": 3,
+                "name": "a wall",
+                "from": { "x": -5.0, "y": 0.0 },
+                "to": { "x": 5.0, "y": 0.0 },
+            }),
+        )
+        .expect("the line is added")
+        .data
+        .get("id")
+        .and_then(|id| id.as_u64())
+        .expect("there is an id");
+    let line = session.document().node(id).expect("the line is there");
+    let kind = session.kinds().get(&line.kind).expect("the kind is there");
+
+    assert!((kind.hit)(line, craftkit_sdk::Point::new(0.0, 0.0)), "the middle of the line is on it");
+    assert!((kind.hit)(line, craftkit_sdk::Point::new(4.9, 0.2)), "and so is a point near it");
+    assert!(!(kind.hit)(line, craftkit_sdk::Point::new(0.0, 20.0)), "and a point far away is not");
+}
+
+/// A circle is hit **on its edge**, not in its middle.
+///
+/// The middle of a circle is the inside of it, and the inside is not
+/// the circle.
+#[cfg(feature = "cad")]
+#[test]
+fn a_circle_is_hit_on_its_edge() {
+    let mut session = a_drawing();
+    let id = session
+        .execute(
+            "cad.entity.circle.add",
+            &json!({ "block": 3, "name": "a hole", "center": { "x": 0.0, "y": 0.0 }, "radius": 5.0 }),
+        )
+        .expect("the circle is added")
+        .data
+        .get("id")
+        .and_then(|id| id.as_u64())
+        .expect("there is an id");
+    let circle = session.document().node(id).expect("the circle is there");
+    let kind = session.kinds().get(&circle.kind).expect("the kind is there");
+
+    assert!((kind.hit)(circle, craftkit_sdk::Point::new(5.0, 0.0)), "the edge is on it");
+    assert!(!(kind.hit)(circle, craftkit_sdk::Point::new(0.0, 0.0)), "and the middle is not");
+}

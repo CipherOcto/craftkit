@@ -158,9 +158,15 @@ macro_rules! entity_kind {
                 draw_geometry($kind, geometry, colour, canvas);
             }
 
-            /// Not hit.
-            fn hit(_node: &Node, _point: craftkit_sdk::Point) -> bool {
-                false
+            /// Whether a point is **on** the entity.
+            ///
+            /// A line and a circle have no inside: they are outlines,
+            /// and a point is on one when it is **near** it — within the
+            /// tolerance, which is this program's number and not the
+            /// core's.
+            fn hit(node: &Node, point: Point) -> bool {
+                let Some(geometry) = node.data.get("geometry") else { return false };
+                hit_geometry($kind, geometry, point)
             }
 
             /// What an entity **means**: its geometry, and the extents it
@@ -233,6 +239,55 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
         }
         _ => {}
     }
+}
+
+/// Whether a point is **on** an entity.
+///
+/// A line is near when the point is near the segment; a circle is near
+/// when the point is near the **circumference** — not near the middle,
+/// which is the inside of the circle and not the circle.
+fn hit_geometry(kind: &str, geometry: &Json, point: Point) -> bool {
+    match kind {
+        "cad.entity.line" => {
+            let (Some(from), Some(to)) = (point_in(geometry, "from"), point_in(geometry, "to")) else {
+                return false;
+            };
+            distance_to_segment(point, from, to) <= TOLERANCE
+        }
+        "cad.entity.circle" => {
+            let Some(center) = point_in(geometry, "center") else { return false };
+            let Some(radius) = geometry
+                .get("radius")
+                .and_then(|radius| radius.as_f64())
+                .filter(|r| r.is_finite() && *r > 0.0)
+            else {
+                return false;
+            };
+            let away = ((point.x - center.x).powi(2) + (point.y - center.y).powi(2)).sqrt();
+            (away - radius).abs() <= TOLERANCE
+        }
+        _ => false,
+    }
+}
+
+/// How near a point has to be to be **on** a line.
+///
+/// It is this program's number: a drawing is in millimetres and a
+/// millimetre is a fine thing to hit.
+const TOLERANCE: f64 = 1.0;
+
+/// The distance from a point to a segment.
+fn distance_to_segment(point: Point, from: Point, to: Point) -> f64 {
+    let across = to.x - from.x;
+    let down = to.y - from.y;
+    let length = across * across + down * down;
+    if length <= f64::MIN_POSITIVE {
+        return ((point.x - from.x).powi(2) + (point.y - from.y).powi(2)).sqrt();
+    }
+    let along = ((point.x - from.x) * across + (point.y - from.y) * down) / length;
+    let along = along.clamp(0.0, 1.0);
+    let nearest = Point::new(from.x + along * across, from.y + along * down);
+    ((point.x - nearest.x).powi(2) + (point.y - nearest.y).powi(2)).sqrt()
 }
 
 /// How many straight segments a circle is drawn with.
