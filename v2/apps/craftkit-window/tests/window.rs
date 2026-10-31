@@ -199,7 +199,8 @@ fn a_node_moves_through_the_registry() {
     window.run().expect("the command runs");
 
     window.move_node(1, 20.0, 30.0).expect("the move runs");
-    let node = window.session().document().node(1).expect("the node is there");
+    let session = window.session();
+    let node = session.document().node(1).expect("the node is there");
     let rect = node.rect.expect("the node has a place");
     assert_eq!(rect.x, 20.0, "the node moved across");
     assert_eq!(rect.y, 30.0, "and up");
@@ -264,7 +265,8 @@ fn a_node_resizes_through_the_registry() {
     window.run().expect("the rectangle is added");
 
     window.resize_node(1, 20.0, 30.0).expect("the resize runs");
-    let rect = window.session().document().node(1).and_then(|node| node.rect).expect("it has a place");
+    let session = window.session();
+    let rect = session.document().node(1).and_then(|node| node.rect).expect("it has a place");
     assert_eq!(rect.x, 0.0, "the node did not move across");
     assert_eq!(rect.y, 0.0, "and it did not move up");
     assert_eq!(rect.w, 20.0, "the width changed");
@@ -346,7 +348,8 @@ fn the_selection_moves_as_one() {
 
     window.move_selection(7.0, 0.0).expect("the selection moves");
     for id in [1, 2] {
-        let rect = window.session().document().node(id).and_then(|node| node.rect).expect("it has a place");
+        let session = window.session();
+        let rect = session.document().node(id).and_then(|node| node.rect).expect("it has a place");
         assert_eq!(rect.x, 7.0, "the node moved across");
     }
 }
@@ -376,4 +379,39 @@ fn the_panels_are_shown_and_their_commands_once() {
     for id in &shown {
         assert!(!outside.contains(&id.as_str()), "the command `{id}` is shown twice");
     }
+}
+
+/// The **control channel** drives the window's own document.
+///
+/// The channel serves the window's session and not a session of its
+/// own: the two are one document, and a command that an agent runs
+/// over the channel changes what the window is drawing.
+#[test]
+fn the_control_channel_drives_the_windows_document() {
+    let window = window();
+    let options = craftkit_control::Options {
+        token: "a-secret".to_string(),
+        address: "127.0.0.1:0".parse().expect("an address"),
+        announce: None,
+    };
+    let mut server =
+        craftkit_control::Server::serve_shared(window.shared_session(), options).expect("the channel opens");
+    let mut client =
+        craftkit_control::Client::connect(server.address(), "a-secret").expect("the client connects");
+
+    client
+        .call(
+            craftkit_control::Method::Execute,
+            json!({
+                "command": "node.add",
+                "params": { "name": "a shape", "kind": "geometry.rect" },
+            }),
+        )
+        .expect("the command runs over the channel");
+
+    // And the window sees it: one document, two doors.
+    let rows = window.tree();
+    assert_eq!(rows.len(), 1, "the node is in the window's document");
+    assert_eq!(rows[0].name, "a shape", "and it is the node the agent added");
+    server.shutdown();
 }

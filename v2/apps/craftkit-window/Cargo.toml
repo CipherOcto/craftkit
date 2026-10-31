@@ -27,6 +27,10 @@ craftkit-studio = { path = "../craftkit-studio", features = [
     "image",
     "clap",
 ] }
+# The **control channel**: the door an agent drives the window through.
+# It serves the window's own session, so a command that an agent runs
+# changes the document the window is drawing.
+craftkit-control = { workspace = true }
 # The **rasteriser**: the canvas that draws a document into a picture.
 # It is a **library** and not a plugin: it contributes no command and
 # no kind.

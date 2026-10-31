@@ -35,6 +35,8 @@
 )]
 #![forbid(unsafe_code)]
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{CommandSpec, Doc, EcosystemError, EngineError, Outcome, Session};
 
@@ -45,7 +47,14 @@ use craftkit_sdk::{CommandSpec, Doc, EcosystemError, EngineError, Outcome, Sessi
 /// nothing else but the form being filled in and what it has to say.
 pub struct Window {
     /// The session: the document, the history and the registry.
-    session: Session,
+    ///
+    /// It is behind a **lock** and shared: a program that opens a
+    /// control channel over the window (§110) hands the same lock to
+    /// the channel, so a command that an agent runs over the channel
+    /// changes the document the window is drawing. Without the lock
+    /// the window would have a session of its own and the channel
+    /// another, and one of them would be a copy.
+    session: Arc<Mutex<Session>>,
     /// The **panels** the ecosystem brought.
     ///
     /// A panel is a contribution and not a session's state: the session
@@ -72,17 +81,40 @@ impl Window {
     pub fn new() -> Result<Window, EcosystemError> {
         let ecosystem = craftkit_studio::ecosystem()?;
         let panels = ecosystem.panels.all().to_vec();
-        Ok(Window { session: ecosystem.session(), panels, form: None, log: Vec::new(), runs: 0 })
+        Ok(Window {
+            session: Arc::new(Mutex::new(ecosystem.session())),
+            panels,
+            form: None,
+            log: Vec::new(),
+            runs: 0,
+        })
     }
 
-    /// The session the window draws.
-    pub fn session(&self) -> &Session {
-        &self.session
+    /// The session the window draws, **locked**.
+    ///
+    /// The lock is not a rule about what the window may do: it is the
+    /// price of the session being shared with a control channel, and a
+    /// lock that is poisoned by a panic is a lock that is taken anyway
+    /// — a panic in one thread must not take the window down with it.
+    pub fn session(&self) -> MutexGuard<'_, Session> {
+        match self.session.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    /// The session **shared**, for a program that opens a channel over
+    /// it.
+    ///
+    /// The handle is the same lock the window uses, so the two are one
+    /// session and not two.
+    pub fn shared_session(&self) -> Arc<Mutex<Session>> {
+        Arc::clone(&self.session)
     }
 
     /// Every **command** in the registry, in the order they are named.
-    pub fn commands(&self) -> Vec<&CommandSpec> {
-        let mut found: Vec<&CommandSpec> = self.session.registry().all().iter().collect();
+    pub fn commands(&self) -> Vec<CommandSpec> {
+        let mut found: Vec<CommandSpec> = self.session().registry().all().to_vec();
         found.sort_by(|left, right| left.id.cmp(right.id));
         found
     }
@@ -95,6 +127,7 @@ impl Window {
     /// program does not have is a panel with a hole in it, and the hole
     /// is not drawn.
     pub fn panels(&self) -> Vec<PanelRow> {
+        let session = self.session();
         let mut panels: Vec<&craftkit_sdk::PanelSpec> = self.panels.iter().collect();
         panels.sort_by(|left, right| left.id.cmp(right.id));
         panels
@@ -105,7 +138,7 @@ impl Window {
                 commands: panel
                     .commands
                     .iter()
-                    .filter(|id| self.session.registry().all().iter().any(|command| command.id == **id))
+                    .filter(|id| session.registry().all().iter().any(|command| command.id == **id))
                     .map(|id| id.to_string())
                     .collect(),
             })
@@ -113,8 +146,8 @@ impl Window {
     }
 
     /// The **command** with this id, if it is linked in.
-    pub fn command(&self, id: &str) -> Option<&CommandSpec> {
-        self.session.registry().all().iter().find(|command| command.id == id)
+    pub fn command(&self, id: &str) -> Option<CommandSpec> {
+        self.session().registry().all().iter().find(|command| command.id == id).cloned()
     }
 
     /// The **commands** that no panel shows.
@@ -122,7 +155,7 @@ impl Window {
     /// The panels are the batteries' own windows of commands, and what
     /// is left over is the kit's own: a front end shows both, and a
     /// command that is shown twice is a command with two doors.
-    pub fn commands_outside_panels(&self) -> Vec<&CommandSpec> {
+    pub fn commands_outside_panels(&self) -> Vec<CommandSpec> {
         let mut shown: Vec<&str> = Vec::new();
         for panel in &self.panels {
             shown.extend(panel.commands.iter().copied());
@@ -131,16 +164,16 @@ impl Window {
     }
 
     /// The **areas** the commands belong to, in order.
-    pub fn areas(&self) -> Vec<&str> {
-        let mut areas: Vec<&str> = self.commands().iter().map(|command| command.area).collect();
-        areas.sort_unstable();
+    pub fn areas(&self) -> Vec<String> {
+        let mut areas: Vec<String> = self.commands().iter().map(|command| command.area.to_string()).collect();
+        areas.sort();
         areas.dedup();
         areas
     }
 
     /// The **document**, as a list of rows: one a node.
     pub fn tree(&self) -> Vec<NodeRow> {
-        self.session
+        self.session()
             .document()
             .walk()
             .map(|node| NodeRow {
@@ -158,7 +191,7 @@ impl Window {
     /// that evaluated the document itself would have two answers to
     /// every question.
     pub fn plan(&self) -> Vec<PlanRow> {
-        self.session
+        self.session()
             .evaluate()
             .items
             .iter()
@@ -175,23 +208,30 @@ impl Window {
     ///
     /// A command that is not in the registry opens nothing.
     pub fn open(&mut self, id: &str) -> bool {
-        let Some(spec) = self.session.registry().get(id) else { return false };
-        let fields = spec
-            .params
-            .iter()
-            .map(|param| Field {
-                name: param.name.to_string(),
-                kind: param.kind,
-                required: param.required,
-                help: param.help.to_string(),
-                value: zero_of(param.kind),
-                // An optional parameter that nobody has filled in is
-                // **not sent**: the zero of a node reference is zero,
-                // and zero is a node that is not there.
-                set: param.required,
-            })
-            .collect();
-        self.form = Some(Form { id: spec.id.to_string(), label: spec.label.to_string(), fields });
+        let fields = {
+            let session = self.session();
+            let Some(spec) = session.registry().get(id) else { return false };
+            spec.params
+                .iter()
+                .map(|param| Field {
+                    name: param.name.to_string(),
+                    kind: param.kind,
+                    required: param.required,
+                    help: param.help.to_string(),
+                    value: zero_of(param.kind),
+                    // An optional parameter that nobody has filled in is
+                    // **not sent**: the zero of a node reference is zero,
+                    // and zero is a node that is not there.
+                    set: param.required,
+                })
+                .collect()
+        };
+        let (id, label) = {
+            let session = self.session();
+            let Some(spec) = session.registry().get(id) else { return false };
+            (spec.id.to_string(), spec.label.to_string())
+        };
+        self.form = Some(Form { id, label, fields });
         true
     }
 
@@ -234,7 +274,8 @@ impl Window {
     /// It is the same way in as the form's: the session's own, and
     /// nothing else.
     pub fn run_id(&mut self, id: &str, params: Json) -> Result<Outcome, EngineError> {
-        match self.session.execute(id, &params) {
+        let outcome = self.session().execute(id, &params);
+        match outcome {
             Ok(outcome) => {
                 self.log.push(outcome.message.clone());
                 Ok(outcome)
@@ -252,15 +293,12 @@ impl Window {
     /// **deepest** hit wins: a thing in a group is in front of the group
     /// that holds it.
     pub fn pick(&self, point: craftkit_sdk::Point) -> Option<u64> {
-        let document = self.session.document();
+        let session = self.session();
+        let document = session.document();
         document
             .walk_visible()
             .filter(|node| {
-                self.session
-                    .kinds()
-                    .get(&node.kind)
-                    .map(|kind| (kind.hit)(node, document, point))
-                    .unwrap_or(false)
+                session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, document, point)).unwrap_or(false)
             })
             .last()
             .map(|node| node.id)
@@ -294,7 +332,7 @@ impl Window {
     ///
     /// It is the session's state and the window asks it.
     pub fn is_selected(&self, node: u64) -> bool {
-        self.session.selected_ids().contains(&node)
+        self.session().selected_ids().contains(&node)
     }
 
     /// **Resize** a node, through the registry.
@@ -317,7 +355,7 @@ impl Window {
     /// group is in front of the group that holds it.
     pub fn handle_at(&self, point: craftkit_sdk::Point, tolerance: f64) -> Option<u64> {
         let tolerance = tolerance.max(0.0);
-        self.session
+        self.session()
             .document()
             .walk_visible()
             .filter(|node| {
@@ -338,12 +376,12 @@ impl Window {
     /// zoom outside them is clamped, because the wheel can send
     /// anything.
     pub fn zoom_by(&mut self, factor: f64) {
-        self.session.camera_mut().zoom_by(factor);
+        self.session().camera_mut().zoom_by(factor);
     }
 
     /// **Move** the camera, in the world's units.
     pub fn pan(&mut self, across: f64, down: f64) {
-        self.session.camera_mut().pan(across, down);
+        self.session().camera_mut().pan(across, down);
     }
 
     /// **Zoom about a point of the screen.**
@@ -353,7 +391,7 @@ impl Window {
     /// can say where it is without working out the world's mapping a
     /// second time.
     pub fn zoom_at(&mut self, factor: f64, at: craftkit_sdk::Point) {
-        self.session.camera_mut().zoom_at(factor, at);
+        self.session().camera_mut().zoom_at(factor, at);
     }
 
     /// What the window has to say.
@@ -376,13 +414,14 @@ impl Window {
     /// The camera is the **session's**, so the picture is seen through
     /// the same controls every other front end uses.
     pub fn picture(&self, width: usize, height: usize) -> Result<Picture, String> {
-        let camera = *self.session.camera();
+        let session = self.session();
+        let camera = *session.camera();
         let mut raster = craftkit_raster::Raster::new(width, height, camera)?;
         // The **kit** draws the document: every node that is not hidden
         // is offered to the kind that says what it is, and the handle of
         // the selected node is drawn on top. The window does not have a
         // rule of its own about what is seen.
-        self.session.paint_view(&mut raster);
+        session.paint_view(&mut raster);
         let image = raster.image();
         let mut pixels = Vec::with_capacity(image.width().saturating_mul(image.height()).saturating_mul(4));
         for y in 0..image.height() {

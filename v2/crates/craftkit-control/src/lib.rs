@@ -356,10 +356,23 @@ pub struct Server {
 impl Server {
     /// Serve a session, and say where it is listening.
     pub fn serve(session: Session, options: Options) -> Result<Server, ControlError> {
+        Server::serve_shared(Arc::new(Mutex::new(session)), options)
+    }
+
+    /// Serve a session that the caller **keeps**.
+    ///
+    /// The session is behind a lock, and the caller holds the same
+    /// lock: a program that has a session of its own — a window, say —
+    /// can open a channel over it, and a command that an agent runs
+    /// over the channel changes the document the program is showing.
+    ///
+    /// Without this the channel can only serve a session of its own,
+    /// and a program with a session already has two documents and one
+    /// of them is a copy.
+    pub fn serve_shared(session: Arc<Mutex<Session>>, options: Options) -> Result<Server, ControlError> {
         let listener = TcpListener::bind(options.address)?;
         let address = listener.local_addr()?;
         let stop = Arc::new(AtomicBool::new(false));
-        let session = Arc::new(Mutex::new(session));
         let token = options.token.clone();
 
         if let Some(path) = &options.announce {

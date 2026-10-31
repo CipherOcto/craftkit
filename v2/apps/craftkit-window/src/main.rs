@@ -63,6 +63,11 @@ enum What {
 struct App {
     /// The kit, as the window sees it.
     window: Window,
+    /// The **control channel**, if one was opened.
+    ///
+    /// It is held so that it stays open: a channel that is dropped is a
+    /// channel that is closed, and the window is the thing it serves.
+    control: Option<craftkit_control::Server>,
     /// The command being filled in.
     open: Option<String>,
     /// The values of the form, by name.
@@ -89,7 +94,15 @@ impl App {
     fn new() -> Result<App, Box<dyn std::error::Error + Send + Sync>> {
         let window =
             Window::new().map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
-        Ok(App { window, open: None, values: Vec::new(), picture: None, drawn: None, drag: None })
+        Ok(App {
+            window,
+            control: None,
+            open: None,
+            values: Vec::new(),
+            picture: None,
+            drawn: None,
+            drag: None,
+        })
     }
 
     /// **Open** a command: the form of what it wants.
@@ -128,7 +141,59 @@ fn main() {
         viewport: egui::ViewportBuilder::default().with_inner_size([1100.0, 700.0]),
         ..Default::default()
     };
-    let _ = eframe::run_native("craftkit", options, Box::new(|_cc| Ok(Box::new(App::new()?))));
+    let port = the_port();
+    let _ = eframe::run_native(
+        "craftkit",
+        options,
+        Box::new(move |_cc| {
+            let mut app = App::new()?;
+            if let Some(port) = port {
+                app.control = open_the_channel(&mut app.window, port);
+            }
+            Ok(Box::new(app))
+        }),
+    );
+}
+
+/// The port the channel listens on, if one was asked for.
+///
+/// The port is asked for on the command line: `--control 4711`.
+fn the_port() -> Option<u16> {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--control" {
+            return args.next().and_then(|port| port.parse().ok());
+        }
+    }
+    None
+}
+
+/// Open the **control channel** over the window's own session.
+///
+/// The channel serves the window's session and not a session of its
+/// own: the two are one document, and a command that an agent runs
+/// over the channel changes what the window is drawing.
+///
+/// The **token** is asked for and not invented: a channel with a token
+/// that a program can guess is a channel with no token, and the
+/// program that opens it is the one that decides who may drive it.
+fn open_the_channel(window: &mut Window, port: u16) -> Option<craftkit_control::Server> {
+    let token = std::env::var("CRAFTKIT_CONTROL_TOKEN").ok()?;
+    let options = craftkit_control::Options {
+        token,
+        address: std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+        announce: None,
+    };
+    match craftkit_control::Server::serve_shared(window.shared_session(), options) {
+        Ok(server) => {
+            println!("the control channel is listening on {}", server.address());
+            Some(server)
+        }
+        Err(error) => {
+            eprintln!("the control channel could not be opened: {error}");
+            None
+        }
+    }
 }
 
 /// The **commands**, by area, on the left.
@@ -208,9 +273,12 @@ fn tree(app: &App, ui: &mut egui::Ui) {
 
 /// The **picture** of the document, drawn through the kinds.
 fn picture(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui) {
-    let camera = app.window.session().camera();
-    let offset = camera.offset();
-    let drawn = (app.window.tree().len(), app.window.runs(), camera.zoom(), offset.x, offset.y);
+    let (offset, zoom) = {
+        let session = app.window.session();
+        let camera = session.camera();
+        (camera.offset(), camera.zoom())
+    };
+    let drawn = (app.window.tree().len(), app.window.runs(), zoom, offset.x, offset.y);
     if app.drawn != Some(drawn) {
         let size = ui.available_size();
         let width = size.x.max(1.0) as usize;
@@ -257,23 +325,20 @@ fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
         let tolerance = HANDLE_PIXELS as f64 / camera.zoom();
         let what = match app.window.handle_at(world, tolerance) {
             Some(node) => {
-                let place = app
-                    .window
-                    .session()
-                    .document()
-                    .node(node)
-                    .and_then(|node| node.rect)
-                    .map(|place| What::Resize { node, place });
+                let place = {
+                    let session = app.window.session();
+                    session
+                        .document()
+                        .node(node)
+                        .and_then(|node| node.rect)
+                        .map(|place| What::Resize { node, place })
+                };
                 place.unwrap_or(What::Camera)
             }
             None => {
                 let place = app.window.pick(world).and_then(|node| {
-                    app.window
-                        .session()
-                        .document()
-                        .node(node)
-                        .and_then(|node| node.rect)
-                        .map(|place| (node, place))
+                    let session = app.window.session();
+                    session.document().node(node).and_then(|node| node.rect).map(|place| (node, place))
                 });
                 match place {
                     Some((node, place)) => What::Move { node, place },
@@ -361,8 +426,10 @@ fn form(app: &mut App, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.heading(format!("{} — {}", form.label, id));
         let nodes: Vec<(u64, String)> = app.window.tree().into_iter().map(|row| (row.id, row.name)).collect();
-        let kinds: Vec<String> =
-            app.window.session().kinds().ids().iter().map(|kind| kind.to_string()).collect();
+        let kinds: Vec<String> = {
+            let session = app.window.session();
+            session.kinds().ids().iter().map(|kind| kind.to_string()).collect()
+        };
         for field in &form.fields {
             ui.label(format!("{}:", field.name));
             match field.kind {

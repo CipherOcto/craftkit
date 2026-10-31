@@ -49,6 +49,7 @@ craftkit-plugin-image = { path = "crates/craftkit-plugin-image", version = "0.2.
 # The **rasteriser**: a canvas that draws a document into a picture. A
 # **library**, not a plugin: it contributes nothing to the registry and
 # the linker does not wire it in.
+craftkit-control = { path = "crates/craftkit-control", version = "0.2.0" }
 craftkit-raster = { path = "crates/craftkit-raster", version = "0.2.0" }
 # The **terminal door**: a person drives the kit from a prompt. It is an
 # **application**, and it depends on everything.
