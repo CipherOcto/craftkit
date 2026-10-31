@@ -17,8 +17,13 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - three **commands**, `vector.rectangle`, `vector.ellipse` and
-//!   `vector.polygon`;
+//! - **ten commands**: `vector.rectangle`, `vector.ellipse` and
+//!   `vector.polygon` make shapes; `vector.path.unite`,
+//!   `vector.path.subtract`, `vector.path.intersect`,
+//!   `vector.path.simplify` and `vector.path.offset` work on whole
+//!   paths; and `vector.path.move` and `vector.path.handle` move a
+//!   point of a path and set the handles of the curves that leave and
+//!   arrive at it;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
