@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1218 tests.** The MCP server links **all fifteen batteries** in, so the
+**1221 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1218 tests
+cargo test          # 1221 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3600,6 +3600,7 @@ so.
 | a **bus that is read** | **built.** A track may read a bus, and a bus that is read is heard through the reader and not by itself; a reader holds no clips, has no sends and is not routed (§163) | §163 |
 | a **route that is honoured** | **built.** A track that feeds a bus is heard on that bus and not in the main mix, and a bus that feeds another bus is heard there; the buses are fed in the order they are read in (§164) | §164 |
 | a **track with a trim** | **built.** The trim is the level of the track's input and it comes before the inserts; the phase is a sign and not a level, and a trim outside the tree's range is refused (§165) | §165 |
+| a **clip with effects of its own** | **built.** An insert is on one thing — a track or a clip — and a clip's chain runs over the clip's own sound, after the clip's gain and before the track's inserts (§166) | §166 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11269,3 +11270,62 @@ level a track had.
   the same, and the tree's *fader* is the thing that has a lane.
 - **The tree's input monitoring is not there**: a track that is
   monitored hears the hardware input instead of its clips.
+
+## 166. A clip may carry effects of its own
+
+The tree's **clip effects** are an equaliser and a compressor on one
+clip and not on the track, and they run over that clip's own sound
+before it is mixed into the track. v2 had no effect that was a clip's
+own.
+
+### What was built
+
+- An insert is on **one thing**: a track or a clip, and not both and
+  not neither. The command says which, and says it by name.
+- A clip may carry a **chain of effects of its own**, and they run
+  over the clip's sound before it is mixed into the track.
+- The clip's **own gain** now comes before the clip's effects, as it
+  does in the tree, where the gain is multiplied into the clip before
+  the clip's chain runs.
+
+### What the port found
+
+- **The tree's clip effect is a pair and not a chain.** The tree's
+  clip carries an equaliser, a compressor and a gain, read from the
+  tree's key-value store, and the chain is a fixed pair that is either
+  there or bypassed. Here a clip's effect is any plugin in the kit's
+  own set — a plugin is a program and the set is open (§141) — so the
+  shape is the tree's and the contents are not.
+- **The clip's gain was in the wrong place.** The tree multiplies the
+  clip's gain into the clip while it renders it, and the track's
+  inserts run over the sum afterwards. Here the gain was applied when
+  the clip was summed into the track, which is *after* the track's
+  inserts: with a gain insert the two are the same, and with anything
+  that is not a gain they are not. A port that reads the mixer and
+  sees a gain applied at the sum has seen where the gain was *used* and
+  not where the tree applies it.
+- **An insert that is on nothing is an insert nobody can hear.** The
+  command took a track and nothing else, so a clip's effect had no way
+  to be said. The lane command had already found the shape — one thing
+  or the other — and the insert command had not.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/clipeffects.rs`): a clip may
+  carry an effect, the effect is the clip's own, and an insert is on
+  one thing.
+- **The clip's gain moved**, and with it the order of two steps in the
+  render. With a gain in an insert the sound is the same; with
+  anything else it is not, and it is now the tree's order.
+
+### What it does not settle
+
+- **The tree's equaliser and compressor are not in the kit.** The
+  kit's own set is a gain, a low pass and a delay (§ the plugins), so
+  a clip's effect is one of those and not an equaliser.
+- **The tree's clip effect is bypassed by a flag and not by an
+  insert**: `clip_fx.bypass.<clip>` is a flag on the session and not a
+  node in the document.
+- **The tree's clip effects are read from a key-value store**, which
+  is the tree's own shape for a parameter that belongs to no node;
+  here an insert is a node and carries its parameters.
