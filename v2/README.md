@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1221 tests.** The MCP server links **all fifteen batteries** in, so the
+**1224 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1221 tests
+cargo test          # 1224 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3601,6 +3601,7 @@ so.
 | a **route that is honoured** | **built.** A track that feeds a bus is heard on that bus and not in the main mix, and a bus that feeds another bus is heard there; the buses are fed in the order they are read in (§164) | §164 |
 | a **track with a trim** | **built.** The trim is the level of the track's input and it comes before the inserts; the phase is a sign and not a level, and a trim outside the tree's range is refused (§165) | §165 |
 | a **clip with effects of its own** | **built.** An insert is on one thing — a track or a clip — and a clip's chain runs over the clip's own sound, after the clip's gain and before the track's inserts (§166) | §166 |
+| a **track with takes** | **built.** A track may have several takes and one of them is the one that is played; the take is named, and a track whose active take is gone plays its first (§167) | §167 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11140,7 +11141,7 @@ is a strip that reads a bus, and v2 had no reader at all.
   is heard through the reader, a reader holds no clips, a reader has no
   sends, a reader is not routed, and a track reads one bus.
 - **One command** (`sound.track.input`) and **one relation kind**
-  (`input`). The MCP server now carries **202** commands.
+  (`input`). The MCP server now carries **205** commands.
 
 ### What it does not settle
 
@@ -11329,3 +11330,60 @@ own.
 - **The tree's clip effects are read from a key-value store**, which
   is the tree's own shape for a parameter that belongs to no node;
   here an insert is a node and carries its parameters.
+
+## 167. A track has takes, and one of them is played
+
+The tree's track has several **playlists** and an index of the one
+that is played. v2 had playlists and played every one of them at once:
+two takes of a track were the same sound twice.
+
+### What was built
+
+- A track may have **takes** — `sound.playlist.add` — and one of them
+  may be the one that is **played** — `sound.playlist.active`.
+- The take is **named**: a name is what a person says and an index is
+  what a program says.
+- A track whose active take is **not there** plays its first one, so
+  that a track is never silent by accident.
+- A take that is not there, and a take with a name the track already
+  has, are **refused by name**.
+
+### What the port found
+
+- **The playlists were there and the choice was not.** v2's track came
+  with a playlist called `A` and the clip command could name another
+  one — and the render walked every clip of the track and played them
+  all. A take is a *choice*, and a choice that is not in the tree is
+  not a choice: the tree's track holds several playlists and says which
+  one is played, and v2 held several playlists and said all of them.
+- **The tree's active take is an index and v2's is a name.** The tree
+  keeps `active_playlist: usize` beside its playlists. An index is
+  broken by a take being deleted — the takes move and the index does
+  not — and a name is not. The port prefers the name, and says so: the
+  two are the same thing said by two kinds of program.
+- **A track that is silent by accident is the worst kind of silence.**
+  The tree's index always points at a take that exists. Here the name
+  may name a take that has gone, and the rule is that the first take
+  is played instead: a track is never silent because a take was
+  removed.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/take.rs`): only the take that
+  is played is heard, the first take is played by default, and a take
+  that is not there is refused.
+- **Two commands** (`sound.playlist.add` and `sound.playlist.active`)
+  and **one field** in the track's payload — the name of the take that
+  is played — which is additive: a track written before this arc plays
+  its first take.
+
+### What it does not settle
+
+- **The tree's recording is not there.** A take in the tree is what a
+  recording makes: the transport records into a take and the take
+  becomes the one that is played. Here a take is made by hand.
+- **The tree's takes are drawn on the track's row**, and v2's sound
+  battery draws nothing at all.
+- **A take is not a clip.** The tree's clips belong to a playlist and
+  are moved between takes; here a clip belongs to the take it was
+  added to, and there is no command that moves it.
