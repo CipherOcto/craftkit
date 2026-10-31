@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1169 tests.** The MCP server links **all fifteen batteries** in, so the
+**1174 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1169 tests
+cargo test          # 1174 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3587,6 +3587,7 @@ so.
 | **hyphenation**: where a word may be broken | **built.** The breaker knows a **hyphenation point** — a flagged penalty — and the limit on how many may follow each other (§58); and now the kit **finds** them: the patterns say where the words of the language break, the heuristic answers for the words the patterns do not know, and the limits say how careful the answer is (§145) | §58, §145 |
 | a **caret**: where the reader is in the text | **built.** The caret is a **node** under the paragraph and it carries the character it stands before; the text is the words with a space between them, and the space is a character too; the caret's **place** is derived from the layout and not stored (§151) | §151 |
 | a **selection of characters** | **built.** The core asks a kind where the picked-out **part** of its node is, and the answer may be more than one piece; a paragraph's own unit is the character, so the SDK's span selection picks out characters and the paragraph says where they are (§152) | §22, §152 |
+| an **edit that replaces what is picked out** | **built.** Typing writes over the picked-out range and deleting takes it away; the caret stands after what was typed (§153) | §153 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10428,3 +10429,69 @@ no way to ask a kind where that part is.
 - **A part is a range and not a set.** The selection holds one range
   per node, so two ranges in one paragraph are two selections and the
   second replaces the first.
+
+## 153. The selection is replaced
+
+§152 said that the caret and the selection were two things and that a
+reader who picks out a range has a caret at one end of it in every word
+processor. The two are still two things — but an **edit** reads both.
+
+### What was built
+
+- **Typing writes over what is picked out.** `text.caret.type` reads
+  the session's selection: a range of characters in this paragraph is
+  replaced by what was typed, and the caret stands after it.
+- **Deleting takes away what is picked out.** `text.caret.delete`
+  takes the picked-out range away instead of the character before the
+  caret, and the caret stands where the range began.
+- The selection is **gone** after the edit: what was picked out has
+  been written over or taken away, and nothing is picked out any more.
+
+### What the port found
+
+- **An edit reads two pieces of state, and that is not a second path.**
+  The caret is the document's (§151) and the selection is the
+  session's (§22), and the command reads both — which is the same
+  bargain the sound battery's trim makes, where the range comes from
+  the selection (§ the sound's edit range). The rule that makes it
+  safe is the same: the *document* is changed in one place, by one
+  command, and the state that says where the reader is is read, not
+  written.
+- **An empty range is not a picked-out range.** The family's caret
+  *is* the selection — a selection with one end — so a range that
+  starts and ends in the same place is a caret. Here the caret is a
+  node and the selection picks things out, so an empty range picks
+  nothing out and the typing goes at the caret. The port found that
+  when it asked what a zero-width range should mean and could not
+  answer it with one rule for both.
+- **Writing over a range is one rule and not two.** The range is
+  replaced by the text: the characters of the range go and the typed
+  characters come, and the words are made again out of the text. The
+  port found that the range and the caret could be **one** rule — the
+  same rule with an empty range — once the text was the thing being
+  edited.
+
+### What it cost
+
+- **Five tests in the battery** (`crates/craftkit-plugin-text/tests/replace.rs`):
+  typing writes over what is picked out, typing with nothing picked out
+  types at the caret, an empty range picks nothing out, deleting takes
+  away what is picked out, and the selection of another paragraph is not
+  this one's.
+- **One helper** that reads the picked-out characters, and the text's
+  insert-and-delete became **replace-and-delete**: a range that is
+  empty is an insertion.
+
+### What it does not settle
+
+- **The caret does not move to the end of a picked-out range.** In the
+  family, picking out a range puts the caret at one end of it. Here
+  the caret stays where it was until the edit moves it, so a reader
+  who picks out a range and then types has the text replaced and the
+  caret after it — but a reader who picks out a range and *looks* has
+  a caret somewhere else.
+- **The selection is the session's and the caret is the document's, so
+  the undo restores one and not the other.** Undoing a typing brings
+  the text and the caret back, and the selection — which was cleared —
+  stays cleared. That is the honest difference between the two homes,
+  and the port left it.
