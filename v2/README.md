@@ -8603,3 +8603,100 @@ system's**.
 - **There is no battery**, and the reason is the format's own: AU's
   parameters and its state are CoreFoundation's, so a document has
   nothing portable to carry yet.
+
+## 122. The reference AU, exported by name
+
+The other side of the contract: a unit that exports it, built by the
+compiler and opened from the disk.
+
+### What was built
+
+- **A `cdylib`** — `craftkit-au-fixture` — that exports the **six
+  functions** the format names: the two that read and write a
+  property, the two that set the unit up and take it down, the one that
+  puts it back as it was, and the one that renders a block.
+- **One symbol of this tree's own**: `craftkit_au_instance`, which
+  hands back an instance. The name is in this tree's namespace so that
+  it cannot be mistaken for the format's.
+- The unit is an **output unit** that passes the audio through, and it
+  knows its rate, its shape and how many frames it takes in one slice.
+- **The unsafe is in one module**, and every block in it says why it
+  is sound: it is writing through a pointer the host gave it.
+
+### What the port found
+
+- **A unit is six functions and a bundle.** The format's unit has no
+  struct to read and no table to walk: the host finds each function by
+  name and calls it. That is a different shape from CLAP's table and
+  from VST3's factory, and it is the same kind of door as craftkit's
+  own (§34).
+- **The instance is not the unit.** A bundle holds the **code**, and an
+  instance holds the **state**, and the state is the platform's
+  manager's to make. This tree makes it with its own door, and says
+  so in the name of the door.
+- **The audio's direction is a convention.** The format's render call
+  is given the **output** buffers, and the input arrives through a
+  callback the host sets — and a callback is the platform's style of
+  saying "here is the input". This tree has no such thing: the first
+  buffer is what went in and the second is what comes out. That is the
+  tree's convention and it is written down in both places.
+
+### What it cost
+
+- one crate, **two tests**, and the **tenth** crate on the list of
+  exceptions.
+
+### What it does not settle
+
+- **The unit has no parameters and no state.** A parameter's name is a
+  CoreFoundation string, and the format's own state is the platform's
+  to hold. So there is nothing here for a document to carry — which is
+  why there is no battery yet.
+
+## 123. The AU host, opening a unit and driving it
+
+The last piece of the format: the door that opens the bundle and drives
+what comes back.
+
+### What was built
+
+- **A crate `craftkit-au`** that opens a bundle with `dlopen`, finds
+  the six symbols with `dlsym`, makes an instance through the tree's
+  own door, and drives it.
+- **Every symbol is found at once**, when the bundle is opened: a
+  bundle that is missing one is refused at the door and not halfway
+  through a render.
+- **The properties are copied out at once**, because they are the
+  unit's own memory and they may change the next moment. The rate, the
+  shape of the audio and the size of a slice are the three the tree
+  asks for.
+- **Nine tests** against the real bundle: the symbols, the instance,
+  the rate, the shape, the slice, the audio, and the two refusals.
+
+### What the port found
+
+- **A host that finds its symbols one at a time finds them too late.**
+  The bundle is opened once and every symbol is looked up then, so a
+  bundle that is not a unit is refused before anything is called.
+- **The instance borrows the bundle.** An instance holds addresses into
+  a library that is open, so the host's instance **borrows** the plugin
+  rather than holding a copy of it: the compiler says so, and a
+  program that dropped the bundle early would not compile.
+- **The tree's own door is named in the tree's own namespace.** A
+  symbol called `craftkit_au_instance` cannot be mistaken for one of
+  the format's, and the host says in its own words that it is using the
+  tree's door and not the platform's.
+
+### What it cost
+
+- one crate, **nine tests**, and the **ninth** crate on the list of
+  exceptions.
+
+### What it does not settle
+
+- **There is no battery**, and there will not be one until the format
+  has something portable to carry: its parameters and its state are
+  CoreFoundation's.
+- **The component manager is still not here.** The tree's own door
+  makes an instance; the platform's would make one from a unit it
+  found, and that is the piece this tree does not have.
