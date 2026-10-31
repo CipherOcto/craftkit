@@ -158,7 +158,7 @@ fn a_parameter_moves_and_the_plugin_knows() {
         let _ = plugin;
         instance.init().expect("the instance initialises");
         instance.activate(48_000.0, 1, 512).expect("the instance activates");
-        let mut block = ClapBlock::new(1, 4);
+        let mut block = ClapBlock::new(2, 4);
         // The gain is set to one and a half.
         instance.set_parameter(1, 1.5);
         instance.process(4, &mut block).expect("the plugin processes");
@@ -181,7 +181,7 @@ fn the_transport_reaches_the_plugin_and_comes_back() {
         let _ = plugin;
         instance.init().expect("the instance initialises");
         instance.activate(48_000.0, 1, 512).expect("the instance activates");
-        let mut block = ClapBlock::new(1, 4);
+        let mut block = ClapBlock::new(2, 4);
         // The music is four beats in, at a hundred and twenty beats a
         // minute, in three-four.
         instance.set_transport(ClapTransport {
@@ -214,7 +214,7 @@ fn a_note_reaches_the_plugin() {
         let _ = plugin;
         instance.init().expect("the instance initialises");
         instance.activate(48_000.0, 1, 512).expect("the instance activates");
-        let mut block = ClapBlock::new(1, 4);
+        let mut block = ClapBlock::new(2, 4);
         // A note on: middle C, at the velocity of a piano.
         instance.send_midi(0, [0x90, 60, 100]);
         instance.process(4, &mut block).expect("the plugin processes");
@@ -238,14 +238,14 @@ fn the_state_is_saved_and_given_back() {
         instance.init().expect("the instance initialises");
         // The gain is moved to one and a half.
         instance.set_parameter(1, 1.5);
-        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        instance.process(4, &mut ClapBlock::new(2, 4)).expect("the plugin processes");
         let saved = instance.save_state().expect("the state is saved");
         assert!(!saved.is_empty(), "the state is not empty");
         // The gain is moved again, and the state is given back.
         instance.set_parameter(1, 0.5);
-        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        instance.process(4, &mut ClapBlock::new(2, 4)).expect("the plugin processes");
         instance.load_state(&saved).expect("the state is given back");
-        instance.process(4, &mut ClapBlock::new(1, 4)).expect("the plugin processes");
+        instance.process(4, &mut ClapBlock::new(2, 4)).expect("the plugin processes");
         let parameters = instance.parameters().expect("the parameters are there");
         assert_eq!(parameters[0].value, 1.5, "the gain is where it was left");
     });

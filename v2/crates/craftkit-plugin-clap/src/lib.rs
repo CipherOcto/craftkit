@@ -47,7 +47,7 @@ use craftkit_derive::{Command, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text};
 
-use craftkit_clap::{ClapBlock, ClapDescriptor, ClapParameter, ClapPlugin};
+use craftkit_clap::{ClapDescriptor, ClapLayout, ClapParameter, ClapPlugin};
 
 /// The layer of the CLAP plugins.
 ///
@@ -89,6 +89,8 @@ impl PluginKind {
             "library": payload.library,
             "params": payload.params.iter().map(|param| param.to_json()).collect::<Vec<_>>(),
             "state_bytes": payload.state.len(),
+            "channels_in": payload.channels_in,
+            "channels_out": payload.channels_out,
         }))
     }
 }
@@ -153,6 +155,10 @@ pub struct PluginPayload {
     pub params: Vec<ParameterPayload>,
     /// Its state, as base64: the plugin's own bytes.
     pub state: String,
+    /// The channels going in, as the plugin said.
+    pub channels_in: u32,
+    /// The channels coming out, as the plugin said.
+    pub channels_out: u32,
 }
 
 impl PluginPayload {
@@ -166,6 +172,8 @@ impl PluginPayload {
             "version": self.version,
             "params": self.params.iter().map(|param| param.to_json()).collect::<Vec<_>>(),
             "state": self.state,
+            "channels_in": self.channels_in,
+            "channels_out": self.channels_out,
         })
     }
 
@@ -192,6 +200,8 @@ impl PluginPayload {
             version: value.get("version").and_then(|version| version.as_str()).unwrap_or("").to_string(),
             params,
             state: value.get("state").and_then(|state| state.as_str()).unwrap_or("").to_string(),
+            channels_in: value.get("channels_in").and_then(|count| count.as_u64()).unwrap_or(0) as u32,
+            channels_out: value.get("channels_out").and_then(|count| count.as_u64()).unwrap_or(0) as u32,
         })
     }
 }
@@ -220,6 +230,8 @@ struct Report {
     parameters: Vec<ClapParameter>,
     /// Its state, as bytes.
     state: Vec<u8>,
+    /// The shape of its audio, as the plugin said.
+    layout: Option<ClapLayout>,
 }
 
 /// **Open** the plugin, hand it the state it had, and ask it what it holds.
@@ -248,13 +260,16 @@ fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> 
     // arrive.
     if let Some((parameter, value)) = set {
         instance.set_parameter(parameter, value);
-        let mut block = ClapBlock::new(1, 1);
+        // The block is the plugin's own shape: the host does not guess
+        // how many channels a plugin has.
+        let mut block = instance.block(1).map_err(|error| fail("clap", error.to_string()))?;
         instance.process(1, &mut block).map_err(|error| fail("clap", error.to_string()))?;
     }
 
     let descriptor = instance.descriptor().map_err(|error| fail("clap", error.to_string()))?;
     let parameters = instance.parameters().map_err(|error| fail("clap", error.to_string()))?;
     let saved = instance.save_state().map_err(|error| fail("clap", error.to_string()))?;
+    let layout = instance.layout();
 
     // The instance is finished with: it is stopped, deactivated and
     // destroyed, and only then is the library closed.
@@ -262,7 +277,7 @@ fn talk(id: &str, path: &str, state: Option<&[u8]>, set: Option<(u32, f64)>) -> 
     instance.deactivate().map_err(|error| fail("clap", error.to_string()))?;
     instance.destroy();
 
-    Ok(Report { descriptor, parameters, state: saved })
+    Ok(Report { descriptor, parameters, state: saved, layout })
 }
 
 /// An error, in the kit's own shape.
@@ -374,6 +389,8 @@ impl AttachPlugin {
             version: report.descriptor.version.clone(),
             params: report.parameters.iter().map(parameter_of).collect(),
             state: encode_state(&report.state)?,
+            channels_in: report.layout.map(|layout| layout.inputs).unwrap_or(0),
+            channels_out: report.layout.map(|layout| layout.outputs).unwrap_or(0),
         };
         let node = session.document_mut()?.add_node(payload.name.clone(), "clap.plugin", None);
         if let Some(node) = session.document_mut()?.node_mut(node) {

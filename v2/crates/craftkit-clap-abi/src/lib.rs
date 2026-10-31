@@ -466,6 +466,66 @@ pub struct ClapHostState {
 /// The id of the **parameters** extension.
 pub const PARAMS_EXTENSION: &str = "clap.params";
 
+/// The id of the **audio ports** extension.
+///
+/// A plugin says how many ports it has and what each one is, and the
+/// host asks it: the channel count is the plugin's own, and a host that
+/// guesses it is a host that breaks the plugins that check.
+pub const AUDIO_PORTS_EXTENSION: &str = "clap.audio-ports";
+
+/// The port is the **main** one of the plugin.
+pub const AUDIO_PORT_IS_MAIN: u32 = 1 << 0;
+
+/// The port's **name** is this kind of port: `stereo`, `mono`, and so on.
+///
+/// The format says the type is a **string the plugin owns**, so it is a
+/// pointer and the host copies it out.
+pub const PORT_TYPE_STEREO: &str = "stereo";
+
+/// What one **audio port** of a plugin is.
+///
+/// The name is a fixed-size array and the type is a pointer to the
+/// plugin's own string: the first because a port's name is a short,
+/// fixed thing, and the second because the format says the type is a
+/// string the plugin owns.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapAudioPortInfo {
+    /// The port's id: the name a host asks by.
+    pub id: u32,
+    /// The port's name, for a person.
+    pub name: [c_char; NAME_SIZE],
+    /// What the port is: the main one, and so on.
+    pub flags: u32,
+    /// How many channels the port has.
+    pub channel_count: u32,
+    /// What kind of port it is: `stereo`, `mono`, and so on.
+    pub port_type: *const c_char,
+    /// The port this one shares its buffer with, if it shares one.
+    pub in_place_pair: u32,
+}
+
+/// The **audio ports** a plugin has.
+///
+/// A port is a group of channels: a plugin with one stereo input and
+/// one stereo output has **one** input port and **one** output port,
+/// and **two** channels each.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ClapPluginAudioPorts {
+    /// How many ports the plugin has on that side.
+    pub count: Option<extern "C" fn(plugin: *const ClapPlugin, is_input: bool) -> u32>,
+    /// What the port at that index is.
+    pub get: Option<
+        extern "C" fn(
+            plugin: *const ClapPlugin,
+            index: u32,
+            is_input: bool,
+            info: *mut ClapAudioPortInfo,
+        ) -> bool,
+    >,
+}
+
 /// How long a parameter's name may be, in bytes.
 pub const NAME_SIZE: usize = 256;
 

@@ -267,6 +267,7 @@ impl ClapFactory<'_> {
             state,
             events: RefCell::new(EventState::default()),
             pushed: RefCell::new(EventState::default()),
+            layout: RefCell::new(None),
             _factory: PhantomData,
         })
     }
@@ -455,6 +456,30 @@ impl ClapBlock {
     pub fn new(channels: usize, frames: usize) -> ClapBlock {
         ClapBlock { inputs: vec![vec![0.0; frames]; channels], outputs: vec![vec![0.0; frames]; channels] }
     }
+
+    /// A block of that many frames, with so many channels **in** and so
+    /// many **out**.
+    ///
+    /// The two are apart because a plugin's ports are: a synthesiser
+    /// has no input at all and two outputs, and a host that gave it a
+    /// block with two inputs would be giving it a layout it did not ask
+    /// for.
+    pub fn with_channels(inputs: usize, outputs: usize, frames: usize) -> ClapBlock {
+        ClapBlock { inputs: vec![vec![0.0; frames]; inputs], outputs: vec![vec![0.0; frames]; outputs] }
+    }
+}
+
+/// The **layout** a plugin asked for: how many channels in and out.
+///
+/// It is the plugin's own, and it is asked for once: the format says
+/// the plugin is activated with the layout it asked for, and a host
+/// that gives it another is a host that breaks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClapLayout {
+    /// The channels going in.
+    pub inputs: u32,
+    /// The channels coming out.
+    pub outputs: u32,
 }
 
 /// One **parameter** of a plugin, as the host reads it.
@@ -477,6 +502,27 @@ pub struct ClapParameter {
     pub default_value: f64,
     /// The value the parameter is set to, as the plugin says it is.
     pub value: f64,
+}
+
+/// One **audio port** of a plugin, as the host reads it.
+///
+/// A port is a group of channels: a plugin with one stereo input has
+/// one port and two channels. Everything is **owned**: the names were
+/// copied out of the plugin's own memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClapPort {
+    /// The port's id: the name a host asks by.
+    pub id: u32,
+    /// The port's name, for a person.
+    pub name: String,
+    /// What the port is: the main one, and so on.
+    pub flags: u32,
+    /// How many channels the port has.
+    pub channel_count: u32,
+    /// What kind of port it is: `stereo`, `mono`, and so on.
+    pub port_type: String,
+    /// The port this one shares its buffer with, if it shares one.
+    pub in_place_pair: u32,
 }
 
 /// A **plugin instance**: a plugin that has been made.
@@ -502,6 +548,11 @@ pub struct ClapInstance<'a> {
     events: RefCell<EventState>,
     /// The events the plugin gave the host.
     pushed: RefCell<EventState>,
+    /// The **layout** the plugin asked for, once it has been asked.
+    ///
+    /// It is `None` when the plugin does not say: the extension is
+    /// optional, and a host that guesses is a host that says so.
+    layout: RefCell<Option<ClapLayout>>,
     /// The factory it came from, so that it cannot outlive it.
     _factory: PhantomData<&'a ClapFactory<'a>>,
 }
@@ -520,7 +571,40 @@ impl ClapInstance<'_> {
 
     /// The instance is to work at that rate.
     pub fn activate(&self, sample_rate: f64, min_frames: u32, max_frames: u32) -> Result<()> {
-        foreign::plugin_activate(self.plugin, sample_rate, min_frames, max_frames).map_err(ClapError::new)
+        foreign::plugin_activate(self.plugin, sample_rate, min_frames, max_frames).map_err(ClapError::new)?;
+        // The plugin is asked what layout it wants, **once**: the
+        // format says the plugin is activated with the layout it asked
+        // for, and a host that guesses is a host that breaks it.
+        let layout = match (self.channels(true), self.channels(false)) {
+            (Ok(inputs), Ok(outputs)) => Some(ClapLayout { inputs, outputs }),
+            // The extension is optional. A plugin that does not say is
+            // a plugin the host cannot check, and the host says so by
+            // not checking.
+            _ => None,
+        };
+        *self.layout.borrow_mut() = layout;
+        Ok(())
+    }
+
+    /// The **layout** the plugin asked for, if it said.
+    ///
+    /// It is `None` when the plugin does not have the audio-ports
+    /// extension: the host cannot know the layout of a plugin that
+    /// does not say, and it does not pretend to.
+    pub fn layout(&self) -> Option<ClapLayout> {
+        *self.layout.borrow()
+    }
+
+    /// A **block** of the plugin's own shape.
+    ///
+    /// The block is built from the layout the plugin asked for, so a
+    /// host does not have to guess: the format says the plugin is
+    /// activated with that layout, and a plugin that checks refuses
+    /// another one — by saying it did not process the block.
+    pub fn block(&self, frames: usize) -> Result<ClapBlock> {
+        let layout =
+            self.layout().ok_or_else(|| ClapError::new("the plugin has not said what shape its audio is"))?;
+        Ok(ClapBlock::with_channels(layout.inputs as usize, layout.outputs as usize, frames))
     }
 
     /// The instance is to stop working.
@@ -655,6 +739,29 @@ impl ClapInstance<'_> {
         foreign::plugin_parameters(self.plugin).map_err(ClapError::new)
     }
 
+    /// The **audio ports** the plugin has on that side.
+    ///
+    /// The channel count is the **plugin's own**, and the host asks for
+    /// it rather than guessing: a host that guesses is a host that
+    /// breaks the plugins that check, and a port is a group of channels
+    /// — one stereo port is two channels.
+    pub fn audio_ports(&self, is_input: bool) -> Result<Vec<ClapPort>> {
+        foreign::plugin_audio_ports(self.plugin, is_input).map_err(ClapError::new)
+    }
+
+    /// How many **channels** the plugin has on that side.
+    ///
+    /// This is the number a host must use: the format says the plugin
+    /// is activated with the layout it asked for, and a host that
+    /// gives it another is a host that breaks it.
+    pub fn channels(&self, is_input: bool) -> Result<u32> {
+        let mut total = 0u32;
+        for port in self.audio_ports(is_input)? {
+            total = total.saturating_add(port.channel_count);
+        }
+        Ok(total)
+    }
+
     /// The plugin's **state**, as bytes.
     ///
     /// The state is **opaque**: the plugin writes it and the host
@@ -736,10 +843,10 @@ mod foreign {
     use std::sync::atomic::Ordering;
 
     use craftkit_clap_abi::{
-        ClapAudioBuffer, ClapEventHeader, ClapHost, ClapIStream, ClapInputEvents, ClapOStream,
-        ClapOutputEvents, ClapParamInfo, ClapPlugin as ClapPluginInstance, ClapPluginDescriptor,
-        ClapPluginEntry, ClapPluginFactory, ClapPluginParams, ClapPluginState, ClapProcess,
-        ClapProcessStatus, ClapVersion,
+        ClapAudioBuffer, ClapAudioPortInfo, ClapEventHeader, ClapHost, ClapIStream, ClapInputEvents,
+        ClapOStream, ClapOutputEvents, ClapParamInfo, ClapPlugin as ClapPluginInstance, ClapPluginAudioPorts,
+        ClapPluginDescriptor, ClapPluginEntry, ClapPluginFactory, ClapPluginParams, ClapPluginState,
+        ClapProcess, ClapProcessStatus, ClapVersion,
     };
 
     use super::{ClapDescriptor, HostState, StreamState};
@@ -1316,6 +1423,55 @@ mod foreign {
         String::from_utf8_lossy(&text).into_owned()
     }
 
+    /// The plugin's **audio ports** on that side, read out at once.
+    ///
+    /// Everything is **owned**: the names were copied out of the
+    /// plugin's own arrays, and the type is a string the plugin owns,
+    /// so it is copied too.
+    pub fn plugin_audio_ports(
+        plugin: *const ClapPluginInstance,
+        is_input: bool,
+    ) -> Result<Vec<super::ClapPort>, String> {
+        let ports = plugin_audio_ports_extension(plugin)?;
+        // SAFETY: the extension is the plugin's own table, inside a
+        // library that is open.
+        let count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*ports).count)) };
+        let get = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*ports).get)) };
+        let Some(count) = count else {
+            return Err("the plugin's audio ports cannot be counted".to_string());
+        };
+        let Some(get) = get else {
+            return Err("the plugin's audio ports cannot be read".to_string());
+        };
+        let total = count(plugin, is_input);
+        let mut found = Vec::with_capacity(total as usize);
+        for index in 0..total {
+            let mut info = ClapAudioPortInfo {
+                id: 0,
+                name: [0; craftkit_clap_abi::NAME_SIZE],
+                flags: 0,
+                channel_count: 0,
+                port_type: std::ptr::null(),
+                in_place_pair: 0,
+            };
+            // The plugin's own function, called with the instance back
+            // and the index, as the format says. It fills in the
+            // information the host asked for.
+            if !get(plugin, index, is_input, &mut info) {
+                return Err(format!("the plugin would not say what port {index} is"));
+            }
+            found.push(super::ClapPort {
+                id: info.id,
+                name: read_fixed(&info.name),
+                flags: info.flags,
+                channel_count: info.channel_count,
+                port_type: read_string(info.port_type)?,
+                in_place_pair: info.in_place_pair,
+            });
+        }
+        Ok(found)
+    }
+
     /// The plugin's **state**, as bytes.
     ///
     /// The plugin writes into a stream and the host keeps what was
@@ -1381,6 +1537,29 @@ mod foreign {
             return Err(format!("the plugin has no `{}`", craftkit_clap_abi::STATE_EXTENSION));
         }
         Ok(extension as *const ClapPluginState)
+    }
+
+    /// The plugin's **audio ports** extension.
+    fn plugin_audio_ports_extension(
+        plugin: *const ClapPluginInstance,
+    ) -> Result<*const ClapPluginAudioPorts, String> {
+        // SAFETY: the instance is the plugin's own struct, inside a
+        // library that is open.
+        let get_extension = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*plugin).get_extension)) };
+        let Some(get_extension) = get_extension else {
+            return Err("the plugin has no extensions".to_string());
+        };
+        let id = match CString::new(craftkit_clap_abi::AUDIO_PORTS_EXTENSION) {
+            Ok(id) => id,
+            Err(_) => return Err("the extension's name is not a C string".to_string()),
+        };
+        // The plugin's own function, called with the instance back and
+        // the extension's id, as the format says.
+        let extension = get_extension(plugin, id.as_ptr());
+        if extension.is_null() {
+            return Err(format!("the plugin has no `{}`", craftkit_clap_abi::AUDIO_PORTS_EXTENSION));
+        }
+        Ok(extension as *const ClapPluginAudioPorts)
     }
 
     /// The plugin writes its state, and the host keeps it.

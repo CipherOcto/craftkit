@@ -189,10 +189,11 @@ mod exports {
     use std::ffi::{c_char, c_void};
 
     use craftkit_clap_abi::{
-        ClapEventHeader, ClapEventMidi, ClapEventParamValue, ClapEventTransport, ClapHost, ClapIStream,
-        ClapInputEvents, ClapOStream, ClapOutputEvents, ClapParamInfo, ClapPlugin, ClapPluginFactory,
-        ClapPluginParams, ClapPluginState, ClapProcess, ClapProcessStatus, PARAMS_EXTENSION,
-        PLUGIN_FACTORY_ID, STATE_EXTENSION,
+        AUDIO_PORTS_EXTENSION, ClapAudioPortInfo, ClapEventHeader, ClapEventMidi, ClapEventParamValue,
+        ClapEventTransport, ClapHost, ClapIStream, ClapInputEvents, ClapOStream, ClapOutputEvents,
+        ClapParamInfo, ClapPlugin, ClapPluginAudioPorts, ClapPluginFactory, ClapPluginParams,
+        ClapPluginState, ClapProcess, ClapProcessStatus, PARAMS_EXTENSION, PLUGIN_FACTORY_ID,
+        STATE_EXTENSION,
     };
 
     /// The entry point of this plugin, found by name.
@@ -276,8 +277,69 @@ mod exports {
         if wanted.to_bytes() == STATE_EXTENSION.as_bytes() {
             return &STATE_TABLE as *const ClapPluginState as *const c_void;
         }
+        if wanted.to_bytes() == AUDIO_PORTS_EXTENSION.as_bytes() {
+            return &PORTS_TABLE as *const ClapPluginAudioPorts as *const c_void;
+        }
         std::ptr::null()
     }
+
+    /// How many **channels** the plugin has, each way.
+    ///
+    /// The plugin is **stereo**: one port in and one port out, and two
+    /// channels in each. A host that gives it one channel is a host
+    /// that gives it a layout it did not ask for.
+    const CHANNELS: u32 = 2;
+
+    /// The name of the plugin's port.
+    const PORT_NAME: &str = "main";
+
+    /// What kind of port it is.
+    ///
+    /// The format says the type is a **C string** the plugin owns, so
+    /// it ends with a zero byte: a Rust string does not, and a host
+    /// that reads one as a C string reads past its end.
+    const PORT_TYPE: &[u8] = b"stereo\0";
+
+    /// How many **ports** the plugin has on that side: one, either way.
+    ///
+    /// A port is a group of channels, and this plugin has one stereo
+    /// port in and one stereo port out: two channels each.
+    pub(super) extern "C" fn ports_count(_plugin: *const ClapPlugin, _is_input: bool) -> u32 {
+        1
+    }
+
+    /// What the **port** at that index is.
+    pub(super) extern "C" fn ports_get(
+        _plugin: *const ClapPlugin,
+        index: u32,
+        _is_input: bool,
+        info: *mut ClapAudioPortInfo,
+    ) -> bool {
+        if index != 0 || info.is_null() {
+            return false;
+        }
+        // SAFETY: the host asked for a port's information, and it gave
+        // the room it wants it written into.
+        unsafe {
+            let info = &mut *info;
+            info.id = 1;
+            info.flags = craftkit_clap_abi::AUDIO_PORT_IS_MAIN;
+            info.channel_count = CHANNELS;
+            info.port_type = PORT_TYPE.as_ptr() as *const c_char;
+            info.in_place_pair = 0;
+            let name = PORT_NAME.as_bytes();
+            let count = name.len().min(info.name.len() - 1);
+            for (index, byte) in name.iter().take(count).enumerate() {
+                info.name[index] = *byte as c_char;
+            }
+            info.name[count] = 0;
+        }
+        true
+    }
+
+    /// The **audio ports** table of the plugin.
+    static PORTS_TABLE: ClapPluginAudioPorts =
+        ClapPluginAudioPorts { count: Some(ports_count), get: Some(ports_get) };
 
     /// The **state** table of the plugin.
     static STATE_TABLE: ClapPluginState = ClapPluginState { save: Some(save_state), load: Some(load_state) };
@@ -624,6 +686,38 @@ mod exports {
         if !state.initialised {
             return ClapProcessStatus::ContinueIfNotProcessed;
         }
+        // SAFETY: the block is the host's own, and it lives for the
+        // length of the call.
+        let frames = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).frames_count)) };
+        let inputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_inputs)) };
+        let outputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_outputs)) };
+        if outputs.is_null() {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // SAFETY: the output buffer is the host's own, and it holds the
+        // addresses of its channels.
+        let output_channels = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).data32)) };
+        let output_count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).channel_count)) };
+        if output_channels.is_null() {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
+        // SAFETY: the input buffer is the host's own, and it holds the
+        // addresses of its channels.
+        let (input_channels, input_count) = if inputs.is_null() {
+            (std::ptr::null_mut(), 0u32)
+        } else {
+            (unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).data32)) }, unsafe {
+                std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).channel_count))
+            })
+        };
+        // The **layout** is the one the plugin asked for. A host that
+        // gives another one is a host the plugin refuses: the format
+        // says the plugin is activated with the layout it asked for,
+        // and a plugin that checks is a plugin that breaks a host that
+        // guessed.
+        if output_count != CHANNELS || input_count != CHANNELS {
+            return ClapProcessStatus::ContinueIfNotProcessed;
+        }
         // The events the host gave: a parameter value is the one the
         // host offers, and the plugin takes it.
         let in_events = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).in_events)) };
@@ -666,30 +760,6 @@ mod exports {
         // length of the call.
         let out_events = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).out_events)) };
         report_value(out_events, 2, state.tempo);
-        // SAFETY: the block is the host's own, and it lives for the
-        // length of the call.
-        let frames = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).frames_count)) };
-        let inputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_inputs)) };
-        let outputs = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*process).audio_outputs)) };
-        if outputs.is_null() {
-            return ClapProcessStatus::ContinueIfNotProcessed;
-        }
-        // SAFETY: the output buffer is the host's own, and it holds the
-        // addresses of its channels.
-        let output_channels = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).data32)) };
-        let output_count = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*outputs).channel_count)) };
-        if output_channels.is_null() {
-            return ClapProcessStatus::ContinueIfNotProcessed;
-        }
-        // SAFETY: the input buffer is the host's own, and it holds the
-        // addresses of its channels.
-        let (input_channels, input_count) = if inputs.is_null() {
-            (std::ptr::null_mut(), 0u32)
-        } else {
-            (unsafe { std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).data32)) }, unsafe {
-                std::ptr::read_unaligned(std::ptr::addr_of!((*inputs).channel_count))
-            })
-        };
         for channel in 0..output_count as usize {
             // SAFETY: the channel is one of the buffer's own, and the
             // address it holds is the host's own memory.

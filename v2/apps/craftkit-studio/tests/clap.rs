@@ -36,6 +36,10 @@ fn a_plugin_is_attached_to_the_document() {
     assert_eq!(node.kind, "clap.plugin", "the node is a plugin");
     assert_eq!(node.data.get("id").and_then(|id| id.as_str()), Some(PLUGIN), "and it is that plugin");
     assert_eq!(node.data.get("name").and_then(|name| name.as_str()), Some("Craftkit Reference"));
+    // The shape of the plugin's audio is the plugin's own, and the
+    // document says what the plugin said.
+    assert_eq!(node.data.get("channels_in").and_then(|count| count.as_u64()), Some(2));
+    assert_eq!(node.data.get("channels_out").and_then(|count| count.as_u64()), Some(2));
 }
 
 /// The **state** is the plugin's own bytes, and the host does not read
