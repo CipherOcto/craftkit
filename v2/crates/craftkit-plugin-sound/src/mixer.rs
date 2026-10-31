@@ -447,6 +447,14 @@ impl AddRoute {
                 });
             }
         }
+        // A **reader** is heard in the main mix: it takes a bus into
+        // the mix and does not send its sound anywhere else.
+        if reads_bus(session.document(), track) {
+            return Err(EngineError::Failed {
+                id: "sound.route.add".to_string(),
+                message: format!("the track `{track}` reads a bus, and it is heard in the main mix"),
+            });
+        }
         let relation = craftkit_sdk::Relation::new(track, bus, "route");
         if !session.document_mut()?.add_relation(relation) {
             return Err(EngineError::Failed {
@@ -457,6 +465,107 @@ impl AddRoute {
         Ok(Outcome::changed(format!("the track `{track}` feeds the bus `{bus}`"))
             .with_data(serde_json::json!({ "track": track, "bus": bus })))
     }
+}
+
+/// Make a track **read** a bus.
+///
+/// A bus is a **destination**: sound collects there and is not heard
+/// there. Something must read it and take it into the mix — the tree's
+/// aux is a strip that reads a bus, and the bus is silent on its own.
+///
+/// The reading is a **relation**: the node says what it is and the
+/// relation says what it reads.
+#[derive(Command)]
+#[command(
+    id = "sound.track.input",
+    area = "sound",
+    layer = "sound",
+    icon = "link",
+    menu("Track", "Input"),
+    mutates,
+    undoable
+)]
+pub struct AddInput {
+    /// The track that reads the bus.
+    pub track: NodeRef,
+    /// The bus it reads.
+    pub bus: NodeRef,
+}
+
+impl AddInput {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let track = self.track.0;
+        let bus = self.bus.0;
+        match session.document().node(track) {
+            Some(node) if node.kind == "sound.track" => {}
+            Some(node) => {
+                return Err(EngineError::Failed {
+                    id: "sound.track.input".to_string(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            None => {
+                return Err(EngineError::Failed {
+                    id: "sound.track.input".to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            }
+        }
+        match session.document().node(bus) {
+            Some(node) if node.kind == "sound.bus" => {}
+            Some(node) => {
+                return Err(EngineError::Failed {
+                    id: "sound.track.input".to_string(),
+                    message: format!("the node `{bus}` is a `{}` and not a bus", node.kind),
+                });
+            }
+            None => {
+                return Err(EngineError::Failed {
+                    id: "sound.track.input".to_string(),
+                    message: format!("there is no bus `{bus}`"),
+                });
+            }
+        }
+        // A track reads **one** bus: a reader with two inputs is a
+        // reader with no meaning.
+        for relation in session.document().relations_from(track, Some("input")) {
+            if relation.to != bus {
+                return Err(EngineError::Failed {
+                    id: "sound.track.input".to_string(),
+                    message: format!("the track `{track}` already reads the bus `{}`", relation.to),
+                });
+            }
+        }
+        let relation = craftkit_sdk::Relation::new(track, bus, "input");
+        if !session.document_mut()?.add_relation(relation) {
+            return Err(EngineError::Failed {
+                id: "sound.track.input".to_string(),
+                message: format!("the track `{track}` already reads the bus `{bus}`"),
+            });
+        }
+        Ok(Outcome::changed(format!("the track `{track}` reads the bus `{bus}`"))
+            .with_data(serde_json::json!({ "track": track, "bus": bus })))
+    }
+}
+
+/// Whether a track **reads** a bus.
+///
+/// A reader takes the bus's sound into the mix, and the bus is not
+/// heard by itself: the tree's bus is read by an aux and is silent on
+/// its own.
+pub fn reads_bus(document: &Document, track: u64) -> bool {
+    !document.relations_from(track, Some("input")).is_empty()
+}
+
+/// The tracks that **read** a bus: the reader and the bus it reads.
+pub fn readers_of(document: &Document) -> Vec<(u64, u64)> {
+    let mut readers = Vec::new();
+    for node in document.walk().filter(|node| node.kind == "sound.track") {
+        for relation in document.relations_from(node.id, Some("input")) {
+            readers.push((node.id, relation.to));
+        }
+    }
+    readers
 }
 
 /// Put a plugin in a slot on a track.
@@ -649,6 +758,14 @@ impl AddSend {
         }
         let mute = self.mute.map(|mute| mute.0).unwrap_or(false);
         let pre_fader = self.pre_fader.map(|pre| pre.0).unwrap_or(false);
+        // A **reader** carries the bus's sound and nothing else: it
+        // takes a bus into the mix and does not copy itself anywhere.
+        if reads_bus(session.document(), track) {
+            return Err(EngineError::Failed {
+                id: "sound.send.add".to_string(),
+                message: format!("the track `{track}` reads a bus, and it has no sends"),
+            });
+        }
         let payload = SendPayload { level_db, pan, mute, pre_fader };
         let id = session.document_mut()?.add_node_with_under(
             Some(track),

@@ -15,11 +15,11 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-three commands**, one for each thing a person does to a
+//! - **twenty-four commands**, one for each thing a person does to a
 //!   sound document: make a track, make a clip, set the tempo, set the
 //!   meter, make a marker, make a source, set the session, and the rest
 //!   that came with the mixer — the bus, the send, the insert, the lane,
-//!   the route, the peaks and the render;
+//!   the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
 //! - an **evaluator**, `sound.timeline`, which says what the document
@@ -1160,6 +1160,15 @@ impl AddClip {
             }
             _ => {}
         }
+        // A **reader** takes a bus into the mix: it holds a bus and not
+        // a playlist.
+        if mixer::reads_bus(session.document(), self.track.0) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.add".to_string(),
+                message: "a track that reads a bus holds no clips: it has a bus and not a playlist"
+                    .to_string(),
+            });
+        }
         let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
         let payload = ClipPayload {
             start,
@@ -1988,7 +1997,13 @@ impl RenderSound {
         // it.
         let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
         let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
-        for track in session.document().walk().filter(|node| node.kind == "sound.track" && !is_master(node)) {
+        // The **readers**: the tracks that read a bus. A reader is
+        // finished after the buses are, because its sound is the bus's
+        // sound.
+        let readers = mixer::readers_of(session.document());
+        for track in session.document().walk().filter(|node| {
+            node.kind == "sound.track" && !is_master(node) && !mixer::reads_bus(session.document(), node.id)
+        }) {
             let mut signal = vec![0.0_f32; frames];
             for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
                 let Some(clip) = session.document().node(*clip_id) else { continue };
@@ -2073,6 +2088,33 @@ impl RenderSound {
             }
             buses.push((bus.id, signal));
         }
+        // The **readers**: a track that reads a bus takes the bus's
+        // sound into the mix, with its own inserts and its own fader.
+        // A bus that is read is not heard by itself: the tree's bus is
+        // read by an aux and is silent on its own.
+        for (reader, bus) in &readers {
+            let Some((_, bus_signal)) = buses.iter().find(|(id, _)| id == bus) else { continue };
+            let Some(track) = session.document().node(*reader) else { continue };
+            let mut signal = bus_signal.clone();
+            for insert in inserts_of(session.document(), track) {
+                if insert.bypass {
+                    continue;
+                }
+                let mut plugin = craftkit_plugins::make(
+                    &insert.plugin,
+                    &craftkit_plugins::Params::from_map(insert.params),
+                )
+                .map_err(|error| EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: error.to_string(),
+                })?;
+                plugin.process(&mut signal, channels.max(1) as usize, rate);
+            }
+            let automation = automate::automation_of(session.document(), track);
+            let gated = automate::apply_mute(&automation, &signal, channels.max(1) as usize, 0);
+            let faded = automate::apply_fader(&automation, &gated, channels.max(1) as usize, 0);
+            tracks.push((*reader, faded, automation));
+        }
         // The **master** is the file: every track and every bus.
         let mut master = vec![0.0_f32; frames];
         for (_, signal, automation) in &tracks {
@@ -2082,7 +2124,12 @@ impl RenderSound {
             let own = automate::apply_pan(automation, signal, channels.max(1) as usize, 0);
             add_into(&mut master, &own, 0, 1.0);
         }
-        for (_, signal) in &buses {
+        for (bus, signal) in &buses {
+            // A bus that is **read** is heard through the reader and
+            // not by itself.
+            if readers.iter().any(|(_, read)| read == bus) {
+                continue;
+            }
             add_into(&mut master, signal, 0, 1.0);
         }
         // The **master faders**: a track of the kind `master` holds a
