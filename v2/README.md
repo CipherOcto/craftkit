@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**880 tests.** The MCP server links **all fourteen batteries** in, so the
+**885 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **214** of them, and **228** with
+on its own, with no features, carries **218** of them, and **232** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1051,7 +1051,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 880 tests
+cargo test          # 885 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7691,3 +7691,49 @@ rules that say the same thing drift apart.
 - **A node is on one layer and not many.** A drawing that puts a
   shape on two layers has to say which one it is on, and the kit says
   there is one.
+
+---
+
+## 104. The kit draws the document
+
+The window had a resize handle it could drag and not see: the picture
+was drawn by the window, node by node, and the handle was not a node,
+so it was not drawn.
+
+### What was built
+
+- The **session paints**: every node that is not hidden is offered to
+  the kind that says what it is, and the **resize handle** of the
+  selected node is drawn on top.
+- The window and the studio ask the session to draw, and keep no rule
+  of their own about what is seen.
+- The handle is a **screen** size: eight pixels across, whatever the
+  zoom, and how big that is in the world's units comes from the camera.
+
+### What the port found
+
+- **A front end that draws the document has a second rule for what is
+  seen.** The window walked the document and asked each kind to paint
+  it, and the studio did the same, and the two were the same rule
+  written twice — which is how the CAD's colour rule drifted from the
+  appearance rule until §103 joined them. The rule is now in the kit,
+  and the front ends ask for a picture.
+- **The handle belongs to the kit too.** The handle is the corner
+  opposite the anchor, and §100 put that in the kit's rectangle; the
+  place it is **drawn** is the same question. A handle drawn by a front
+  end is a handle that two front ends draw in two places.
+
+### What it cost
+
+- one method on the session, one constant, the window and the studio
+  asking for a picture, **five tests**.
+
+### What it does not settle
+
+- **The handle is black.** The kit has no chrome, no theme and no
+  colour that means "this is a control": the handle is drawn in the
+  drawing's own colour, and a drawing on a black background has a
+  black handle.
+- **Only the selected node has a handle.** A drawing program shows the
+  handles of everything that is selected, and the selection here is a
+  list of nodes, so every selected node has one.
