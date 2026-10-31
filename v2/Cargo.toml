@@ -29,6 +29,10 @@ craftkit-payload = { path = "crates/craftkit-payload", version = "0.2.0" }
 # **library**, not a plugin. It contributes nothing to the registry and
 # the linker does not wire it in.
 craftkit-text-layout = { path = "crates/craftkit-text-layout", version = "0.2.0" }
+# The kit's own typeface: glyphs as strokes, drawn in code. A
+# **library**, not a plugin. It contributes nothing to the registry and
+# the linker does not wire it in.
+craftkit-font = { path = "crates/craftkit-font", version = "0.2.0" }
 # The MCP door: the registry, spoken to an agent. One tool per command.
 craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
 # The **PNG reader**: the pixels of a picture, and the inflate they come

@@ -79,9 +79,7 @@ fn the_mixer_is_a_picture() {
     session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
     let track = session.document().node_by_name("drums").expect("the track is there").id;
     let bus = session.document().node_by_name("mix").expect("the bus is there").id;
-    session
-        .execute("sound.send.add", &json!({ "track": track, "bus": bus }))
-        .expect("the send is added");
+    session.execute("sound.send.add", &json!({ "track": track, "bus": bus })).expect("the send is added");
 
     let mut canvas = RecordingCanvas::default();
     session.paint(&mut canvas);

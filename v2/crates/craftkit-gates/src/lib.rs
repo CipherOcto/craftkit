@@ -106,6 +106,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The line breaker: arithmetic over the widths a caller brings. It
     // knows nothing about a document, a font or the kit.
     ("craftkit-text-layout", 0),
+    // The kit's own typeface: glyphs as strokes, drawn in code. It
+    // knows nothing about a document, a canvas or the kit.
+    ("craftkit-font", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),

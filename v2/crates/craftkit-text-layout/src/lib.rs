@@ -20,16 +20,19 @@
 //!
 //! # Why it is a library and not a plugin
 //!
-//! Because the kit has no **font**. A line breaker needs the advance
-//! of every glyph, and an advance comes from a typeface, and this tree
-//! has no typeface and no asset of any kind (the outer tree's rule: no
-//! artwork, no fonts, nothing that is not drawn in code).
+//! Because a line breaker needs the advance of every glyph, and an
+//! advance comes from a typeface — and a typeface is **the caller's
+//! business**. This tree's rule is that nothing is an asset: no
+//! artwork, no font file, nothing that is not drawn in code.
 //!
 //! So the widths come from **the caller**: the library takes items with
 //! widths already in them, and the battery that uses it asks the caller
 //! for a measure and an advance. That is the honest shape, and it is
-//! also the useful one: the moment a font arrives, it supplies the
-//! widths and nothing else changes.
+//! also the useful one. The kit **does** have a typeface now — its own,
+//! drawn in code, a library of its own (§128) — and the breaker still
+//! takes the widths from the caller, because the widths that matter to a
+//! paragraph are the ones in **its metric**, and a metric is a thing in
+//! a document, not a thing in a typeface.
 //!
 //! # The units
 //!
@@ -43,7 +46,8 @@
 //!   its column. A first line that is narrower (an indent, a drop cap)
 //!   makes the optimal breaker quadratic in the *number of lines* as
 //!   well as in the number of breaks, and that is not built yet.
-//! - **A font.** There is none to have: see above.
+//! - **A font.** The kit has one — its own, drawn in code — and the
+//!   breaker does not use it: see above.
 //! - **Hyphenation.** The breaker knows a **hyphenation point** — a
 //!   flagged penalty — but it does not find them. Finding them is a
 //!   dictionary's business.

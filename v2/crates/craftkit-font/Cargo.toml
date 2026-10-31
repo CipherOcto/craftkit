@@ -1,0 +1,13 @@
+[package]
+name = "craftkit-font"
+description = "The kit's own typeface: glyphs as strokes, drawn in code. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. A typeface is a table of numbers — the strokes of a glyph and
+# how wide it is — and a table of numbers knows nothing about a
+# document, a canvas or the kit. The caller brings the size and the
+# place, and the library brings the outlines.
