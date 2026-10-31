@@ -691,8 +691,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-vst3"
+version = "0.2.0"
+dependencies = [
+ "craftkit-vst3-abi",
+ "craftkit-vst3-fixture",
+]
+
+[[package]]
 name = "craftkit-vst3-abi"
 version = "0.2.0"
+
+[[package]]
+name = "craftkit-vst3-fixture"
+version = "0.2.0"
+dependencies = [
+ "craftkit-vst3-abi",
+]
 
 [[package]]
 name = "craftkit-wasm"
