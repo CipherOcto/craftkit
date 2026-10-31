@@ -991,7 +991,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1040 tests.** The MCP server links **all fifteen batteries** in, so the
+**1041 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1093,7 +1093,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1040 tests
+cargo test          # 1041 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9420,10 +9420,12 @@ the tracks are mixed, and the mix is written to a file.
   clock to move it.
 - **The mixer's graph is not rendered.** The buses, the sends, the
   inserts and the automation lanes (§127) are in the plan and not in
-  the render: the render sums the clips. — **Partly answered in §138**:
-  the **automation** is rendered — the lanes move the volume, the pan
-  and the mute. What is still missing is the **routing**: the buses
-  and the sends.
+  the render: the render sums the clips. — **Answered in §138 and
+  §140**: the **automation** is rendered — the lanes move the volume,
+  the pan and the mute — and the **routing** is rendered too: a track's
+  signal, the sends that carry it into the buses, and the master that
+  is the file. What is still missing is the **inserts**: a plugin's
+  name is not a plugin.
 - **There is no resampler and no time stretch.** A source at another
   rate is refused, and a clip that should be slower than its source is
   not made. — **Answered in §137**: the resampler is linear and the
@@ -9579,11 +9581,69 @@ that no sound obeyed.
 - **The routing is still not rendered.** The buses and the sends are in
   the plan and not in the sound: the render sums the clips, and a
   track's send to a bus changes nothing that is heard. The model has
-  no **master bus**, so what a track outputs to has no answer yet.
+  no **master bus**, so what a track outputs to has no answer yet. —
+  **Answered in §140**: the master is the file, and the model does not
+  need a node for it.
 - **The inserts are not rendered.** An insert is a plugin's name (§ the
-  insert's payload) and the render does not load plugins.
+  insert's payload) and the render does not load plugins. A plugin is a
+  **program** (§ the plugin's own section) and a program needs a host,
+  and the render is not one.
 - **The lane's curve and the lane's sound are two things.** The curve
   is drawn scaled to its row (§127) — the kit does not know what range
   a parameter takes — and the sound uses the parameter's own units. A
   lane that is drawn one way and heard another is a lane whose drawing
   says the shape and not the values.
+
+---
+
+## 140. The routing is heard
+
+The buses and the sends were in the plan, in the picture (§127) and in
+no sound: the render summed the clips and stopped.
+
+### What was built
+
+- The render follows the **graph**. A track's **signal** is the sum of
+  its clips; a **send** carries a copy of that signal, at its own level
+  and its own pan, into the bus it names; and the **master** is the
+  file — every track and every bus, added together.
+- A send's **pan** is a balance between the channels, and a **mono**
+  signal is not balanced and is left alone.
+
+### What the port found
+
+- **The model does not need a master bus.** The obvious reading of a
+  mixer is that a track feeds a master and its sends feed the buses,
+  and that the master is a thing in the document. It does not have to
+  be: a track feeds the master, its sends feed the buses, and the buses
+  feed the master — so the **master is the file**, and a document that
+  says nothing about a master says everything about where the sound
+  goes.
+- **A send is a copy, and not a move.** The track's signal is heard on
+  its own **and** through the bus, at the send's level: that is what a
+  send is, and it is why the render adds the bus to the master and not
+  instead of the track.
+- **The graph is one level deep.** A bus is fed by the sends of the
+  tracks and feeds the master, and there is no bus that feeds a bus —
+  so the order of the buses does not matter to the sound, and the
+  routing's own order (§ the routing) is about the *plan* and not about
+  the samples.
+
+### What it cost
+
+- three helpers — the sends, the sum and the pan — and **one test**: a
+  track that sends to a bus at six decibels down is heard twice, once
+  on its own and once through the bus.
+
+### What it does not settle
+
+- **The inserts are not rendered.** An insert is a plugin's *name* and
+  the render does not load plugins: a plugin is a **program** (§ the
+  plugin's own section) and a program needs a host, and the render is
+  not one.
+- **There is no master of its own.** The file is the master, so a
+  document cannot have two outputs and cannot say that one bus is a
+  master and another is not.
+- **The pre-fader flag does nothing.** A send says whether it is before
+  the fader, and the model has no fader: the tree's mixer has one and
+  this one does not, so both kinds of send carry the same signal.
