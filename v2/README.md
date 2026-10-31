@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**834 tests.** The MCP server links **all fourteen batteries** in, so the
+**835 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -7042,3 +7042,58 @@ that the front ends were not built.
 - **Nothing here is a drawing program.** The window is a way to *see*
   the kit and to run its commands; it is not the kit's canvas, and it
   does not pretend to be.
+
+## 92. The window draws the document
+
+§91 left one thing out: the window showed a **tree** of nodes and a
+**plan**, and neither of them is a picture of a document. The kit has
+had a canvas since the rasteriser was written (§67) — and nothing was
+drawing into it.
+
+### What was built
+
+- The window **draws the document**, through the kinds: every node is
+  offered to the kind that says what it is, and a node whose kind is
+  not linked in is not drawn.
+- The **camera is the session's**, so the picture is seen through the
+  same controls every other front end uses — and the window draws it
+  again only when the document, the camera or the command count has
+  changed.
+- The window links in **all fourteen batteries**, so the picture and
+  the plan are of the whole kit and not of half of it.
+- One more test: the picture is the size it was asked for, it is four
+  bytes a pixel, and **the shape is in it**, in the colour it was
+  given.
+
+### What the port found
+
+- **A shape in the colour of the background is a shape nobody sees.**
+  The reference plugin paints its rectangle **white**, and the
+  rasteriser's background is white: the first picture of a document
+  was a blank page. The window was right and the picture was empty,
+  and the difference was a colour in another crate. A test that only
+  checked "the picture has the right size" would have passed.
+- **Drawing is work, and a window that draws sixty times a second is a
+  window that is always busy.** The picture is drawn again when the
+  document, the camera or the command count has changed — a
+  fingerprint, not a guess, and the count is the window's own.
+- **A front end that draws must still not keep what it drew.** The
+  picture is the window's own shape — pixels, and nothing else — and
+  the window does not know what drew it.
+
+### What it cost
+
+- one method in the window, one dependency (`craftkit-raster`), **one
+  test**, and the window's own picture of a document.
+
+### What it does not settle
+
+- **There is no interaction.** The picture is a picture: a person can
+  look at it and cannot yet click it, and the hit-testing the core
+  offers is not wired to the mouse.
+- **The picture has no scroll and no zoom of its own.** It is drawn
+  through the session's camera, and the camera is the session's state
+  — which is right, and means the window has to offer the camera's
+  controls before the picture can be moved.
+- **The window still shows the tree and the plan as text.** They are
+  the same information twice, and a person would rather have one.
