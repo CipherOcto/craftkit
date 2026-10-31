@@ -952,7 +952,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**822 tests.** The MCP server links **all fourteen batteries** in, so the
+**826 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -6903,3 +6903,72 @@ word.
 - **Nothing here runs on an audio thread.** The flag is an atomic, so
   it is safe to set from one, and the kit has no audio thread to prove
   it on.
+
+## 90. The transport comes from the kit's time
+
+The transport was the last thing the host offered **once**: the events
+a host offers are for one block, and the transport was one of them. But
+the transport says where the music *is*, and the music does not stop
+between two blocks — so a host that offered it once told the plugin
+where the music **was**.
+
+### What was built
+
+- The host **keeps** the transport and offers it with **every** block.
+  The reference plugin counts the blocks that carried one and reports
+  the count back, so a host can be *seen* to have offered it every
+  time.
+- The **plugin node carries a transport**: where the music is, in
+  **ticks**; whether it is playing; and the **tempo** and **meter**
+  maps.
+- **Three commands**: `clap.transport.set` moves the music,
+  `clap.transport.tempo` sets the tempo from a tick onwards, and
+  `clap.transport.meter` sets the meter from a tick onwards.
+- The transport the plugin is told about is **derived**: the beats, the
+  seconds, the tempo and the meter at that tick, worked out with the
+  kit's own time model (`craftkit-sound-time`, the library the sound
+  battery uses).
+
+### What the port found
+
+- **The transport is not an event for one block.** Every other event
+  the host offers happens once: a parameter value is set, a note is
+  played. The transport is not that kind of thing — it is **where the
+  music is**, and the answer changes with every block. So it is kept,
+  and offered again and again.
+- **The position is a tick, and the rest is derived.** The kit's unit
+  is the tick — 960 to a quarter note — and the beats and the seconds
+  are worked out from it. The format wants fixed-point numbers, the
+  kit's model wants ticks, and the conversion is the host's business.
+  Nothing is stored twice: the node holds the tick and the map, and
+  everything else is worked out when it is needed.
+- **The tempo is a map and not a number.** A piece changes tempo, and a
+  single number cannot say *when*. So the document holds the events and
+  the tempo at a tick is **derived** from them — and the test moves the
+  music across the change to show the new tempo is the one in force.
+- **A derived value that is stored is a value that goes stale.** The
+  node says "tick 1920" and the map; the beats, the seconds and the
+  tempo are worked out every time they are asked for. A document that
+  stored the tempo as well would have two answers to the same question.
+
+### What it cost
+
+- one field in the host's instance, two payload structures and three
+  commands in the battery, **four tests**.
+
+### What it does not settle
+
+- **The tempo map is in the plugin node's payload, and the sound
+  battery keeps its own in its own nodes.** Two batteries, two places
+  to say what the tempo is. The tree's answer — a battery is a document
+  model of its own, and batteries do not depend on each other — is
+  right, and it is also the reason the duplication is there.
+- **The sample rate is the program's, not the document's.** The seconds
+  are worked out at 48 kHz, because that is the rate the kit's own
+  audio path uses and the rate the plugin is activated at.
+- **Nothing moves by itself.** The transport is offered with every
+  block, and the position only moves when a command moves it: there is
+  no audio thread and no playhead.
+- **The host still offers the plugin nothing but "clap.state".** The
+  host's own parameters and the request to rescan the ports are still
+  not answered.
