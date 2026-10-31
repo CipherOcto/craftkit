@@ -557,6 +557,56 @@ pub fn reads_bus(document: &Document, track: u64) -> bool {
     !document.relations_from(track, Some("input")).is_empty()
 }
 
+/// Where a node **feeds**: the bus it sends its sound to.
+///
+/// A relation of the kind `route` says that the sound of one node
+/// goes into another, and the node that goes nowhere is heard in the
+/// main mix.
+pub fn route_of(document: &Document, node: u64) -> Option<u64> {
+    document.relations_from(node, Some("route")).into_iter().map(|relation| relation.to).next()
+}
+
+/// The **order of the buses**: a bus that feeds another bus comes
+/// before it, so that a bus is fed before it is read.
+///
+/// The list is short and the order is worked out by walking it, so a
+/// cycle in the routing is not a hang: a bus that is already in the
+/// order is left where it is.
+pub fn bus_order(document: &Document) -> Vec<u64> {
+    let buses: Vec<&Node> = document.walk().filter(|node| node.kind == "sound.bus").collect();
+    let mut order: Vec<u64> = Vec::new();
+    for bus in &buses {
+        if !order.contains(&bus.id) {
+            order.push(bus.id);
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for bus in &buses {
+            let feeds: Vec<u64> = document
+                .relations_to(bus.id, Some("route"))
+                .into_iter()
+                .map(|relation| relation.from)
+                .filter(|from| buses.iter().any(|node| node.id == *from))
+                .collect();
+            for from in feeds {
+                let from_index = order.iter().position(|id| *id == from);
+                let bus_index = order.iter().position(|id| *id == bus.id);
+                if let (Some(from_index), Some(bus_index)) = (from_index, bus_index)
+                    && from_index > bus_index
+                {
+                    order.remove(from_index);
+                    let bus_index = order.iter().position(|id| *id == bus.id).unwrap_or(0);
+                    order.insert(bus_index, from);
+                    changed = true;
+                }
+            }
+        }
+    }
+    order
+}
+
 /// The tracks that **read** a bus: the reader and the bus it reads.
 pub fn readers_of(document: &Document) -> Vec<(u64, u64)> {
     let mut readers = Vec::new();
@@ -885,40 +935,7 @@ impl AddLane {
 /// order the buses are fed in — a bus that nothing feeds comes first, and
 /// a bus that feeds another comes before it.
 pub fn routing(document: &Document) -> Vec<Json> {
-    let buses: Vec<&Node> = document.walk().filter(|node| node.kind == "sound.bus").collect();
-    let mut order: Vec<u64> = Vec::new();
-    for bus in &buses {
-        if !order.contains(&bus.id) {
-            order.push(bus.id);
-        }
-    }
-    // A bus that feeds another bus comes before it. The list is short and
-    // the order is worked out by walking it, so a cycle in the routing is
-    // not a hang: a bus that is already in the order is left where it is.
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for bus in &buses {
-            let feeds: Vec<u64> = document
-                .relations_to(bus.id, Some("route"))
-                .into_iter()
-                .map(|relation| relation.from)
-                .filter(|from| buses.iter().any(|node| node.id == *from))
-                .collect();
-            for from in feeds {
-                let from_index = order.iter().position(|id| *id == from);
-                let bus_index = order.iter().position(|id| *id == bus.id);
-                if let (Some(from_index), Some(bus_index)) = (from_index, bus_index)
-                    && from_index > bus_index
-                {
-                    order.remove(from_index);
-                    let bus_index = order.iter().position(|id| *id == bus.id).unwrap_or(0);
-                    order.insert(bus_index, from);
-                    changed = true;
-                }
-            }
-        }
-    }
+    let order = bus_order(document);
     order
         .into_iter()
         .filter_map(|id| {

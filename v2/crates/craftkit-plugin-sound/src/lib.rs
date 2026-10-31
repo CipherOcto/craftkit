@@ -1997,6 +1997,9 @@ impl RenderSound {
         // it.
         let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
         let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
+        // The **routed tracks**: the tracks that feed a bus, and the
+        // signal they feed it with.
+        let mut routed: Vec<(u64, Vec<f32>)> = Vec::new();
         // The **readers**: the tracks that read a bus. A reader is
         // finished after the buses are, because its sound is the bus's
         // sound.
@@ -2037,7 +2040,13 @@ impl RenderSound {
             if sends_of(session.document()).iter().any(|send| send.track == track.id && send.pre_fader) {
                 pre_fader.push((track.id, gated));
             }
-            tracks.push((track.id, faded, automation));
+            // The **route**: a track that feeds a bus is heard on that
+            // bus and not in the main mix. The tree's strip goes to
+            // its output and to nowhere else.
+            match mixer::route_of(session.document(), track.id) {
+                Some(bus) => routed.push((bus, faded)),
+                None => tracks.push((track.id, faded, automation)),
+            }
         }
         // The **solo**: a soloed track silences the others, and their
         // sends carry the silence, because a send is a copy of the
@@ -2088,6 +2097,24 @@ impl RenderSound {
             }
             buses.push((bus.id, signal));
         }
+        // The **routed tracks**: a track that feeds a bus is heard on
+        // that bus.
+        for (bus, signal) in &routed {
+            if let Some((_, bus_signal)) = buses.iter_mut().find(|(id, _)| id == bus) {
+                add_into(bus_signal, signal, 0, 1.0);
+            }
+        }
+        // The **buses in order**: a bus that feeds another bus is heard
+        // there and not by itself. The order is the order the buses are
+        // fed in, so a bus is fed before it is read.
+        for id in mixer::bus_order(session.document()) {
+            let Some(destination) = mixer::route_of(session.document(), id) else { continue };
+            let Some(index) = buses.iter().position(|(bus, _)| *bus == id) else { continue };
+            let signal = buses[index].1.clone();
+            if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
+                add_into(target, &signal, 0, 1.0);
+            }
+        }
         // The **readers**: a track that reads a bus takes the bus's
         // sound into the mix, with its own inserts and its own fader.
         // A bus that is read is not heard by itself: the tree's bus is
@@ -2125,9 +2152,13 @@ impl RenderSound {
             add_into(&mut master, &own, 0, 1.0);
         }
         for (bus, signal) in &buses {
-            // A bus that is **read** is heard through the reader and
-            // not by itself.
+            // A bus that is **read** is heard through the reader, and a
+            // bus that **feeds another bus** is heard there: neither is
+            // heard by itself.
             if readers.iter().any(|(_, read)| read == bus) {
+                continue;
+            }
+            if mixer::route_of(session.document(), *bus).is_some() {
                 continue;
             }
             add_into(&mut master, signal, 0, 1.0);
