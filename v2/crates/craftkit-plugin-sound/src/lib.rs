@@ -430,7 +430,7 @@ impl MarkerKind {
 /// (§58) and the appearance of a node (§95).
 ///
 /// The ruler's **marks** are not the ruler's: the tempo and the meter
-/// are drawn in the ruler's row by their own kinds (§132), and the ruler
+/// are drawn in the ruler's row by their own kinds (§126), and the ruler
 /// draws the **numbers**.
 #[derive(NodeKind)]
 #[node_kind(kind = "sound.ruler", label = "Ruler", layer = "sound", evaluates, place)]

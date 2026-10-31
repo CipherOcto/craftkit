@@ -984,7 +984,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**998 tests.** The MCP server links **all fifteen batteries** in, so the
+**1003 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1086,7 +1086,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 998 tests
+cargo test          # 1003 tests
 cargo run -p craftkit-studio
 ```
 
@@ -8885,7 +8885,9 @@ oversight: the **tempo** and **meter** events carry their time in
 - **The ruler has no scale.** It has marks and no numbers, because a
   number it cannot draw is not worth computing. The kit **has a
   typeface** now (§128), so the bar numbers of a real ruler are within
-  reach — and they are not drawn yet.
+  reach — and they are not drawn yet. — **Built in §131**: the ruler
+  counts by bars or by seconds, and the numbers are the kit's own
+  letters.
 
 ---
 
@@ -9128,3 +9130,65 @@ here* and not what it says. That was honest, and it was a placeholder.
 - **The picture has no anti-aliasing** (§67), so a letter is a
   staircase like everything else. A letter is thinner than a rectangle,
   so it shows the staircase more.
+
+---
+
+## 131. The ruler has a scale: the bar numbers
+
+§126 gave the ruler its **marks** and left it with no numbers — and the
+reason was the missing font. The kit has a typeface now (§128), so the
+numbers are possible.
+
+### What was built
+
+- **The ruler is a node.** The ruler has a **setting** — the scale it
+  counts by — and a setting is a thing in a document, and a node is
+  where settings live: the same rule as the measure of a paragraph
+  (§58) and the appearance of a node (§95). So `sound.ruler.add` puts a
+  ruler in the document, and the scale is **bars** or **seconds**.
+- **The bar numbers** come from the **tempo map**: the map says which
+  bar a tick is in, and the tick of a bar is found by a **search**,
+  because the bars are monotonic in the tick.
+- **The numbers are the kit's own letters**, drawn in the row above the
+  tracks, standing on the bottom of that row so that the marks of the
+  tempo and the meter are above them.
+- **Two numbers are never too close.** The gap is in **seconds** and not
+  in bars: a tempo may make the bars any width it likes, and the ruler
+  is drawn in seconds.
+
+### What the port found
+
+- **A ruler is a view, and a view can have settings.** The ruler is not
+  in the sound document's model — the tree this ports has a ruler in its
+  window, not in its file — and v2 has no window of its own. So the
+  ruler became a node: the one thing a view needs that a model does not
+  have is a **setting**, and a node is where settings live. The ruler's
+  **marks** stayed where they were — the tempo's and the meter's own
+  kinds draw them (§126) — so the ruler draws only the numbers, and the
+  two do not draw over each other.
+- **A number is a word of one or two letters**, so the whole of the
+  ruler's scale is the typeface: no number format, no digits of its
+  own, and no table of number shapes.
+- **The bars are monotonic in the tick**, which is what makes the search
+  possible. The tempo map was written for the opposite question — what
+  bar is this tick in — and the reverse question has the same answer
+  because the map's segments are in order.
+
+### What it cost
+
+- one kind, one command, two functions in the timeline, and **five
+  tests**: the bar numbers, the seconds, the row above the tracks, a
+  scale that is not a scale, and a studio test that the numbers are
+  drawn.
+
+### What it does not settle
+
+- **The numbers are the ruler's own letters, stretched to nothing.**
+  The digits are drawn at the em of the ruler's row and their widths are
+  the typeface's, so two numbers that are far enough apart in **time**
+  may still be close in **ink** when the bar is short.
+- **There is no time signature on the ruler.** The meter is a mark in
+  the row (§126) and not a number, so a change of meter is visible and
+  not readable.
+- **The ruler is drawn once per frame**, like everything else, and a
+  document with a thousand bars pays a search per bar (§126).
