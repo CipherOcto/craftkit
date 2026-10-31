@@ -45,6 +45,7 @@ use craftkit_sdk::document::{Document, Node, Rect};
 
 use crate::mixer::LanePayload;
 use crate::{ClipPayload, MarkerPayload, session_of, tempo_map};
+use craftkit_sound_time::TempoMap;
 
 /// The kind of a **track**.
 const TRACK_KIND: &str = "sound.track";
@@ -347,4 +348,104 @@ mod tests {
         // timeline, wide enough to be picked.
         assert_eq!(MINIMUM_WIDTH, 0.05, "the narrowest a clip is drawn");
     }
+}
+
+/// The smallest gap between two **numbers** of the ruler, in seconds.
+///
+/// A number is a label and a label has a width, so two numbers that are
+/// too close would lie on top of each other. The rule is a gap in
+/// **time**, and not a gap in bars: the ruler is drawn in seconds and a
+/// tempo may make the bars any width it likes.
+pub const MINIMUM_GAP: f64 = 2.0;
+
+/// How tall the numbers of the ruler are, in world units: the **em**.
+///
+/// The ruler's row is one unit tall, and the numbers sit in it.
+pub const SCALE_EM: f64 = 0.5;
+
+/// One **number** of the ruler: where it is and what it says.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScaleMark {
+    /// Where the number is, in seconds from the beginning.
+    pub x: f64,
+    /// What the number says.
+    pub label: String,
+}
+
+/// The ruler's **scale**: the numbers it carries.
+///
+/// The scale is either the **bars** — the numbers a musician counts by —
+/// or the **seconds**, which is the world the ruler is drawn in. A ruler
+/// with no scale says nothing: a bar number without a tempo map has no
+/// bars to count.
+pub fn scale_marks(document: &Document, node: &Node) -> Vec<ScaleMark> {
+    let scale = scale_of(node);
+    if scale == "seconds" { seconds_marks(document) } else { bar_marks(document) }
+}
+
+/// The scale a ruler is drawn in.
+fn scale_of(node: &Node) -> &str {
+    match node.data.get("scale").and_then(|value| value.as_str()) {
+        Some(scale) => scale,
+        None => "bars",
+    }
+}
+
+/// The numbers of the ruler, counting **seconds**.
+fn seconds_marks(document: &Document) -> Vec<ScaleMark> {
+    let length = length_of(document);
+    let mut marks = Vec::new();
+    let mut second = 1.0;
+    while second <= length {
+        marks.push(ScaleMark { x: second, label: format!("{second}") });
+        second += 1.0;
+    }
+    marks
+}
+
+/// The numbers of the ruler, counting **bars**.
+///
+/// The bars come from the **tempo map**: the map says which bar a tick
+/// is in, and the tick of a bar is found by a search, because the bars
+/// are monotonic in the tick.
+fn bar_marks(document: &Document) -> Vec<ScaleMark> {
+    let map = tempo_map(document);
+    let rate = session_of(document).sample_rate;
+    let length = length_of(document);
+    if length <= 0.0 {
+        return Vec::new();
+    }
+    let last_tick = map.samples_to_ticks((length * rate as f64) as i64, rate);
+    let bars = map.bar_beat_at_tick(last_tick).bar;
+    let mut marks: Vec<ScaleMark> = Vec::new();
+    let mut last_x = f64::NEG_INFINITY;
+    for bar in 1..=bars {
+        let tick = tick_of_bar(&map, bar, last_tick);
+        let samples = map.ticks_to_samples(tick, rate);
+        let x = samples as f64 / rate as f64;
+        if x - last_x < MINIMUM_GAP {
+            continue;
+        }
+        last_x = x;
+        marks.push(ScaleMark { x, label: format!("{bar}") });
+    }
+    marks
+}
+
+/// The **tick** a bar starts at.
+///
+/// The bars are monotonic in the tick — a later tick is in a later bar —
+/// so the tick of a bar is found by a search, and not by counting.
+fn tick_of_bar(map: &TempoMap, bar: i64, last_tick: i64) -> i64 {
+    let mut low = 0_i64;
+    let mut high = last_tick.max(0);
+    while low < high {
+        let middle = low + (high - low) / 2;
+        if map.bar_beat_at_tick(middle).bar < bar {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    low
 }

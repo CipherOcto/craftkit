@@ -422,6 +422,158 @@ impl MarkerKind {
     }
 }
 
+/// The kind of a **ruler**: the row above the tracks, and its scale.
+///
+/// The ruler is a **node** because the ruler has a **setting**: the
+/// scale it counts by. A setting is a thing in a document, and a node is
+/// where settings live — the same rule as the measure of a paragraph
+/// (§58) and the appearance of a node (§95).
+///
+/// The ruler's **marks** are not the ruler's: the tempo and the meter
+/// are drawn in the ruler's row by their own kinds (§132), and the ruler
+/// draws the **numbers**.
+#[derive(NodeKind)]
+#[node_kind(kind = "sound.ruler", label = "Ruler", layer = "sound", evaluates, place)]
+pub struct RulerKind;
+
+impl RulerKind {
+    /// How a ruler is drawn: its **numbers**.
+    ///
+    /// The numbers are the kit's own letters (§128): the tree has no
+    /// font file and no asset of any kind, and a number is a word of one
+    /// or two letters.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let marks = timeline::scale_marks(document, node);
+        let font = craftkit_font::Font::builtin();
+        let Some(metrics) = craftkit_font::Metrics::new(timeline::SCALE_EM) else { return };
+        let unit = metrics.unit();
+        for mark in marks {
+            let mut pen = mark.x;
+            for character in mark.label.chars() {
+                let Some(glyph) = font.glyph(character) else { continue };
+                for stroke in &glyph.strokes {
+                    if stroke.len() < 2 {
+                        continue;
+                    }
+                    let mut segments = Vec::with_capacity(stroke.len() - 1);
+                    for point in stroke.iter().skip(1) {
+                        segments.push(craftkit_sdk::document::Segment::Line {
+                            to: Point::new(pen + point[0] * unit, baseline() + point[1] * unit),
+                        });
+                    }
+                    let start = stroke[0];
+                    let path = craftkit_sdk::document::Path::single(craftkit_sdk::document::SubPath {
+                        start: Point::new(pen + start[0] * unit, baseline() + start[1] * unit),
+                        segments,
+                        closed: false,
+                    });
+                    canvas.path(
+                        &path,
+                        craftkit_sdk::document::Colour::NONE,
+                        Some(craftkit_sdk::document::Stroke {
+                            colour: craftkit_sdk::document::Colour::BLACK,
+                            width: 0.01,
+                        }),
+                    );
+                }
+                pen += glyph.advance * unit;
+            }
+        }
+    }
+
+    /// Whether a point is on a **number**.
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        let marks = timeline::scale_marks(document, node);
+        let font = craftkit_font::Font::builtin();
+        let Some(metrics) = craftkit_font::Metrics::new(timeline::SCALE_EM) else { return false };
+        let unit = metrics.unit();
+        marks.iter().any(|mark| {
+            let width: f64 = mark
+                .label
+                .chars()
+                .filter_map(|character| font.glyph(character))
+                .map(|glyph| glyph.advance * unit)
+                .sum();
+            let box_of = craftkit_sdk::document::Rect::new(mark.x, baseline(), width, metrics.em);
+            box_of.contains(point)
+        })
+    }
+
+    /// Where a ruler **is**: the row above the tracks.
+    fn place(_node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        Some(craftkit_sdk::document::Rect::new(
+            0.0,
+            -timeline::RULER_HEIGHT,
+            timeline::length_of(document),
+            timeline::RULER_HEIGHT,
+        ))
+    }
+
+    /// What a ruler **means**: its scale and how many numbers it has.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let marks = timeline::scale_marks(document, node);
+        Some(serde_json::json!({
+            "scale": node.data.get("scale").and_then(|value| value.as_str()).unwrap_or("bars"),
+            "numbers": marks.len(),
+        }))
+    }
+}
+
+/// The **baseline** of the ruler's numbers: the bottom of the ruler's
+/// row.
+///
+/// The numbers stand on the bottom of the row and rise into it, so that
+/// the marks of the tempo and the meter are above them.
+fn baseline() -> f64 {
+    -timeline::RULER_HEIGHT
+}
+
+/// Put a **ruler** in the document: the row above the tracks, and the
+/// scale it counts by.
+#[derive(Command)]
+#[command(
+    id = "sound.ruler.add",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Ruler"),
+    mutates,
+    undoable
+)]
+pub struct AddRuler {
+    /// What to call it.
+    pub name: Text,
+    /// The scale the ruler counts by: `bars` or `seconds`.
+    pub scale: Option<Text>,
+}
+
+impl AddRuler {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let scale = match &self.scale {
+            Some(scale) => {
+                let scale = scale.0.as_str();
+                if scale != "bars" && scale != "seconds" {
+                    return Err(EngineError::Failed {
+                        id: "sound.ruler.add".to_string(),
+                        message: format!("a ruler counts by bars or by seconds, and not by `{scale}`"),
+                    });
+                }
+                scale.to_string()
+            }
+            None => "bars".to_string(),
+        };
+        let name = self.name.0.clone();
+        let id = session.document_mut()?.add_node_with(
+            name.clone(),
+            "sound.ruler",
+            None,
+            serde_json::json!({ "scale": scale }),
+        );
+        Ok(Outcome::changed(format!("added a ruler `{name}`"))
+            .with_data(serde_json::json!({ "id": id, "name": name, "scale": scale })))
+    }
+}
+
 /// The kind of a source.
 ///
 /// A source is a **reference** to media: where it is, how many channels it
@@ -1115,6 +1267,7 @@ pub struct ClipTool;
         "sound.tempo.set",
         "sound.meter.set",
         "sound.marker.add",
+        "sound.ruler.add",
         "sound.source.add",
         "sound.session.set"
     )
@@ -1513,6 +1666,75 @@ mod tests {
         // At a hundred and twenty beats a minute, a beat is half a
         // second, and tick 960 is one beat.
         assert!((rect.x - 0.5).abs() < 0.001, "and the beat is half a second in: {}", rect.x);
+    }
+
+    /// The ruler carries the **bar numbers**.
+    ///
+    /// The bars come from the tempo map: at a hundred and twenty beats
+    /// a minute a bar of four beats is two seconds long.
+    #[test]
+    fn the_ruler_carries_the_bar_numbers() {
+        let mut session = session();
+        session.execute("sound.tempo.set", &json!({ "tick": 0, "bpm": 120.0 })).expect("the tempo is set");
+        session
+            .execute("sound.meter.set", &json!({ "tick": 0, "numerator": 4, "denominator": 4 }))
+            .expect("the meter is set");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 480000 }))
+            .expect("the clip is added");
+        session.execute("sound.ruler.add", &json!({ "name": "ruler" })).expect("the ruler is added");
+        let ruler =
+            session.document().walk().find(|node| node.kind == "sound.ruler").expect("the ruler is there");
+        let marks = timeline::scale_marks(session.document(), ruler);
+        assert!(!marks.is_empty(), "the ruler has no numbers");
+        assert_eq!(marks[0].label, "1", "the first bar is bar one");
+        assert!((marks[0].x - 0.0).abs() < 0.001, "and it is at the beginning");
+        let second = marks.iter().find(|mark| mark.label == "2").expect("the second bar is numbered");
+        assert!((second.x - 2.0).abs() < 0.001, "and a bar is two seconds long: {}", second.x);
+    }
+
+    /// The ruler can count by **seconds** instead.
+    #[test]
+    fn the_ruler_can_count_by_seconds() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 480000 }))
+            .expect("the clip is added");
+        session
+            .execute("sound.ruler.add", &json!({ "name": "ruler", "scale": "seconds" }))
+            .expect("the ruler is added");
+        let ruler =
+            session.document().walk().find(|node| node.kind == "sound.ruler").expect("the ruler is there");
+        let marks = timeline::scale_marks(session.document(), ruler);
+        assert_eq!(marks[0].label, "1", "the first second is second one");
+        assert!((marks[0].x - 1.0).abs() < 0.001, "and it is one second in");
+    }
+
+    /// The ruler is the **row above the tracks**.
+    #[test]
+    fn the_ruler_is_the_row_above_the_tracks() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.ruler.add", &json!({ "name": "ruler" })).expect("the ruler is added");
+        let ruler =
+            session.document().walk().find(|node| node.kind == "sound.ruler").expect("the ruler is there");
+        let rect = RulerKind::place(ruler, session.document()).expect("the ruler has a place");
+        assert_eq!(rect.y, -timeline::RULER_HEIGHT, "the ruler is above the tracks");
+        assert_eq!(rect.h, timeline::RULER_HEIGHT, "and it is a row");
+    }
+
+    /// A scale that is not a scale is **refused**.
+    #[test]
+    fn a_scale_that_is_not_a_scale_is_refused() {
+        let mut session = session();
+        let error = session
+            .execute("sound.ruler.add", &json!({ "name": "ruler", "scale": "eighths" }))
+            .expect_err("that is not a scale");
+        assert!(error.to_string().contains("bars"), "the refusal says what is wrong: {error}");
     }
 
     /// The kind of a track is a string, and it is open.

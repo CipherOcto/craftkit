@@ -17,3 +17,7 @@ craftkit-derive = { workspace = true }
 # to the registry and the linker does not wire it in. A plugin may depend
 # on a library; the host never names one.
 craftkit-sound-time = { workspace = true }
+# The kit's own typeface: the numbers the ruler carries. A **library**,
+# not a plugin: it contributes nothing to the registry and the linker
+# does not wire it in.
+craftkit-font = { path = "../craftkit-font", version = "0.2.0" }

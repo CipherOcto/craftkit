@@ -91,3 +91,30 @@ fn the_mixer_is_a_picture() {
     let bounds = session.bounds().expect("the document has bounds");
     assert_eq!(bounds.h, 2.0, "a track's row and a bus's row");
 }
+
+/// The **ruler** has a scale: the bar numbers.
+///
+/// The numbers are the kit's own letters — the tree has no font file —
+/// and they are drawn in the row above the tracks.
+#[cfg(feature = "sound")]
+#[test]
+fn the_ruler_has_a_scale() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("sound.tempo.set", &json!({ "tick": 0, "bpm": 120.0 })).expect("the tempo is set");
+    session
+        .execute("sound.meter.set", &json!({ "tick": 0, "numerator": 4, "denominator": 4 }))
+        .expect("the meter is set");
+    session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+    let track = session.document().node_by_name("drums").expect("the track is there").id;
+    session
+        .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 480000 }))
+        .expect("the clip is added");
+    session.execute("sound.ruler.add", &json!({ "name": "ruler" })).expect("the ruler is added");
+
+    let mut canvas = RecordingCanvas::default();
+    session.paint(&mut canvas);
+    // The track's line, the tempo's mark, the meter's mark and a number
+    // for each bar.
+    let lines = canvas.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
+    assert!(lines > 3, "the ruler drew no numbers: {:?}", canvas.drawn);
+}
