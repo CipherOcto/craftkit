@@ -66,3 +66,30 @@ fn a_sound_document_has_a_picture() {
         .expect("the picture is made");
     assert!(std::path::Path::new(&path).exists(), "the picture is on the disk: {:?}", outcome.data);
 }
+
+/// The **mixer** is a picture.
+///
+/// The buses are the rows under the tracks, and the sends are the lines
+/// between them: the mixer is a **graph**, and this is the graph.
+#[cfg(feature = "sound")]
+#[test]
+fn the_mixer_is_a_picture() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+    session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+    let track = session.document().node_by_name("drums").expect("the track is there").id;
+    let bus = session.document().node_by_name("mix").expect("the bus is there").id;
+    session
+        .execute("sound.send.add", &json!({ "track": track, "bus": bus }))
+        .expect("the send is added");
+
+    let mut canvas = RecordingCanvas::default();
+    session.paint(&mut canvas);
+    // The track's row, the bus's row and the line between them.
+    let lines = canvas.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
+    assert_eq!(lines, 3, "the mixer is three lines: {:?}", canvas.drawn);
+
+    // And the mixer is **below** the timeline.
+    let bounds = session.bounds().expect("the document has bounds");
+    assert_eq!(bounds.h, 2.0, "a track's row and a bus's row");
+}
