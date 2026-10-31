@@ -45,6 +45,17 @@ fn a_sound(path: &str, frames: usize, level: f32) {
     std::fs::write(path, bytes).expect("the sound is written");
 }
 
+/// A **stereo** sound: that level on the left and silence on the right.
+fn a_stereo_sound(path: &str, frames: usize, level: f32) {
+    let mut samples = Vec::with_capacity(frames * 2);
+    for _ in 0..frames {
+        samples.push(level);
+        samples.push(0.0);
+    }
+    let bytes = craftkit_wav::write(2, 48_000, &samples);
+    std::fs::write(path, bytes).expect("the sound is written");
+}
+
 /// A source of that sound, measured or not.
 fn a_source(session: &mut Session, path: &str) -> u64 {
     session.execute("sound.source.add", &json!({ "path": path })).expect("the source is added");
@@ -79,10 +90,30 @@ fn the_peaks_are_measured_from_the_file() {
     assert!(peaks(&session, source).is_empty(), "nobody has measured the sound yet");
     session.execute("sound.source.peaks", &json!({ "source": source })).expect("the peaks are measured");
     let peaks = peaks(&session, source);
-    assert_eq!(peaks.len(), 512, "two hundred and fifty-six buckets, a least and a most each");
+    assert_eq!(peaks.len(), 1024, "five hundred and twelve buckets, a least and a most each");
     assert!((peaks[0] - 0.5).abs() < 1e-6, "the sound is half as loud as it can be");
     assert!((peaks[1] - 0.5).abs() < 1e-6, "and it is no louder than that");
-    assert!((peaks[510] - 0.5).abs() < 1e-6, "the last bucket is the same sound");
+    assert!((peaks[1022] - 0.5).abs() < 1e-6, "the last bucket is the same sound");
+}
+
+/// The peaks are **told apart by channel**: a stereo sound has two
+/// bands and each is its own channel's sound.
+#[test]
+fn the_peaks_are_told_apart_by_channel() {
+    let directory = directory("channels");
+    let path = format!("{directory}/stereo.wav");
+    a_stereo_sound(&path, 48_000, 0.5);
+    let mut session = session();
+    let source = a_source(&mut session, &path);
+    session.execute("sound.source.peaks", &json!({ "source": source })).expect("the peaks are measured");
+    let peaks = peaks(&session, source);
+    assert_eq!(peaks.len(), 1024, "the table is a thousand numbers however many channels there are");
+    // The first bucket: the left channel's least and most, and then the
+    // right channel's.
+    assert!((peaks[0] - 0.5).abs() < 1e-6, "the left channel is the tone");
+    assert!((peaks[1] - 0.5).abs() < 1e-6, "and it is no louder than that");
+    assert_eq!(peaks[2], 0.0, "and the right channel is silent");
+    assert_eq!(peaks[3], 0.0, "all the way down");
 }
 
 /// A sound that is **shorter** than the table is silence for the rest
@@ -96,9 +127,9 @@ fn a_short_sound_is_silence_for_the_rest_of_the_table() {
     let source = a_source(&mut session, &path);
     session.execute("sound.source.peaks", &json!({ "source": source })).expect("the peaks are measured");
     let peaks = peaks(&session, source);
-    assert_eq!(peaks.len(), 512);
+    assert_eq!(peaks.len(), 1024);
     assert!((peaks[0] - 0.25).abs() < 1e-6, "the sound is there");
-    assert_eq!(peaks[510], 0.0, "and the rest of the table is silence");
+    assert_eq!(peaks[1022], 0.0, "and the rest of the table is silence");
 }
 
 /// A clip is drawn with the **shape of its sound**: the bar grows a
@@ -124,6 +155,30 @@ fn a_clip_is_drawn_with_the_shape_of_its_sound() {
     session.paint(&mut after);
     let drawn = after.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
     assert_eq!(drawn, paths + 1, "the waveform is one more shape on the bar: {:?}", after.drawn);
+}
+
+/// A **stereo** clip has a band for each channel: the bar is as tall
+/// as the channels it holds.
+#[test]
+fn a_stereo_clip_has_a_band_for_each_channel() {
+    let directory = directory("stereo-drawn");
+    let path = format!("{directory}/stereo.wav");
+    a_stereo_sound(&path, 48_000, 0.5);
+    let mut session = session();
+    let source = a_source(&mut session, &path);
+    session.execute("sound.track.add", &json!({ "name": "track" })).expect("the track is added");
+    let track = session.document().node_by_name("track").expect("the track is there").id;
+    session
+        .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 48_000, "source": source }))
+        .expect("the clip is added");
+    let mut before = RecordingCanvas::default();
+    session.paint(&mut before);
+    let paths = before.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
+    session.execute("sound.source.peaks", &json!({ "source": source })).expect("the peaks are measured");
+    let mut after = RecordingCanvas::default();
+    session.paint(&mut after);
+    let drawn = after.drawn.iter().filter(|drawn| drawn.starts_with("path(")).count();
+    assert_eq!(drawn, paths + 2, "the bar carries a band for each channel: {:?}", after.drawn);
 }
 
 /// A source whose file is **not there** cannot be measured.

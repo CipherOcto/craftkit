@@ -334,7 +334,7 @@ impl ClipKind {
         let paper = craftkit_sdk::document::Colour::WHITE;
         // The **waveform**: the shape of the sound the clip plays, drawn
         // on the bar in the paper's colour, the way the fade's notch is.
-        if let Some(path) = waveform_of(document, node, &payload, &rect) {
+        for path in waveform_of(document, node, &payload, &rect) {
             canvas.path(&path, paper, None);
         }
         let width = payload.fade_in.len as f64 / rate;
@@ -973,7 +973,7 @@ impl SourcePayload {
                 peaks
                     .iter()
                     .filter_map(|peak| peak.as_f64())
-                    .take(PEAK_BUCKETS * 2)
+                    .take(PEAK_NUMBERS)
                     .map(|peak| peak as f32)
                     .collect()
             })
@@ -1703,7 +1703,7 @@ impl MeasurePeaks {
         node.data["peaks"] = serde_json::json!(peaks);
         Ok(Outcome::changed(format!("measured the peaks of the source {id}")).with_data(serde_json::json!({
             "id": id,
-            "buckets": PEAK_BUCKETS,
+            "numbers": PEAK_NUMBERS,
             "frames": sound.frames as i64,
             "channels": sound.channels as u32,
             "sample_rate": sound.rate,
@@ -2255,13 +2255,15 @@ fn the_span(sound: &craftkit_wav::Sound, payload: &ClipPayload, rate: u32) -> (u
 /// notch is a hint and not the sound.
 const FADE_SEGMENTS: usize = 8;
 
-/// How many **buckets** a sound's peaks have.
+/// How many **numbers** a sound's peaks have.
 ///
 /// The peaks are the shape of a sound in a small table, and the table
-/// has to be small enough to live in a payload: two hundred and fifty
-/// six buckets is a shape that a reader can see and a document can
-/// carry.
-const PEAK_BUCKETS: usize = 256;
+/// has to be small enough to live in a payload: a thousand numbers is
+/// a shape that a reader can see and a document can carry. The
+/// buckets and the channels share it — a sound with two channels has
+/// half the buckets of a sound with one, so that the table is the same
+/// size either way.
+const PEAK_NUMBERS: usize = 1024;
 
 /// The **peaks** of a sound: the extent of the samples in each bucket.
 ///
@@ -2271,22 +2273,26 @@ const PEAK_BUCKETS: usize = 256;
 fn peaks_of(sound: &craftkit_wav::Sound) -> Vec<f32> {
     let channels = sound.channels.max(1) as usize;
     let frames = sound.frames as usize;
-    let per_bucket = (frames / PEAK_BUCKETS).max(1);
-    let mut out = Vec::with_capacity(PEAK_BUCKETS * 2);
-    for bucket in 0..PEAK_BUCKETS {
+    // The buckets and the channels **share** the table: a table of a
+    // thousand numbers is a thousand numbers however many channels
+    // there are.
+    let buckets = (PEAK_NUMBERS / (channels * 2)).max(1);
+    let per_bucket = (frames / buckets).max(1);
+    let mut out = Vec::with_capacity(buckets * channels * 2);
+    for bucket in 0..buckets {
         let from = bucket * per_bucket;
-        if from >= frames {
-            // A sound shorter than the table: the rest of the table is
-            // silence, and silence is a shape too.
-            out.push(0.0);
-            out.push(0.0);
-            continue;
-        }
         let to = (from + per_bucket).min(frames);
-        let mut least = f32::MAX;
-        let mut most = f32::MIN;
-        for frame in from..to {
-            for channel in 0..channels {
+        for channel in 0..channels {
+            if from >= frames {
+                // A sound shorter than the table: the rest of the table
+                // is silence, and silence is a shape too.
+                out.push(0.0);
+                out.push(0.0);
+                continue;
+            }
+            let mut least = f32::MAX;
+            let mut most = f32::MIN;
+            for frame in from..to {
                 let Some(sample) = sound.samples.get(frame * channels + channel) else { continue };
                 if *sample < least {
                     least = *sample;
@@ -2295,9 +2301,9 @@ fn peaks_of(sound: &craftkit_wav::Sound) -> Vec<f32> {
                     most = *sample;
                 }
             }
+            out.push(least);
+            out.push(most);
         }
-        out.push(least);
-        out.push(most);
     }
     out
 }
@@ -2307,8 +2313,11 @@ fn peaks_of(sound: &craftkit_wav::Sound) -> Vec<f32> {
 /// The peaks are a flat table — a least and a most for each bucket —
 /// and the source says how many frames of the sound the table covers.
 struct Peaks {
-    /// The buckets: the least and the most of each.
-    buckets: Vec<(f32, f32)>,
+    /// The table: for each bucket, the least and the most of each
+    /// channel.
+    table: Vec<f32>,
+    /// How many channels the sound has.
+    channels: usize,
     /// How many frames of the sound the table covers.
     frames: u64,
 }
@@ -2317,16 +2326,11 @@ struct Peaks {
 fn peaks_of_source(document: &Document, source: u64) -> Option<Peaks> {
     let node = document.node(source)?;
     let payload = SourcePayload::from_json(&node.data).ok()?;
-    let mut buckets = Vec::with_capacity(payload.peaks.len() / 2);
-    for pair in payload.peaks.chunks(2) {
-        let least = pair.first().copied().unwrap_or(0.0);
-        let most = pair.get(1).copied().unwrap_or(least);
-        buckets.push((least, most));
-    }
-    if buckets.is_empty() {
+    let channels = payload.channels.max(1) as usize;
+    if payload.peaks.is_empty() {
         return None;
     }
-    Some(Peaks { buckets, frames: payload.frames.max(0) as u64 })
+    Some(Peaks { table: payload.peaks, channels, frames: payload.frames.max(0) as u64 })
 }
 
 /// The **waveform** of a clip: the shape of the sound it plays.
@@ -2335,51 +2339,67 @@ fn peaks_of_source(document: &Document, source: u64) -> Option<Peaks> {
 /// as its length says — and a stretched clip reads its source more
 /// slowly, so it plays less of it. The bar is the clip, and the shape
 /// drawn on the bar is the part of the source the clip plays.
-fn waveform_path<F: Fn(usize, usize) -> f32>(
+fn waveform_paths<F: Fn(usize, usize) -> f32>(
     rect: &Rect,
     peaks: &Peaks,
     from_frame: usize,
     span_frames: usize,
     gain: F,
-) -> Option<Path> {
-    if peaks.buckets.is_empty() || peaks.frames == 0 {
-        return None;
+) -> Vec<Path> {
+    let channels = peaks.channels.max(1);
+    let count = peaks.table.len() / (channels * 2);
+    if count == 0 || peaks.frames == 0 {
+        return Vec::new();
     }
-    let count = peaks.buckets.len();
     let from_bucket = from_frame.saturating_mul(count) / peaks.frames as usize;
     let to_bucket = ((from_frame + span_frames).saturating_mul(count) / peaks.frames as usize)
         .min(count)
         .max(from_bucket + 1);
     if from_bucket >= count {
-        return None;
+        return Vec::new();
     }
-    // The **upper** edge of the shape, left to right, and then the
-    // lower edge, right to left: the shape is the sound between them.
-    let mut segments: Vec<Segment> = Vec::new();
+    let buckets = to_bucket - from_bucket;
     let width = rect.w;
-    let mut upper: Vec<Point> = Vec::new();
-    let mut lower: Vec<Point> = Vec::new();
-    let count = to_bucket - from_bucket;
-    for (index, bucket) in peaks.buckets[from_bucket..to_bucket].iter().enumerate() {
-        let x = rect.x + (index as f64 + 0.5) * width / count as f64;
-        let gain = gain(index, count);
-        let (least, most) = (bucket.0 * gain, bucket.1 * gain);
-        upper.push(Point::new(x, level_y(rect, most)));
-        lower.push(Point::new(x, level_y(rect, least)));
+    let mut paths: Vec<Path> = Vec::with_capacity(channels);
+    for channel in 0..channels {
+        // The **band** of the channel: the bar is as tall as the
+        // channels it holds, and each channel has its own.
+        let band = Rect::new(
+            rect.x,
+            rect.y + rect.h * channel as f64 / channels as f64,
+            rect.w,
+            rect.h / channels as f64,
+        );
+        // The **upper** edge of the shape, left to right, and then the
+        // lower edge, right to left: the shape is the sound between
+        // them.
+        let mut upper: Vec<Point> = Vec::with_capacity(buckets);
+        let mut lower: Vec<Point> = Vec::with_capacity(buckets);
+        for index in 0..buckets {
+            let bucket = from_bucket + index;
+            let at = (bucket * channels + channel) * 2;
+            let least = peaks.table.get(at).copied().unwrap_or(0.0);
+            let most = peaks.table.get(at + 1).copied().unwrap_or(least);
+            let gain = gain(index, buckets);
+            let x = rect.x + (index as f64 + 0.5) * width / buckets as f64;
+            upper.push(Point::new(x, level_y(&band, most * gain)));
+            lower.push(Point::new(x, level_y(&band, least * gain)));
+        }
+        if upper.is_empty() {
+            continue;
+        }
+        let mut segments: Vec<Segment> = Vec::with_capacity(upper.len() * 2);
+        for point in upper.iter().skip(1) {
+            segments.push(Segment::Line { to: *point });
+        }
+        for point in lower.iter().rev().skip(1) {
+            segments.push(Segment::Line { to: *point });
+        }
+        let Some(start) = upper.first() else { continue };
+        paths.push(Path::single(SubPath { start: *start, segments, closed: true }));
     }
-    if upper.is_empty() {
-        return None;
-    }
-    for point in upper.iter().skip(1) {
-        segments.push(Segment::Line { to: *point });
-    }
-    for point in lower.iter().rev().skip(1) {
-        segments.push(Segment::Line { to: *point });
-    }
-    let start = *upper.first()?;
-    Some(Path::single(SubPath { start, segments, closed: true }))
+    paths
 }
-
 /// The **waveform** of a clip: the shape of the sound it plays.
 ///
 /// The clip plays a part of a source, and the part is in the source's
@@ -2387,11 +2407,11 @@ fn waveform_path<F: Fn(usize, usize) -> f32>(
 /// length is turned into the frames the source is read in — which is
 /// less than the length when the clip is stretched, because a stretched
 /// clip reads its source more slowly.
-fn waveform_of(document: &Document, clip: &Node, payload: &ClipPayload, rect: &Rect) -> Option<Path> {
-    let source = payload.source?;
-    let peaks = peaks_of_source(document, source)?;
-    let source_node = document.node(source)?;
-    let source_payload = SourcePayload::from_json(&source_node.data).ok()?;
+fn waveform_of(document: &Document, clip: &Node, payload: &ClipPayload, rect: &Rect) -> Vec<Path> {
+    let Some(source) = payload.source else { return Vec::new() };
+    let Some(peaks) = peaks_of_source(document, source) else { return Vec::new() };
+    let Some(source_node) = document.node(source) else { return Vec::new() };
+    let Ok(source_payload) = SourcePayload::from_json(&source_node.data) else { return Vec::new() };
     let session_rate = session_of(document).sample_rate.max(1) as f64;
     let ratio = source_payload.sample_rate.max(1) as f64 / session_rate;
     let from_frame = (payload.offset.max(0) as f64 * ratio).round() as usize;
@@ -2403,7 +2423,7 @@ fn waveform_of(document: &Document, clip: &Node, payload: &ClipPayload, rect: &R
     // says so — the shape is the sound as it is heard and not the
     // sound as it is on the disk.
     let length = payload.length.max(0);
-    waveform_path(rect, &peaks, from_frame, span_frames, |index, count| {
+    waveform_paths(rect, &peaks, from_frame, span_frames, |index, count| {
         let at = payload.start + (length * index as i64) / count.max(1) as i64;
         gain_at(document, clip, payload, at) as f32
     })
@@ -3756,10 +3776,13 @@ mod waveform_tests {
     /// heard: a gain that falls makes the shape fall.
     #[test]
     fn the_shape_follows_the_gain() {
-        let peaks = Peaks { buckets: vec![(-0.5, 0.5), (-0.5, 0.5)], frames: 2 };
+        let peaks = Peaks { table: vec![-0.5, 0.5, -0.5, 0.5], channels: 1, frames: 2 };
         let rect = Rect::new(0.0, 0.0, 2.0, 1.0);
-        let loud = waveform_path(&rect, &peaks, 0, 2, |_index, _count| 1.0).expect("the shape is drawn");
-        let quiet = waveform_path(&rect, &peaks, 0, 2, |_index, _count| 0.25).expect("the shape is drawn");
+        let loud = waveform_paths(&rect, &peaks, 0, 2, |_index, _count| 1.0);
+        let quiet = waveform_paths(&rect, &peaks, 0, 2, |_index, _count| 0.25);
+        assert_eq!(loud.len(), 1, "a mono sound has one band");
+        let loud = loud.first().expect("the shape is drawn");
+        let quiet = quiet.first().expect("the shape is drawn");
         // The shape is a path: the upper edge first, and the lower edge
         // after it. The upper edge of the loud shape is at the top of
         // the bar, and the quiet one is a quarter of the way down.
