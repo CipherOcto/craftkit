@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**851 tests.** The MCP server links **all fourteen batteries** in, so the
+**854 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **201** of them, and **215** with
+on its own, with no features, carries **202** of them, and **216** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1049,7 +1049,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 679 tests
+cargo test          # 854 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7367,3 +7367,51 @@ be picked, and a drawing nobody can touch is a picture.
   is easy to hit by accident. The hit test has no camera.
 - **The insert is not drawn and not hit.** It is a reference to another
   block, and the picture says nothing about it.
+
+---
+
+## 98. The undo is a command
+
+§91 gave the window a way in and nothing to undo with. The history was
+already there — it is a tree of states (§33) — but nothing could reach
+it, because a front end that called the session's own history would be
+a front end with a second way into the design.
+
+### What was built
+
+- Two commands in the registry: `doc.undo` and `doc.redo`. They are
+  **mutating** commands and not **undoable** ones: they move along the
+  tree of states and they add nothing to it.
+- The window grows two buttons that run the two commands by name.
+- The front-end rule grows two more forbidden words: `undo` and `redo`
+  beside the document and the evaluator.
+
+### What the port found
+
+- **A rule that reads the text reads the comments.** The first version
+  of the front-end rule searched the source for the word `undo` and
+  found it in a sentence that explained what the rule was. A rule that
+  a comment can break is a rule about prose, and the tree has one of
+  those already and does not need another.
+- **So the rule reads the code.** A stripper blanks comments and string
+  literals before the rule looks, and the raw strings are handled
+  separately because their delimiters are not the same. A front end may
+  now say "undo" in a label and be told nothing.
+- **The redo takes the newest branch.** The history is a tree, and a
+  change made after an undo starts a new branch. Going back into an
+  older branch needs a branch number, and a number is not a parameter
+  the kit's own types carry: the redo takes the newest and says so.
+
+### What it cost
+
+- two commands, one stripper, two buttons, **three tests** (two for
+  the rule and its stripper, one for the history itself).
+
+### What it does not settle
+
+- **The redo does not choose a branch.** The tree holds more than one
+  way forward and the command takes the newest.
+- **The buttons are not a menu.** The window shows the commands a
+  panel's form would show; the undo and the redo are on the window
+  itself, and the menu that would hold them beside everything else is
+  not built.
