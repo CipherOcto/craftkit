@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1113 tests.** The MCP server links **all fifteen batteries** in, so the
+**1121 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1113 tests
+cargo test          # 1121 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9992,3 +9992,62 @@ so no paragraph in the tree could be hyphenated at all.
   takes the limits from the caller and the paragraph uses the
   defaults; a paragraph cannot yet say that it wants three letters
   left at the end.
+
+## 146. The click is heard
+
+A sound editor can play a sound and cannot count it out. The family
+has a **metronome** — a click on every beat, and a different click on
+the first beat of a bar — and this tree had no way to say that a
+document should have one.
+
+### What was built
+
+- **`blip`** in the audio crate: a sine at a pitch, under an
+  exponential envelope, added to the samples and to every channel. It
+  lasts thirty thousandths of a second, which is long enough to be
+  heard and short enough to be a click.
+- **`midi_to_hz`**: a note is a number and a frequency is 440 hertz
+  times two to the power of the semitones, and an octave is a
+  doubling.
+- The **session's settings** carry the metronome: whether it is on,
+  how loud it is in decibels, the click's note and the **accent's**
+  note. `sound.session.set` sets them.
+- The **render** mixes the click in **after** the master, so it reaches
+  the output without passing through a track, a send or an insert.
+- The **beats** come from the tempo map and the **meter** says how long
+  a beat is, and the first beat of a bar is the accent.
+
+### What the port found
+
+- **The click is a voice of its own.** The family sums it in after the
+  master fader, so it goes to the speakers without passing through any
+  track, send or insert — and a track that is silent does not silence
+  the click.
+- **A click is a sine and a decay.** The envelope is what makes it a
+  click and not a tone, and the envelope is exponential: a click fades
+  away and does not stop.
+- **The family never prints the click into a file.** Its rule is that
+  an offline render leaves the click off, because the click is for the
+  player and not for the record. This tree has no playback engine — it
+  has a render — so the click here is printed when the document says
+  so, and that is the difference to name.
+
+### What it cost
+
+- two functions in the audio crate with **three tests**, four settings,
+  and **five tests** in the battery: a note is a frequency, a blip is
+  added to the samples, a blip goes to every channel, the click is not
+  heard unless it is asked for, the click is heard on the beat, the
+  accent is on the first beat of the bar, the click does not pass
+  through a track, and the level of the click is the caller's.
+
+### What it does not settle
+
+- **The click is printed into the file.** The family keeps it out of
+  every offline render, and this tree has no playback engine to keep
+  it out of: the click is in the file when the document asks for it.
+- **The sound is as long as its content.** The click is placed by the
+  tempo map, but the file is as long as the clips: a document with no
+  clips has no click, because there is no sound to put it in.
+- **There is one click and one accent.** The family has a velocity for
+  each of them and a "only while recording" flag; neither is here.
