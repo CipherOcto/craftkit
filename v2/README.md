@@ -955,12 +955,12 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**866 tests.** The MCP server links **all fourteen batteries** in, so the
+**873 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
 `/clap`) — and the studio
-on its own, with no features, carries **205** of them, and **219** with
+on its own, with no features, carries **211** of them, and **225** with
 the text battery. (Both measured; the number in an earlier draft of this
 line was stale, and a number that is not measured is a number that is
 wrong.)
@@ -1049,7 +1049,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 866 tests
+cargo test          # 873 tests
 cargo run -p craftkit-studio
 ```
 
@@ -4380,6 +4380,7 @@ derivation says:
 | a relation | **5** |
 | a stream | **7** |
 | a relation that says something | **8** — the payload of a relation is the eighth version's field |
+| a hidden node | **9** — the flag is the ninth version's field |
 
 A plain document is written at the **first** version. A document with a
 stream is written at the seventh. And the bundle says which version it
@@ -7517,3 +7518,66 @@ program that cannot resize is a drawing program that cannot draw.
 - **Only one handle.** A rectangle has four corners and the kit knows
   one of them: a resize that keeps the anchor keeps one corner still,
   and the other three would each need their own rule.
+
+---
+
+## 101. The node can be hidden
+
+Every drawing program has the idea: a layer that is turned off, a guide
+that is in the way, a shape that is not part of the picture yet. v2 had
+no way to say it. The only way to have a thing that was in the document
+and not on the screen was to take it **out** of the document — and
+taking it out loses it.
+
+### What was built
+
+- A **flag** on a node: `hidden`. A hidden node is not drawn and not
+  picked, and it is still in the document.
+- The **ninth version** of the format, which is the version that writes
+  the flag. Every earlier version writes it away, so a file of an
+  earlier version says nothing about hiding.
+- Two commands: `node.hide` and `node.show`. Two commands and not one
+  with a boolean: a boolean says "yes" or "no" instead of saying what
+  to do.
+- The kit owns what hidden means: `Document::walk_visible` skips a
+  hidden node and **does not go into it**, so a hidden group hides what
+  is in it. The window draws and picks with that walk and decides
+  nothing.
+
+### What the port found
+
+- **A flag on the core is a version of the format.** The node is
+  written by a function every version shares, so adding a field to it
+  changes every file the kit writes — and a file of the eighth version
+  must not carry a field the eighth version cannot explain. So the
+  field is the **ninth** version's, the earlier writers take it off,
+  and the step from the eighth to the ninth says what walking forward
+  means.
+- **The version is still derived from the document.** Nothing was
+  declared and nothing was configured: the document is written at each
+  version in turn and read back, and the first version whose round trip
+  gives the same document back is the one. A document with a hidden
+  node comes back smaller from the eighth version — the flag is
+  dropped — so it is written at the ninth. **The rule found the new
+  version by itself.**
+- **"Hidden" has to be one thing and not two.** The first version of
+  the window skipped hidden nodes when it drew and did not skip them
+  when it picked, and a node that could not be seen could still be
+  picked. So the kit has the walk, and both the drawing and the
+  picking use it.
+
+### What it cost
+
+- one flag, one version of the format, one step, two commands, one
+  walk, **eleven tests** (six in the studio — four about the file and
+  two about the commands — and one in the window, plus the four the
+  new version needed elsewhere).
+
+### What it does not settle
+
+- **A hidden node is still in the plan.** The plan is what the document
+  means, and a hidden node means something; the plan says what, and
+  nothing says that it is not to be seen.
+- **Nothing is hidden by default.** A document that a program opens has
+  everything shown, and a program that wants a layer turned off has to
+  turn it off.
