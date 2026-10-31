@@ -991,7 +991,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1032 tests.** The MCP server links **all fifteen batteries** in, so the
+**1035 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1093,7 +1093,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1032 tests
+cargo test          # 1035 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9309,10 +9309,10 @@ first thing that was missing was a way to get the **samples** in.
 - **There is still no audio.** The reader gives back samples and
   stops: there is no engine that mixes them, no device that plays them
   and no playhead that moves. The mixer is a picture of a mixer
-  (§127), and now the samples are in the room. — **Answered in §134
-  and §135**: the engine is the mixer, and the document is rendered
-  into a file. What is still missing is a **device** and a
-  **playhead**.
+  (§127), and now the samples are in the room. — **Answered in §134,
+  §135 and §136**: the engine is the mixer, the document is rendered
+  into a file, and the playhead says where the sound is. What is still
+  missing is a **device** and a **clock**.
 - **Only WAV.** A sound file may be in AIFF or in FLAC, and those are
   refusals with names.
 - **The file's own extras are left in it.** A WAV may carry a list of
@@ -9414,10 +9414,66 @@ the tracks are mixed, and the mix is written to a file.
 
 - **There is no device and no playhead.** The render makes a file; the
   kit cannot play it, cannot show where it is and cannot move a cursor
-  along it.
+  along it. — **Partly answered in §136**: the playhead is a node and
+  it says where the sound is; what is missing is a **device** and a
+  clock to move it.
 - **The mixer's graph is not rendered.** The buses, the sends, the
   inserts and the automation lanes (§127) are in the plan and not in
   the render: the render sums the clips.
 - **There is no resampler and no time stretch.** A source at another
   rate is refused, and a clip that should be slower than its source is
   not made.
+
+---
+
+## 136. The playhead is where the sound is
+
+The render made a file (§135) and there was no way to say **where in
+it** the sound was.
+
+### What was built
+
+- **The playhead is a node**: it has a **setting** — the position — and
+  a setting is a thing in a document, and a node is where settings
+  live. The same rule as the ruler's scale (§131).
+- The position is a number of **samples**, and it is worked out against
+  the session's rate: the world is in seconds and the document is in
+  samples.
+- The playhead is drawn as a **line** from the ruler's row through the
+  tracks, because a playhead is where the sound is and the sound is
+  under the ruler.
+- `sound.playhead.set` **moves** it: there is one playhead, and the
+  command moves it rather than adding another.
+
+### What the port found
+
+- **The transport is a place and not an event.** The tree this ports
+  has a transport that says "play" and "stop" and moves a cursor; here
+  the position **is** the number, and there is no event to catch. That
+  is the rule the plugin batteries already follow (§ the position is a
+  tick and everything else is derived), and it is the same rule here.
+- **A view with a setting is a node.** The playhead is a view thing —
+  it is not part of the design — and it has a setting. The ruler made
+  the same argument (§131) and the answer is the same: a node is where
+  settings live, and a view that is not in the document has nowhere to
+  keep its number.
+- **The line is drawn from the ruler down.** The playhead crosses the
+  ruler's row because the ruler is where the time is, and a cursor that
+  stopped at the tracks would say nothing about the time.
+
+### What it cost
+
+- one kind, one command, one place function and **three tests**: the
+  playhead is a line at the position, it is moved and not duplicated,
+  and a position before the beginning is refused.
+
+### What it does not settle
+
+- **Nothing moves it.** The playhead says where the sound is and the
+  kit has no **clock**: there is no thread, no device and no timer, so
+  the position is a number a caller sets.
+- **The playhead is in the document, so it is in the file.** A document
+  that is saved carries the position it was left at, and that is a
+  **view** in the design. It is the same trade as the ruler's scale
+  (§131): the setting is somewhere, and the document is where the
+  settings are.
