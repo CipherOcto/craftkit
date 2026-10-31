@@ -580,36 +580,66 @@ fn split_into_words(text: &str) -> Vec<String> {
     text.split_whitespace().map(|word| word.to_string()).collect()
 }
 
-/// The words of the text with `typed` put in at `character`.
+/// The words of the text with the characters from `from` to `to` put in
+/// as `typed`.
 ///
-/// The text is the words with a space between them, so putting a
-/// character in is putting it in the text and splitting the text into
-/// words again. The answer is the new words and where the caret stands
-/// afterwards.
-fn insert_at(words: &[String], character: usize, typed: &str) -> Option<(Vec<String>, usize)> {
+/// The text is the words with a space between them, so putting
+/// characters in is putting them in the text and splitting the text
+/// into words again. The answer is the new words and where the caret
+/// stands afterwards.
+///
+/// A range that is empty is an **insertion**: the characters go in at
+/// that place and nothing is taken away.
+fn replace_at(words: &[String], from: usize, to: usize, typed: &str) -> Option<(Vec<String>, usize)> {
     let characters: Vec<char> = text_of(words).chars().collect();
-    if character > characters.len() {
+    if from > to || to > characters.len() {
         return None;
     }
-    let mut text: String = characters[..character].iter().collect();
+    let mut text: String = characters[..from].iter().collect();
     text.push_str(typed);
-    text.extend(characters[character..].iter());
-    Some((split_into_words(&text), character + typed.chars().count()))
+    text.extend(characters[to..].iter());
+    Some((split_into_words(&text), from + typed.chars().count()))
 }
 
-/// The words of the text with the character **before** `character` taken
+/// The characters that are **picked out** in this paragraph, if any.
+///
+/// The selection is the session's (§22) and a part of a node is in the
+/// node's own units — and a paragraph's own unit is the character. So
+/// a picked-out range of a paragraph is a range of characters.
+///
+/// An **empty** range is not a picked-out range: the caret says where
+/// the reader is (§151) and the selection says what is picked out, and
+/// an empty range picks nothing out.
+fn picked_out(session: &Session, paragraph: u64) -> Option<(usize, usize)> {
+    session.selection().iter().find_map(|item| {
+        if item.node != paragraph {
+            return None;
+        }
+        let from = item.from?;
+        let to = item.to?;
+        if !from.is_finite() || !to.is_finite() || from < 0.0 || to < from {
+            return None;
+        }
+        if from.fract() != 0.0 || to.fract() != 0.0 {
+            return None;
+        }
+        Some((from as usize, to as usize))
+    })
+}
+
+/// The words of the text with the characters from `from` to `to` taken
 /// away.
-fn delete_before(words: &[String], character: usize) -> Option<(Vec<String>, usize)> {
-    if character == 0 {
-        return None;
-    }
+///
+/// The caret stands where the range began: the characters are gone and
+/// the reader is where they were.
+fn delete_range(words: &[String], from: usize, to: usize) -> Option<(Vec<String>, usize)> {
     let characters: Vec<char> = text_of(words).chars().collect();
-    if character > characters.len() {
+    if from > to || to > characters.len() {
         return None;
     }
-    let mut text: String = characters[..character - 1].iter().collect();
-    text.extend(characters[character..].iter());
-    Some((split_into_words(&text), character - 1))
+    let mut text: String = characters[..from].iter().collect();
+    text.extend(characters[to..].iter());
+    Some((split_into_words(&text), from))
 }
 
 /// The width of the column, in millimetres. Zero means **not set yet**.
@@ -1448,6 +1478,11 @@ impl MoveCaret {
 /// the middle of a word makes the word two words and typing a space
 /// makes a word end. The caret stands after what was typed.
 ///
+/// What is **picked out** is written over: a reader who has picked out
+/// a range and types means to write over it, and that is what every
+/// word processor does. The selection is the session's (§22) and it is
+/// gone when the text has been written.
+///
 /// The paragraph's **name** follows its words: the name is the first
 /// few words, and a paragraph whose first words changed has a name
 /// that says so.
@@ -1507,10 +1542,18 @@ impl TypeText {
                 message: format!("a paragraph may hold {MAX_TEXT_CHARACTERS} characters and no more"),
             });
         }
-        let Some((new_words, moved)) = insert_at(&words, character, typed) else {
+        // What is **picked out** is replaced; what is not is typed at
+        // the caret. A reader who has picked out a range and types
+        // means to write over it, and that is what every word processor
+        // does.
+        let (from, to) = match picked_out(session, id) {
+            Some((from, to)) if to > from => (from, to),
+            _ => (character, character),
+        };
+        let Some((new_words, moved)) = replace_at(&words, from, to, typed) else {
             return Err(EngineError::Failed {
                 id: "text.caret.type".to_string(),
-                message: format!("the caret is at {character} and the text is shorter than that"),
+                message: format!("the text is shorter than the range {from} to {to}"),
             });
         };
         if new_words.len() > LIMITS.entries {
@@ -1535,6 +1578,9 @@ impl TypeText {
             });
         };
         node.data["character"] = json!(moved);
+        // What was picked out has been written over, so nothing is
+        // picked out any more.
+        session.clear_selection();
         Ok(Outcome::changed(format!("typed into the paragraph {id}"))
             .with_data(json!({ "paragraph": id, "caret": caret, "character": moved })))
     }
@@ -1545,6 +1591,9 @@ impl TypeText {
 /// This is the backspace: the character before the caret goes and the
 /// caret stands where it was. A caret at the start of the text has
 /// nothing before it, and there is nothing to delete.
+///
+/// What is **picked out** is deleted instead, and the caret stands
+/// where the range began.
 #[derive(Command)]
 #[command(id = "text.caret.delete", area = "text", layer = "text", icon = "select", mutates, undoable)]
 pub struct DeleteBackward {
@@ -1586,16 +1635,24 @@ impl DeleteBackward {
             });
         };
         let character = character_of(caret_node).unwrap_or(0);
-        if character == 0 {
+        // What is **picked out** is deleted; what is not is the
+        // character before the caret.
+        let (from, to) = match picked_out(session, id) {
+            Some((from, to)) if to > from => (from, to),
+            _ => {
+                if character == 0 {
+                    return Err(EngineError::Failed {
+                        id: "text.caret.delete".to_string(),
+                        message: "there is nothing before the caret to delete".to_string(),
+                    });
+                }
+                (character - 1, character)
+            }
+        };
+        let Some((new_words, moved)) = delete_range(&words, from, to) else {
             return Err(EngineError::Failed {
                 id: "text.caret.delete".to_string(),
-                message: "there is nothing before the caret to delete".to_string(),
-            });
-        }
-        let Some((new_words, moved)) = delete_before(&words, character) else {
-            return Err(EngineError::Failed {
-                id: "text.caret.delete".to_string(),
-                message: format!("the caret is at {character} and the text is shorter than that"),
+                message: format!("the text is shorter than the range {from} to {to}"),
             });
         };
         let name = name_of(&new_words);
@@ -1614,6 +1671,9 @@ impl DeleteBackward {
             });
         };
         node.data["character"] = json!(moved);
+        // What was picked out has been deleted, so nothing is picked out
+        // any more.
+        session.clear_selection();
         Ok(Outcome::changed(format!("deleted a character in the paragraph {id}"))
             .with_data(json!({ "paragraph": id, "caret": caret, "character": moved })))
     }
