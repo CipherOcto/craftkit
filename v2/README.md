@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**903 tests.** The MCP server links **all fourteen batteries** in, so the
+**904 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1056,7 +1056,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 903 tests
+cargo test          # 904 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7925,3 +7925,44 @@ document that grows for ever.
   that deletes a node by another way must take them itself.
 - **There is no undelete.** The undo is the undelete, and a document
   that was saved and closed is gone.
+
+---
+
+## 109. The panels are shown
+
+A **panel** is a battery's own window of commands: it names the commands
+it shows. The batteries declared them, the ecosystem registered them,
+and **no front end showed them**.
+
+### What was built
+
+- The window shows the **panels** first, and the commands that no panel
+  shows after them, so that every command is shown **once**.
+- The window keeps the panels of the ecosystem it was built with: a
+  panel is a **contribution** and not a session's state — the session
+  is what a person changes, and a panel is what a battery shows.
+
+### What the port found
+
+- **A command that is shown twice is a command with two doors.** The
+  first version of the window showed the panels *and* every command by
+  area, so the panel's commands were in both. The commands that no
+  panel shows are the rest, and the window asks for those.
+- **The panels are not the session's state.** The session holds what a
+  person changes — the document, the history, the selection — and a
+  panel is what a battery brings. So the window keeps them beside the
+  session and not inside it.
+
+### What it cost
+
+- two methods on the window, one field, the window's own list of
+  commands, **one test**.
+
+### What it does not settle
+
+- **The panel is a list of commands and not a view.** It says what it
+  shows and nothing about how it shows it: a panel with a form in it,
+  or with a picture, is not a thing the kit has.
+- **A panel whose commands are not linked in is shown with a hole in
+  it.** The commands that are not there are left out, and the panel
+  does not say how many it wanted.
