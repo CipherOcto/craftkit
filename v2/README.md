@@ -978,7 +978,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**966 tests.** The MCP server links **all fifteen batteries** in, so the
+**974 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1080,7 +1080,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 966 tests
+cargo test          # 974 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1199,6 +1199,9 @@ none says so. The sound kinds have none, and the host no longer invents
 one: `node.add` takes a place if the caller wants it, the kind's own
 payload if it has one, and nothing at all otherwise.
 
+(§125 is the arc that gives the sound document a place again — a
+**derived** one, so that it never goes stale.)
+
 The file format grew a version for it — `craftkit/4` — and the step from
 the third version gives the document an empty payload and leaves the
 places where they are. The derive learned a field that may be **absent**,
@@ -1281,11 +1284,16 @@ and it is the same rule the vector battery follows.
   too (§121–§123), and what is missing is the **battery**: AU's
   parameters and its state are CoreFoundation's, so there is nothing
   portable for a document to carry yet.
-- **The mixer is not ported.** Ten insert slots and ten send slots per
-  strip, a routing graph over buses, and per-track automation are a
-  **model**, and the model is where the sound tree's closed enums live
-  (`Route`, `AutoParam`, `ChannelFormat`). In v2 they would all be
-  payload, which is possible and is not yet written.
+- **The mixer is modelled but not drawn.** Ten insert slots and ten send
+  slots per strip, a routing graph over buses, and per-track automation
+  are a **model**, and the model is where the sound tree's closed enums
+  live (`Route`, `AutoParam`, `ChannelFormat`). In v2 they are all
+  payload, and the model **is** written: a bus is a node, a send is a
+  node with a relation, an insert is a node with a plugin's name, and an
+  automation lane is a node with a parameter's name (§20.4). What is
+  missing is the **drawing**: the timeline shows the tracks and their
+  clips (§125), and the mixer itself — the strips, the buses and the
+  routing between them — is still a model and not a picture.
 - **The menus are not ported.** The sound tree's menu bar is generated
   from a **catalog file** of 512 leaf paths, and a command whose path is
   not in the catalog never appears in the bar. v2's projection is a view
