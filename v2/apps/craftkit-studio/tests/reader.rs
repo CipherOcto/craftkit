@@ -51,7 +51,7 @@ fn what_was_kept_is_written_back() {
     let written = craftkit_sdk::format::write_document(&document, &newest(&ecosystem));
     assert_eq!(written["views"], json!(["one", "two"]), "the views were written back");
     // And the file is still a file of this program's version.
-    assert_eq!(written["format"], "craftkit/8", "the newest version writes it");
+    assert_eq!(written["format"], "craftkit/9", "the newest version writes it");
 }
 
 /// A field of a **node** the reader does not understand is kept too.
@@ -89,8 +89,8 @@ fn a_node_field_the_reader_does_not_understand_is_kept() {
 fn a_file_from_a_newer_program_is_read_and_kept() {
     let ecosystem = ecosystem();
     let file = json!({
-        "format": "craftkit/9",
-        "version": 9,
+        "format": "craftkit/10",
+        "version": 10,
         "name": "from the future",
         "data": null,
         "nodes": [],
@@ -101,7 +101,7 @@ fn a_file_from_a_newer_program_is_read_and_kept() {
     let (document, forward) =
         craftkit_sdk::format::read_document_noting(&file, &ecosystem.formats, &ecosystem.migrations)
             .expect("the file is read");
-    assert_eq!(forward, Some(9), "the reader says the file was newer");
+    assert_eq!(forward, Some(10), "the reader says the file was newer");
     assert_eq!(document.name, "from the future", "the name was read");
     assert_eq!(document.unknown["views"], json!(["one"]), "the views were kept");
     // The file this program writes keeps them.
@@ -173,8 +173,8 @@ fn opening_a_file_from_the_future_says_so() {
     std::fs::write(
         &path,
         craftkit_sdk::serde_json::to_string(&json!({
-            "format": "craftkit/9",
-            "version": 9,
+            "format": "craftkit/10",
+            "version": 10,
             "name": "from the future",
             "data": null,
             "nodes": [],

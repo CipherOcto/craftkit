@@ -249,6 +249,68 @@ impl NodeResize {
     }
 }
 
+/// **Hide** a node.
+///
+/// A hidden node is in the document and not on the screen: it is not
+/// drawn and it is not picked. Hiding a group hides what is in it.
+///
+/// Before this, the only way to have a thing that was in the document
+/// and not on the screen was to take it **out** of the document, and
+/// taking it out loses it.
+#[derive(Command)]
+#[command(id = "node.hide", area = "node", icon = "eye", menu("Node"), mutates, undoable)]
+pub struct NodeHide {
+    /// The node to hide.
+    pub node: NodeRef,
+}
+
+impl NodeHide {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.hide".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.hidden = true;
+        }
+        Ok(Outcome::changed(format!("hid the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
+/// **Show** a node again.
+///
+/// The opposite of hiding, and a command of its own: a command that hid
+/// and showed in one would need a parameter to say which, and a
+/// parameter that is a boolean is a parameter that says "yes" or "no"
+/// instead of saying what to do.
+#[derive(Command)]
+#[command(id = "node.show", area = "node", icon = "eye", menu("Node"), mutates, undoable)]
+pub struct NodeShow {
+    /// The node to show.
+    pub node: NodeRef,
+}
+
+impl NodeShow {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        if session.document().node(id).is_none() {
+            return Err(EngineError::Failed {
+                id: "node.show".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        }
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.hidden = false;
+        }
+        Ok(Outcome::changed(format!("showed the node `{id}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id })))
+    }
+}
+
 /// Mute or unmute a node.
 ///
 /// The node may be given as an **id** or as a **name**: one parameter, two

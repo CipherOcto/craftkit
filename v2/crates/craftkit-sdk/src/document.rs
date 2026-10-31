@@ -568,6 +568,7 @@ impl FormatValue for Node {
             "kind": self.kind,
             "rect": self.rect.to_json(),
             "muted": self.muted,
+            "hidden": self.hidden,
             "appearance": self.appearance.map(|appearance| appearance.to_json()),
             "appearance_from": self.appearance_from,
             "data": self.data,
@@ -607,6 +608,11 @@ impl Node {
             None => None,
         };
         let muted = value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false);
+        // A node may be **hidden**. A file that says nothing about it is
+        // read as a node that is shown: the ninth version is the one
+        // that writes the field, and a file before it has no word for
+        // it.
+        let hidden = value.get("hidden").and_then(|hidden| hidden.as_bool()).unwrap_or(false);
         // A node may have an **appearance** of its own, and it may point
         // at one that has. A file that says nothing about either is read
         // as a node with neither.
@@ -633,6 +639,7 @@ impl Node {
                 "kind",
                 "rect",
                 "muted",
+                "hidden",
                 "appearance",
                 "appearance_from",
                 "data",
@@ -643,7 +650,20 @@ impl Node {
         // A node may have a **stream**: the file its bytes are in. A node
         // that does not have one says so.
         let stream = value.get("stream").and_then(|stream| stream.as_str()).map(|path| path.to_string());
-        Ok(Node { id, name, kind, rect, muted, appearance, appearance_from, data, children, unknown, stream })
+        Ok(Node {
+            id,
+            name,
+            kind,
+            rect,
+            muted,
+            hidden,
+            appearance,
+            appearance_from,
+            data,
+            children,
+            unknown,
+            stream,
+        })
     }
 }
 
@@ -763,6 +783,18 @@ pub struct Node {
     pub rect: Option<Rect>,
     /// Whether it is muted.
     pub muted: bool,
+    /// Whether it is **hidden**.
+    ///
+    /// A hidden node is not drawn and not picked: it is in the
+    /// document and not on the screen. Every drawing program has the
+    /// idea — a layer that is turned off, a guide that is in the way,
+    /// a shape that is not part of the picture yet — and before this
+    /// the only way to have it was to take the node **out** of the
+    /// document, which loses it.
+    ///
+    /// Hiding a **group** hides what is in it: the group is the thing
+    /// that is hidden, and what is inside it is behind it.
+    pub hidden: bool,
     /// How it looks, if it has an appearance of its own.
     ///
     /// It is **optional**: most things in a document are not seen — a
@@ -1087,6 +1119,7 @@ impl Document {
             kind: kind.into(),
             rect,
             muted: false,
+            hidden: false,
             appearance: None,
             appearance_from: None,
             data,
@@ -1127,6 +1160,18 @@ impl Document {
         Descendants { stack: self.nodes.iter().rev().map(|node| &**node).collect() }
     }
 
+    /// The nodes that are **not hidden**, in the order they are in.
+    ///
+    /// A hidden node is not drawn and not picked, and what is inside a
+    /// hidden group is behind it: the group is the thing that is
+    /// hidden, so the walk does not go into it.
+    ///
+    /// This is the walk a front end draws with and the walk it picks
+    /// with, so that "hidden" means one thing and not two.
+    pub fn walk_visible(&self) -> Visible<'_> {
+        Visible { stack: self.nodes.iter().rev().map(|node| &**node).collect() }
+    }
+
     /// Take a node out of the document, and say whether it was there.
     ///
     /// The node goes wherever it is — at the top level or under another
@@ -1162,6 +1207,7 @@ impl Document {
             kind: kind.into(),
             rect,
             muted: false,
+            hidden: false,
             appearance: None,
             appearance_from: None,
             data,
@@ -1336,6 +1382,30 @@ impl<'a> Iterator for Descendants<'a> {
             self.stack.push(&**child);
         }
         Some(node)
+    }
+}
+
+/// The nodes of a document that are **not hidden**.
+pub struct Visible<'a> {
+    stack: Vec<&'a Node>,
+}
+
+impl<'a> Iterator for Visible<'a> {
+    type Item = &'a Node;
+
+    fn next(&mut self) -> Option<&'a Node> {
+        loop {
+            let node = self.stack.pop()?;
+            if node.hidden {
+                // The node is hidden, and so is everything in it: the
+                // walk does not go into a hidden group.
+                continue;
+            }
+            for child in node.children.iter().rev() {
+                self.stack.push(&**child);
+            }
+            return Some(node);
+        }
     }
 }
 

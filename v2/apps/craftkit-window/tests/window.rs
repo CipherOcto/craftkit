@@ -270,3 +270,28 @@ fn a_node_resizes_through_the_registry() {
     assert_eq!(rect.w, 20.0, "the width changed");
     assert_eq!(rect.h, 30.0, "and the height");
 }
+
+/// A **hidden** node is neither drawn nor picked.
+///
+/// It is in the document and not on the screen, and the window does not
+/// decide that: the kit's walk of what is not hidden says so, and the
+/// window draws and picks with that walk.
+#[test]
+fn a_hidden_node_is_neither_drawn_nor_picked() {
+    let mut window = window();
+    window.open("node.add");
+    window.set("name", json!("a shape"));
+    window.set("kind", json!("geometry.rect"));
+    window.set("rect", json!({ "x": 0.0, "y": 0.0, "w": 10.0, "h": 10.0 }));
+    window.run().expect("the command runs");
+
+    assert_eq!(window.pick(craftkit_sdk::Point::new(5.0, 5.0)), Some(1), "the shape is picked");
+
+    window.run_id("node.hide", json!({ "node": 1 })).expect("the node is hidden");
+    assert_eq!(window.pick(craftkit_sdk::Point::new(5.0, 5.0)), None, "a hidden node is not picked");
+
+    // And the tree still says it is there: it is in the document.
+    let rows = window.tree();
+    assert_eq!(rows.len(), 1, "the node is in the document");
+    assert!(rows[0].hidden, "and the tree says it is hidden");
+}

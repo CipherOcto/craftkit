@@ -345,6 +345,23 @@ fn without_payloads(value: &mut Json) {
 /// stream is the seventh version's field, and a file of the sixth version
 /// that has one is a file of the sixth version with something in it that
 /// the sixth version does not know.
+/// Take the `hidden` flag off every node.
+///
+/// The flag is the **ninth** version's field: a file of an earlier
+/// version must not carry a field that version does not know, or a
+/// program that reads it with an older reader will find a field it
+/// cannot explain.
+fn without_hidden(value: &mut Json) {
+    let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+        return;
+    };
+    for node in nodes.iter_mut() {
+        if let Some(object) = node.as_object_mut() {
+            object.remove("hidden");
+        }
+    }
+}
+
 fn without_streams(value: &mut Json) {
     let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
         return;
@@ -369,6 +386,7 @@ pub fn write_v1(document: &Document) -> Json {
             }
         }
     }
+    without_hidden(&mut value);
     without_streams(&mut value);
     let mut written = serde_json::json!({
         "format": "craftkit/1",
@@ -396,6 +414,7 @@ pub fn write_v2(document: &Document) -> Json {
             }
         }
     }
+    without_hidden(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -413,6 +432,7 @@ pub fn write_v3(document: &Document) -> Json {
         "name": document.name,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
+    without_hidden(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -429,6 +449,7 @@ pub fn write_v4(document: &Document) -> Json {
         "data": document.data,
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
     });
+    without_hidden(&mut value);
     without_streams(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
@@ -448,6 +469,7 @@ pub fn write_v5(document: &Document) -> Json {
         "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
     });
+    without_hidden(&mut value);
     without_streams(&mut value);
     without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
@@ -470,6 +492,7 @@ pub fn write_v6(document: &Document) -> Json {
         "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
         "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
     });
+    without_hidden(&mut value);
     without_streams(&mut value);
     without_payloads(&mut value);
     merge_unknown(&mut value, &document.unknown);
@@ -499,6 +522,8 @@ pub fn write_v7(document: &Document) -> Json {
     // file of the seventh version must not carry a field the seventh
     // version does not know.
     without_payloads(&mut value);
+    // And the `hidden` flag is the **ninth** version's field.
+    without_hidden(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -726,6 +751,11 @@ pub fn write_v8(document: &Document) -> Json {
     // The payload of a relation is the eighth version's field, and this
     // is the version that has it: it is written here, and the seventh
     // version's writer takes it off again.
+    //
+    // The `hidden` flag is the **ninth** version's field, and the eighth
+    // version does not have it: a file of the eighth version must not
+    // carry a field that version cannot explain.
+    without_hidden(&mut value);
     merge_unknown(&mut value, &document.unknown);
     value
 }
@@ -756,6 +786,62 @@ impl V7ToV8 {
         for relation in relations.iter_mut() {
             if let Some(object) = relation.as_object_mut() {
                 object.entry("payload").or_insert(Json::Null);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The ninth version of the document format.
+///
+/// It adds the `hidden` flag to a node: a node may be in the document
+/// and not on the screen. Every version before this one writes the
+/// flag away, so a file of an earlier version is a file that says
+/// nothing about hiding.
+pub fn write_v9(document: &Document) -> Json {
+    let mut value = serde_json::json!({
+        "format": "craftkit/9",
+        "version": 9,
+        "name": document.name,
+        "data": document.data,
+        "nodes": document.nodes.iter().map(|node| node.to_json()).collect::<Vec<_>>(),
+        "relations": document.relations.iter().map(|relation| relation.to_json()).collect::<Vec<_>>(),
+        "assets": document.assets.iter().map(|asset| asset.to_json()).collect::<Vec<_>>(),
+    });
+    merge_unknown(&mut value, &document.unknown);
+    value
+}
+
+/// The ninth version of the document format.
+pub static FORMAT_V9: FormatSpec =
+    FormatSpec { tag: "craftkit/9", version: 9, layer: "core", read: Document::from_json, write: write_v9 };
+
+inventory::submit! {
+    crate::contribution::Registration { item: &FORMAT_V9 }
+}
+
+/// The step from the eighth version to the ninth.
+///
+/// A file of the eighth version has no word for hiding, and **not
+/// hidden** is what it gets: the reader reads a file that says nothing
+/// about the flag as a document whose nodes are all shown.
+///
+/// The step is here because the chain must have one: a program that
+/// reads an eighth version file has to walk it forward to the version
+/// it knows, and the step says what walking forward means.
+#[derive(crate::Migration)]
+#[migration(id = "craftkit.8to9", family = "craftkit", from = 8, to = 9, layer = "core")]
+pub struct V8ToV9;
+
+impl V8ToV9 {
+    /// The step itself.
+    fn apply(value: &mut Json) -> Result<(), String> {
+        let Some(nodes) = value.get_mut("nodes").and_then(|nodes| nodes.as_array_mut()) else {
+            return Ok(());
+        };
+        for node in nodes.iter_mut() {
+            if let Some(object) = node.as_object_mut() {
+                object.entry("hidden").or_insert(Json::Bool(false));
             }
         }
         Ok(())

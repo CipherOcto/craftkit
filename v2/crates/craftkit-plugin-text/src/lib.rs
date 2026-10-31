@@ -997,6 +997,7 @@ mod tests {
             kind: kind.to_string(),
             rect: None,
             muted: false,
+            hidden: false,
             appearance: None,
             appearance_from: None,
             data,

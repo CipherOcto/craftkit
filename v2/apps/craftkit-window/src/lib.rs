@@ -94,7 +94,12 @@ impl Window {
         self.session
             .document()
             .walk()
-            .map(|node| NodeRow { id: node.id, name: node.name.clone(), kind: node.kind.clone() })
+            .map(|node| NodeRow {
+                id: node.id,
+                name: node.name.clone(),
+                kind: node.kind.clone(),
+                hidden: node.hidden,
+            })
             .collect()
     }
 
@@ -200,7 +205,7 @@ impl Window {
     pub fn pick(&self, point: craftkit_sdk::Point) -> Option<u64> {
         self.session
             .document()
-            .walk()
+            .walk_visible()
             .filter(|node| {
                 self.session.kinds().get(&node.kind).map(|kind| (kind.hit)(node, point)).unwrap_or(false)
             })
@@ -246,7 +251,7 @@ impl Window {
         let tolerance = tolerance.max(0.0);
         self.session
             .document()
-            .walk()
+            .walk_visible()
             .filter(|node| {
                 node.rect
                     .map(|rect| {
@@ -306,7 +311,7 @@ impl Window {
         let camera = *self.session.camera();
         let mut raster = craftkit_raster::Raster::new(width, height, camera)?;
         let document = self.session.document();
-        for node in document.walk() {
+        for node in document.walk_visible() {
             let Some(kind) = self.session.kinds().get(&node.kind) else { continue };
             (kind.paint)(node, document, &mut raster);
         }
@@ -347,6 +352,11 @@ pub struct NodeRow {
     pub name: String,
     /// Its kind.
     pub kind: String,
+    /// Whether it is hidden.
+    ///
+    /// A hidden node is in the document and not on the screen, and the
+    /// tree says so: a row that is not drawn says nothing about why.
+    pub hidden: bool,
 }
 
 /// One **item** of the plan, as the window shows it.
