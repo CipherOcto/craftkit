@@ -984,7 +984,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1003 tests.** The MCP server links **all fifteen batteries** in, so the
+**1005 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1086,7 +1086,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1003 tests
+cargo test          # 1005 tests
 cargo run -p craftkit-studio
 ```
 
@@ -9126,7 +9126,8 @@ here* and not what it says. That was honest, and it was a placeholder.
 - **The canvas's text is still monospaced.** The cell is fixed, so a
   narrow letter and a wide one take the same room. A canvas that
   measured its text would want the advance of each character, and the
-  seam would need a number it does not have.
+  seam would need a number it does not have. — **Answered in §132**:
+  the seam takes the size, and the advance is the typeface's own.
 - **The picture has no anti-aliasing** (§67), so a letter is a
   staircase like everything else. A letter is thinner than a rectangle,
   so it shows the staircase more.
@@ -9192,3 +9193,54 @@ numbers are possible.
   not readable.
 - **The ruler is drawn once per frame**, like everything else, and a
   document with a thousand bars pays a search per bar (§126).
+
+---
+
+## 132. The canvas's text takes a size, and is proportional
+
+§130 gave the canvas real letters, and the letters came out **one size
+for everything**: the canvas had a cell of its own, and every character
+took it.
+
+### What was built
+
+- **The seam takes the size**: the height of the capitals — the **em** —
+  in the world's units. The size is the caller's, because the size is
+  the caller's business.
+- **The advance is the typeface's own**, so the text is **proportional**:
+  a narrow letter takes less room than a wide one.
+- The **CAD battery** passes the text's own **height**, so a text that
+  says how tall it is is drawn that tall.
+
+### What the port found
+
+- **A seam that takes a number is a seam that can be changed.** The
+  canvas's text had no size because the canvas had a size of its own —
+  the fixed cell — and a caller with a size could not give it away. The
+  CAD battery's text **has** a height, in its payload, and it was
+  ignored: the drawing and the model disagreed and the drawing won.
+- **The size and the width are two different things.** The size is the
+  caller's; the width of each letter is the typeface's. A metric may
+  say otherwise — and then the metric wins, as it does in the text
+  battery (§129) — but a canvas's text has no metric, so the typeface
+  is the only truth there is.
+- **The recording canvas follows the seam.** It records the size too,
+  because a recorder that forgets a parameter is a recorder that cannot
+  be trusted to tell two drawings apart.
+
+### What it cost
+
+- one parameter on a seam, two implementations, one caller and **two
+  tests**: the text is proportional — a line of `i` is narrower than a
+  line of `m` — and the size is the caller's, because the big letter is
+  bigger.
+
+### What it does not settle
+
+- **A canvas's text has no metric.** The letters are the typeface's own
+  widths, so a text that is measured by a **metric** — a paragraph
+  (§129) — and a text that is drawn by the canvas are measured
+  differently. The two never meet today: the text battery draws its
+  letters as paths and the canvas draws the CAD's text.
+- **The picture has no anti-aliasing** (§67), so a letter thinner than
+  a pixel is a letter that comes and goes with the zoom.
