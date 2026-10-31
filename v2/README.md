@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**847 tests.** The MCP server links **all fourteen batteries** in, so the
+**849 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -7262,3 +7262,63 @@ thing it needed first: a kind that can **see** the document.
 - **The window does not show the appearances.** It shows them in the
   **picture**, which is where they are, and a list of them would be a
   second thing to keep right.
+
+## 96. The CAD battery draws
+
+§95 left the CAD battery with the appearance and nothing to do with
+it. This is the other half: the battery had a **model** — layers,
+blocks, entities, extents — and **no picture at all**.
+
+### What was built
+
+- The CAD battery's entities **draw**: a line is a line, a circle is a
+  circle, and a text is a text.
+- The **colour is the layer's**: an entity is *on* a layer, the layer
+  holds an appearance, and the entity is drawn in it. An entity with no
+  layer is drawn in black.
+- The **layer** takes a fill, written as `#rrggbb` — the kit's
+  spelling, like every other colour in the tree.
+- The **canvas's text takes a colour**. The seam said text is black,
+  and a layer's text is not black: the text now takes a colour like
+  everything else that is drawn.
+- Two more tests: the line is in its layer's colour, and the entity
+  with no layer is in black.
+
+### What the port found
+
+- **The model was a table and a flat store, and not a picture.** The
+  CAD battery had layers, blocks, entities and extents, and every one
+  of them said "not drawn". A port of the *model* without the *picture*
+  is a document model with no way to see it — and the port of the
+  **vector** battery, which came first, had drawn its paths from the
+  start. The gap was that a battery can be ported twice: once for what
+  it *holds* and once for what it *looks like*.
+- **The colour was the layer's all along, and the layer could not say
+  what it was.** The layer's payload held a `color` — an index or a
+  name — and **nothing resolved it**: it was a field with no meaning.
+  Now the layer holds an appearance, and the entity that is on the
+  layer is drawn in it.
+- **The seam said text is black.** The canvas drew text in a colour of
+  its own, because the seam had no colour to give it. That is what a
+  seam is for: it is the place where the tree's own rules are written
+  down, and a rule that is wrong in the seam is wrong everywhere.
+
+### What it cost
+
+- one seam changed (the text takes a colour), one macro body, three
+  drawings, one parameter on a command, **two tests**.
+
+### What it does not settle
+
+- **The circle is a polygon of sixty-four segments.** The kit has no
+  curves in its drawing except the ones a path carries, and a circle
+  is drawn as a polygon of straight lines.
+- **The text has no font.** The canvas draws the box each character
+  would occupy, and the picture says *there is text here* and not what
+  it says.
+- **Nothing can be picked.** The entity's hit test still says no, so a
+  line cannot be clicked in the window.
+- **The layer's old `color` field is still there.** An index or a name
+  in the payload, and nothing resolves it: the appearance is how a
+  layer says what colour it is, and the old field has not been taken
+  away.
