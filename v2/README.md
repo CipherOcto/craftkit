@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1192 tests.** The MCP server links **all fifteen batteries** in, so the
+**1194 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1192 tests
+cargo test          # 1194 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3592,6 +3592,7 @@ so.
 | a **better resampler** | **built.** The resampler is a **windowed sinc** — an ideal low-pass with a Kaiser window — so what was above the new half of the rate is taken away instead of folding back as a whistle; a sound too long for the limits is refused (§155) | §137, §155 |
 | a **shape that follows the automation** | **built.** The gain of a clip's sound at a time is the clip's own gain and the track's curve, and the shape on the bar is drawn with it (§156) | §156 |
 | a **caret that moves a word and a line at a time** | **built.** The word is in the words and the line is in the layout, and the caret keeps its place across a line (§157) | §151, §157 |
+| a **resampler with a bank** | **built.** The kernel is precomputed for every phase of a rational rate change, so an output is a dot product; a rate change with no bank worth having is read tap by tap (§158) | §155, §158 |
 
 ### The list of things that are honestly not there: empty
 
@@ -10754,3 +10755,65 @@ family's caret moves a word at a time and a line at a time.
   thinks is there.
 - **There is no selection to move.** The caret moves alone; the
   selection is the session's and it is not moved with it (§152).
+
+## 158. The resampler has a bank
+
+§155 ported the tree's windowed sinc and said that the **polyphase
+bank** was not ported: the tree precomputes the kernel for every
+phase of a rational rate change, so that an output is one dot product
+over the samples, and this resampler read the kernel for every tap.
+
+### What was built
+
+- The **bank**: the kernel precomputed for every phase of a rational
+  rate change. Two whole numbers have a common factor, and the rate
+  change is then a whole number of phases; each phase has its own set
+  of weights, and an output is one dot product over the samples.
+- The resampler uses the bank when there is one worth having, and
+  reads **tap by tap** when there is not: a rate change with no small
+  common factor has one phase for every output frame, and a bank of
+  that size is not a bank.
+
+### What the port found
+
+- **The bank is the tree's, and the tree's is a library too.** The
+  bank is arithmetic like the resampler it speeds up: it is a table of
+  weights and a dot product, and it needs no device and no host — the
+  same finding as §155, one layer down.
+- **A rate change has a common factor or it has a hundred thousand
+  phases.** Forty-four thousand and one hertz have no common factor
+  and the phases are one for every output frame; the bank would be
+  millions of weights for nothing. So the bank is **refused** when it
+  is too large, and the taps are there for it — the same bargain as
+  everywhere else in this tree: a bound is a bound and there is a way
+  round it that is not a truncation.
+- **The bank and the taps are the same sound.** That is the claim
+  worth a test: if the fast path were a different resampler, the
+  sound would be different in a way nobody could hear. The two agree
+  to within a hundredth of a percent.
+
+### What it cost
+
+- **Two tests** in the crate (`bank_tests`): the bank and the taps are
+  the same sound, and a rate change without a bank is read tap by tap.
+- **One measurement** the reader can run: `cargo test -p craftkit-audio
+  -- --ignored --nocapture` prints the two paths' times. On this
+  machine, forty-four thousand and one hertz to forty-eight thousand,
+  two hundred and eighteen thousand samples: **the bank took 230
+  milliseconds and the taps 383** — a speed-up of **1.7 times**.
+
+### What it does not settle
+
+- **The bank's dot product gathers across the channels.** The samples
+  are interleaved here, so the taps of a channel are a stride apart,
+  and the dot product is a gather and not a walk over memory that is
+  all together. The tree's samples are a channel at a time, and its
+  bank is contiguous. The sound is the same and the memory is not.
+- **The speed-up is not the tree's.** The tree's bank is over
+  contiguous memory and its taps are the same taps, so its speed-up
+  is a little better than the **1.7 times** measured here. The port
+  measured what it built and not what the tree built.
+- **The cap on the bank's size is a number the port chose.** Four
+  million weights is sixteen megabytes, and a rate change that needs
+  more than that is read tap by tap. The tree's cap is the same
+  number, and neither of the two ports measured it.
