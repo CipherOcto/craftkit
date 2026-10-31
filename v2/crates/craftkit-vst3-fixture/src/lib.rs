@@ -55,7 +55,7 @@
 //! Writing through the pointers the host hands over is `unsafe` in the
 //! plain sense: those pointers are the host's memory, and the plugin
 //! writes into them. So this crate is on v2's **list** of exceptions —
-//! the seventh entry — and it is held to the same rules as the others:
+//! the **eighth** entry — and it is held to the same rules as the others:
 //! `deny(unsafe_code)` and not `forbid`, **one** `allow(unsafe_code)`,
 //! and the `unsafe` inside **one module**.
 //!

@@ -43,7 +43,7 @@
 //! Opening a library, calling into it, and reading the memory it wrote
 //! is `unsafe` by definition: the host is calling code it has not read,
 //! at an address it did not choose. So this crate is on v2's **list**
-//! of exceptions — the seventh entry — and it is held to the same rules
+//! of exceptions — the **seventh** entry — and it is held to the same rules
 //! as the others:
 //!
 //! - it is **one crate**, and it does one thing;
