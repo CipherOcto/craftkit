@@ -52,6 +52,7 @@
 //! not a crash of the program, because the program holds the user's
 //! document and a crash loses it.
 
+use std::any::Any;
 use std::cell::Cell;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -84,7 +85,11 @@ pub enum Block {
 ///   allocate, it must not wait for anything, and it must not panic. A
 ///   panic is caught and the block is silenced, so a job that breaks
 ///   does not take the program with it.
-pub trait LaneJob: Send {
+///
+/// The job is **`Any`**, so that a caller may have the work back when
+/// it stops and read what it made: a lane that swallowed its job would
+/// be a lane that swallowed the samples.
+pub trait LaneJob: Send + Any {
     /// Prepare the work.
     ///
     /// This is the control thread, and it is where everything expensive

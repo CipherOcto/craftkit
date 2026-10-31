@@ -134,6 +134,9 @@ vst3 = ["dep:craftkit-plugin-vst3"]
 # It is a **dev** dependency: nothing in the application links it, and
 # the application itself still forbids unsafe.
 craftkit-alloc = { path = "../../crates/craftkit-alloc" }
+# The **mixer**: the audio crate the sound battery mixes with, and the
+# tracks the lane's test hands it.
+craftkit-audio = { path = "../../crates/craftkit-audio" }
 # A plugin that is **not part of the program**: a shared library, built
 # by cargo and opened by the door's tests. It is a dev dependency, so
 # nothing that ships links it.

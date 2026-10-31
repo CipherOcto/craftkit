@@ -82,12 +82,17 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// One **track**: a stretch of samples that starts somewhere.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Track<'a> {
+///
+/// The track **owns** its samples, and that is the point: the mixing
+/// that runs on a lane may not allocate, and a track that borrowed its
+/// samples would have to be built on the control thread and could not
+/// be handed to the lane whole.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Track {
     /// Where it starts, in samples from the beginning of the mix.
     pub start: i64,
     /// The samples, interleaved.
-    pub samples: &'a [f32],
+    pub samples: Vec<f32>,
     /// Its gain, **linear**: one is as it is, a half is half.
     pub gain: f64,
 }
@@ -121,7 +126,22 @@ pub fn db_to_linear(db: f64) -> f64 {
 /// The mix is as long as the **longest** track, and the samples are not
 /// clipped: a clip is a decision about the output, and the caller makes
 /// it when the mix is written.
-pub fn mix(tracks: &[Track<'_>], rate: u32, limits: &Limits) -> Result<Mix, Error> {
+pub fn mix(tracks: &[Track], rate: u32, limits: &Limits) -> Result<Mix, Error> {
+    let frames = frames_of(tracks)?;
+    if frames > limits.max_frames {
+        return Err(Error::TooLong { frames });
+    }
+    let mut samples = vec![0.0_f32; frames as usize];
+    mix_into(&mut samples, tracks);
+    Ok(Mix { rate, frames, samples })
+}
+
+/// How many **frames** a set of tracks needs.
+///
+/// The tracks are checked as they are counted: a track that starts
+/// before the beginning and a track with a gain that is not a number
+/// are **refused**, and the refusal says which track.
+pub fn frames_of(tracks: &[Track]) -> Result<i64, Error> {
     let mut frames = 0_i64;
     for track in tracks {
         if track.start < 0 {
@@ -135,21 +155,36 @@ pub fn mix(tracks: &[Track<'_>], rate: u32, limits: &Limits) -> Result<Mix, Erro
             frames = end;
         }
     }
-    if frames > limits.max_frames {
-        return Err(Error::TooLong { frames });
-    }
-    let mut samples = vec![0.0_f32; frames as usize];
+    Ok(frames)
+}
+
+/// The samples of every track, summed, **into a buffer the caller owns**.
+///
+/// This is the mixing that may run on a **lane**: it allocates nothing,
+/// it waits for nothing and it does bounded work. The buffer is the
+/// caller's and the tracks are the caller's too.
+///
+/// A track that starts after the buffer ends is left out, and a track
+/// that starts before it is summed into it from where it starts.
+pub fn mix_into(output: &mut [f32], tracks: &[Track]) -> usize {
     for track in tracks {
+        if track.start < 0 {
+            continue;
+        }
         let start = track.start as usize;
+        if start >= output.len() {
+            continue;
+        }
+        let gain = track.gain as f32;
         for (index, sample) in track.samples.iter().enumerate() {
             let at = start + index;
-            if at >= samples.len() {
+            if at >= output.len() {
                 break;
             }
-            samples[at] += *sample * track.gain as f32;
+            output[at] += *sample * gain;
         }
     }
-    Ok(Mix { rate, frames, samples })
+    output.len()
 }
 
 /// The samples of a mix, **clipped** to the range a file may hold.

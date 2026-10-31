@@ -17,8 +17,10 @@ fn limits() -> Limits {
 fn two_tracks_are_summed() {
     let first: Vec<f32> = vec![0.5, 0.5];
     let second: Vec<f32> = vec![0.25, 0.25];
-    let tracks =
-        [Track { start: 0, samples: &first, gain: 1.0 }, Track { start: 0, samples: &second, gain: 1.0 }];
+    let tracks = [
+        Track { start: 0, samples: first.clone(), gain: 1.0 },
+        Track { start: 0, samples: second.clone(), gain: 1.0 },
+    ];
     let mixed = mix(&tracks, 48_000, &limits()).expect("the tracks are mixed");
     assert_eq!(mixed.frames, 2);
     assert!((mixed.samples[0] - 0.75).abs() < 1e-6, "the first sample is the sum");
@@ -29,7 +31,7 @@ fn two_tracks_are_summed() {
 #[test]
 fn a_track_that_starts_later_lands_later() {
     let late: Vec<f32> = vec![1.0];
-    let tracks = [Track { start: 3, samples: &late, gain: 1.0 }];
+    let tracks = [Track { start: 3, samples: late.clone(), gain: 1.0 }];
     let mixed = mix(&tracks, 48_000, &limits()).expect("the track is mixed");
     assert_eq!(mixed.frames, 4, "the mix is as long as the track's end");
     assert!((mixed.samples[0] - 0.0).abs() < 1e-6, "nothing is at the beginning");
@@ -40,7 +42,7 @@ fn a_track_that_starts_later_lands_later() {
 #[test]
 fn a_gain_multiplies_the_track() {
     let track: Vec<f32> = vec![1.0, 1.0];
-    let tracks = [Track { start: 0, samples: &track, gain: 0.5 }];
+    let tracks = [Track { start: 0, samples: track.clone(), gain: 0.5 }];
     let mixed = mix(&tracks, 48_000, &limits()).expect("the track is mixed");
     assert!((mixed.samples[0] - 0.5).abs() < 1e-6, "the sample is halved");
 }
@@ -57,7 +59,7 @@ fn a_decibel_is_a_ratio() {
 #[test]
 fn a_track_that_starts_before_the_beginning_is_refused() {
     let track: Vec<f32> = vec![1.0];
-    let tracks = [Track { start: -1, samples: &track, gain: 1.0 }];
+    let tracks = [Track { start: -1, samples: track.clone(), gain: 1.0 }];
     let error = mix(&tracks, 48_000, &limits()).expect_err("that is before the beginning");
     assert_eq!(error, Error::NegativeStart { start: -1 });
 }
@@ -66,7 +68,7 @@ fn a_track_that_starts_before_the_beginning_is_refused() {
 #[test]
 fn a_gain_that_is_not_a_number_is_refused() {
     let track: Vec<f32> = vec![1.0];
-    let tracks = [Track { start: 0, samples: &track, gain: f64::NAN }];
+    let tracks = [Track { start: 0, samples: track.clone(), gain: f64::NAN }];
     let error = mix(&tracks, 48_000, &limits()).expect_err("that is not a gain");
     assert_eq!(error, Error::BadGain);
 }
@@ -76,7 +78,7 @@ fn a_gain_that_is_not_a_number_is_refused() {
 #[test]
 fn a_mix_longer_than_the_limits_allow_is_refused() {
     let track: Vec<f32> = vec![0.0; 16];
-    let tracks = [Track { start: 0, samples: &track, gain: 1.0 }];
+    let tracks = [Track { start: 0, samples: track.clone(), gain: 1.0 }];
     let limits = Limits { max_frames: 8 };
     let error = mix(&tracks, 48_000, &limits).expect_err("that is longer than the limit");
     assert_eq!(error, Error::TooLong { frames: 16 });

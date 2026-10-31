@@ -1837,7 +1837,7 @@ impl RenderSound {
             click_into(&mut master, channels as usize, rate, &tempo_map(session.document()), &settings);
         }
         let mix = craftkit_audio::mix(
-            &[craftkit_audio::Track { start: 0, samples: &master, gain: 1.0 }],
+            &[craftkit_audio::Track { start: 0, samples: master, gain: 1.0 }],
             rate,
             &craftkit_audio::Limits::default(),
         )
@@ -1854,6 +1854,81 @@ impl RenderSound {
             "channels": channels,
             "clips": tracks.len(),
         })))
+    }
+}
+
+/// The **mix** of a sound document, as a **lane job**.
+///
+/// This is the real-time work of a sound application: the tracks are
+/// prepared on the **control thread** — the sources are read, the
+/// clips are prepared and the tracks' signals are built — and the lane
+/// does the rest: the block's samples are the sum of the tracks, and
+/// nothing is allocated while it happens.
+///
+/// The tree has **no device**, so nothing plays the job: a caller runs
+/// the blocks itself, and the rule that the work does not allocate is
+/// **measured** on it rather than asserted in a comment.
+pub struct MixJob {
+    /// The tracks, prepared: their signals and where they start.
+    tracks: Vec<craftkit_audio::Track>,
+    /// The block's samples.
+    block: Vec<f32>,
+    /// The frames the job has mixed.
+    played: i64,
+}
+
+impl MixJob {
+    /// A job that mixes these tracks.
+    pub fn new(tracks: Vec<craftkit_audio::Track>) -> MixJob {
+        MixJob { tracks, block: Vec::new(), played: 0 }
+    }
+
+    /// The block's samples, after the lane has run it.
+    pub fn samples(&self) -> &[f32] {
+        &self.block
+    }
+
+    /// How many frames the job has mixed.
+    pub fn played(&self) -> i64 {
+        self.played
+    }
+}
+
+impl craftkit_sdk::LaneJob for MixJob {
+    /// Prepare: the **control thread**. The block's buffer is made
+    /// here, because the lane may not allocate.
+    fn prepare(&mut self, block: usize) -> Result<(), String> {
+        self.block = vec![0.0_f32; block];
+        Ok(())
+    }
+
+    /// Run: the **lane**. The tracks are summed into the block, and
+    /// nothing is allocated.
+    fn run(&mut self, frames: usize) -> craftkit_sdk::Block {
+        let frames = frames.min(self.block.len());
+        for sample in self.block.iter_mut().take(frames) {
+            *sample = 0.0;
+        }
+        let block_start = self.played.max(0) as usize;
+        let block_end = block_start + frames;
+        for track in &self.tracks {
+            let start = track.start.max(0) as usize;
+            let end = start + track.samples.len();
+            // The part of the track that is in this block.
+            let from = start.max(block_start);
+            let to = end.min(block_end);
+            if from >= to {
+                continue;
+            }
+            let gain = track.gain as f32;
+            for (index, sample) in track.samples[from - start..to - start].iter().enumerate() {
+                if let Some(slot) = self.block.get_mut(from - block_start + index) {
+                    *slot += *sample * gain;
+                }
+            }
+        }
+        self.played += frames as i64;
+        craftkit_sdk::Block::Played
     }
 }
 
