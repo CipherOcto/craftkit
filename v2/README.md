@@ -8368,3 +8368,53 @@ and the names the two sides ask each other by.
 - **The FUIDs are not the SDK's.** A program that talks to a real
   plugin asks for the SDK's bytes instead, and the shape of the call
   is the same either way.
+
+## 118. The reference VST3 plugin
+
+§117 wrote down the shapes; this section is the **other side** of them:
+a plugin that exports them, built by the compiler and opened from the
+disk.
+
+### What was built
+
+- **A `cdylib`** — `craftkit-vst3-fixture` — that exports one
+  **function**, `GetPluginFactory`. The host finds it by name, calls
+  it, and gets the factory back.
+- **One class**, `Craftkit::Fixture`, with **one parameter** (a gain),
+  **one bus in** and **one bus out**, and a state of four bytes: the
+  gain itself, in the plugin's own words.
+- **The plugin does the one thing a plugin is for**: what comes in
+  comes out, louder or quieter.
+- **The unsafe is in one module**, and every block in it says why it
+  is sound: it is writing through a pointer the host gave it.
+
+### What the port found
+
+- **The entry is a function, and the symbol is found by name.** Craftkit's
+  own door finds a function and calls it; CLAP's entry is a *variable*
+  whose value is a pointer; VST3's is a function again. Three doors,
+  two shapes.
+- **A name in a pattern is a binding and not a constant.** The
+  fixture's first draft asked which interface it was with a `match`
+  over the interface id, and the arm bound the id instead of matching
+  it — so *every* request took the first arm, and the plugin made a
+  component when it was asked for a processor. The ids are now
+  **compared**, and the lesson is the tree's own: a constant in a
+  pattern is a thing that can be *read*, not a thing that can be
+  *bound*.
+- **The plugin's own state is the plugin's own.** The fixture saves
+  four bytes and reads four bytes back, and the host never looks
+  inside them: it cannot, and it does not try.
+
+### What it cost
+
+- one crate, **four tests**, and the **seventh** crate on the list of
+  exceptions.
+
+### What it does not settle
+
+- **The audio processor is a second instance.** In the format it is
+  the *same* object as the component, seen through another table, and
+  §117's shape cannot say that. The fixture gives it a state of its
+  own, and says so here rather than hiding it.
+- **It is a fixture**: one class, one parameter, one bus each way.
