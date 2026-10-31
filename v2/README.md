@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1207 tests.** The MCP server links **all fifteen batteries** in, so the
+**1212 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1207 tests
+cargo test          # 1212 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3597,6 +3597,7 @@ so.
 | a **send that is panned and muted** | **built.** A send's copy is panned on its way to the bus, and a muted send is a copy of nothing; a pan that is not a pan is refused (§160) | §160 |
 | a **pre-fader send** | **built.** The track's stage is the clips, the inserts, the mute and then the fader, and a send may take its copy from before the fader; a muted track is not heard anywhere (§161) | §160, §161 |
 | a **master with a fader** | **built.** A track whose kind is `master` holds the fader of the whole mix: its inserts are run over the mix, its lanes move it, and the metronome is summed after it (§162) | §162 |
+| a **bus that is read** | **built.** A track may read a bus, and a bus that is read is heard through the reader and not by itself; a reader holds no clips, has no sends and is not routed (§163) | §163 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11088,3 +11089,67 @@ other, and its fader moved nothing but its own — empty — signal.
   and nothing reads a bus back.
 - **The delay compensation of the main mix is not there.** The tree
   delays the main mix by the slowest insert on the master.
+
+## 163. A bus is read, and a reader is a track
+
+A bus is a **destination**: sound collects there and is not heard
+there. Something must read it and take it into the mix. The tree's aux
+is a strip that reads a bus, and v2 had no reader at all.
+
+### What was built
+
+- A track may **read** a bus: the command is `sound.track.input`, and
+  the reading is a **relation** — the node says what it is and the
+  relation says what it reads.
+- A bus that is read is **heard through the reader and not by itself**:
+  the reader carries the bus's sound into the mix, with its own inserts
+  and its own fader.
+- The refusals that keep the reader honest: a reader **holds no
+  clips**, has **no sends** and is **not routed** — it carries the
+  bus's sound and nothing else, and each of those is refused by name.
+- A track reads **one** bus: the same bus twice is refused, and so is
+  a second bus.
+
+### What the port found
+
+- **The tree's bus is silent on its own.** The tree's bus is a
+  destination and nothing more; what reaches the speakers is the sound
+  of an aux track that reads it, at the aux's own level. Here the bus
+  was heard by itself, at a level of one, and nothing could take it out
+  of the mix — which is why a send was the only way to hear a bus, and
+  why the copy could not be balanced or faded on its own.
+- **The tree's aux is a strip like any other.** It has inserts, it has
+  a fader, it has a mute, and it reads a bus. So a reader here is not a
+  special kind of thing: it is a **track** that reads a bus, and
+  everything a track can do to its signal — the inserts, the fader, the
+  mute — it does to the bus's sound.
+- **A reader is not a second path into the mixer.** It holds no clips
+  (it has a bus and not a playlist), it has no sends (it carries the
+  bus's sound and does not copy itself anywhere) and it is not routed
+  (it is heard in the main mix). Each of those would make a loop: the
+  bus's sound would be taken out of the mix, copied back into it and
+  taken out of it again. The refusals are not caution; they are what
+  keeps the arithmetic a sum and not a spiral.
+
+### What it cost
+
+- **Five tests** in the battery (`tests/reader.rs`): a bus that is read
+  is heard through the reader, a reader holds no clips, a reader has no
+  sends, a reader is not routed, and a track reads one bus.
+- **One command** (`sound.track.input`) and **one relation kind**
+  (`input`). The MCP server now carries **202** commands.
+
+### What it does not settle
+
+- **A reader may not be routed.** The tree's aux may be sent to a bus
+  like any other strip; here a reader is heard in the main mix and
+  nowhere else, because a routed reader would put the bus's sound back
+  into the mix after the bus had been read.
+- **The readers are not in the dependency order.** The tree reads its
+  auxes in dependency order — an aux that reads a bus another aux feeds
+  is read after it. Here a reader reads a bus that is finished, and a
+  reader may not feed a bus, so the order is a single step; a chain of
+  readers is not built.
+- **The bus's channel format does not fold.** The tree's matrix folds a
+  mono bus into a stereo aux with the pan law; here the copy is the
+  copy.
