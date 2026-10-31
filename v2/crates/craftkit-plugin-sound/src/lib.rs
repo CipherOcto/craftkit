@@ -15,12 +15,12 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-seven commands**, one for each thing a person does to a
-//!   sound document: make a track, set a track, make a clip, make a
-//!   take, choose the take that is played, set the tempo, set the
-//!   meter, make a marker, make a source, set the session, and the rest
-//!   that came with the mixer — the bus, the send, the insert, the
-//!   lane, the route, the input, the peaks and the render;
+//! - **twenty-eight commands**, one for each thing a person does to a
+//!   sound document: make a track, set a track, make a clip, mute a
+//!   clip, make a take, choose the take that is played, set the tempo,
+//!   set the meter, make a marker, make a source, set the session, and
+//!   the rest that came with the mixer — the bus, the send, the insert,
+//!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
 //! - an **evaluator**, `sound.timeline`, which says what the document
@@ -864,6 +864,11 @@ pub(crate) struct ClipPayload {
     /// One is none. Two is twice as long and an octave lower, because
     /// the pitch follows the speed.
     stretch: f64,
+    /// Whether the clip is **muted**.
+    ///
+    /// A muted clip is not played and is still there: the tree's
+    /// renderer skips it and the tree's editor keeps it.
+    muted: bool,
 }
 
 /// The most a clip may be stretched.
@@ -885,6 +890,7 @@ impl ClipPayload {
             "fade_in": self.fade_in.to_json(),
             "fade_out": self.fade_out.to_json(),
             "stretch": self.stretch,
+            "muted": self.muted,
         })
     }
 
@@ -915,6 +921,7 @@ impl ClipPayload {
                 None => FadePayload::none(),
             },
             stretch,
+            muted: value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
         })
     }
 }
@@ -1430,6 +1437,7 @@ impl AddClip {
             fade_in: FadePayload::none(),
             fade_out: FadePayload::none(),
             stretch,
+            muted: false,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -2100,6 +2108,66 @@ impl SetPlayhead {
     }
 }
 
+/// **Mute** a clip, or unmute it.
+///
+/// A muted clip is not played and is still there: the tree's renderer
+/// skips it and the tree's editor keeps it, so that a clip that is
+/// quiet is a clip that may be loud again.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.mute",
+    area = "sound",
+    layer = "sound",
+    icon = "sound",
+    menu("Track", "Mute"),
+    mutates,
+    undoable
+)]
+pub struct MuteClip {
+    /// The clip to mute.
+    pub clip: NodeRef,
+    /// Whether it is muted. Without it, the clip is muted.
+    pub muted: Option<Bool>,
+}
+
+impl MuteClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.clip.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.clip.mute".to_string(),
+                message: format!("there is no clip `{id}`"),
+            });
+        };
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.mute".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.clip.mute".to_string(),
+            message: error.to_string(),
+        })?;
+        let muted = self.muted.map(|muted| muted.0).unwrap_or(true);
+        payload.muted = muted;
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.clip.mute".to_string(),
+                message: format!("there is no clip `{id}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(if muted {
+            format!("the clip `{id}` is muted")
+        } else {
+            format!("the clip `{id}` is not muted")
+        })
+        .with_data(serde_json::json!({ "id": id, "muted": muted })))
+    }
+}
+
 /// Render the document into a **sound file**.
 ///
 /// The renderer is the first thing in this tree that makes a sound: it
@@ -2138,6 +2206,10 @@ impl RenderSound {
                 message: format!("the clip `{}` cannot be read: {error}", clip.id),
             })?;
             let Some(source_id) = payload.source else { continue };
+            // A **muted** clip is not played and is still there.
+            if payload.muted {
+                continue;
+            }
             // The **take**: a clip that is not in the take that is
             // played is not heard, and the tree's tracks have takes for
             // exactly that reason.
