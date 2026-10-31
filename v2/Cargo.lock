@@ -367,6 +367,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-audio"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-bridge"
 version = "0.2.0"
 dependencies = [
@@ -606,10 +610,12 @@ dependencies = [
 name = "craftkit-plugin-sound"
 version = "0.2.0"
 dependencies = [
+ "craftkit-audio",
  "craftkit-derive",
  "craftkit-font",
  "craftkit-sdk",
  "craftkit-sound-time",
+ "craftkit-wav",
 ]
 
 [[package]]

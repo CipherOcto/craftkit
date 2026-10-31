@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-audio"
+description = "The mixer: the samples of many tracks, summed into one. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. The mixer is arithmetic over plain numbers: it takes samples
+# and gives back samples, and it knows nothing about a document, a file
+# or the kit.

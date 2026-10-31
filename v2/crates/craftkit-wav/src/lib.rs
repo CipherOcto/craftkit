@@ -340,3 +340,39 @@ fn decode(data: &[u8], format: &Format) -> Vec<f32> {
 fn chunk_name(name: &[u8]) -> String {
     name.iter().map(|byte| char::from(*byte)).collect()
 }
+
+/// Write a sound as a WAV file.
+///
+/// The file is **sixteen bit** PCM: it is the width every tool reads,
+/// and a file the kit writes is a file the kit can read back.
+///
+/// The samples are **clipped** to the range a file may hold: a mix may
+/// be louder than one, and a file cannot say so.
+pub fn write(channels: u16, rate: u32, samples: &[f32]) -> Vec<u8> {
+    let channel_count = channels.max(1);
+    let channels = channel_count as usize;
+    let frames = samples.len() / channels;
+    let mut bytes: Vec<u8> = Vec::with_capacity(44 + frames * channels * 2);
+    bytes.extend_from_slice(&RIFF);
+    bytes.extend_from_slice(&0_u32.to_le_bytes());
+    bytes.extend_from_slice(&WAVE);
+    // The format chunk.
+    bytes.extend_from_slice(&FMT);
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&FORMAT_PCM.to_le_bytes());
+    bytes.extend_from_slice(&channel_count.to_le_bytes());
+    bytes.extend_from_slice(&rate.to_le_bytes());
+    bytes.extend_from_slice(&(rate * channels as u32).to_le_bytes());
+    bytes.extend_from_slice(&((channels * 2) as u16).to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    // The samples.
+    bytes.extend_from_slice(&DATA);
+    bytes.extend_from_slice(&((frames * channels * 2) as u32).to_le_bytes());
+    for sample in samples.iter().take(frames * channels) {
+        let value = (sample.clamp(-1.0, 1.0) * 32767.0).round() as i16;
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    let size = (bytes.len() - 8) as u32;
+    bytes[4..8].copy_from_slice(&size.to_le_bytes());
+    bytes
+}

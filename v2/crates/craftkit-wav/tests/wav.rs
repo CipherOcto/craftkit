@@ -222,3 +222,31 @@ fn samples_that_are_not_whole_frames_are_refused() {
     let error = sound(&a_wav(1, 1, 48_000, 16, &[0, 0, 0])).expect_err("that is half a frame");
     assert_eq!(error, Error::ShortData);
 }
+
+/// A sound **written** by the kit is a file the kit can read back.
+///
+/// The round trip is the test: what goes in comes out, within the
+/// width of sixteen bits.
+#[test]
+fn a_sound_written_is_a_sound_read() {
+    let samples = [0.0_f32, 0.5, -0.5, 1.0, -1.0];
+    let bytes = craftkit_wav::write(1, 48_000, &samples);
+    let sound = sound(&bytes).expect("the file is read back");
+    assert_eq!(sound.channels, 1);
+    assert_eq!(sound.rate, 48_000);
+    assert_eq!(sound.frames, 5);
+    for (index, sample) in samples.iter().enumerate() {
+        let read = sound.samples[index];
+        assert!((read - sample).abs() < 1.0 / 32767.0, "the sample {index} came back as {read}");
+    }
+}
+
+/// A sound that is **louder than one** is clipped when it is written:
+/// a file cannot say how loud it is.
+#[test]
+fn a_sound_that_is_too_loud_is_clipped() {
+    let bytes = craftkit_wav::write(1, 48_000, &[2.0, -2.0]);
+    let sound = sound(&bytes).expect("the file is read back");
+    assert!((sound.samples[0] - 1.0).abs() < 1.0 / 32767.0, "the loud sample is clipped");
+    assert!((sound.samples[1] + 1.0).abs() < 1.0 / 32767.0, "and so is the quiet one");
+}
