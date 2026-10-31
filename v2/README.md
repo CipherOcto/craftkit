@@ -1284,16 +1284,18 @@ and it is the same rule the vector battery follows.
   too (§121–§123), and what is missing is the **battery**: AU's
   parameters and its state are CoreFoundation's, so there is nothing
   portable for a document to carry yet.
-- **The mixer is modelled but not drawn.** Ten insert slots and ten send
+- **The mixer is modelled and drawn.** Ten insert slots and ten send
   slots per strip, a routing graph over buses, and per-track automation
   are a **model**, and the model is where the sound tree's closed enums
   live (`Route`, `AutoParam`, `ChannelFormat`). In v2 they are all
   payload, and the model **is** written: a bus is a node, a send is a
   node with a relation, an insert is a node with a plugin's name, and an
-  automation lane is a node with a parameter's name (§20.4). What is
-  missing is the **drawing**: the timeline shows the tracks and their
-  clips (§125), and the mixer itself — the strips, the buses and the
-  routing between them — is still a model and not a picture.
+  automation lane is a node with a parameter's name (§20.4). The
+  **drawing** is here too (§127): the buses are rows under the tracks,
+  the sends are the lines between them, the inserts are the boxes at the
+  left of a row and the lanes are the curves on it. What is still
+  missing is the **audio** — the mixer is a picture of a mixer, and the
+  sound is not made.
 - **The menus are not ported.** The sound tree's menu bar is generated
   from a **catalog file** of 512 leaf paths, and a command whose path is
   not in the catalog never appears in the bar. v2's projection is a view
@@ -8810,9 +8812,13 @@ obvious one.
   want the rows **stored**, and that is a different design.
 - **The tempo and meter events are not drawn.** Their time is in
   **ticks** and the world is in **seconds**, so placing them would need
-  the tempo map, and that is the next arc.
+  the tempo map, and that is the next arc. — **Built in §126**: the ruler
+  is the row above the tracks, and the tick is worked out against the
+  tempo map.
 - **The mixer is still not drawn.** Its model is written (§20.4) and its
-  picture is not.
+  picture is not. — **Built in §127**: the buses are rows under the
+  tracks, the sends are the lines between them, the inserts are the boxes
+  at the left of a row and the automation lanes are the curves on it.
 
 ---
 
@@ -8862,3 +8868,61 @@ oversight: the **tempo** and **meter** events carry their time in
   kit **has no font** (§12) and a number it cannot draw is not worth
   computing. The bar numbers of a real ruler are still missing.
 
+---
+
+## 127. The mixer is a picture
+
+The mixer's **model** was written long ago (§20.4): a bus is a node, a
+send is a node with a relation, an insert is a node with a plugin's
+name, and an automation lane is a node with a parameter's name. What
+was missing was the **picture** — and a model nobody can see is half a
+model.
+
+### What was built
+
+- **The buses are rows under the tracks.** The mixer is under the
+  timeline: the tracks are the rows above, the buses are the rows
+  below, and a bus is drawn as the **line along the top** of its row.
+- **The sends are the lines.** A send is the **edge** of the mixer's
+  graph, and an edge is drawn where it goes: a line from the track's
+  row down to the bus's row.
+- **The inserts are the boxes at the left of the row.** An insert is not
+  at a time, so it is at the **start** of the track — the way a mixer
+  shows the slots of a strip.
+- **An automation lane is a curve on the row**, drawn to **fill its
+  row**: the kit does not know what range a parameter takes, so what is
+  seen is the **shape** of the automation and not the absolute values.
+
+### What the port found
+
+- **The mixer is not a canvas of its own.** It is the same world as the
+  timeline — seconds across, rows down — and it is simply **below** the
+  tracks. Two pictures, one coordinate system, one kit.
+- **A send needs both of its ends.** The send node says *what it is* and
+  the relation says *where it goes* (§21), so the line's length is
+  worked out from the bus's row and the track's row: the edge knows its
+  own place because both of its ends have one.
+- **A lane's value has no range.** The lane's points are the parameter's
+  own values, and the kit does not know the parameter, so the curve is
+  **scaled to the row**. This is a decision, not a shortage: what the
+  lane shows is the shape of the automation, and a mixer that showed
+  absolute values would need to know every parameter's range — which is
+  the audio engine's business, and v2 has no audio engine yet.
+
+### What it cost
+
+- four tests in the battery — the bus's row, the send's line, the
+  insert's box and the lane's curve — and **one** in the studio.
+
+### What it does not settle
+
+- **The mixer's rows are counted by walking.** The bus's row is the
+  number of tracks plus its index among the buses, so drawing a mixer
+  of `n` buses costs `n` walks, the same cost as §125's rows.
+- **Two sends to the same bus at the same place are one line.** The
+  sends are spaced along the row by a fixed amount so that two lines
+  are not drawn on top of each other, but a mixer that draws one line
+  per send would need a way to say which is which.
+- **There is no audio.** The mixer is a picture of a mixer: the routing
+  is in the plan (§20.4) and the sound is not made. That is the audio
+  engine, and it is not built.
