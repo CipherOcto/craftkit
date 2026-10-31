@@ -1,7 +1,8 @@
 //! The **canvas**: the kit's painting seam, over a picture.
 
+use craftkit_font::{Font, Metrics};
 use craftkit_sdk::camera::Camera;
-use craftkit_sdk::document::{Canvas, Colour, FillRule, Path, Point, Rect, Segment, Stroke};
+use craftkit_sdk::document::{Canvas, Colour, FillRule, Path, Point, Rect, Segment, Stroke, SubPath};
 
 use crate::image::Image;
 
@@ -27,12 +28,25 @@ const CURVE_STEPS: usize = 24;
 
 /// How wide a character is, in the world's units, before the zoom.
 ///
-/// There is no font in this kit, so a character is a **box**: this is
-/// how wide the box is.
+/// This is the **cell**: every character takes one, a letter and a
+/// space alike, so a line of text is monospaced.
 const ADVANCE: f64 = 8.0;
 
 /// How tall a character is, in the world's units, before the zoom.
 const LINE_HEIGHT: f64 = 12.0;
+
+/// The **em** of the canvas's text: the height of the capitals, in the
+/// world's units.
+///
+/// It is under the line height, because a line of text needs room below
+/// the baseline for the letters that hang there — a `g`, a `p` — and
+/// the line height is that room.
+const EM: f64 = LINE_HEIGHT * 2.0 / 3.0;
+
+/// How wide the pen is, in the world's units.
+///
+/// A letter is a line, and a line has to be thick enough to be seen.
+const PEN: f64 = 0.8;
 
 /// A canvas that draws into a picture.
 ///
@@ -262,29 +276,43 @@ impl Canvas for Raster {
 
     /// Draw a line of text.
     ///
-    /// There is **no font** in this kit: it has the metrics of a
-    /// typeface and not its glyphs. So a character is drawn as the box it
-    /// would occupy — a typewriter's worth of rectangles — and the
-    /// picture says *there is text here* and not what it says.
+    /// The letters are the kit's **own**: the typeface is a table of
+    /// strokes drawn in code (§128), and a character is drawn by its
+    /// strokes and not by the box it would occupy.
+    ///
+    /// The **advance** is still one cell for every character — a space
+    /// takes a cell and a letter takes a cell — so a line of text is
+    /// still monospaced; what changed is that the cell now holds a
+    /// letter and not a rectangle.
     fn text(&mut self, at: Point, text: &str, colour: Colour) {
-        let (origin_x, origin_y) = self.to_pixels(at);
-        let zoom = self.camera.zoom();
-        let advance = ADVANCE * zoom;
-        let height = LINE_HEIGHT * zoom;
+        let font = Font::builtin();
+        let Some(metrics) = Metrics::new(EM) else { return };
+        let unit = metrics.unit();
         for (index, character) in text.chars().enumerate() {
-            if character == ' ' {
-                continue;
-            }
-            let x = origin_x + index as f64 * advance;
-            let y = origin_y - height;
-            let first = (x.floor().max(0.0)) as usize;
-            let last = ((x + advance * 0.8).ceil().min(self.image.width() as f64)) as usize;
-            let top = (y.floor().max(0.0)) as usize;
-            let bottom = ((y + height).ceil().min(self.image.height() as f64)) as usize;
-            for row in top..bottom {
-                for column in first..last {
-                    self.image.blend(column, row, colour);
+            let x = at.x + index as f64 * ADVANCE;
+            let Some(glyph) = font.glyph(character) else { continue };
+            let natural = glyph.advance * unit;
+            // The letter is **stretched** to the cell: the cell says how
+            // wide the character is and the typeface says what it looks
+            // like.
+            let scale = if natural > 0.0 { ADVANCE / natural } else { 1.0 };
+            for stroke in &glyph.strokes {
+                if stroke.len() < 2 {
+                    continue;
                 }
+                let mut segments = Vec::with_capacity(stroke.len() - 1);
+                for point in stroke.iter().skip(1) {
+                    segments.push(Segment::Line {
+                        to: Point::new(x + point[0] * unit * scale, at.y + point[1] * unit),
+                    });
+                }
+                let start = stroke[0];
+                let path = Path::single(SubPath {
+                    start: Point::new(x + start[0] * unit * scale, at.y + start[1] * unit),
+                    segments,
+                    closed: false,
+                });
+                Canvas::path(self, &path, Colour::NONE, Some(Stroke { colour, width: PEN }));
             }
         }
     }

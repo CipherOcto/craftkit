@@ -128,12 +128,12 @@ fn a_stroke_is_drawn_on_the_outline() {
     assert_eq!(pixel(image, 55, 45), Some([255, 255, 255, 255]), "the inside is not painted");
 }
 
-/// Text is drawn as boxes, because there is no font.
+/// Text is drawn, and it is drawn with the kit's own letters.
 ///
-/// The kit has the **metrics** of a typeface and not its glyphs, so a
-/// character is the box it would occupy.
+/// The typeface is the tree's own — a table of strokes drawn in code —
+/// so a character is a letter and not the box it would occupy.
 #[test]
-fn text_is_drawn_as_boxes() {
+fn text_is_drawn_at_all() {
     let mut canvas = a_canvas(100, 100);
     canvas.text(Point::new(-10.0, 0.0), "hi", craftkit_sdk::Colour::BLACK);
     let image = canvas.image();
@@ -256,4 +256,46 @@ fn unstore(stream: &[u8]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// The canvas's text is drawn with **the kit's own letters**.
+///
+/// The typeface is the tree's own — a table of strokes drawn in code —
+/// and a character is drawn by its strokes and not by the box it would
+/// occupy. So a letter is a **line** on the picture, and the space
+/// beside it is empty.
+#[test]
+fn the_text_is_drawn_with_letters_and_not_with_boxes() {
+    let mut canvas = a_canvas(100, 100);
+    canvas.text(Point::new(0.0, 0.0), "I", Colour::BLACK);
+    let image = canvas.image();
+    // The `I` is one vertical stroke: the middle of its cell is empty.
+    let mut ink = 0;
+    for column in 50..58 {
+        for row in 40..52 {
+            if pixel(image, column, row) == Some([0, 0, 0, 255]) {
+                ink += 1;
+            }
+        }
+    }
+    assert!(ink > 0, "the letter was not drawn");
+    // A box would have filled the cell: 8 wide and 12 tall.
+    assert!(ink < 40, "the letter is a box and not a letter: {ink} pixels");
+}
+
+/// A **space** takes a cell and draws nothing.
+#[test]
+fn a_space_takes_a_cell_and_draws_nothing() {
+    let mut canvas = a_canvas(100, 100);
+    canvas.text(Point::new(0.0, 0.0), " ", Colour::BLACK);
+    let image = canvas.image();
+    let mut ink = 0;
+    for column in 40..70 {
+        for row in 30..60 {
+            if pixel(image, column, row) == Some([0, 0, 0, 255]) {
+                ink += 1;
+            }
+        }
+    }
+    assert_eq!(ink, 0, "the space drew something: {ink} pixels");
 }

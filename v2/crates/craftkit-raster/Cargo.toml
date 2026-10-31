@@ -11,3 +11,7 @@ license.workspace = true
 # is a **library**, not a plugin: it contributes nothing to the registry
 # and the linker does not wire it in.
 craftkit-sdk = { workspace = true }
+# The kit's own typeface: the letters the canvas draws. A **library**,
+# not a plugin: it contributes nothing to the registry and the linker
+# does not wire it in.
+craftkit-font = { path = "../craftkit-font", version = "0.2.0" }

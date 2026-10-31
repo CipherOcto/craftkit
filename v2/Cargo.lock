@@ -654,6 +654,7 @@ dependencies = [
 name = "craftkit-raster"
 version = "0.2.0"
 dependencies = [
+ "craftkit-font",
  "craftkit-sdk",
 ]
 
