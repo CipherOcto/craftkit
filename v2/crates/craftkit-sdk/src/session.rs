@@ -350,15 +350,32 @@ impl Session {
         self.paint_handles(canvas);
     }
 
-    /// The **resize handles** of the selected nodes.
+    /// The **chrome** of the selection: its frame and its handles.
     ///
-    /// One handle each: the corner opposite the anchor, where the
-    /// rectangle says it is.
+    /// The frame says what is selected, and the handle says that it
+    /// can be resized. Both are **chrome**: they belong to the view
+    /// and not to the document, so a picture of the document — a
+    /// snapshot for a file — has neither.
+    ///
+    /// The line is a **screen** size, like the handle: one pixel
+    /// across, whatever the zoom.
     fn paint_handles(&self, canvas: &mut dyn crate::document::Canvas) {
         let zoom = self.camera().zoom();
         let size = HANDLE_PIXELS / zoom;
+        let width = 1.0 / zoom;
         for node in self.selected_nodes() {
             let Some(rect) = node.rect else { continue };
+            let frame = crate::document::Path::polygon(&[
+                crate::document::Point::new(rect.x, rect.y),
+                crate::document::Point::new(rect.x + rect.w, rect.y),
+                crate::document::Point::new(rect.x + rect.w, rect.y + rect.h),
+                crate::document::Point::new(rect.x, rect.y + rect.h),
+            ]);
+            canvas.path(
+                &frame,
+                crate::document::Colour::NONE,
+                Some(crate::document::Stroke { colour: crate::document::Colour::BLACK, width }),
+            );
             let handle = rect.resize_handle();
             canvas.rect(
                 crate::document::Rect::new(handle.x - size / 2.0, handle.y - size / 2.0, size, size),

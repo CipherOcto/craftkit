@@ -102,3 +102,31 @@ fn the_picture_of_the_document_has_no_handle() {
         canvas.drawn
     );
 }
+
+/// The **selection** is drawn.
+///
+/// The frame says what is selected, and it is chrome: it is drawn by
+/// the view and not by the document, so a picture of the document — a
+/// snapshot for a file — has no frame in it.
+#[test]
+fn the_selection_is_drawn() {
+    let mut session = a_rectangle();
+    session.execute("select.node", &json!({ "node": 1 })).expect("the node is selected");
+
+    let mut canvas = RecordingCanvas::default();
+    session.paint_view(&mut canvas);
+    assert!(
+        canvas.drawn.iter().any(|drawn| drawn.starts_with("path(")),
+        "the frame is drawn: {:?}",
+        canvas.drawn
+    );
+
+    // And a picture of the **document** has no frame in it.
+    let mut canvas = RecordingCanvas::default();
+    session.paint(&mut canvas);
+    assert!(
+        !canvas.drawn.iter().any(|drawn| drawn.starts_with("path(")),
+        "the document has no frame in it: {:?}",
+        canvas.drawn
+    );
+}
