@@ -897,6 +897,10 @@ different commands with one id.
   icons follow, and for the same reason. A **library**, not a plugin: it
   contributes nothing to the registry and the linker does not wire it in
   (§128).
+- `crates/craftkit-wav` — the **WAV reader**: the samples of a sound,
+  from the file — the header and the numbers, read within limits. A
+  **library**, not a plugin: it contributes nothing to the registry and
+  the linker does not wire it in (§133).
 - `crates/craftkit-plugin-text` — the **text battery**: a paragraph, its
   words, the measure it sits in, the **metric** it is set in, the lines
   it breaks into and the **letters** it is drawn with — ported into v2's
@@ -984,7 +988,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1005 tests.** The MCP server links **all fifteen batteries** in, so the
+**1020 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1086,7 +1090,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1005 tests
+cargo test          # 1020 tests
 cargo run -p craftkit-studio
 ```
 
@@ -1301,7 +1305,8 @@ and it is the same rule the vector battery follows.
   the sends are the lines between them, the inserts are the boxes at the
   left of a row and the lanes are the curves on it. What is still
   missing is the **audio** — the mixer is a picture of a mixer, and the
-  sound is not made.
+  sound is not made. The **samples** are read now (§133); what is
+  missing is the engine that mixes them.
 - **The menus are not ported.** The sound tree's menu bar is generated
   from a **catalog file** of 512 leaf paths, and a command whose path is
   not in the catalog never appears in the bar. v2's projection is a view
@@ -9244,3 +9249,60 @@ took it.
   letters as paths and the canvas draws the CAD's text.
 - **The picture has no anti-aliasing** (§67), so a letter thinner than
   a pixel is a letter that comes and goes with the zoom.
+
+---
+
+## 133. The WAV reader: the samples of a sound, from the file
+
+The kit can draw a mixer and it cannot make a sound (§127), and the
+first thing that was missing was a way to get the **samples** in.
+
+### What was built
+
+- **`craftkit-wav`**: the **RIFF** container, the **format** chunk and
+  the **data** chunk, read into samples.
+- The samples come back as `f32` — interleaved, between −1 and 1 —
+  whatever the file's own width was: sixteen, twenty four and thirty
+  two bit whole numbers, eight bit unsigned, and thirty two and sixty
+  four bit floats.
+- The **extensible** format is read too: it says what it is in its own
+  sub-format, and the sub-format's first two bytes are the answer.
+- The file is **hostile**, so every number in it is checked before a
+  single sample is read: the format is one the kit reads, the channels
+  are between one and the limit, the rate is not nothing and not too
+  fast, the samples are within the limit, and the samples are a whole
+  number of frames.
+
+### What the port found
+
+- **A sound file is a header and some numbers**, and the header is the
+  whole of the format: the rest is convention about how the numbers are
+  packed. So the reader is a small parser with a table of widths and
+  not an engine.
+- **A file that says one thing and holds another is refused.** The
+  samples are a whole number of frames, and a file whose data chunk is
+  a half frame short is not read: the numbers would be wrong in a way
+  nobody could see.
+- **The widths are the same problem the metric had.** A file's width is
+  a property of the **file** and not of the sound: the same recording
+  is eight bit in one file and sixteen in another, and the reader gives
+  back one thing — the numbers — so that the caller never has to know.
+  It is the same rule as the metric's (§60), with the file in place of
+  the document.
+
+### What it cost
+
+- one crate, one module and **fifteen tests**: the samples of every
+  width the kit reads, the interleaving of a stereo file, the
+  extensible format, and a refusal for every way a file can lie.
+
+### What it does not settle
+
+- **There is still no audio.** The reader gives back samples and
+  stops: there is no engine that mixes them, no device that plays them
+  and no playhead that moves. The mixer is a picture of a mixer
+  (§127), and now the samples are in the room.
+- **Only WAV.** A sound file may be in AIFF or in FLAC, and those are
+  refusals with names.
+- **The file's own extras are left in it.** A WAV may carry a list of
+  markers or a name, and the reader does not look for them.
