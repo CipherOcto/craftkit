@@ -955,7 +955,7 @@ different commands with one id.
   state, the state as base64 and the state as the plugin's own bytes
   (§87). It is optional, like the others.
 
-**904 tests.** The MCP server links **all fourteen batteries** in, so the
+**905 tests.** The MCP server links **all fourteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -986,8 +986,9 @@ wrong.)
   built (§78) — and what v2 has besides those is the **projection** every
   front end would read. The **window** is built too (§91: a thin front
   end over the same registry), and the **control channel** is a crate
-  with its own tests — but no application opens it yet, because the
-  channel serves a session of its own and the window has one already.
+  with its own tests that the **window opens over its own session**
+  (§110) — so an agent that runs a command over the channel changes
+  the document the window is drawing.
 - **A real document model.** The vector battery (§12) put paths, curves and
   colours in a document that is still a list of nodes with rectangles. What
   the port showed is missing: a typed body, text, and images. The
@@ -1056,7 +1057,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 904 tests
+cargo test          # 905 tests
 cargo run -p craftkit-studio
 ```
 
@@ -7966,3 +7967,51 @@ and **no front end showed them**.
 - **A panel whose commands are not linked in is shown with a hole in
   it.** The commands that are not there are left out, and the panel
   does not say how many it wanted.
+
+---
+
+## 110. The control channel drives the window
+
+The control channel could only serve a session of its own. So a
+program that had a session already had **two** documents, and one of
+them was a copy.
+
+### What was built
+
+- The channel can serve a session the caller **keeps**: the same lock
+  on the same session, so the two are one document.
+- The **window** opens a channel over its own session when it is asked
+  to: `--control PORT`, with the token in `CRAFTKIT_CONTROL_TOKEN`.
+- The window's session is behind a **lock**, and the lock is taken
+  anyway when it is poisoned: a panic in one thread must not take the
+  window down with it.
+
+### What the port found
+
+- **A copy of a document is a document that drifts.** The channel's
+  session and the window's session would each have their own history,
+  their own selection and their own camera, and the person at the
+  keyboard would be looking at one of them while the agent was driving
+  the other.
+- **The token is asked for and not invented.** The window takes the
+  token from the environment and opens nothing without it: a channel
+  with a token a program can guess is a channel with no token, and the
+  program that opens it is the one that decides who may drive it.
+
+### What it cost
+
+- one method on the channel's server, the window's session behind a
+  lock, the window's methods adapted, **one test** — and the test is
+  the point: it runs a command over the channel and looks at the
+  window's document.
+
+### What it does not settle
+
+- **The channel cannot click.** The old tree's channel had `ui.click`,
+  `ui.screenshot` and `ui.render`, and an agent that could see the
+  screen could check what it had done. v2's channel has the six
+  methods of the protocol and not the three of the screen.
+- **The window redraws when it is told to.** The picture is drawn again
+  when the document, the camera or the command count has changed, and
+  a command that arrived over the channel changes the document — so
+  the window redraws — but nothing says so out loud.
