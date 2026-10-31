@@ -87,6 +87,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // for the same reason the other ABI is: a binary contract that two
     // sides share is data, and data belongs at the bottom.
     ("craftkit-vst3-abi", 0),
+    // The **AU ABI**: the shapes an Audio Unit is made of. It is here
+    // for the same reason the other two are: a binary contract that two
+    // sides share is data, and data belongs at the bottom.
+    ("craftkit-au-abi", 0),
     ("craftkit-gates", 0),
     ("craftkit-link", 0),
     // The payload reader: a bounded reading of the values a document
@@ -124,6 +128,15 @@ pub const LAYERS: &[(&str, u8)] = &[
     // because a host that has never opened a real plugin has not been
     // tested.
     ("craftkit-vst3-fixture", 1),
+    // The **AU host**: the same door, in another format's language. An
+    // AU exports **functions** and the platform's component manager
+    // makes the instances, so this door reaches the tree's own door for
+    // that one thing. One `unsafe` module, and it is named.
+    ("craftkit-au", 1),
+    // A **reference AU**: a shared library that exports the symbols the
+    // host looks for. It is a fixture, and it is here because a host
+    // that has never opened a real unit has not been tested.
+    ("craftkit-au-fixture", 1),
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),
