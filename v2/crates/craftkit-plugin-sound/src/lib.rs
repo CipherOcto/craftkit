@@ -297,16 +297,38 @@ impl ClipKind {
 
 /// The kind of a tempo event.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.tempo", label = "Tempo", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.tempo", label = "Tempo", layer = "sound", evaluates, place)]
 pub struct TempoKind;
 
 impl TempoKind {
-    /// How a tempo event is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a tempo event is drawn: a **mark in the ruler**.
+    ///
+    /// The ruler is the row **above** the tracks, and it is where the
+    /// things that are not on a track live: the tempo and the meter.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::event_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x, rect.y + rect.h),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a tempo event.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::event_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a tempo event **is**: a mark in the ruler.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::event_rect(document, node)
     }
 
     /// What a tempo event **means**, in the plan.
@@ -318,16 +340,35 @@ impl TempoKind {
 
 /// The kind of a meter event.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.meter", label = "Meter", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.meter", label = "Meter", layer = "sound", evaluates, place)]
 pub struct MeterKind;
 
 impl MeterKind {
-    /// How a meter event is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a meter event is drawn: a **mark in the ruler**.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::event_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x, rect.y + rect.h),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a meter event.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::event_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a meter event **is**: a mark in the ruler.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::event_rect(document, node)
     }
 
     /// What a meter event **means**, in the plan.
@@ -1191,7 +1232,7 @@ impl RoutingEvaluator {
 ///
 /// The map is **derived**: the document holds the events, and the map is
 /// what they mean. That is the evaluator's job and not the document's.
-fn tempo_map(document: &Document) -> TempoMap {
+pub(crate) fn tempo_map(document: &Document) -> TempoMap {
     let mut map = TempoMap::new();
     for node in document.walk() {
         if node.kind == "sound.tempo"
@@ -1452,6 +1493,26 @@ mod tests {
             !ClipKind::hit(clip, session.document(), Point::new(5.0, 0.5)),
             "and a point outside it is not"
         );
+    }
+
+    /// A tempo event is a **mark in the ruler**, and the ruler is above
+    /// the tracks.
+    ///
+    /// The event's time is in **ticks** and the world is in **seconds**,
+    /// so the tick is worked out against the tempo map: a tick is a
+    /// musical position, and it is not a length until the tempo says how
+    /// fast the music is.
+    #[test]
+    fn a_tempo_event_is_a_mark_in_the_ruler() {
+        let mut session = session();
+        session.execute("sound.tempo.set", &json!({ "tick": 960, "bpm": 120.0 })).expect("the tempo is set");
+        let tempo =
+            session.document().walk().find(|node| node.kind == "sound.tempo").expect("the tempo is there");
+        let rect = TempoKind::place(tempo, session.document()).expect("the tempo has a place");
+        assert_eq!(rect.y, -timeline::RULER_HEIGHT, "the ruler is above the tracks");
+        // At a hundred and twenty beats a minute, a beat is half a
+        // second, and tick 960 is one beat.
+        assert!((rect.x - 0.5).abs() < 0.001, "and the beat is half a second in: {}", rect.x);
     }
 
     /// The kind of a track is a string, and it is open.

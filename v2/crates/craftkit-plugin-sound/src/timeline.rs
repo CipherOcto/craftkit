@@ -43,7 +43,8 @@
 
 use craftkit_sdk::document::{Document, Node, Rect};
 
-use crate::{ClipPayload, MarkerPayload, session_of};
+use crate::mixer::LanePayload;
+use crate::{ClipPayload, MarkerPayload, session_of, tempo_map};
 
 /// The kind of a **track**.
 const TRACK_KIND: &str = "sound.track";
@@ -51,11 +52,34 @@ const TRACK_KIND: &str = "sound.track";
 /// The kind of a **playlist**.
 const PLAYLIST_KIND: &str = "sound.playlist";
 
+/// The kind of a **bus**.
+const BUS_KIND: &str = "sound.bus";
+
 /// How tall one **row** is, in world units.
 ///
 /// A track is a row, and a row is one world unit tall: the timeline's
 /// world is measured in seconds across and in rows down.
 pub const ROW_HEIGHT: f64 = 1.0;
+
+/// The **ruler**: the row above the tracks.
+///
+/// It is where the things that are not on a track live: the tempo and
+/// the meter. It is **above** the first track, so the ruler's row is
+/// at `-1` and the first track's row is at `0`.
+pub const RULER_HEIGHT: f64 = ROW_HEIGHT;
+
+/// How wide an **insert** is, in world units.
+///
+/// The inserts are the boxes at the **left** of a track's row, the way
+/// a mixer shows them: an insert is not at a time, so it is at the
+/// start.
+pub const INSERT_WIDTH: f64 = 0.2;
+
+/// How far apart two **sends** are, in world units.
+///
+/// The sends are the lines from a track down to a bus, and two lines
+/// that are in the same place are one line.
+pub const SEND_SPACING: f64 = 0.05;
 
 /// The narrowest a **clip** may be.
 ///
@@ -148,6 +172,28 @@ pub fn marker_rect(document: &Document, marker: &Node) -> Option<Rect> {
     Some(Rect::new(x, 0.0, MINIMUM_WIDTH, length_of(document).max(ROW_HEIGHT)))
 }
 
+/// The rectangle of a **tempo** or **meter** event: a mark in the
+/// ruler.
+///
+/// The event's time is in **ticks**, and the world is in **seconds**,
+/// so the tick is worked out against the **tempo map** — the map the
+/// evaluator derives from the very events this reads. A tick is a
+/// musical position, and it is not a length until the tempo says how
+/// fast the music is.
+pub fn event_rect(document: &Document, event: &Node) -> Option<Rect> {
+    let tick = event_tick(event)?;
+    let rate = session_of(document).sample_rate;
+    let samples = tempo_map(document).ticks_to_samples(tick, rate);
+    let x = samples as f64 / rate as f64;
+    Some(Rect::new(x, -RULER_HEIGHT, MINIMUM_WIDTH, RULER_HEIGHT))
+}
+
+/// The **tick** an event is at, if it is an event with one.
+fn event_tick(event: &Node) -> Option<i64> {
+    let value = event.data.get("tick")?;
+    value.as_i64()
+}
+
 /// The rectangle of a **track**: its row, the whole way along.
 pub fn track_rect(document: &Document, track: &Node) -> Option<Rect> {
     let row = row_of(document, track)?;
@@ -161,6 +207,126 @@ pub fn playlist_rect(document: &Document, playlist: &Node) -> Option<Rect> {
         return None;
     }
     track_rect(document, parent)
+}
+
+/// How many **tracks** the document has.
+pub fn track_count(document: &Document) -> usize {
+    document.walk().filter(|node| node.kind == TRACK_KIND).count()
+}
+
+/// The row of a **bus**: below the tracks.
+///
+/// The mixer is under the timeline: the tracks are the rows of the
+/// timeline and the buses are the rows of the mixer, and the sends are
+/// the lines between them.
+pub fn bus_row(document: &Document, bus: &Node) -> Option<f64> {
+    let mut index = 0usize;
+    for node in document.walk() {
+        if node.kind != BUS_KIND {
+            continue;
+        }
+        if node.id == bus.id {
+            return Some((track_count(document) + index) as f64 * ROW_HEIGHT);
+        }
+        index += 1;
+    }
+    None
+}
+
+/// The rectangle of a **bus**: its row, the whole way along.
+pub fn bus_rect(document: &Document, bus: &Node) -> Option<Rect> {
+    let row = bus_row(document, bus)?;
+    Some(Rect::new(0.0, row, length_of(document), ROW_HEIGHT))
+}
+
+/// The rectangle of an **insert**: a box at the left of the track's row.
+pub fn insert_rect(document: &Document, insert: &Node) -> Option<Rect> {
+    let track = track_of(document, insert)?;
+    let row = row_of(document, track)?;
+    let index = index_among(document, insert, "sound.insert");
+    Some(Rect::new(index as f64 * INSERT_WIDTH, row, INSERT_WIDTH, ROW_HEIGHT))
+}
+
+/// The rectangle of a **send**: the line from the track down to the bus.
+pub fn send_rect(document: &Document, send: &Node) -> Option<Rect> {
+    let track = track_of(document, send)?;
+    let row = row_of(document, track)?;
+    let bus = the_bus_of(document, send)?;
+    let bus_row = bus_row(document, bus)?;
+    let index = index_among(document, send, "sound.send");
+    Some(Rect::new(index as f64 * SEND_SPACING, row, SEND_SPACING, (bus_row - row).max(ROW_HEIGHT)))
+}
+
+/// The rectangle of an **automation lane**: the curve on the track's row.
+pub fn lane_rect(document: &Document, lane: &Node) -> Option<Rect> {
+    let track = track_of(document, lane)?;
+    let row = row_of(document, track)?;
+    let payload = LanePayload::from_json(&lane.data).ok()?;
+    let rate = session_of(document).sample_rate as f64;
+    let mut first: Option<f64> = None;
+    let mut last: Option<f64> = None;
+    for (at, _value) in &payload.points {
+        let x = *at as f64 / rate;
+        first = Some(first.map_or(x, |current: f64| current.min(x)));
+        last = Some(last.map_or(x, |current: f64| current.max(x)));
+    }
+    let first = first?;
+    let last = last?;
+    Some(Rect::new(first, row, (last - first).max(MINIMUM_WIDTH), ROW_HEIGHT))
+}
+
+/// The **points** of an automation lane, as the world sees them.
+///
+/// The point's time is in **samples** and the value is the parameter's
+/// own, and the kit does not know what range a parameter takes. So the
+/// curve is drawn to **fill its row**: what is seen is the shape of the
+/// automation and not the absolute values.
+pub fn lane_points(document: &Document, lane: &Node) -> Vec<(f64, f64)> {
+    let Ok(payload) = LanePayload::from_json(&lane.data) else { return Vec::new() };
+    let Some(track) = track_of(document, lane) else { return Vec::new() };
+    let Some(row) = row_of(document, track) else { return Vec::new() };
+    if payload.points.is_empty() {
+        return Vec::new();
+    }
+    let rate = session_of(document).sample_rate as f64;
+    let smallest = payload.points.iter().map(|(_at, value)| *value).fold(f64::MAX, f64::min);
+    let largest = payload.points.iter().map(|(_at, value)| *value).fold(f64::MIN, f64::max);
+    let span = largest - smallest;
+    payload
+        .points
+        .iter()
+        .map(|(at, value)| {
+            let x = *at as f64 / rate;
+            let y = if span > 0.0 {
+                row + (value - smallest) / span * ROW_HEIGHT
+            } else {
+                row + ROW_HEIGHT / 2.0
+            };
+            (x, y)
+        })
+        .collect()
+}
+
+/// The node's place among its **brothers of one kind**.
+fn index_among(document: &Document, node: &Node, kind: &str) -> usize {
+    let Some(parent) = parent_of(document, node.id) else { return 0 };
+    let mut index = 0usize;
+    for child in &parent.children {
+        if child.id == node.id {
+            return index;
+        }
+        if child.kind == kind {
+            index += 1;
+        }
+    }
+    index
+}
+
+/// The **bus** a send goes to.
+fn the_bus_of<'a>(document: &'a Document, send: &Node) -> Option<&'a Node> {
+    let relations = document.relations_from(send.id, Some("send"));
+    let relation = relations.first()?;
+    document.node(relation.to)
 }
 
 #[cfg(test)]

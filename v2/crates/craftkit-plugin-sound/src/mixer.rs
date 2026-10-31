@@ -30,24 +30,46 @@ use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Number, Outcome
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
 
+use crate::timeline;
+
 /// The kind of a bus.
 ///
 /// A bus is a **destination**: the mixer sends to it. It is a node, and
 /// the tracks that feed it say so with a relation.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.bus", label = "Bus", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.bus", label = "Bus", layer = "sound", evaluates, place)]
 pub struct BusKind;
 
 impl BusKind {
-    /// How a bus is drawn.
+    /// How a bus is drawn: the **line along the top** of its row.
     ///
-    /// Nothing: there is no mixer window and no camera (§19 of the
-    /// design document).
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// The bus is a row of the **mixer**, and the mixer is under the
+    /// timeline: the tracks are the rows above and the buses are the
+    /// rows below.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::bus_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x + rect.w, rect.y),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a bus.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::bus_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a bus **is**: its row in the mixer.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::bus_rect(document, node)
     }
 
     /// What a bus **means**, in the plan.
@@ -75,16 +97,35 @@ impl BusKind {
 /// happens to them is the audio engine's business — which v2 does not
 /// have yet.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.insert", label = "Insert", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.insert", label = "Insert", layer = "sound", evaluates, place)]
 pub struct InsertKind;
 
 impl InsertKind {
-    /// How an insert is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How an insert is drawn: a **box at the left** of the track's row.
+    ///
+    /// An insert is not at a time, so it is at the **start** of the
+    /// track — the way a mixer shows the slots of a strip.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::insert_rect(document, node) else { return };
+        let fill = if node.muted {
+            craftkit_sdk::document::Colour::NONE
+        } else {
+            document
+                .appearance_of(node)
+                .map(|appearance| appearance.fill)
+                .unwrap_or(craftkit_sdk::document::Colour::BLACK)
+        };
+        canvas.rect(rect, fill);
+    }
 
     /// Whether a point is inside an insert.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::insert_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where an insert **is**: a box at the left of the track's row.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::insert_rect(document, node)
     }
 
     /// What an insert **means**, in the plan.
@@ -104,16 +145,38 @@ impl InsertKind {
 /// **relation**: the send says *what it is* and the relation says *where
 /// it goes*.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.send", label = "Send", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.send", label = "Send", layer = "sound", evaluates, place)]
 pub struct SendKind;
 
 impl SendKind {
-    /// How a send is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a send is drawn: the **line** from the track down to the bus.
+    ///
+    /// The mixer is a **graph**, and this is the graph: the send is
+    /// the edge, and the edge is drawn where it goes.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let Some(rect) = timeline::send_rect(document, node) else { return };
+        let line = craftkit_sdk::document::Path::polygon(&[
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x, rect.y + rect.h),
+        ]);
+        canvas.path(
+            &line,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a send.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::send_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a send **is**: the line from the track to the bus.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::send_rect(document, node)
     }
 
     /// What a send **means**, in the plan.
@@ -137,16 +200,50 @@ impl SendKind {
 /// mixer parameters with a plugin escape, so a lane can only automate what
 /// the enum knows; here it can automate anything a node's payload names.
 #[derive(NodeKind)]
-#[node_kind(kind = "sound.lane", label = "Automation", layer = "sound", evaluates)]
+#[node_kind(kind = "sound.lane", label = "Automation", layer = "sound", evaluates, place)]
 pub struct LaneKind;
 
 impl LaneKind {
-    /// How a lane is drawn.
-    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn Canvas) {}
+    /// How a lane is drawn: the **curve** on the track's row.
+    ///
+    /// The curve is drawn to **fill its row**, so that what is seen is
+    /// the shape of the automation and not the absolute values: the kit
+    /// does not know what range a parameter takes.
+    fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
+        let points = timeline::lane_points(document, node);
+        if points.len() < 2 {
+            return;
+        }
+        // The curve is an **open** line: it starts at the first
+        // breakpoint and ends at the last, and it does not join back.
+        let mut segments = Vec::with_capacity(points.len());
+        for (x, y) in points.iter().skip(1) {
+            segments.push(craftkit_sdk::Segment::Line { to: Point::new(*x, *y) });
+        }
+        let (x, y) = points[0];
+        let path = craftkit_sdk::Path::single(craftkit_sdk::SubPath {
+            start: Point::new(x, y),
+            segments,
+            closed: false,
+        });
+        canvas.path(
+            &path,
+            craftkit_sdk::document::Colour::NONE,
+            Some(craftkit_sdk::document::Stroke {
+                colour: craftkit_sdk::document::Colour::BLACK,
+                width: 0.01,
+            }),
+        );
+    }
 
     /// Whether a point is inside a lane.
-    fn hit(_node: &Node, _document: &Document, _point: Point) -> bool {
-        false
+    fn hit(node: &Node, document: &Document, point: Point) -> bool {
+        timeline::lane_rect(document, node).is_some_and(|rect| rect.contains(point))
+    }
+
+    /// Where a lane **is**: the curve's box on the track's row.
+    fn place(node: &Node, document: &Document) -> Option<craftkit_sdk::document::Rect> {
+        timeline::lane_rect(document, node)
     }
 
     /// What a lane **means**, in the plan.
@@ -631,6 +728,76 @@ mod tests {
         assert_eq!(relations[0].from, track);
         assert_eq!(relations[0].to, bus);
         assert_eq!(relations[0].kind, "route");
+    }
+
+    /// The **bus** is a row of the mixer, and the mixer is **under** the
+    /// tracks.
+    #[test]
+    fn a_bus_is_a_row_under_the_tracks() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+        let bus = session.document().node_by_name("mix").expect("the bus is there");
+        let rect = BusKind::place(bus, session.document()).expect("the bus has a place");
+        assert_eq!(rect.y, timeline::ROW_HEIGHT, "the bus is one row below the track");
+        assert_eq!(rect.h, timeline::ROW_HEIGHT, "and it is a row");
+    }
+
+    /// A **send** is the line from the track down to the bus.
+    #[test]
+    fn a_send_is_the_line_from_the_track_to_the_bus() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        session.execute("sound.bus.add", &json!({ "name": "mix" })).expect("the bus is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        let bus = session.document().node_by_name("mix").expect("the bus is there").id;
+        session.execute("sound.send.add", &json!({ "track": track, "bus": bus })).expect("the send is added");
+        let send =
+            session.document().walk().find(|node| node.kind == "sound.send").expect("the send is there");
+        let rect = SendKind::place(send, session.document()).expect("the send has a place");
+        assert_eq!(rect.y, 0.0, "the line starts on the track's row");
+        assert_eq!(rect.h, timeline::ROW_HEIGHT, "and it reaches the bus's row");
+    }
+
+    /// An **insert** is a box at the left of the track's row.
+    #[test]
+    fn an_insert_is_a_box_at_the_left_of_the_row() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.insert.add", &json!({ "track": track, "plugin": "reverb" }))
+            .expect("the insert is added");
+        let insert =
+            session.document().walk().find(|node| node.kind == "sound.insert").expect("the insert is there");
+        let rect = InsertKind::place(insert, session.document()).expect("the insert has a place");
+        assert_eq!(rect.x, 0.0, "the box is at the left");
+        assert_eq!(rect.w, timeline::INSERT_WIDTH, "and it is as wide as an insert is");
+        assert_eq!(rect.y, 0.0, "on the track's row");
+    }
+
+    /// An **automation lane** is a curve on the track's row.
+    #[test]
+    fn an_automation_lane_is_a_curve_on_the_row() {
+        let mut session = session();
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute(
+                "sound.lane.add",
+                &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [48000, 1.0]] }),
+            )
+            .expect("the lane is added");
+        let lane =
+            session.document().walk().find(|node| node.kind == "sound.lane").expect("the lane is there");
+        let rect = LaneKind::place(lane, session.document()).expect("the lane has a place");
+        assert_eq!(rect.x, 0.0, "the curve starts at the beginning");
+        assert_eq!(rect.w, 1.0, "and it is a second long");
+        assert_eq!(rect.y, 0.0, "on the track's row");
+        let points = timeline::lane_points(session.document(), lane);
+        assert_eq!(points.len(), 2, "and it has two points");
+        assert!((points[0].1 - 0.0).abs() < 0.001, "the first is at the bottom");
+        assert!((points[1].1 - 1.0).abs() < 0.001, "and the second at the top");
     }
 
     /// The same route twice is refused: one edge is one relation.
