@@ -26,3 +26,6 @@ craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
 # them in.
 craftkit-wav = { path = "../craftkit-wav", version = "0.2.0" }
 craftkit-audio = { path = "../craftkit-audio", version = "0.2.0" }
+# The kit's own **audio plugins**: the catalogue a insert names. A
+# **library**, and the linker does not wire it in.
+craftkit-plugins = { path = "../craftkit-plugins", version = "0.2.0" }

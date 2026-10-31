@@ -115,6 +115,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The **mixer**: the samples of many tracks, summed into one. It
     // knows nothing about a document, a canvas or the kit.
     ("craftkit-audio", 0),
+    // The kit's own **audio plugins**: a catalogue of small programs
+    // that change a signal. It knows nothing about a document, a canvas
+    // or the kit.
+    ("craftkit-plugins", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),

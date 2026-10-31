@@ -73,6 +73,8 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 mod automate;
 mod mixer;
 
+use std::collections::HashMap;
+
 use craftkit_sdk::{
     Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
@@ -1391,7 +1393,8 @@ impl RenderSound {
             }
         }
         let frames = frames.max(0) as usize;
-        // The **tracks**: each track's signal is the sum of its clips.
+        // The **tracks**: each track's signal is the sum of its clips,
+        // and its **inserts** are run over it, in the order of the tree.
         let mut tracks: Vec<(u64, Vec<f32>)> = Vec::new();
         for track in session.document().walk().filter(|node| node.kind == "sound.track") {
             let mut signal = vec![0.0_f32; frames];
@@ -1402,6 +1405,20 @@ impl RenderSound {
                 }
                 let gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
                 add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, gain);
+            }
+            for insert in inserts_of(session.document(), track) {
+                if insert.bypass {
+                    continue;
+                }
+                let mut plugin = craftkit_plugins::make(
+                    &insert.plugin,
+                    &craftkit_plugins::Params::from_map(insert.params),
+                )
+                .map_err(|error| EngineError::Failed {
+                    id: "sound.render".to_string(),
+                    message: error.to_string(),
+                })?;
+                plugin.process(&mut signal, channels as usize, rate);
             }
             tracks.push((track.id, signal));
         }
@@ -1451,6 +1468,42 @@ impl RenderSound {
             "clips": tracks.len(),
         })))
     }
+}
+
+/// An **insert**: the plugin a track runs over its signal.
+struct Insert {
+    /// The plugin's name.
+    plugin: String,
+    /// Its parameters, by name.
+    params: HashMap<String, f64>,
+    /// Whether it is bypassed.
+    bypass: bool,
+}
+
+/// The inserts of a track, in the order of the tree.
+///
+/// The order of the tree is the order of the drawing (§ the order), and
+/// it is the order of the **processing** too: the first insert is the
+/// first program the signal meets.
+fn inserts_of(document: &Document, track: &Node) -> Vec<Insert> {
+    let mut inserts = Vec::new();
+    for child in &track.children {
+        let Some(node) = document.node(child.id) else { continue };
+        if node.kind != "sound.insert" {
+            continue;
+        }
+        let Ok(payload) = InsertPayload::from_json(&node.data) else { continue };
+        let mut params: HashMap<String, f64> = HashMap::new();
+        if let Some(values) = payload.params.as_object() {
+            for (name, value) in values {
+                if let Some(number) = value.as_f64() {
+                    params.insert(name.clone(), number);
+                }
+            }
+        }
+        inserts.push(Insert { plugin: payload.plugin, params, bypass: payload.bypass });
+    }
+    inserts
 }
 
 /// A **send**: the level and the pan with which a track feeds a bus.
@@ -1631,6 +1684,7 @@ pub struct ClipTool;
         "sound.meter.set",
         "sound.marker.add",
         "sound.ruler.add",
+        "sound.insert.set",
         "sound.playhead.set",
         "sound.source.add",
         "sound.render",
@@ -2323,6 +2377,85 @@ mod tests {
             "the track and the bus are both heard: {}",
             sound.samples[0]
         );
+    }
+
+    /// An **insert** is run over the track's signal: the insert names a
+    /// plugin and the plugin is a program.
+    #[test]
+    fn an_insert_is_run_over_the_track() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-insert-source.wav");
+        let output_path = directory.join("craftkit-v2-insert-out.wav");
+        let bytes = craftkit_wav::write(1, 48_000, &[1.0, 1.0]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session.execute("sound.session.set", &json!({ "sample_rate": 48_000 })).expect("the session is set");
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 2, "source": source }))
+            .expect("the clip is added");
+        // A gain insert, at six decibels down.
+        session
+            .execute("sound.insert.add", &json!({ "track": track, "plugin": "gain" }))
+            .expect("the insert is added");
+        let insert =
+            session.document().walk().find(|node| node.kind == "sound.insert").expect("the insert is there");
+        session
+            .execute("sound.insert.set", &json!({ "insert": insert.id, "parameters": { "gain_db": -6.0 } }))
+            .expect("the insert is changed");
+        session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect("the sound is rendered");
+
+        let written = std::fs::read(&output_path).expect("the sound is on the disk");
+        let sound =
+            craftkit_wav::read(&written, &craftkit_wav::Limits::default()).expect("the sound is read");
+        assert!((sound.samples[0] - 0.5).abs() < 0.01, "the insert changed the sound: {}", sound.samples[0]);
+    }
+
+    /// A plugin that is **not in the catalogue** is refused: a plugin
+    /// that cannot be made cannot be run.
+    #[test]
+    fn a_plugin_that_is_not_in_the_catalogue_is_refused() {
+        let directory = std::env::temp_dir();
+        let source_path = directory.join("craftkit-v2-unknown-source.wav");
+        let output_path = directory.join("craftkit-v2-unknown-out.wav");
+        let bytes = craftkit_wav::write(1, 48_000, &[1.0]);
+        std::fs::write(&source_path, bytes).expect("the source is written");
+
+        let mut session = session();
+        session
+            .execute("sound.source.add", &json!({ "path": source_path.to_string_lossy() }))
+            .expect("the source is added");
+        let source = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.source")
+            .map(|node| node.id)
+            .expect("the source is there");
+        session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
+        let track = session.document().node_by_name("drums").expect("the track is there").id;
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 1, "source": source }))
+            .expect("the clip is added");
+        session
+            .execute("sound.insert.add", &json!({ "track": track, "plugin": "reverb" }))
+            .expect("the insert is added");
+        let error = session
+            .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
+            .expect_err("there is no reverb in the catalogue");
+        assert!(error.to_string().contains("reverb"), "the refusal says what is wrong: {error}");
     }
 
     /// A source that is **not there** is refused: the renderer does not

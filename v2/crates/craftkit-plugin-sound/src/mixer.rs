@@ -500,6 +500,81 @@ impl AddInsert {
     }
 }
 
+/// Change an **insert**: its parameters, or whether it is bypassed.
+///
+/// An insert's parameters are how a plugin is told what to do, and a
+/// document may not change them by itself: the change is a **command**,
+/// like every other change.
+#[derive(Command)]
+#[command(
+    id = "sound.insert.set",
+    area = "sound",
+    layer = "sound",
+    icon = "pencil",
+    menu("Track", "Inserts"),
+    mutates,
+    undoable
+)]
+pub struct SetInsert {
+    /// The insert to change.
+    pub insert: NodeRef,
+    /// Its parameters, by name: a table of parameter to number.
+    pub parameters: Option<Json>,
+    /// Whether it is bypassed.
+    pub bypass: Option<craftkit_sdk::Bool>,
+}
+
+impl SetInsert {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.insert.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.insert.set".to_string(),
+                message: format!("there is no node {id} in the document"),
+            });
+        };
+        if node.kind != "sound.insert" {
+            return Err(EngineError::Failed {
+                id: "sound.insert.set".to_string(),
+                message: format!("node {id} is not an insert"),
+            });
+        }
+        // The parameters are **numbers**, and a value that is not a
+        // number is **left out**: the reader's rule (§43), and the
+        // parameters of a plugin are numbers.
+        let params = match &self.parameters {
+            Some(params) => {
+                let mut values = serde_json::Map::new();
+                if let Some(table) = params.as_object() {
+                    for (name, value) in table {
+                        if let Some(number) = value.as_f64()
+                            && number.is_finite()
+                        {
+                            values.insert(name.clone(), serde_json::json!(number));
+                        }
+                    }
+                }
+                Some(values)
+            }
+            None => None,
+        };
+        let bypass = self.bypass.map(|bypass| bypass.0);
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.insert.set".to_string(),
+                message: format!("there is no node {id} in the document"),
+            });
+        };
+        if let Some(params) = params {
+            node.data["params"] = serde_json::Value::Object(params);
+        }
+        if let Some(bypass) = bypass {
+            node.data["bypass"] = serde_json::json!(bypass);
+        }
+        Ok(Outcome::changed(format!("changed the insert {id}")).with_data(serde_json::json!({ "id": id })))
+    }
+}
+
 /// Send a track to a bus at a level.
 ///
 /// The send is a node under the track, and the bus it goes to is a

@@ -613,6 +613,7 @@ dependencies = [
  "craftkit-audio",
  "craftkit-derive",
  "craftkit-font",
+ "craftkit-plugins",
  "craftkit-sdk",
  "craftkit-sound-time",
  "craftkit-wav",
@@ -646,6 +647,10 @@ dependencies = [
  "craftkit-sdk",
  "craftkit-vst3",
 ]
+
+[[package]]
+name = "craftkit-plugins"
+version = "0.2.0"
 
 [[package]]
 name = "craftkit-png"

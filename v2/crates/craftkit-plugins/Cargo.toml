@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-plugins"
+description = "The kit's own audio plugins: a catalogue of small programs that change a signal. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. A plugin is a program over a buffer of numbers: it takes
+# samples and changes them, and it knows nothing about a document, a
+# file or the kit.
