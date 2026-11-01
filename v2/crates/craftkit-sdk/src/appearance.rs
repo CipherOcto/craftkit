@@ -158,6 +158,7 @@ fn appearance_of(
         Some(stroke) => Some(Stroke {
             colour: colour_of(stroke, id)?,
             width: stroke_width.map(|width| width.0).unwrap_or(1.0),
+            ..Default::default()
         }),
         None => current.and_then(|appearance| appearance.stroke),
     };

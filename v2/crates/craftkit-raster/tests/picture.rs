@@ -8,7 +8,7 @@
 
 use craftkit_raster::{Canvas, Image, Raster};
 use craftkit_sdk::camera::Camera;
-use craftkit_sdk::document::{Colour, FillRule, Path, Point, Rect, Segment, Stroke, SubPath};
+use craftkit_sdk::document::{Cap, Colour, FillRule, Join, Path, Point, Rect, Segment, Stroke, SubPath};
 
 /// A canvas of that size, with a camera at the origin.
 fn a_canvas(width: usize, height: usize) -> Raster {
@@ -121,11 +121,88 @@ fn the_fill_rule_is_the_paths() {
 #[test]
 fn a_stroke_is_drawn_on_the_outline() {
     let mut canvas = a_canvas(100, 100);
-    let stroke = Stroke { colour: Colour::BLACK, width: 2.0 };
+    let stroke = Stroke { colour: Colour::BLACK, width: 2.0, ..Default::default() };
     canvas.path(&a_square(20.0), Colour::NONE, Some(stroke));
     let image = canvas.image();
     assert_eq!(pixel(image, 50, 40), Some([0, 0, 0, 255]), "the outline is painted");
     assert_eq!(pixel(image, 55, 45), Some([255, 255, 255, 255]), "the inside is not painted");
+}
+
+/// The **corners** of a line meet the way the stroke says.
+///
+/// The corner is filled in on the outside of the turn, and a joint
+/// that is cut off does not reach as far as a pointed one.
+#[test]
+fn the_corners_of_a_line_meet() {
+    let corner = Path {
+        subpaths: vec![SubPath {
+            start: Point::new(0.0, 0.0),
+            segments: vec![
+                Segment::Line { to: Point::new(10.0, 0.0) },
+                Segment::Line { to: Point::new(10.0, 10.0) },
+            ],
+            closed: false,
+        }],
+        rule: FillRule::NonZero,
+    };
+    let mut miter = a_canvas(100, 100);
+    miter.path(
+        &corner,
+        Colour::NONE,
+        Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Butt }),
+    );
+    let mut bevel = a_canvas(100, 100);
+    bevel.path(
+        &corner,
+        Colour::NONE,
+        Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Bevel, cap: Cap::Butt }),
+    );
+    // The corner is the point where the two lines meet, and the joint
+    // fills the gap on the outside of the turn.
+    assert_eq!(pixel(miter.image(), 61, 51), Some([0, 0, 0, 255]), "the pointed corner is filled");
+    assert_eq!(pixel(bevel.image(), 61, 51), Some([255, 255, 255, 255]), "the cut corner is not");
+}
+
+/// The **ends** of a line are finished the way the stroke says.
+///
+/// A flush end stops at the point, a round one bulges and a square one
+/// is carried on past it.
+#[test]
+fn the_ends_of_a_line_are_finished() {
+    let line = Path {
+        subpaths: vec![SubPath {
+            start: Point::new(0.0, 0.0),
+            segments: vec![Segment::Line { to: Point::new(10.0, 0.0) }],
+            closed: false,
+        }],
+        rule: FillRule::NonZero,
+    };
+    let mut butt = a_canvas(100, 100);
+    butt.path(
+        &line,
+        Colour::NONE,
+        Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Butt }),
+    );
+    let mut round = a_canvas(100, 100);
+    round.path(
+        &line,
+        Colour::NONE,
+        Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Round }),
+    );
+    let mut square = a_canvas(100, 100);
+    square.path(
+        &line,
+        Colour::NONE,
+        Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Square }),
+    );
+    assert_eq!(pixel(butt.image(), 61, 50), Some([255, 255, 255, 255]), "the flush end stops");
+    assert_eq!(pixel(round.image(), 61, 50), Some([0, 0, 0, 255]), "the round end is carried on");
+    assert_eq!(pixel(square.image(), 61, 50), Some([0, 0, 0, 255]), "the square end is carried on");
+    let flush = count_painted(butt.image());
+    let rounded = count_painted(round.image());
+    let squared = count_painted(square.image());
+    assert!(rounded > flush, "the round end has more ink: {flush} and {rounded}");
+    assert!(squared > rounded, "the square end has more ink: {rounded} and {squared}");
 }
 
 /// Text is drawn, and it is drawn with the kit's own letters.

@@ -228,8 +228,11 @@ impl TrackKind {
             Point::new(rect.x, rect.y),
             Point::new(rect.x + rect.w, rect.y),
         ]);
-        let stroke =
-            craftkit_sdk::document::Stroke { colour: craftkit_sdk::document::Colour::BLACK, width: 0.01 };
+        let stroke = craftkit_sdk::document::Stroke {
+            colour: craftkit_sdk::document::Colour::BLACK,
+            width: 0.01,
+            ..Default::default()
+        };
         canvas.path(&line, craftkit_sdk::document::Colour::NONE, Some(stroke));
         // A **soloed** track is a double rule: the row says which
         // track is heard alone.
@@ -405,6 +408,7 @@ impl TempoKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }
@@ -445,6 +449,7 @@ impl MeterKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }
@@ -489,6 +494,7 @@ impl MarkerKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }
@@ -561,6 +567,7 @@ impl RulerKind {
                         Some(craftkit_sdk::document::Stroke {
                             colour: craftkit_sdk::document::Colour::BLACK,
                             width: 0.01,
+                            ..Default::default()
                         }),
                     );
                 }
@@ -2034,6 +2041,7 @@ impl PlayheadKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }

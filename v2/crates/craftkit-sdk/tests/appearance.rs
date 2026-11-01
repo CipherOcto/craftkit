@@ -18,8 +18,10 @@ fn a_document() -> (Document, u64, u64) {
     let appearance = document.add_node("blue", "core.appearance", None);
     let fill = colour("#3366cc");
     if let Some(node) = document.node_mut(appearance) {
-        node.appearance =
-            Some(Appearance { fill, stroke: Some(Stroke { colour: Colour::BLACK, width: 2.0 }) });
+        node.appearance = Some(Appearance {
+            fill,
+            stroke: Some(Stroke { colour: Colour::BLACK, width: 2.0, ..Default::default() }),
+        });
     }
     let shape = document.add_node("a shape", "geometry.rect", None);
     if let Some(node) = document.node_mut(shape) {

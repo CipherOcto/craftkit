@@ -289,13 +289,63 @@ impl Segment {
     }
 }
 
-/// A stroke: a colour and a width.
+/// How the **corners** of a stroke meet.
+///
+/// A line that turns has a corner in it, and the corner is either
+/// pointed, round or cut off. The three are the way a pen's corner is
+/// drawn, and they are the same three in every drawing program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Join {
+    /// The corner is **pointed**: the two edges are carried on until
+    /// they meet.
+    #[default]
+    Miter,
+    /// The corner is **round**: the gap is filled with a circle.
+    Round,
+    /// The corner is **cut off**: the two edges are joined by a
+    /// straight line.
+    Bevel,
+}
+
+/// How the **ends** of a stroke are finished.
+///
+/// A line that stops has an end to it, and the end is either flush
+/// with the last point, round, or carried on past it by half the
+/// width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Cap {
+    /// The end is **flush**: the stroke stops at the last point.
+    #[default]
+    Butt,
+    /// The end is **round**: a half circle is put on it.
+    Round,
+    /// The end is **square**: the stroke is carried on past the last
+    /// point by half the width.
+    Square,
+}
+
+/// A stroke: a colour, a width, and the way it is finished.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stroke {
     /// The colour of the line.
     pub colour: Colour,
     /// How wide it is.
     pub width: f64,
+    /// How the corners meet.
+    pub join: Join,
+    /// How the ends are finished.
+    pub cap: Cap,
+}
+
+impl Default for Stroke {
+    /// A stroke with no colour, a width of one, a **pointed** corner
+    /// and a **flush** end.
+    ///
+    /// The defaults are the way a line has always been drawn in this
+    /// tree: the corners are pointed and the ends are flush.
+    fn default() -> Self {
+        Stroke { colour: Colour::NONE, width: 1.0, join: Join::Miter, cap: Cap::Butt }
+    }
 }
 
 /// What a backend is given to draw with.
@@ -411,7 +461,20 @@ impl FormatValue for Colour {
 
 impl FormatValue for Stroke {
     fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({ "colour": self.colour.to_json(), "width": self.width })
+        serde_json::json!({
+            "colour": self.colour.to_json(),
+            "width": self.width,
+            "join": match self.join {
+                Join::Miter => "miter",
+                Join::Round => "round",
+                Join::Bevel => "bevel",
+            },
+            "cap": match self.cap {
+                Cap::Butt => "butt",
+                Cap::Round => "round",
+                Cap::Square => "square",
+            },
+        })
     }
 
     fn from_json(value: &serde_json::Value) -> Result<Self, String> {
@@ -420,7 +483,22 @@ impl FormatValue for Stroke {
             .get("width")
             .and_then(|width| width.as_f64())
             .ok_or_else(|| "a stroke has no width".to_string())?;
-        Ok(Stroke { colour: Colour::from_json(colour)?, width })
+        // The join and the cap are **optional**: a stroke written
+        // before they were in the file is read with the way the tree
+        // has always drawn a line.
+        let join = match value.get("join").and_then(|join| join.as_str()) {
+            Some("miter") | None => Join::Miter,
+            Some("round") => Join::Round,
+            Some("bevel") => Join::Bevel,
+            Some(other) => return Err(format!("the join `{other}` is not one of the three")),
+        };
+        let cap = match value.get("cap").and_then(|cap| cap.as_str()) {
+            Some("butt") | None => Cap::Butt,
+            Some("round") => Cap::Round,
+            Some("square") => Cap::Square,
+            Some(other) => return Err(format!("the cap `{other}` is not one of the three")),
+        };
+        Ok(Stroke { colour: Colour::from_json(colour)?, width, join, cap })
     }
 }
 

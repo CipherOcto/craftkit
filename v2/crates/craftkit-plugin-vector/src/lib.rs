@@ -17,15 +17,17 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fourteen commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixteen commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it; `vector.path.fill` and
-//!   `vector.path.stroke` say what the path is painted with; and
-//!   `vector.path.rule` says which parts of it are inside;
+//!   `vector.path.stroke` say what the path is painted with;
+//!   `vector.path.join` and `vector.path.cap` say how the line's
+//!   corners and ends are finished; and `vector.path.rule` says which
+//!   parts of it are inside;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
@@ -54,8 +56,8 @@
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
-    Canvas, Colour, Document, EngineError, FillRule, FormatValue, Node, NodeRef, Number, Outcome, Path, Plan,
-    PlanItem, Point, Rect, Segment, Session, Stroke, SubPath, Text,
+    Canvas, Cap, Colour, Document, EngineError, FillRule, FormatValue, Join, Node, NodeRef, Number, Outcome,
+    Path, Plan, PlanItem, Point, Rect, Segment, Session, Stroke, SubPath, Text,
 };
 
 use craftkit_vector_geom as geom;
@@ -699,10 +701,107 @@ impl StrokePath {
             });
         }
         let colour = parse_colour(&self.colour.0)?;
-        vector.stroke = Some(Stroke { colour, width });
+        vector.stroke = Some(Stroke { colour, width, ..Default::default() });
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the path has a line")
             .with_data(serde_json::json!({ "id": self.path.0, "width": width })))
+    }
+}
+
+/// Say how the **corners** of a path's line meet.
+///
+/// The join is `miter` — a pointed corner — `round` or `bevel`, which
+/// is a corner that is cut off.
+#[derive(Command)]
+#[command(
+    id = "vector.path.join",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct JoinPath {
+    /// The path.
+    pub path: NodeRef,
+    /// The join: `miter`, `round` or `bevel`.
+    pub join: Text,
+}
+
+impl JoinPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let Some(mut stroke) = vector.stroke else {
+            return Err(EngineError::Failed {
+                id: "vector.path.join".to_string(),
+                message: format!("the path `{}` has no line", self.path.0),
+            });
+        };
+        let join = match self.join.0.trim().to_ascii_lowercase().as_str() {
+            "miter" => Join::Miter,
+            "round" => Join::Round,
+            "bevel" => Join::Bevel,
+            other => {
+                return Err(EngineError::Failed {
+                    id: "vector.path.join".to_string(),
+                    message: format!("the join `{other}` is not one of the three"),
+                });
+            }
+        };
+        stroke.join = join;
+        vector.stroke = Some(stroke);
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the corners of the line meet")
+            .with_data(serde_json::json!({ "id": self.path.0, "join": self.join.0 })))
+    }
+}
+
+/// Say how the **ends** of a path's line are finished.
+///
+/// The cap is `butt` — a flush end — `round` or `square`.
+#[derive(Command)]
+#[command(
+    id = "vector.path.cap",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct CapPath {
+    /// The path.
+    pub path: NodeRef,
+    /// The cap: `butt`, `round` or `square`.
+    pub cap: Text,
+}
+
+impl CapPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let Some(mut stroke) = vector.stroke else {
+            return Err(EngineError::Failed {
+                id: "vector.path.cap".to_string(),
+                message: format!("the path `{}` has no line", self.path.0),
+            });
+        };
+        let cap = match self.cap.0.trim().to_ascii_lowercase().as_str() {
+            "butt" => Cap::Butt,
+            "round" => Cap::Round,
+            "square" => Cap::Square,
+            other => {
+                return Err(EngineError::Failed {
+                    id: "vector.path.cap".to_string(),
+                    message: format!("the cap `{other}` is not one of the three"),
+                });
+            }
+        };
+        stroke.cap = cap;
+        vector.stroke = Some(stroke);
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the ends of the line are finished")
+            .with_data(serde_json::json!({ "id": self.path.0, "cap": self.cap.0 })))
     }
 }
 
@@ -1116,6 +1215,8 @@ craftkit_sdk::plugin_anchor!(
     IntersectPaths,
     SimplifyPath,
     OffsetPath,
+    JoinPath,
+    CapPath,
     VectorPanel,
     TotalAreaEvaluator
 );

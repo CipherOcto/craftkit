@@ -315,7 +315,7 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 return;
             };
             let path = Path::polygon(&[from, to]);
-            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0 }));
+            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0, ..Default::default() }));
         }
         "cad.entity.circle" => {
             let Some(center) = point_in(geometry, "center") else { return };
@@ -332,7 +332,7 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 points.push(Point::new(center.x + radius * angle.cos(), center.y + radius * angle.sin()));
             }
             let path = Path::polygon(&points);
-            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0 }));
+            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0, ..Default::default() }));
         }
         "cad.entity.text" => {
             let Some(at) = point_in(geometry, "at") else { return };

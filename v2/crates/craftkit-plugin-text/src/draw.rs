@@ -379,7 +379,7 @@ fn place_word(word: &str, start: Option<usize>, x: f64, baseline: f64, ink: &Ink
 
 /// The stroke of a letter, in the kit's colours.
 pub fn stroke(colour: Colour) -> Stroke {
-    Stroke { colour, width: STROKE_EM }
+    Stroke { colour, width: STROKE_EM, ..Default::default() }
 }
 
 /// Whether a point is **on** the drawing.

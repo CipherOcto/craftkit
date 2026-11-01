@@ -2,7 +2,9 @@
 
 use craftkit_font::{Font, Metrics};
 use craftkit_sdk::camera::Camera;
-use craftkit_sdk::document::{Canvas, Colour, FillRule, Path, Point, Rect, Segment, Stroke, SubPath};
+use craftkit_sdk::document::{
+    Canvas, Cap, Colour, FillRule, Join, Path, Point, Rect, Segment, Stroke, SubPath,
+};
 
 use crate::image::Image;
 
@@ -25,6 +27,20 @@ pub const MAX_IMAGE_SIDE: usize = 8192;
 /// A cubic is not a line, and a line is what a rasteriser can draw. The
 /// number is a number: a hundredth of a curve is a curve to the eye.
 const CURVE_STEPS: usize = 24;
+
+/// How many pieces a **round** corner or end is cut into.
+///
+/// A circle is not a polygon, and a polygon is what a rasteriser can
+/// fill. The number is a number: a twelfth of a circle is a circle to
+/// the eye.
+const ARC_STEPS: usize = 12;
+
+/// How long a **miter** may be, in widths of the stroke.
+///
+/// A corner that is nearly straight makes a miter that is very long,
+/// and a long spike of ink is not what a corner means. A miter longer
+/// than four widths is a bevel.
+const MITER_LIMIT: f64 = 4.0;
 
 /// How wide the pen is, in the world's units.
 ///
@@ -332,7 +348,12 @@ impl Canvas for Raster {
                     segments,
                     closed: false,
                 });
-                Canvas::path(self, &path, Colour::NONE, Some(Stroke { colour, width: PEN }));
+                Canvas::path(
+                    self,
+                    &path,
+                    Colour::NONE,
+                    Some(Stroke { colour, width: PEN, ..Default::default() }),
+                );
             }
             pen += glyph.advance * unit;
         }
@@ -373,39 +394,211 @@ impl Raster {
     /// Draw the outline of a contour.
     ///
     /// Each segment is a **quad**: the line, widened to the stroke's
-    /// width. The joints are squares, because a square joint is what a
-    /// machine can draw and a round one is not.
+    /// width. The **corners** and the **ends** are drawn from the
+    /// stroke's own join and cap, because that is what they are for.
     fn stroke_contour(&mut self, contour: &[(f64, f64)], stroke: Stroke) {
         if contour.len() < 2 {
             return;
         }
         let half = stroke.width * self.camera.zoom() / 2.0;
-        for window in contour.windows(2) {
-            let (x0, y0) = window[0];
-            let (x1, y1) = window[1];
-            let dx = x1 - x0;
-            let dy = y1 - y0;
-            let length = (dx * dx + dy * dy).sqrt();
-            if length <= f64::EPSILON {
-                continue;
-            }
-            let nx = -dy / length * half;
-            let ny = dx / length * half;
-            let quad = [(x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)];
-            self.fill_polygon(&quad, stroke.colour, FillRule::NonZero);
+        if half <= 0.0 {
+            return;
         }
-        // The joints: a square at every corner, so that the outline has
-        // no gaps in it.
-        for point in contour {
-            let square = [
-                (point.0 - half, point.1 - half),
-                (point.0 + half, point.1 - half),
-                (point.0 + half, point.1 + half),
-                (point.0 - half, point.1 + half),
-            ];
-            self.fill_polygon(&square, stroke.colour, FillRule::NonZero);
+        // A **closed** contour says where it starts again at the end.
+        let closed = contour.len() > 2
+            && (contour[0].0 - contour[contour.len() - 1].0).abs() <= f64::EPSILON
+            && (contour[0].1 - contour[contour.len() - 1].1).abs() <= f64::EPSILON;
+        let points: Vec<(f64, f64)> =
+            if closed { contour[..contour.len() - 1].to_vec() } else { contour.to_vec() };
+        let count = points.len();
+        if count < 2 {
+            return;
+        }
+        // The **segments**: the line, widened.
+        let segments = if closed { count } else { count - 1 };
+        for index in 0..segments {
+            let from = points[index];
+            let to = points[(index + 1) % count];
+            // A **square** end carries the line on past its last point.
+            let before = if !closed && index == 0 && stroke.cap == Cap::Square { half } else { 0.0 };
+            let after =
+                if !closed && index == segments - 1 && stroke.cap == Cap::Square { half } else { 0.0 };
+            self.stroke_segment(from, to, half, before, after, stroke.colour);
+        }
+        // The **corners**: the joints between two segments.
+        let corners = if closed { count } else { count - 2 };
+        for index in 0..corners {
+            let corner_at = if closed { index } else { index + 1 };
+            let before = points[(corner_at + count - 1) % count];
+            let corner = points[corner_at];
+            let after = points[(corner_at + 1) % count];
+            self.stroke_joint(before, corner, after, half, stroke.join, stroke.colour);
+        }
+        // The **ends**: the caps of an open line.
+        if !closed && stroke.cap == Cap::Round {
+            self.stroke_cap(points[0], points[1], half, true, stroke.colour);
+            self.stroke_cap(points[count - 1], points[count - 2], half, false, stroke.colour);
         }
     }
+
+    /// Draw one **segment** of a contour: the line, widened.
+    fn stroke_segment(
+        &mut self,
+        from: (f64, f64),
+        to: (f64, f64),
+        half: f64,
+        before: f64,
+        after: f64,
+        colour: Colour,
+    ) {
+        let Some((ux, uy)) = unit(from, to) else { return };
+        let start = (from.0 - ux * before, from.1 - uy * before);
+        let end = (to.0 + ux * after, to.1 + uy * after);
+        let nx = -uy * half;
+        let ny = ux * half;
+        let quad = [
+            (start.0 + nx, start.1 + ny),
+            (end.0 + nx, end.1 + ny),
+            (end.0 - nx, end.1 - ny),
+            (start.0 - nx, start.1 - ny),
+        ];
+        self.fill_polygon(&quad, colour, FillRule::NonZero);
+    }
+
+    /// Draw the **corner** where two segments meet.
+    ///
+    /// The joint fills the gap on the **outside** of the turn: a
+    /// pointed corner, a round one or a cut-off one.
+    fn stroke_joint(
+        &mut self,
+        before: (f64, f64),
+        corner: (f64, f64),
+        after: (f64, f64),
+        half: f64,
+        join: Join,
+        colour: Colour,
+    ) {
+        let Some((u0x, u0y)) = unit(before, corner) else { return };
+        let Some((u1x, u1y)) = unit(corner, after) else { return };
+        let cross = u0x * u1y - u0y * u1x;
+        if cross.abs() <= f64::EPSILON {
+            return;
+        }
+        // The **outside** of the turn: the side the two edges do not
+        // share.
+        let sign = if cross > 0.0 { -1.0 } else { 1.0 };
+        let o0 = (sign * -u0y, sign * u0x);
+        let o1 = (sign * -u1y, sign * u1x);
+        let p0 = (corner.0 + o0.0 * half, corner.1 + o0.1 * half);
+        let p1 = (corner.0 + o1.0 * half, corner.1 + o1.1 * half);
+        match join {
+            Join::Bevel => {
+                self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+            }
+            Join::Round => {
+                // The **arc** on the outside of the turn, from one edge
+                // to the other.
+                let start = angle_of(p0, corner);
+                let finish = angle_of(p1, corner);
+                let mut sector = Vec::with_capacity(ARC_STEPS + 2);
+                sector.push(corner);
+                for step in 0..=ARC_STEPS {
+                    let angle = start + shortest(start, finish) * step as f64 / ARC_STEPS as f64;
+                    sector.push((corner.0 + angle.cos() * half, corner.1 + angle.sin() * half));
+                }
+                self.fill_polygon(&sector, colour, FillRule::NonZero);
+            }
+            Join::Miter => {
+                // The two edges are carried on until they meet, and the
+                // meeting point is the **miter**. A miter that is too
+                // long is a bevel: the limit is four widths.
+                let Some(miter) = meet(p0, u0x, u0y, p1, u1x, u1y) else {
+                    self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+                    return;
+                };
+                let length = ((miter.0 - corner.0).powi(2) + (miter.1 - corner.1).powi(2)).sqrt();
+                if length > MITER_LIMIT * half {
+                    self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+                } else {
+                    self.fill_polygon(&[p0, miter, p1], colour, FillRule::NonZero);
+                }
+            }
+        }
+    }
+
+    /// Draw the **end** of an open line: the round cap.
+    ///
+    /// The half circle is put on the end, away from the line.
+    fn stroke_cap(&mut self, end: (f64, f64), towards: (f64, f64), half: f64, first: bool, colour: Colour) {
+        let Some((ux, uy)) = unit(towards, end) else { return };
+        // The way the line comes: from the point towards the end, and
+        // the cap is behind it.
+        let (dx, dy) = if first { (-ux, -uy) } else { (ux, uy) };
+        let left = (-dy, dx);
+        let right = (dy, -dx);
+        let start = angle_of((end.0 + left.0 * half, end.1 + left.1 * half), end);
+        let finish = angle_of((end.0 + right.0 * half, end.1 + right.1 * half), end);
+        let middle = angle_of((end.0 + dx * half, end.1 + dy * half), end);
+        // The half circle is the way round that goes **through** the
+        // direction the line comes from.
+        let step = if angle_distance(start, middle) + angle_distance(middle, finish) <= std::f64::consts::PI {
+            1.0
+        } else {
+            -1.0
+        };
+        let mut cap = Vec::with_capacity(ARC_STEPS + 2);
+        for index in 0..=ARC_STEPS {
+            let angle = start + (finish - start) * step * index as f64 / ARC_STEPS as f64;
+            cap.push((end.0 + angle.cos() * half, end.1 + angle.sin() * half));
+        }
+        self.fill_polygon(&cap, colour, FillRule::NonZero);
+    }
+}
+
+/// The **unit** vector from one point to another.
+fn unit(from: (f64, f64), to: (f64, f64)) -> Option<(f64, f64)> {
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    let length = (dx * dx + dy * dy).sqrt();
+    if length <= f64::EPSILON {
+        return None;
+    }
+    Some((dx / length, dy / length))
+}
+
+/// The **angle** of a point about a centre.
+fn angle_of(point: (f64, f64), centre: (f64, f64)) -> f64 {
+    (point.1 - centre.1).atan2(point.0 - centre.0)
+}
+
+/// The **shortest** way round from one angle to another.
+fn shortest(from: f64, to: f64) -> f64 {
+    let mut difference = to - from;
+    while difference > std::f64::consts::PI {
+        difference -= std::f64::consts::TAU;
+    }
+    while difference < -std::f64::consts::PI {
+        difference += std::f64::consts::TAU;
+    }
+    difference
+}
+
+/// The **distance** between two angles, the short way round.
+fn angle_distance(from: f64, to: f64) -> f64 {
+    shortest(from, to).abs()
+}
+
+/// Where two lines **meet**: the first through `from` along `u`, the
+/// second through `to` along `v`.
+fn meet(from: (f64, f64), ux: f64, uy: f64, to: (f64, f64), vx: f64, vy: f64) -> Option<(f64, f64)> {
+    let determinant = ux * vy - uy * vx;
+    if determinant.abs() <= f64::EPSILON {
+        return None;
+    }
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    let along = (dx * vy - dy * vx) / determinant;
+    Some((from.0 + ux * along, from.1 + uy * along))
 }
 
 /// A point on a cubic curve.

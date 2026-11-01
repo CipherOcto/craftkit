@@ -60,6 +60,7 @@ impl BusKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }
@@ -167,6 +168,7 @@ impl SendKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }
@@ -234,6 +236,7 @@ impl LaneKind {
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
+                ..Default::default()
             }),
         );
     }

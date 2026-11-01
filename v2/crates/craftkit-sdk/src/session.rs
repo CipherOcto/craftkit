@@ -452,7 +452,11 @@ impl Session {
             canvas.path(
                 &frame,
                 crate::document::Colour::NONE,
-                Some(crate::document::Stroke { colour: crate::document::Colour::BLACK, width }),
+                Some(crate::document::Stroke {
+                    colour: crate::document::Colour::BLACK,
+                    width,
+                    ..Default::default()
+                }),
             );
             let handle = rect.resize_handle();
             canvas.rect(
