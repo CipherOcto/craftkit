@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1251 tests.** The MCP server links **all fifteen batteries** in, so the
+**1256 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1251 tests
+cargo test          # 1256 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3608,6 +3608,7 @@ so.
 | a **path that says what is inside it** | **built.** The fill rule of a path may be set, and two paths may be excluded — the difference the other way round, which is in the library and was not in a command (§171) | §171 |
 | a **PDF stream's filter** | **built.** The five ways a stream's bytes may be encoded are undone — Flate, LZW with the early change, ASCIIHex, ASCII85 and RunLength — and the filter may be named in the command or in the dictionary (§172) | §172 |
 | a **PDF stream's predictor** | **built.** The step that was made after the encoding is undone: the TIFF predictor and the five PNG ones, with the width of the picture from the dictionary (§173) | §173 |
+| a **line's corners and ends** | **built.** The stroke carries a join and a cap, the rasteriser draws them, and two commands say which (§174) | §174 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11768,3 +11769,74 @@ one.
 - **The parameters are the PDF's defaults.** One column, one colour and
   eight bits are what the PDF says when it says nothing, and a caller
   that wants a picture of another shape must say so in the dictionary.
+
+---
+
+## 174. A line's corners and ends
+
+A line that turns has a **corner** in it, and a line that stops has an
+**end**. The corner is pointed, round or cut off; the end is flush, round
+or square. v2's stroke carried a colour and a width and nothing else, so
+every line in the tree had the same corner and the same end — and the
+rasteriser drew a **square** at every point of the outline, which is
+none of the six.
+
+### What was built
+
+- The SDK's **stroke** carries a **join** and a **cap**: `miter`,
+  `round` and `bevel` for the corner, `butt`, `round` and `square` for
+  the end.
+- The rasteriser draws them: the joint fills the gap on the **outside**
+  of the turn, and the **miter** is the point where the two edges meet
+  — a miter longer than four widths is a bevel, because a long spike of
+  ink is not what a corner means.
+- Two commands: `vector.path.join` and `vector.path.cap`. A name that
+  is not one of the three is **refused by name**, and a path with no
+  line has no corners and no ends to set.
+
+### What the port found
+
+- **The seam was the SDK's, and that is where it belongs.** The
+  rasteriser is **below** the batteries and cannot ask a battery what
+  its lines should look like; so the join and the cap are in the
+  **stroke**, beside the colour and the width, and every backend that
+  draws a stroke is told the same thing.
+- **The tree's own drawing was a joint of its own.** The rasteriser put
+  a square at every point of the outline — a corner that is neither a
+  miter nor a bevel nor a round, and an end that is neither flush nor
+  round nor square. It filled the gaps, which is what it was for, and
+  it did it the way a machine can: in squares.
+- **The default had to be chosen, and the tree's pictures moved.** The
+  default is the **miter** and the **flush** end — the way a PostScript
+  line has always been drawn — and the square the rasteriser used to
+  put at the end of a line is gone: an open line now stops at its last
+  point. That is a visible change to the tree's own drawings, and it is
+  a change the arc meant to make.
+- **The join and the cap are of the line and not of the path.** A path
+  has a **fill** with a rule, and it has a **line** with a corner and
+  an end; the two are different things and the payload keeps them
+  apart.
+- **The file grew a field and no version.** A stroke written before the
+  join and the cap existed is read with them: the two are **optional**
+  in the file, and a stroke that says nothing about them means the
+  default. That is why the format did not need a new version for it.
+
+### What it cost
+
+- **Five tests**: three in the vector battery (`tests/stroke.rs`) and
+  two in the rasteriser's own (`tests/picture.rs`).
+- **Two commands** (`vector.path.join` and `vector.path.cap`). The MCP
+  server now carries **215** commands.
+- **The SDK's stroke grew two fields**, and the eighteen places in the
+  tree that make a stroke were taught to say what they mean.
+
+### What it does not settle
+
+- **There is no anti-aliasing.** A round corner is a polygon of twelve
+  sides and a round end is a half circle of twelve sides, and the
+  pixels are on or off (§67).
+- **The miter limit is the kit's.** Four widths, and not the caller's.
+- **The join and the cap are only of the drawing.** The geometry
+  library's boolean operations do not know them — they are about what
+  is inside a path and not about the ink on its outline — and the tree
+  has no outline-of-a-stroke operation either.
