@@ -17,14 +17,15 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twelve commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fourteen commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
-//!   `vector.path.simplify` and `vector.path.offset` work on whole
-//!   paths; `vector.path.move` and `vector.path.handle` move a point of
-//!   a path and set the handles of the curves that leave and arrive at
-//!   it; and `vector.path.fill` and `vector.path.stroke` say what the
-//!   path is painted with;
+//!   `vector.path.exclude`, `vector.path.simplify` and
+//!   `vector.path.offset` work on whole paths; `vector.path.move` and
+//!   `vector.path.handle` move a point of a path and set the handles of
+//!   the curves that leave and arrive at it; `vector.path.fill` and
+//!   `vector.path.stroke` say what the path is painted with; and
+//!   `vector.path.rule` says which parts of it are inside;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
@@ -53,8 +54,8 @@
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
-    Canvas, Colour, Document, EngineError, FormatValue, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
-    Point, Rect, Segment, Session, Stroke, SubPath, Text,
+    Canvas, Colour, Document, EngineError, FillRule, FormatValue, Node, NodeRef, Number, Outcome, Path, Plan,
+    PlanItem, Point, Rect, Segment, Session, Stroke, SubPath, Text,
 };
 
 use craftkit_vector_geom as geom;
@@ -702,6 +703,81 @@ impl StrokePath {
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the path has a line")
             .with_data(serde_json::json!({ "id": self.path.0, "width": width })))
+    }
+}
+
+/// Say which parts of a path are **inside**.
+///
+/// The rule is `nonzero` — the default, and the rule that makes a
+/// contour inside another one a hole when the two run in opposite
+/// directions — or `evenodd`, which does not care which way round a
+/// contour runs.
+#[derive(Command)]
+#[command(
+    id = "vector.path.rule",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Rule"),
+    mutates,
+    undoable
+)]
+pub struct SetRule {
+    /// The path.
+    pub path: NodeRef,
+    /// The rule: `nonzero` or `evenodd`.
+    pub rule: Text,
+}
+
+impl SetRule {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let rule = match self.rule.0.trim().to_ascii_lowercase().as_str() {
+            "nonzero" | "non-zero" => FillRule::NonZero,
+            "evenodd" | "even-odd" => FillRule::EvenOdd,
+            other => {
+                return Err(EngineError::Failed {
+                    id: "vector.path.rule".to_string(),
+                    message: format!("the rule is `nonzero` or `evenodd`, and not `{other}`"),
+                });
+            }
+        };
+        vector.path.rule = rule;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the rule is set").with_data(serde_json::json!({ "id": self.path.0 })))
+    }
+}
+
+/// Keep what is in one path and not in the other.
+///
+/// The **exclusion**: what the two paths do not share. It is the
+/// difference the other way round, and it is the operation that leaves
+/// the overlap out.
+#[derive(Command)]
+#[command(
+    id = "vector.path.exclude",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Combine"),
+    mutates,
+    undoable
+)]
+pub struct ExcludePaths {
+    /// The first path.
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub first: Option<NodeRef>,
+    /// The second path.
+    ///
+    /// Leave it out and the **selection** is used instead.
+    pub second: Option<NodeRef>,
+}
+
+impl ExcludePaths {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let (first, second) = two_of(session, self.first, self.second)?;
+        combine(session, "vector.path.exclude", first, second, geom::BoolOp::Xor)
     }
 }
 
