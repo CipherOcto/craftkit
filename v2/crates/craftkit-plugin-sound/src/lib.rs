@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-nine commands**, one for each thing a person does to a
+//! - **sixty commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -31,8 +31,8 @@
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
-//!   **stems**, **separate** a clip into two, **mute** a track, make a
-//!   track **solo safe**, and
+//!   **stems**, **separate** a clip into two or on the **grid**,
+//!   **mute** a track, make a track **solo safe**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -2959,18 +2959,21 @@ impl SeparateClip {
         if !at.is_finite() {
             return Err(EngineError::Failed { id: id.clone(), message: "a place is a number".to_string() });
         }
-        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{clip_id}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
+        let (name, payload) = {
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            (node.name.clone(), payload)
+        };
         // A clip whose **content** is locked is finished: it is not
         // separated.
         if locks::edit_is_locked(&payload) {
@@ -2990,54 +2993,180 @@ impl SeparateClip {
                 ),
             });
         }
-        // The **first** piece: the head of the clip, with its head
-        // fade and without a fade at the cut.
-        let mut first = payload.clone();
-        first.length = at - payload.start;
-        first.fade_out = FadePayload::none();
-        // The **beat** of the first piece is the beat of the clip if
-        // it is inside it; a beat that the cut left in the second
-        // piece is not a beat of this one.
-        first.sync = payload.sync.filter(|sync| *sync <= first.length);
-        // The **second** piece: the tail, with the tail's fade and
-        // without one at the cut. Its content starts later in the
-        // source by the distance the cut made, **divided by the
-        // stretch**: a stretched clip's source is read more slowly,
-        // and the two are the same fact.
-        let mut second = payload.clone();
-        second.start = at;
-        second.length = end - at;
-        second.fade_in = FadePayload::none();
-        let delta = at - payload.start;
-        second.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
-        // The **beat** moves with the audio it is in: the beat of the
-        // second piece is nearer its head by the distance the cut
-        // made, and a beat that the cut left in the other piece is
-        // not a beat of this one.
-        second.sync =
-            payload.sync.map(|sync| sync - delta).filter(|sync| *sync >= 0 && *sync <= second.length);
-        let name = node.name.clone();
-        let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
-        let source = payload.source;
-        let first_data = first.to_json();
-        let second_data = second.to_json();
-        let document = session.document_mut()?;
-        if let Some(node) = document.node_mut(clip_id) {
-            node.data = first_data;
-        }
-        // The **second** piece is a clip of its own, under the same
-        // take, and it plays the same source.
-        let second_id = document.add_node_with_under(playlist, name, "sound.clip", None, second_data);
-        if let Some(source) = source {
-            document.add_relation(craftkit_sdk::Relation::new(second_id, source, "source"));
-        }
+        let second = separate_at(session, clip_id, &payload, &name, at)?;
         Ok(Outcome::changed(format!("separated the clip `{clip_id}` at {at}")).with_data(serde_json::json!({
             "id": clip_id,
             "at": at,
-            "second": second_id,
+            "second": second,
         })))
     }
 }
+
+/// The **cut** of a clip at a place.
+///
+/// The clip becomes two clips under the same take: the first keeps
+/// the head of the clip and the second keeps the tail, and the second
+/// starts later in the source by the distance the cut made — **divided
+/// by the stretch**, because a stretched clip's source is read more
+/// slowly.
+///
+/// The **beat** moves with the audio it is in: a beat that the cut
+/// left in the other piece is not a beat of this one.
+///
+/// The **fade** at the cut is dropped: the tree drops it too, because
+/// a fade that ended at the cut would be a fade of nothing.
+///
+/// The **second** piece's id is the answer: it is the piece that runs
+/// from the cut to the end, and it is the piece a further cut goes
+/// into.
+fn separate_at(
+    session: &mut Session,
+    clip_id: u64,
+    payload: &ClipPayload,
+    name: &str,
+    at: i64,
+) -> Result<u64, EngineError> {
+    let end = payload.start + payload.length;
+    // The **first** piece: the head of the clip, with its head fade
+    // and without a fade at the cut.
+    let mut first = payload.clone();
+    first.length = at - payload.start;
+    first.fade_out = FadePayload::none();
+    // The **beat** of the first piece is the beat of the clip if it
+    // is inside it; a beat that the cut left in the second piece is
+    // not a beat of this one.
+    first.sync = payload.sync.filter(|sync| *sync <= first.length);
+    // The **second** piece: the tail, with the tail's fade and
+    // without one at the cut. Its content starts later in the source
+    // by the distance the cut made, **divided by the stretch**: a
+    // stretched clip's source is read more slowly, and the two are the
+    // same fact.
+    let mut second = payload.clone();
+    second.start = at;
+    second.length = end - at;
+    second.fade_in = FadePayload::none();
+    let delta = at - payload.start;
+    second.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
+    // The **beat** moves with the audio it is in: the beat of the
+    // second piece is nearer its head by the distance the cut made,
+    // and a beat that the cut left in the other piece is not a beat
+    // of this one.
+    second.sync = payload.sync.map(|sync| sync - delta).filter(|sync| *sync >= 0 && *sync <= second.length);
+    let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
+    let source = payload.source;
+    let first_data = first.to_json();
+    let second_data = second.to_json();
+    let document = session.document_mut()?;
+    if let Some(node) = document.node_mut(clip_id) {
+        node.data = first_data;
+    }
+    // The **second** piece is a clip of its own, under the same take,
+    // and it plays the same source.
+    let second_id = document.add_node_with_under(playlist, name.to_string(), "sound.clip", None, second_data);
+    if let Some(source) = source {
+        document.add_relation(craftkit_sdk::Relation::new(second_id, source, "source"));
+    }
+    Ok(second_id)
+}
+
+/// Separate a clip on the **grid**.
+///
+/// The tree's editor separates a take on the grid: the clip is cut at
+/// every line of the grid it crosses, and the pieces are the bars or
+/// the beats the grid says they are. The grid is the session's (§200)
+/// and the lines are **musical**, so they move with the tempo.
+///
+/// The number of lines is **bounded**: a clip that crosses more lines
+/// than the bound is **refused** and not cut at the first thousand of
+/// them, because a clip cut at a thousand lines is a clip nobody
+/// meant to make.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.separate.grid",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Separate on Grid"),
+    mutates,
+    undoable
+)]
+pub struct SeparateClipOnGrid {
+    /// The clip to separate.
+    pub clip: NodeRef,
+}
+
+impl SeparateClipOnGrid {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.separate.grid".to_string();
+        let clip_id = self.clip.0;
+        let (name, payload) = {
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            (node.name.clone(), payload)
+        };
+        // A clip whose **content** is locked is finished: it is not
+        // separated.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        let end = payload.start + payload.length;
+        // The **lines** the clip crosses, and the bound: a clip that
+        // crosses more lines than the bound is refused.
+        let lines = settings.grid.lines(payload.start, end, &map, settings.sample_rate, MAX_GRID_LINES + 1);
+        if lines.len() > MAX_GRID_LINES {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip crosses more than {MAX_GRID_LINES} lines of the grid"),
+            });
+        }
+        // The **cut**: each line cuts the piece that is left, and the
+        // piece that is left is the piece the next line cuts.
+        let mut current = clip_id;
+        let mut pieces = 1_usize;
+        for line in &lines {
+            let piece = ClipPayload::from_json(
+                &session
+                    .document()
+                    .node(current)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{current}` is gone"),
+                    })?
+                    .data,
+            )
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if *line <= piece.start || *line >= piece.start + piece.length {
+                continue;
+            }
+            current = separate_at(session, current, &piece, &name, *line)?;
+            pieces += 1;
+        }
+        Ok(Outcome::changed(format!("separated the clip `{clip_id}` on the grid"))
+            .with_data(serde_json::json!({ "id": clip_id, "pieces": pieces, "lines": lines.len() })))
+    }
+}
+
+/// The most grid lines a clip may be separated on.
+///
+/// A clip that crosses a thousand lines is a clip that crosses more
+/// than the loop is willing to, and the tree's own bound is ten
+/// thousand — a bound and not a policy, the same way the tree's is.
+const MAX_GRID_LINES: usize = 1024;
 
 /// Space the **clips** against each other.
 ///
