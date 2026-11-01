@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1302 tests.** The MCP server links **all fifteen batteries** in, so the
+**1304 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1302 tests
+cargo test          # 1304 tests
 cargo run -p craftkit-studio
 ```
 
@@ -12717,3 +12717,61 @@ things a page carries besides its content.
   is written out wrong. The action of a link is an object of its own
   here, which is why this arc does not hit it; but the bug is there,
   and it is the next thing to fix.
+
+## 189. A dictionary is a dictionary
+
+The tree's PDF editor writes a file out of a document and reads it back,
+and the two are the same question asked in the other order. v2's PDF
+battery could read a file and write one — and a file with a dictionary
+inside a dictionary came out **wrong**: the dictionary was written as an
+array, and nothing said so.
+
+### What was built
+
+- The reader holds a dictionary that is inside another dictionary as a
+  **list of pairs under the name `entries`** — the name the payload
+  already uses for the dictionary of an object, so that there is one
+  spelling for a dictionary and not two.
+- The writer writes it back as a **dictionary**: the file that comes out
+  of a document that was read from a file has the dictionary in it, and
+  not an array.
+
+### What the port found
+
+- **A JSON array is one thing, and a PDF has two.** A PDF's dictionary
+  and a PDF's array are both lists of things, and the payload had one
+  list. The tree has two types — a dictionary and an array — and it
+  never has to guess which one it is holding. Here the payload has to
+  say, and it says it with the name it already uses.
+- **The order is why the dictionary is a list.** A JSON object does not
+  keep the order of its keys, so the dictionary is a list of pairs, and
+  that is why the spelling had to grow a name rather than be the object
+  itself: a JSON object would have lost the order the file had.
+- **The bug was in the writer, and it was silent.** The reader read a
+  nested dictionary as a list of pairs and the writer wrote a list of
+  pairs as an array, so the file that came out was malformed and the
+  command said it had written a file. §188 named the bug by looking for
+  it; this is the fixing of it.
+
+### What it cost
+
+- **Two tests** in the battery (`tests/dictionary.rs`): a dictionary is
+  a list of pairs and an array is an array, and the dictionary survives
+  the round trip.
+- **No commands**: the MCP server still carries **231** commands.
+- **One spelling changed**: a dictionary inside a dictionary is now
+  `{"entries": […]}`, and the values of an object stream say so too.
+
+### What it does not settle
+
+- **The price is paid on both sides.** A PDF dictionary with a key
+  called `entries` whose value is a list of pairs is read as a
+  dictionary and written as one — the same price §180 paid for a name
+  and a text.
+- **The tree's type is still not here.** The tree has a dictionary and
+  an array and never guesses; the payload guesses and marks. A typed
+  value would not have to mark anything, and that is what the kernel is
+  for (§16).
+- **The writer writes what the payload says.** A document built by hand
+  may hold a nested dictionary in the old spelling, and the writer will
+  write an array for it: the reader is forgiving and the writer is not.
