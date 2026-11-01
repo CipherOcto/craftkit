@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1276 tests.** The MCP server links **all fifteen batteries** in, so the
+**1278 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1276 tests
+cargo test          # 1278 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3616,6 +3616,7 @@ so.
 | a **cross-reference table** | **built.** The file's own index of itself is read: the classic table and the cross-reference stream (§179) | §179 |
 | a **file loaded into the document** | **built.** The objects of a file become nodes, its references become relations, and the bytes of its streams go into files of their own (§180) | §180 |
 | a **reader that feeds a bus** | **built.** The buses and the readers are mixed in the order their routes say, and a mix that loops is refused (§181) | §181 |
+| the **outline of a line** | **built.** The shape a stroke covers is a path of its own, which may be filled, measured and cut (§182) | §182 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12284,3 +12285,56 @@ chain of auxes the tree has was not built.
 - **A reader may still not have sends.** It reads one bus and it is
   heard there or in the mix; a copy of it to a third bus is still
   refused.
+
+---
+
+## 182. The shape a line covers
+
+A line with a width covers an **area**, and that area is a shape in its
+own right: the path of the line, widened and closed at its ends. The
+tree has that shape as an **effect** — the outline of a stroke — and
+v2's geometry library could not make it, and no command asked for it.
+
+### What was built
+
+- The geometry library holds `outline_stroke`: the shape a line of a
+  given width covers, with the line's **join** and **cap**, as a path.
+- The command `vector.path.outline` makes that shape a **path of its
+  own**: a new node, filled, that may be measured and cut like any
+  other. The path it came from is left alone.
+- A path with **no line** has no outline, and the refusal says so.
+
+### What the port found
+
+- **The stroke was already carrying what the outline needs.** The
+  join and the cap — §174 — are the two things that say what the shape
+  of a line looks like at its corners and at its ends; so the outline
+  is a shape with the same corners and the same ends as the line it
+  came from, and the arc that gave the line its join and its cap gave
+  the outline its shape for free.
+- **The width of a line is the width of the outline and not its
+  radius.** A line of width four covers two on each side of the path,
+  and an outline that used the width as a radius would be twice the
+  size.
+- **The outline is a band and not a shape inside the path.** The
+  outline of a square is the ring around it, and not the square: the
+  outline of a closed path has a hole in it, which the fill rule
+  decides how to read.
+
+### What it cost
+
+- **Two tests** in the battery (`tests/outline.rs`): a line's outline
+  is a path, and a path with no line has no outline.
+- **One command** (`vector.path.outline`). The MCP server now carries
+  **223** commands.
+
+### What it does not settle
+
+- **The outline is not cleaned.** The tree's outline is one clean
+  shape — the overlaps removed and the pieces fitted together — and
+  here the outline is what the stroker gives: a path whose pieces may
+  overlap where the line crosses itself.
+- **The miter limit is the kit's.** Four widths, as §174 said.
+- **The outline is not in the file format.** It is a path, so it is —
+  but there is no "outline" of a path in the tree's own format, and
+  the outline here is a path like any other.
