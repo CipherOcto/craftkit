@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1245 tests.** The MCP server links **all fifteen batteries** in, so the
+**1251 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1245 tests
+cargo test          # 1251 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3607,6 +3607,7 @@ so.
 | a **path that may be painted** | **built.** The fill and the stroke of a path may be set: what is inside it and what the line on its outline is; a colour that is not a colour is refused (§170) | §170 |
 | a **path that says what is inside it** | **built.** The fill rule of a path may be set, and two paths may be excluded — the difference the other way round, which is in the library and was not in a command (§171) | §171 |
 | a **PDF stream's filter** | **built.** The five ways a stream's bytes may be encoded are undone — Flate, LZW with the early change, ASCIIHex, ASCII85 and RunLength — and the filter may be named in the command or in the dictionary (§172) | §172 |
+| a **PDF stream's predictor** | **built.** The step that was made after the encoding is undone: the TIFF predictor and the five PNG ones, with the width of the picture from the dictionary (§173) | §173 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11697,3 +11698,73 @@ in the tree said what was inside it.
 - **The stream is read whole.** The bytes are read into memory before
   they are undone, so a stream that is large and cheap to decode is
   still large in the heap.
+
+---
+
+## 173. The PDF's predictors, undone
+
+A filter undoes the **encoding** of a stream's bytes. A **predictor**
+undoes a step that was made after the encoding: the bytes of an image
+are stored as the difference from the byte before them, so that the
+bytes of a picture compress far better than the picture does. The PDF
+names the predictor in `/DecodeParms`, and v2's battery could not undo
+one.
+
+### What was built
+
+- The module `predictors` holds the **two** predictors a PDF uses: the
+  **TIFF** one — the difference from the byte to the left — and the
+  **PNG** ones — each row of the picture begins with a byte that says
+  how the row was made, and there are five ways.
+- The command `pdf.stream.decode` undoes the predictor **after** the
+  filter, which is the order the steps were made in.
+- The predictor may be named in the **command** or in the
+  **dictionary**, and the **parameters** — the columns, the colours and
+  the bits to a component — come from the dictionary either way.
+- A predictor the kit does not know is **refused by name**, and so is a
+  row that is shorter than the picture is wide.
+
+### What the port found
+
+- **The predictor is not a filter, and it is not another crate
+  either.** It is a step on top of a filter, and the battery that
+  holds the filters holds it: a separate crate would sit at the same
+  layer and could not reach the filters it works on.
+- **The width of the picture is the dictionary's, and the command
+  cannot supply it.** The PNG predictors work a **row** at a time, and
+  a row is as wide as the picture is — which the PDF says in
+  `/Columns`. So the command may say *which* predictor a stream is in,
+  and the *width* comes from the file: a caller that says "predictor
+  15" and nothing else has said nothing about how wide the picture is,
+  and the kit's default is the PDF's own — one column.
+- **The Paeth guess is a guess about three bytes.** The fifth PNG
+  predictor does not store the difference from the byte to the left or
+  from the byte above; it stores the difference from the **nearest of
+  the three**, and the nearest is the one the guess names. A decoder
+  that implements the other four and this one wrongly reads rows that
+  are one byte out and does not say so.
+- **The five PNG ways are the PNG's, not the PDF's.** The PDF points at
+  the PNG's predictors and reuses the numbers; the rows and the guess
+  are the PNG specification's, and the port had to write them against
+  that and not against the PDF's words about them.
+
+### What it cost
+
+- **Six tests** in the battery (`tests/predictors.rs`): the two
+  predictors, the dictionary naming one, the Paeth guess, the
+  predictor that is none, and the refusals.
+- **One module** (`predictors`), **one parameter** on the command that
+  already existed, and no new command: the MCP server still carries
+  **213** commands.
+
+### What it does not settle
+
+- **There is no encoder.** A predictor that undoes a step is worth
+  having on its own; the tree's PDF reads and does not write.
+- **The bits are not split.** A picture of sixteen bits to a component
+  is two bytes to a component, and the kit rounds the byte up and does
+  not unpack the halves; the difference the predictors undo is made on
+  the byte, not on the bit.
+- **The parameters are the PDF's defaults.** One column, one colour and
+  eight bits are what the PDF says when it says nothing, and a caller
+  that wants a picture of another shape must say so in the dictionary.
