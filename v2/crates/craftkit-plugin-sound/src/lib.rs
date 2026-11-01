@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **thirty-four commands**, one for each thing a person does to a
+//! - **thirty-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -23,7 +23,8 @@
 //!   the
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, set
-//!   the **beat** of a clip and take it away, and
+//!   the **beat** of a clip and take it away, lock a clip's **content**
+//!   and its **place**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -95,6 +96,9 @@ mod mixer;
 // The **beat** of a clip: where the beat falls inside it.
 mod beat;
 
+// The **locks** on a clip: what may not change, and what may not move.
+mod locks;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
@@ -102,6 +106,7 @@ use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
+pub use locks::{EditLock, TimeLock};
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
@@ -936,6 +941,16 @@ pub(crate) struct ClipPayload {
     /// Here the two are different: `None` is no sync point, and a
     /// sync point of zero is a sync point at the start.
     pub(crate) sync: Option<i64>,
+    /// Whether the clip's **content** is locked.
+    ///
+    /// A locked clip's sound is finished: it is not trimmed, not faded
+    /// and not stretched.
+    pub(crate) edit_locked: bool,
+    /// Whether the clip's **place** is locked.
+    ///
+    /// A locked clip stays where it is: it is not spaced and not
+    /// snapped.
+    pub(crate) time_locked: bool,
 }
 
 /// The most a clip may be stretched.
@@ -959,6 +974,8 @@ impl ClipPayload {
             "stretch": self.stretch,
             "muted": self.muted,
             "sync": self.sync,
+            "edit_locked": self.edit_locked,
+            "time_locked": self.time_locked,
         })
     }
 
@@ -991,6 +1008,8 @@ impl ClipPayload {
             stretch,
             muted: value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
             sync: value.get("sync").and_then(|sync| sync.as_i64()),
+            edit_locked: value.get("edit_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
+            time_locked: value.get("time_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
         })
     }
 }
@@ -1508,6 +1527,8 @@ impl AddClip {
             stretch,
             muted: false,
             sync: None,
+            edit_locked: false,
+            time_locked: false,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -1577,6 +1598,14 @@ impl SetClipStretch {
         }
         let mut payload = ClipPayload::from_json(&node.data)
             .map_err(|error| EngineError::Failed { id: "sound.clip.stretch".to_string(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // stretched.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.stretch".to_string(),
+                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+            });
+        }
         payload.stretch = stretch;
         if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
             node.data = payload.to_json();
@@ -1637,6 +1666,14 @@ impl SetClipFade {
         }
         let mut payload = ClipPayload::from_json(&node.data)
             .map_err(|error| EngineError::Failed { id: "sound.clip.fade".to_string(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // faded.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.fade".to_string(),
+                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+            });
+        }
         if self.fade_in.is_none() && self.fade_out.is_none() {
             return Err(EngineError::Failed {
                 id: "sound.clip.fade".to_string(),
@@ -1783,6 +1820,14 @@ impl TrimClip {
         }
         let payload = ClipPayload::from_json(&node.data)
             .map_err(|error| EngineError::Failed { id: "sound.clip.trim".to_string(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // trimmed.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
         if from < payload.start as f64 {
             return Err(EngineError::Failed {
                 id: "sound.clip.trim".to_string(),
@@ -1913,6 +1958,16 @@ impl SpaceClips {
             }
             let payload = ClipPayload::from_json(&node.data)
                 .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            // A clip whose **place** is locked stays where it is — and
+            // the whole spacing is refused, because a spacing that
+            // left one clip behind would be a spacing the caller did
+            // not ask for.
+            if locks::time_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: it stays where it is"),
+                });
+            }
             clips.push((*clip_id, payload.start, payload.length));
         }
         clips.sort_by_key(|(clip_id, start, _)| (*start, *clip_id));
@@ -2474,6 +2529,15 @@ impl SnapClip {
             }
             let payload = ClipPayload::from_json(&node.data)
                 .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            // A clip whose **place** is locked stays where it is — and
+            // the whole snap is refused, because a snap that left one
+            // clip behind would be a snap the caller did not ask for.
+            if locks::time_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: it stays where it is"),
+                });
+            }
             // The **list** the clip is in: the playlist under the
             // track, or the track itself. A clip's neighbours are the
             // clips of its own list — a take is a list of clips of its
@@ -4069,7 +4133,9 @@ pub struct ClipTool;
         "sound.session.set",
         "sound.clip.sync.set",
         "sound.clip.sync.remove",
-        "sound.clip.sync.read"
+        "sound.clip.sync.read",
+        "sound.clip.lock.edit",
+        "sound.clip.lock.time"
     )
 )]
 pub struct SoundPanel;
@@ -4362,7 +4428,9 @@ craftkit_sdk::plugin_anchor!(
     AddLane,
     SetBeat,
     RemoveBeat,
-    ReadBeat
+    ReadBeat,
+    EditLock,
+    TimeLock
 );
 
 #[cfg(test)]
