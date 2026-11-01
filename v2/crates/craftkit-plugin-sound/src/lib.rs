@@ -15,9 +15,10 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-nine commands**, one for each thing a person does to a
+//! - **thirty-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
-//!   clip, space the clips against each other, make a take, choose the
+//!   clip, space the clips against each other, loop a clip and take the
+//!   loop away, make a take, choose the
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -1871,6 +1872,392 @@ impl SpaceClips {
             "gap": gap,
         })))
     }
+}
+
+/// The **relation** that says a clip is followed by its loop.
+///
+/// The tree's editor remembers a loop in a field on the clip, and has to
+/// find the copies again — to take them away, or to draw them as one
+/// thing — by looking at what is next to the clip on the track.
+///
+/// Here the loop is an **edge**: the copy is named by the clip it
+/// follows, and the chain is a walk. Nothing has to be guessed.
+const LOOP_RELATION: &str = "loop";
+
+/// The most **loops** one clip may be given.
+///
+/// A clip that loops a thousand times is a thousand bars on the
+/// timeline and a thousand copies of the clip in the document. The
+/// bound is here so that a number from outside cannot ask for an
+/// absurd thing — and the answer is a **refusal**, and not a shorter
+/// loop: a loop that is not the loop that was asked for is a loop that
+/// is wrong in a way nobody can hear.
+const MAX_LOOPS: usize = 1000;
+
+/// How many times a clip is played when nothing else is said.
+///
+/// The tree's dialog asks; the tree's default is the clip and three
+/// loops.
+const DEFAULT_LOOPS: i64 = 4;
+
+/// Loop a clip: the copies of it that follow it.
+///
+/// The tree's editor pastes a copy of the clip onto the track, and the
+/// copies are ordinary clips — they may be trimmed, muted and faded on
+/// their own. This tree does the same, and says what the tree can only
+/// infer: the copy is **named by the clip it follows**, in a relation,
+/// so that the loop can be found again without guessing.
+///
+/// Three ways to say how long the loop is:
+///
+/// - **count** — the clip and its loops: four is the clip and three
+///   copies;
+/// - **length** — how long the whole looped clip is, in samples, and
+///   the last copy is cut short to fit;
+/// - **fill** — up to the next clip on the track, or else to the end of
+///   the timeline.
+///
+/// They are taken in that order: a fill beats a length, and a length
+/// beats a count.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.loop",
+    area = "sound",
+    layer = "sound",
+    icon = "link",
+    menu("Clip", "Loop"),
+    mutates,
+    undoable
+)]
+pub struct LoopClip {
+    /// The clip to loop.
+    pub clip: NodeRef,
+    /// How many times the clip is played: the clip and its loops.
+    pub count: Option<Number>,
+    /// How long the whole looped clip is, in samples. The last loop is
+    /// cut short to fit.
+    pub length: Option<Number>,
+    /// Loop up to the next clip on the track, or else to the end of the
+    /// timeline.
+    pub fill: Option<Bool>,
+}
+
+impl LoopClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.loop".to_string();
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        if payload.length <= 0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a clip with no length is not a clip".to_string(),
+            });
+        }
+        // The **playlist** the clip is in: the copies go beside it.
+        let playlist =
+            timeline::parent_of(session.document(), self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{}` is on no playlist", self.clip.0),
+            })?;
+        // A clip that is **already followed** by a copy is refused: the
+        // chain is a line and not a tree, and a branch would have two
+        // answers to the same question.
+        if !session.document().relations_from(self.clip.0, Some(LOOP_RELATION)).is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{}` is already looped: unloop it first", self.clip.0),
+            });
+        }
+        // How many copies, and how long the last one is.
+        let (reps, last) = self.the_plan(session, node, &payload)?;
+        if reps == 0 {
+            return Ok(Outcome::new("there is no room for a loop").with_data(serde_json::json!({
+                "loops": 0,
+                "clips": Vec::<u64>::new(),
+            })));
+        }
+        // The **copies**: each one starts where the last one ended, and
+        // the last one is cut short to fit.
+        let name = node.name.clone();
+        let playlist_id = playlist.id;
+        let mut made: Vec<u64> = Vec::with_capacity(reps);
+        let mut previous = self.clip.0;
+        for step in 1..=reps {
+            let mut copy = payload.clone();
+            copy.start = payload.start.saturating_add(payload.length.saturating_mul(step as i64));
+            if step == reps && last < payload.length {
+                copy.length = last;
+                // The **fades** are shortened to fit: a fade that is
+                // longer than the clip is a fade past the end of it.
+                copy.fade_in.len = copy.fade_in.len.min(copy.length);
+                copy.fade_out.len = copy.fade_out.len.min(copy.length);
+            }
+            let made_id = session.document_mut()?.add_node_with_under(
+                Some(playlist_id),
+                name.clone(),
+                "sound.clip",
+                None,
+                copy.to_json(),
+            );
+            // The copy plays the same source, and it is said so.
+            if let Some(source) = payload.source {
+                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(made_id, source, "source"));
+            }
+            // And the copy **follows** the clip before it: that is the
+            // loop, and it is an edge and not a guess.
+            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(
+                previous,
+                made_id,
+                LOOP_RELATION,
+            ));
+            previous = made_id;
+            made.push(made_id);
+        }
+        let count = made.len();
+        Ok(Outcome::changed(format!("looped the clip {count} time(s)")).with_data(serde_json::json!({
+            "loops": count,
+            "clips": made,
+        })))
+    }
+
+    /// How many **copies** the loop has, and how long the last one is.
+    ///
+    /// The three ways to say it are taken in order: a fill beats a
+    /// length, and a length beats a count.
+    fn the_plan(
+        &self,
+        session: &Session,
+        node: &Node,
+        payload: &ClipPayload,
+    ) -> Result<(usize, i64), EngineError> {
+        let id = "sound.clip.loop".to_string();
+        // **Fill**: up to the next clip on the track, or else to the end
+        // of the timeline.
+        if self.fill.map(|fill| fill.0) == Some(true) {
+            let end = the_next_start(session.document(), node, payload)
+                .unwrap_or_else(|| timeline::end_in_samples(session.document()));
+            let span = end.saturating_sub(payload.start.saturating_add(payload.length));
+            return Self::the_reps(span, payload.length, &id);
+        }
+        // **Length**: the whole looped clip is this long, and the last
+        // copy is cut short to fit.
+        if let Some(length) = self.length {
+            let total = samples(length.0, "how long the looped clip is")?;
+            let span = total.saturating_sub(payload.length);
+            return Self::the_reps(span, payload.length, &id);
+        }
+        // **Count**: the clip and its loops.
+        let count = match self.count {
+            Some(count) => samples(count.0, "how many times the clip is played")?,
+            None => DEFAULT_LOOPS,
+        };
+        if count < 1 {
+            return Err(EngineError::Failed {
+                id,
+                message: "a clip that is played no times is not a clip".to_string(),
+            });
+        }
+        let reps = count - 1;
+        if reps > MAX_LOOPS as i64 {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("a clip loops at most {MAX_LOOPS} times, and this one was asked for {reps}"),
+            });
+        }
+        Ok((reps as usize, payload.length))
+    }
+
+    /// How many copies fit in a **span**, and how long the last one is.
+    ///
+    /// A span that is not a whole number of clips has a last copy that
+    /// is cut short — which is the tree's own rule, and the reason a
+    /// loop of a whole number of bars ends exactly where it began.
+    fn the_reps(span: i64, length: i64, id: &str) -> Result<(usize, i64), EngineError> {
+        if span <= 0 || length <= 0 {
+            return Ok((0, length));
+        }
+        let whole = span / length;
+        let rest = span % length;
+        let reps = whole + i64::from(rest > 0);
+        if reps > MAX_LOOPS as i64 {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("a clip loops at most {MAX_LOOPS} times, and this one would need {reps}"),
+            });
+        }
+        let last = if rest > 0 { rest } else { length };
+        Ok((reps as usize, last))
+    }
+}
+
+/// Unloop a clip: take the copies away.
+///
+/// The tree's editor has to **find** the copies before it can take them
+/// away, and it finds them by looking at the track: a clip that starts
+/// where this one ends, of the same material. This tree knows them —
+/// the copy is named by the clip it follows — so the copies are found
+/// by walking the chain.
+///
+/// Two ways to be rid of a loop:
+///
+/// - **remove** — the copies are taken away, and the clip is a clip
+///   again;
+/// - **flatten** — the copies stay, and they are not a loop any more:
+///   they are clips in their own right.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.unloop",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Unloop"),
+    mutates,
+    undoable
+)]
+pub struct UnloopClip {
+    /// The clip whose loop is to be taken away.
+    pub clip: NodeRef,
+    /// `remove` — the copies are taken away. `flatten` — the copies
+    /// stay, and are not a loop any more. The first one if it is left
+    /// out.
+    pub mode: Option<Text>,
+}
+
+impl UnloopClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.unloop".to_string();
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let remove = match &self.mode {
+            None => true,
+            Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
+                "remove" => true,
+                "flatten" => false,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the mode `{other}` is not one of the two"),
+                    });
+                }
+            },
+        };
+        // The **chain**: the clip, and the copies that follow it.
+        let chain = the_chain(session.document(), self.clip.0);
+        if chain.len() < 2 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{}` is not a looped clip", self.clip.0),
+            });
+        }
+        let copies = chain.len() - 1;
+        if remove {
+            // The copies go, and their edges go with them: a document
+            // that keeps the edge to a clip that is not there is a
+            // document that says a clip plays a source that is gone.
+            for copy in chain.iter().skip(1) {
+                session.document_mut()?.remove_node(*copy);
+            }
+        } else {
+            // The copies stay, and the **edges** go: they are clips in
+            // their own right, and nothing says they are a loop.
+            let members = chain.clone();
+            session.document_mut()?.remove_relations(|relation| {
+                relation.kind == LOOP_RELATION
+                    && members.contains(&relation.from)
+                    && members.contains(&relation.to)
+            });
+        }
+        let message = if remove {
+            format!("took away {copies} cop(y|ies) of the loop")
+        } else {
+            format!("the {copies} cop(y|ies) are not a loop any more")
+        };
+        Ok(Outcome::changed(message).with_data(serde_json::json!({
+            "copies": copies,
+            "removed": remove,
+            "clips": chain.iter().skip(1).collect::<Vec<_>>(),
+        })))
+    }
+}
+
+/// The **chain** of a loop: the clip and the copies that follow it.
+///
+/// The chain is a walk: back along the edges to the head, and then
+/// forward along the copies. A clip that is in no loop is a chain of
+/// one.
+fn the_chain(document: &craftkit_sdk::document::Document, clip: u64) -> Vec<u64> {
+    // The **head**: the clip that nothing follows into.
+    let mut head = clip;
+    loop {
+        let incoming = document.relations_to(head, Some(LOOP_RELATION));
+        let Some(relation) = incoming.first() else { break };
+        let from = relation.from;
+        if from == head {
+            break;
+        }
+        head = from;
+    }
+    // The **copies**: the head, and then each one after it.
+    let mut chain = vec![head];
+    let mut current = head;
+    loop {
+        let outgoing = document.relations_from(current, Some(LOOP_RELATION));
+        let Some(relation) = outgoing.first() else { break };
+        let to = relation.to;
+        if chain.contains(&to) {
+            break;
+        }
+        chain.push(to);
+        current = to;
+    }
+    chain
+}
+
+/// The start of the **next clip** on the clip's track, if there is one.
+///
+/// The tree's editor looks for the next clip that starts at or after
+/// this one ends: a clip that overlaps is not a neighbour, because the
+/// loop would run into the middle of it.
+fn the_next_start(
+    document: &craftkit_sdk::document::Document,
+    clip: &Node,
+    payload: &ClipPayload,
+) -> Option<i64> {
+    let track = timeline::track_of(document, clip)?;
+    let end = payload.start.saturating_add(payload.length);
+    let mut next: Option<i64> = None;
+    for node in document.walk().filter(|node| node.kind == "sound.clip") {
+        if node.id == clip.id {
+            continue;
+        }
+        if timeline::track_of(document, node).map(|owner| owner.id) != Some(track.id) {
+            continue;
+        }
+        let Ok(other) = ClipPayload::from_json(&node.data) else { continue };
+        if other.start < end {
+            continue;
+        }
+        next = Some(next.map_or(other.start, |best: i64| best.min(other.start)));
+    }
+    next
 }
 
 /// Set the tempo.

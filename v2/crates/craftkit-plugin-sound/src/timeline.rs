@@ -155,6 +155,19 @@ pub fn length_of(document: &Document) -> f64 {
     longest
 }
 
+/// The **end** of the timeline, in samples.
+///
+/// The timeline is measured in seconds and the document in samples, so
+/// the end is worked out against the session's rate. A session with no
+/// rate has no end, and the end is the beginning.
+pub fn end_in_samples(document: &Document) -> i64 {
+    let rate = session_of(document).sample_rate as f64;
+    if rate <= 0.0 {
+        return 0;
+    }
+    (length_of(document) * rate).round() as i64
+}
+
 /// The rectangle of a **clip**: a bar on the track's row.
 pub fn clip_rect(document: &Document, clip: &Node) -> Option<Rect> {
     let payload = ClipPayload::from_json(&clip.data).ok()?;
