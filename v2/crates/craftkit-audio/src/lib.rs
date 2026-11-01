@@ -536,6 +536,92 @@ fn resample_by_taps(
     out
 }
 
+/// The sound **backwards**.
+///
+/// Each channel is reversed on its own, so a stereo sound is still a
+/// stereo sound and the two channels keep their places in it.
+pub fn reverse(samples: &[f32], channels: usize) -> Vec<f32> {
+    let channels = channels.max(1);
+    let frames = samples.len() / channels;
+    let mut out = vec![0.0_f32; frames * channels];
+    for frame in 0..frames {
+        for channel in 0..channels {
+            let at = frame * channels + channel;
+            let from = (frames - 1 - frame) * channels + channel;
+            out[at] = samples.get(from).copied().unwrap_or(0.0);
+        }
+    }
+    out
+}
+
+/// The sound **upside down**: the sign of every sample is flipped.
+///
+/// It is the same sound and not the other one, and it is the phase
+/// that is different — the same thing the tree's phase invert does to
+/// a track.
+pub fn invert(samples: &[f32]) -> Vec<f32> {
+    samples.iter().map(|sample| -*sample).collect()
+}
+
+/// The sound at a **level**: its loudest sample is at that level.
+///
+/// The level is in decibels and it is bounded, from minus one hundred
+/// and forty-four to twenty-four: a level above zero would ask for a
+/// sound that is louder than a file can hold. A silent sound is left
+/// alone, because there is no loudest sample to move.
+///
+/// The loudest sample of the **whole** sound is the one that counts,
+/// and not the loudest of each channel: the tree's normalizer does
+/// the same unless it is asked for the other way.
+pub fn normalize(samples: &[f32], target_db: f64) -> Vec<f32> {
+    let target_db = if target_db.is_finite() { target_db.clamp(-144.0, 24.0) } else { 0.0 };
+    let target = db_to_linear(target_db);
+    let mut loudest = 0.0_f32;
+    for sample in samples {
+        let value = sample.abs();
+        if value.is_finite() && value > loudest {
+            loudest = value;
+        }
+    }
+    if loudest <= 0.0 {
+        return samples.to_vec();
+    }
+    let gain = target as f32 / loudest;
+    samples.iter().map(|sample| sample * gain).collect()
+}
+
+/// The sound without its **direct current**: the mean is taken away.
+///
+/// A sound that sits above zero is not louder, it is **offset**, and
+/// the offset takes room from the sound without adding any. Each
+/// channel is measured on its own, because a stereo sound may have a
+/// different offset in each of them.
+pub fn remove_dc(samples: &[f32], channels: usize) -> Vec<f32> {
+    let channels = channels.max(1);
+    let frames = samples.len() / channels;
+    let mut out = samples.to_vec();
+    for channel in 0..channels {
+        if frames == 0 {
+            break;
+        }
+        let mut sum = 0.0_f64;
+        for frame in 0..frames {
+            let value = samples.get(frame * channels + channel).copied().unwrap_or(0.0);
+            if value.is_finite() {
+                sum += f64::from(value);
+            }
+        }
+        let mean = (sum / frames as f64) as f32;
+        for frame in 0..frames {
+            let at = frame * channels + channel;
+            if let Some(slot) = out.get_mut(at) {
+                *slot -= mean;
+            }
+        }
+    }
+    out
+}
+
 /// Resample the sound by a **ratio**: the new sound is `ratio` times
 /// as long as the old one.
 ///

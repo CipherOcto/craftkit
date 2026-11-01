@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-two commands**, one for each thing a person does to a
+//! - **fifty-four commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -29,7 +29,8 @@
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
-//!   set a track's **fader**, move a clip's **pitch**, and
+//!   set a track's **fader**, move a clip's **pitch**, do a **process**
+//!   to a clip's sound and take it off, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -78,6 +79,16 @@
 //! drawn — an **appearance** is the colour a node is filled with, and
 //! one command sets it on any node — so the battery has no command for
 //! it, and the clip's colour is the appearance the clip carries.
+//!
+//! **A process is a field and not a rendering.** The tree's audio
+//! suite reverses a clip's sound, turns it upside down, brings it to a
+//! level and takes the direct current away — and it does each of them
+//! by rendering the material and replacing the clip's content with
+//! the rendered file. Here a process is a name on the clip, and the
+//! sound is worked out when it is played. The name is a string and
+//! not a variant, for the same reason the kinds are strings here —
+//! but a name this battery does not know is **refused**, because a
+//! process that does nothing is worse than no process at all.
 //!
 //! **A shifted pitch is a field and not a rendering.** The tree's
 //! pitch shift is one of its **audio-suite processes**: it renders the
@@ -1131,6 +1142,9 @@ pub(crate) struct ClipPayload {
     /// Zero is the pitch of the source, twelve semitones are an octave
     /// up, and the clip keeps its length whatever the pitch does.
     pitch_semitones: f64,
+    /// The **processes** on the clip's sound, in the order they are
+    /// done.
+    processes: Vec<ProcessPayload>,
     /// Whether the clip is **muted**.
     ///
     /// A muted clip is not played and is still there: the tree's
@@ -1176,6 +1190,37 @@ pub(crate) struct ClipPayload {
     pub(crate) source_bpm: Option<f64>,
 }
 
+/// A **process** on a clip's sound: something done to it on the way
+/// out.
+///
+/// The name is a **string** and not a variant — the kinds of a sound
+/// are open here, and so are its processes — and the parameters are
+/// whatever the process takes. The ones this battery knows are
+/// `reverse`, `invert`, `normalize` and `dc_offset`; a name it does
+/// not know is **refused**, because a process that does nothing is
+/// worse than no process at all.
+#[derive(Debug, Clone, PartialEq)]
+struct ProcessPayload {
+    /// What the process is called.
+    process: String,
+    /// What it is given.
+    params: Json,
+}
+
+impl ProcessPayload {
+    fn to_json(&self) -> Json {
+        serde_json::json!({ "process": self.process, "params": self.params })
+    }
+
+    fn from_json(value: &Json) -> Result<Self, String> {
+        let process = value.get("process").and_then(|process| process.as_str()).unwrap_or("").to_string();
+        if process.is_empty() {
+            return Err("a process is a name".to_string());
+        }
+        Ok(ProcessPayload { process, params: value.get("params").cloned().unwrap_or(Json::Null) })
+    }
+}
+
 /// The most a clip's pitch may be moved, in **semitones**.
 ///
 /// The tree's pitch shift is a process and its own range is twenty-four
@@ -1204,6 +1249,7 @@ impl ClipPayload {
             "fade_out": self.fade_out.to_json(),
             "stretch": self.stretch,
             "pitch_semitones": self.pitch_semitones,
+            "processes": self.processes.iter().map(ProcessPayload::to_json).collect::<Vec<Json>>(),
             "muted": self.muted,
             "sync": self.sync,
             "edit_locked": self.edit_locked,
@@ -1251,6 +1297,17 @@ impl ClipPayload {
             },
             stretch,
             pitch_semitones,
+            processes: match value.get("processes") {
+                Some(processes) => {
+                    let list = processes.as_array().ok_or("the processes of a clip are a list")?;
+                    let mut out = Vec::with_capacity(list.len());
+                    for process in list {
+                        out.push(ProcessPayload::from_json(process)?);
+                    }
+                    out
+                }
+                None => Vec::new(),
+            },
             muted: value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
             sync: value.get("sync").and_then(|sync| sync.as_i64()),
             edit_locked: value.get("edit_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
@@ -2001,6 +2058,7 @@ impl AddClip {
             fade_out: FadePayload::none(),
             stretch,
             pitch_semitones: 0.0,
+            processes: Vec::new(),
             muted: false,
             sync: None,
             edit_locked: false,
@@ -2106,6 +2164,170 @@ impl SetClipStretch {
         }
         Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
             .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
+    }
+}
+
+/// Do something to a clip's **sound**.
+///
+/// A process is one of the tree's **audio-suite processes**: the sound
+/// is reversed, upside down, brought to a level, or has its direct
+/// current taken away. The tree does each of them by rendering the
+/// material and replacing the clip's content with the rendered file;
+/// here the process is on the clip and the sound is worked out when it
+/// is played.
+///
+/// The processes are done in the order they were added, so a clip may
+/// have more than one — and a clip may have the same one twice, which
+/// is what the tree does when the same process is asked for twice.
+///
+/// A process this battery does not know is **refused** and not
+/// ignored: a process that does nothing is worse than no process at
+/// all, because the document says the sound was changed and it was
+/// not.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.process",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Process"),
+    mutates,
+    undoable
+)]
+pub struct AddClipProcess {
+    /// The clip to process.
+    pub clip: NodeRef,
+    /// What to do: `reverse`, `invert`, `normalize` or `dc_offset`.
+    pub process: Text,
+    /// What it is given: `normalize` takes a `target_db`.
+    pub params: Option<Json>,
+}
+
+impl AddClipProcess {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let name = self.process.0.trim().to_string();
+        if name.is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.clip.process".to_string(),
+                message: "a process is a name".to_string(),
+            });
+        }
+        // The **parameters** are checked here, so that a process that
+        // would be refused is refused before the clip is changed.
+        let params = process_params(&name, self.params.as_ref(), "sound.clip.process")?;
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.process".to_string(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.process".to_string(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.clip.process".to_string(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // processed.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.process".to_string(),
+                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+            });
+        }
+        payload.processes.push(ProcessPayload { process: name.clone(), params });
+        let data = payload.to_json();
+        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+            node.data = data;
+        }
+        Ok(Outcome::changed(format!("the clip `{}` is processed with `{name}`", self.clip.0))
+            .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
+    }
+}
+
+/// Take a process off a clip.
+///
+/// The **last** process of that name is the one that goes, because the
+/// processes are done in order and the last one is the one that was
+/// asked for last. A clip with no such process has nothing to take
+/// away, and that is refused.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.process.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Unprocess"),
+    mutates,
+    undoable
+)]
+pub struct RemoveClipProcess {
+    /// The clip to take the process off.
+    pub clip: NodeRef,
+    /// The name of the process.
+    pub process: Text,
+}
+
+impl RemoveClipProcess {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let name = self.process.0.trim().to_string();
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.process.remove".to_string(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.process.remove".to_string(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.clip.process.remove".to_string(),
+            message: error,
+        })?;
+        let Some(at) = payload.processes.iter().rposition(|process| process.process == name) else {
+            return Err(EngineError::Failed {
+                id: "sound.clip.process.remove".to_string(),
+                message: format!("the clip `{}` has no `{name}`", self.clip.0),
+            });
+        };
+        payload.processes.remove(at);
+        let data = payload.to_json();
+        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+            node.data = data;
+        }
+        Ok(Outcome::changed(format!("the clip `{}` is not processed with `{name}`", self.clip.0))
+            .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
+    }
+}
+
+/// The parameters of a process, and the check that it is one this
+/// battery knows.
+///
+/// The name is a string and not a variant, because the kinds here are
+/// open — but a name nothing knows is **refused**, because a process
+/// that is quietly ignored is a process the document lies about.
+fn process_params(name: &str, params: Option<&Json>, id: &str) -> Result<Json, EngineError> {
+    let given = params.cloned().unwrap_or(Json::Null);
+    match name {
+        "reverse" | "invert" | "dc_offset" => Ok(Json::Null),
+        "normalize" => {
+            let target = given.get("target_db").and_then(|target| target.as_f64()).unwrap_or(0.0);
+            if !target.is_finite() || !(-144.0..=24.0).contains(&target) {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!(
+                        "a level is a number of decibels from minus one hundred and forty-four to \
+                         twenty-four, and this one is {target}"
+                    ),
+                });
+            }
+            Ok(serde_json::json!({ "target_db": target }))
+        }
+        other => Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("not supported yet: the process `{other}`"),
+        }),
     }
 }
 
@@ -3747,6 +3969,16 @@ impl RenderSound {
             } else {
                 samples
             };
+            // The **processes**: what is done to the sound on the way
+            // out. They are done in the order they were added, and
+            // each of them is the tree's own.
+            let samples =
+                apply_processes(&payload.processes, &samples, sound.channels as usize).map_err(|error| {
+                    EngineError::Failed {
+                        id: "sound.render".to_string(),
+                        message: format!("the clip `{}` cannot be played: {error}", clip_id),
+                    }
+                })?;
             // The **fades**: the head of the clip fades in and the tail
             // fades out, and a fade is a gain and not a thing that
             // belongs to a channel.
@@ -4249,6 +4481,35 @@ fn add_into(target: &mut [f32], source: &[f32], at: usize, gain: f32) {
         }
         target[position] += sample * gain;
     }
+}
+
+/// The **processes** on a clip's sound, done in order.
+///
+/// Each process is the tree's own: the sound is reversed, upside down,
+/// brought to a level, or has its direct current taken away. A process
+/// the battery does not know is an **error** and not a sound that is
+/// quietly left alone — a document that says the sound was changed and
+/// was not is a document that lies.
+fn apply_processes(
+    processes: &[ProcessPayload],
+    samples: &[f32],
+    channels: usize,
+) -> Result<Vec<f32>, String> {
+    let mut out = samples.to_vec();
+    for process in processes {
+        out = match process.process.as_str() {
+            "reverse" => craftkit_audio::reverse(&out, channels),
+            "invert" => craftkit_audio::invert(&out),
+            "dc_offset" => craftkit_audio::remove_dc(&out, channels),
+            "normalize" => {
+                let target =
+                    process.params.get("target_db").and_then(|target| target.as_f64()).unwrap_or(0.0);
+                craftkit_audio::normalize(&out, target)
+            }
+            other => return Err(format!("not supported yet: the process `{other}`")),
+        };
+    }
+    Ok(out)
 }
 
 /// The signal of a track, **panned** between its channels.
