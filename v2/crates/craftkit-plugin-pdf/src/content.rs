@@ -1,0 +1,412 @@
+//! The **content stream**: what a page says to draw.
+//!
+//! A page's content is a stream of **operands** and **operators**: the
+//! operands are the numbers, the names, the strings and the arrays that
+//! come before an operator, and the operator says what to do with
+//! them. `10 20 m` moves the pen to the point (10, 20), and
+//! `100 100 200 200 re` draws a rectangle.
+//!
+//! This module **reads** a content stream: it says what the stream
+//! says, in the order the stream says it. It does not draw it — the
+//! drawing of a PDF page is the evaluator's business and not this
+//! module's.
+//!
+//! # What it does not do
+//!
+//! - **The inline images are not read.** A stream may hold an image
+//!   between `BI` and `EI`, and the bytes between are the image and
+//!   not a list of operands; the operator is reported and the bytes
+//!   are skipped.
+//! - **The operators are not carried out.** What a `re` means is the
+//!   evaluator's; this module says that a `re` is there.
+
+use craftkit_sdk::serde_json::{Map, Value as Json};
+
+/// Why a content stream could not be **read**.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    /// The bytes are not what a content stream is.
+    Malformed(String),
+}
+
+/// One **operation**: an operator and the operands it was given.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Operation {
+    /// The operator's name, as the stream spells it.
+    pub operator: String,
+    /// The operands that came before it.
+    pub operands: Vec<Json>,
+}
+
+impl Operation {
+    /// The operation, as the caller gets it.
+    pub fn to_json(&self) -> Json {
+        let mut map = Map::new();
+        map.insert("operator".to_string(), Json::String(self.operator.clone()));
+        map.insert("operands".to_string(), Json::Array(self.operands.clone()));
+        Json::Object(map)
+    }
+}
+
+/// The **operators** a content stream may hold.
+///
+/// The list is the specification's (ISO 32000-2 §8.9), and an operator
+/// that is not on it is refused by name: a stream that says something
+/// the kit does not know is not a stream the kit should read half of.
+const OPERATORS: &[&str] = &[
+    "b", "B", "B*", "b*", "BDC", "BI", "BMC", "BT", "BX", "c", "cm", "CS", "cs", "d", "d0", "d1", "Do", "DP",
+    "EI", "EMC", "ET", "EX", "f", "F", "f*", "G", "g", "gs", "h", "i", "ID", "j", "J", "K", "k", "l", "m",
+    "M", "MP", "n", "q", "Q", "re", "RG", "rg", "ri", "s", "S", "SC", "sc", "SCN", "scn", "sh", "T*", "Tc",
+    "Td", "TD", "Tf", "Tj", "TJ", "TL", "Tm", "Tr", "Ts", "Tw", "Tz", "v", "w", "W", "W*", "y", "'", "\"",
+];
+
+/// Read the **operations** of a content stream.
+pub fn operations(bytes: &[u8]) -> Result<Vec<Operation>, Error> {
+    let mut reader = Reader { bytes, at: 0 };
+    let mut operations: Vec<Operation> = Vec::new();
+    let mut operands: Vec<Json> = Vec::new();
+    loop {
+        let token = reader.token()?;
+        let Some(token) = token else { break };
+        match token {
+            Token::Value(value) => operands.push(value),
+            Token::Operator(name) => {
+                if name == "BI" {
+                    // The **inline image**: the bytes until `EI` are
+                    // the image and not a list of operands.
+                    reader.skip_inline_image()?;
+                }
+                operations.push(Operation { operator: name, operands: std::mem::take(&mut operands) });
+            }
+        }
+    }
+    if !operands.is_empty() {
+        return Err(Error::Malformed("the stream ends with operands and no operator".to_string()));
+    }
+    Ok(operations)
+}
+
+/// A **token** of a content stream.
+enum Token {
+    /// An operand.
+    Value(Json),
+    /// An operator.
+    Operator(String),
+}
+
+/// The reader of a content stream.
+struct Reader<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl<'a> Reader<'a> {
+    /// The next token, or `None` at the end of the stream.
+    fn token(&mut self) -> Result<Option<Token>, Error> {
+        self.skip_space();
+        let Some(byte) = self.bytes.get(self.at).copied() else {
+            return Ok(None);
+        };
+        let token = match byte {
+            b'/' => Token::Value(self.name()?),
+            b'(' => Token::Value(self.literal_string()?),
+            b'<' => {
+                if self.bytes.get(self.at + 1) == Some(&b'<') {
+                    Token::Value(self.dictionary()?)
+                } else {
+                    Token::Value(self.hex_string()?)
+                }
+            }
+            b'[' => Token::Value(self.array()?),
+            b']' => return Err(Error::Malformed("a `]` with no `[`".to_string())),
+            b'{' | b'}' => return Err(Error::Malformed("a content stream has no procedures".to_string())),
+            b'0'..=b'9' | b'+' | b'-' | b'.' => {
+                if let Some(number) = self.number()? {
+                    Token::Value(number)
+                } else {
+                    self.keyword()?
+                }
+            }
+            _ => self.keyword()?,
+        };
+        Ok(Some(token))
+    }
+
+    /// The **space** and the comments, which say nothing.
+    fn skip_space(&mut self) {
+        loop {
+            let Some(byte) = self.bytes.get(self.at).copied() else { return };
+            match byte {
+                b' ' | b'\t' | b'\n' | b'\r' | 0x0c | 0x00 => self.at += 1,
+                b'%' => {
+                    while let Some(byte) = self.bytes.get(self.at).copied() {
+                        self.at += 1;
+                        if byte == b'\n' || byte == b'\r' {
+                            break;
+                        }
+                    }
+                }
+                _ => return,
+            }
+        }
+    }
+
+    /// A **name**: `/Name`.
+    fn name(&mut self) -> Result<Json, Error> {
+        self.at += 1;
+        let mut bytes: Vec<u8> = Vec::new();
+        while let Some(byte) = self.bytes.get(self.at).copied() {
+            if is_space(byte) || is_delimiter(byte) {
+                break;
+            }
+            self.at += 1;
+            if byte == b'#' {
+                // The **escape**: `#20` is the byte that the two
+                // digits stand for.
+                let high = self.bytes.get(self.at).copied();
+                let low = self.bytes.get(self.at + 1).copied();
+                match (high, low) {
+                    (Some(high), Some(low)) => match (hex(high), hex(low)) {
+                        (Some(high), Some(low)) => {
+                            bytes.push(high * 16 + low);
+                            self.at += 2;
+                        }
+                        _ => return Err(Error::Malformed("a name has a bad escape".to_string())),
+                    },
+                    _ => return Err(Error::Malformed("a name has a bad escape".to_string())),
+                }
+            } else {
+                bytes.push(byte);
+            }
+        }
+        Ok(Json::String(format!("/{}", String::from_utf8_lossy(&bytes))))
+    }
+
+    /// A **literal string**: `(text)`.
+    ///
+    /// The bytes are kept as they are, and each one is a character: a
+    /// PDF string is a sequence of bytes and not text, and the kit does
+    /// not pretend otherwise.
+    fn literal_string(&mut self) -> Result<Json, Error> {
+        self.at += 1;
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut depth = 1_usize;
+        while let Some(byte) = self.bytes.get(self.at).copied() {
+            self.at += 1;
+            match byte {
+                b'\\' => {
+                    let Some(next) = self.bytes.get(self.at).copied() else {
+                        return Err(Error::Malformed("a string ends in an escape".to_string()));
+                    };
+                    self.at += 1;
+                    match next {
+                        b'n' => bytes.push(b'\n'),
+                        b'r' => bytes.push(b'\r'),
+                        b't' => bytes.push(b'\t'),
+                        b'b' => bytes.push(0x08),
+                        b'f' => bytes.push(0x0c),
+                        b'(' => bytes.push(b'('),
+                        b')' => bytes.push(b')'),
+                        b'\\' => bytes.push(b'\\'),
+                        b'0'..=b'7' => {
+                            // The **octal**: up to three digits.
+                            let mut value = u32::from(next - b'0');
+                            for _ in 0..2 {
+                                let Some(digit) = self.bytes.get(self.at).copied() else { break };
+                                if !(b'0'..=b'7').contains(&digit) {
+                                    break;
+                                }
+                                value = value * 8 + u32::from(digit - b'0');
+                                self.at += 1;
+                            }
+                            bytes.push((value & 0xff) as u8);
+                        }
+                        other => bytes.push(other),
+                    }
+                }
+                b'(' => {
+                    depth += 1;
+                    bytes.push(byte);
+                }
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(Json::String(bytes.iter().map(|byte| *byte as char).collect()));
+                    }
+                    bytes.push(byte);
+                }
+                other => bytes.push(other),
+            }
+        }
+        Err(Error::Malformed("a string is never closed".to_string()))
+    }
+
+    /// A **hex string**: `<48656C6C6F>`.
+    fn hex_string(&mut self) -> Result<Json, Error> {
+        self.at += 1;
+        let mut digits: Vec<u8> = Vec::new();
+        while let Some(byte) = self.bytes.get(self.at).copied() {
+            self.at += 1;
+            if byte == b'>' {
+                break;
+            }
+            if is_space(byte) {
+                continue;
+            }
+            let Some(value) = hex(byte) else {
+                return Err(Error::Malformed("a hex string has a bad digit".to_string()));
+            };
+            digits.push(value);
+        }
+        if digits.len() % 2 == 1 {
+            // An odd number of digits: the last one is half a byte,
+            // and the specification pads it with a zero.
+            digits.push(0);
+        }
+        let bytes: Vec<u8> = digits.chunks(2).map(|pair| pair[0] * 16 + pair[1]).collect();
+        Ok(Json::String(bytes.iter().map(|byte| *byte as char).collect()))
+    }
+
+    /// A **dictionary**: `<< /Key value >>`.
+    fn dictionary(&mut self) -> Result<Json, Error> {
+        self.at += 2;
+        let mut pairs: Vec<Json> = Vec::new();
+        loop {
+            self.skip_space();
+            if self.bytes.get(self.at) == Some(&b'>') && self.bytes.get(self.at + 1) == Some(&b'>') {
+                self.at += 2;
+                return Ok(Json::Array(pairs));
+            }
+            if self.at >= self.bytes.len() {
+                return Err(Error::Malformed("a dictionary is never closed".to_string()));
+            }
+            let key = self.name()?;
+            let Some(value) = self.token()? else {
+                return Err(Error::Malformed("a dictionary's key has no value".to_string()));
+            };
+            let Token::Value(value) = value else {
+                return Err(Error::Malformed("a dictionary's key has no value".to_string()));
+            };
+            pairs.push(Json::Array(vec![key, value]));
+        }
+    }
+
+    /// An **array**: `[1 2 3]`.
+    fn array(&mut self) -> Result<Json, Error> {
+        self.at += 1;
+        let mut values: Vec<Json> = Vec::new();
+        loop {
+            self.skip_space();
+            match self.bytes.get(self.at) {
+                Some(b']') => {
+                    self.at += 1;
+                    return Ok(Json::Array(values));
+                }
+                None => return Err(Error::Malformed("an array is never closed".to_string())),
+                _ => {}
+            }
+            let Some(token) = self.token()? else {
+                return Err(Error::Malformed("an array is never closed".to_string()));
+            };
+            match token {
+                Token::Value(value) => values.push(value),
+                Token::Operator(name) => {
+                    return Err(Error::Malformed(format!("the operator `{name}` is inside an array")));
+                }
+            }
+        }
+    }
+
+    /// A **number**, if the bytes are one.
+    fn number(&mut self) -> Result<Option<Json>, Error> {
+        let start = self.at;
+        if matches!(self.bytes.get(self.at), Some(b'+') | Some(b'-')) {
+            self.at += 1;
+        }
+        let mut seen_dot = false;
+        let mut seen_digit = false;
+        while let Some(byte) = self.bytes.get(self.at).copied() {
+            match byte {
+                b'0'..=b'9' => {
+                    seen_digit = true;
+                    self.at += 1;
+                }
+                b'.' if !seen_dot => {
+                    seen_dot = true;
+                    self.at += 1;
+                }
+                _ => break,
+            }
+        }
+        if !seen_digit {
+            self.at = start;
+            return Ok(None);
+        }
+        let text = String::from_utf8_lossy(&self.bytes[start..self.at]).to_string();
+        let Ok(number) = text.parse::<f64>() else {
+            return Err(Error::Malformed(format!("the number `{text}` is not a number")));
+        };
+        if !number.is_finite() {
+            return Err(Error::Malformed(format!("the number `{text}` is not finite")));
+        }
+        let Some(value) = craftkit_sdk::serde_json::Number::from_f64(number) else {
+            return Err(Error::Malformed(format!("the number `{text}` is not finite")));
+        };
+        Ok(Some(Json::Number(value)))
+    }
+
+    /// A **keyword**: an operator.
+    fn keyword(&mut self) -> Result<Token, Error> {
+        let start = self.at;
+        while let Some(byte) = self.bytes.get(self.at).copied() {
+            if is_space(byte) || is_delimiter(byte) {
+                break;
+            }
+            self.at += 1;
+        }
+        if start == self.at {
+            return Err(Error::Malformed("the stream has a byte that says nothing".to_string()));
+        }
+        let name = String::from_utf8_lossy(&self.bytes[start..self.at]).to_string();
+        if !OPERATORS.contains(&name.as_str()) {
+            return Err(Error::Malformed(format!("the operator `{name}` is not one of the kit's")));
+        }
+        Ok(Token::Operator(name))
+    }
+
+    /// The bytes of an **inline image**, which are skipped.
+    fn skip_inline_image(&mut self) -> Result<(), Error> {
+        while self.at < self.bytes.len() {
+            if self.bytes[self.at] == b'E' && self.bytes.get(self.at + 1) == Some(&b'I') {
+                let before = self.at.checked_sub(1).and_then(|at| self.bytes.get(at)).copied();
+                let after = self.bytes.get(self.at + 2).copied();
+                if !before.map(is_space).unwrap_or(true) && !after.map(is_space).unwrap_or(true) {
+                    self.at += 2;
+                    return Ok(());
+                }
+            }
+            self.at += 1;
+        }
+        Err(Error::Malformed("the inline image is never closed".to_string()))
+    }
+}
+
+/// Whether a byte is **space**.
+fn is_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0c | 0x00)
+}
+
+/// Whether a byte **ends** a token.
+fn is_delimiter(byte: u8) -> bool {
+    matches!(byte, b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%')
+}
+
+/// The **value** of a hex digit.
+fn hex(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}

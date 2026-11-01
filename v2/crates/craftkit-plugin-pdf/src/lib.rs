@@ -66,6 +66,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod content;
 mod filters;
 mod predictors;
 
@@ -301,21 +302,6 @@ impl DecodeStream {
                 message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
             });
         }
-        let Some(path) = node.stream.clone() else {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: format!("the stream `{id}` has no file"),
-            });
-        };
-        // The **filter**: the one the command was given, or the one the
-        // dictionary names.
-        let names = match &self.filter {
-            Some(name) => vec![name.0.clone()],
-            None => filters::filter_of(&entries_of(&node.data)).ok_or_else(|| EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: format!("the stream `{id}` does not name a filter"),
-            })?,
-        };
         let to = self.to.0.clone();
         if to.trim().is_empty() {
             return Err(EngineError::Failed {
@@ -323,60 +309,166 @@ impl DecodeStream {
                 message: "the decoded bytes go somewhere".to_string(),
             });
         }
-        let limits = filters::Limits::default();
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-            .map_err(|message| EngineError::Failed {
-            id: "pdf.stream.decode".to_string(),
-            message: format!("the stream cannot be read: {message}"),
-        })?;
-        let decoded =
-            filters::decode_named(&names, &bytes, &limits).map_err(|error| EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: format!("the stream cannot be decoded: {error:?}"),
-            })?;
-        // The **predictor**: the step that was made after the encoding.
-        // The command may say which one it is, and the parameters come
-        // from the dictionary either way.
-        let entries = entries_of(&node.data);
-        let base = predictors::spec_of(&entries).map_err(|error| EngineError::Failed {
-            id: "pdf.stream.decode".to_string(),
-            message: format!("the predictor cannot be read: {error:?}"),
-        })?;
-        let spec = match (&self.predictor, base) {
-            (None, None) => None,
-            (None, Some(spec)) => Some(spec),
-            (Some(number), base) => {
-                let number = number.0.round() as i64;
-                let Some(predictor) = predictors::Predictor::by_number(number) else {
-                    return Err(EngineError::Failed {
-                        id: "pdf.stream.decode".to_string(),
-                        message: format!("the predictor {number} is not one of the kit's"),
-                    });
-                };
-                let mut spec = base.unwrap_or_default();
-                spec.predictor = predictor;
-                Some(spec)
-            }
-        };
-        let decoded = match spec {
-            Some(spec) => predictors::undo(&decoded, &spec).map_err(|error| EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: format!("the predictor cannot be undone: {error:?}"),
-            })?,
-            None => decoded,
-        };
-        std::fs::write(&to, &decoded).map_err(|error| EngineError::Failed {
+        let decoded = decoded_bytes(
+            node,
+            self.filter.as_ref().map(|filter| filter.0.as_str()),
+            self.predictor.as_ref().map(|predictor| predictor.0),
+            true,
+            "pdf.stream.decode",
+        )?;
+        std::fs::write(&to, &decoded.bytes).map_err(|error| EngineError::Failed {
             id: "pdf.stream.decode".to_string(),
             message: format!("the decoded bytes cannot be written to `{to}`: {error}"),
         })?;
-        Ok(Outcome::new(format!("decoded {} bytes", decoded.len())).with_data(serde_json::json!({
+        let from = node.stream.clone().unwrap_or_default();
+        let count = decoded.bytes.len();
+        Ok(Outcome::new(format!("decoded {count} bytes")).with_data(serde_json::json!({
             "id": id,
-            "from": path,
+            "from": from,
             "to": to,
-            "filters": names,
-            "predictor": spec.map(|spec| format!("{:?}", spec.predictor)),
-            "bytes": decoded.len(),
+            "filters": decoded.filters,
+            "predictor": decoded.predictor.map(|kind| format!("{kind:?}")),
+            "bytes": count,
         })))
+    }
+}
+
+/// The **decoded bytes** of a stream node.
+///
+/// The bytes are read from the file the node names, the **filter** is
+/// undone — the one the caller names, or the one the dictionary names —
+/// and the **predictor** is undone after it.
+fn decoded_bytes(
+    node: &Node,
+    filter: Option<&str>,
+    predictor: Option<f64>,
+    require_filter: bool,
+    command: &str,
+) -> Result<Decoded, EngineError> {
+    let id = node.id;
+    let Some(path) = node.stream.clone() else {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!("the stream `{id}` has no file"),
+        });
+    };
+    // The **filter**: the one the command was given, or the one the
+    // dictionary names.
+    let names = match filter {
+        Some(name) => vec![name.to_string()],
+        None => match filters::filter_of(&entries_of(&node.data)) {
+            Some(names) => names,
+            // A **content stream** is usually not encoded at all, and
+            // its bytes are the content; a stream that is being
+            // decoded must say what it is in.
+            None if require_filter => {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the stream `{id}` does not name a filter"),
+                });
+            }
+            None => Vec::new(),
+        },
+    };
+    let limits = filters::Limits::default();
+    let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+        .map_err(|message| EngineError::Failed {
+            id: command.to_string(),
+            message: format!("the stream cannot be read: {message}"),
+        })?;
+    let decoded = filters::decode_named(&names, &bytes, &limits).map_err(|error| EngineError::Failed {
+        id: command.to_string(),
+        message: format!("the stream cannot be decoded: {error:?}"),
+    })?;
+    // The **predictor**: the step that was made after the encoding.
+    // The command may say which one it is, and the parameters come
+    // from the dictionary either way.
+    let entries = entries_of(&node.data);
+    let base = predictors::spec_of(&entries).map_err(|error| EngineError::Failed {
+        id: command.to_string(),
+        message: format!("the predictor cannot be read: {error:?}"),
+    })?;
+    let spec = match (predictor, base) {
+        (None, None) => None,
+        (None, Some(spec)) => Some(spec),
+        (Some(number), base) => {
+            let number = number.round() as i64;
+            let Some(predictor) = predictors::Predictor::by_number(number) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the predictor {number} is not one of the kit's"),
+                });
+            };
+            let mut spec = base.unwrap_or_default();
+            spec.predictor = predictor;
+            Some(spec)
+        }
+    };
+    let decoded = match spec {
+        Some(spec) => predictors::undo(&decoded, &spec).map_err(|error| EngineError::Failed {
+            id: command.to_string(),
+            message: format!("the predictor cannot be undone: {error:?}"),
+        })?,
+        None => decoded,
+    };
+    let kind = spec.map(|spec| spec.predictor);
+    Ok(Decoded { bytes: decoded, filters: names, predictor: kind })
+}
+
+/// The **decoded bytes** of a stream, and what was done to them.
+struct Decoded {
+    /// The bytes, after the filter and the predictor.
+    bytes: Vec<u8>,
+    /// The filters that were undone.
+    filters: Vec<String>,
+    /// The predictor that was undone, if there was one.
+    predictor: Option<predictors::Predictor>,
+}
+
+/// Read the **operators** of a content stream.
+///
+/// A page's content is a stream of operands and operators, and the
+/// command says what the stream says: the operators in the order the
+/// stream has them, with the operands each one was given.
+#[derive(Command)]
+#[command(id = "pdf.content.operators", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ContentOperators {
+    /// The stream whose bytes are read.
+    pub stream: NodeRef,
+    /// The filter to undo, when the dictionary does not name one.
+    pub filter: Option<Text>,
+}
+
+impl ContentOperators {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.stream.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "pdf.content.operators".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: "pdf.content.operators".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+            });
+        }
+        let decoded = decoded_bytes(
+            node,
+            self.filter.as_ref().map(|filter| filter.0.as_str()),
+            None,
+            false,
+            "pdf.content.operators",
+        )?;
+        let operations = content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
+            id: "pdf.content.operators".to_string(),
+            message: format!("the content cannot be read: {error:?}"),
+        })?;
+        let count = operations.len();
+        let list: Vec<serde_json::Value> = operations.iter().map(content::Operation::to_json).collect();
+        Ok(Outcome::new(format!("{count} operation(s)"))
+            .with_data(serde_json::json!({ "id": id, "operations": list })))
     }
 }
 
@@ -750,6 +842,7 @@ craftkit_sdk::plugin_anchor!(
     AddPage,
     PageAttributes,
     DecodeStream,
+    ContentOperators,
     AddReference,
     ListReferences,
     GraphEvaluator,
