@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1514 tests.** The MCP server links **all fifteen batteries** in, so the
+**1523 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1514 tests
+cargo test          # 1523 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3650,6 +3650,7 @@ so.
 | the **mute** of a track | **built.** A switch on the track, and the mute lane is its default (§213) | §213 |
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
+| the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14783,3 +14784,78 @@ place; this one takes the **lines**.
   without looking at anything.
 - **The tree separates at a range and not at a clip.** A take of
   twenty clips is cut in one command in the tree and in twenty here.
+
+## 216. The auto rename of a clip
+
+The tree's sound editor has an **Auto Rename** scheme: a name, a
+number and a suffix, and the clips that editing separates from a clip
+with a scheme are named from it. "Kick" cut in four becomes "Kick",
+"Kick1", "Kick2" and "Kick3" — and the numbers keep counting, so the
+next clip separated from any of them is "Kick4".
+
+### What was built
+
+- The command `sound.clip.autoname` sets the scheme of clips, and
+  `sound.clip.autoname.read` reads it back with the **next** name it
+  would give.
+- A **scheme is a node** (`sound.autoname`) and the clips in it point
+  at it with an edge of kind `sound.autonamed` — the same shape as a
+  group (§199).
+- The **piece after a cut** takes the scheme's next name and the scheme
+  counts up; the piece **before** the cut keeps the name it had. The
+  cut is §212's cut, so a clip separated on the grid (§215) is named
+  as well.
+- The name is made of the **name**, the **zeros**, the **number** and
+  the **suffix**, in that order: "SFX", one zero, twenty-four and
+  ".Reel1" is "SFX024.Reel1".
+- A scheme that **no clip is in** is removed, and a scheme is taken
+  away by the same command without a name.
+
+### What the port found
+
+- **The tree's scheme is a number in a map and this tree's is a
+  node.** The tree keeps the schemes in the session, keyed by a number,
+  and each clip holds the key of the scheme it is in. Here the scheme
+  is a node with a payload, and the clips **point at it** — so the
+  membership is an edge, a clip's record is not rewritten to change
+  its scheme, and a scheme that no clip uses is **pruned** instead of
+  being a key in a map that says nothing.
+- **The tree's key makes the scheme shared and so does the edge.** The
+  clips separated from one clip share the scheme and count up one
+  number sequence. That is the reason the tree has a key at all, and
+  the reason the scheme is a thing here: the pieces of a clip are in
+  the scheme too, so a cut of a piece counts on in the same sequence.
+- **The tree's scheme has an id and this tree's has none.** The tree's
+  id is "to tell this scheme from another one under the same key after
+  an undo or in another session, for pastes from the clipboard". This
+  battery has no clipboard — there is no copy and no paste — and so
+  there is nothing for such an id to tell apart.
+- **The tree's zeros are zeros and not padding.** The tree writes the
+  name, then that many zero characters, then the number, then the
+  suffix — "SFX", one zero, twenty-four and ".Reel1" is "SFX024.Reel1",
+  and not "SFX24.Reel1" with the number padded to some width. The
+  same rule here, because a reader of a name should not have to know
+  how wide the number is meant to be.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/autoname.rs`): the piece
+  after a cut takes the next name, the name is made of its four parts,
+  the scheme counts up, two clips share one sequence, the scheme is
+  taken away without a name, a scheme no clip is in is removed, the
+  number and the zeros and the suffix need a name, a number outside
+  the bound is refused, and a node that is not a clip is refused.
+- **Two commands** (`sound.clip.autoname` and `sound.clip.autoname.read`)
+  and **one kind** (`sound.autoname`). The MCP server now carries
+  **273** commands, and the sound battery carries **62**.
+
+### What it does not settle
+
+- **The tree names the clips it strips as well.** The tree's strip
+  silence names the pieces it keeps and leaves the ones it removes
+  alone, in time order; here only a cut names a piece, because a cut
+  is the only thing that makes a piece.
+- **The tree's scheme survives a paste.** A copy carries its scheme
+  with it, and the copy pasted into another session brings the scheme
+  along and counts on from it. This battery has no clipboard, and so
+  there is nothing to carry.
