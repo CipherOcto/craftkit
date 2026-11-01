@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1568 tests.** The MCP server links **all fifteen batteries** in, so the
+**1577 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1568 tests
+cargo test          # 1577 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3655,6 +3655,7 @@ so.
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **healing** of a track | **built.** The clips that were separated are joined again when they are the same sound continued (§220) | §220 |
+| the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed and given a velocity (§217, §218, §219) | §219 |
 
@@ -15165,3 +15166,76 @@ until now nothing undid it.
 - **The tree's range is not here.** A person heals the part of a track
   they are looking at, and this tree heals the whole track: there is
   no range in the command, and the whole track is walked.
+
+## 221. The separation of a clip at its transients
+
+The tree's editor separates a take at the **transients** of its sound:
+the places where the sound starts again — a drum, a plucked string,
+the start of a phrase. The clip was cut at a place (§212) and on the
+grid (§215), and the sound itself was never listened to.
+
+### What was built
+
+- The **audio crate** grows a **detector**: `transients` finds the
+  onsets of a sound and says where they are, in the sound's own
+  samples.
+- The command `sound.clip.separate.transients` separates a clip at the
+  transients of the **material** it plays — the source — and not in
+  the clip's own sound: the clip's sound is the material read the
+  clip's way, and the material's own attacks are where the pieces are.
+- The **sensitivity** is how small a rise may be and still count, from
+  zero to one.
+- The number of cuts is **bounded**: a clip with more transients than
+  the bound is **refused** and not cut at the first thousand of them.
+
+### What the port found
+
+- **The tree's detector watches the spectrum and this one watches the
+  level.** The tree takes a fast Fourier transform of each frame and
+  looks for a jump in the high bands; that is a better answer, and it
+  needs a transform this kit does not have — the kit's crates carry no
+  dependencies at all, and a fast Fourier transform is a piece of work
+  of its own. So the detector here reads the **level** of each short
+  frame and calls a transient a rise that stays up, and the difference
+  is written down where the detector is.
+- **The tree's sensitivity and this one's are not the same number.**
+  The tree's sensitivity is how much of the frame's own spectrum must
+  change; here it is how much of the **whole sound's** level a frame
+  must reach to count — a hundredth of it at the most sensitive, and
+  all of it at the least. A number outside zero to one is clamped into
+  it: the sensitivity is a knob and not a fact about the sound.
+- **The tree's transients are of the clip and this one's are of the
+  material.** The tree reads the clip's rendered sound, so a clip that
+  is stretched or pitched is heard as it will be played; here the
+  source is read, and the clip's stretch is undone on the way back —
+  because a stretched clip reads its material more slowly, and the
+  piece is where the material's attack was.
+
+### What it cost
+
+- **Six tests** in the audio crate (`tests/transients.rs`): the hits of
+  a sound are found, a fade has no transients, silence has no
+  transients, the sensitivity is how small a rise may be, two hits that
+  are too close are one hit, and a stereo sound is read across both of
+  its channels.
+- **Three tests** in the sound battery (`tests/transients.rs`): a clip
+  is separated at its transients, a clip that plays no sound is
+  refused, and the sensitivity is how small a rise may be.
+- **One command** (`sound.clip.separate.transients`). The MCP server
+  now carries **281** commands, and the sound battery carries **70**.
+
+### What it does not settle
+
+- **The tree's detector is better and this one is not.** A spectral
+  detector hears a drum inside a chord, and a level detector hears the
+  chord. A fast Fourier transform is a piece of work of its own, and
+  it is not done: the kit's crates carry no dependencies at all, and
+  that is a rule worth more than a better detector.
+- **The tree reads the clip and this one reads the source.** A clip
+  whose sound is changed on the way out — a process, a pitch — is
+  heard by the tree as it will be played, and here the material is
+  heard as it is on the disk.
+- **The silence is not cut out.** The tree's strip silence removes the
+  quiet parts of a clip and names the pieces that are left; here the
+  transients are found and the clip is cut at them, and the quiet parts
+  are still in the pieces.
