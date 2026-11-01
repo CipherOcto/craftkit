@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1274 tests.** The MCP server links **all fifteen batteries** in, so the
+**1276 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1274 tests
+cargo test          # 1276 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3615,6 +3615,7 @@ so.
 | an **object stream** | **built.** The objects a file keeps in one place are read: each one's number and what it says (§178) | §178 |
 | a **cross-reference table** | **built.** The file's own index of itself is read: the classic table and the cross-reference stream (§179) | §179 |
 | a **file loaded into the document** | **built.** The objects of a file become nodes, its references become relations, and the bytes of its streams go into files of their own (§180) | §180 |
+| a **reader that feeds a bus** | **built.** The buses and the readers are mixed in the order their routes say, and a mix that loops is refused (§181) | §181 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12226,3 +12227,60 @@ a file's pieces one at a time, and could not hold a file.
   of nodes.** The relations say which page names which parent, and the
   command `pdf.page.attributes` walks them — but the pages of a loaded
   file are ordinary objects until somebody says they are pages.
+
+---
+
+## 181. The mix, in the order its routes say
+
+The tree reads its **auxes** in dependency order: an aux that reads a
+bus another aux feeds is read after it. v2's mixer read the buses and
+then the readers, and a reader could not feed a bus at all — so the
+chain of auxes the tree has was not built.
+
+### What was built
+
+- A reader may now be **routed**: it may feed a bus, and it is heard
+  there and not in the main mix.
+- The mixer works out the **order of the mix**: the buses and the
+  readers, mixed so that a bus is mixed before the readers that read
+  it, and a reader is mixed before the bus it feeds.
+- A mix that **loops** — a reader that feeds the bus it reads — is
+  **refused by name** when the sound is rendered.
+
+### What the port found
+
+- **The order was a property of the code and not of the document.** The
+  mixer mixed the buses, then the readers, and the two steps were
+  written down in that order; a chain of readers had nowhere to go,
+  because the reader's sound was always the main mix's.
+- **A reader that feeds a bus is not in the mix.** That was the
+  reason the refusal was there: a routed reader would have put the
+  bus's sound back into the mix after the bus had been read. It is not
+  a reason to refuse — it is a reason to *order* the mix — and the
+  order is what the routes say.
+- **The tree's rule about derived values held.** The order of the mix
+  is not stored anywhere: it is worked out from the routes every time
+  the sound is rendered, and a document that says otherwise gets a
+  different order — which is the point of a document.
+
+### What it cost
+
+- **Two tests** in the battery (`tests/mixorder.rs`): the chain is
+  heard at its end, and a mix that loops is refused.
+- **One test changed** in the battery's own file (`tests/reader.rs`):
+  a reader that was refused a route may now have one, because the
+  refusal was the thing this arc removes.
+- **No new command**: the MCP server still carries **222** commands.
+
+### What it does not settle
+
+- **The bus's channel format does not fold.** A mono bus is not
+  folded into a stereo one; that is still the tree's own law and not
+  this tree's.
+- **The order is worked out on every render.** The mixer sorts the
+  stages each time the sound is rendered, and a document with many
+  buses pays for it each time; the order could be kept, and nothing
+  keeps it.
+- **A reader may still not have sends.** It reads one bus and it is
+  heard there or in the mix; a copy of it to a third bus is still
+  refused.
