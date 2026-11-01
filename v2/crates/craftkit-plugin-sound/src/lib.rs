@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **forty-three commands**, one for each thing a person does to a
+//! - **forty-five commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -25,7 +25,8 @@
 //!   set the meter, make a marker, make a source, set the session, set
 //!   the **beat** of a clip and take it away, lock a clip's **content**
 //!   and its **place**, rate a clip, group clips and take them out of
-//!   the group, set the **grid** and put a clip on it, and
+//!   the group, set the **grid** and put a clip on it, set a clip's
+//!   **gain** and bypass it, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -126,6 +127,9 @@ mod group;
 // The **grid**: the lines a clip is put on.
 mod grid;
 
+// The **gain** of a clip: how loud it is.
+mod gain;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
@@ -133,6 +137,7 @@ use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
+pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, Ungroup};
 pub use locks::{EditLock, TimeLock};
@@ -522,6 +527,7 @@ impl ClipKind {
             "fade_out": clip.fade_out.to_json(),
             "sync": clip.sync,
             "rating": clip.rating,
+            "gain_bypassed": clip.gain_bypassed,
             "group": group::group_of(document, node.id),
         }))
     }
@@ -1048,6 +1054,11 @@ pub(crate) struct ClipPayload {
     /// From none to five. Zero is a rating — the clip has none — and
     /// not the absence of one, so every clip carries a rating.
     pub(crate) rating: u8,
+    /// Whether the clip's **gain** is bypassed.
+    ///
+    /// A bypassed clip plays as it is: the gain is not in the path.
+    /// The gain is **kept**, so taking the bypass off brings it back.
+    pub(crate) gain_bypassed: bool,
 }
 
 /// The most a clip may be stretched.
@@ -1074,6 +1085,7 @@ impl ClipPayload {
             "edit_locked": self.edit_locked,
             "time_locked": self.time_locked,
             "rating": self.rating,
+            "gain_bypassed": self.gain_bypassed,
         })
     }
 
@@ -1128,6 +1140,10 @@ impl ClipPayload {
                     rating as u8
                 }
             },
+            gain_bypassed: value
+                .get("gain_bypassed")
+                .and_then(|bypassed| bypassed.as_bool())
+                .unwrap_or(false),
         })
     }
 }
@@ -1648,6 +1664,7 @@ impl AddClip {
             edit_locked: false,
             time_locked: false,
             rating: 0,
+            gain_bypassed: false,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -3301,7 +3318,11 @@ impl RenderSound {
             // The clip's **gain**: the level of the clip itself. The
             // tree's mixer multiplies it into the clip before the
             // track's inserts, and so does this one.
-            let clip_gain = craftkit_audio::db_to_linear(payload.gain_db) as f32;
+            let clip_gain = if payload.gain_bypassed {
+                1.0
+            } else {
+                craftkit_audio::db_to_linear(payload.gain_db) as f32
+            };
             if clip_gain != 1.0 {
                 samples.iter_mut().for_each(|sample| *sample *= clip_gain);
             }
@@ -4000,7 +4021,9 @@ fn waveform_of(document: &Document, clip: &Node, payload: &ClipPayload, rect: &R
 /// is in decibels and the mute lane is one or less, and a muted track
 /// is silent however loud its sound is.
 fn gain_at(document: &Document, clip: &Node, payload: &ClipPayload, at: i64) -> f64 {
-    let mut decibels = payload.gain_db;
+    // A **bypassed** gain is not in the path: the clip is as loud as it
+    // is, and the gain that is kept comes back when the bypass is off.
+    let mut decibels = if payload.gain_bypassed { 0.0 } else { payload.gain_db };
     if let Some(track) = timeline::track_of(document, clip) {
         let automation = automate::automation_of(document, track);
         if let Some(points) = &automation.volume {
@@ -4557,7 +4580,9 @@ craftkit_sdk::plugin_anchor!(
     ReadGroup,
     SetGrid,
     ReadGrid,
-    Quantize
+    Quantize,
+    SetGain,
+    BypassGain
 );
 
 #[cfg(test)]
