@@ -536,6 +536,76 @@ fn resample_by_taps(
     out
 }
 
+/// Resample the sound by a **ratio**: the new sound is `ratio` times
+/// as long as the old one.
+///
+/// The ratio is not a pair of rates, so there is no bank of weights to
+/// read: the sound is read one tap at a time, which is the reference
+/// path and the slower one. A rate change that has a bank should use
+/// [`resample`] instead.
+///
+/// The **cutoff** follows the ratio: a sound that is made shorter is
+/// played faster, and what was above the new half of the rate has to
+/// go or it folds back as a whistle.
+pub fn resample_ratio(samples: &[f32], channels: usize, ratio: f64, new_frames: usize) -> Vec<f32> {
+    let channels = channels.max(1);
+    let frames = samples.len() / channels;
+    if frames == 0 || new_frames == 0 || !ratio.is_finite() || ratio <= 0.0 {
+        return Vec::new();
+    }
+    let cutoff = if ratio < 1.0 { ratio * 0.94 } else { 0.97 };
+    let kernel = Sinc::new(cutoff);
+    resample_by_taps(samples, channels, frames, new_frames, ratio, &kernel)
+}
+
+/// Shift the **pitch** of the sound and keep its length.
+///
+/// A pitch shift is the other half of a stretch: a stretch makes the
+/// sound longer and the pitch stays, and a pitch shift makes the pitch
+/// move and the sound stays as long as it was.
+///
+/// It is done in two steps, and each of them is a thing this crate
+/// already has:
+///
+/// - the sound is **resampled** as if it were played faster, which
+///   raises the pitch and makes it shorter;
+/// - the sound is then **stretched** back to the length it was, and a
+///   stretch keeps the pitch — so the pitch has moved and the length
+///   has not.
+///
+/// The **semitones** are the tree's: a semitone is a twelfth of a
+/// doubling, so twelve semitones are an octave. A shift of more than
+/// forty-eight semitones is clamped here, because that is all the
+/// method can do; a caller that means such a shift should **refuse**
+/// it rather than get a clamped one — the clamp here is the last line
+/// of defence, not the policy.
+pub fn pitch_shift(samples: &[f32], channels: usize, semitones: f64, rate: u32) -> Vec<f32> {
+    let channels = channels.max(1);
+    let frames = samples.len() / channels;
+    if frames == 0 {
+        return Vec::new();
+    }
+    let semitones = if semitones.is_finite() { semitones.clamp(-48.0, 48.0) } else { 0.0 };
+    if semitones.abs() < 1e-4 {
+        return samples.to_vec();
+    }
+    let factor = 2f64.powf(semitones / 12.0);
+    // The pitch goes up by the factor: the sound is read as if it were
+    // played faster, and it is shorter for it.
+    let shorter =
+        resample_ratio(samples, channels, 1.0 / factor, ((frames as f64) / factor).round().max(1.0) as usize);
+    // The length is put back by a stretch, and a stretch keeps the
+    // pitch.
+    if (0.1..=10.0).contains(&factor) {
+        return time_stretch(&shorter, channels, factor, rate);
+    }
+    // A stretch of sixteen would ask for a frame every sixteenth of a
+    // window, and the sound would be a noise: the stretch is done in
+    // two halves instead, and the sound is the same.
+    let half = factor.sqrt();
+    time_stretch(&time_stretch(&shorter, channels, half, rate), channels, half, rate)
+}
+
 /// The **bank**: the kernel precomputed for every phase of a rational
 /// rate change.
 ///

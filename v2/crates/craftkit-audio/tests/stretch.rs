@@ -9,7 +9,7 @@
 //! are the tests of it: the pitch stays, the loudness stays, the
 //! channels stay apart, and a stretch of one is the sound itself.
 
-use craftkit_audio::time_stretch;
+use craftkit_audio::{pitch_shift, time_stretch};
 
 /// The samples of a **tone** of that frequency.
 fn a_tone(frequency: f32, frames: usize) -> Vec<f32> {
@@ -51,6 +51,24 @@ fn period(samples: &[f32]) -> f64 {
         }
     }
     best_lag as f64
+}
+
+/// The **period** of a wave, counted at its crossings.
+///
+/// The autocorrelation above cannot tell an octave from the note
+/// below it: every second cycle lines up as well, and the two are the
+/// same wave. The crossings can: they are one for every cycle, and
+/// there are twice as many of them an octave up.
+fn crossing_period(samples: &[f32]) -> f64 {
+    let mut crossings = Vec::new();
+    for index in 1..samples.len() {
+        if samples[index - 1] <= 0.0 && samples[index] > 0.0 {
+            crossings.push(index);
+        }
+    }
+    assert!(crossings.len() >= 10, "the sound crosses zero often: {}", crossings.len());
+    let total: usize = crossings.windows(2).map(|pair| pair[1] - pair[0]).sum();
+    total as f64 / (crossings.len() - 1) as f64
 }
 
 /// A stretched tone **keeps its pitch**: the sound is twice as long
@@ -131,4 +149,36 @@ fn a_stretch_out_of_range_is_clamped() {
 #[test]
 fn an_empty_sound_stays_empty() {
     assert!(time_stretch(&[], 1, 2.0, 48_000).is_empty(), "there is no sound to stretch");
+}
+
+/// A pitch shift raises the **pitch** and keeps the **length**: the
+/// sound is the same size and it is the note above.
+#[test]
+fn a_pitch_shift_raises_the_pitch_and_keeps_the_length() {
+    let tone = a_tone(440.0, 48_000);
+    let shifted = pitch_shift(&tone, 1, 12.0, 48_000);
+    assert_eq!(shifted.len(), tone.len(), "the sound is as long as it was");
+    let before = crossing_period(&tone);
+    let after = crossing_period(&shifted);
+    // An octave up is half the period.
+    assert!((after - before / 2.0).abs() <= 2.0, "the octave above: {before} and {after}");
+}
+
+/// A pitch shift **down** lowers the pitch, and the length is still
+/// the same.
+#[test]
+fn a_pitch_shift_down_lowers_the_pitch() {
+    let tone = a_tone(440.0, 48_000);
+    let shifted = pitch_shift(&tone, 1, -12.0, 48_000);
+    assert_eq!(shifted.len(), tone.len(), "the sound is as long as it was");
+    let before = crossing_period(&tone);
+    let after = crossing_period(&shifted);
+    assert!((after - before * 2.0).abs() <= 4.0, "the octave below: {before} and {after}");
+}
+
+/// A pitch shift of **zero** is the sound itself.
+#[test]
+fn a_pitch_shift_of_zero_is_the_sound() {
+    let tone = a_tone(440.0, 4_800);
+    assert_eq!(pitch_shift(&tone, 1, 0.0, 48_000), tone);
 }

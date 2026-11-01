@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-one commands**, one for each thing a person does to a
+//! - **fifty-two commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -29,7 +29,7 @@
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
-//!   set a track's **fader**, and
+//!   set a track's **fader**, move a clip's **pitch**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -79,6 +79,17 @@
 //! one command sets it on any node — so the battery has no command for
 //! it, and the clip's colour is the appearance the clip carries.
 //!
+//! **A shifted pitch is a field and not a rendering.** The tree's
+//! pitch shift is one of its **audio-suite processes**: it renders the
+//! material, replaces the clip's content with the rendered file, and
+//! keeps the original in the edit state so that `clip.remove_pitch_shift`
+//! can put it back. Here the pitch is a number of semitones on the
+//! clip, and the sound is worked out when it is played — so there is
+//! no rendered file, no edit state and nothing to remove. The two
+//! steps the tree's shift is made of are the two this crate has: the
+//! sound is resampled as if it were played faster, and stretched back
+//! to the length it was.
+//!
 //! **A stretched clip is stretched one way.** The tree has a clip's
 //! **speed** and a clip's **warp** as two things, and a warp bakes the
 //! material into a rendered file and makes the clip longer, and the
@@ -108,6 +119,12 @@
 //!   samples as well as a division of the bar. Here a grid is a
 //!   division of the bar, because a sound document is a bar of beats and
 //!   a grid in it is a musical thing.
+//! - **A big shift loses the top of the sound.** The pitch shift is
+//!   made by resampling the sound as if it were played faster, and a
+//!   resample takes away what was above the new half of the rate: an
+//!   octave up is made from a sound whose top is gone. The tree's
+//!   shift has the same loss, for the same reason, and a shift that
+//!   keeps every harmonic is a different piece of work.
 //! - **Every elastic algorithm is one method.** The tree's algorithms —
 //!   `polyphonic`, `rhythmic`, `monophonic`, `x-form` — are four ways of
 //!   keeping the pitch, and each of them is a different piece of work. Here
@@ -1109,6 +1126,11 @@ pub(crate) struct ClipPayload {
     /// One is none. Two is twice as long and an octave lower, because
     /// the pitch follows the speed.
     stretch: f64,
+    /// The **pitch** of the clip, in **semitones**.
+    ///
+    /// Zero is the pitch of the source, twelve semitones are an octave
+    /// up, and the clip keeps its length whatever the pitch does.
+    pitch_semitones: f64,
     /// Whether the clip is **muted**.
     ///
     /// A muted clip is not played and is still there: the tree's
@@ -1154,6 +1176,14 @@ pub(crate) struct ClipPayload {
     pub(crate) source_bpm: Option<f64>,
 }
 
+/// The most a clip's pitch may be moved, in **semitones**.
+///
+/// The tree's pitch shift is a process and its own range is twenty-four
+/// semitones either way; a shift of more than that is refused here
+/// rather than clamped, because a caller that asked for a hundred
+/// semitones would be given twenty-four and would not know.
+const MAX_PITCH_SEMITONES: f64 = 24.0;
+
 /// The most a clip may be stretched.
 ///
 /// A stretch is a length ratio, and a clip that is stretched a
@@ -1173,6 +1203,7 @@ impl ClipPayload {
             "fade_in": self.fade_in.to_json(),
             "fade_out": self.fade_out.to_json(),
             "stretch": self.stretch,
+            "pitch_semitones": self.pitch_semitones,
             "muted": self.muted,
             "sync": self.sync,
             "edit_locked": self.edit_locked,
@@ -1195,6 +1226,15 @@ impl ClipPayload {
                 "a stretch is greater than zero and no more than {MAX_STRETCH}, and this one is {stretch}"
             ));
         }
+        let pitch_semitones = value.get("pitch_semitones").and_then(|pitch| pitch.as_f64()).unwrap_or(0.0);
+        if !pitch_semitones.is_finite()
+            || !(-MAX_PITCH_SEMITONES..=MAX_PITCH_SEMITONES).contains(&pitch_semitones)
+        {
+            return Err(format!(
+                "a pitch is from minus {MAX_PITCH_SEMITONES} semitones to {MAX_PITCH_SEMITONES}, \
+                 and this one is {pitch_semitones}"
+            ));
+        }
         Ok(ClipPayload {
             start,
             length,
@@ -1210,6 +1250,7 @@ impl ClipPayload {
                 None => FadePayload::none(),
             },
             stretch,
+            pitch_semitones,
             muted: value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
             sync: value.get("sync").and_then(|sync| sync.as_i64()),
             edit_locked: value.get("edit_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
@@ -1959,6 +2000,7 @@ impl AddClip {
             fade_in: FadePayload::none(),
             fade_out: FadePayload::none(),
             stretch,
+            pitch_semitones: 0.0,
             muted: false,
             sync: None,
             edit_locked: false,
@@ -2064,6 +2106,78 @@ impl SetClipStretch {
         }
         Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
             .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
+    }
+}
+
+/// Move the **pitch** of a clip.
+///
+/// A pitch shift is the other half of a stretch: a stretch makes the
+/// sound longer and the pitch stays, and a pitch shift moves the pitch
+/// and the sound stays as long as it was. Twelve semitones are an
+/// octave up and minus twelve an octave down.
+///
+/// The shift runs from minus twenty-four semitones to twenty-four, and
+/// a shift outside that is **refused** and not pulled to the edge: a
+/// caller that asked for a hundred semitones would be given
+/// twenty-four and would not know.
+///
+/// A clip whose **content** is locked is finished, and it is not
+/// shifted.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.pitch",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Pitch"),
+    mutates,
+    undoable
+)]
+pub struct SetClipPitch {
+    /// The clip to shift.
+    pub clip: NodeRef,
+    /// How many semitones: twelve is an octave up, zero is none.
+    pub semitones: Number,
+}
+
+impl SetClipPitch {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let semitones = self.semitones.0;
+        if !semitones.is_finite() || !(-MAX_PITCH_SEMITONES..=MAX_PITCH_SEMITONES).contains(&semitones) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.pitch".to_string(),
+                message: format!(
+                    "a pitch is from minus {MAX_PITCH_SEMITONES} semitones to {MAX_PITCH_SEMITONES}, \
+                     and this one is {semitones}"
+                ),
+            });
+        }
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: "sound.clip.pitch".to_string(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: "sound.clip.pitch".to_string(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: "sound.clip.pitch".to_string(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // shifted.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: "sound.clip.pitch".to_string(),
+                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+            });
+        }
+        payload.pitch_semitones = semitones;
+        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("the clip `{}` is at {semitones} semitones", self.clip.0))
+            .with_data(serde_json::json!({ "id": self.clip.0, "semitones": semitones })))
     }
 }
 
@@ -3622,6 +3736,14 @@ impl RenderSound {
                 } else {
                     craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
                 }
+            } else {
+                samples
+            };
+            // The **pitch**: the clip's own note, moved. The shift
+            // keeps the length — it is the other half of a stretch,
+            // and the two are the same sound read two ways.
+            let samples = if payload.pitch_semitones.abs() > f64::EPSILON {
+                craftkit_audio::pitch_shift(&samples, sound.channels as usize, payload.pitch_semitones, rate)
             } else {
                 samples
             };
