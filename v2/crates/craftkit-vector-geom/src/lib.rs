@@ -45,7 +45,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_sdk::{FillRule, FormatValue, Path, Point, Rect, Segment, SubPath};
+use craftkit_sdk::{Cap, FillRule, FormatValue, Join, Path, Point, Rect, Segment, SubPath};
 use kurbo::{BezPath, PathEl, Shape};
 use linesweeper::BinaryOp as SweepOp;
 
@@ -178,6 +178,49 @@ impl FormatValue for Matrix {
         })
     }
 }
+
+/// The **outline** of a line: the shape a stroke covers.
+///
+/// A stroke is a line with a width, and the area it covers is a shape
+/// in its own right: the path of a line, widened to the width and
+/// closed at its ends. This is that shape, as a path — so that it may
+/// be filled, and measured, and cut like any other.
+///
+/// The **width** is the width of the line and not its radius: a line
+/// of width four covers two on each side of the path.
+pub fn outline_stroke(path: &Path, width: f64, cap: Cap, join: Join, miter_limit: f64) -> Path {
+    if !width.is_finite() || width <= 0.0 {
+        return Path { subpaths: Vec::new(), rule: FillRule::NonZero };
+    }
+    let style = kurbo::Stroke {
+        width,
+        join: match join {
+            Join::Miter => kurbo::Join::Miter,
+            Join::Round => kurbo::Join::Round,
+            Join::Bevel => kurbo::Join::Bevel,
+        },
+        miter_limit,
+        start_cap: cap_of(cap),
+        end_cap: cap_of(cap),
+        dash_pattern: kurbo::Dashes::new(),
+        dash_offset: 0.0,
+    };
+    let opts = kurbo::StrokeOpts::default();
+    let outline = kurbo::stroke(to_bezpath(path), &style, &opts, STROKE_TOLERANCE);
+    from_bezpath(&outline)
+}
+
+/// The **cap** of the kit, as the library's own.
+fn cap_of(cap: Cap) -> kurbo::Cap {
+    match cap {
+        Cap::Butt => kurbo::Cap::Butt,
+        Cap::Round => kurbo::Cap::Round,
+        Cap::Square => kurbo::Cap::Square,
+    }
+}
+
+/// How close the outline's curves are to the true ones.
+const STROKE_TOLERANCE: f64 = 0.01;
 
 /// Which boolean operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

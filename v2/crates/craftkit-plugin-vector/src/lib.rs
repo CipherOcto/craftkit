@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **seventeen commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **eighteen commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -27,8 +27,9 @@
 //!   `vector.path.stroke` say what the path is painted with;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.transform` says where
-//!   the path is put; and `vector.path.rule` says which parts of it are
-//!   inside;
+//!   the path is put; `vector.path.outline` makes the shape a line
+//!   covers into a path of its own; and `vector.path.rule` says which
+//!   parts of it are inside;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
@@ -541,7 +542,64 @@ impl OffsetPath {
     }
 }
 
-/// Move a **point** of a path.
+/// The **outline** of a path's line.
+///
+/// The line of a path covers an area, and the outline is that area as
+/// a shape: a path in its own right, which may be filled, measured and
+/// cut. The command makes a **new** path and leaves the one it was
+/// given alone.
+#[derive(Command)]
+#[command(
+    id = "vector.path.outline",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
+pub struct OutlinePath {
+    /// The path whose line is outlined.
+    pub path: NodeRef,
+    /// What to call the new path.
+    pub name: Option<Text>,
+    /// The colour of the new path, as `#rrggbb`.
+    ///
+    /// Leave it out and the new path is filled with the colour of the
+    /// line it came from.
+    pub fill: Option<Text>,
+}
+
+impl OutlinePath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let vector = vector_of(session, self.path.0)?;
+        let Some(stroke) = vector.stroke else {
+            return Err(EngineError::Failed {
+                id: "vector.path.outline".to_string(),
+                message: format!("the path `{}` has no line to outline", self.path.0),
+            });
+        };
+        // The **miter limit** is the kit's: four widths.
+        let outline = geom::outline_stroke(&vector.path, stroke.width, stroke.cap, stroke.join, 4.0);
+        let colour = match &self.fill {
+            Some(fill) => parse_colour(&fill.0)?,
+            None => stroke.colour,
+        };
+        let name = self.name.clone().unwrap_or_else(|| Text(format!("outline {}", self.path.0)));
+        let node = VectorNode {
+            path: outline.clone(),
+            fill: colour,
+            stroke: None,
+            transform: geom::Matrix::identity(),
+        };
+        let rect = bounds(&outline);
+        let id =
+            session.document_mut()?.add_node_with(name.0.clone(), "vector.path", Some(rect), node.to_json());
+        Ok(Outcome::changed("the line has an outline")
+            .with_data(serde_json::json!({ "id": id, "from": self.path.0 })))
+    }
+}
+
 ///
 /// The points of a contour are the point it starts at and the point
 /// each segment ends at, counting from zero. The handles of the curves
@@ -1298,6 +1356,7 @@ craftkit_sdk::plugin_anchor!(
     OffsetPath,
     JoinPath,
     CapPath,
+    OutlinePath,
     TransformPath,
     VectorPanel,
     TotalAreaEvaluator
