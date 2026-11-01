@@ -182,6 +182,122 @@ impl NodeRename {
     }
 }
 
+/// **Duplicate** a node: a copy of it and of everything under it.
+///
+/// The copy is a **new thing** with new ids: it is not the node and it
+/// is not a reference to it. Everything under it is copied too, so a
+/// track is copied with its playlists and its clips, and a group is
+/// copied with what is in it.
+///
+/// The **edges** are copied as well, and an edge that joins two copied
+/// things joins the **copies**: the copy of a clip still plays the same
+/// source, and the copy of a track is still on the same layer. An edge
+/// that comes from outside the copy is left where it was — the copy is
+/// a new thing and nothing outside points at it yet.
+#[derive(Command)]
+#[command(id = "node.duplicate", area = "node", icon = "copy", menu("Node"), mutates, undoable)]
+pub struct NodeDuplicate {
+    /// The node to copy.
+    pub node: NodeRef,
+    /// The name of the copy.
+    ///
+    /// Without it, the copy is the node's own name with `.dup` on the
+    /// end.
+    pub name: Option<Text>,
+}
+
+impl NodeDuplicate {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "node.duplicate".to_string();
+        let root = self.node.0;
+        let Some(node) = session.document().node(root) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{root}`"),
+            });
+        };
+        let name = match &self.name {
+            Some(name) => name.0.trim().to_string(),
+            None => format!("{}.dup", node.name),
+        };
+        if name.is_empty() {
+            return Err(EngineError::Failed { id: id.clone(), message: "a node has a name".to_string() });
+        }
+        // The **tree** that is copied: the node and everything under
+        // it, parents before children.
+        let tree = subtree_of(session.document(), root);
+        let mut copies: Vec<(u64, u64)> = Vec::with_capacity(tree.len());
+        for old in &tree {
+            let Some(node) = session.document().node(*old) else { continue };
+            let kind = node.kind.clone();
+            let rect = node.rect;
+            let data = node.data.clone();
+            let muted = node.muted;
+            let hidden = node.hidden;
+            let locked = node.locked;
+            let appearance = node.appearance.clone();
+            let appearance_from = node.appearance_from;
+            // The copy goes where the node was: it is its **sibling**.
+            // And when the parent is copied too, the copy is under the
+            // **copy** — a copied child does not stay in the thing it
+            // was copied from.
+            let parent = session
+                .document()
+                .walk()
+                .find(|parent| parent.children.iter().any(|child| child.id == *old))
+                .map(|parent| parent.id);
+            let parent = parent.map(|parent| {
+                copies.iter().find(|(old, _)| *old == parent).map(|(_, new)| *new).unwrap_or(parent)
+            });
+            let copy_name = if *old == root { name.clone() } else { node.name.clone() };
+            let new = session.document_mut()?.add_node_with_under(parent, copy_name, kind, rect, data);
+            if let Some(copy) = session.document_mut()?.node_mut(new) {
+                copy.muted = muted;
+                copy.hidden = hidden;
+                copy.locked = locked;
+                copy.appearance = appearance;
+                copy.appearance_from = appearance_from;
+            }
+            copies.push((*old, new));
+        }
+        // The **edges**: the ones that come from a copied thing. An edge
+        // that joins two copied things joins the copies.
+        let copied: Vec<u64> = copies.iter().map(|(old, _)| *old).collect();
+        let edges: Vec<(u64, u64, String, craftkit_sdk::serde_json::Value)> = session
+            .document()
+            .relations
+            .iter()
+            .filter(|relation| copied.contains(&relation.from))
+            .map(|relation| (relation.from, relation.to, relation.kind.clone(), relation.payload.clone()))
+            .collect();
+        for (from, to, kind, payload) in edges {
+            let from = copies.iter().find(|(old, _)| *old == from).map(|(_, new)| *new).unwrap_or(from);
+            let to = copies.iter().find(|(old, _)| *old == to).map(|(_, new)| *new).unwrap_or(to);
+            session
+                .document_mut()?
+                .add_relation(craftkit_sdk::Relation::with_payload(from, to, kind, payload));
+        }
+        let new_root = copies.iter().find(|(old, _)| *old == root).map(|(_, new)| *new).unwrap_or(root);
+        Ok(Outcome::changed(format!("copied the node `{root}` as `{name}`")).with_data(
+            craftkit_sdk::serde_json::json!({ "id": new_root, "name": name, "copied": copies.len() }),
+        ))
+    }
+}
+
+/// The node and everything **under** it, parents before children.
+fn subtree_of(document: &craftkit_sdk::Document, root: u64) -> Vec<u64> {
+    let Some(node) = document.node(root) else { return Vec::new() };
+    let mut tree = vec![root];
+    let mut stack: Vec<u64> = node.children.iter().map(|child| child.id).collect();
+    while let Some(id) = stack.pop() {
+        tree.push(id);
+        if let Some(node) = document.node(id) {
+            stack.extend(node.children.iter().map(|child| child.id));
+        }
+    }
+    tree
+}
+
 /// **Move** a node.
 ///
 /// A node that has **no place** cannot be moved: a clip in a sound
