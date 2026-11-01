@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **sixty-nine commands**, one for each thing a person does to a
+//! - **seventy commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -36,7 +36,8 @@
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
-//!   the notes of a clip, **heal** the clips that were separated, and
+//!   the notes of a clip, **heal** the clips that were separated,
+//!   separate a clip at its **transients**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -152,6 +153,13 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A transient is found by the level here and by the spectrum in the
+//! tree.** The tree's detector takes a fast Fourier transform of each
+//! frame and watches the high bands for a jump; a transform is a piece
+//! of work this kit has not done — its crates carry no dependencies at
+//! all — so the detector here watches the **level**, and the
+//! difference is written down where the detector is.
 //!
 //! **A separation is joined again by what it is, not by where it is.**
 //! The tree's editor heals a track: it walks the clips in order and
@@ -3283,6 +3291,167 @@ impl SeparateClipOnGrid {
             .with_data(serde_json::json!({ "id": clip_id, "pieces": pieces, "lines": lines.len() })))
     }
 }
+
+/// Separate a clip at its **transients**.
+///
+/// The tree's editor separates a take at the transients of its sound:
+/// the places where the sound starts again — a drum, a plucked string,
+/// the start of a phrase. Here the transients are found in the
+/// **material** — the source the clip plays — and not in the clip's own
+/// sound: the clip's sound is the material read the clip's way, and
+/// the material's own attacks are where the pieces are.
+///
+/// The **sensitivity** is how small a rise may be and still be a
+/// transient, from zero to one: the higher it is, the smaller a rise
+/// counts.
+///
+/// The tree's detector watches the **spectrum** — it takes a fast
+/// Fourier transform of each frame and looks for a jump in the high
+/// bands. This one watches the **level**: the kit's crates carry no
+/// dependencies at all, and a fast Fourier transform is a piece of work
+/// of its own. So the detector here is a level detector, and the
+/// difference is written down where the detector is.
+///
+/// The number of cuts is **bounded**: a clip with more transients than
+/// the bound is **refused** and not cut at the first thousand of them,
+/// because a clip cut at a thousand places is a clip nobody meant to
+/// make.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.separate.transients",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Separate on Transients"),
+    mutates,
+    undoable
+)]
+pub struct SeparateClipOnTransients {
+    /// The clip to separate.
+    pub clip: NodeRef,
+    /// How small a rise may be and still be a transient, from zero to one.
+    pub sensitivity: Option<Number>,
+}
+
+impl SeparateClipOnTransients {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.separate.transients".to_string();
+        let clip_id = self.clip.0;
+        let (name, payload) = {
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            (node.name.clone(), payload)
+        };
+        // A clip whose **content** is locked is finished: it is not
+        // separated.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
+        let Some(source_id) = payload.source else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` plays no sound, and there is nothing to find"),
+            });
+        };
+        let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no source `{source_id}`"),
+        })?;
+        let source = SourcePayload::from_json(&source_node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        let sound = read_sound(&id, &source.path)?;
+        let sensitivity = match self.sensitivity {
+            Some(sensitivity) if sensitivity.0.is_finite() => sensitivity.0.clamp(0.0, 1.0),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the sensitivity is a number from zero to one".to_string(),
+                });
+            }
+            None => 0.5,
+        };
+        // The **transients** of the material, in the material's own
+        // samples.
+        let onsets =
+            craftkit_audio::transients(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
+        // The material's samples are the **session's** samples turned
+        // into the source's rate, and the clip's offset says where in
+        // the material the clip starts.
+        let settings = session_of(session.document());
+        let rate = settings.sample_rate.max(1) as f64;
+        let source_rate = sound.rate.max(1) as f64;
+        let ratio = source_rate / rate;
+        let offset = payload.offset.max(0) as f64 * ratio;
+        let end = payload.start + payload.length;
+        let mut cuts: Vec<i64> = Vec::new();
+        for onset in onsets {
+            // The onset in the session's samples, and then in the
+            // clip's own time: a stretched clip reads its material more
+            // slowly, so the stretch is in the way back.
+            let at = ((onset as f64 - offset) / ratio.max(f64::EPSILON)) * payload.stretch;
+            let at = (at.round() as i64).max(payload.start + 1);
+            if at >= end {
+                continue;
+            }
+            if cuts.last().is_some_and(|last| *last == at) {
+                continue;
+            }
+            cuts.push(at);
+        }
+        if cuts.len() > MAX_TRANSIENT_CUTS {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip has more than {MAX_TRANSIENT_CUTS} transients"),
+            });
+        }
+        // The **cut**: each transient cuts the piece that is left, and
+        // the piece that is left is the piece the next transient cuts.
+        let mut current = clip_id;
+        let mut pieces = 1_usize;
+        for at in &cuts {
+            let piece = ClipPayload::from_json(
+                &session
+                    .document()
+                    .node(current)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{current}` is gone"),
+                    })?
+                    .data,
+            )
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if *at <= piece.start || *at >= piece.start + piece.length {
+                continue;
+            }
+            current = separate_at(session, current, &piece, &name, *at)?;
+            pieces += 1;
+        }
+        Ok(Outcome::changed(format!("separated the clip `{clip_id}` at its transients")).with_data(
+            serde_json::json!({
+                "id": clip_id,
+                "pieces": pieces,
+                "transients": cuts.len(),
+                "sensitivity": sensitivity,
+            }),
+        ))
+    }
+}
+
+/// The most transients a clip may be separated at.
+const MAX_TRANSIENT_CUTS: usize = 1024;
 
 /// The most grid lines a clip may be separated on.
 ///

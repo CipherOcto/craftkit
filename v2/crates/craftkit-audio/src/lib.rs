@@ -19,6 +19,14 @@
 //! file or the kit. A battery that renders a document brings the tracks
 //! and takes the mix.
 //!
+//! # The transients of a sound
+//!
+//! The library also finds the **onsets** of a sound — the places where
+//! it starts again — by its level. The tree's detector watches the
+//! spectrum with a fast Fourier transform, and this kit's crates carry
+//! no dependencies at all, so the detector here is a level detector,
+//! and it says so where it is.
+//!
 //! # The numbers are hostile
 //!
 //! A track's start and its length came from a document, and a document
@@ -36,6 +44,10 @@
     clippy::unreachable
 )]
 #![forbid(unsafe_code)]
+
+mod transients;
+
+pub use transients::{MAX_TRANSIENTS, transients};
 
 /// The **limits** a mix is made within.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
