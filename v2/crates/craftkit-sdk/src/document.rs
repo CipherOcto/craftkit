@@ -1833,6 +1833,10 @@ impl Document {
     /// node is among its brothers, and bringing a node to the front is
     /// moving it to the end of the list it is in.
     ///
+    /// The node may be **anywhere** in the tree: a clip under a
+    /// playlist under a track is three levels down, and it is moved
+    /// among its brothers like any other.
+    ///
     /// A node that is the only one of its brothers is already at the
     /// front, and the command says so rather than doing nothing in
     /// silence.
@@ -1846,6 +1850,10 @@ impl Document {
     }
 
     /// Move a node to the front or to the back of its brothers.
+    ///
+    /// The node is looked for in the whole tree: a node that is under
+    /// a node that is under a node is still a node, and it is moved
+    /// among **its** brothers and not among the roots'.
     fn reorder(&mut self, id: u64, front: bool) -> bool {
         if let Some(index) = self.nodes.iter().position(|node| node.id == id) {
             let node = unwrap(self.nodes.remove(index));
@@ -1858,16 +1866,33 @@ impl Document {
             return true;
         }
         for node in self.nodes.iter_mut() {
-            let parent = Arc::make_mut(node);
-            let Some(index) = parent.children.iter().position(|child| child.id == id) else { continue };
-            let child = unwrap(parent.children.remove(index));
+            if Self::reorder_among(Arc::make_mut(node), id, front) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Move a node among its **brothers**, and say whether it was found.
+    ///
+    /// The node is looked for in the whole of what is under this one: a
+    /// node that is under a node that is under a node is still a node, and
+    /// it is moved among its own brothers.
+    fn reorder_among(node: &mut Node, id: u64, front: bool) -> bool {
+        if let Some(index) = node.children.iter().position(|child| child.id == id) {
+            let child = unwrap(node.children.remove(index));
             let child = Arc::new(child);
             if front {
-                parent.children.push(child);
+                node.children.push(child);
             } else {
-                parent.children.insert(0, child);
+                node.children.insert(0, child);
             }
             return true;
+        }
+        for child in node.children.iter_mut() {
+            if Self::reorder_among(Arc::make_mut(child), id, front) {
+                return true;
+            }
         }
         false
     }

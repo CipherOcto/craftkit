@@ -110,3 +110,31 @@ fn the_reader_refuses_a_document_with_too_many_nodes() {
         .expect_err("that document holds too many nodes");
     assert!(error.contains("nodes"), "{error}");
 }
+
+/// A node may be brought to the front **wherever it is**.
+///
+/// The order of the tree is the order of the drawing, and a node that
+/// is under a node that is under a node is still a node: it is moved
+/// among **its** brothers, and not among the roots'.
+#[test]
+fn a_node_may_be_moved_wherever_it_is() {
+    let mut document = Document::new("deep");
+    let outer = document.add_node("outer", "shape.group", None);
+    let inner = document.add_node_with_under(Some(outer), "inner", "shape.group", None, json!({}));
+    let first = document.add_node_with_under(Some(inner), "first", "shape.rect", None, json!({}));
+    let second = document.add_node_with_under(Some(inner), "second", "shape.rect", None, json!({}));
+    let order = |document: &Document| {
+        document
+            .node(inner)
+            .expect("the inner group is there")
+            .children
+            .iter()
+            .map(|child| child.id)
+            .collect::<Vec<u64>>()
+    };
+    assert_eq!(order(&document), vec![first, second], "the rects are where they were made");
+    assert!(document.bring_to_front(first), "the rect may be brought to the front");
+    assert_eq!(order(&document), vec![second, first], "and it is the last of its brothers");
+    assert!(document.send_to_back(first), "and sent to the back");
+    assert_eq!(order(&document), vec![first, second], "which is the first of them");
+}

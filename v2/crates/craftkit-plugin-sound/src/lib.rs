@@ -15,11 +15,12 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **thirty-two commands**, one for each thing a person does to a
+//! - **thirty-three commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
-//!   loop away, make a take, choose the
+//!   loop away, put a clip in front of the others, make a take, choose
+//!   the
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -1929,6 +1930,64 @@ const MAX_LOOPS: usize = 1000;
 /// The tree's dialog asks; the tree's default is the clip and three
 /// loops.
 const DEFAULT_LOOPS: i64 = 4;
+
+/// Put a clip **in front** of the others on its track, or **behind**
+/// them.
+///
+/// The order the clips are drawn in is the order they are in — and the
+/// clips of a track are mixed and not laid over one another, so the
+/// order is what a person sees and not what a person hears.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.order",
+    area = "sound",
+    layer = "sound",
+    icon = "list",
+    menu("Clip", "Order"),
+    mutates,
+    undoable
+)]
+pub struct OrderClip {
+    /// The clip to move.
+    pub clip: NodeRef,
+    /// `front` or `back`.
+    pub place: Text,
+}
+
+impl OrderClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.order".to_string();
+        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{}`", self.clip.0),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+            });
+        }
+        let place = self.place.0.trim().to_ascii_lowercase();
+        let moved = match place.as_str() {
+            "front" => session.document_mut()?.bring_to_front(self.clip.0),
+            "back" => session.document_mut()?.send_to_back(self.clip.0),
+            other => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a clip goes to the front or to the back, and not to `{other}`"),
+                });
+            }
+        };
+        if !moved {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is not in the document", self.clip.0),
+            });
+        }
+        Ok(Outcome::changed(format!("the clip is {place}"))
+            .with_data(serde_json::json!({ "id": self.clip.0, "place": place })))
+    }
+}
 
 /// Loop a clip: the copies of it that follow it.
 ///

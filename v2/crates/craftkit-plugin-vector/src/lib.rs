@@ -782,6 +782,67 @@ impl FillPath {
     }
 }
 
+/// Put a path **in front** of the others, or **behind** them.
+///
+/// The order the paths are drawn in is the order they are in the
+/// document: the first is drawn first and is behind, and the last is
+/// drawn last and is in front.
+///
+/// The tree's layers hold an ordered list of their own, and this
+/// tree's layers are **edges** — so a path moved here moves among
+/// everything, and not only among the paths of its own layer.
+#[derive(Command)]
+#[command(
+    id = "vector.path.order",
+    area = "vector",
+    layer = "vector",
+    icon = "list",
+    menu("Path", "Order"),
+    mutates,
+    undoable
+)]
+pub struct OrderPath {
+    /// The path.
+    pub path: NodeRef,
+    /// `front` or `back`.
+    pub place: Text,
+}
+
+impl OrderPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.order".to_string();
+        let node = session.document().node(self.path.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{}`", self.path.0),
+        })?;
+        if node.kind != "vector.path" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is a `{}` and not a path", self.path.0, node.kind),
+            });
+        }
+        let place = self.place.0.trim().to_ascii_lowercase();
+        let moved = match place.as_str() {
+            "front" => session.document_mut()?.bring_to_front(self.path.0),
+            "back" => session.document_mut()?.send_to_back(self.path.0),
+            other => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a path goes to the front or to the back, and not to `{other}`"),
+                });
+            }
+        };
+        if !moved {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is not in the document", self.path.0),
+            });
+        }
+        Ok(Outcome::changed(format!("the path is {place}"))
+            .with_data(serde_json::json!({ "id": self.path.0, "place": place })))
+    }
+}
+
 /// Make a **grid** of copies of a path.
 ///
 /// The tree's repeat tool makes a grid of copies, and the shape is the

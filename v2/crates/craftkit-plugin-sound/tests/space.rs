@@ -139,3 +139,39 @@ fn a_spacing_that_cannot_be_done_is_refused() {
     let refused = session.execute("sound.clip.space", &json!({ "clips": clips, "gap": -5 }));
     assert!(refused.is_err(), "a negative gap is refused");
 }
+
+/// The clips of a track may be put **in front** of the others, or
+/// **behind** them.
+///
+/// The order the clips are drawn in is the order they are in — and the
+/// clips of a track are mixed and not laid over one another, so the
+/// order is what a person sees and not what a person hears.
+#[test]
+fn a_clip_may_be_put_in_front_of_the_others() {
+    let mut session = session();
+    session.execute("sound.track.add", &json!({ "name": "take" })).expect("the track is added");
+    let track = session.document().node_by_name("take").expect("the track is there").id;
+    let mut clips = Vec::new();
+    for start in [0, 200, 400] {
+        session
+            .execute("sound.clip.add", &json!({ "track": track, "start": start, "length": 100 }))
+            .expect("the clip is added");
+        clips.push(
+            session
+                .document()
+                .walk()
+                .filter(|node| node.kind == "sound.clip")
+                .last()
+                .map(|node| node.id)
+                .expect("the clip is there"),
+        );
+    }
+    session
+        .execute("sound.clip.order", &json!({ "clip": clips[0], "place": "front" }))
+        .expect("the clip is put in front");
+    let drawn: Vec<u64> =
+        session.document().walk().filter(|node| node.kind == "sound.clip").map(|node| node.id).collect();
+    assert_eq!(drawn, vec![clips[1], clips[2], clips[0]], "the clip is drawn last");
+    let refused = session.execute("sound.clip.order", &json!({ "clip": clips[0], "place": "middle" }));
+    assert!(refused.is_err(), "a clip goes to the front or to the back");
+}
