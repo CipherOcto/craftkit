@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1581 tests.** The MCP server links **all fifteen batteries** in, so the
+**1590 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1581 tests
+cargo test          # 1590 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,7 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
-| the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed and given a velocity (§217, §218, §219) | §219 |
+| the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15006,7 +15006,7 @@ the notes had nowhere to live.
 
 - **Eight tests** in the sound battery (`tests/midi.rs`): a file is
   imported as a clip that holds notes, the length of the clip is
-  derived, the notes are read, the MIDI is exported and the file holds
+  derived from the notes, the notes are read, the MIDI is exported and the file holds
   the same notes, a file that is not a MIDI file is refused, a file
   with no notes is refused, a clip that is not a MIDI clip is refused,
   and a MIDI clip is not heard.
@@ -15044,8 +15044,10 @@ could not be touched.
 - The **battery** grows three commands: `sound.clip.midi.quantize`,
   `sound.clip.midi.transpose` and `sound.clip.midi.velocity`.
 - The quantise puts the notes on the **session's grid** (§200) — the
-  lines are musical, so they move with the tempo — and the length of
-  the clip is worked out again from the notes.
+  lines are musical, so they move with the tempo — and the clip keeps
+  its length: the room the notes had is the room they have. (This was
+  written the other way round at first — the length was worked out
+  again from the notes — and §223 says why it changed.)
 - A pitch or a velocity outside the MIDI range is **refused**, and the
   notes are not changed at all.
 
@@ -15303,3 +15305,76 @@ its transients (§221), and the quiet parts of it were still in it.
 - **The tree's preview is not here.** The tree scans a track without
   changing it, so that a person can see the ranges before they strip
   them; here the command strips, and there is no scan to see.
+
+## 223. The editing of the notes of a MIDI clip
+
+The tree's MIDI editor has a pencil: a note is added, edited, taken
+away and moved. The notes of a MIDI clip could be read and written
+(§218) and quantised, transposed and given a velocity (§219), and
+**not one of them could be changed**: the notes were a fact with no
+command to touch them.
+
+### What was built
+
+- The command `sound.clip.midi.add` makes a **MIDI clip with no notes**
+  in it, a bar long at the document's tempo unless the caller says
+  how long it is.
+- The commands `sound.clip.midi.note.add`, `sound.clip.midi.note.edit`,
+  `sound.clip.midi.note.remove` and `sound.clip.midi.notes.move` add,
+  change, take away and move the notes of a clip.
+- A note's **pitch**, **velocity** and **channel** are refused when
+  they are outside the range a MIDI note has, and an **index** that
+  names no note is refused.
+- The **room** of a MIDI clip: the length is the room the notes need
+  and never less than the room the clip has.
+
+### What the port found
+
+- **The tree clamps and this tree refuses.** The tree's pencil clamps
+  the pitch, the velocity and the channel into the range a MIDI note
+  has, and a note asked for as a hundred and forty is a note the
+  caller does not know about. Here every one of them is refused and
+  the note is not made — the same rule the transpose follows (§219).
+- **The tree's clip has a length of its own and the notes do not touch
+  it.** Here the notes may make the clip **longer** — a note that
+  reaches beyond the clip makes room for itself — and they do not make
+  it shorter: the room is the room, and a note that moves away does not
+  take the room with it.
+- **This is a change, and §219 said the other thing.** §219 said the
+  length of a MIDI clip was "worked out again from the notes" when the
+  notes were quantised, and that was true when it was written: the
+  length was the length of the notes. It is not true now, and the
+  reason is the tree's own: the tree's clip has a length and the
+  sequence does not touch it. So the length is the **greater** of the
+  room the clip has and the room its notes need, and §219's text has
+  been corrected where it stood.
+- **The tree's new MIDI clip is on an instrument track and this one's
+  is not.** The tree makes a MIDI clip on a track that plays an
+  instrument, and there is no instrument in this battery — a MIDI clip
+  is silent (§218) — so the clip is made on any track and it holds
+  notes and no sound.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/midinotes.rs`): a MIDI
+  clip is made with no notes, a note is added, a note is edited, a
+  note is removed, notes are moved, a note outside the range is
+  refused, a move out of the range is refused, an index that names no
+  note is refused, and a clip that is not a MIDI clip is refused.
+- **Five commands** (`sound.clip.midi.add`, `sound.clip.midi.note.add`,
+  `sound.clip.midi.note.edit`, `sound.clip.midi.note.remove` and
+  `sound.clip.midi.notes.move`). The MCP server now carries **287**
+  commands, and the sound battery carries **76**.
+
+### What it does not settle
+
+- **The tree's controllers are not edited.** A MIDI clip's controllers
+  are read and written (§218) and there is no pencil for them: a
+  controller may be added, changed or removed by no command.
+- **The tree's duplicates are not taken out.** The tree has a command
+  that takes the duplicate notes out of a clip, and the library here
+  can do it (§ the MIDI library's `remove_duplicates`) — but there is
+  no command that asks for it.
+- **The tree's note names are not here.** A note is a pitch, a place
+  and a length, and it has no name: the tree names a note "C3", and a
+  name is for a person to read.
