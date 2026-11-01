@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1269 tests.** The MCP server links **all fifteen batteries** in, so the
+**1272 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1269 tests
+cargo test          # 1272 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3613,6 +3613,7 @@ so.
 | a **content stream** | **built.** The operators of a page's content are read, with the operands each one was given (§176) | §176 |
 | a **path that is placed** | **built.** A path may carry a transform — the six numbers of a matrix — and it is drawn, hit and measured where the transform puts it (§177) | §177 |
 | an **object stream** | **built.** The objects a file keeps in one place are read: each one's number and what it says (§178) | §178 |
+| a **cross-reference table** | **built.** The file's own index of itself is read: the classic table and the cross-reference stream (§179) | §179 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12100,3 +12101,65 @@ content, and not one of the objects underneath.
 - **The file is still not read.** There is no parser and no
   cross-reference table, so the objects are read out of a stream that
   somebody has already found.
+
+---
+
+## 179. The file's own index of itself
+
+A PDF file does not hold its objects in order. It holds them wherever
+they were written, and a **cross-reference table** says where each one
+is. The table is found from the end of the file, which says where the
+table is. v2's PDF battery could read a page, a page's content and an
+object stream — and it could not find the file's own index.
+
+### What was built
+
+- The module `xref` reads the **table** of a file, and there are two
+  kinds of it:
+  - the **classic table**, a list of twenty-byte entries under the word
+    `xref`, and a **trailer** after them;
+  - the **cross-reference stream**, the same information in binary,
+    which is how a file compresses its own index.
+- The command `pdf.file.xref` reads a file and reports the **entries**
+  and the **trailer**.
+- An entry says which of the three it is: in the file, **free**, or
+  **compressed** — in an object stream.
+- A file that does not say where its table is is **refused**.
+
+### What the port found
+
+- **The table is found from the end, and the end is a small place.**
+  The last thing a file says is where its table is, and the table may
+  be a stream of its own — so the reader follows the file's own
+  instruction instead of looking for objects.
+- **The two tables are the same table.** The classic one has entries of
+  twenty bytes with the numbers written out; the stream one has the
+  same three fields — the kind, the place and the generation — in
+  binary, each as wide as the dictionary says. So the reader answers
+  the same question either way: where is object *n*?
+- **A number in a file is not always a whole number, and the kit's
+  JSON is not either.** The values that come out of a file's own
+  dictionary are numbers, and the kit's JSON holds them as numbers that
+  may have a fraction; so the reader asks for the number and rounds it
+  down where a count is wanted, and a table that says something else
+  is refused by name.
+- **The file is still not read.** The table says where an object is;
+  fetching it, and following the references, is the next thing.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/xref.rs`): the classic table,
+  the cross-reference stream, and the file that says nothing.
+- **One command** (`pdf.file.xref`). The MCP server now carries
+  **221** commands.
+
+### What it does not settle
+
+- **The objects are not fetched.** The table is an index and the reader
+  reads the index.
+- **The incremental save is not followed.** A file that has been saved
+  again has more than one table, and the newest one wins — here the
+  reader takes the one the end of the file points at, and the older
+  ones are not read.
+- **The hybrid files are not read.** A file may have both kinds of
+  table, and the reader takes the one it is given.
