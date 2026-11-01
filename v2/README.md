@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1320 tests.** The MCP server links **all fifteen batteries** in, so the
+**1325 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1320 tests
+cargo test          # 1325 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3627,6 +3627,7 @@ so.
 | a **gradient** | **built.** The fill is a paint — one colour or a gradient — and the gradient is the kit's own (§190) | §190 |
 | a **blend mode** | **built.** The sixteen modes of the PDF and the screen, and the kit says how each of them mixes (§191) | §191 |
 | the **copies** of a shape | **built.** A grid, a mirror over a line and a ring round a centre — the copies are paths of their own, and the transform says where each one is (§192) | §192 |
+| the **order** of the drawing | **built.** The order of the tree is the order of the drawing, and two commands say it — the kit's own lookup now reaches a node wherever it is (§193) | §193 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12978,3 +12979,64 @@ battery could make a shape and could not make another one out of it.
 - **The mirror is one shape and not a row.** The tree's mirror repeat
   makes a row of mirrored copies along an angle; here the command
   makes the one copy that is over the line.
+
+## 193. The order of the drawing
+
+The tree's sound editor has a **Bring to Front** and a **Send to
+Back**, and its vector editor draws its shapes in the order they are
+in. v2's kit said from the start that *the order of the tree is the
+order of the drawing* — and no battery had a command that said it.
+
+### What was built
+
+- The command `vector.path.order` puts a path in front of the others or
+  behind them, and `sound.clip.order` does the same for a clip.
+- The kit's own `bring_to_front` and `send_to_back` now reach **the
+  whole tree**: a node that is under a node that is under a node is
+  moved among **its** brothers.
+
+### What the port found
+
+- **The kit already had the order.** The SDK's `bring_to_front` and
+  `send_to_back` were there from the start, and their own words say
+  what they are for: *the order of the tree is the order of the
+  drawing*, and the picture and the picking agree because both walk
+  the tree in that order. The gap was not the kit — it was the **door**:
+  nothing in any battery reached the kit's own method.
+- **The kit's order reached one level down.** The lookup was in the
+  roots and then in their children, and a clip under a playlist under a
+  track is three levels down: the sound battery's clips could not be
+  moved at all, and the command said the node was not in the document.
+  The lookup now walks the tree, and a node is moved among its brothers
+  wherever it is.
+- **The tree has a bug of the same shape.** Its own tests carry a bug
+  called *bring to front across layers underflows*: bringing a node to
+  the front across two layers underflows, and an underflow is not a
+  number. This tree's layers are **edges**, so there is no list of
+  layers to underflow — but the tree's layers hold an ordered list of
+  their own, and this tree's do not: the order here is the order of the
+  **tree**, the containment, so a node moved to the front moves among
+  its brothers and not among the nodes of its layer.
+
+### What it cost
+
+- **Three tests** in the vector battery (`tests/order.rs`): a path may
+  be brought in front, a path may be sent behind, and an order that
+  cannot be given is refused.
+- **One test** in the sound battery (`tests/space.rs`): a clip may be
+  put in front of the others.
+- **One test** in the kit (`tests/document.rs`): a node may be moved
+  wherever it is.
+- **Two commands** (`vector.path.order` and `sound.clip.order`). The
+  MCP server now carries **238** commands.
+
+### What it does not settle
+
+- **The order is the tree's and not the layer's.** The tree's layer
+  holds an ordered list, and a node may be brought to the front of
+  **its layer**; here the layer is an edge and the order is the
+  containment's, so the order of the nodes on a layer is the order of
+  the document.
+- **The sound battery's order is what a person sees.** The clips of a
+  track are mixed and not laid over one another, so their order is the
+  order they are drawn in and not the order they are heard in.
