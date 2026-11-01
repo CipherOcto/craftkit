@@ -17,8 +17,9 @@
 //!
 //! One part of the file is here as well, because it is not the file but
 //! the **bytes** in it: the **filters** — the ways a stream's bytes may
-//! be encoded — are in the module `filters`, and the command
-//! `pdf.stream.decode` undoes them.
+//! be encoded — are in the module `filters`, the **predictors** — the
+//! steps made after the encoding — are in the module `predictors`, and
+//! the command `pdf.stream.decode` undoes both.
 //!
 //! # The mapping
 //!
@@ -62,6 +63,7 @@
 #![forbid(unsafe_code)]
 
 mod filters;
+mod predictors;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
@@ -268,6 +270,14 @@ pub struct DecodeStream {
     /// Leave it out and the **dictionary** names it, which is where a
     /// PDF file says which filter a stream is in.
     pub filter: Option<Text>,
+    /// The **predictor** to undo: the number the PDF gives it — `1` is
+    /// none, `2` is the TIFF one and `10` to `15` are the PNG ones.
+    ///
+    /// Leave it out and the **dictionary** names it, in
+    /// `/DecodeParms`. The other parameters of the predictor — the
+    /// columns, the colours and the bits — come from the dictionary
+    /// whatever this says.
+    pub predictor: Option<Number>,
     /// Where to write the decoded bytes.
     pub to: Text,
 }
@@ -320,6 +330,37 @@ impl DecodeStream {
                 id: "pdf.stream.decode".to_string(),
                 message: format!("the stream cannot be decoded: {error:?}"),
             })?;
+        // The **predictor**: the step that was made after the encoding.
+        // The command may say which one it is, and the parameters come
+        // from the dictionary either way.
+        let entries = entries_of(&node.data);
+        let base = predictors::spec_of(&entries).map_err(|error| EngineError::Failed {
+            id: "pdf.stream.decode".to_string(),
+            message: format!("the predictor cannot be read: {error:?}"),
+        })?;
+        let spec = match (&self.predictor, base) {
+            (None, None) => None,
+            (None, Some(spec)) => Some(spec),
+            (Some(number), base) => {
+                let number = number.0.round() as i64;
+                let Some(predictor) = predictors::Predictor::by_number(number) else {
+                    return Err(EngineError::Failed {
+                        id: "pdf.stream.decode".to_string(),
+                        message: format!("the predictor {number} is not one of the kit's"),
+                    });
+                };
+                let mut spec = base.unwrap_or_default();
+                spec.predictor = predictor;
+                Some(spec)
+            }
+        };
+        let decoded = match spec {
+            Some(spec) => predictors::undo(&decoded, &spec).map_err(|error| EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("the predictor cannot be undone: {error:?}"),
+            })?,
+            None => decoded,
+        };
         std::fs::write(&to, &decoded).map_err(|error| EngineError::Failed {
             id: "pdf.stream.decode".to_string(),
             message: format!("the decoded bytes cannot be written to `{to}`: {error}"),
@@ -329,6 +370,7 @@ impl DecodeStream {
             "from": path,
             "to": to,
             "filters": names,
+            "predictor": spec.map(|spec| format!("{:?}", spec.predictor)),
             "bytes": decoded.len(),
         })))
     }
