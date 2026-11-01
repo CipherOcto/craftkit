@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1304 tests.** The MCP server links **all fifteen batteries** in, so the
+**1310 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1304 tests
+cargo test          # 1310 tests
 cargo run -p craftkit-studio
 ```
 
@@ -12775,3 +12775,73 @@ array, and nothing said so.
 - **The writer writes what the payload says.** A document built by hand
   may hold a nested dictionary in the old spelling, and the writer will
   write an array for it: the reader is forgiving and the writer is not.
+
+## 190. The fill is a paint
+
+The tree's vector editor fills a path with a colour or with a
+**gradient**: the colours, the stops they are at, and where the gradient
+is put. v2's kit had an appearance with a colour in it and nothing else
+— the fill was a `Colour` in the SDK, in the canvas, and in every
+plugin that drew anything.
+
+### What was built
+
+- The **fill** is a paint: one colour, or a gradient. The appearance
+  holds one, the canvas is given one, and the vector battery's payload
+  holds one.
+- The **gradient** is the kit's own: the kind, the stops, and the
+  geometry — a line from a point to a point, or a centre and a radius.
+  The kit says what a gradient is, and it says how the stops are mixed.
+- The command `vector.path.gradient` fills a path with one. Where the
+  gradient is put is the path's **own box**, unless the caller says.
+- The raster draws it: every pixel is asked where it is along the
+  gradient, and the answer is its colour.
+
+### What the port found
+
+- **The tree's gradient is a type and this tree's is a value.** The tree
+  has a `Gradient` with a kind, a method and a dither, and it decides
+  the **geometry** in a separate place — the tree has a `GradientGeom`
+  and a `GradientPaint`, and the paint is what a shape refers to. Here
+  the gradient holds its own geometry, because the gradient is the kit's
+  and the shape may be given one.
+- **The tree's action was a closed list of three, and this one's is
+  not a list at all** — the same finding as §188, seen from the other
+  side: the tree's `LinkAction::Other` exists because the tree cannot
+  edit an action it does not know. A gradient here is not a kind at all
+  that the kit matches on; it is a list of stops, and the stops are
+  whatever the caller sent.
+- **The appearance could not be copied.** The appearance was `Copy`, and
+  a gradient is a list of stops — so the appearance is `Clone` now, and
+  the places that copied one copy it. The appearance is still the one
+  place a colour lives (§95); it is now the one place a **paint** lives.
+- **The file did not change.** A fill that is one colour is written as a
+  colour — the same bytes as before — and a gradient is written under
+  the name `gradient`. A file written before the gradient is still a
+  file, and the tree's own format needs no migration.
+
+### What it cost
+
+- **Four tests** in the raster (`tests/gradient.rs`): the rectangle
+  changes across, the path changes across, the radial gradient changes
+  outwards, and the colours are mixed between the stops.
+- **Two tests** in the vector battery (`tests/paint.rs`): a path may be
+  filled with a gradient, and a gradient that cannot be made is refused.
+- **One command** (`vector.path.gradient`). The MCP server now carries
+  **232** commands.
+- **The seam moved**: the appearance's fill is a paint, and the canvas
+  takes one — so every plugin that fills something was touched.
+
+### What it does not settle
+
+- **The colours are mixed in RGB.** The tree mixes its stops in a
+  **colour space** it names, and it has more than one. Here the stops
+  are mixed in the bytes the colour has, which is what a picture of
+  bytes can do; a colour space is a question for the colour crate.
+- **The gradient is not in the tree's own drawing.** v2 has one drawing
+  — the raster's — and the gradient is drawn by it. The tree has a
+  swatch, a gradient tool, a mesh and a dither, and none of them are
+  here.
+- **The stops are not edited.** The tree's editor drags a stop along
+  the gradient and gives it a colour; here the stops are what the
+  command is given, and nothing moves them afterwards.
