@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-six commands**, one for each thing a person does to a
+//! - **fifty-seven commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -31,7 +31,7 @@
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
-//!   **stems**, and
+//!   **stems**, **separate** a clip into two, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -2748,6 +2748,127 @@ impl TrimClip {
                 "sync": trimmed.sync,
             }),
         ))
+    }
+}
+
+/// Separate a clip into two.
+///
+/// The tree's editor separates a take at a place on the track: every
+/// clip that crosses that place becomes two clips, and the two are
+/// the same sound with a line between them. Here one clip is
+/// separated at one place, and the place is **inside** the clip — a
+/// place at its edge or outside it is refused, because there is
+/// nothing to separate.
+///
+/// The two pieces are the same sound: the first keeps the head of the
+/// clip and the second keeps the tail, and the second starts later in
+/// the source by the distance the cut made — **divided by the
+/// stretch**, because a stretched clip's source is read more slowly.
+///
+/// The **fade** at the cut is dropped: the tree drops it too, because
+/// a fade that ended at the cut would be a fade of nothing.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.separate",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Separate"),
+    mutates,
+    undoable
+)]
+pub struct SeparateClip {
+    /// The clip to separate.
+    pub clip: NodeRef,
+    /// Where to cut it, in samples on the timeline.
+    pub at: Number,
+}
+
+impl SeparateClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.separate".to_string();
+        let clip_id = self.clip.0;
+        let at = self.at.0;
+        if !at.is_finite() {
+            return Err(EngineError::Failed { id: id.clone(), message: "a place is a number".to_string() });
+        }
+        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{clip_id}`"),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        // A clip whose **content** is locked is finished: it is not
+        // separated.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
+        let at = at as i64;
+        let end = payload.start + payload.length;
+        if at <= payload.start || at >= end {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the clip runs from {} to {end} and cannot be separated at {at}",
+                    payload.start
+                ),
+            });
+        }
+        // The **first** piece: the head of the clip, with its head
+        // fade and without a fade at the cut.
+        let mut first = payload.clone();
+        first.length = at - payload.start;
+        first.fade_out = FadePayload::none();
+        // The **beat** of the first piece is the beat of the clip if
+        // it is inside it; a beat that the cut left in the second
+        // piece is not a beat of this one.
+        first.sync = payload.sync.filter(|sync| *sync <= first.length);
+        // The **second** piece: the tail, with the tail's fade and
+        // without one at the cut. Its content starts later in the
+        // source by the distance the cut made, **divided by the
+        // stretch**: a stretched clip's source is read more slowly,
+        // and the two are the same fact.
+        let mut second = payload.clone();
+        second.start = at;
+        second.length = end - at;
+        second.fade_in = FadePayload::none();
+        let delta = at - payload.start;
+        second.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
+        // The **beat** moves with the audio it is in: the beat of the
+        // second piece is nearer its head by the distance the cut
+        // made, and a beat that the cut left in the other piece is
+        // not a beat of this one.
+        second.sync =
+            payload.sync.map(|sync| sync - delta).filter(|sync| *sync >= 0 && *sync <= second.length);
+        let name = node.name.clone();
+        let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
+        let source = payload.source;
+        let first_data = first.to_json();
+        let second_data = second.to_json();
+        let document = session.document_mut()?;
+        if let Some(node) = document.node_mut(clip_id) {
+            node.data = first_data;
+        }
+        // The **second** piece is a clip of its own, under the same
+        // take, and it plays the same source.
+        let second_id = document.add_node_with_under(playlist, name, "sound.clip", None, second_data);
+        if let Some(source) = source {
+            document.add_relation(craftkit_sdk::Relation::new(second_id, source, "source"));
+        }
+        Ok(Outcome::changed(format!("separated the clip `{clip_id}` at {at}")).with_data(serde_json::json!({
+            "id": clip_id,
+            "at": at,
+            "second": second_id,
+        })))
     }
 }
 
