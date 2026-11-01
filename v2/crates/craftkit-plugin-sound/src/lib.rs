@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-one commands**, one for each thing a person does to a
+//! - **ninety-four commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -33,6 +33,8 @@
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
+//!   **move** and **rename** a marker, **scale** the tempos and make a
+//!   range of the tempo map **constant**,
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
@@ -161,6 +163,12 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **The session's events are edited and not only put there.** A
+//! marker could be added and not moved, and the tempo map could be
+//! given a tempo and not scaled: so the tree's "Scale..." and
+//! "Constant..." had no place here, and the tree's markers could be
+//! edited and these could not.
 //!
 //! **The whole of a MIDI clip can be edited.** The tree's MIDI editor
 //! has a pencil for the **notes** and none for the **controllers**;
@@ -4819,6 +4827,246 @@ impl SetMeter {
         };
         Ok(Outcome::changed(format!("the meter at tick {tick} is {numerator}/{denominator}"))
             .with_data(serde_json::json!({ "id": id, "tick": tick })))
+    }
+}
+
+/// **Move** a marker, or **rename** it.
+///
+/// The marker's **name** is what a person calls it, and its **place**
+/// is where it is on the timeline, and both of them may be changed: a
+/// marker is a thing in the document and not a thing that is put there
+/// once and for ever.
+#[derive(Command)]
+#[command(
+    id = "sound.marker.set",
+    area = "sound",
+    layer = "sound",
+    icon = "pencil",
+    menu("Marker"),
+    mutates,
+    undoable
+)]
+pub struct SetMarker {
+    /// The marker to change.
+    pub marker: NodeRef,
+    /// The new name.
+    pub name: Option<Text>,
+    /// The new place, in samples.
+    pub start: Option<Number>,
+    /// The new end, in samples.
+    pub end: Option<Number>,
+}
+
+impl SetMarker {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.marker.set".to_string();
+        let marker = self.marker.0;
+        let node = session.document().node(marker).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{marker}`"),
+        })?;
+        if node.kind != "sound.marker" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{marker}` is a `{}` and not a marker", node.kind),
+            });
+        }
+        let mut payload = MarkerPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        // The marker moves as a **whole**: its span is kept, so that
+        // moving it does not make it longer or shorter than it was.
+        if let Some(start) = self.start {
+            let start = samples(start.0, "where the marker is")?;
+            let delta = start - payload.start;
+            payload.start = start;
+            payload.end += delta;
+        }
+        if let Some(end) = self.end {
+            payload.end = samples(end.0, "where the marker ends")?;
+        }
+
+        if payload.end < payload.start {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the marker ends at {} and starts at {}", payload.end, payload.start),
+            });
+        }
+        let name = self.name.as_ref().map(|name| name.0.clone()).unwrap_or(node.name.clone());
+        if let Some(node) = session.document_mut()?.node_mut(marker) {
+            node.name = name.clone();
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("changed the marker `{name}`"))
+            .with_data(serde_json::json!({ "marker": marker, "name": name, "start": payload.start })))
+    }
+}
+
+/// **Scale** the tempos of the document.
+///
+/// Every tempo is multiplied by the **factor**: a factor of two is
+/// twice as fast everywhere, and the times the tempos happen at do not
+/// move — the music is faster, and it starts at the same moment.
+///
+/// A factor that would take a tempo outside the range a tempo may have
+/// — five to a thousand beats a minute — is **refused**: a tempo of
+/// zero is not a tempo, and a tempo of two thousand is not one either.
+#[derive(Command)]
+#[command(
+    id = "sound.tempo.scale",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Event", "Tempo"),
+    mutates,
+    undoable
+)]
+pub struct ScaleTempo {
+    /// The factor every tempo is multiplied by.
+    pub factor: Number,
+}
+
+impl ScaleTempo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.tempo.scale".to_string();
+        let factor = self.factor.0;
+        if !factor.is_finite() || factor <= 0.0 {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the factor is a number above zero, and {factor} is not one"),
+            });
+        }
+        // Every tempo is read first, and the whole scale is refused if
+        // one of them would leave the range: a scale that is half made
+        // is a map that says something false about half of itself.
+        let mut tempos: Vec<(u64, i64, f64)> = Vec::new();
+        for node in session.document().walk() {
+            if node.kind != "sound.tempo" {
+                continue;
+            }
+            let Ok(payload) = TempoPayload::from_json(&node.data) else { continue };
+            let scaled = payload.bpm * factor;
+            if !scaled.is_finite() || !(5.0..=1000.0).contains(&scaled) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the tempo of {} beats a minute would become {scaled}, which is not a tempo",
+                        payload.bpm
+                    ),
+                });
+            }
+            tempos.push((node.id, payload.tick, scaled));
+        }
+        for (node, tick, bpm) in &tempos {
+            if let Some(node) = session.document_mut()?.node_mut(*node) {
+                node.data = TempoPayload { tick: *tick, bpm: *bpm }.to_json();
+                node.name = format!("tempo {bpm}");
+            }
+        }
+        Ok(Outcome::changed(format!("scaled {} tempos by {factor}", tempos.len()))
+            .with_data(serde_json::json!({ "tempos": tempos.len(), "factor": factor })))
+    }
+}
+
+/// Make a **range** of the tempo map constant.
+///
+/// The tempo at the start of the range is the one given, the tempo
+/// changes inside the range are **taken away**, and the tempo at the
+/// end of the range comes back — so that the music after the range is
+/// as fast as it was.
+///
+/// The tree's command is the same one, and the tree's own name for it
+/// is "Constant...".
+#[derive(Command)]
+#[command(
+    id = "sound.tempo.constant",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Event", "Tempo"),
+    mutates,
+    undoable
+)]
+pub struct ConstantTempo {
+    /// How fast, in beats a minute.
+    pub bpm: Number,
+    /// Where the range starts, in ticks.
+    pub start: Option<Number>,
+    /// Where the range ends, in ticks.
+    pub end: Option<Number>,
+}
+
+impl ConstantTempo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.tempo.constant".to_string();
+        let bpm = self.bpm.0;
+        if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("{bpm} is not a tempo between 5 and 1000 beats a minute"),
+            });
+        }
+        let start = match self.start {
+            Some(start) => ticks(start.0)?,
+            None => 0,
+        };
+        let end = match self.end {
+            Some(end) => ticks(end.0)?,
+            None => start,
+        };
+        if end <= start {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the range from {start} to {end} is empty"),
+            });
+        }
+        // The tempo at the end of the range is read **before** the
+        // edit: the end is a musical place, and the new tempo moves it.
+        let map = tempo_map(session.document());
+        let after = map.tempo_at_tick(end);
+        let had_end = find_event(session, "sound.tempo", end).is_some();
+        // The tempo at the start of the range.
+        match find_event(session, "sound.tempo", start) {
+            Some(node) => {
+                if let Some(node) = session.document_mut()?.node_mut(node) {
+                    node.data = TempoPayload { tick: start, bpm }.to_json();
+                    node.name = format!("tempo {bpm}");
+                }
+            }
+            None => {
+                session.document_mut()?.add_node_with(
+                    format!("tempo {bpm}"),
+                    "sound.tempo",
+                    None,
+                    TempoPayload { tick: start, bpm }.to_json(),
+                );
+            }
+        }
+        // The tempo changes **inside** the range are taken away.
+        let inside: Vec<u64> = session
+            .document()
+            .walk()
+            .filter(|node| node.kind == "sound.tempo")
+            .filter(|node| {
+                TempoPayload::from_json(&node.data)
+                    .map(|payload| payload.tick > start && payload.tick < end)
+                    .unwrap_or(false)
+            })
+            .map(|node| node.id)
+            .collect();
+        for node in inside {
+            session.document_mut()?.remove_node(node);
+        }
+        // And the tempo at the end of the range comes back.
+        if !had_end {
+            session.document_mut()?.add_node_with(
+                format!("tempo {after}"),
+                "sound.tempo",
+                None,
+                TempoPayload { tick: end, bpm: after }.to_json(),
+            );
+        }
+        Ok(Outcome::changed(format!("the tempo from tick {start} to {end} is {bpm}"))
+            .with_data(serde_json::json!({ "start": start, "end": end, "bpm": bpm })))
     }
 }
 
