@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1292 tests.** The MCP server links **all fifteen batteries** in, so the
+**1297 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1292 tests
+cargo test          # 1297 tests
 cargo run -p craftkit-studio
 ```
 
@@ -12590,3 +12590,66 @@ the copies it could not make were the copies it could not find again.
 - **The copies do not know where they came from.** A copy is a clip in
   its own right, and it says nothing about the clip it was made from,
   except that the edge says who follows whom.
+
+## 187. The clip snaps to its neighbour
+
+The tree's editor has an *Edit ▸ Snap to* menu with two items in it:
+**Next** puts a clip's end against the start of the clip that follows
+it, and **Previous** puts a clip's start against the end of the clip
+that comes before it. v2's timeline could space the clips and could
+not put one against another.
+
+### What was built
+
+- The command `sound.clip.snap` moves the clips it is given: `next`
+  puts each clip's end against the start of the clip that follows it,
+  and `previous` puts each clip's start against the end of the clip
+  that comes before it.
+- The clip **nearest the destination** is moved first, so that the
+  neighbours stay where they are.
+- The clips that are named are **destinations too**, and a direction
+  that is not one of the two is refused by name.
+
+### What the port found
+
+- **The tree's editor snaps the neighbours first, and says why.** Its
+  own comment says that ignoring the selected neighbours made *Snap to
+  Next* pile every selected clip onto the same later clip, and made
+  *Snap to Previous* leave the gap between the selected clips in
+  place. Here the named clips are the destinations too, and the order
+  is the tree's: the one nearest the destination goes first.
+- **The tree's move clamps at the beginning.** A clip that is snapped
+  back past the start of the timeline is put at the start of it, and
+  its end does not meet its neighbour's end. Here the same clamp
+  happens, and it is a decision the tree makes silently.
+- **A snap does not overwrite.** The tree's editor moves a clip by
+  taking it off the track and putting it back, and putting it back
+  clears whatever was under it. Here a clip is moved and the clips
+  around it are left alone — the same decision §185 made for the
+  spacing, and the same one §186 made for the loop's copies.
+
+### What it cost
+
+- **Five tests** in the battery (`tests/snap.rs`): the clip meets the
+  next one, the clip meets the previous one, the named clips are the
+  destinations too, the neighbours are the clips of the same take, and
+  a snap that cannot be done is refused.
+- **One command** (`sound.clip.snap`). The MCP server now carries
+  **229** commands.
+
+### What it does not settle
+
+- **The direction is a word and not a menu.** The tree's editor has two
+  commands, one for each direction, and a host may put them in a menu
+  side by side. Here there is one command and a parameter, because one
+  tool that says which way it is going is better than two tools that
+  are the same tool.
+- **A clip in another take is not a neighbour.** The tree's editor
+  looks at the clips of the track's **active** list, because a track in
+  the tree has one list of clips at a time. Here a track may have
+  several playlists — the takes — and a clip's neighbours are the clips
+  of the list the clip is in.
+- **The grid is not here.** The tree's editor also snaps to a grid,
+  which is a **view** setting — a number of pixels a thing lands on.
+  This tree's timeline has no grid, so there is nothing to snap to but
+  the clips.
