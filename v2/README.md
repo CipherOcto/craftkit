@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1337 tests.** The MCP server links **all fifteen batteries** in, so the
+**1345 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1337 tests
+cargo test          # 1345 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3630,6 +3630,7 @@ so.
 | the **order** of the drawing | **built.** The order of the tree is the order of the drawing, and two commands say it — the kit's own lookup now reaches a node wherever it is (§193) | §193 |
 | a **reference in the dictionary** | **built.** A reference is an edge and a value at once, the page tree says itself in the file, and the count of the children is derived from the edges (§194) | §194 |
 | the **outline** of a document | **built.** The bookmarks are a tree of items with titles and destinations, the list of siblings is relinked, and the counts are derived from the visible items (§195) | §195 |
+| the **beat** of a clip | **built.** The place inside a clip where the beat falls, an option and not a zero — and it follows the audio when the clip is trimmed (§196) | §196 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11461,9 +11462,10 @@ had no way to say that a clip is quiet.
 
 ### What it does not settle
 
-- **The tree's rating, colour and sync point are not there.** The
-  tree's clip carries a rating, a colour override and a sync point, and
-  they are what the tree's editor reads them for.
+- **The tree's rating and colour are not there.** The tree's clip
+  carries a rating, a colour override and a sync point, and they are
+  what the tree's editor reads them for. The **sync point** is here
+  now, and it is the **beat** of the clip (§196).
 - **The tree's locked clips are not here.** The tree's clip has an
   `edit_locked` and a `time_locked`; the kit has its own lock on a node
   (§115), which is a lock on the node and not on the clip's time.
@@ -13180,3 +13182,83 @@ what a document's outline was.
   is closed shows nothing below it, so the count of its parent does
   not count it — which is the rule of the file, and is the rule this
   follows.
+
+## 196. The beat of a clip
+
+The tree's sound editor has a **sync point**: a place inside a clip
+where the beat falls, and the thing a clip is lined up by. A clip
+recorded against another one still lines up because both of them say
+where their beat is. v2's sound battery had the tempo map, the meter
+and the clips — and nothing that said where the beat of a clip fell.
+
+### What was built
+
+- The command `sound.clip.sync.set` puts the **beat** in a clip: a
+  place on the timeline, which must be inside the clip. Without a
+  place, the beat goes where the selection starts.
+- The command `sound.clip.sync.remove` takes it away.
+- The command `sound.clip.sync.read` reads it back: the offset in the
+  clip's own samples, the place it falls on the timeline, and the
+  **bar and beat** it falls on — worked out from the tempo map, and
+  not kept.
+- The **trim** carries the beat: the trim takes samples off the head
+  of the clip and leaves the rest where it was, so the beat moves
+  nearer the head by the number of samples that were cut — and a beat
+  the trim left outside the clip is gone.
+- The **loop** carries it too: a copy cut short loses a beat that is
+  past the cut.
+
+### What the port found
+
+- **The tree's zero is two things.** The tree keeps the sync point as
+  a number, and **zero means none** — so a clip whose beat is at its
+  very first sample cannot say so, and the tree's own editor draws the
+  sync point only when it is `> 0`. Here the beat is an **option**:
+  no beat, or a beat at some sample in the clip. A beat of zero is a
+  beat at the clip's head, and it is not the same as no beat at all.
+- **The tree clamps and this tree refuses.** The tree's editor takes
+  the place the beat falls at and **clamps** it into the clip, so a
+  beat asked for outside the clip lands at its edge without a word.
+  Here the place outside the clip is refused: a beat that was moved
+  without being asked for is a beat the caller did not want.
+- **The beat is a place in the audio, and the audio does not move.**
+  The tree moves its sync point by hand on every edit — a trim of the
+  head takes the delta off it, and a trim of the tail drops it when it
+  falls outside. Here the same rule is written once, in the trim and
+  in the loop, and the beat is an **offset in the clip's own samples**:
+  it is where a person sees it, on the clip's bar.
+- **A clip's samples and a source's samples are not the same
+  distance apart.** A stretched clip plays its source more slowly, so
+  a source sample and a timeline sample are not the same length. The
+  beat is in the **timeline's** units, because a beat a person cannot
+  place on the clip's bar is not a beat they can use.
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/beat.rs`): a beat may
+  be set, a beat at the head is not no beat, a beat outside the clip
+  is refused, a beat follows the audio of a trim, a beat the trim left
+  outside is gone, a copy cut short loses a beat past the cut, a beat
+  is read with the place it falls in the bar, and a clip with no beat
+  says so.
+- **Three commands** (`sound.clip.sync.set`,
+  `sound.clip.sync.remove` and `sound.clip.sync.read`). The MCP
+  server now carries **243** commands.
+- **One module** (`beat`) and one field in the clip's payload: the
+  beat, an option of samples. The tree's own kinds did not change.
+
+### What it does not settle
+
+- **There is no grid.** The tree's editor snaps a clip to a grid, and
+  the grid is a setting of its own — a division of the bar. This
+  battery has a beat and a tempo map and no grid, so nothing here
+  snaps a clip to anything, and the tree's `clip.quantize_to_grid`
+  has nowhere to land.
+- **The beat is not shown.** A sound document is not a picture here,
+  so the beat is a fact in the document and not a mark on a bar. The
+  tree draws it as a flag over the clip, and that flag is a question
+  for the tree.
+- **The clip's own metadata is still not here.** The tree's clip also
+  carries a **rating**, a **colour**, an **edit lock** and a **time
+  lock**, and none of those are in this tree yet — they are fields on
+  the clip rather than behaviour, and they are the next slice.
