@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1538 tests.** The MCP server links **all fifteen batteries** in, so the
+**1546 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1538 tests
+cargo test          # 1546 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3655,7 +3655,7 @@ so.
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
-| the **MIDI** of a document | **partly.** The notes, the controllers and the Standard MIDI File are a library of their own; a clip does not hold notes yet (§217) | §217 |
+| the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, and the notes are read from and written to a Standard MIDI File (§217, §218) | §218 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14944,3 +14944,83 @@ was no note in the whole of v2, and no MIDI file.
 - **The names are not here.** The tree names a note ("C3"), a drum and
   a program; a name is for a person to read, and nothing here is read
   by a person yet.
+
+## 218. The MIDI of a clip
+
+The tree's sound editor has a **MIDI clip**: a clip whose content is a
+sequence of notes and controllers, read from and written to a Standard
+MIDI File. The library was built in §217, and the clip that holds the
+notes was not: a clip in v2 was a clip of sound and nothing else, and
+the notes had nowhere to live.
+
+### What was built
+
+- The clip's **content** is a field in the clip's payload: `midi` for a
+  clip of notes, and nothing for a clip of sound. That is the whole of
+  the tree's closed enum of three kinds of clip — audio, MIDI and
+  video — and it is a **string** here, so a third party may add a kind
+  of content without touching the core.
+- The **notes** and the **controllers** are in the clip's payload, and
+  the commands are `sound.clip.midi.import`, `sound.clip.midi.export`
+  and `sound.clip.midi.read`.
+- The **length** of the clip is **derived**: it is as long as the notes
+  need, at the tempo of the document where the clip starts.
+- The file is **hostile**: a file that is not a MIDI file is refused,
+  a file with no notes is refused, and the number of notes a clip may
+  hold is bounded.
+
+### What the port found
+
+- **The tree's content is a variant and this tree's is a string.** The
+  tree matches on the three kinds of a clip in the mixer. Here the
+  clip says what its content is, and a kind this battery does not know
+  is not a kind it can read: the clip's payload is **refused** rather
+  than believed.
+- **The tree's note is a value in a sequence and so is this tree's.**
+  The tree's note has no identity beyond its pitch, its place and its
+  length, and the sequence is a value in the clip's record. Here the
+  notes are in the clip's payload as well — a note is not a node,
+  because a node is a thing with a life of its own and a note has
+  none.
+- **The tick of a note is the kit's tick.** The MIDI library counts in
+  nine hundred and sixty ticks a quarter note, and so does the sound
+  battery's tempo map (§19). So a note's place in a clip and a clip's
+  place on the timeline are two readings of the same scale, and the
+  length of a MIDI clip is worked out from its notes at the tempo of
+  the document — and not at a tempo of the file's own.
+- **The tree's file keeps its own tempo and this tree's does not.** A
+  MIDI file may carry a tempo, a meter and a key signature. The
+  library reads them (§217), and the import reads the **notes** at the
+  tempo the **document** says: a second tempo map would be a second
+  truth about the same timeline, and the document already has one.
+- **A MIDI clip is not sound, and it says so.** The tree plays a MIDI
+  clip through a synthesiser; there is no synthesiser here, so a MIDI
+  clip has no source and the render leaves it alone. It is silent, and
+  it is silent **honestly**: what the clip holds is notes, and the
+  notes are not a sound until something makes them one.
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/midi.rs`): a file is
+  imported as a clip that holds notes, the length of the clip is
+  derived, the notes are read, the MIDI is exported and the file holds
+  the same notes, a file that is not a MIDI file is refused, a file
+  with no notes is refused, a clip that is not a MIDI clip is refused,
+  and a MIDI clip is not heard.
+- **Three commands** (`sound.clip.midi.import`, `sound.clip.midi.export`
+  and `sound.clip.midi.read`). The MCP server now carries **276**
+  commands, and the sound battery carries **65**.
+
+### What it does not settle
+
+- **The notes are not edited.** Quantising a note and moving it are the
+  tree's operations, and they are arithmetic over the notes — but they
+  are the tree's, and a clip's notes may be read and written here and
+  not yet moved.
+- **The tracks of a file are merged.** A clip holds one sequence, and a
+  file may hold many: the import puts the notes of every track into the
+  one clip. A file of three parts is a clip of one sequence, and the
+  parts are not kept apart.
+- **There is no synthesiser.** A MIDI clip is silent, and the tree's
+  is not — the tree plays it. Making a sound out of notes is a bigger
+  piece of work than reading them.
