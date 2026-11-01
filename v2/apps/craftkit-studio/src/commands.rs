@@ -137,6 +137,51 @@ impl NodeAppearance {
     }
 }
 
+/// **Rename** a node.
+///
+/// A node has a name, and the name is what a person calls it by. The
+/// name is **trimmed**, and a name that is nothing once it is trimmed
+/// is refused: a node with no name cannot be found, and a node that
+/// cannot be found is a node nobody can talk about.
+///
+/// The tree this ports has a rename command for **each** kind of thing
+/// — a clip is renamed and a track is renamed — and the kit has one
+/// command for **every** node, which is the same thing said once.
+#[derive(Command)]
+#[command(id = "node.rename", area = "node", icon = "pencil", menu("Node"), mutates, undoable)]
+pub struct NodeRename {
+    /// The node to rename.
+    pub node: NodeRef,
+    /// The new name.
+    pub name: Text,
+}
+
+impl NodeRename {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.node.0;
+        let name = self.name.0.trim().to_string();
+        if name.is_empty() {
+            return Err(EngineError::Failed {
+                id: "node.rename".to_string(),
+                message: "a node has a name".to_string(),
+            });
+        }
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "node.rename".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        let changed = node.name != name;
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.name = name.clone();
+        }
+        Ok(Outcome::new(format!("renamed the node `{id}` to `{name}`"))
+            .with_data(craftkit_sdk::serde_json::json!({ "id": id, "name": name }))
+            .changed_if(changed))
+    }
+}
+
 /// **Move** a node.
 ///
 /// A node that has **no place** cannot be moved: a clip in a sound
