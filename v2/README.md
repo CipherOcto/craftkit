@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1286 tests.** The MCP server links **all fifteen batteries** in, so the
+**1292 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1286 tests
+cargo test          # 1292 tests
 cargo run -p craftkit-studio
 ```
 
@@ -12519,3 +12519,74 @@ stretch it and mute it, and could not move a row of clips at once.
 - **The gap is not musical.** The tree's editor can space the clips
   on the beats; here the gap is a number of samples, and the caller
   works out what a beat is.
+
+## 186. The copies follow the clip
+
+The tree's editor loops a clip by pasting copies of it onto the track,
+and it remembers the loop in a field on the clip. v2's timeline could
+trim a clip and stretch it and mute it, and could not loop one — and
+the copies it could not make were the copies it could not find again.
+
+### What was built
+
+- The command `sound.clip.loop` makes the copies of a clip: each one
+  starts where the last one ended, and the last one is cut short to
+  fit.
+- Three ways to say how long the loop is: a **count** — the clip and
+  its loops — a **length**, which is how long the whole looped clip is,
+  and a **fill**, which is up to the next clip on the track or else to
+  the end of the timeline.
+- The command `sound.clip.unloop` takes the copies away, or leaves them
+  and says that they are not a loop any more.
+- The loop is a **relation**: a copy is named by the clip it follows,
+  and the chain is a walk.
+
+### What the port found
+
+- **The tree's loop is invisible.** The tree remembers it in a field on
+  the clip, and to find the copies again it looks at the track: a clip
+  that starts where this one ends, of the same material. The tree even
+  has a test that a loop is still recognised after the source's content
+  is edited — which is the tree working around its own blindness. Here
+  the copy is named by the clip it follows, and nothing is inferred.
+- **A loop is a chain and not a tree.** Two clips of the same material
+  butted together by hand are, in the tree, indistinguishable from a
+  loop. Here the edge says which is which — and a clip that is already
+  followed by a copy may not be looped again, because the chain is a
+  line and a branch would have two answers to the same question.
+- **The last copy is cut short, and the fades with it.** A loop of a
+  whole number of bars ends exactly where it began; one that is not
+  whole has a last copy that is short. The tree shortens that copy's
+  fades to fit, and so does this one: a fade past the end of a clip is
+  a fade that is not heard.
+- **A bound is a refusal and not a shorter loop.** A clip loops at
+  most a thousand times, and a loop that asks for more is refused by
+  name — a loop that is not the loop that was asked for is a loop that
+  is wrong in a way nobody can hear.
+
+### What it cost
+
+- **Six tests** in the battery (`tests/loop.rs`): the copies are made
+  and they are linked, the last one is cut short, the loop fills to the
+  next clip, the copies are taken away, the copies may stay, and a loop
+  that cannot be made is refused.
+- **Two commands** (`sound.clip.loop` and `sound.clip.unloop`). The MCP
+  server now carries **228** commands.
+- **One private bound**: a clip loops at most **1000** times.
+
+### What it does not settle
+
+- **The tree's paste overwrites.** The tree's loop pastes the copies
+  onto the track, and the paste replaces whatever was under them. This
+  tree has no such rule: a copy is laid beside what is there.
+- **A clip that overlaps is not a neighbour.** The tree's fill stops at
+  the next clip that starts at or after this one ends, and this one
+  does the same — but a clip that overlaps this one and starts earlier
+  is not a neighbour in either tree, and here that is a decision made
+  without saying so.
+- **The loop is not in the drawing.** The copies are bars of their own
+  on the timeline, as they are in the tree; nothing draws them as one
+  thing, because the drawing of a loop is a question for the tree.
+- **The copies do not know where they came from.** A copy is a clip in
+  its own right, and it says nothing about the clip it was made from,
+  except that the edge says who follows whom.
