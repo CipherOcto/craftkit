@@ -17,14 +17,15 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **nineteen commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **twenty commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it; `vector.path.fill` and
-//!   `vector.path.stroke` say what the path is painted with;
+//!   `vector.path.stroke` say what the path is painted with, and
+//!   `vector.path.gradient` says what the colours are;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.smooth` makes a point
 //!   of a path smooth; `vector.path.transform` says where
@@ -59,8 +60,9 @@
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
-    Canvas, Cap, Colour, Document, EngineError, FillRule, FormatValue, Join, Node, NodeRef, Number, Outcome,
-    Path, Plan, PlanItem, Point, Rect, Segment, Session, Stroke, SubPath, Text,
+    Canvas, Cap, Colour, Document, EngineError, Fill, FillRule, FormatValue, Gradient, GradientGeometry,
+    GradientKind, GradientStop, Join, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem, Point, Rect,
+    Segment, Session, Stroke, SubPath, Text,
 };
 
 use craftkit_vector_geom as geom;
@@ -85,8 +87,8 @@ pub struct VectorLayer;
 pub struct VectorNode {
     /// The outline.
     pub path: Path,
-    /// What it is filled with.
-    pub fill: Colour,
+    /// What it is filled with: a colour, or a gradient.
+    pub fill: Fill,
     /// The stroke on its outline, if it has one.
     pub stroke: Option<Stroke>,
     /// The transform the path is placed with.
@@ -120,8 +122,8 @@ impl FormatValue for VectorNode {
     fn from_json(value: &Json) -> Result<Self, String> {
         let path = value.get("path").ok_or_else(|| "a vector node has no path".to_string())?;
         let fill = match value.get("fill") {
-            Some(fill) => Colour::from_json(fill)?,
-            None => Colour::BLACK,
+            Some(fill) => Fill::from_json(fill)?,
+            None => Fill::Solid(Colour::BLACK),
         };
         let stroke = match value.get("stroke") {
             Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
@@ -155,9 +157,9 @@ impl VectorPathKind {
         // the same appearance as another path.
         let (fill, stroke) = match document.appearance_of(node) {
             Some(appearance) => (appearance.fill, appearance.stroke),
-            None => (vector.fill, vector.stroke),
+            None => (vector.fill.clone(), vector.stroke),
         };
-        let fill = if node.muted { Colour::NONE } else { fill };
+        let fill = if node.muted { Fill::Solid(Colour::NONE) } else { fill };
         // The **transform** is where the path is put, and the canvas
         // draws the path it is given.
         canvas.path(&vector.placed(), fill, stroke);
@@ -344,7 +346,8 @@ impl AddPolygon {
         "vector.path.subtract",
         "vector.path.intersect",
         "vector.path.simplify",
-        "vector.path.offset"
+        "vector.path.offset",
+        "vector.path.gradient"
     )
 )]
 pub struct VectorPanel;
@@ -589,7 +592,7 @@ impl OutlinePath {
         let name = self.name.clone().unwrap_or_else(|| Text(format!("outline {}", self.path.0)));
         let node = VectorNode {
             path: outline.clone(),
-            fill: colour,
+            fill: Fill::Solid(colour),
             stroke: None,
             transform: geom::Matrix::identity(),
         };
@@ -743,11 +746,156 @@ impl FillPath {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let mut vector = vector_of(session, self.path.0)?;
         let colour = parse_colour(&self.colour.0)?;
-        vector.fill = colour;
+        vector.fill = Fill::Solid(colour);
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the path is filled")
             .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.0 })))
     }
+}
+
+/// Fill a path with a **gradient**.
+///
+/// The gradient is the **kit's own** — the colours, the stops they are
+/// at, and where the gradient is put — and the path is filled with it.
+///
+/// The stops are a list of `{"offset": 0, "colour": "#rrggbb"}`, and
+/// the offset is where the colour is along the gradient: zero is the
+/// start and one is the end. A stop may say how solid it is, with
+/// `"opacity"`.
+///
+/// Where the gradient is put is the path's **own box** unless the
+/// caller says otherwise: a linear gradient goes across the box, and a
+/// radial one is centred in it.
+#[derive(Command)]
+#[command(
+    id = "vector.path.gradient",
+    area = "vector",
+    layer = "vector",
+    icon = "paint",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct GradientPath {
+    /// The path to fill with the gradient.
+    pub path: NodeRef,
+    /// `linear` — along a line — or `radial` — out from a centre.
+    pub kind: Text,
+    /// The stops: a list of `{"offset": 0, "colour": "#rrggbb"}`.
+    pub stops: serde_json::Value,
+    /// Where a **linear** gradient starts: `{"x": 0, "y": 0}`.
+    pub from: Option<serde_json::Value>,
+    /// Where a **linear** gradient ends.
+    pub to: Option<serde_json::Value>,
+    /// Where a **radial** gradient is centred.
+    pub centre: Option<serde_json::Value>,
+    /// How far a **radial** gradient reaches.
+    pub radius: Option<Number>,
+}
+
+impl GradientPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.gradient".to_string();
+        let mut vector = vector_of(session, self.path.0)?;
+        // The **kind**: a line or a centre.
+        let kind = match self.kind.0.trim().to_ascii_lowercase().as_str() {
+            "linear" => GradientKind::Linear,
+            "radial" => GradientKind::Radial,
+            other => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a gradient is linear or radial, and this one is `{other}`"),
+                });
+            }
+        };
+        // The **stops**.
+        let list = self.stops.as_array().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: "the stops of a gradient are a list".to_string(),
+        })?;
+        if list.len() < 2 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a gradient has two stops or more".to_string(),
+            });
+        }
+        let mut stops: Vec<GradientStop> = Vec::with_capacity(list.len());
+        for item in list {
+            let offset = item.get("offset").and_then(|offset| offset.as_f64()).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: "a stop says where it is".to_string() }
+            })?;
+            if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a stop's offset is between zero and one, and this one is {offset}"),
+                });
+            }
+            let colour = item.get("colour").and_then(|colour| colour.as_str()).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: "a stop says what colour it is".to_string() }
+            })?;
+            let colour = parse_colour(colour)?;
+            let opacity = match item.get("opacity").and_then(|opacity| opacity.as_f64()) {
+                Some(opacity) if opacity.is_finite() && (0.0..=1.0).contains(&opacity) => opacity,
+                Some(_) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a stop's opacity is between zero and one".to_string(),
+                    });
+                }
+                None => 1.0,
+            };
+            stops.push(GradientStop { offset, colour, opacity });
+        }
+        // The **geometry**: the path's own box, unless the caller says.
+        let box_of = bounds(&vector.path);
+        let geometry = match kind {
+            GradientKind::Linear => {
+                let from = match &self.from {
+                    Some(from) => point_of(from, &id)?,
+                    None => Point::new(box_of.x, box_of.y + box_of.h / 2.0),
+                };
+                let to = match &self.to {
+                    Some(to) => point_of(to, &id)?,
+                    None => Point::new(box_of.x + box_of.w, box_of.y + box_of.h / 2.0),
+                };
+                GradientGeometry::Linear { from, to }
+            }
+            GradientKind::Radial => {
+                let centre = match &self.centre {
+                    Some(centre) => point_of(centre, &id)?,
+                    None => Point::new(box_of.x + box_of.w / 2.0, box_of.y + box_of.h / 2.0),
+                };
+                let radius = match &self.radius {
+                    Some(radius) => radius.0,
+                    None => (box_of.w * box_of.w + box_of.h * box_of.h).sqrt() / 2.0,
+                };
+                if !radius.is_finite() || radius <= 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a gradient's radius is a number greater than zero".to_string(),
+                    });
+                }
+                GradientGeometry::Radial { centre, radius }
+            }
+        };
+        vector.fill = Fill::Gradient(Gradient { kind, stops, geometry });
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path is filled with a gradient")
+            .with_data(serde_json::json!({ "id": self.path.0, "gradient": vector.fill.to_json() })))
+    }
+}
+
+/// A **point**, from a value a caller sent.
+fn point_of(value: &serde_json::Value, id: &str) -> Result<Point, EngineError> {
+    let number =
+        |name: &str| value.get(name).and_then(|value| value.as_f64()).filter(|value| value.is_finite());
+    let (Some(x), Some(y)) = (number("x"), number("y")) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a point says where it is, across and down".to_string(),
+        });
+    };
+    Ok(Point::new(x, y))
 }
 
 /// Set the **stroke** of a path, or take it away.
@@ -1420,8 +1568,12 @@ fn add_path(
         Some(fill) => parse_colour(&fill.0)?,
         None => Colour::BLACK,
     };
-    let vector =
-        VectorNode { path: path.clone(), fill: colour, stroke: None, transform: geom::Matrix::identity() };
+    let vector = VectorNode {
+        path: path.clone(),
+        fill: Fill::Solid(colour),
+        stroke: None,
+        transform: geom::Matrix::identity(),
+    };
     let rect = bounds(&path);
     let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
     Ok(id)

@@ -104,8 +104,9 @@ pub use camera::Camera;
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{
-    Appearance, Asset, Canvas, Cap, Colour, Document, FillRule, Join, Node, NodeKindSpec, Path, Point,
-    RecordingCanvas, Rect, Relation, Segment, Stroke, SubPath,
+    Appearance, Asset, Canvas, Cap, Colour, Document, Fill, FillRule, Gradient, GradientGeometry,
+    GradientKind, GradientStop, Join, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Relation,
+    Segment, Stroke, SubPath,
 };
 pub use ecosystem::{Ecosystem, EcosystemError, MenuEntry, MenuNode, Projection};
 pub use error::{EngineError, Outcome, ParamDoc, ParamError};

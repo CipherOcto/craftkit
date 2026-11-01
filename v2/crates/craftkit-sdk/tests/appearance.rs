@@ -5,7 +5,7 @@
 //! the colours are changed in one place.
 
 use craftkit_sdk::Document;
-use craftkit_sdk::document::{Appearance, Colour, Node, Stroke};
+use craftkit_sdk::document::{Appearance, Colour, Fill, Node, Stroke};
 
 /// A colour, as a person writes it.
 fn colour(text: &str) -> Colour {
@@ -19,7 +19,7 @@ fn a_document() -> (Document, u64, u64) {
     let fill = colour("#3366cc");
     if let Some(node) = document.node_mut(appearance) {
         node.appearance = Some(Appearance {
-            fill,
+            fill: Fill::Solid(fill),
             stroke: Some(Stroke { colour: Colour::BLACK, width: 2.0, ..Default::default() }),
         });
     }
@@ -38,7 +38,7 @@ fn a_thing_that_uses_an_appearance_resolves_it() {
     let (document, _appearance, shape) = a_document();
     let node = document.node(shape).expect("the shape is there");
     let resolved = document.appearance_of(node).expect("the appearance is resolved");
-    assert_eq!(resolved.fill, colour("#3366cc"));
+    assert_eq!(resolved.fill, Fill::Solid(colour("#3366cc")));
     assert_eq!(resolved.stroke.map(|stroke| stroke.width), Some(2.0));
 }
 
@@ -50,7 +50,7 @@ fn an_appearance_of_its_own_wins() {
     let (mut document, _appearance, shape) = a_document();
     let own = Appearance::filled(colour("#ff0000"));
     if let Some(node) = document.node_mut(shape) {
-        node.appearance = Some(own);
+        node.appearance = Some(own.clone());
     }
     let node = document.node(shape).expect("the shape is there");
     assert_eq!(document.appearance_of(node), Some(own));

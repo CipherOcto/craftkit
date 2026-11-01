@@ -22,8 +22,11 @@ fn an_appearance_is_a_node() {
 
     let node = session.document().node(id).expect("the node is there");
     assert_eq!(node.kind, "core.appearance");
-    let appearance = node.appearance.expect("it has an appearance");
-    assert_eq!(appearance.fill, craftkit_sdk::Colour::from_hex("#3366cc").expect("a colour"));
+    let appearance = node.appearance.clone().expect("it has an appearance");
+    assert_eq!(
+        appearance.fill,
+        craftkit_sdk::Fill::Solid(craftkit_sdk::Colour::from_hex("#3366cc").expect("a colour"))
+    );
     assert_eq!(appearance.stroke, None, "and no outline");
 }
 
@@ -78,7 +81,10 @@ fn two_things_can_share_one_appearance() {
         let found = session.document().node(node).expect("the node is there");
         assert_eq!(found.appearance_from, Some(appearance), "the node points at the appearance");
         let resolved = session.document().appearance_of(found).expect("the appearance is resolved");
-        assert_eq!(resolved.fill, craftkit_sdk::Colour::from_hex("#3366cc").expect("a colour"));
+        assert_eq!(
+            resolved.fill,
+            craftkit_sdk::Fill::Solid(craftkit_sdk::Colour::from_hex("#3366cc").expect("a colour"))
+        );
     }
 
     // And changing the appearance changes both.
@@ -90,7 +96,7 @@ fn two_things_can_share_one_appearance() {
         let resolved = session.document().appearance_of(found).expect("the appearance is resolved");
         assert_eq!(
             resolved.fill,
-            craftkit_sdk::Colour::from_hex("#ff0000").expect("a colour"),
+            craftkit_sdk::Fill::Solid(craftkit_sdk::Colour::from_hex("#ff0000").expect("a colour")),
             "both shapes changed"
         );
     }

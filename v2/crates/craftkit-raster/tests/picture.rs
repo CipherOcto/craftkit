@@ -8,7 +8,9 @@
 
 use craftkit_raster::{Canvas, Image, Raster};
 use craftkit_sdk::camera::Camera;
-use craftkit_sdk::document::{Cap, Colour, FillRule, Join, Path, Point, Rect, Segment, Stroke, SubPath};
+use craftkit_sdk::document::{
+    Cap, Colour, Fill, FillRule, Join, Path, Point, Rect, Segment, Stroke, SubPath,
+};
 
 /// A canvas of that size, with a camera at the origin.
 fn a_canvas(width: usize, height: usize) -> Raster {
@@ -42,7 +44,7 @@ fn pixel(image: &Image, x: usize, y: usize) -> Option<[u8; 4]> {
 #[test]
 fn a_filled_rectangle_covers_the_pixels_it_should() {
     let mut canvas = a_canvas(100, 100);
-    canvas.rect(a_rect(10.0, 10.0), Colour::BLACK);
+    canvas.rect(a_rect(10.0, 10.0), Fill::Solid(Colour::BLACK));
     let image = canvas.image();
     // The world's origin is the picture's middle, and the rectangle
     // reaches up and to the right from it.
@@ -57,7 +59,7 @@ fn a_filled_rectangle_covers_the_pixels_it_should() {
 #[test]
 fn the_worlds_up_is_the_pictures_down() {
     let mut canvas = a_canvas(100, 100);
-    canvas.rect(Rect { x: 0.0, y: 10.0, w: 10.0, h: 10.0 }, Colour::BLACK);
+    canvas.rect(Rect { x: 0.0, y: 10.0, w: 10.0, h: 10.0 }, Fill::Solid(Colour::BLACK));
     let image = canvas.image();
     assert_eq!(pixel(image, 55, 35), Some([0, 0, 0, 255]), "the rectangle is above the middle");
     assert_eq!(pixel(image, 55, 45), Some([255, 255, 255, 255]), "the rectangle is not below it");
@@ -71,13 +73,13 @@ fn the_worlds_up_is_the_pictures_down() {
 fn the_cameras_zoom_magnifies() {
     let camera = Camera::new();
     let mut canvas = Raster::new(200, 200, camera).expect("that canvas fits");
-    canvas.rect(a_rect(10.0, 10.0), Colour::BLACK);
+    canvas.rect(a_rect(10.0, 10.0), Fill::Solid(Colour::BLACK));
     let small = count_painted(canvas.image());
 
     let mut camera = Camera::new();
     camera.set_zoom(2.0);
     let mut canvas = Raster::new(200, 200, camera).expect("that canvas fits");
-    canvas.rect(a_rect(10.0, 10.0), Colour::BLACK);
+    canvas.rect(a_rect(10.0, 10.0), Fill::Solid(Colour::BLACK));
     let large = count_painted(canvas.image());
 
     assert!(large > small * 3, "the zoom did not magnify: {small} and {large}");
@@ -87,7 +89,7 @@ fn the_cameras_zoom_magnifies() {
 #[test]
 fn a_path_is_filled() {
     let mut canvas = a_canvas(100, 100);
-    canvas.path(&a_square(20.0), Colour::BLACK, None);
+    canvas.path(&a_square(20.0), Fill::Solid(Colour::BLACK), None);
     let image = canvas.image();
     assert_eq!(pixel(image, 55, 45), Some([0, 0, 0, 255]), "the middle is inside");
     assert_eq!(pixel(image, 55, 20), Some([255, 255, 255, 255]), "the outside is outside");
@@ -113,7 +115,7 @@ fn the_fill_rule_is_the_paths() {
         rule: FillRule::NonZero,
     };
     let mut canvas = a_canvas(100, 100);
-    canvas.path(&outer, Colour::BLACK, None);
+    canvas.path(&outer, Fill::Solid(Colour::BLACK), None);
     assert_eq!(pixel(canvas.image(), 90, 10), Some([0, 0, 0, 255]), "the square is filled");
 }
 
@@ -122,7 +124,7 @@ fn the_fill_rule_is_the_paths() {
 fn a_stroke_is_drawn_on_the_outline() {
     let mut canvas = a_canvas(100, 100);
     let stroke = Stroke { colour: Colour::BLACK, width: 2.0, ..Default::default() };
-    canvas.path(&a_square(20.0), Colour::NONE, Some(stroke));
+    canvas.path(&a_square(20.0), Fill::Solid(Colour::NONE), Some(stroke));
     let image = canvas.image();
     assert_eq!(pixel(image, 50, 40), Some([0, 0, 0, 255]), "the outline is painted");
     assert_eq!(pixel(image, 55, 45), Some([255, 255, 255, 255]), "the inside is not painted");
@@ -148,13 +150,13 @@ fn the_corners_of_a_line_meet() {
     let mut miter = a_canvas(100, 100);
     miter.path(
         &corner,
-        Colour::NONE,
+        Fill::Solid(Colour::NONE),
         Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Butt }),
     );
     let mut bevel = a_canvas(100, 100);
     bevel.path(
         &corner,
-        Colour::NONE,
+        Fill::Solid(Colour::NONE),
         Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Bevel, cap: Cap::Butt }),
     );
     // The corner is the point where the two lines meet, and the joint
@@ -180,19 +182,19 @@ fn the_ends_of_a_line_are_finished() {
     let mut butt = a_canvas(100, 100);
     butt.path(
         &line,
-        Colour::NONE,
+        Fill::Solid(Colour::NONE),
         Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Butt }),
     );
     let mut round = a_canvas(100, 100);
     round.path(
         &line,
-        Colour::NONE,
+        Fill::Solid(Colour::NONE),
         Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Round }),
     );
     let mut square = a_canvas(100, 100);
     square.path(
         &line,
-        Colour::NONE,
+        Fill::Solid(Colour::NONE),
         Some(Stroke { colour: Colour::BLACK, width: 4.0, join: Join::Miter, cap: Cap::Square }),
     );
     assert_eq!(pixel(butt.image(), 61, 50), Some([255, 255, 255, 255]), "the flush end stops");
@@ -250,7 +252,7 @@ fn a_picture_that_is_too_big_is_refused() {
 #[test]
 fn the_png_is_a_png() {
     let mut canvas = a_canvas(4, 3);
-    canvas.rect(a_rect(2.0, 2.0), Colour::BLACK);
+    canvas.rect(a_rect(2.0, 2.0), Fill::Solid(Colour::BLACK));
     let png = canvas.image().to_png();
 
     assert_eq!(&png[..8], &[137, 80, 78, 71, 13, 10, 26, 10], "the signature");
@@ -444,7 +446,7 @@ fn a_picture_is_drawn_pixel_for_pixel() {
 #[test]
 fn a_picture_with_an_alpha_is_blended() {
     let mut canvas = a_canvas(100, 100);
-    canvas.rect(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, Colour::BLACK);
+    canvas.rect(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, Fill::Solid(Colour::BLACK));
     let picture = craftkit_sdk::picture::Picture::from_samples(1, 1, 4, vec![255, 255, 255, 128]);
     canvas.picture(Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }, &picture);
     let image = canvas.image();

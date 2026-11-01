@@ -53,8 +53,8 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
-    Appearance, Canvas, Colour, Document, EngineError, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
-    Point, Relation, Session, Stroke, Text,
+    Appearance, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path, Plan,
+    PlanItem, Point, Relation, Session, Stroke, Text,
 };
 
 /// The CAD layer.
@@ -204,7 +204,7 @@ fn colour_of(document: &Document, node: &Node) -> Colour {
     // The rule is the **kit's**: a node with no appearance of its own
     // takes the appearance of the layer it is on (§103), and the
     // membership is the kit's edge.
-    document.appearance_of(node).map(|appearance| appearance.fill).unwrap_or(Colour::BLACK)
+    document.appearance_of(node).map(|appearance| appearance.fill.colour()).unwrap_or(Colour::BLACK)
 }
 
 /// Draw an entity's **geometry**.
@@ -315,7 +315,11 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 return;
             };
             let path = Path::polygon(&[from, to]);
-            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0, ..Default::default() }));
+            canvas.path(
+                &path,
+                Fill::Solid(Colour::NONE),
+                Some(Stroke { colour, width: 1.0, ..Default::default() }),
+            );
         }
         "cad.entity.circle" => {
             let Some(center) = point_in(geometry, "center") else { return };
@@ -332,7 +336,11 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 points.push(Point::new(center.x + radius * angle.cos(), center.y + radius * angle.sin()));
             }
             let path = Path::polygon(&points);
-            canvas.path(&path, Colour::NONE, Some(Stroke { colour, width: 1.0, ..Default::default() }));
+            canvas.path(
+                &path,
+                Fill::Solid(Colour::NONE),
+                Some(Stroke { colour, width: 1.0, ..Default::default() }),
+            );
         }
         "cad.entity.text" => {
             let Some(at) = point_in(geometry, "at") else { return };
@@ -556,14 +564,17 @@ impl AddLayer {
             });
         }
         let color = self.color.as_ref().map(|color| color.0.clone());
-        let appearance = match &self.fill {
-            Some(fill) => Some(Appearance {
-                fill: Colour::from_hex(&fill.0)
-                    .map_err(|message| EngineError::Failed { id: "cad.layer.add".to_string(), message })?,
-                stroke: None,
-            }),
-            None => None,
-        };
+        let appearance =
+            match &self.fill {
+                Some(fill) => Some(Appearance {
+                    fill: Fill::Solid(Colour::from_hex(&fill.0).map_err(|message| EngineError::Failed {
+                        id: "cad.layer.add".to_string(),
+                        message,
+                    })?),
+                    stroke: None,
+                }),
+                None => None,
+            };
         let id = session.document_mut()?.add_node_with_under(
             Some(drawing),
             name.clone(),

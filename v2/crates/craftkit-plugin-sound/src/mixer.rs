@@ -56,7 +56,7 @@ impl BusKind {
         ]);
         canvas.path(
             &line,
-            craftkit_sdk::document::Colour::NONE,
+            craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -111,12 +111,12 @@ impl InsertKind {
     fn paint(node: &Node, document: &Document, canvas: &mut dyn Canvas) {
         let Some(rect) = timeline::insert_rect(document, node) else { return };
         let fill = if node.muted {
-            craftkit_sdk::document::Colour::NONE
+            craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE)
         } else {
             document
                 .appearance_of(node)
                 .map(|appearance| appearance.fill)
-                .unwrap_or(craftkit_sdk::document::Colour::BLACK)
+                .unwrap_or(craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::BLACK))
         };
         canvas.rect(rect, fill);
     }
@@ -164,7 +164,7 @@ impl SendKind {
         ]);
         canvas.path(
             &line,
-            craftkit_sdk::document::Colour::NONE,
+            craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -232,7 +232,7 @@ impl LaneKind {
         });
         canvas.path(
             &path,
-            craftkit_sdk::document::Colour::NONE,
+            craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,

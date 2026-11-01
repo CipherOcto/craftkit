@@ -3,7 +3,8 @@
 use craftkit_font::{Font, Metrics};
 use craftkit_sdk::camera::Camera;
 use craftkit_sdk::document::{
-    Canvas, Cap, Colour, FillRule, Join, Path, Point, Rect, Segment, Stroke, SubPath,
+    Canvas, Cap, Colour, Fill, FillRule, Gradient, GradientGeometry, Join, Path, Point, Rect, Segment,
+    Stroke, SubPath,
 };
 
 use crate::image::Image;
@@ -168,8 +169,8 @@ impl Raster {
     }
 
     /// Fill a shape that has already been turned into a polygon.
-    fn fill_polygon(&mut self, points: &[(f64, f64)], colour: Colour, rule: FillRule) {
-        if points.len() < 3 || colour.0[3] <= 0.0 {
+    fn fill_polygon(&mut self, points: &[(f64, f64)], fill: &Fill, rule: FillRule) {
+        if points.len() < 3 || fill.is_none() {
             return;
         }
         let mut lowest = f64::INFINITY;
@@ -213,29 +214,75 @@ impl Raster {
                     start = x;
                 }
                 if was_inside && !is_inside {
-                    self.fill_span(row, start, x, colour);
+                    self.fill_span(row, start, x, fill);
                 }
             }
         }
     }
 
     /// Fill a run of a row, from one edge to another.
-    fn fill_span(&mut self, row: usize, from: f64, to: f64, colour: Colour) {
+    ///
+    /// A **colour** is the same in every pixel of the span, and a
+    /// **gradient** is not: every pixel is asked where it is along the
+    /// gradient, and the answer is its colour.
+    fn fill_span(&mut self, row: usize, from: f64, to: f64, fill: &Fill) {
         if to <= from {
             return;
         }
         let first = (from.floor().max(0.0)) as usize;
         let last = (to.ceil().min(self.image.width() as f64)) as usize;
-        for column in first..last {
-            self.image.blend(column, row, colour);
+        match fill {
+            Fill::Solid(colour) => {
+                for column in first..last {
+                    self.image.blend(column, row, *colour);
+                }
+            }
+            Fill::Gradient(gradient) => {
+                for column in first..last {
+                    let colour = gradient.colour_at_parameter(self.parameter_of(gradient, column, row));
+                    self.image.blend(column, row, colour);
+                }
+            }
+        }
+    }
+
+    /// Where a pixel is **along** a gradient.
+    ///
+    /// The gradient is in the world's units and the pixel is in the
+    /// picture's, so the gradient's own geometry is put into pixels
+    /// once and the answer is worked out there.
+    fn parameter_of(&self, gradient: &Gradient, column: usize, row: usize) -> f64 {
+        let pixel = (column as f64 + 0.5, row as f64 + 0.5);
+        match gradient.geometry {
+            GradientGeometry::Linear { from, to } => {
+                let start = self.to_pixels(from);
+                let end = self.to_pixels(to);
+                let dx = end.0 - start.0;
+                let dy = end.1 - start.1;
+                let length = dx * dx + dy * dy;
+                if length <= 0.0 {
+                    return 0.0;
+                }
+                (((pixel.0 - start.0) * dx + (pixel.1 - start.1) * dy) / length).clamp(0.0, 1.0)
+            }
+            GradientGeometry::Radial { centre, radius } => {
+                let middle = self.to_pixels(centre);
+                let reach = radius * self.camera.zoom();
+                if reach <= 0.0 {
+                    return 0.0;
+                }
+                let dx = pixel.0 - middle.0;
+                let dy = pixel.1 - middle.1;
+                ((dx * dx + dy * dy).sqrt() / reach).clamp(0.0, 1.0)
+            }
         }
     }
 }
 
 impl Canvas for Raster {
     /// Draw a rectangle.
-    fn rect(&mut self, rect: Rect, fill: Colour) {
-        if fill.0[3] <= 0.0 {
+    fn rect(&mut self, rect: Rect, fill: Fill) {
+        if fill.is_none() {
             return;
         }
         let (x0, y0) = self.to_pixels(Point::new(rect.x, rect.y + rect.h));
@@ -250,18 +297,24 @@ impl Canvas for Raster {
         let bottom_row = (bottom.ceil().min(self.image.height() as f64)) as usize;
         for row in top_row..bottom_row {
             for column in first..last {
-                self.image.blend(column, row, fill);
+                let colour = match &fill {
+                    Fill::Solid(colour) => *colour,
+                    Fill::Gradient(gradient) => {
+                        gradient.colour_at_parameter(self.parameter_of(gradient, column, row))
+                    }
+                };
+                self.image.blend(column, row, colour);
             }
         }
     }
 
     /// Draw a path: filled, and stroked on its outline.
-    fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {
+    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>) {
         let contours: Vec<Vec<(f64, f64)>> =
             path.subpaths.iter().map(|subpath| self.flatten(subpath)).collect();
-        if fill.0[3] > 0.0 {
+        if !fill.is_none() {
             for contour in &contours {
-                self.fill_polygon(contour, fill, path.rule);
+                self.fill_polygon(contour, &fill, path.rule);
             }
         }
         let Some(stroke) = stroke else { return };
@@ -351,7 +404,7 @@ impl Canvas for Raster {
                 Canvas::path(
                     self,
                     &path,
-                    Colour::NONE,
+                    Fill::Solid(Colour::NONE),
                     Some(Stroke { colour, width: PEN, ..Default::default() }),
                 );
             }
@@ -462,7 +515,7 @@ impl Raster {
             (end.0 - nx, end.1 - ny),
             (start.0 - nx, start.1 - ny),
         ];
-        self.fill_polygon(&quad, colour, FillRule::NonZero);
+        self.fill_polygon(&quad, &Fill::Solid(colour), FillRule::NonZero);
     }
 
     /// Draw the **corner** where two segments meet.
@@ -493,7 +546,7 @@ impl Raster {
         let p1 = (corner.0 + o1.0 * half, corner.1 + o1.1 * half);
         match join {
             Join::Bevel => {
-                self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+                self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
             }
             Join::Round => {
                 // The **arc** on the outside of the turn, from one edge
@@ -506,21 +559,21 @@ impl Raster {
                     let angle = start + shortest(start, finish) * step as f64 / ARC_STEPS as f64;
                     sector.push((corner.0 + angle.cos() * half, corner.1 + angle.sin() * half));
                 }
-                self.fill_polygon(&sector, colour, FillRule::NonZero);
+                self.fill_polygon(&sector, &Fill::Solid(colour), FillRule::NonZero);
             }
             Join::Miter => {
                 // The two edges are carried on until they meet, and the
                 // meeting point is the **miter**. A miter that is too
                 // long is a bevel: the limit is four widths.
                 let Some(miter) = meet(p0, u0x, u0y, p1, u1x, u1y) else {
-                    self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+                    self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
                     return;
                 };
                 let length = ((miter.0 - corner.0).powi(2) + (miter.1 - corner.1).powi(2)).sqrt();
                 if length > MITER_LIMIT * half {
-                    self.fill_polygon(&[p0, p1, corner], colour, FillRule::NonZero);
+                    self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
                 } else {
-                    self.fill_polygon(&[p0, miter, p1], colour, FillRule::NonZero);
+                    self.fill_polygon(&[p0, miter, p1], &Fill::Solid(colour), FillRule::NonZero);
                 }
             }
         }
@@ -551,7 +604,7 @@ impl Raster {
             let angle = start + (finish - start) * step * index as f64 / ARC_STEPS as f64;
             cap.push((end.0 + angle.cos() * half, end.1 + angle.sin() * half));
         }
-        self.fill_polygon(&cap, colour, FillRule::NonZero);
+        self.fill_polygon(&cap, &Fill::Solid(colour), FillRule::NonZero);
     }
 }
 

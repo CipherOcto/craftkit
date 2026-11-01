@@ -127,10 +127,14 @@ impl ParagraphKind {
         let Some(drawn) = draw::draw(node, document) else { return };
         let colour = document
             .appearance_of(node)
-            .map(|appearance| appearance.fill)
+            .map(|appearance| appearance.fill.colour())
             .unwrap_or(craftkit_sdk::document::Colour::BLACK);
         for path in &drawn.paths {
-            canvas.path(path, craftkit_sdk::document::Colour::NONE, Some(draw::stroke(colour)));
+            canvas.path(
+                path,
+                craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+                Some(draw::stroke(colour)),
+            );
         }
     }
 
@@ -261,14 +265,18 @@ impl CaretKind {
         // The caret is in the text, so it is in the text's colour.
         let colour = document
             .appearance_of(paragraph)
-            .map(|appearance| appearance.fill)
+            .map(|appearance| appearance.fill.colour())
             .unwrap_or(craftkit_sdk::document::Colour::BLACK);
         let path = Path::single(SubPath {
             start: Point::new(caret.x, caret.top),
             segments: vec![Segment::Line { to: Point::new(caret.x, caret.bottom) }],
             closed: false,
         });
-        canvas.path(&path, craftkit_sdk::document::Colour::NONE, Some(draw::stroke(colour)));
+        canvas.path(
+            &path,
+            craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            Some(draw::stroke(colour)),
+        );
     }
 
     /// Not hit: a caret is a line and not a thing a pointer is on.

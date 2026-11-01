@@ -22,7 +22,7 @@
 
 use craftkit_derive::{Command, NodeKind};
 
-use crate::document::{Canvas, Colour, Document, Node, Point, Stroke};
+use crate::document::{Canvas, Colour, Document, Fill, Node, Point, Stroke};
 use crate::format::FormatValue;
 use crate::serde_json::{Value as Json, json};
 use crate::{Appearance, EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -46,7 +46,7 @@ impl AppearanceKind {
 
     /// What an appearance **means**: the colours it carries.
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
-        let appearance = node.appearance?;
+        let appearance = node.appearance.clone()?;
         Some(json!({
             "fill": appearance.fill.to_json(),
             "stroke": appearance.stroke.map(|stroke| stroke.to_json()),
@@ -122,7 +122,7 @@ impl SetAppearance {
                 message: format!("there is no node `{id}`"),
             });
         };
-        let current = node.appearance;
+        let current = node.appearance.clone();
         let appearance = appearance_of(
             self.fill.as_ref(),
             self.stroke.as_ref(),
@@ -130,11 +130,12 @@ impl SetAppearance {
             current,
             "core.appearance.set",
         )?;
+        let shown = appearance.to_json();
         if let Some(node) = session.document_mut()?.node_mut(id) {
             node.appearance = Some(appearance);
         }
         Ok(Outcome::changed(format!("changed the appearance `{id}`"))
-            .with_data(json!({ "id": id, "appearance": appearance.to_json() })))
+            .with_data(json!({ "id": id, "appearance": shown })))
     }
 }
 
@@ -150,9 +151,14 @@ fn appearance_of(
     current: Option<Appearance>,
     id: &str,
 ) -> Result<Appearance, EngineError> {
+    // The **current** appearance: the fill is taken out of it, and the
+    // stroke is copied, because the fill is not a copy any more — a
+    // gradient is a list of stops.
+    let current_stroke = current.as_ref().and_then(|appearance| appearance.stroke);
+    let current_fill = current.map(|appearance| appearance.fill);
     let fill = match fill {
-        Some(fill) => colour_of(fill, id)?,
-        None => current.map(|appearance| appearance.fill).unwrap_or(Colour::BLACK),
+        Some(fill) => Fill::Solid(colour_of(fill, id)?),
+        None => current_fill.unwrap_or(Fill::Solid(Colour::BLACK)),
     };
     let stroke = match stroke {
         Some(stroke) => Some(Stroke {
@@ -160,7 +166,7 @@ fn appearance_of(
             width: stroke_width.map(|width| width.0).unwrap_or(1.0),
             ..Default::default()
         }),
-        None => current.and_then(|appearance| appearance.stroke),
+        None => current_stroke,
     };
     Ok(Appearance { fill, stroke })
 }

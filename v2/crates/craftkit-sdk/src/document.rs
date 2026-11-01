@@ -128,6 +128,181 @@ impl Colour {
     }
 }
 
+/// What a thing is **filled with**.
+///
+/// A fill is one **colour** or a **gradient** — the colours of a
+/// gradient are in the gradient, and the fill says which of the two it
+/// is. The appearance holds one and the canvas is given one, so there
+/// is one way to fill a thing and not two.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Fill {
+    /// One colour, everywhere.
+    Solid(Colour),
+    /// Colours that **change**: along a line, or out from a centre.
+    Gradient(Gradient),
+}
+
+impl Fill {
+    /// The **colour** of a fill.
+    ///
+    /// A gradient has no one colour, and this says which one it has: the
+    /// colour in its middle. It is what a caller that wants a colour —
+    /// a swatch in a panel, a line on a ruler — uses.
+    pub fn colour(&self) -> Colour {
+        match self {
+            Fill::Solid(colour) => *colour,
+            Fill::Gradient(gradient) => gradient.colour_at_parameter(0.5),
+        }
+    }
+
+    /// Whether the fill is **nothing**: no colour at all.
+    pub fn is_none(&self) -> bool {
+        match self {
+            Fill::Solid(colour) => colour.0[3] <= 0.0,
+            Fill::Gradient(gradient) => gradient.stops.iter().all(|stop| stop.colour.0[3] <= 0.0),
+        }
+    }
+}
+
+/// A **gradient**: the colours of a fill that changes.
+///
+/// The gradient is the **kit's own**, and not a plugin's: a path may be
+/// filled with one, a rectangle may be filled with one, and the kit
+/// says what a gradient is, so that two kinds can be given the same one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Gradient {
+    /// How the colours are put down.
+    pub kind: GradientKind,
+    /// The stops: the colours, and where they are.
+    pub stops: Vec<GradientStop>,
+    /// Where the gradient is put.
+    pub geometry: GradientGeometry,
+}
+
+/// How a gradient's colours are **put down**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GradientKind {
+    /// Along a line, from one point to another.
+    Linear,
+    /// Out from a centre, to a radius.
+    Radial,
+}
+
+/// One **stop**: a colour at a place along the gradient.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    /// Where it is along the gradient: zero is the start and one the end.
+    pub offset: f64,
+    /// The colour there.
+    pub colour: Colour,
+    /// How solid it is there: zero is nothing and one is solid.
+    pub opacity: f64,
+}
+
+impl GradientStop {
+    /// The colour of the stop, with its **opacity**.
+    pub fn colour_at(&self) -> Colour {
+        let mut colour = self.colour;
+        colour.0[3] *= self.opacity as f32;
+        colour
+    }
+}
+
+/// Where a gradient is **put**.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GradientGeometry {
+    /// From one point to another.
+    Linear {
+        /// Where it starts.
+        from: Point,
+        /// Where it ends.
+        to: Point,
+    },
+    /// From a centre, out to a radius.
+    Radial {
+        /// Where it is centred.
+        centre: Point,
+        /// How far out it reaches.
+        radius: f64,
+    },
+}
+
+impl Gradient {
+    /// The **colour** at a place along the gradient: zero is the start
+    /// and one is the end.
+    ///
+    /// The stops are mixed in the order they come, and a place before
+    /// the first stop is the first stop's colour and a place after the
+    /// last is the last one's.
+    pub fn colour_at_parameter(&self, t: f64) -> Colour {
+        let mut stops: Vec<&GradientStop> = self.stops.iter().collect();
+        stops.sort_by(|left, right| {
+            left.offset.partial_cmp(&right.offset).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let Some(first) = stops.first() else { return Colour::NONE };
+        if t <= first.offset {
+            return first.colour_at();
+        }
+        let last = stops.last().copied().unwrap_or(first);
+        if t >= last.offset {
+            return last.colour_at();
+        }
+        for pair in stops.windows(2) {
+            let (before, after) = (pair[0], pair[1]);
+            if t < before.offset || t > after.offset {
+                continue;
+            }
+            let span = after.offset - before.offset;
+            let u = if span <= 0.0 { 0.0 } else { (t - before.offset) / span };
+            return mix(before, after, u);
+        }
+        first.colour_at()
+    }
+
+    /// Where a point of the world is **along** the gradient.
+    ///
+    /// The geometry is in the world's units, and the answer is a number
+    /// between zero and one.
+    pub fn parameter_at(&self, at: Point) -> f64 {
+        match self.geometry {
+            GradientGeometry::Linear { from, to } => {
+                let dx = to.x - from.x;
+                let dy = to.y - from.y;
+                let length = dx * dx + dy * dy;
+                if length <= 0.0 {
+                    return 0.0;
+                }
+                (((at.x - from.x) * dx + (at.y - from.y) * dy) / length).clamp(0.0, 1.0)
+            }
+            GradientGeometry::Radial { centre, radius } => {
+                if radius <= 0.0 {
+                    return 0.0;
+                }
+                let dx = at.x - centre.x;
+                let dy = at.y - centre.y;
+                ((dx * dx + dy * dy).sqrt() / radius).clamp(0.0, 1.0)
+            }
+        }
+    }
+
+    /// The **colour** at a point of the world.
+    pub fn colour_at(&self, at: Point) -> Colour {
+        self.colour_at_parameter(self.parameter_at(at))
+    }
+}
+
+/// The colour between two **stops**.
+fn mix(before: &GradientStop, after: &GradientStop, u: f64) -> Colour {
+    let lerp = |from: f32, to: f32| from + (to - from) * u as f32;
+    let alpha = |stop: &GradientStop| stop.colour.0[3] * stop.opacity as f32;
+    Colour([
+        lerp(before.colour.0[0], after.colour.0[0]),
+        lerp(before.colour.0[1], after.colour.0[1]),
+        lerp(before.colour.0[2], after.colour.0[2]),
+        lerp(alpha(before), alpha(after)),
+    ])
+}
+
 /// How a thing looks.
 ///
 /// The appearance is the **kit's own**, and not a plugin's payload: a
@@ -138,10 +313,10 @@ impl Colour {
 /// the vector battery had a fill and a stroke in its payload, and
 /// nothing else could have either. The appearance is the one place a
 /// colour lives.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Appearance {
     /// What the thing is filled with.
-    pub fill: Colour,
+    pub fill: Fill,
     /// The line on its outline, if it has one.
     pub stroke: Option<Stroke>,
 }
@@ -149,6 +324,11 @@ pub struct Appearance {
 impl Appearance {
     /// An appearance that is filled with a colour and has no outline.
     pub fn filled(fill: Colour) -> Appearance {
+        Appearance { fill: Fill::Solid(fill), stroke: None }
+    }
+
+    /// An appearance that is filled with a **paint** and has no outline.
+    pub fn painted(fill: Fill) -> Appearance {
         Appearance { fill, stroke: None }
     }
 }
@@ -364,7 +544,7 @@ impl Default for Stroke {
 /// stands, and it is written down rather than pretended away.
 pub trait Canvas {
     /// Draw a rectangle.
-    fn rect(&mut self, rect: Rect, fill: Colour);
+    fn rect(&mut self, rect: Rect, fill: Fill);
     /// Draw a line of text.
     ///
     /// The text takes a **colour**, like everything else that is
@@ -378,7 +558,7 @@ pub trait Canvas {
     /// would be a canvas that could not draw a text of another size.
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64);
     /// Draw a path: filled, and stroked on its outline.
-    fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>);
+    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>);
     /// Draw a **picture**: its pixels, in a rectangle.
     ///
     /// The picture is drawn at the rectangle it is given, and it is
@@ -400,7 +580,7 @@ pub struct RecordingCanvas {
 }
 
 impl Canvas for RecordingCanvas {
-    fn rect(&mut self, rect: Rect, fill: Colour) {
+    fn rect(&mut self, rect: Rect, fill: Fill) {
         self.drawn.push(format!("rect({}, {}, {}, {})", rect.x, rect.y, rect.w, rect.h));
         let _ = fill;
     }
@@ -414,13 +594,13 @@ impl Canvas for RecordingCanvas {
         self.drawn.push(format!("picture({}, {}, {} pixel(s))", at.x, at.y, picture.pixels_count()));
     }
 
-    fn path(&mut self, path: &Path, fill: Colour, stroke: Option<Stroke>) {
+    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>) {
         let segments: usize = path.subpaths.iter().map(|subpath| subpath.segments.len()).sum();
         let mut drawn = format!("path({segments} segment(s), {} contour(s)", path.subpaths.len());
         if path.rule == FillRule::EvenOdd {
             drawn.push_str(", even-odd");
         }
-        if fill != Colour::NONE {
+        if !fill.is_none() {
             drawn.push_str(", filled");
         }
         if stroke.is_some() {
@@ -456,6 +636,107 @@ impl FormatValue for Colour {
                 .ok_or_else(|| format!("a colour has no `{name}`"))
         };
         Ok(Colour([number("r")? as f32, number("g")? as f32, number("b")? as f32, number("a")? as f32]))
+    }
+}
+
+impl FormatValue for Fill {
+    fn to_json(&self) -> serde_json::Value {
+        match self {
+            // A **colour** is written as a colour, so that a file
+            // written before the gradient is still a file.
+            Fill::Solid(colour) => colour.to_json(),
+            Fill::Gradient(gradient) => serde_json::json!({ "gradient": gradient.to_json() }),
+        }
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        match value.get("gradient") {
+            Some(gradient) => Ok(Fill::Gradient(Gradient::from_json(gradient)?)),
+            None => Ok(Fill::Solid(Colour::from_json(value)?)),
+        }
+    }
+}
+
+impl FormatValue for Gradient {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "kind": match self.kind {
+                GradientKind::Linear => "linear",
+                GradientKind::Radial => "radial",
+            },
+            "stops": self.stops.iter().map(|stop| stop.to_json()).collect::<Vec<_>>(),
+            "geometry": self.geometry.to_json(),
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let kind = match value.get("kind").and_then(|kind| kind.as_str()) {
+            Some("linear") | None => GradientKind::Linear,
+            Some("radial") => GradientKind::Radial,
+            Some(other) => return Err(format!("there is no gradient kind called `{other}`")),
+        };
+        let mut stops: Vec<GradientStop> = Vec::new();
+        for stop in value.get("stops").and_then(|stops| stops.as_array()).unwrap_or(&Vec::new()) {
+            stops.push(GradientStop::from_json(stop)?);
+        }
+        let geometry = match value.get("geometry") {
+            Some(geometry) => GradientGeometry::from_json(geometry)?,
+            None => return Err("a gradient has no geometry".to_string()),
+        };
+        Ok(Gradient { kind, stops, geometry })
+    }
+}
+
+impl FormatValue for GradientStop {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "offset": self.offset,
+            "colour": self.colour.to_json(),
+            "opacity": self.opacity,
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        let offset = value.get("offset").and_then(|offset| offset.as_f64()).unwrap_or(0.0);
+        let opacity = value.get("opacity").and_then(|opacity| opacity.as_f64()).unwrap_or(1.0);
+        if !offset.is_finite() || !opacity.is_finite() {
+            return Err("a stop's offset and opacity are numbers".to_string());
+        }
+        let colour = match value.get("colour") {
+            Some(colour) => Colour::from_json(colour)?,
+            None => return Err("a stop has no colour".to_string()),
+        };
+        Ok(GradientStop { offset, colour, opacity })
+    }
+}
+
+impl FormatValue for GradientGeometry {
+    fn to_json(&self) -> serde_json::Value {
+        match self {
+            GradientGeometry::Linear { from, to } => {
+                serde_json::json!({ "linear": { "from": from.to_json(), "to": to.to_json() } })
+            }
+            GradientGeometry::Radial { centre, radius } => {
+                serde_json::json!({ "radial": { "centre": centre.to_json(), "radius": radius } })
+            }
+        }
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, String> {
+        if let Some(linear) = value.get("linear") {
+            let from = linear.get("from").ok_or_else(|| "a gradient has no start".to_string())?;
+            let to = linear.get("to").ok_or_else(|| "a gradient has no end".to_string())?;
+            return Ok(GradientGeometry::Linear { from: Point::from_json(from)?, to: Point::from_json(to)? });
+        }
+        if let Some(radial) = value.get("radial") {
+            let centre = radial.get("centre").ok_or_else(|| "a gradient has no centre".to_string())?;
+            let radius = radial.get("radius").and_then(|radius| radius.as_f64()).unwrap_or(0.0);
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err("a gradient's radius is a number greater than zero".to_string());
+            }
+            return Ok(GradientGeometry::Radial { centre: Point::from_json(centre)?, radius });
+        }
+        Err("a gradient is linear or radial".to_string())
     }
 }
 
@@ -512,8 +793,8 @@ impl FormatValue for Appearance {
 
     fn from_json(value: &serde_json::Value) -> Result<Self, String> {
         let fill = match value.get("fill") {
-            Some(fill) if !fill.is_null() => Colour::from_json(fill)?,
-            _ => Colour::NONE,
+            Some(fill) if !fill.is_null() => Fill::from_json(fill)?,
+            _ => Fill::Solid(Colour::NONE),
         };
         let stroke = match value.get("stroke") {
             Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
@@ -666,7 +947,7 @@ impl FormatValue for Node {
             "muted": self.muted,
             "hidden": self.hidden,
             "locked": self.locked,
-            "appearance": self.appearance.map(|appearance| appearance.to_json()),
+            "appearance": self.appearance.as_ref().map(|appearance| appearance.to_json()),
             "appearance_from": self.appearance_from,
             "data": self.data,
             "children": self.children.iter().map(|child| child.to_json()).collect::<Vec<_>>(),
@@ -1563,10 +1844,10 @@ impl Document {
     /// appearance existed) keeps it.
     pub fn appearance_of(&self, node: &Node) -> Option<Appearance> {
         if node.appearance.is_some() {
-            return node.appearance;
+            return node.appearance.clone();
         }
         if let Some(from) = node.appearance_from
-            && let Some(appearance) = self.node(from).and_then(|node| node.appearance)
+            && let Some(appearance) = self.node(from).and_then(|node| node.appearance.clone())
         {
             return Some(appearance);
         }
@@ -1574,7 +1855,7 @@ impl Document {
         // a layer that has one, is drawn as the layer says. The layer
         // is followed **once**: a layer on a layer is not a chain to
         // walk.
-        self.layer_of(node).and_then(|layer| layer.appearance)
+        self.layer_of(node).and_then(|layer| layer.appearance.clone())
     }
 
     /// The **layer** a node is on, if it is on one.
