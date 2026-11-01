@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1414 tests.** The MCP server links **all fifteen batteries** in, so the
+**1434 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1414 tests
+cargo test          # 1434 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3640,6 +3640,7 @@ so.
 | the **name** of a node | **built.** A node has a name and nothing could change it; one command renames any node (§203) | §203 |
 | the **copy** of a node | **built.** A node and everything under it, with the edges copied and the copies joined to the copies (§204) | §204 |
 | the **group** of tracks | **built.** A group of tracks is a link: the members are mixed together, and a group that is off links nothing (§205) | §205 |
+| the **elastic** of a track | **built.** An algorithm on the track says that its clips are stretched and the pitch stays, and the bound is the tree's own (§206) | §206 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14016,3 +14017,113 @@ group, so nothing in it was ever linked to anything.
   colour of its own, and the kit's **appearance** is how a thing looks
   — so the group's colour is the appearance the group carries, and
   there is no command of the battery's own for it.
+
+## 206. The elastic of a track
+
+The tree's sound editor has an **elastic** mode: a track whose clips
+are stretched and the pitch stays. It is the difference between a
+record played at the wrong speed and a record played slowly, and the
+second is the one a musician asks for. The tree keeps the difference
+in **two** places — an algorithm on the track (`track.elastic`) and a
+warp on the clip (`clip.elastic_properties`) — and the warp bakes the
+material into a rendered file and remembers the original in the edit
+state so that it can be put back. The v2 battery had a stretch, and
+the stretch was always a varispeed: the pitch always fell.
+
+### What was built
+
+- The **algorithm** is on the track. The command
+  `sound.track.elastic` sets it, with the names the tree uses —
+  `polyphonic`, `rhythmic`, `monophonic`, `varispeed`, `x-form` — and
+  the name `none` takes the elastic away. The algorithm is a **string**
+  and not a variant, for the same reason the track's kind is: the
+  kinds of a track are open here, and so are its algorithms.
+- A clip on an elastic track is **stretched and the pitch stays**. The
+  method is waveform-similarity overlap-add: the sound is cut into
+  frames, each frame is written over the last, and the place each
+  frame is read from is chosen so that it joins the frame before it as
+  smoothly as it can. The frames are all of the same pitch, so the
+  pitch is kept and the length is what changes.
+- The **stretch is bounded** the way the tree's is: from a tenth to
+  ten times. A stretch outside that is **refused** — by
+  `sound.clip.stretch` and by `sound.clip.add` — and it is not pulled
+  to the edge, because a caller that asked for a hundredfold stretch
+  would be handed a tenthfold one and would not know.
+- The algorithm `varispeed` says that the pitch **falls**, which is
+  what an ordinary track does anyway.
+- The **unwarp** is a stretch of one. There is no command that takes
+  it off, because there is nothing to take off: the stretch is a fact
+  and the material is derived from it.
+
+### What the port found
+
+- **The tree has two facts and this tree has one.** The tree's clip
+  has a `stretch` — the varispeed — and the warp is a second thing
+  that is rendered into a file and remembered in the edit state under
+  `elastic.<id>.src`, `off`, `len` and `ratio`, so that
+  `clip.remove_warp` can put the material back. Here a clip has **one**
+  stretch, and the track says how it is played. The tree's own
+  description of the difference says the same thing: "on Elastic Audio
+  tracks (polyphonic/rhythmic/monophonic/x-form) the stretch is
+  rendered pitch-preserving; elsewhere it is varispeed".
+- **The tree's warp makes the clip longer and this one's does not.**
+  The tree renders the material at `length × ratio`, replaces the
+  clip's content with the rendered file and sets the clip's length to
+  the result. Here the clip keeps its length on the timeline, and the
+  source is read the way the stretch says: a clip stretched twice
+  plays its source at half the speed, with the pitch kept. The length
+  on the timeline is the clip's length in both, and what is derived
+  from it is the sound.
+- **The tree's algorithms are four pieces of work and here they are
+  one.** `polyphonic`, `rhythmic`, `monophonic` and `x-form` are four
+  ways of keeping a pitch, and each of them is a different piece of
+  work. Here the name is kept — the name is the fact — and every one
+  of them is rendered with the one method this has. The battery says
+  so in its own header, because a name that is kept and a method that
+  is not are different things and a reader should not have to guess
+  which is which.
+- **The tree clamps and this tree refuses.** The tree clamps the warp
+  ratio to `0.05..20` and then refuses a computed ratio outside
+  `0.1..10` when it renders. Here the bound is `0.1..10` on the
+  stretch itself, and it is refused by the command that sets it.
+- **The tree's remove-warp has no command here.** The tree needs one
+  because its warp is a rendering: to undo it, the original source has
+  to be put back from the edit state. Here there is no rendering and
+  no edit state — a stretch of one is the undo, and it is the same
+  command that set it.
+
+### What it cost
+
+- **Twelve tests** in the sound battery (`tests/elastic.rs`): the
+  track carries its algorithm, `none` takes it away, an empty name is
+  refused, a node that is not a track is refused, an elastic clip keeps
+  its pitch, an ordinary clip drops it, `varispeed` drops it, an
+  elastic stretch that is too large is refused, one that is too small
+  is refused, an ordinary track may be stretched further, and a clip
+  added to an elastic track is refused a stretch outside the bound and
+  is given one inside it.
+- **Seven tests** in the audio crate (`tests/stretch.rs`): the pitch
+  stays, the loudness stays, a stretch of one is the sound, the
+  channels stay apart, a stretch of half is shorter and the same
+  pitch, a stretch out of range is clamped by the method, and an empty
+  sound stays empty.
+- **One command** (`sound.track.elastic`) and **two commands changed**
+  — `sound.clip.stretch` and `sound.clip.add` now ask the track what
+  it is. The audio crate gained `time_stretch`. The MCP server now
+  carries **261** commands, and the sound battery carries **50**.
+
+### What it does not settle
+
+- **Four algorithms and one method.** The names are kept and every
+  one of them plays the same way, because this tree has one
+  pitch-preserving stretch and the tree has four. A third party may
+  add a method, and the name is already there for it.
+- **There is no warped material to look at.** The tree's warp leaves a
+  rendered file in the session, and a clip can be pointed at it like
+  any other source. Here the material is derived at render time from
+  the source and the stretch, so there is nothing in the clip list to
+  find.
+- **The clip's own sound is not the tree's.** The tree's clip, once
+  warped, is a clip of the rendered file; here it is a clip of the
+  source with a stretch, and the sound of it is the source's, played
+  as the stretch says.
