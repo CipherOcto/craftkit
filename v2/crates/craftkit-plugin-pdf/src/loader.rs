@@ -73,15 +73,10 @@ pub fn load(bytes: &[u8]) -> Result<Vec<Loaded>, Error> {
         }
         let (object, _) = objects::indirect(bytes, at).map_err(from_objects)?;
         let mut entries: Vec<(String, Json)> = Vec::new();
-        if let Some(list) = object.value.as_array() {
-            for pair in list {
-                let Some(pair) = pair.as_array() else { continue };
-                let Some(key) = pair.first().and_then(|key| key.as_str()) else { continue };
-                let Some(value) = pair.get(1) else { continue };
-                // The **kit's** spelling of a key: no slash in front.
-                let key = key.strip_prefix('/').unwrap_or(key).to_string();
-                entries.push((key, value.clone()));
-            }
+        for (key, value) in objects::pairs_of(&object.value) {
+            // The **kit's** spelling of a key: no slash in front.
+            let key = key.strip_prefix('/').unwrap_or(key.as_str()).to_string();
+            entries.push((key, value));
         }
         let mut references: Vec<Reference> = Vec::new();
         for (key, value) in &entries {

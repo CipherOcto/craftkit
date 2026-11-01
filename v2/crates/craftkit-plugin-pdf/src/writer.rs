@@ -150,6 +150,12 @@ fn value_of(value: &Json) -> String {
                 let generation = pair.get(1).and_then(|number| number.as_f64()).unwrap_or(0.0);
                 return format!("{} {} R", number as u64, generation as u64);
             }
+            // A **dictionary**: the payload holds one as a list of pairs
+            // under the name `entries`, and the file holds one between
+            // two angle brackets.
+            if crate::objects::is_dictionary(value) {
+                return dictionary(&crate::objects::pairs_of(value));
+            }
             let entries: Vec<(String, Json)> =
                 map.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
             dictionary(&entries)

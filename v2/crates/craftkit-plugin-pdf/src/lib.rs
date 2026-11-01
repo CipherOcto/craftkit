@@ -57,7 +57,11 @@
 //!   keep the order of its keys, so the dictionary is a **list of pairs**:
 //!   `[["Type", "Page"], ["MediaBox", [0, 0, 595, 842]]]`. The pairs are
 //!   in the order the file had them, which is what a rewritten file has
-//!   to keep for the diff to be readable.
+//!   to keep for the diff to be readable. And because a JSON array is
+//!   one thing, a dictionary *inside* a dictionary is a list of pairs
+//!   under the name `entries` — the name the payload already uses for
+//!   the dictionary of an object, so that there is one spelling for a
+//!   dictionary and not two.
 //! - **A reference may point forward.** A relation names two nodes that
 //!   are *in the document*, so the graph is built in **two passes**: the
 //!   objects first, and the references after. That is a plugin's business,
@@ -66,6 +70,10 @@
 //! And one that is not a finding but a fact: a PDF **name** and a PDF
 //! **string** are *bytes*, and the payload is JSON. A name that is not
 //! text is base64 in the payload, and the door is the SDK's.
+//!
+//! The **price** of the spellings is the same price: a PDF dictionary
+//! with a key called `entries` whose value is a list of pairs is read
+//! as a dictionary and written as one.
 
 #![deny(
     clippy::unwrap_used,

@@ -86,9 +86,12 @@ fn the_objects_of_an_object_stream_are_read() {
     let objects = objects_of(&mut session, stream);
     assert_eq!(objects.len(), 2, "the stream holds two objects");
     assert_eq!(objects[0]["object"], json!(5), "the first is object five");
-    assert_eq!(objects[0]["value"], json!([["Type", "Page"]]), "and it says what it is");
+    // A **dictionary** is a list of pairs under the name `entries`: the
+    // payload holds one spelling for a dictionary, and a JSON array is
+    // an array.
+    assert_eq!(objects[0]["value"], json!({ "entries": [["Type", "Page"]] }), "and it says what it is");
     assert_eq!(objects[1]["object"], json!(6), "the second is object six");
-    assert_eq!(objects[1]["value"], json!([["Type", "Pages"]]), "and it says what it is");
+    assert_eq!(objects[1]["value"], json!({ "entries": [["Type", "Pages"]] }), "and it says what it is");
 }
 
 /// An object may be a **value** and not a dictionary: a number, a

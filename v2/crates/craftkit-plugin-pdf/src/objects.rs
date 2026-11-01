@@ -310,7 +310,7 @@ fn dictionary(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
     loop {
         at = skip_space(bytes, at);
         if bytes.get(at) == Some(&b'>') && bytes.get(at + 1) == Some(&b'>') {
-            return Ok((Json::Array(pairs), at + 2));
+            return Ok((dict_value(pairs), at + 2));
         }
         if at >= bytes.len() {
             return Err(Error::Malformed("a dictionary is never closed".to_string()));
@@ -320,6 +320,50 @@ fn dictionary(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
         pairs.push(Json::Array(vec![Json::String(key), value]));
         at = after;
     }
+}
+
+/// A **dictionary**, as the payload holds it.
+///
+/// The pairs are in the order the file had them, and a JSON object does
+/// not keep the order of its keys — so the dictionary is a **list of
+/// pairs**, under the name the payload uses for the dictionary of an
+/// object. One spelling for a dictionary, and not two.
+///
+/// The price is the same price §180 paid for a name and a text: a PDF
+/// dictionary with a key called `entries` whose value is a list of
+/// pairs is read as a dictionary and written as one.
+fn dict_value(pairs: Vec<Json>) -> Json {
+    let mut map = Map::new();
+    map.insert("entries".to_string(), Json::Array(pairs));
+    Json::Object(map)
+}
+
+/// Whether a value is a **dictionary**, as the payload spells it.
+///
+/// The dictionary is a list of pairs under the name `entries`, and the
+/// name is the only key it has: a map with other keys in it is a
+/// dictionary the PDF wrote with other keys, and it is written back as
+/// it is.
+pub fn is_dictionary(value: &Json) -> bool {
+    let Json::Object(map) = value else { return false };
+    if map.len() != 1 {
+        return false;
+    }
+    let Some(Json::Array(list)) = map.get("entries") else { return false };
+    list.iter().all(|pair| pair.as_array().is_some_and(|pair| pair.len() == 2 && pair[0].is_string()))
+}
+
+/// The **pairs** of a dictionary, as the payload holds them.
+pub fn pairs_of(value: &Json) -> Vec<(String, Json)> {
+    let mut pairs: Vec<(String, Json)> = Vec::new();
+    let Some(Json::Array(list)) = value.get("entries") else { return pairs };
+    for pair in list {
+        let Some(pair) = pair.as_array() else { continue };
+        let Some(key) = pair.first().and_then(|key| key.as_str()) else { continue };
+        let Some(value) = pair.get(1) else { continue };
+        pairs.push((key.to_string(), value.clone()));
+    }
+    pairs
 }
 
 /// An **indirect object**: the header, the value, and the stream.
@@ -418,16 +462,7 @@ fn find_endstream(bytes: &[u8], from: usize) -> Option<usize> {
 /// file had them.
 pub fn dictionary_of(bytes: &[u8], at: usize) -> Result<(Vec<(String, Json)>, usize), Error> {
     let (value, after) = dictionary(bytes, skip_space(bytes, at))?;
-    let mut pairs: Vec<(String, Json)> = Vec::new();
-    if let Some(list) = value.as_array() {
-        for pair in list {
-            let Some(pair) = pair.as_array() else { continue };
-            let Some(key) = pair.first().and_then(|key| key.as_str()) else { continue };
-            let Some(value) = pair.get(1) else { continue };
-            pairs.push((key.to_string(), value.clone()));
-        }
-    }
-    Ok((pairs, after))
+    Ok((pairs_of(&value), after))
 }
 
 /// An **array**: `[1 2 3]`.
