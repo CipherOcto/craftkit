@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1238 tests.** The MCP server links **all fifteen batteries** in, so the
+**1245 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1238 tests
+cargo test          # 1245 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3606,6 +3606,7 @@ so.
 | a **path that may be edited** | **built.** A point of a path may be moved and the handles of its curves set; the handles move with the point, and a handle on a straight segment makes it a curve (§169) | §169 |
 | a **path that may be painted** | **built.** The fill and the stroke of a path may be set: what is inside it and what the line on its outline is; a colour that is not a colour is refused (§170) | §170 |
 | a **path that says what is inside it** | **built.** The fill rule of a path may be set, and two paths may be excluded — the difference the other way round, which is in the library and was not in a command (§171) | §171 |
+| a **PDF stream's filter** | **built.** The five ways a stream's bytes may be encoded are undone — Flate, LZW with the early change, ASCIIHex, ASCII85 and RunLength — and the filter may be named in the command or in the dictionary (§172) | §172 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11615,3 +11616,84 @@ change, and a library that could exclude and no command that said so.
   cuts to the other shape); here the exclusion keeps the pieces that
   are in one and not the other, and there is no command that keeps
   every piece.
+
+---
+
+## 172. The PDF's filters, undone
+
+A stream in a PDF file may be **encoded**: the `/Filter` entry names the
+way, and the bytes in the file are the encoded ones. v2's PDF battery
+ported the **object model** — the dictionary, the stream, the reference
+— and left the bytes as bytes: a stream node named a file, and nothing
+in the tree said what was inside it.
+
+### What was built
+
+- The module `filters` in the PDF battery holds the **five ways** a
+  PDF stream may be encoded: **Flate** (a zlib stream), **LZW** with the
+  early change, **ASCIIHex**, **ASCII85** and **RunLength**.
+- The command `pdf.stream.decode` reads the file the stream node names,
+  undoes the filter and writes what was inside it to another file.
+- The **filter may be named in the command** or **in the dictionary**:
+  the `/Filter` entry is where a PDF file says which filter a stream is
+  in, and the command falls back on it.
+- More than one filter may be named, and they are undone in the
+  **reverse** order: the last one named is the first one undone.
+- A filter the kit does not know is **refused by name**, and a stream
+  that names no filter at all is refused too.
+- The bytes are **bounded on both sides**: what comes in and what comes
+  out, and a stream that would grow past the bound is refused before the
+  memory is spent.
+
+### What the port found
+
+- **The kit already had the inflate.** A Flate stream is a zlib stream,
+  and the PNG crate's inflate is the kit's zlib reader — so the PDF's
+  most common filter was one function call away. That is a finding about
+  the *kit*, not about the PDF: a second inflate would have been a
+  second answer to a question the tree had already answered.
+- **The filters could not be a crate of their own.** A crate may only
+  depend on a **strictly lower** layer, and the inflate lives in the
+  PNG crate, which is a **bytes-only** library at the bottom. A filter
+  crate would have to sit below the PDF battery, and it could not reach
+  the PNG crate, because that is the same layer. So the filters are a
+  **module inside the PDF battery**: the one place where the rule lets
+  them live.
+- **The early change is the whole difference in LZW.** The PDF's LZW
+  grows the code width one entry *before* the table is full, and a
+  decoder that does it the other way — the way a GIF's does — reads the
+  wrong bytes and says nothing about it. The port had to write the
+  decoder against the specification and not against the other one.
+- **A decoded stream is not the stream.** The node still names the
+  **encoded** bytes, because that is what the PDF file holds; the
+  decoded bytes are what the caller asked for, and they go to a file of
+  their own. Rewriting the node would have been a second path from a
+  command that only reads.
+- **The five are decoders and not encoders, in the tree as well.** The
+  tree reads PDF streams and does not write them, and a filter that
+  undoes a stream is worth having on its own: the encoder is a different
+  job with different questions — what the file will look like after —
+  and this tree does not answer those.
+
+### What it cost
+
+- **Seven tests** in the battery (`tests/filters.rs`): the five filters,
+  the dictionary naming the filter, and the refusals.
+- **One command** (`pdf.stream.decode`), **one module** (`filters`) and
+  **one dependency** (`craftkit-png`). The MCP server now carries
+  **213** commands.
+
+### What it does not settle
+
+- **The predictors are not here.** A predictor is a second step on top
+  of Flate or LZW — the PNG and TIFF predictors — and the `/DecodeParms`
+  entry names it. It is the next thing this battery needs, and it is
+  not this arc.
+- **There is no encoder.** A file may be read and undone, and nothing
+  may be written back.
+- **The bounds are the kit's, not the caller's.** A stream may hold 256
+  mebibytes and may decode to 64; a caller that knows the file it wants
+  cannot yet say so.
+- **The stream is read whole.** The bytes are read into memory before
+  they are undone, so a stream that is large and cheap to decode is
+  still large in the heap.
