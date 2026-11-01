@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1235 tests.** The MCP server links **all fifteen batteries** in, so the
+**1238 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1235 tests
+cargo test          # 1238 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3605,6 +3605,7 @@ so.
 | a **muted clip** | **built.** A clip may be muted: the render skips it and the clip stays in the document, so a quiet clip is a clip that may be loud again (§168) | §168 |
 | a **path that may be edited** | **built.** A point of a path may be moved and the handles of its curves set; the handles move with the point, and a handle on a straight segment makes it a curve (§169) | §169 |
 | a **path that may be painted** | **built.** The fill and the stroke of a path may be set: what is inside it and what the line on its outline is; a colour that is not a colour is refused (§170) | §170 |
+| a **path that says what is inside it** | **built.** The fill rule of a path may be set, and two paths may be excluded — the difference the other way round, which is in the library and was not in a command (§171) | §171 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11144,7 +11145,7 @@ is a strip that reads a bus, and v2 had no reader at all.
   is heard through the reader, a reader holds no clips, a reader has no
   sends, a reader is not routed, and a track reads one bus.
 - **One command** (`sound.track.input`) and **one relation kind**
-  (`input`). The MCP server now carries **210** commands.
+  (`input`). The MCP server now carries **212** commands.
 
 ### What it does not settle
 
@@ -11557,3 +11558,60 @@ there.
   draws the join the document asks for.
 - **A fill is a colour and not a paint server.** The tree's fill may
   be a gradient, and a gradient is a list of stops and a direction.
+
+## 171. A path says what is inside it, and two paths may be excluded
+
+The tree's path says **which parts of it are inside**, and it can keep
+what two paths do not share. v2's path had a rule that nothing could
+change, and a library that could exclude and no command that said so.
+
+### What was built
+
+- The command `vector.path.rule` says which parts of a path are
+  inside: the default rule, or the one that does not care which way
+  round a contour runs.
+- The command `vector.path.exclude` keeps what two paths do **not**
+  share — the difference the other way round — and the two paths
+  become one.
+- A rule that is not a rule is **refused by name**, and each rule has
+  two spellings, so that a caller may say it either way.
+
+### What the port found
+
+- **The rule was in the kit and nothing could change it.** The SDK's
+  path has carried a fill rule since it was written, the geometry
+  library honours it, and the vector battery had no command that said
+  which rule a path has. A rule that is always the same rule is not a
+  rule; it is a constant with a name.
+- **The library could exclude and no command said so.** The geometry
+  library's boolean operation has four cases — everything in either,
+  what is in both, what is in the first and not the second, and what
+  is in one or the other but not both — and the battery exposed three
+  of them. The fourth was in the library, tested there, and out of
+  reach of a person: the port had read the library and counted the
+  commands and did not put the two together.
+- **The exclusion is not the difference.** The difference of two
+  rectangles that overlap is one rectangle; the exclusion is two
+  pieces, one on each side of the overlap. A port that has only ever
+  seen the difference has seen one shape and not the rule.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/rule.rs`): a path may say
+  what is inside it, a rule that is not a rule is refused, and two
+  paths may be excluded.
+- **Two commands** (`vector.path.rule` and `vector.path.exclude`) and
+  no change to the SDK or the library: the rule and the exclusion were
+  both there.
+
+### What it does not settle
+
+- **The tree's rule is a property of the shape and not of the path.**
+  The tree's shapes are kinds — a polygon, a rectangle, an ellipse —
+  and each kind knows its own rule. Here the rule is the path's, and
+  any shape may have either.
+- **The tree's divide and trim are not here.** The tree's boolean
+  operations include *divide* (which keeps the pieces) and *trim* (which
+  cuts to the other shape); here the exclusion keeps the pieces that
+  are in one and not the other, and there is no command that keeps
+  every piece.
