@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **forty-nine commands**, one for each thing a person does to a
+//! - **fifty commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -27,7 +27,9 @@
 //!   and its **place**, rate a clip, group clips and take them out of
 //!   the group, set the **grid** and put a clip on it, set a clip's
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
-//!   **tracks** so that they are mixed together, and
+//!   **tracks** so that they are mixed together, make a track
+//!   **elastic** so that its clips are stretched and the pitch stays,
+//!   and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -77,6 +79,18 @@
 //! one command sets it on any node — so the battery has no command for
 //! it, and the clip's colour is the appearance the clip carries.
 //!
+//! **A stretched clip is stretched one way.** The tree has a clip's
+//! **speed** and a clip's **warp** as two things, and a warp bakes the
+//! material into a rendered file and makes the clip longer, and the
+//! original is kept in the edit state so that a warp can be taken off.
+//! Here a clip has **one** stretch, and how it is played is the
+//! **track's** business: an elastic track's clips are stretched and the
+//! pitch stays, and every other track's are played at another speed and
+//! the pitch falls with it. The tree's own words for the difference are
+//! the same ones this uses, and the tree's rendering of the warp — a
+//! file in the session, and a length in the edit state — has no place
+//! here: the stretch is a fact and the material is derived from it.
+//!
 //! # What this does not do
 //!
 //! - **It draws nothing.** A sound document is not a picture. v2 has no
@@ -94,6 +108,14 @@
 //!   samples as well as a division of the bar. Here a grid is a
 //!   division of the bar, because a sound document is a bar of beats and
 //!   a grid in it is a musical thing.
+//! - **Every elastic algorithm is one method.** The tree's algorithms —
+//!   `polyphonic`, `rhythmic`, `monophonic`, `x-form` — are four ways of
+//!   keeping the pitch, and each of them is a different piece of work. Here
+//!   the algorithm is **named and kept**, and every one of them is
+//!   rendered with the one method this has: waveform-similarity
+//!   overlap-add. A third party may name an algorithm, and the name is
+//!   the fact; what plays is the method, and it is the same for all of
+//!   them.
 
 #![deny(
     clippy::unwrap_used,
@@ -891,6 +913,19 @@ struct TrackPayload {
     /// of them is the one that is played. A track with no name here
     /// plays its first take.
     active_playlist: Option<String>,
+    /// The **elastic algorithm** of the track: how its clips are
+    /// stretched.
+    ///
+    /// The tree's track carries an elastic field with an algorithm in
+    /// it — `polyphonic`, `rhythmic`, `monophonic`, `varispeed`,
+    /// `x-form` — and a track with no algorithm is not an elastic
+    /// track. Here the algorithm is a **string** and not a variant, so
+    /// a third party may name one, and the names are the tree's.
+    ///
+    /// The algorithm `varispeed` says that the track's clips are played
+    /// at another speed and the **pitch falls with it** — which is
+    /// what every track does when it has no algorithm at all.
+    elastic: Option<String>,
 }
 
 impl TrackPayload {
@@ -902,6 +937,7 @@ impl TrackPayload {
             "trim_db": self.trim_db,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
+            "elastic": self.elastic,
         })
     }
 
@@ -916,6 +952,10 @@ impl TrackPayload {
                 .get("active_playlist")
                 .and_then(|playlist| playlist.as_str())
                 .map(|playlist| playlist.to_string()),
+            elastic: value
+                .get("elastic")
+                .and_then(|elastic| elastic.as_str())
+                .map(|elastic| elastic.to_string()),
         })
     }
 }
@@ -949,6 +989,37 @@ fn active_playlist(_document: &Document, track: &Node) -> Option<u64> {
 fn is_master(node: &Node) -> bool {
     TrackPayload::from_json(&node.data).map(|payload| payload.track_kind == "master").unwrap_or(false)
 }
+
+/// Whether a track's clips are **stretched with the pitch kept**.
+///
+/// The tree's track carries an elastic algorithm, and every algorithm
+/// but `varispeed` says that the clip's stretch is rendered
+/// pitch-preserving. A track with no algorithm is not an elastic track
+/// at all, and its clips are played at another speed and the pitch
+/// falls with it.
+fn is_elastic(node: &Node) -> bool {
+    TrackPayload::from_json(&node.data)
+        .ok()
+        .and_then(|payload| payload.elastic)
+        .map(|algorithm| algorithm != "varispeed")
+        .unwrap_or(false)
+}
+
+/// The elastic algorithm of a track, if it has one.
+fn elastic_algorithm(node: &Node) -> Option<String> {
+    TrackPayload::from_json(&node.data).ok().and_then(|payload| payload.elastic)
+}
+
+/// The **least** and the **greatest** stretch a pitch-preserving
+/// stretch may have.
+///
+/// The tree's own stretch refuses a ratio outside `0.1..10`: a stretch
+/// of a hundredth would ask for a frame every hundredth of a window,
+/// and the sound would be a noise. The bound is here and not in the
+/// method, because a caller that means such a stretch should be told
+/// that it cannot have one — and not be handed a different one.
+const MIN_ELASTIC_STRETCH: f64 = 0.1;
+const MAX_ELASTIC_STRETCH: f64 = 10.0;
 
 /// What a **fade** says about itself.
 ///
@@ -1353,6 +1424,7 @@ impl AddTrack {
             trim_db: 0.0,
             phase_invert: false,
             active_playlist: None,
+            elastic: None,
         };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
@@ -1482,6 +1554,82 @@ impl SetActivePlaylist {
         node.data = data;
         Ok(Outcome::changed(format!("the track `{track}` plays the take `{name}`"))
             .with_data(serde_json::json!({ "track": track, "playlist": name })))
+    }
+}
+
+/// Set a track's **elastic algorithm**.
+///
+/// An elastic track is a track whose clips are **stretched and the
+/// pitch stays**: the sound is longer and it is the same note. The
+/// tree's track carries an algorithm for it — `polyphonic`,
+/// `rhythmic`, `monophonic`, `varispeed`, `x-form` — and the
+/// algorithm `varispeed` says that the pitch falls with the speed,
+/// which is what an ordinary track does anyway.
+///
+/// The algorithm is a **string** and not a variant: the kinds of a
+/// track are open here, and so are its algorithms. The names the tree
+/// uses are the names this uses, and a third party may name one.
+///
+/// The algorithm `none` takes the elastic away, and so does an empty
+/// name: a track with no algorithm is an ordinary track, and its
+/// clips are played at another speed.
+#[derive(Command)]
+#[command(
+    id = "sound.track.elastic",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Elastic"),
+    mutates,
+    undoable
+)]
+pub struct SetTrackElastic {
+    /// The track to set.
+    pub track: NodeRef,
+    /// The algorithm: `polyphonic`, `rhythmic`, `monophonic`,
+    /// `varispeed`, `x-form`, or `none` to take the elastic away.
+    pub algorithm: Text,
+}
+
+impl SetTrackElastic {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.elastic".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.elastic".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let asked = self.algorithm.0.trim().to_string();
+        if asked.is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.track.elastic".to_string(),
+                message: "an algorithm is a name, and the name `none` takes the elastic away".to_string(),
+            });
+        }
+        let algorithm = if asked == "none" { None } else { Some(asked.clone()) };
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.elastic".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.elastic = algorithm.clone();
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.elastic".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
+        Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
+            .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
     }
 }
 
@@ -1680,10 +1828,6 @@ impl AddClip {
                 message: "a clip with no length is not a clip".to_string(),
             });
         }
-        let stretch = match self.stretch {
-            Some(stretch) => stretch_of(stretch.0, "sound.clip.add")?,
-            None => 1.0,
-        };
         // A **master** holds a fader and not a playlist: a clip on a
         // master would be a clip that is never heard.
         match session.document().node(self.track.0) {
@@ -1704,6 +1848,22 @@ impl AddClip {
                     .to_string(),
             });
         }
+        // A clip on an **elastic** track is stretched with the pitch
+        // kept, and that stretch is bounded the way the tree's is: a
+        // stretch outside the bound is refused and not pulled to the
+        // edge.
+        let stretch = match self.stretch {
+            Some(asked) => match session
+                .document()
+                .node(self.track.0)
+                .and_then(elastic_algorithm)
+                .filter(|algorithm| algorithm != "varispeed")
+            {
+                Some(algorithm) => elastic_stretch_of(asked.0, "sound.clip.add", &algorithm)?,
+                None => stretch_of(asked.0, "sound.clip.add")?,
+            },
+            None => 1.0,
+        };
         let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
         let payload = ClipPayload {
             start,
@@ -1758,6 +1918,11 @@ impl AddClip {
 /// The clip's place in the source moves with it: trimming a stretched
 /// clip moves the content by the delta **divided by the stretch**,
 /// because the source is read that much more slowly.
+///
+/// On an **elastic** track the stretch is **pitch-preserving**: the
+/// sound is longer and it is the same note, and that is a harder thing
+/// to do — so it is bounded the way the tree's is, from a tenth to ten
+/// times, and a stretch outside that is refused.
 #[derive(Command)]
 #[command(
     id = "sound.clip.stretch",
@@ -1777,7 +1942,6 @@ pub struct SetClipStretch {
 
 impl SetClipStretch {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let stretch = stretch_of(self.stretch.0, "sound.clip.stretch")?;
         let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
             id: "sound.clip.stretch".to_string(),
             message: format!("there is no node `{}`", self.clip.0),
@@ -1788,6 +1952,17 @@ impl SetClipStretch {
                 message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
             });
         }
+        // A clip on an **elastic** track is stretched with the pitch
+        // kept, and that is a harder thing to do: the stretch is
+        // bounded the way the tree's is, and a stretch outside the
+        // bound is refused.
+        let elastic = timeline::track_of(session.document(), node).and_then(elastic_algorithm);
+        let stretch = match elastic.as_deref() {
+            Some(algorithm) if algorithm != "varispeed" => {
+                elastic_stretch_of(self.stretch.0, "sound.clip.stretch", algorithm)?
+            }
+            _ => stretch_of(self.stretch.0, "sound.clip.stretch")?,
+        };
         let mut payload = ClipPayload::from_json(&node.data)
             .map_err(|error| EngineError::Failed { id: "sound.clip.stretch".to_string(), message: error })?;
         // A clip whose **content** is locked is finished: it is not
@@ -3338,12 +3513,30 @@ impl RenderSound {
                     message: format!("the source cannot be played at {rate} Hz: {error}"),
                 })?
             };
+            // Whether the clip's track is **elastic**: the track's
+            // algorithm says so, and the algorithms are open strings.
+            let elastic = session
+                .document()
+                .node(*clip_id)
+                .and_then(|clip| timeline::track_of(session.document(), clip))
+                .map(is_elastic)
+                .unwrap_or(false);
             // The **stretch**: the source is read more slowly, so the
             // sound is longer and the pitch is lower. The clip's own
             // length does not change: the stretch says how the source
             // is played.
+            //
+            // An **elastic** track is the exception: its clips are
+            // stretched and the pitch stays, because that is what an
+            // elastic track is for. The track says so by its
+            // **algorithm** — the algorithms are open strings, and
+            // every one of them but `varispeed` says so.
             let samples = if (payload.stretch - 1.0).abs() > f64::EPSILON {
-                craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
+                if elastic {
+                    craftkit_audio::time_stretch(&samples, sound.channels as usize, payload.stretch, rate)
+                } else {
+                    craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
+                }
             } else {
                 samples
             };
@@ -4579,6 +4772,29 @@ pub(crate) fn stretch_of(value: f64, id: &str) -> Result<f64, EngineError> {
         });
     }
     Ok(value)
+}
+
+/// A stretch, from a number a caller sent, for a track that is
+/// **elastic**.
+///
+/// A pitch-preserving stretch is a harder thing to do than a
+/// varispeed, and it is bounded the way the tree's is: the sound may
+/// be stretched from a tenth to ten times, and not more. A stretch
+/// outside that is **refused** — and not quietly pulled to the edge,
+/// because a caller that asked for a hundredfold stretch would be
+/// given a tenthfold one and would not know.
+fn elastic_stretch_of(value: f64, id: &str, algorithm: &str) -> Result<f64, EngineError> {
+    let stretch = stretch_of(value, id)?;
+    if !(MIN_ELASTIC_STRETCH..=MAX_ELASTIC_STRETCH).contains(&stretch) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "a stretch on an `{algorithm}` track is from {MIN_ELASTIC_STRETCH} to {MAX_ELASTIC_STRETCH}, \
+                 and this one is {stretch}"
+            ),
+        });
+    }
+    Ok(stretch)
 }
 
 /// A number of ticks, from a number a caller sent.

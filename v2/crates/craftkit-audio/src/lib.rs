@@ -204,6 +204,197 @@ pub fn clipped(samples: &[f32]) -> Vec<f32> {
     samples.iter().map(|sample| sample.clamp(-1.0, 1.0)).collect()
 }
 
+/// Stretch the sound **without changing its pitch**.
+///
+/// A **varispeed** plays the sound faster and the pitch falls with it;
+/// a **stretch** makes the sound longer and the pitch stays. It is the
+/// difference between a record played at the wrong speed and a record
+/// played slowly, and the second is the one a musician asks for.
+///
+/// The method is **WSOLA** — waveform-similarity overlap-add. The sound
+/// is cut into frames, each frame is written over the last, and the
+/// place each frame is read from is chosen so that it joins the frame
+/// before it as smoothly as it can. The frames are all of the same
+/// pitch, so the pitch is kept and the length is what changes.
+///
+/// Three places decide where a frame is read from, and each of them
+/// has a job:
+///
+/// - the **nominal** place is where the frame would be read from if
+///   the sound were not joined at all: the output place divided by the
+///   factor. The nominal is what keeps the **rate** right, and the
+///   rate is what keeps the pitch;
+/// - the **natural continuation** is the sound that follows the frame
+///   before it, and it is what the frame has to carry on from;
+/// - the **tolerance** is how far from the nominal a frame may be
+///   read from to join well. A small tolerance keeps the rate right
+///   and a large one lets the sound wander.
+///
+/// The factor is a **length ratio**, the same one the varispeed takes:
+/// a factor of two makes the sound twice as long, and it is the
+/// **pitch** that does not move.
+///
+/// The factor is **clamped** into a range the method can do: a stretch
+/// of sixteen would ask for a frame every sixteenth of a window, and
+/// the sound would be a noise. A caller that means such a stretch
+/// should **refuse** it rather than get a clamped one — the clamp here
+/// is the last line of defence, not the policy.
+///
+/// The **channels** are kept: each channel is played on its own, and
+/// the place a frame is read from is the same for all of them, because
+/// the channels are one sound.
+pub fn time_stretch(samples: &[f32], channels: usize, factor: f64, rate: u32) -> Vec<f32> {
+    let factor = factor.clamp(0.1, 10.0);
+    let channels = channels.max(1);
+    if samples.is_empty() || !factor.is_finite() {
+        return Vec::new();
+    }
+    let frames = samples.len() / channels;
+    if frames == 0 {
+        return Vec::new();
+    }
+    let new_frames = ((frames as f64) * factor).round().max(1.0) as usize;
+    if (factor - 1.0).abs() < 1e-9 {
+        let mut same = samples.to_vec();
+        same.resize(new_frames * channels, 0.0);
+        return same;
+    }
+    // The **frame** is forty thousandths of a second, the **hop** is
+    // half of it, and the **tolerance** is ten thousandths.
+    let rate = f64::from(rate.max(1));
+    let frame = (((rate * 0.04) as usize) & !1).clamp(64, 8192);
+    let hop = frame / 2;
+    let tolerance = ((rate * 0.010) as usize).clamp(8, 2048);
+    // The **window**: a Hann over the frame, and the sum of the
+    // windows of the frames that overlap is what the sound is divided
+    // by at the end.
+    let window: Vec<f32> = (0..frame)
+        .map(|index| {
+            let phase = 2.0 * std::f64::consts::PI * index as f64 / frame as f64;
+            (0.5 - 0.5 * phase.cos()) as f32
+        })
+        .collect();
+    // The **guide**: the mix of the channels, and it is the guide that
+    // says where a frame is read from, because the channels are one
+    // sound and they are read from the same place.
+    let guide: Vec<f32> = (0..frames)
+        .map(|frame_index| {
+            let mut sum = 0.0_f32;
+            for channel in 0..channels {
+                sum += samples[frame_index * channels + channel];
+            }
+            sum / channels as f32
+        })
+        .collect();
+    let guide_at = |index: isize| -> f32 {
+        if index < 0 {
+            return 0.0;
+        }
+        guide.get(index as usize).copied().unwrap_or(0.0)
+    };
+    let mut out = vec![0.0_f32; (new_frames + frame) * channels];
+    let mut weights = vec![0.0_f32; new_frames + frame];
+    let mut previous = 0_isize;
+    let mut index = 0_usize;
+    loop {
+        let out_pos = index * hop;
+        if out_pos >= new_frames {
+            break;
+        }
+        let nominal = ((out_pos as f64 / factor).round() as isize).max(0);
+        let from = if index == 0 {
+            0
+        } else {
+            best_start(&guide_at, nominal, previous + hop as isize, tolerance as isize, hop)
+        };
+        // The frame is written, windowed, over what is there.
+        for (offset, &weight) in window.iter().enumerate() {
+            let read = from + offset as isize;
+            for channel in 0..channels {
+                let value = if read < 0 {
+                    0.0
+                } else {
+                    samples.get(read as usize * channels + channel).copied().unwrap_or(0.0)
+                };
+                if let Some(slot) = out.get_mut((out_pos + offset) * channels + channel) {
+                    *slot += value * weight;
+                }
+            }
+            if let Some(slot) = weights.get_mut(out_pos + offset) {
+                *slot += weight;
+            }
+        }
+        previous = from;
+        index += 1;
+    }
+    out.truncate(new_frames * channels);
+    // The sound is divided by the windows that were written over it.
+    for frame_index in 0..new_frames {
+        let weight = weights.get(frame_index).copied().unwrap_or(0.0);
+        if weight > 1e-3 {
+            for channel in 0..channels {
+                if let Some(slot) = out.get_mut(frame_index * channels + channel) {
+                    *slot /= weight;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The place a frame is read from.
+///
+/// It is the place **near the nominal** whose beginning is most like
+/// the **natural continuation** — the sound that follows the frame
+/// before it — and it is the one that joins the frames best.
+///
+/// The search is coarse first and then fine: the coarse pass finds the
+/// neighbourhood and the fine pass finds the sample.
+fn best_start(
+    guide: &dyn Fn(isize) -> f32,
+    nominal: isize,
+    natural: isize,
+    tolerance: isize,
+    hop: usize,
+) -> isize {
+    let score = |at: isize| -> f32 {
+        let mut products = 0.0_f32;
+        let mut energy = 0.0_f32;
+        let mut offset = 0_isize;
+        while offset < hop as isize {
+            let want = guide(natural + offset);
+            let got = guide(at + offset);
+            products += want * got;
+            energy += got * got;
+            offset += 2;
+        }
+        products / energy.sqrt().max(1e-9)
+    };
+    let low = (nominal - tolerance).max(0);
+    let high = nominal + tolerance;
+    let mut best = nominal.max(0);
+    let mut best_score = f32::NEG_INFINITY;
+    let mut at = low;
+    while at <= high {
+        let value = score(at);
+        if value > best_score {
+            best_score = value;
+            best = at;
+        }
+        at += 4;
+    }
+    let fine_low = (best - 3).max(low);
+    let fine_high = (best + 3).min(high);
+    for at in fine_low..=fine_high {
+        let value = score(at);
+        if value > best_score {
+            best_score = value;
+            best = at;
+        }
+    }
+    best
+}
+
 /// Play the samples at **another speed**.
 ///
 /// A factor of two makes the sound **twice as long** and an octave
