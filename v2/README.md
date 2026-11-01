@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1359 tests.** The MCP server links **all fifteen batteries** in, so the
+**1368 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1359 tests
+cargo test          # 1368 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3633,6 +3633,7 @@ so.
 | the **beat** of a clip | **built.** The place inside a clip where the beat falls, an option and not a zero — and it follows the audio when the clip is trimmed (§196) | §196 |
 | the **locks** on a clip | **built.** The content lock and the place lock are two locks, and the commands that would break one of them refuse (§197) | §197 |
 | the **marks** of a clip | **built.** The rating of stars is the clip's own, and the colour is the kit's appearance — so the battery has no second way to say it (§198) | §198 |
+| the **group** of a clip | **built.** A group is a node with a name and the clips point at it, so the name is the handle and the membership is an edge (§199) | §199 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13436,3 +13437,98 @@ already here.
   same number on each clip — is the answer this tree is most likely to
   change, because a group is an **edge** and not an id. That is the next
   slice.
+
+## 199. The group of a clip
+
+The tree's sound editor keeps a **group** on a clip: a shared number
+that says which clips belong together. Two clips on two different tracks
+can be in one group, and a group is not a folder — the clips stay where
+they are. The v2 sound battery had no groups at all, and the last arc
+named the group as the third mark and the answer this tree is most
+likely to change.
+
+### What was built
+
+- The kind `sound.group` — a **group** of clips, which holds nothing
+  and has no place: it is the name of a set.
+- The edge `sound.grouped`, from a clip **to** its group, the way
+  `core.on_layer` goes from a node to the layer it is on.
+- The command `sound.clip.group` puts clips in a group **by name**: the
+  group is made if it is not there, and the same name is the same group.
+- The command `sound.clip.ungroup` takes clips out of their groups, and
+  a group that is left with no clips in it is taken away.
+- The command `sound.clip.group.read` reads the group of a clip — its
+  name and its members — and the group of a clip and the members of a
+  group are **derived** from the edges and said in the plan.
+- A clip is in **one** group, and a group of **one** clip is refused.
+
+### What the port found
+
+- **The tree's group is a number, and a number is a handle nobody can
+  say.** The tree's `clip.group` gives the named clips a fresh number,
+  `clip.ungroup` takes it off them, and `clip.regroup` gives them the
+  number that **most of them already had** — a person who groups three
+  clips that were already together means to put them back together, and
+  the tree has no other way of saying "the group they were in". It
+  finds that group by **counting ids**: the group with the most members
+  among the clips named wins. Here the group is a node, and a node has
+  a name, so the same thing is said by saying the name — and the
+  counting is gone.
+- **The tree's group is not drawn and not named, and the one place it
+  is seen is a file.** The tree's clip-group file writes the clips of a
+  group out together into a `.scgrp` file, and the group is named by the
+  file. A group in the tree is a number that only a writer ever sees.
+  Here the group is a node in the document, so it has a name before
+  there is any file to write.
+- **The tree's group is a field on the clip, and here it is an edge.**
+  The tree keeps the group number in the clip's own record, so putting
+  a clip in a group is a rewrite of the clip, and the reader of a tree's
+  file cannot tell a group from a field. Here the membership is an
+  edge: the clip's own record is not touched, the group is a thing in
+  the document, and the clip's group is derived from the edge it
+  carries.
+- **A group of clips is not the kit's group.** The kit's group is
+  **structural**: a node with children, which the core walks into, and
+  the studio's `node.group` puts the selected nodes *into* it. A sound
+  clip that went into such a group would leave its playlist — and a
+  playlist is where a clip's place in the timeline is kept — so the
+  sound group holds **nothing**, its members point at it, and the clips
+  stay on their own tracks. Two things with the same word and different
+  meanings are two things, and the name says which is which.
+- **The tree's group can have one clip in it and this tree's cannot be
+  made that way.** The tree's `clip.group` refuses fewer than two
+  clips, and so does this one; but the tree's group *ends up* with one
+  clip in it when one of its clips is moved elsewhere, and the group
+  stays. Here that is the same — a group with one clip in it is a group
+  — and the group that is left with **none** is taken away, because a
+  node that says nothing is litter.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/group.rs`): clips are put
+  in a group, a group holds nothing and the clips stay, the name is the
+  handle, a clip is in one group, a group of one clip is refused, a
+  clip leaves its group, a clip in no group is left alone, the group is
+  read, and only a clip can be grouped.
+- **Three commands** (`sound.clip.group`, `sound.clip.ungroup` and
+  `sound.clip.group.read`), **one kind** (`sound.group`) and **one edge
+  kind** (`sound.grouped`). The MCP server now carries **249**
+  commands, and the sound battery carries **40**.
+- **The clip's kind says one thing more** — the group of the clip, in
+  the plan — and the group says its members.
+
+### What it does not settle
+
+- **A group does not move its clips.** Nothing in the tree moves a
+  group of clips together — the group is a marker and not a handle on
+  the timeline — and nothing does here either. A command that moved
+  every clip of a group at once would be a new thing, and the tree has
+  no word for it.
+- **The tree's clip-group file is not here.** The tree writes the clips
+  of a group into a `.scgrp` file with their audio beside it; this tree
+  writes sound (§ the render) and not groups.
+- **The tree's "ungroup all" has no command of its own.** The tree can
+  take every clip out of every group at once. Here the same thing is
+  two steps — read the members of each group and ungroup them — because
+  a group is named and its members are said in the plan, and a
+  document-wide sweep is not a thing a command should do quietly.
