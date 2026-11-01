@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1609 tests.** The MCP server links **all fifteen batteries** in, so the
+**1614 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1609 tests
+cargo test          # 1614 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,6 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **controllers** of a MIDI clip | **built.** The volume, the pan, the bend and the program may be changed, and the duplicate notes taken out (§227) | §227 |
 | the **moving** of a clip | **built.** A clip moves along the timeline with its content, and a locked clip does not move (§226) | §226 |
 | the **editing** of a lane | **built.** The breakpoints of a curve are set, taken away, cleared, written and thinned (§225) | §225 |
 | the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
@@ -15576,3 +15577,67 @@ heard — and there was no command for the second thing.
 - **The tree's trim to fill the selection is not here.** It trims the
   clips to the edges of a selection, and here the trim is to a range
   the caller gives or to the material the clip plays.
+
+## 227. The controllers of a MIDI clip
+
+The tree's MIDI editor has a pencil for the **notes** and none for the
+**controllers** — the volume, the pan, the pitch bend, the program, the
+pressure. A MIDI clip could hold them, read them and write them, and
+not one of them could be changed.
+
+### What was built
+
+- The commands `sound.clip.midi.ctrl.add`, `sound.clip.midi.ctrl.edit`
+  and `sound.clip.midi.ctrl.remove` add, change and take away the
+  **controllers** of a clip.
+- The command `sound.clip.midi.notes.dedupe` takes the **duplicate
+  notes** out of a clip.
+- The **kind** of a controller says what it changes: a `control`
+  change, a `pitch_bend`, a `channel_pressure`, a `poly_pressure` or a
+  `program`. A kind that is not one of them is refused, and so is a
+  number for a kind that has none and a missing number for a kind that
+  has one.
+- The **value** is in the range of its kind: a control change, a
+  pressure and a program are from zero to a hundred and twenty-seven,
+  and the pitch bend is centred on zero.
+
+### What the port found
+
+- **The tree's editor has no pencil for the controllers, and this tree
+  does.** That is the finding of this arc: the tree's MIDI editor
+  moves notes about and leaves the controllers to the file they came
+  from, and here the controllers of a clip are editable — which is
+  *more* than the tree has, and the honest way to say so is to say it.
+- **The kinds are open strings, and the range of each is checked
+  against its kind.** A control change and a program are numbers from
+  zero to a hundred and twenty-seven and the pitch bend is a signed
+  number about eight thousand — so a value is refused when it is
+  outside the range of **its** kind, and not against one range for
+  them all.
+- **The tree's duplicates are taken out by a command and so are
+  theirs here.** The tree's `midi.remove_duplicate_notes` and the
+  library's `remove_duplicates` are the same thing: two notes of the
+  same channel, pitch and start are one note, and the longer one is
+  kept; two controllers of the same kind, channel and tick are one
+  controller, and the last one is kept.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/midictrl.rs`): a
+  controller is added, a controller is edited, a controller is
+  removed, a controller outside its range is refused, and the duplicate
+  notes are taken out.
+- **Four commands** (`sound.clip.midi.ctrl.add`,
+  `sound.clip.midi.ctrl.edit`, `sound.clip.midi.ctrl.remove` and
+  `sound.clip.midi.notes.dedupe`). The MCP server now carries **302**
+  commands, and the sound battery carries **91**.
+
+### What it does not settle
+
+- **A controller has no name.** The tree names a drum and a program;
+  here a controller is a kind, a number and a value, and the name of
+  the thing it changes is a name for a person to read.
+- **The controllers of a clip are not moved with the notes.** A cut
+  moves the notes of a clip (§212) and the controllers with them — the
+  tree's cut splits the sequence, notes and controllers together — and
+  the *move* of a controller is the command that edits it.
