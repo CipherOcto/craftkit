@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1480 tests.** The MCP server links **all fifteen batteries** in, so the
+**1488 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1480 tests
+cargo test          # 1488 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3645,6 +3645,7 @@ so.
 | the **pitch** of a clip | **built.** A number of semitones on the clip, refused outside its range, and the length is the same (§208) | §208 |
 | the **processes** on a clip | **built.** A name and its parameters, done in order, refused when the name is not one this battery knows (§209) | §209 |
 | the **pan** of a track | **built.** A balance from minus one to one, the default of the pan lane, applied when the track is routed (§210) | §210 |
+| the **stems** of a session | **built.** The mix with one track in it, one file for each track, written into a directory (§211) | §211 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14455,3 +14456,78 @@ decibels off a stereo sound in the middle.
   pucker for a surround field, with a divergence and a share for the
   centre speaker, and an Ambisonics encoder under it. That is a
   loudspeaker layout and not a balance.
+
+## 211. The stems of a session
+
+The tree's **bounce** writes one file for each track: the mix with
+one track in it. It is how a mix is handed to somebody else — each
+part on its own, so that it can be worked on again. This tree could
+render the document into one file and had no way to render it into
+several.
+
+### What was built
+
+- The command `sound.render.stems` writes **one file for each track**
+  into a directory, and the directory is made if it is not there.
+- A stem is the mix with **one track in it**: the track is soloed and
+  the mix is worked out again, so a stem carries the master faders and
+  the metronome with it, and a stem of a track that feeds a bus carries
+  the bus.
+- Each file is named after its track, and a name that is taken gets a
+  number after it: two tracks with the same name are two files and not
+  one file written twice.
+- A **muted** track is not bounced: a stem of silence is a file nobody
+  asked for. The mute is a **lane** here and not a field of the track,
+  so a muted track is one whose mute lane says so at the start.
+- The renderer was **split**: the mix is now worked out by a function
+  of the document alone, and the render and the stems are two ways of
+  writing that one mix.
+
+### What the port found
+
+- **The tree bounces the mix again for every track and this tree
+  bounces the same mix.** The tree's `bounce_stems_with` clones the
+  session, solos the track and renders the whole mix — a render per
+  track, and the mixer run from the beginning each time. Here the mix
+  is a **function of the document**: the render writes it and the
+  stems write it with one track in it, and the two are the same sound
+  because they come from the same mixer.
+- **The tree's stems are tracks and this tree's are tracks too.** The
+  tree bounces the audio, instrument and MIDI tracks that are neither
+  inactive nor muted; a bus is not a stem in the tree and it is not one
+  here. What a stem *carries* is a different thing: the tree's stem of
+  a track that feeds a bus carries the bus, because the bus is in the
+  mix, and so does this one.
+- **The tree names the files after the session and the track.** The
+  tree's file is `<session> - <track>.wav` and the name is made safe
+  for a file system: the letters and the numbers and a few marks are
+  kept and the rest becomes an underscore. Here the name is the
+  track's alone, and the same rule makes it safe.
+- **The tree's mute is a field and this tree's is a lane.** The tree
+  skips a track whose mixer says it is muted; here the mute is a lane
+  under the track, so a muted track is one whose mute lane says so at
+  the start.
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/stems.rs`): each track
+  is bounced into a file of its own, a stem is the mix with one track
+  in it, the mix is both of them, the directory is made if it is not
+  there, two tracks with the same name are two files, a muted track is
+  not bounced, a directory that is not a directory is refused, and the
+  stems are the render of the document.
+- **One command** (`sound.render.stems`) and **one refactor**: the mix
+  is now worked out by `mix_of`, a function of the document alone, and
+  the renderer writes it. The MCP server now carries **267** commands,
+  and the sound battery carries **56**.
+
+### What it does not settle
+
+- **The tree's stems carry a format and a depth.** The tree's bounce
+  writes WAV, AIFF or FLAC, at sixteen, twenty-four or thirty-two bits
+  of float, with dither and a fold-down to stereo. Here a stem is a
+  WAV at the session's rate, and the file the kit writes is the file
+  it has.
+- **The tree bounces a range.** The tree's bounce takes the start and
+  the end of what is bounced; here the whole document is bounced, as
+  the render does.
