@@ -76,6 +76,90 @@ fn factor_of(sensitivity: f64) -> f64 {
 /// a slow passage is not measured against the loud hit before it.
 const BACKGROUND: usize = 8;
 
+/// The **level** of each short frame of a sound.
+///
+/// The frames are a **hop** apart and each one reads a **window**: the
+/// level of a frame is the root of the mean of the squares of the
+/// samples in its window, so it is a level and not a peak.
+///
+/// The samples are **interleaved**: the sound's channels come one
+/// after another, and the level of a frame is worked out across the
+/// channels of it.
+pub fn levels(samples: &[f32], channels: usize) -> Vec<f64> {
+    let channels = channels.max(1);
+    let frames = samples.len() / channels;
+    let mut levels: Vec<f64> = Vec::with_capacity(frames / HOP + 2);
+    let mut index = 0;
+    while index < frames {
+        let end = (index + WINDOW).min(frames);
+        let mut sum = 0.0_f64;
+        let mut count = 0_u32;
+        for frame in index..end {
+            for channel in 0..channels {
+                let value = samples.get(frame * channels + channel).copied().unwrap_or(0.0);
+                if value.is_finite() {
+                    sum += f64::from(value) * f64::from(value);
+                    count += 1;
+                }
+            }
+        }
+        let level = if count == 0 { 0.0 } else { (sum / f64::from(count)).sqrt() };
+        levels.push(level);
+        index += HOP;
+    }
+    levels
+}
+
+/// The **loud** parts of a sound, as ranges of its samples.
+///
+/// A part is loud when its level is within `threshold_db` of the
+/// **loudest** part of the sound: a threshold of forty-eight decibels
+/// is a part that is at least a fortieth of the peak, and a threshold
+/// of zero is the peak itself.
+///
+/// A part shorter than `min_length` is not a part: it is a click, and
+/// a click that is kept is a clip of its own that says nothing. The
+/// length is in samples, and a length of nothing keeps every part.
+///
+/// The ranges are in the sound's own samples, and they do not touch:
+/// two parts with a gap between them are two parts.
+pub fn loud_ranges(
+    samples: &[f32],
+    channels: usize,
+    threshold_db: f64,
+    min_length: i64,
+) -> Vec<(usize, usize)> {
+    let levels = levels(samples, channels);
+    if levels.is_empty() {
+        return Vec::new();
+    }
+    let peak = levels.iter().copied().fold(0.0_f64, f64::max);
+    if peak <= 0.0 {
+        return Vec::new();
+    }
+    let decibels = if threshold_db.is_finite() { threshold_db.clamp(-96.0, 0.0) } else { -48.0 };
+    let threshold = peak * 10.0_f64.powf(decibels / 20.0);
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (position, level) in levels.iter().enumerate() {
+        let loud = *level >= threshold;
+        match (loud, start) {
+            (true, None) => start = Some(position),
+            (false, Some(from)) => {
+                ranges.push((from * HOP, position * HOP));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(from) = start {
+        ranges.push((from * HOP, levels.len() * HOP));
+    }
+    // The **short** parts are dropped: a click is not a part.
+    ranges.retain(|(from, to)| to.saturating_sub(*from) >= min_length.max(0) as usize);
+    ranges
+}
+
 /// The **onsets** of a sound, in samples from its start.
 ///
 /// The samples are **interleaved**: the sound's channels come one
@@ -109,26 +193,7 @@ pub fn transients(samples: &[f32], channels: usize, rate: u32, sensitivity: f64)
     }
     let overall = if count == 0 { 0.0 } else { (sum / count as f64).sqrt() };
     let threshold = overall * factor;
-    // The level of each frame of the sound, in steps of the hop.
-    let mut levels: Vec<f64> = Vec::with_capacity(frames / HOP + 2);
-    let mut index = 0;
-    while index < frames {
-        let end = (index + WINDOW).min(frames);
-        let mut sum = 0.0_f64;
-        let mut count = 0_u32;
-        for frame in index..end {
-            for channel in 0..channels {
-                let value = samples.get(frame * channels + channel).copied().unwrap_or(0.0);
-                if value.is_finite() {
-                    sum += f64::from(value) * f64::from(value);
-                    count += 1;
-                }
-            }
-        }
-        let level = if count == 0 { 0.0 } else { (sum / f64::from(count)).sqrt() };
-        levels.push(level);
-        index += HOP;
-    }
+    let levels = levels(samples, channels);
     if levels.len() < 3 {
         return Vec::new();
     }

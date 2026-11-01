@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **seventy commands**, one for each thing a person does to a
+//! - **seventy-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -37,7 +37,8 @@
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
 //!   the notes of a clip, **heal** the clips that were separated,
-//!   separate a clip at its **transients**, and
+//!   separate a clip at its **transients**, **strip** the silence out
+//!   of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -153,6 +154,15 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **The quiet is thrown away and the loud parts are named.** The
+//! tree's strip silence finds the parts of a sound that are not
+//! silent, cuts the clip at the edges of them and keeps the loud
+//! parts; the kept parts take the names of the auto rename scheme, in
+//! time order. Here the parts are found in the **material** and not in
+//! the clip's own sound, and the pieces that are thrown away take no
+//! number: the scheme's number is put back before the kept pieces are
+//! named, so that nothing is skipped.
 //!
 //! **A transient is found by the level here and by the spectrum in the
 //! tree.** The tree's detector takes a fast Fourier transform of each
@@ -3394,15 +3404,14 @@ impl SeparateClipOnTransients {
         let rate = settings.sample_rate.max(1) as f64;
         let source_rate = sound.rate.max(1) as f64;
         let ratio = source_rate / rate;
-        let offset = payload.offset.max(0) as f64 * ratio;
         let end = payload.start + payload.length;
         let mut cuts: Vec<i64> = Vec::new();
         for onset in onsets {
-            // The onset in the session's samples, and then in the
+            // The onset in the material's samples, and then in the
             // clip's own time: a stretched clip reads its material more
             // slowly, so the stretch is in the way back.
-            let at = ((onset as f64 - offset) / ratio.max(f64::EPSILON)) * payload.stretch;
-            let at = (at.round() as i64).max(payload.start + 1);
+            let at = at_of_frame(onset as i64, payload.offset, payload.stretch, ratio);
+            let at = at.max(payload.start + 1);
             if at >= end {
                 continue;
             }
@@ -3448,6 +3457,249 @@ impl SeparateClipOnTransients {
             }),
         ))
     }
+}
+
+/// **Strip the silence** out of a clip.
+///
+/// The tree's editor strips silence: it finds the parts of a sound that
+/// are not silent, cuts the clip at the edges of them, and keeps the
+/// loud parts and throws the quiet ones away. The kept parts are
+/// **named** from the auto rename scheme, in time order.
+///
+/// Here the parts are found in the **material** — the source the clip
+/// plays — and not in the clip's own sound: the clip's sound is the
+/// material read the clip's way, and the material's own silence is
+/// where the silence is.
+///
+/// The **threshold** is how far below the loudest part of the material
+/// a part may be and still be kept, in decibels: forty-eight is the
+/// tree's own default, and it is a part that is at least a fortieth of
+/// the peak.
+///
+/// The **minimum length** is how long a part must be to be kept: a
+/// click is not a part, and a click that is kept is a clip of its own
+/// that says nothing.
+///
+/// The **pad** is how much of the silence is kept at each end of a
+/// part, so that a part does not begin or end with a click.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.strip.silence",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Strip Silence"),
+    mutates,
+    undoable
+)]
+pub struct StripSilence {
+    /// The clip to strip.
+    pub clip: NodeRef,
+    /// How far below the loudest part a part may be and still be kept,
+    /// in decibels.
+    pub threshold_db: Option<Number>,
+    /// How long a part must be to be kept, in milliseconds.
+    pub min_length_ms: Option<Number>,
+    /// How much silence is kept before each part, in milliseconds.
+    pub pad_before_ms: Option<Number>,
+    /// How much silence is kept after each part, in milliseconds.
+    pub pad_after_ms: Option<Number>,
+}
+
+impl StripSilence {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.strip.silence".to_string();
+        let clip_id = self.clip.0;
+        let (name, payload) = {
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            (node.name.clone(), payload)
+        };
+        // A clip whose **content** is locked is finished: it is not
+        // stripped.
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
+        let Some(source_id) = payload.source else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` plays no sound, and there is no silence in it"),
+            });
+        };
+        let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no source `{source_id}`"),
+        })?;
+        let source = SourcePayload::from_json(&source_node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        let sound = read_sound(&id, &source.path)?;
+        let settings = session_of(session.document());
+        let rate = settings.sample_rate.max(1) as f64;
+        let ratio = sound.rate.max(1) as f64 / rate;
+        let threshold_db = match self.threshold_db {
+            Some(value) if value.0.is_finite() => value.0.clamp(-96.0, 0.0),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the threshold is a number of decibels".to_string(),
+                });
+            }
+            None => -48.0,
+        };
+        let ms = |value: Option<Number>, default: f64| -> f64 {
+            match value {
+                Some(value) if value.0.is_finite() => value.0.clamp(0.0, 10_000.0),
+                _ => default,
+            }
+        };
+        // The lengths are in **milliseconds**, and a millisecond is a
+        // thousandth of a second.
+        let min_length = (ms(self.min_length_ms, 50.0) / 1000.0 * rate) as i64;
+        let pad_before = (ms(self.pad_before_ms, 5.0) / 1000.0 * rate) as i64;
+        let pad_after = (ms(self.pad_after_ms, 20.0) / 1000.0 * rate) as i64;
+        // The **loud parts** of the material, in the material's samples.
+        let loud =
+            craftkit_audio::loud_ranges(&sound.samples, sound.channels as usize, threshold_db, min_length);
+        // And the loud parts in the **clip's own time**.
+        let end = payload.start + payload.length;
+        let mut ranges: Vec<(i64, i64)> = Vec::new();
+        for (from, to) in loud {
+            let start = at_of_frame(from as i64, payload.offset, payload.stretch, ratio) - pad_before;
+            let stop = at_of_frame(to as i64, payload.offset, payload.stretch, ratio) + pad_after;
+            let start = start.max(payload.start);
+            let stop = stop.min(end);
+            if stop <= start {
+                continue;
+            }
+            if let Some(last) = ranges.last_mut()
+                && start <= last.1
+            {
+                last.1 = last.1.max(stop);
+                continue;
+            }
+            ranges.push((start, stop));
+        }
+        if ranges.is_empty() {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the clip `{clip_id}` is silent: there is nothing to keep"),
+            });
+        }
+        // The scheme and its **number** before the cut: the pieces
+        // that are kept are named from it, and the pieces that are
+        // thrown away must not take numbers.
+        let scheme = crate::autoname::scheme_of(session.document(), clip_id);
+        let number = scheme.map(|scheme| crate::autoname::number_of(session, scheme));
+        // The **cut**: at the edges of the loud parts, so that the
+        // pieces are the parts and the gaps.
+        let mut points: Vec<i64> = Vec::new();
+        for (start, stop) in &ranges {
+            for point in [start, stop] {
+                if *point > payload.start && *point < end && !points.contains(point) {
+                    points.push(*point);
+                }
+            }
+        }
+        points.sort_unstable();
+        let mut current = clip_id;
+        let mut pieces = 1_usize;
+        for point in &points {
+            let piece = ClipPayload::from_json(
+                &session
+                    .document()
+                    .node(current)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{current}` is gone"),
+                    })?
+                    .data,
+            )
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if *point <= piece.start || *point >= piece.start + piece.length {
+                continue;
+            }
+            current = separate_at(session, current, &piece, &name, *point)?;
+            pieces += 1;
+        }
+        // The **quiet pieces** are thrown away, and the loud ones are
+        // kept.
+        let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
+        let mut kept: Vec<u64> = Vec::new();
+        let mut removed: Vec<u64> = Vec::new();
+        for node in session.document().walk() {
+            if node.kind != "sound.clip" {
+                continue;
+            }
+            if timeline::parent_of(session.document(), node.id).map(|parent| parent.id) != playlist {
+                continue;
+            }
+            let Ok(payload) = ClipPayload::from_json(&node.data) else { continue };
+            let start = payload.start;
+            let stop = payload.start + payload.length;
+            let loud = ranges.iter().any(|(from, to)| start >= *from && stop <= *to);
+            if loud {
+                kept.push(node.id);
+            } else {
+                removed.push(node.id);
+            }
+        }
+        for piece in &removed {
+            session.document_mut()?.remove_node(*piece);
+        }
+        // The kept pieces are **named** from the scheme, in time order,
+        // and the number the thrown-away pieces took is given back.
+        if let (Some(scheme), Some(number)) = (scheme, number) {
+            crate::autoname::set_number(session, scheme, number);
+        }
+        kept.sort_by_key(|piece| {
+            session
+                .document()
+                .node(*piece)
+                .and_then(|node| ClipPayload::from_json(&node.data).ok())
+                .map(|payload| payload.start)
+                .unwrap_or(0)
+        });
+        let named = match scheme {
+            Some(scheme) => crate::autoname::name_the_pieces(session, scheme, &kept),
+            None => 0,
+        };
+        Ok(Outcome::changed(format!("stripped the silence out of the clip `{clip_id}`")).with_data(
+            serde_json::json!({
+                "id": clip_id,
+                "kept": kept.len(),
+                "removed": removed.len(),
+                "pieces": pieces,
+                "named": named,
+                "ranges": ranges.len(),
+            }),
+        ))
+    }
+}
+
+/// The place on the **timeline** of a frame of the material.
+///
+/// The material speaks in its own samples and the timeline speaks in
+/// the session's, and the clip's **offset** says where in the material
+/// the clip starts. A stretched clip reads its material more slowly,
+/// so the stretch is in the way back.
+///
+/// The ratio is the material's rate over the session's: one of the
+/// session's samples is this many of the material's.
+fn at_of_frame(frame: i64, offset: i64, stretch: f64, ratio: f64) -> i64 {
+    (((frame as f64 / ratio.max(f64::EPSILON)) - offset as f64) * stretch).round() as i64
 }
 
 /// The most transients a clip may be separated at.

@@ -369,6 +369,62 @@ impl ReadAutoName {
     }
 }
 
+/// The **number** a scheme is at.
+///
+/// It is the number the next piece would take, and a scheme that is
+/// counting is a scheme that has already named something.
+pub(crate) fn number_of(session: &Session, scheme: u64) -> u64 {
+    payload_of(session.document(), scheme).number
+}
+
+/// Put a scheme's **number** back where it was.
+///
+/// The strip of a silence cuts a clip into pieces and every one of
+/// them takes a name as it is cut — and then the quiet pieces are
+/// thrown away, and their names are names of pieces that are not
+/// there. So the number is put back before the pieces that are kept
+/// are named: the kept pieces take the numbers of the scheme, in time
+/// order, and nothing is skipped.
+pub(crate) fn set_number(session: &mut Session, scheme: u64, number: u64) -> bool {
+    let mut payload = payload_of(session.document(), scheme);
+    payload.number = number;
+    let Ok(document) = session.document_mut() else { return false };
+    if let Some(node) = document.node_mut(scheme) {
+        node.data = payload.to_json();
+    }
+    true
+}
+
+/// Name the **pieces** of a cut in order, from the scheme.
+///
+/// The pieces are named in the order they are given, and the scheme
+/// counts up once for each of them: the first piece takes the
+/// scheme's number and the scheme counts up, and the next piece takes
+/// the next number.
+///
+/// The pieces are already **in** the scheme — the cut put them there —
+/// and this is about their names: the scheme is one sequence and the
+/// pieces take it in order.
+pub(crate) fn name_the_pieces(session: &mut Session, scheme: u64, pieces: &[u64]) -> usize {
+    let mut payload = payload_of(session.document(), scheme);
+    let mut named = 0;
+    for piece in pieces {
+        let name = payload.next_name();
+        payload.number = payload.number.saturating_add(1);
+        let Ok(document) = session.document_mut() else { break };
+        if let Some(node) = document.node_mut(*piece) {
+            node.name = name;
+        }
+        named += 1;
+    }
+    if let Ok(document) = session.document_mut()
+        && let Some(node) = document.node_mut(scheme)
+    {
+        node.data = payload.to_json();
+    }
+    named
+}
+
 /// A whole number from a parameter, refused when it is not one.
 ///
 /// A number that is not whole — a half a number, or a billion — is

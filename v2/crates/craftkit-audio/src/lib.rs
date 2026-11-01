@@ -47,7 +47,7 @@
 
 mod transients;
 
-pub use transients::{MAX_TRANSIENTS, transients};
+pub use transients::{MAX_TRANSIENTS, levels, loud_ranges, transients};
 
 /// The **limits** a mix is made within.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
