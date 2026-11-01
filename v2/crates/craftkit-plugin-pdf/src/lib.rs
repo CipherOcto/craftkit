@@ -31,6 +31,11 @@
 //! four attributes a page inherits — the media box, the resources, the
 //! crop box and the rotation — are found by walking up the tree.
 //!
+//! And the **annotation** is here: an annotation is an object of its
+//! own — a kind, a rectangle, and somewhere to go — and the page names
+//! it in its `/Annots`, which is an edge, the same edge the page tree
+//! is made of.
+//!
 //! # The mapping
 //!
 //! | the object model | v2 |
@@ -655,6 +660,418 @@ fn parent_of(session: &Session, id: u64) -> Option<u64> {
 /// there so that a document that says otherwise is not walked for ever.
 const MAX_ANCESTORS: usize = 64;
 
+/// The smallest an **annotation** may be.
+///
+/// The tree's editor refuses a link whose area is less than two
+/// points, because a link that cannot be clicked is not a link. The
+/// bound is the tree's own, and it is here for the same reason: a
+/// thing that cannot be picked is not there.
+const MINIMUM_ANNOTATION: f64 = 2.0;
+
+/// Put an **annotation** on a page.
+///
+/// An annotation is an object of its own: a dictionary with a type, a
+/// kind, a rectangle, and — for a link — somewhere to go. The page
+/// names it in its `/Annots`, and that naming is an **edge**, the same
+/// edge the page tree is made of.
+///
+/// The kind is a **name** and not a closed list: the tree's editor has
+/// a list of the annotations it draws, and keeps the others as they
+/// are. Here nothing matches on the kind at all — the annotation says
+/// what it is, and a third party may add a kind of its own.
+///
+/// Where a link goes is either a **page of this document** — the
+/// `/Dest` — or a **web address** — the `/A` action, which is an
+/// object of its own, so that the action may be anything at all.
+#[derive(Command)]
+#[command(id = "pdf.annot.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
+pub struct AddAnnotation {
+    /// The page the annotation is on.
+    pub page: NodeRef,
+    /// The annotation's object number in the file.
+    pub object: Number,
+    /// The annotation's kind: `Link`, `Text`, `FreeText`, `Square`,
+    /// `Circle`, `Highlight`, `Popup`, `Widget` or `Stamp`.
+    pub subtype: Text,
+    /// The rectangle the annotation covers: four numbers.
+    pub rect: serde_json::Value,
+    /// The annotation's text.
+    pub contents: Option<Text>,
+    /// The page a link goes to.
+    pub destination: Option<NodeRef>,
+    /// Where a link goes that is not in this document.
+    pub uri: Option<Text>,
+}
+
+impl AddAnnotation {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.annot.add".to_string();
+        // The **page**: an object whose type is `Page`.
+        let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{}`", self.page.0),
+        })?;
+        if page.kind != "pdf.object" && page.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is a `{}` and not an object", self.page.0, page.kind),
+            });
+        }
+        let kind = entries_of(&page.data)
+            .into_iter()
+            .find(|(key, _)| key == "Type")
+            .and_then(|(_, value)| value.as_str().map(|kind| kind.to_string()));
+        if kind.as_deref() != Some("Page") {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is not a page", self.page.0),
+            });
+        }
+        let page_number = the_number_of(page).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the node `{}` has no object number", self.page.0),
+        })?;
+        // The page's own **annotations**, before the new one is made.
+        let annots = entries_of(&page.data)
+            .into_iter()
+            .find(|(key, _)| key == "Annots")
+            .and_then(|(_, value)| value.as_array().cloned())
+            .unwrap_or_default();
+        // The **object number** of the annotation: a whole number, and
+        // one that nothing else has.
+        let object = self.object.0;
+        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "an object number is a whole number".to_string(),
+            });
+        }
+        let number = object as u64;
+        if number == 0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "object numbers start at one".to_string(),
+            });
+        }
+        if session.document().walk().any(|node| the_number_of(node) == Some(number)) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the object {number} is already in the document"),
+            });
+        }
+        // The **kind**: a name.
+        let subtype = a_name(&self.subtype.0, &id)?;
+        // The **rectangle**: four numbers, and the corners may come in
+        // any order — the tree puts them the right way round.
+        let rect = the_rect(&self.rect, &id)?;
+        // Where it goes: one place, and one place only.
+        if self.destination.is_some() && self.uri.is_some() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "an annotation goes to one place".to_string(),
+            });
+        }
+        let mut entries: Vec<(String, serde_json::Value)> = vec![
+            ("Type".to_string(), serde_json::json!("Annot")),
+            ("Subtype".to_string(), serde_json::json!(subtype)),
+            ("Rect".to_string(), serde_json::json!(rect)),
+        ];
+        if let Some(contents) = &self.contents {
+            entries.push(("Contents".to_string(), serde_json::json!({ "string": contents.0 })));
+        }
+        // The **page** the annotation is on, and the **print** flag: the
+        // tree's editor prints its links, and so does this one.
+        entries.push(("P".to_string(), serde_json::json!({ "ref": [page_number, 0] })));
+        entries.push(("F".to_string(), serde_json::json!(4)));
+        // Where it goes.
+        let mut destination = None;
+        let mut action = None;
+        if let Some(target) = self.destination {
+            let node = session.document().node(target.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", target.0),
+            })?;
+            let target_number = the_number_of(node).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` has no object number", target.0),
+            })?;
+            // The **destination**: the page, and the way it is shown.
+            entries.push(("Dest".to_string(), serde_json::json!([{ "ref": [target_number, 0] }, "Fit"])));
+            destination = Some(target.0);
+        }
+        if let Some(uri) = &self.uri {
+            let uri = uri.0.trim().to_string();
+            if uri.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a web address is not empty".to_string(),
+                });
+            }
+            if !uri.is_ascii() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a web address is 7-bit ASCII".to_string(),
+                });
+            }
+            // The **action** is an object of its own: the tree's editor
+            // writes it inside the annotation, and the tree's action is
+            // a closed list of three — a page, a web address, and the
+            // things it does not edit. Here the action is an object, and
+            // the annotation refers to it, so that a third party may
+            // make one of its own.
+            let action_number = the_next_number(session.document(), number);
+            let action_entries: Vec<(String, serde_json::Value)> = vec![
+                ("S".to_string(), serde_json::json!("URI")),
+                ("URI".to_string(), serde_json::json!({ "string": uri })),
+            ];
+            let action_data = serde_json::json!({
+                "object": action_number,
+                "entries": pairs_of(&action_entries),
+            });
+            let action_name = format!("action {action_number}");
+            let action_id =
+                session.document_mut()?.add_node_with(action_name, "pdf.object", None, action_data);
+            entries.push(("A".to_string(), serde_json::json!({ "ref": [action_number, 0] })));
+            action = Some(action_id);
+        }
+        // The **annotation** itself.
+        let data = serde_json::json!({ "object": number, "entries": pairs_of(&entries) });
+        let name = format!("annotation {number}");
+        let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+        // The page **names** the annotation: the `/Annots` is an array
+        // of the annotations, and the array grows.
+        let mut annots = annots;
+        annots.push(serde_json::json!({ "ref": [number, 0] }));
+        if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
+            node.data = with_entry(&node.data, "Annots", serde_json::json!(annots));
+        }
+        // And the **edges**: the page names the annotation, and the
+        // annotation names where it goes.
+        let edges: Vec<(u64, u64, &str)> = vec![
+            (self.page.0, annot, "Annots"),
+            (annot, destination.unwrap_or(annot), "Dest"),
+            (annot, action.unwrap_or(annot), "A"),
+        ];
+        for (from, to, key) in edges {
+            if from == to && key != "Dest" {
+                continue;
+            }
+            if key == "Dest" && destination.is_none() {
+                continue;
+            }
+            if key == "A" && action.is_none() {
+                continue;
+            }
+            let payload = serde_json::json!({ "key": key, "generation": 0 });
+            let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object `{from}` already refers to `{to}` under `{key}`"),
+                });
+            }
+        }
+        Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(serde_json::json!({
+            "id": annot,
+            "object": number,
+            "page": self.page.0,
+            "subtype": subtype,
+            "rect": rect,
+            "destination": destination,
+            "action": action,
+        })))
+    }
+}
+
+/// The **annotations** of a page.
+///
+/// A query: it does not change the document. The page's `/Annots` are
+/// the edges the page holds, and each one is an object of its own.
+#[derive(Command)]
+#[command(id = "pdf.page.annotations", area = "pdf", layer = "pdf", icon = "list")]
+pub struct PageAnnotations {
+    /// The page.
+    pub page: NodeRef,
+}
+
+impl PageAnnotations {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.page.annotations".to_string();
+        if session.document().node(self.page.0).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.page.0),
+            });
+        }
+        let mut annotations: Vec<serde_json::Value> = Vec::new();
+        for relation in session.document().relations.iter().filter(|relation| {
+            relation.kind == "ref"
+                && relation.from == self.page.0
+                && relation
+                    .payload
+                    .get("key")
+                    .and_then(|key| key.as_str())
+                    .map(|key| key == "Annots")
+                    .unwrap_or(false)
+        }) {
+            let Some(node) = session.document().node(relation.to) else { continue };
+            let entries = entries_of(&node.data);
+            let mut annotation = serde_json::Map::new();
+            annotation.insert("id".to_string(), serde_json::json!(node.id));
+            annotation
+                .insert("object".to_string(), serde_json::json!(the_number_of(node).unwrap_or_default()));
+            for key in ["Subtype", "Rect", "Contents"] {
+                if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
+                    annotation.insert(key.to_string(), value.clone());
+                }
+            }
+            if let Some(where_) = where_it_goes(session.document(), &entries) {
+                annotation.insert("goes_to".to_string(), where_);
+            }
+            annotations.push(serde_json::Value::Object(annotation));
+        }
+        let count = annotations.len();
+        Ok(Outcome::new(format!("{count} annotation(s)"))
+            .with_data(serde_json::json!({ "id": self.page.0, "annotations": annotations })))
+    }
+}
+
+/// Where an annotation **goes**: a page of this document, or a web
+/// address.
+fn where_it_goes(document: &Document, entries: &[(String, serde_json::Value)]) -> Option<serde_json::Value> {
+    // The **action** first: it is the one that is used when both are
+    // there, and the tree says so.
+    if let Some((_, action)) = entries.iter().find(|(key, _)| key == "A") {
+        let number = action
+            .get("ref")
+            .and_then(|pair| pair.as_array())
+            .and_then(|pair| pair.first())
+            .and_then(|number| number.as_u64())?;
+        let node = document.walk().find(|node| the_number_of(node) == Some(number))?;
+        let uri =
+            entries_of(&node.data).into_iter().find(|(key, _)| key == "URI").and_then(|(_, value)| {
+                value.get("string").and_then(|text| text.as_str()).map(|text| text.to_string())
+            })?;
+        return Some(serde_json::json!({ "uri": uri }));
+    }
+    let (_, dest) = entries.iter().find(|(key, _)| key == "Dest")?;
+    let number = dest
+        .as_array()
+        .and_then(|list| list.first())
+        .and_then(|first| first.get("ref"))
+        .and_then(|pair| pair.as_array())
+        .and_then(|pair| pair.first())
+        .and_then(|number| number.as_u64())?;
+    Some(serde_json::json!({ "page": number }))
+}
+
+/// The **object number** of a node, if it has one.
+fn the_number_of(node: &Node) -> Option<u64> {
+    node.data.get("object").and_then(|number| number.as_u64())
+}
+
+/// The next **free** object number.
+///
+/// A number nothing else has: the file says which object an action is,
+/// and the file's objects are numbered.
+fn the_next_number(document: &Document, after: u64) -> u64 {
+    let mut highest = after;
+    for node in document.walk() {
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            continue;
+        }
+        if let Some(number) = the_number_of(node) {
+            highest = highest.max(number);
+        }
+    }
+    highest + 1
+}
+
+/// A **name**, from a text a caller sent.
+///
+/// A name may not be empty, and may not hold the characters a name may
+/// not hold: the spaces, and the delimiters that end a name.
+fn a_name(text: &str, id: &str) -> Result<String, EngineError> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err(EngineError::Failed { id: id.to_string(), message: "a name is not empty".to_string() });
+    }
+    if trimmed.chars().any(|character| character.is_whitespace() || "()<>[]{}/%".contains(character)) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{trimmed}` is not a name: a name may not hold a space or a delimiter"),
+        });
+    }
+    Ok(trimmed.to_string())
+}
+
+/// The **rectangle** of an annotation, from a value a caller sent.
+///
+/// Four numbers, and the corners may come in any order: the tree puts
+/// them the right way round, and so does this one.
+fn the_rect(value: &serde_json::Value, id: &str) -> Result<[f64; 4], EngineError> {
+    let Some(list) = value.as_array() else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a rectangle is four numbers".to_string(),
+        });
+    };
+    if list.len() != 4 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("a rectangle is four numbers, and this one is {}", list.len()),
+        });
+    }
+    let mut numbers: Vec<f64> = Vec::with_capacity(4);
+    for item in list {
+        let Some(number) = item.as_f64() else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "a rectangle is four numbers".to_string(),
+            });
+        };
+        if !number.is_finite() {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "a rectangle is four numbers, and one of them is not".to_string(),
+            });
+        }
+        numbers.push(number);
+    }
+    let rect = [
+        numbers[0].min(numbers[2]),
+        numbers[1].min(numbers[3]),
+        numbers[0].max(numbers[2]),
+        numbers[1].max(numbers[3]),
+    ];
+    if rect[2] - rect[0] < MINIMUM_ANNOTATION || rect[3] - rect[1] < MINIMUM_ANNOTATION {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "the annotation is too small to be picked: it is less than {MINIMUM_ANNOTATION} points across"
+            ),
+        });
+    }
+    Ok(rect)
+}
+
+/// The **pairs** of a dictionary, as the payload holds them.
+fn pairs_of(entries: &[(String, serde_json::Value)]) -> serde_json::Value {
+    serde_json::Value::Array(entries.iter().map(|(key, value)| serde_json::json!([key, value])).collect())
+}
+
+/// A node's payload with an **entry** set.
+///
+/// The entry is put where it was, and at the end if it was not there.
+fn with_entry(data: &serde_json::Value, key: &str, value: serde_json::Value) -> serde_json::Value {
+    let mut entries = entries_of(data);
+    match entries.iter_mut().find(|(name, _)| name == key) {
+        Some(entry) => entry.1 = value,
+        None => entries.push((key.to_string(), value)),
+    }
+    serde_json::json!({ "object": data.get("object").cloned().unwrap_or(serde_json::Value::Null), "entries": pairs_of(&entries) })
+}
+
 /// Read the **objects** of an object stream.
 ///
 /// An object stream is a stream that holds a file's objects, so that
@@ -1105,7 +1522,12 @@ impl GraphEvaluator {
 
 /// The panel that shows the objects.
 #[derive(Panel)]
-#[panel(id = "panel.pdf", label = "PDF objects", layer = "pdf", commands("pdf.object.add", "pdf.ref.add"))]
+#[panel(
+    id = "panel.pdf",
+    label = "PDF objects",
+    layer = "pdf",
+    commands("pdf.object.add", "pdf.ref.add", "pdf.annot.add", "pdf.page.annotations")
+)]
 pub struct PdfPanel;
 
 /// Check the dictionary, and give it back.
