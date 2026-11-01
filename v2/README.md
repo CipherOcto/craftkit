@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1406 tests.** The MCP server links **all fifteen batteries** in, so the
+**1414 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1406 tests
+cargo test          # 1414 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3639,6 +3639,7 @@ so.
 | the **conform** of a clip | **built.** The material is played at the rate that makes it fit the tempo, the tempo of the material is the clip's own, and the beat follows the audio (§202) | §202 |
 | the **name** of a node | **built.** A node has a name and nothing could change it; one command renames any node (§203) | §203 |
 | the **copy** of a node | **built.** A node and everything under it, with the edges copied and the copies joined to the copies (§204) | §204 |
+| the **group** of tracks | **built.** A group of tracks is a link: the members are mixed together, and a group that is off links nothing (§205) | §205 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13930,3 +13931,85 @@ is a document in which every copy is made by hand.
   duplicate is the same, and the kit's **appearance** is the opposite
   — two things sharing one appearance is a reference, and a copy is
   not.
+
+## 205. The group of tracks
+
+The tree's sound editor has a second kind of group: a group of
+**tracks**. The clip group of §199 is a set of things that belong
+together; the track group is a **link** — the tracks in it are mixed
+together, so a change to one track's level is a change to every track
+in the group. The v2 sound battery had the clip group and no track
+group, so nothing in it was ever linked to anything.
+
+### What was built
+
+- The group of tracks is the **same kind of node** as the group of
+  clips, with two flags on it: **mix** says the group links its
+  members' levels, and **active** says the group is on.
+- The command `sound.track.group` puts tracks in a group **by name**,
+  and the command `sound.track.group.set` sets the flags.
+- The command `sound.track.ungroup` takes the group away and leaves
+  the tracks where they were.
+- The command `sound.track.set` **asks the groups**: a change to the
+  trim of a track in a group that mixes is a change to the trim of
+  every member.
+- A group of **one** track is refused, the way a group of one clip is.
+
+### What the port found
+
+- **The tree has two group models and this tree has one.** The tree's
+  clip group is a number in the clip's own record, and the tree's
+  track group is an entry in a list of groups in the session — a name,
+  a letter, the members, two flags, an active flag and a colour. Two
+  models for one word, and neither of them is a thing in the document.
+  Here a group is a **node**: the clips of §199 point at it and the
+  tracks of this arc point at it, and the flags that only make sense
+  for tracks are the group's own.
+- **The tree's group has a letter because its group is a list entry.**
+  The letter — a, b, c — is the tree's stable name for a group, and
+  the tree's own test says it "never changes". Here the group is a
+  node and its **id** is its stable identity; the letter was a
+  substitute for an id, and the id was already there.
+- **The tree's group is a list of members and here it is an edge.**
+  The tree's group holds the ids of its member tracks, so a group is a
+  second copy of the membership. Here the membership is an edge from
+  each track to the group, so the group is derived from the edges —
+  the same way the clip's group was, and for the same reason: a fact
+  kept in two places is a fact that can be wrong in one of them.
+- **The tree links the mix through a list of attribute names.** The
+  tree's group carries a list — volume, mute, solo, rec — and a
+  change to one of those attributes is a change to the whole group.
+  Here the group says one thing: it **mixes**. The level is the thing
+  that is linked, and the phase — which is not a level — is not.
+- **The tree skips what it cannot do and here it is refused.** The
+  tree's `track.group` walks the tracks and skips the ones that are
+  not there, and it answers with the id of the group it made. Here a
+  track that is not a track is **refused by name**, and a group of one
+  track is refused before anything is made.
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/trackgroup.rs`): tracks
+  are put in a group, a group of tracks mixes them, a group that is off
+  links nothing, the mix can be taken off, a group is taken away and the
+  tracks stay, a group of one track is refused, only a track is grouped,
+  and the group is in the plan.
+- **Three commands** (`sound.track.group`, `sound.track.group.set` and
+  `sound.track.ungroup`) and **one command changed** — `sound.track.set`
+  now asks the groups. The MCP server now carries **260** commands, and
+  the sound battery carries **49**.
+
+### What it does not settle
+
+- **The tree's edit link is not here.** The tree's group has an
+  *edit* flag: selecting one track of a group selects the whole group,
+  so a move moves them together. That is a change to the **selection**,
+  and the selection is the kit's here and the editor's there — so
+  there is nowhere for the link to live yet.
+- **The tree's mute and solo are not linked here.** The tree links
+  them through its list of attributes; here the group links the level
+  and says so, and the mute and the solo are the track's own.
+- **The tree's group colour is not here.** A group in the tree has a
+  colour of its own, and the kit's **appearance** is how a thing looks
+  — so the group's colour is the appearance the group carries, and
+  there is no command of the battery's own for it.
