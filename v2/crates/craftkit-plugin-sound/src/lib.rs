@@ -11,11 +11,11 @@
 //! It contributes:
 //!
 //! - a **layer**, `sound`, which the rest of it is in;
-//! - **thirteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
+//! - **fourteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
-//!   `sound.playhead` and `sound.source`;
-//! - **thirty-seven commands**, one for each thing a person does to a
+//!   `sound.playhead`, `sound.source` and `sound.group`;
+//! - **forty commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -24,7 +24,8 @@
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, set
 //!   the **beat** of a clip and take it away, lock a clip's **content**
-//!   and its **place**, rate a clip, and
+//!   and its **place**, rate a clip, group clips and take them out of
+//!   the group, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -109,6 +110,9 @@ mod locks;
 // The **marks** on a clip: what a person has said about it.
 mod marks;
 
+// The **group** a clip is in: a set of clips that belong together.
+mod group;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
@@ -116,6 +120,7 @@ use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
+pub use group::{Group, GroupKind, ReadGroup, Ungroup};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
 pub use mixer::{
@@ -431,7 +436,10 @@ impl ClipKind {
     }
 
     /// What a clip **means**, in the plan.
-    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+    ///
+    /// The **group** is derived: it is the edge the clip carries, and
+    /// not a field of the clip's own.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
         let clip = ClipPayload::from_json(&node.data).ok()?;
         Some(serde_json::json!({
             "start": clip.start,
@@ -443,6 +451,7 @@ impl ClipKind {
             "fade_out": clip.fade_out.to_json(),
             "sync": clip.sync,
             "rating": clip.rating,
+            "group": group::group_of(document, node.id),
         }))
     }
 }
@@ -4470,7 +4479,11 @@ craftkit_sdk::plugin_anchor!(
     ReadBeat,
     EditLock,
     TimeLock,
-    SetRating
+    SetRating,
+    GroupKind,
+    Group,
+    Ungroup,
+    ReadGroup
 );
 
 #[cfg(test)]
