@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **sixty-eight commands**, one for each thing a person does to a
+//! - **sixty-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -36,7 +36,7 @@
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
-//!   the notes of a clip, and
+//!   the notes of a clip, **heal** the clips that were separated, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -152,6 +152,15 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A separation is joined again by what it is, not by where it is.**
+//! The tree's editor heals a track: it walks the clips in order and
+//! joins each one with the one before it when they are **the same
+//! sound continued** — the same source, the second starting where the
+//! first's sound carries on, and the same way of playing it. Here the
+//! rule is the same, and the tree's is checked in full: the mute, the
+//! stretch, the gain **and** the pitch, because a clip played at
+//! another pitch is not the same sound continued.
 //!
 //! **A note's place is a fact and the tree's quantise is not.** The
 //! tree's quantise has a **random** component: a note is moved by a
@@ -279,6 +288,10 @@ mod conform;
 // The **MIDI** of a clip: the notes it holds.
 mod midi;
 
+// The **healing** of a track: the clips that were separated are put
+// back together.
+mod heal;
+
 use std::collections::HashMap;
 
 pub use autoname::{ReadAutoName, SetAutoName};
@@ -291,6 +304,7 @@ use craftkit_sdk::{
 pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
+pub use heal::HealTrack;
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
 pub use midi::{ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, TransposeMidi, VelocityMidi};
