@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1330 tests.** The MCP server links **all fifteen batteries** in, so the
+**1337 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1330 tests
+cargo test          # 1337 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3629,6 +3629,7 @@ so.
 | the **copies** of a shape | **built.** A grid, a mirror over a line and a ring round a centre — the copies are paths of their own, and the transform says where each one is (§192) | §192 |
 | the **order** of the drawing | **built.** The order of the tree is the order of the drawing, and two commands say it — the kit's own lookup now reaches a node wherever it is (§193) | §193 |
 | a **reference in the dictionary** | **built.** A reference is an edge and a value at once, the page tree says itself in the file, and the count of the children is derived from the edges (§194) | §194 |
+| the **outline** of a document | **built.** The bookmarks are a tree of items with titles and destinations, the list of siblings is relinked, and the counts are derived from the visible items (§195) | §195 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13104,3 +13105,78 @@ there were.
   of a stream is written from the bytes, a `/Size` of the file is
   written from the number of objects, and a `/N` of anything else is
   still a number somebody has to keep.
+
+## 195. The outline of the document
+
+The tree's PDF editor has **bookmarks**: a tree of items, each one with
+a title and a place to go, and the tree's own library edits them by
+**path** — `[0, 2]` is the third child of the first top-level
+bookmark. v2's PDF battery had the object model and nothing that said
+what a document's outline was.
+
+### What was built
+
+- The command `pdf.outline.add` puts a **bookmark** in the outline: a
+  title, and where it goes — a page of this document. It hangs under
+  the outline's root, or under another bookmark.
+- The command `pdf.outline.read` reads the outline back: the items in
+  the order they are in, with their titles, their destinations and
+  their children.
+- The outline is made when the document has none: the **catalog**
+  names it, and an outline without a catalog has nowhere to hang.
+
+### What the port found
+
+- **The tree's outline is a list, and the tree's address is a path.**
+  The file keeps the siblings of an item in a **chain** — each one
+  names the next, and the last names none — so the tree's library
+  walks that chain and addresses a bookmark by the chain of indices
+  that reaches it. Here the chain is in the **dictionary**, as the file
+  has it (`/First`, `/Last`, `/Next`, `/Prev`), and the address is the
+  **node**: a bookmark is a node, and a node has an id. The path was
+  the tree's way of naming a place in a chain, and this tree's nodes
+  already have names.
+- **The count is derived, and the sign says whether the item is
+  open.** The tree's library recomputes every `/Count` after every
+  edit, and the sign of the number is the state: a **positive** count
+  is an item that is open and shows its children, and a **negative**
+  one is an item that is closed and shows nothing. So the count here
+  is worked out from the edges — how many items are **visible** below
+  an item — and never kept: the root's count is how many items are
+  visible at all, and an item's is how many are visible below it.
+- **The count of a file's object is not always an integer.** The
+  numbers in a file's bytes are read as **floats**, because that is
+  what the bytes are, and a reference in a loaded file therefore holds
+  `3.0` and not `3`. A reader that asks for a whole number and gets a
+  float back finds nothing: this arc's first version could not read
+  back a file it had written, and the fix is a reader that takes a
+  number however it is spelled.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/outline.rs`): a bookmark
+  may be put in the outline, the outline is read in order, a bookmark
+  may go under another, the list of siblings is relinked, the edges
+  are there as well as the values, a bookmark that cannot be is
+  refused, and the outline survives the round trip through a file.
+- **Two commands** (`pdf.outline.add` and `pdf.outline.read`). The MCP
+  server now carries **240** commands.
+- **One module** (`outline`) and one node kind more in the file's
+  terms: an outline item is an **object** of its own, with a `/Title`
+  and a `/Dest`, and it is not a new kind.
+
+### What it does not settle
+
+- **The outline is not moved.** A bookmark may be added and read, and
+  that is all. The tree's library moves bookmarks and renames them and
+  deletes them, and each of those is a **relinking** of the affected
+  siblings — the same relinking the tree's library does, and the next
+  arc.
+- **An item is only closed because its count is negative.** Nothing
+  here makes an item closed: the sign is the state, and there is no
+  command that changes it. A tree that can say *open* and *closed* is
+  the next thing to port.
+- **The count is the visible count and not the total.** An item that
+  is closed shows nothing below it, so the count of its parent does
+  not count it — which is the rule of the file, and is the rule this
+  follows.
