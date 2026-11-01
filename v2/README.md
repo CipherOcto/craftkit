@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1444 tests.** The MCP server links **all fifteen batteries** in, so the
+**1457 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1444 tests
+cargo test          # 1457 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3642,6 +3642,7 @@ so.
 | the **group** of tracks | **built.** A group of tracks is a link: the members are mixed together, and a group that is off links nothing (§205) | §205 |
 | the **elastic** of a track | **built.** An algorithm on the track says that its clips are stretched and the pitch stays, and the bound is the tree's own (§206) | §206 |
 | the **level** of a track | **built.** The trim is the input and the fader is the output, the fader is the volume lane's default, and the group links it (§207) | §207 |
+| the **pitch** of a clip | **built.** A number of semitones on the clip, refused outside its range, and the length is the same (§208) | §208 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14211,3 +14212,85 @@ and a lane is a curve for something that moves.
 - **The tree's fader is a nudge and a number.** The tree moves the
   fader in steps as well as setting it, and its nudge is a command of
   its own. Here the fader is a number and the number is set.
+
+## 208. The pitch of a clip
+
+The tree's sound editor can move a clip's **pitch**: the sound stays
+as long as it was and it is another note. It is the other half of a
+stretch — a stretch makes the sound longer and the pitch stays — and
+the tree does it as one of its **audio-suite processes**: it renders
+the material, replaces the clip's content with the rendered file, and
+keeps the original in the edit state so that `clip.remove_pitch_shift`
+can put it back. This tree had no pitch at all: a clip could be
+stretched and could not be tuned.
+
+### What was built
+
+- The **pitch** is a number of **semitones** on the clip, and the
+  command `sound.clip.pitch` sets it. Twelve semitones are an octave
+  up and minus twelve an octave down, and zero is the pitch of the
+  source.
+- The shift runs from minus twenty-four semitones to twenty-four, and
+  a shift outside that is **refused** and not pulled to the edge.
+- The clip keeps its **length**: the sound is the same size and it is
+  another note. The pitch and the stretch are two things, and a clip
+  that has both is the stretch's note moved by the shift.
+- The audio crate gains `pitch_shift` and `resample_ratio`: the sound
+  is resampled as if it were played faster, which raises the pitch and
+  makes it shorter, and it is then **stretched** back to the length it
+  was — and a stretch keeps the pitch.
+
+### What the port found
+
+- **The tree's pitch shift is a rendering and this tree's is a fact.**
+  The tree's `audiosuite.process` with `pitch_shift` renders the
+  material into a new source, replaces the clip's content with it,
+  sets the clip's stretch back to one and remembers the original
+  source, the offset and the length in the edit state — so that
+  `clip.remove_pitch_shift` can undo it. Here the pitch is a number on
+  the clip and the sound is worked out when it is played: there is no
+  rendered file, no edit state, and **nothing to remove** — a pitch of
+  zero is the undo.
+- **The tree's shift is two steps and this crate already had both.**
+  The tree's `pitch_shift` stretches the sound by the factor — the
+  pitch stays — and resamples it back to its length, which raises the
+  pitch by the factor and puts the length back. The stretch was
+  built in §206 and the resampler was built in §155, so the pitch
+  shift is the two of them in a row.
+- **The tree's shift is a clip and not a track.** The tree's
+  `clip.remove_pitch_shift` undoes the shift of a clip, and the shift
+  itself is a process over a clip's audio. Here it is a field of the
+  clip for the same reason: the sound of one clip is that clip's.
+- **The tree clamps and this tree refuses.** The tree's shift is
+  clamped to twenty-four semitones when it is asked for and to
+  forty-eight when it is done. Here the command refuses a shift
+  outside twenty-four semitones, and the method's own clamp is the
+  last line of defence and not the policy.
+
+### What it cost
+
+- **Ten tests** in the sound battery (`tests/pitch.rs`): a clip
+  carries its pitch, a pitch is set on it, one that is out of range is
+  refused, one that is not a number is refused, a node that is not a
+  clip is refused, a locked clip is not shifted, the pitch is heard
+  and the length is the same, a pitch down is heard, a pitch of zero
+  is the sound of the source, and the pitch and the stretch are two
+  things.
+- **Three tests** in the audio crate (`tests/stretch.rs`): the shift
+  raises the pitch and keeps the length, a shift down lowers it, and a
+  shift of zero is the sound.
+- **One command** (`sound.clip.pitch`). The MCP server now carries
+  **263** commands, and the sound battery carries **52**.
+
+### What it does not settle
+
+- **A big shift loses the top of the sound.** The shift is made by
+  resampling the sound as if it were played faster, and a resample
+  takes away what was above the new half of the rate: an octave up is
+  made from a sound whose top is gone. The tree's shift has the same
+  loss for the same reason. A shift that keeps every harmonic is a
+  different piece of work — a phase vocoder, or a granular one.
+- **The tree's other processes are not here.** The audio suite also
+  normalizes, reverses, inverts, removes the direct current and ramps
+  the speed; each of them is a rendering in the tree and each of them
+  would be a field here.
