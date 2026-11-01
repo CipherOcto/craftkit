@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-five commands**, one for each thing a person does to a
+//! - **fifty-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -30,7 +30,8 @@
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
-//!   do a **process** to a clip's sound and take it off, and
+//!   do a **process** to a clip's sound and take it off, render the
+//!   **stems**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -79,6 +80,12 @@
 //! drawn — an **appearance** is the colour a node is filled with, and
 //! one command sets it on any node — so the battery has no command for
 //! it, and the clip's colour is the appearance the clip carries.
+//!
+//! **The mix is worked out once.** The renderer builds the whole mix
+//! and the stems are that same mix with one track in it: the tree
+//! clones the session, solos the track and renders the mix again, and
+//! here the mix is a function of the document alone, so a stem and the
+//! mix are the same sound and not two ways of making one.
 //!
 //! **A pan is a balance and not a placement.** The tree's mixer keeps
 //! a pan on every track, and a stereo track has one panner for each of
@@ -3939,183 +3946,402 @@ pub struct RenderSound {
 impl RenderSound {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let settings = session_of(session.document());
-        let rate = settings.sample_rate;
-        // The clips: each one plays a source from an offset, for a
-        // length, at a gain.
-        let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
-        for clip in session.document().walk().filter(|node| node.kind == "sound.clip") {
-            // A clip that cannot be read is **refused**, and not left
-            // out: a sound that is missing a clip without saying so is
-            // a sound that is wrong in a way nobody can hear.
-            let payload = ClipPayload::from_json(&clip.data).map_err(|error| EngineError::Failed {
-                id: "sound.render".to_string(),
-                message: format!("the clip `{}` cannot be read: {error}", clip.id),
-            })?;
-            let Some(source_id) = payload.source else { continue };
-            // A **muted** clip is not played and is still there.
-            if payload.muted {
+        let mix = mix_of(session.document(), "sound.render")?;
+        let channels = mix.channels;
+        let bytes = craftkit_wav::write(channels, mix.rate, &mix.master);
+        write_file(&path, &bytes)?;
+        Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
+            "path": path,
+            "frames": mix.frames,
+            "rate": mix.rate,
+            "channels": channels,
+            "clips": mix.tracks.len(),
+        })))
+    }
+}
+
+/// The **mix** of a document: the sound of the whole thing, and the
+/// sound of each of its tracks.
+///
+/// The mixer is worked out **once** and the file is written from it,
+/// so that the render and the stems are the same sound: a stem is
+/// the mix with one track in it, and not a second way of mixing.
+struct Mix {
+    /// The whole mix: every track and every bus, after the master
+    /// faders and the metronome.
+    master: Vec<f32>,
+    /// The tracks that are heard, with their signal.
+    tracks: Vec<(u64, Vec<f32>)>,
+    /// How many channels the mix has.
+    channels: u16,
+    /// The rate the mix was made at.
+    rate: u32,
+    /// How many frames the mix is.
+    frames: usize,
+}
+
+/// The **mix** of a document.
+///
+/// The `id` is the command that asked for it, so that a refusal says
+/// which command refused and not which one it was borrowed from.
+fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
+    let settings = session_of(document);
+    let rate = settings.sample_rate;
+    // The clips: each one plays a source from an offset, for a
+    // length, at a gain.
+    let mut clips: Vec<(u64, u64, ClipPayload)> = Vec::new();
+    for clip in document.walk().filter(|node| node.kind == "sound.clip") {
+        // A clip that cannot be read is **refused**, and not left
+        // out: a sound that is missing a clip without saying so is
+        // a sound that is wrong in a way nobody can hear.
+        let payload = ClipPayload::from_json(&clip.data).map_err(|error| EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the clip `{}` cannot be read: {error}", clip.id),
+        })?;
+        let Some(source_id) = payload.source else { continue };
+        // A **muted** clip is not played and is still there.
+        if payload.muted {
+            continue;
+        }
+        // The **take**: a clip that is not in the take that is
+        // played is not heard, and the tree's tracks have takes for
+        // exactly that reason.
+        if let Some(track) = timeline::track_of(document, clip) {
+            let active = active_playlist(document, track);
+            let take = timeline::parent_of(document, clip.id).map(|playlist| playlist.id);
+            if let (Some(active), Some(take)) = (active, take)
+                && active != take
+            {
                 continue;
             }
-            // The **take**: a clip that is not in the take that is
-            // played is not heard, and the tree's tracks have takes for
-            // exactly that reason.
-            if let Some(track) = timeline::track_of(session.document(), clip) {
-                let active = active_playlist(session.document(), track);
-                let take = timeline::parent_of(session.document(), clip.id).map(|playlist| playlist.id);
-                if let (Some(active), Some(take)) = (active, take)
-                    && active != take
-                {
+        }
+        clips.push((source_id, clip.id, payload));
+    }
+    // The sources are read once each, and the clips that play one
+    // share it.
+    let mut sources: Vec<(u64, craftkit_wav::Sound)> = Vec::new();
+    let mut channels = 0_u16;
+    for (source_id, _, _) in &clips {
+        if sources.iter().any(|(id, _)| id == source_id) {
+            continue;
+        }
+        let Some(node) = document.node(*source_id) else { continue };
+        let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
+        let sound = read_sound("sound.render", &source.path)?;
+        if channels == 0 {
+            channels = sound.channels;
+        } else if channels != sound.channels {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "the sources do not have the same number of channels".to_string(),
+            });
+        }
+        sources.push((*source_id, sound));
+    }
+    // Each clip's samples are **prepared**: a source at another rate
+    // is resampled, a **stretched** clip is played at another
+    // speed, and the track's **automation** is applied to them,
+    // sample by sample.
+    let mut prepared: Vec<Vec<f32>> = Vec::with_capacity(clips.len());
+    for (source_id, clip_id, payload) in &clips {
+        let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else {
+            prepared.push(Vec::new());
+            continue;
+        };
+        let (from, to) = the_span(sound, payload, rate);
+        let slice = &sound.samples[from..to];
+        let samples = if sound.rate == rate {
+            slice.to_vec()
+        } else {
+            // A source that cannot be played at the session's rate
+            // is **refused**, and not truncated: a sound that is
+            // missing its tail is a sound that is wrong in a way
+            // nobody can hear.
+            craftkit_audio::resample(
+                slice,
+                sound.channels as usize,
+                sound.rate,
+                rate,
+                &craftkit_audio::Limits::default(),
+            )
+            .map_err(|error| EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the source cannot be played at {rate} Hz: {error}"),
+            })?
+        };
+        // Whether the clip's track is **elastic**: the track's
+        // algorithm says so, and the algorithms are open strings.
+        let elastic = document
+            .node(*clip_id)
+            .and_then(|clip| timeline::track_of(document, clip))
+            .map(is_elastic)
+            .unwrap_or(false);
+        // The **stretch**: the source is read more slowly, so the
+        // sound is longer and the pitch is lower. The clip's own
+        // length does not change: the stretch says how the source
+        // is played.
+        //
+        // An **elastic** track is the exception: its clips are
+        // stretched and the pitch stays, because that is what an
+        // elastic track is for. The track says so by its
+        // **algorithm** — the algorithms are open strings, and
+        // every one of them but `varispeed` says so.
+        let samples = if (payload.stretch - 1.0).abs() > f64::EPSILON {
+            if elastic {
+                craftkit_audio::time_stretch(&samples, sound.channels as usize, payload.stretch, rate)
+            } else {
+                craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
+            }
+        } else {
+            samples
+        };
+        // The **pitch**: the clip's own note, moved. The shift
+        // keeps the length — it is the other half of a stretch,
+        // and the two are the same sound read two ways.
+        let samples = if payload.pitch_semitones.abs() > f64::EPSILON {
+            craftkit_audio::pitch_shift(&samples, sound.channels as usize, payload.pitch_semitones, rate)
+        } else {
+            samples
+        };
+        // The **processes**: what is done to the sound on the way
+        // out. They are done in the order they were added, and
+        // each of them is the tree's own.
+        let samples =
+            apply_processes(&payload.processes, &samples, sound.channels as usize).map_err(|error| {
+                EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!("the clip `{}` cannot be played: {error}", clip_id),
+                }
+            })?;
+        // The **fades**: the head of the clip fades in and the tail
+        // fades out, and a fade is a gain and not a thing that
+        // belongs to a channel.
+        let samples = craftkit_audio::faded(
+            &samples,
+            sound.channels as usize,
+            payload.fade_in.fade(),
+            payload.fade_out.fade(),
+        );
+        // The **track's** automation is **not** applied here: the
+        // fader comes after the track's inserts, the way the
+        // tree's mixer runs it, and a send may be taken before the
+        // fader. The lanes under the track move the track's sound
+        // and not one clip's.
+        //
+        // The **clip's own** automation: the lanes under the clip,
+        // and their times are the clip's own — a clip carries a
+        // curve of its own, and the family's does.
+        let mut own =
+            document.node(*clip_id).map(|clip| automate::automation_of(document, clip)).unwrap_or_default();
+        // A **bypassed** gain is not in the path: the clip is as
+        // loud as it is, and the curve that automates its level is
+        // not in the path either. The curve is **kept**, and it
+        // comes back when the bypass is taken off.
+        if payload.gain_bypassed {
+            own.volume = None;
+        }
+        let mut samples = automate::apply(&own, &samples, sound.channels as usize, 0);
+        // The clip's **gain**: the level of the clip itself. The
+        // tree's mixer multiplies it into the clip before the
+        // track's inserts, and so does this one.
+        let clip_gain =
+            if payload.gain_bypassed { 1.0 } else { craftkit_audio::db_to_linear(payload.gain_db) as f32 };
+        if clip_gain != 1.0 {
+            samples.iter_mut().for_each(|sample| *sample *= clip_gain);
+        }
+        // The clip's **own effects**: the tree's clip effects are an
+        // equaliser and a compressor on one clip and not on the
+        // track, and they run over the clip's own sound before it
+        // is mixed into the track.
+        if let Some(clip) = document.node(*clip_id) {
+            for insert in inserts_of(document, clip) {
+                if insert.bypass {
                     continue;
                 }
-            }
-            clips.push((source_id, clip.id, payload));
-        }
-        // The sources are read once each, and the clips that play one
-        // share it.
-        let mut sources: Vec<(u64, craftkit_wav::Sound)> = Vec::new();
-        let mut channels = 0_u16;
-        for (source_id, _, _) in &clips {
-            if sources.iter().any(|(id, _)| id == source_id) {
-                continue;
-            }
-            let Some(node) = session.document().node(*source_id) else { continue };
-            let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
-            let sound = read_sound("sound.render", &source.path)?;
-            if channels == 0 {
-                channels = sound.channels;
-            } else if channels != sound.channels {
-                return Err(EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: "the sources do not have the same number of channels".to_string(),
-                });
-            }
-            sources.push((*source_id, sound));
-        }
-        // Each clip's samples are **prepared**: a source at another rate
-        // is resampled, a **stretched** clip is played at another
-        // speed, and the track's **automation** is applied to them,
-        // sample by sample.
-        let mut prepared: Vec<Vec<f32>> = Vec::with_capacity(clips.len());
-        for (source_id, clip_id, payload) in &clips {
-            let Some((_, sound)) = sources.iter().find(|(id, _)| id == source_id) else {
-                prepared.push(Vec::new());
-                continue;
-            };
-            let (from, to) = the_span(sound, payload, rate);
-            let slice = &sound.samples[from..to];
-            let samples = if sound.rate == rate {
-                slice.to_vec()
-            } else {
-                // A source that cannot be played at the session's rate
-                // is **refused**, and not truncated: a sound that is
-                // missing its tail is a sound that is wrong in a way
-                // nobody can hear.
-                craftkit_audio::resample(
-                    slice,
-                    sound.channels as usize,
-                    sound.rate,
-                    rate,
-                    &craftkit_audio::Limits::default(),
+                let mut plugin = craftkit_plugins::make(
+                    &insert.plugin,
+                    &craftkit_plugins::Params::from_map(insert.params),
                 )
-                .map_err(|error| EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: format!("the source cannot be played at {rate} Hz: {error}"),
-                })?
+                .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })?;
+                plugin.process(&mut samples, sound.channels as usize, rate);
+            }
+        }
+        prepared.push(samples);
+    }
+    // How long the sound is: the end of the longest clip.
+    let mut frames = 0_i64;
+    for (index, (_, _, payload)) in clips.iter().enumerate() {
+        let end = payload.start.max(0) + prepared[index].len() as i64 / channels.max(1) as i64;
+        if end > frames {
+            frames = end;
+        }
+    }
+    let frames = frames.max(0) as usize;
+    // The **tracks**: each track's signal is the sum of its clips,
+    // its **inserts** are run over that sum in the order of the
+    // tree, and its **fader** comes after them — the fader is the
+    // track's automation, and the tree's mixer runs the fader
+    // last.
+    //
+    // The signal before the fader is kept for the tracks whose
+    // sends ask for it: a **pre-fader** send is a copy of the
+    // signal before the fader, and the copy is the whole point of
+    // it.
+    let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
+    let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
+    // The **routed tracks**: the tracks that feed a bus, and the
+    // signal they feed it with.
+    let mut routed: Vec<(u64, Vec<f32>)> = Vec::new();
+    // The **readers**: the tracks that read a bus. A reader is
+    // finished after the buses are, because its sound is the bus's
+    // sound.
+    let readers = mixer::readers_of(document);
+    for track in document
+        .walk()
+        .filter(|node| node.kind == "sound.track" && !is_master(node) && !mixer::reads_bus(document, node.id))
+    {
+        let mut signal = vec![0.0_f32; frames];
+        for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
+            let Some(clip) = document.node(*clip_id) else { continue };
+            if timeline::track_of(document, clip).map(|owner| owner.id) != Some(track.id) {
+                continue;
+            }
+            // The clip's own gain is already in its samples: the
+            // tree's mixer multiplies it into the clip.
+            add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, 1.0);
+        }
+        // The **trim**: the level of the track's input, and its
+        // phase. The tree's mixer applies the trim to the strip
+        // before the inserts, so an insert sees the trimmed sound.
+        let trim = TrackPayload::from_json(&track.data)
+            .map(|payload| {
+                let gain = craftkit_audio::db_to_linear(payload.trim_db) as f32;
+                let phase = if payload.phase_invert { -1.0 } else { 1.0 };
+                gain * phase
+            })
+            .unwrap_or(1.0);
+        if trim != 1.0 {
+            signal.iter_mut().for_each(|sample| *sample *= trim);
+        }
+        for insert in inserts_of(document, track) {
+            if insert.bypass {
+                continue;
+            }
+            let mut plugin =
+                craftkit_plugins::make(&insert.plugin, &craftkit_plugins::Params::from_map(insert.params))
+                    .map_err(|error| EngineError::Failed {
+                        id: id.to_string(),
+                        message: error.to_string(),
+                    })?;
+            plugin.process(&mut signal, channels as usize, rate);
+        }
+        // The **mute** gates the audio and the track's pre-fader
+        // tap: a muted track is not heard anywhere.
+        let automation = automate::automation_of(document, track);
+        let gated = automate::apply_mute(&automation, &signal, channels as usize, 0);
+        // The **fader**: the track's volume, over the whole signal
+        // and not over one clip.
+        let faded = automate::apply_fader(&automation, &gated, channels as usize, 0);
+        if sends_of(document).iter().any(|send| send.track == track.id && send.pre_fader) {
+            pre_fader.push((track.id, gated));
+        }
+        // The **route**: a track that feeds a bus is heard on that
+        // bus and not in the main mix. The tree's strip goes to
+        // its output and to nowhere else.
+        match mixer::route_of(document, track.id) {
+            // The **balance** is applied when the track is routed:
+            // a track that feeds a bus is balanced before it
+            // reaches the bus, and it is not balanced again.
+            Some(bus) => {
+                let panned = automate::apply_pan(&automation, &faded, channels.max(1) as usize, 0);
+                routed.push((bus, panned));
+            }
+            None => tracks.push((track.id, faded, automation)),
+        }
+    }
+    // The **solo**: a soloed track silences the others, and their
+    // sends carry the silence, because a send is a copy of the
+    // track's signal.
+    if tracks.iter().any(|(id, _, _)| track_is_soloed(document, *id)) {
+        for (id, signal, _) in &mut tracks {
+            if !track_is_soloed(document, *id) {
+                signal.iter_mut().for_each(|sample| *sample = 0.0);
+            }
+        }
+        // A soloed-out track's **pre-fader** copy is silent too: the
+        // tree's mixer skips the send of a track that is muted, and
+        // the copy is not heard.
+        for (id, signal) in &mut pre_fader {
+            if !track_is_soloed(document, *id) {
+                signal.iter_mut().for_each(|sample| *sample = 0.0);
+            }
+        }
+    }
+    // The **buses**: each bus is fed by the sends that name it, and
+    // a send carries a copy of its track's signal at its own level.
+    let mut buses: Vec<(u64, Vec<f32>)> = Vec::new();
+    for bus in document.walk().filter(|node| node.kind == "sound.bus") {
+        let mut signal = vec![0.0_f32; frames];
+        for send in sends_of(document) {
+            if send.bus != bus.id {
+                continue;
+            }
+            // A **pre-fader** send takes the signal from before the
+            // fader, and a post-fader send takes it from after.
+            let source: Option<&[f32]> = if send.pre_fader {
+                pre_fader.iter().find(|(id, _)| *id == send.track).map(|(_, signal)| signal.as_slice())
+            } else {
+                tracks.iter().find(|(id, _, _)| *id == send.track).map(|(_, signal, _)| signal.as_slice())
             };
-            // Whether the clip's track is **elastic**: the track's
-            // algorithm says so, and the algorithms are open strings.
-            let elastic = session
-                .document()
-                .node(*clip_id)
-                .and_then(|clip| timeline::track_of(session.document(), clip))
-                .map(is_elastic)
-                .unwrap_or(false);
-            // The **stretch**: the source is read more slowly, so the
-            // sound is longer and the pitch is lower. The clip's own
-            // length does not change: the stretch says how the source
-            // is played.
-            //
-            // An **elastic** track is the exception: its clips are
-            // stretched and the pitch stays, because that is what an
-            // elastic track is for. The track says so by its
-            // **algorithm** — the algorithms are open strings, and
-            // every one of them but `varispeed` says so.
-            let samples = if (payload.stretch - 1.0).abs() > f64::EPSILON {
-                if elastic {
-                    craftkit_audio::time_stretch(&samples, sound.channels as usize, payload.stretch, rate)
-                } else {
-                    craftkit_audio::varispeed(&samples, sound.channels as usize, payload.stretch)
+            let Some(track_signal) = source else {
+                continue;
+            };
+            if send.mute {
+                // A muted send is a copy of **nothing**: the track
+                // is still heard on its own and the bus hears
+                // nothing.
+                continue;
+            }
+            let level = craftkit_audio::db_to_linear(send.level_db) as f32;
+            let panned = panned(track_signal, send.pan, channels as usize);
+            add_into(&mut signal, &panned, 0, level);
+        }
+        buses.push((bus.id, signal));
+    }
+    // The **routed tracks**: a track that feeds a bus is heard on
+    // that bus.
+    for (bus, signal) in &routed {
+        if let Some((_, bus_signal)) = buses.iter_mut().find(|(id, _)| id == bus) {
+            add_into(bus_signal, signal, 0, 1.0);
+        }
+    }
+    // The **mix order**: the buses and the readers, in the order
+    // they are mixed. A bus is mixed before the readers that read
+    // it, and a reader is mixed before the bus it feeds — so a
+    // reader that feeds a bus is heard there and not by itself.
+    let stages = mixer::stage_order(document)
+        .map_err(|message| EngineError::Failed { id: id.to_string(), message })?;
+    for stage in stages {
+        match stage {
+            mixer::Stage::Bus(id) => {
+                // A bus that feeds another bus is heard there and
+                // not by itself.
+                let Some(destination) = mixer::route_of(document, id) else { continue };
+                let Some(index) = buses.iter().position(|(bus, _)| *bus == id) else { continue };
+                let signal = buses[index].1.clone();
+                if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
+                    add_into(target, &signal, 0, 1.0);
                 }
-            } else {
-                samples
-            };
-            // The **pitch**: the clip's own note, moved. The shift
-            // keeps the length — it is the other half of a stretch,
-            // and the two are the same sound read two ways.
-            let samples = if payload.pitch_semitones.abs() > f64::EPSILON {
-                craftkit_audio::pitch_shift(&samples, sound.channels as usize, payload.pitch_semitones, rate)
-            } else {
-                samples
-            };
-            // The **processes**: what is done to the sound on the way
-            // out. They are done in the order they were added, and
-            // each of them is the tree's own.
-            let samples =
-                apply_processes(&payload.processes, &samples, sound.channels as usize).map_err(|error| {
-                    EngineError::Failed {
-                        id: "sound.render".to_string(),
-                        message: format!("the clip `{}` cannot be played: {error}", clip_id),
-                    }
-                })?;
-            // The **fades**: the head of the clip fades in and the tail
-            // fades out, and a fade is a gain and not a thing that
-            // belongs to a channel.
-            let samples = craftkit_audio::faded(
-                &samples,
-                sound.channels as usize,
-                payload.fade_in.fade(),
-                payload.fade_out.fade(),
-            );
-            // The **track's** automation is **not** applied here: the
-            // fader comes after the track's inserts, the way the
-            // tree's mixer runs it, and a send may be taken before the
-            // fader. The lanes under the track move the track's sound
-            // and not one clip's.
-            //
-            // The **clip's own** automation: the lanes under the clip,
-            // and their times are the clip's own — a clip carries a
-            // curve of its own, and the family's does.
-            let mut own = session
-                .document()
-                .node(*clip_id)
-                .map(|clip| automate::automation_of(session.document(), clip))
-                .unwrap_or_default();
-            // A **bypassed** gain is not in the path: the clip is as
-            // loud as it is, and the curve that automates its level is
-            // not in the path either. The curve is **kept**, and it
-            // comes back when the bypass is taken off.
-            if payload.gain_bypassed {
-                own.volume = None;
             }
-            let mut samples = automate::apply(&own, &samples, sound.channels as usize, 0);
-            // The clip's **gain**: the level of the clip itself. The
-            // tree's mixer multiplies it into the clip before the
-            // track's inserts, and so does this one.
-            let clip_gain = if payload.gain_bypassed {
-                1.0
-            } else {
-                craftkit_audio::db_to_linear(payload.gain_db) as f32
-            };
-            if clip_gain != 1.0 {
-                samples.iter_mut().for_each(|sample| *sample *= clip_gain);
-            }
-            // The clip's **own effects**: the tree's clip effects are an
-            // equaliser and a compressor on one clip and not on the
-            // track, and they run over the clip's own sound before it
-            // is mixed into the track.
-            if let Some(clip) = session.document().node(*clip_id) {
-                for insert in inserts_of(session.document(), clip) {
+            mixer::Stage::Reader(reader, bus) => {
+                // A track that reads a bus takes the bus's sound,
+                // with its own inserts and its own fader. A bus
+                // that is read is not heard by itself: the tree's
+                // bus is read by an aux and is silent on its own.
+                let Some((_, bus_signal)) = buses.iter().find(|(id, _)| *id == bus) else { continue };
+                let Some(track) = document.node(reader) else { continue };
+                let mut signal = bus_signal.clone();
+                for insert in inserts_of(document, track) {
                     if insert.bypass {
                         continue;
                     }
@@ -4124,292 +4350,204 @@ impl RenderSound {
                         &craftkit_plugins::Params::from_map(insert.params),
                     )
                     .map_err(|error| EngineError::Failed {
-                        id: "sound.render".to_string(),
+                        id: id.to_string(),
                         message: error.to_string(),
                     })?;
-                    plugin.process(&mut samples, sound.channels as usize, rate);
+                    plugin.process(&mut signal, channels.max(1) as usize, rate);
                 }
-            }
-            prepared.push(samples);
-        }
-        // How long the sound is: the end of the longest clip.
-        let mut frames = 0_i64;
-        for (index, (_, _, payload)) in clips.iter().enumerate() {
-            let end = payload.start.max(0) + prepared[index].len() as i64 / channels.max(1) as i64;
-            if end > frames {
-                frames = end;
-            }
-        }
-        let frames = frames.max(0) as usize;
-        // The **tracks**: each track's signal is the sum of its clips,
-        // its **inserts** are run over that sum in the order of the
-        // tree, and its **fader** comes after them — the fader is the
-        // track's automation, and the tree's mixer runs the fader
-        // last.
-        //
-        // The signal before the fader is kept for the tracks whose
-        // sends ask for it: a **pre-fader** send is a copy of the
-        // signal before the fader, and the copy is the whole point of
-        // it.
-        let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
-        let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
-        // The **routed tracks**: the tracks that feed a bus, and the
-        // signal they feed it with.
-        let mut routed: Vec<(u64, Vec<f32>)> = Vec::new();
-        // The **readers**: the tracks that read a bus. A reader is
-        // finished after the buses are, because its sound is the bus's
-        // sound.
-        let readers = mixer::readers_of(session.document());
-        for track in session.document().walk().filter(|node| {
-            node.kind == "sound.track" && !is_master(node) && !mixer::reads_bus(session.document(), node.id)
-        }) {
-            let mut signal = vec![0.0_f32; frames];
-            for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
-                let Some(clip) = session.document().node(*clip_id) else { continue };
-                if timeline::track_of(session.document(), clip).map(|owner| owner.id) != Some(track.id) {
-                    continue;
-                }
-                // The clip's own gain is already in its samples: the
-                // tree's mixer multiplies it into the clip.
-                add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, 1.0);
-            }
-            // The **trim**: the level of the track's input, and its
-            // phase. The tree's mixer applies the trim to the strip
-            // before the inserts, so an insert sees the trimmed sound.
-            let trim = TrackPayload::from_json(&track.data)
-                .map(|payload| {
-                    let gain = craftkit_audio::db_to_linear(payload.trim_db) as f32;
-                    let phase = if payload.phase_invert { -1.0 } else { 1.0 };
-                    gain * phase
-                })
-                .unwrap_or(1.0);
-            if trim != 1.0 {
-                signal.iter_mut().for_each(|sample| *sample *= trim);
-            }
-            for insert in inserts_of(session.document(), track) {
-                if insert.bypass {
-                    continue;
-                }
-                let mut plugin = craftkit_plugins::make(
-                    &insert.plugin,
-                    &craftkit_plugins::Params::from_map(insert.params),
-                )
-                .map_err(|error| EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: error.to_string(),
-                })?;
-                plugin.process(&mut signal, channels as usize, rate);
-            }
-            // The **mute** gates the audio and the track's pre-fader
-            // tap: a muted track is not heard anywhere.
-            let automation = automate::automation_of(session.document(), track);
-            let gated = automate::apply_mute(&automation, &signal, channels as usize, 0);
-            // The **fader**: the track's volume, over the whole signal
-            // and not over one clip.
-            let faded = automate::apply_fader(&automation, &gated, channels as usize, 0);
-            if sends_of(session.document()).iter().any(|send| send.track == track.id && send.pre_fader) {
-                pre_fader.push((track.id, gated));
-            }
-            // The **route**: a track that feeds a bus is heard on that
-            // bus and not in the main mix. The tree's strip goes to
-            // its output and to nowhere else.
-            match mixer::route_of(session.document(), track.id) {
-                // The **balance** is applied when the track is routed:
-                // a track that feeds a bus is balanced before it
-                // reaches the bus, and it is not balanced again.
-                Some(bus) => {
-                    let panned = automate::apply_pan(&automation, &faded, channels.max(1) as usize, 0);
-                    routed.push((bus, panned));
-                }
-                None => tracks.push((track.id, faded, automation)),
-            }
-        }
-        // The **solo**: a soloed track silences the others, and their
-        // sends carry the silence, because a send is a copy of the
-        // track's signal.
-        if tracks.iter().any(|(id, _, _)| track_is_soloed(session.document(), *id)) {
-            for (id, signal, _) in &mut tracks {
-                if !track_is_soloed(session.document(), *id) {
-                    signal.iter_mut().for_each(|sample| *sample = 0.0);
-                }
-            }
-            // A soloed-out track's **pre-fader** copy is silent too: the
-            // tree's mixer skips the send of a track that is muted, and
-            // the copy is not heard.
-            for (id, signal) in &mut pre_fader {
-                if !track_is_soloed(session.document(), *id) {
-                    signal.iter_mut().for_each(|sample| *sample = 0.0);
-                }
-            }
-        }
-        // The **buses**: each bus is fed by the sends that name it, and
-        // a send carries a copy of its track's signal at its own level.
-        let mut buses: Vec<(u64, Vec<f32>)> = Vec::new();
-        for bus in session.document().walk().filter(|node| node.kind == "sound.bus") {
-            let mut signal = vec![0.0_f32; frames];
-            for send in sends_of(session.document()) {
-                if send.bus != bus.id {
-                    continue;
-                }
-                // A **pre-fader** send takes the signal from before the
-                // fader, and a post-fader send takes it from after.
-                let source: Option<&[f32]> = if send.pre_fader {
-                    pre_fader.iter().find(|(id, _)| *id == send.track).map(|(_, signal)| signal.as_slice())
-                } else {
-                    tracks.iter().find(|(id, _, _)| *id == send.track).map(|(_, signal, _)| signal.as_slice())
-                };
-                let Some(track_signal) = source else {
-                    continue;
-                };
-                if send.mute {
-                    // A muted send is a copy of **nothing**: the track
-                    // is still heard on its own and the bus hears
-                    // nothing.
-                    continue;
-                }
-                let level = craftkit_audio::db_to_linear(send.level_db) as f32;
-                let panned = panned(track_signal, send.pan, channels as usize);
-                add_into(&mut signal, &panned, 0, level);
-            }
-            buses.push((bus.id, signal));
-        }
-        // The **routed tracks**: a track that feeds a bus is heard on
-        // that bus.
-        for (bus, signal) in &routed {
-            if let Some((_, bus_signal)) = buses.iter_mut().find(|(id, _)| id == bus) {
-                add_into(bus_signal, signal, 0, 1.0);
-            }
-        }
-        // The **mix order**: the buses and the readers, in the order
-        // they are mixed. A bus is mixed before the readers that read
-        // it, and a reader is mixed before the bus it feeds — so a
-        // reader that feeds a bus is heard there and not by itself.
-        let stages = mixer::stage_order(session.document())
-            .map_err(|message| EngineError::Failed { id: "sound.render".to_string(), message })?;
-        for stage in stages {
-            match stage {
-                mixer::Stage::Bus(id) => {
-                    // A bus that feeds another bus is heard there and
-                    // not by itself.
-                    let Some(destination) = mixer::route_of(session.document(), id) else { continue };
-                    let Some(index) = buses.iter().position(|(bus, _)| *bus == id) else { continue };
-                    let signal = buses[index].1.clone();
-                    if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
-                        add_into(target, &signal, 0, 1.0);
-                    }
-                }
-                mixer::Stage::Reader(reader, bus) => {
-                    // A track that reads a bus takes the bus's sound,
-                    // with its own inserts and its own fader. A bus
-                    // that is read is not heard by itself: the tree's
-                    // bus is read by an aux and is silent on its own.
-                    let Some((_, bus_signal)) = buses.iter().find(|(id, _)| *id == bus) else { continue };
-                    let Some(track) = session.document().node(reader) else { continue };
-                    let mut signal = bus_signal.clone();
-                    for insert in inserts_of(session.document(), track) {
-                        if insert.bypass {
-                            continue;
+                let automation = automate::automation_of(document, track);
+                let gated = automate::apply_mute(&automation, &signal, channels.max(1) as usize, 0);
+                let faded = automate::apply_fader(&automation, &gated, channels.max(1) as usize, 0);
+                // A reader that **feeds a bus** is heard there and
+                // not in the main mix.
+                match mixer::route_of(document, reader) {
+                    Some(destination) => {
+                        if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
+                            add_into(target, &faded, 0, 1.0);
                         }
-                        let mut plugin = craftkit_plugins::make(
-                            &insert.plugin,
-                            &craftkit_plugins::Params::from_map(insert.params),
-                        )
-                        .map_err(|error| EngineError::Failed {
-                            id: "sound.render".to_string(),
-                            message: error.to_string(),
-                        })?;
-                        plugin.process(&mut signal, channels.max(1) as usize, rate);
                     }
-                    let automation = automate::automation_of(session.document(), track);
-                    let gated = automate::apply_mute(&automation, &signal, channels.max(1) as usize, 0);
-                    let faded = automate::apply_fader(&automation, &gated, channels.max(1) as usize, 0);
-                    // A reader that **feeds a bus** is heard there and
-                    // not in the main mix.
-                    match mixer::route_of(session.document(), reader) {
-                        Some(destination) => {
-                            if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
-                                add_into(target, &faded, 0, 1.0);
-                            }
-                        }
-                        None => tracks.push((reader, faded, automation)),
-                    }
+                    None => tracks.push((reader, faded, automation)),
                 }
             }
         }
-        // The **master** is the file: every track and every bus.
-        let mut master = vec![0.0_f32; frames];
-        for (_, signal, automation) in &tracks {
-            // The **balance**: the track's own pan is the track's, and
-            // it is applied when the track is routed. A copy that a
-            // send takes is balanced by the **send's** own pan.
-            let own = automate::apply_pan(automation, signal, channels.max(1) as usize, 0);
-            add_into(&mut master, &own, 0, 1.0);
+    }
+    // The **master** is the file: every track and every bus.
+    let mut master = vec![0.0_f32; frames];
+    for (_, signal, automation) in &tracks {
+        // The **balance**: the track's own pan is the track's, and
+        // it is applied when the track is routed. A copy that a
+        // send takes is balanced by the **send's** own pan.
+        let own = automate::apply_pan(automation, signal, channels.max(1) as usize, 0);
+        add_into(&mut master, &own, 0, 1.0);
+    }
+    for (bus, signal) in &buses {
+        // A bus that is **read** is heard through the reader, and a
+        // bus that **feeds another bus** is heard there: neither is
+        // heard by itself.
+        if readers.iter().any(|(_, read)| read == bus) {
+            continue;
         }
-        for (bus, signal) in &buses {
-            // A bus that is **read** is heard through the reader, and a
-            // bus that **feeds another bus** is heard there: neither is
-            // heard by itself.
-            if readers.iter().any(|(_, read)| read == bus) {
+        if mixer::route_of(document, *bus).is_some() {
+            continue;
+        }
+        add_into(&mut master, signal, 0, 1.0);
+    }
+    // The **master faders**: a track of the kind `master` holds a
+    // fader for the whole mix and not for a part of it. The tree's
+    // mixer runs the master faders over the main mix, in the order
+    // of the tree, and the metronome is summed after them.
+    for master_track in document.walk().filter(|node| node.kind == "sound.track" && is_master(node)) {
+        for insert in inserts_of(document, master_track) {
+            if insert.bypass {
                 continue;
             }
-            if mixer::route_of(session.document(), *bus).is_some() {
-                continue;
-            }
-            add_into(&mut master, signal, 0, 1.0);
+            let mut plugin =
+                craftkit_plugins::make(&insert.plugin, &craftkit_plugins::Params::from_map(insert.params))
+                    .map_err(|error| EngineError::Failed {
+                        id: id.to_string(),
+                        message: error.to_string(),
+                    })?;
+            plugin.process(&mut master, channels.max(1) as usize, rate);
         }
-        // The **master faders**: a track of the kind `master` holds a
-        // fader for the whole mix and not for a part of it. The tree's
-        // mixer runs the master faders over the main mix, in the order
-        // of the tree, and the metronome is summed after them.
-        for master_track in
-            session.document().walk().filter(|node| node.kind == "sound.track" && is_master(node))
-        {
-            for insert in inserts_of(session.document(), master_track) {
-                if insert.bypass {
-                    continue;
-                }
-                let mut plugin = craftkit_plugins::make(
-                    &insert.plugin,
-                    &craftkit_plugins::Params::from_map(insert.params),
-                )
-                .map_err(|error| EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: error.to_string(),
-                })?;
-                plugin.process(&mut master, channels.max(1) as usize, rate);
-            }
-            // The **fader** of the master: its own lanes, over the whole
-            // mix.
-            let automation = automate::automation_of(session.document(), master_track);
-            master = automate::apply_mute(&automation, &master, channels.max(1) as usize, 0);
-            master = automate::apply_fader(&automation, &master, channels.max(1) as usize, 0);
+        // The **fader** of the master: its own lanes, over the whole
+        // mix.
+        let automation = automate::automation_of(document, master_track);
+        master = automate::apply_mute(&automation, &master, channels.max(1) as usize, 0);
+        master = automate::apply_fader(&automation, &master, channels.max(1) as usize, 0);
+    }
+    let channels = channels.max(1);
+    // The **metronome**: the click is mixed in after the master, so
+    // it reaches the output without passing through a track, a send
+    // or an insert. The beats come from the tempo map, and the
+    // first beat of a bar is the accent.
+    if settings.metronome {
+        click_into(&mut master, channels as usize, rate, &tempo_map(document), &settings);
+    }
+    let mix = craftkit_audio::mix(
+        &[craftkit_audio::Track { start: 0, samples: master, gain: 1.0 }],
+        rate,
+        &craftkit_audio::Limits::default(),
+    )
+    .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })?;
+    Ok(Mix {
+        master: mix.samples,
+        tracks: tracks.into_iter().map(|(id, signal, _)| (id, signal)).collect(),
+        channels,
+        rate,
+        frames: mix.frames.max(0) as usize,
+    })
+}
+
+/// Render the **stems**: one file for each track.
+///
+/// A stem is the mix with **one track in it**: the tree's bounce solos
+/// the track and renders the whole mix, so a stem carries the master
+/// faders and the metronome with it, and a stem of a track that feeds
+/// a bus carries the bus.
+///
+/// The files are written into a **directory**, and the directory is
+/// made if it is not there. Each file is named after its track, and a
+/// name that is taken gets a number after it — two tracks with the
+/// same name are two files and not one file written twice.
+///
+/// A **muted** track is not bounced: the tree does not bounce it, and
+/// a stem of silence is a file nobody asked for. The mute is a **lane**
+/// here and not a field of the track, so a muted track is one whose
+/// mute lane says so at the start.
+#[derive(Command)]
+#[command(id = "sound.render.stems", area = "sound", layer = "sound", icon = "play", menu("Render"))]
+pub struct RenderStems {
+    /// The directory to write the stems into.
+    pub directory: Text,
+}
+
+impl RenderStems {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let directory = self.directory.0.clone();
+        if directory.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "sound.render.stems".to_string(),
+                message: "a directory is a path".to_string(),
+            });
         }
-        let channels = channels.max(1);
-        // The **metronome**: the click is mixed in after the master, so
-        // it reaches the output without passing through a track, a send
-        // or an insert. The beats come from the tempo map, and the
-        // first beat of a bar is the accent.
-        if settings.metronome {
-            click_into(&mut master, channels as usize, rate, &tempo_map(session.document()), &settings);
-        }
-        let mix = craftkit_audio::mix(
-            &[craftkit_audio::Track { start: 0, samples: master, gain: 1.0 }],
-            rate,
-            &craftkit_audio::Limits::default(),
-        )
-        .map_err(|error| EngineError::Failed {
-            id: "sound.render".to_string(),
-            message: error.to_string(),
+        std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
+            id: "sound.render.stems".to_string(),
+            message: format!("the directory `{directory}` cannot be made: {error}"),
         })?;
-        let bytes = craftkit_wav::write(channels, rate, &mix.samples);
-        write_file(&path, &bytes)?;
-        Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
-            "path": path,
-            "frames": mix.frames,
-            "rate": rate,
-            "channels": channels,
-            "clips": tracks.len(),
-        })))
+        let document = session.document().clone();
+        // The **tracks** that are bounced: a track that is not a track
+        // is not bounced, a **master** is not bounced (it holds the
+        // fader of the mix and not a sound of its own), and a muted
+        // track is not bounced.
+        let mut files = Vec::new();
+        for track in document.walk().filter(|node| node.kind == "sound.track" && !is_master(node)) {
+            // The **mute** is a lane here and not a field of the
+            // track, so a muted track is one whose mute lane says so.
+            let muted = automate::automation_of(&document, track)
+                .mute
+                .as_ref()
+                .map(|points| automate::value_at(points, 0) >= 0.5)
+                .unwrap_or(false);
+            if muted {
+                continue;
+            }
+            // The **stem** is the mix with this track in it and the
+            // others out: the track is soloed and the mix is worked
+            // out again, so a stem is the same sound as the mix and
+            // not a second way of mixing.
+            let mut soloed = document.clone();
+            let tracks: Vec<u64> =
+                soloed.walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+            for other in tracks {
+                let Some(node) = soloed.node_mut(other) else { continue };
+                let Ok(mut payload) = TrackPayload::from_json(&node.data) else { continue };
+                payload.solo = other == track.id;
+                node.data = payload.to_json();
+            }
+            let mix = mix_of(&soloed, "sound.render.stems")?;
+            let bytes = craftkit_wav::write(mix.channels, mix.rate, &mix.master);
+            let path = a_stem_path(&directory, &track.name);
+            write_file(&path, &bytes)?;
+            files.push(path);
+        }
+        Ok(Outcome::new(format!("bounced {} stems into `{directory}`", files.len()))
+            .with_data(serde_json::json!({ "directory": directory, "files": files })))
+    }
+}
+
+/// The **path** of a stem: the track's name in the directory, and a
+/// name that is taken gets a number after it.
+///
+/// The name is made safe for a file system: the letters and the
+/// numbers and a few marks are kept and the rest becomes an
+/// underscore, and a name that is empty is `untitled`.
+fn a_stem_path(directory: &str, name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() || matches!(character, '-' | '_' | ' ' | '.') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe = safe.trim().trim_start_matches('.').to_string();
+    let safe = if safe.is_empty() { "untitled".to_string() } else { safe.chars().take(100).collect() };
+    let first = format!("{directory}/{safe}.wav");
+    if !std::path::Path::new(&first).exists() {
+        return first;
+    }
+    let mut number = 2_u32;
+    loop {
+        let path = format!("{directory}/{safe}-{number}.wav");
+        if !std::path::Path::new(&path).exists() {
+            return path;
+        }
+        number = number.saturating_add(1);
+        if number > 10_000 {
+            return format!("{directory}/{safe}.wav");
+        }
     }
 }
 
