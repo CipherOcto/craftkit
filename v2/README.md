@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1297 tests.** The MCP server links **all fifteen batteries** in, so the
+**1302 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1297 tests
+cargo test          # 1302 tests
 cargo run -p craftkit-studio
 ```
 
@@ -12653,3 +12653,67 @@ not put one against another.
   which is a **view** setting — a number of pixels a thing lands on.
   This tree's timeline has no grid, so there is nothing to snap to but
   the clips.
+
+## 188. The annotation is an object on the page
+
+The tree's PDF editor draws annotations on its pages: links, notes,
+highlights, and the rest of the kinds the PDF names. v2's PDF battery
+could read a file and write one, and had nothing to say about the
+things a page carries besides its content.
+
+### What was built
+
+- The command `pdf.annot.add` puts an annotation on a page: its kind,
+  its rectangle, its text, and — for a link — where it goes.
+- The command `pdf.page.annotations` reads the annotations of a page,
+  and each one says where it goes.
+- The page names its annotations in the `/Annots`, and that naming is an
+  **edge** — the same edge the page tree is made of.
+
+### What the port found
+
+- **The tree's kind is a list, and this one's is a name.** The tree's
+  editor has a list of the annotations it draws and keeps the others as
+  they are, and its `LinkAction` is a closed list of three — a page, a
+  web address, and the things it does not edit. Here nothing matches
+  on the kind: the annotation says what it is, and the **action** is an
+  object of its own, so that a third party may make one. The tree's
+  third case — the thing it cannot edit — is the case that needs no
+  case at all.
+- **The tree's rectangle is put the right way round.** The corners may
+  come in any order and the tree sorts them, and a link that is less
+  than two points across is refused: a link that cannot be clicked is
+  not a link. The bound is the tree's own.
+- **A web address is 7-bit ASCII**, and the PDF says so (§12.6.4.8).
+  An address that is not is refused here too.
+- **The action is written inside the annotation in the tree, and it is
+  an object here.** The tree's `/A` is a dictionary inside the
+  annotation's own dictionary; here it is an object the annotation
+  refers to — which is legal PDF, and which keeps **one** spelling for
+  a dictionary: a list of pairs.
+
+### What it cost
+
+- **Five tests** in the battery (`tests/annot.rs`): the annotation is an
+  object on the page, a link goes to another page, a link goes to a web
+  address, the annotations of a page are read, and an annotation that
+  cannot be made is refused.
+- **Two commands** (`pdf.annot.add` and `pdf.page.annotations`). The MCP
+  server now carries **231** commands.
+
+### What it does not settle
+
+- **The annotation is not drawn.** v2 has no PDF renderer: the battery
+  reads and writes the file, and the drawing of a page is a question
+  for the tree.
+- **The style is not written.** The tree's link has a style — a border
+  width, a colour, a dash, an underline and a highlight. Here those
+  are the annotation's own `/Border`, `/C`, `/BS` and `/H` entries, and
+  nothing writes them: the dictionary holds them and the battery does
+  not match on them.
+- **A dictionary inside a dictionary does not survive a round trip.**
+  The reader reads one as a list of pairs, and the writer writes a list
+  of pairs as an **array** — so a file with a nested dictionary in it
+  is written out wrong. The action of a link is an object of its own
+  here, which is why this arc does not hit it; but the bug is there,
+  and it is the next thing to fix.
