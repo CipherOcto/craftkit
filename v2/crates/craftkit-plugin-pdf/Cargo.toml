@@ -12,3 +12,7 @@ license.workspace = true
 # application. That is the whole point of a plugin.
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
+# The **inflate**: a Flate stream is a zlib stream, and the PNG crate's
+# inflate is the one the kit has. It is a **library**, and the linker
+# does not wire it in.
+craftkit-png = { path = "../craftkit-png", version = "0.2.0" }

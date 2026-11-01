@@ -586,6 +586,7 @@ name = "craftkit-plugin-pdf"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-png",
  "craftkit-sdk",
 ]
 

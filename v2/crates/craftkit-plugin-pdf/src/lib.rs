@@ -11,9 +11,14 @@
 //! file.
 //!
 //! That is the part this battery ports — the **object model** (ISO
-//! 32000-2 §7.3), not the file: the cross-reference table, the filters,
-//! the incremental save and the parser are the *file*, and a v2 document
+//! 32000-2 §7.3), not the file: the cross-reference table, the
+//! incremental save and the parser are the *file*, and a v2 document
 //! is not a PDF file.
+//!
+//! One part of the file is here as well, because it is not the file but
+//! the **bytes** in it: the **filters** — the ways a stream's bytes may
+//! be encoded — are in the module `filters`, and the command
+//! `pdf.stream.decode` undoes them.
 //!
 //! # The mapping
 //!
@@ -55,6 +60,8 @@
     clippy::unreachable
 )]
 #![forbid(unsafe_code)]
+
+mod filters;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
@@ -240,6 +247,93 @@ impl AddStream {
     }
 }
 
+/// **Decode** a stream's bytes.
+///
+/// A PDF's stream may be **encoded**: the `/Filter` entry names the way
+/// and the bytes in the file are the encoded ones. The command reads
+/// the file the node names, undoes the filter and writes what was
+/// inside it to another file.
+///
+/// The node is not changed: it still names the **encoded** bytes,
+/// because that is what the PDF file holds, and the decoded bytes are
+/// what the caller asked for.
+#[derive(Command)]
+#[command(id = "pdf.stream.decode", area = "pdf", layer = "pdf", icon = "file", menu("PDF", "Streams"))]
+pub struct DecodeStream {
+    /// The stream whose bytes are decoded.
+    pub stream: NodeRef,
+    /// The filter to undo: `FlateDecode`, `LZWDecode`,
+    /// `ASCIIHexDecode`, `ASCII85Decode` or `RunLengthDecode`.
+    ///
+    /// Leave it out and the **dictionary** names it, which is where a
+    /// PDF file says which filter a stream is in.
+    pub filter: Option<Text>,
+    /// Where to write the decoded bytes.
+    pub to: Text,
+}
+
+impl DecodeStream {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.stream.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+            });
+        }
+        let Some(path) = node.stream.clone() else {
+            return Err(EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("the stream `{id}` has no file"),
+            });
+        };
+        // The **filter**: the one the command was given, or the one the
+        // dictionary names.
+        let names = match &self.filter {
+            Some(name) => vec![name.0.clone()],
+            None => filters::filter_of(&entries_of(&node.data)).ok_or_else(|| EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("the stream `{id}` does not name a filter"),
+            })?,
+        };
+        let to = self.to.0.clone();
+        if to.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: "the decoded bytes go somewhere".to_string(),
+            });
+        }
+        let limits = filters::Limits::default();
+        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+            .map_err(|message| EngineError::Failed {
+            id: "pdf.stream.decode".to_string(),
+            message: format!("the stream cannot be read: {message}"),
+        })?;
+        let decoded =
+            filters::decode_named(&names, &bytes, &limits).map_err(|error| EngineError::Failed {
+                id: "pdf.stream.decode".to_string(),
+                message: format!("the stream cannot be decoded: {error:?}"),
+            })?;
+        std::fs::write(&to, &decoded).map_err(|error| EngineError::Failed {
+            id: "pdf.stream.decode".to_string(),
+            message: format!("the decoded bytes cannot be written to `{to}`: {error}"),
+        })?;
+        Ok(Outcome::new(format!("decoded {} bytes", decoded.len())).with_data(serde_json::json!({
+            "id": id,
+            "from": path,
+            "to": to,
+            "filters": names,
+            "bytes": decoded.len(),
+        })))
+    }
+}
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -408,6 +502,24 @@ fn check_entries(entries: &serde_json::Value) -> Result<Vec<serde_json::Value>, 
     Ok(list.clone())
 }
 
+/// The **dictionary** of an object, as the pairs it holds.
+///
+/// The dictionary is a list of `[key, value]` pairs, and the pairs are
+/// in the order the file had them.
+fn entries_of(payload: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
+    let Some(list) = payload.get("entries").and_then(|entries| entries.as_array()) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|entry| {
+            let pair = entry.as_array()?;
+            let key = pair.first()?.as_str()?.to_string();
+            let value = pair.get(1)?.clone();
+            Some((key, value))
+        })
+        .collect()
+}
+
 // The plugin's anchor: one name that keeps every item above in the
 // program, on every target.
 craftkit_sdk::plugin_anchor!(
@@ -416,6 +528,7 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     AddObject,
     AddStream,
+    DecodeStream,
     AddReference,
     ListReferences,
     GraphEvaluator,
