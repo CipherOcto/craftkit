@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1310 tests.** The MCP server links **all fifteen batteries** in, so the
+**1316 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1310 tests
+cargo test          # 1316 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3620,6 +3620,12 @@ so.
 | a **file written out** | **built.** The document is written out as a PDF file, and the file that comes out is read back (§183) | §183 |
 | a **smooth point** | **built.** A point's two handles become one: collinear and of the same length, and a straight side becomes a curve (§184) | §184 |
 | the **spacing** of the clips | **built.** The clips are butted against each other, with a gap between them, end to start or start to start (§185) | §185 |
+| the **loop** of a clip | **built.** The copies of a clip are made, and each one is named by the clip it follows — so the chain is a walk and the loop is not inferred from the track (§186) | §186 |
+| a **clip that snaps** to its neighbour | **built.** Next and Previous, the clip nearest the destination first, and the clips that are named are the destinations too (§187) | §187 |
+| a **PDF annotation** | **built.** An annotation is an object of its own, the page names it in its `/Annots`, and the action of a link is an object as well (§188) | §188 |
+| a **dictionary** inside a dictionary | **built.** The payload holds one as a list of pairs under `entries`, and the writer writes it back as a dictionary (§189) | §189 |
+| a **gradient** | **built.** The fill is a paint — one colour or a gradient — and the gradient is the kit's own (§190) | §190 |
+| a **blend mode** | **built.** The sixteen modes of the PDF and the screen, and the kit says how each of them mixes (§191) | §191 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12845,3 +12851,66 @@ plugin that drew anything.
 - **The stops are not edited.** The tree's editor drags a stop along
   the gradient and gives it a colour; here the stops are what the
   command is given, and nothing moves them afterwards.
+
+## 191. The thing mixes with what is under it
+
+The tree's vector editor has a **transparency panel**: every object
+says how it mixes with what is under it — multiply, screen, overlay,
+and the rest. v2's kit had an appearance with a colour in it and
+nothing that said how the colour met the one below.
+
+### What was built
+
+- The **blend mode** is the kit's own: the sixteen modes of the PDF and
+  the screen, and the kit says how each of them mixes two colours.
+- The appearance holds one, the canvas is given one, and the vector
+  battery's payload holds one.
+- The command `vector.path.blend` says how a path mixes, and the
+  core's `core.appearance.set` says how a **shared** appearance mixes.
+- The raster mixes the two colours the way the mode says, and the
+  source's own opacity is laid over the result.
+
+### What the port found
+
+- **The tree's mode is a colour-space question, and this one's is
+  not.** The tree's `BlendMode` carries a **method** — Classic or
+  Perceptual — and its colours are mixed in the colour's own model:
+  CMYK stays CMYK, and a Classic gradient's neighbouring stop colours
+  are mixed in the model they are in rather than in display RGB. Here
+  the colours are mixed in the bytes the colour has, which is what a
+  picture of bytes can do — the same answer §190 gave for the
+  gradient's stops.
+- **The tree's mode is on the object, and this one's is on the
+  appearance** — the same place a colour lives, so that two paths may
+  be given the same appearance and mix the same way.
+- **The tree dithers a gradient and this tree does not.** The tree
+  adds fine noise of up to a colour level to a gradient's fill, which
+  hides the steps between the levels an 8-bit colour has. Here the
+  raster has no noise at all, and a gradient's steps are steps.
+- **The file did not change.** An appearance with no mode in it is the
+  plain one, and the modes are named as the PDF names them — so a file
+  written before the mode is still a file.
+
+### What it cost
+
+- **Five tests** in the raster (`tests/blend.rs`): the modes mix the
+  two colours as the PDF says, a mode is named however it is written,
+  a shape mixes with what is under it, a transparent shape lets the
+  backdrop through, and the mode is the same everywhere.
+- **One test** in the vector battery (`tests/paint.rs`): a path may mix
+  with what is under it, and a mode that is not one of the sixteen is
+  refused.
+- **One command** (`vector.path.blend`). The MCP server now carries
+  **233** commands.
+- **The seam moved again**: the canvas takes the mode, and every plugin
+  that draws something was touched.
+
+### What it does not settle
+
+- **The colours are mixed in RGB**, and the tree's CMYK and its
+  perceptual method are not here.
+- **There is no dither.** A gradient's steps show as steps, and the
+  tree's answer to that — noise — is not in this tree.
+- **The letters do not mix.** The canvas's text takes a colour and not
+  a mode, because a mode is a property of a *thing* and the canvas's
+  letters are drawn one at a time.
