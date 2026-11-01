@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1614 tests.** The MCP server links **all fifteen batteries** in, so the
+**1618 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1614 tests
+cargo test          # 1618 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,6 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **events** of the session | **built.** A marker is moved and renamed, the tempos are scaled and a range of the map is made constant (§228) | §228 |
 | the **controllers** of a MIDI clip | **built.** The volume, the pan, the bend and the program may be changed, and the duplicate notes taken out (§227) | §227 |
 | the **moving** of a clip | **built.** A clip moves along the timeline with its content, and a locked clip does not move (§226) | §226 |
 | the **editing** of a lane | **built.** The breakpoints of a curve are set, taken away, cleared, written and thinned (§225) | §225 |
@@ -15641,3 +15642,67 @@ not one of them could be changed.
   moves the notes of a clip (§212) and the controllers with them — the
   tree's cut splits the sequence, notes and controllers together — and
   the *move* of a controller is the command that edits it.
+
+## 228. The events of the session
+
+A marker could be added and not moved, and the tempo map could be
+given a tempo and not scaled. The tree edits both — its markers have
+an edit command, and its tempo map has "Scale..." and "Constant..." —
+and v2 could only put things there.
+
+### What was built
+
+- The command `sound.marker.set` moves a marker or **renames** it, and
+  the marker moves as a **whole**: its span is kept.
+- The command `sound.tempo.scale` multiplies every tempo by a
+  **factor**: the music is faster everywhere and the times the tempos
+  happen at do not move.
+- The command `sound.tempo.constant` makes a **range** of the tempo
+  map constant: the tempo at the start of the range is the one given,
+  the tempo changes inside it are taken away, and the tempo at the end
+  of it comes back.
+- A factor that would take a tempo **out of the range** a tempo may
+  have is refused, and no tempo is scaled.
+
+### What the port found
+
+- **The tree's marker is edited and this tree's marker was not.** The
+  tree's `markers.edit` moves a marker and renames it; here a marker
+  was a node that could be made and deleted and not touched — and a
+  marker is one of the few things in a sound document that a person
+  names.
+- **The tree's scale multiplies the tempos and keeps the times.** The
+  tree's `event.tempo_scale` is the same operation: a factor of two
+  is twice as fast everywhere and the music still starts at the same
+  moment. The times are **ticks** and they do not move, because a
+  tempo is how fast the music goes and not when it goes.
+- **The tree's constant range reads the end before the edit.** The
+  tree's `event.tempo_constant` reads the tempo at the end of the
+  range **before** it changes the tempo at the start of it — because
+  the end is a musical place and the new tempo moves it. Here the
+  same: the tempo at the end of the range is read first and put back
+  afterwards, so that the music after the range is as fast as it was.
+- **The tree's tempos are in its session and these are in the
+  document.** The tree's tempo map is a value of the session; here the
+  tempo events are **nodes** — the same rule as the markers and the
+  meter — and the map is worked out from them every time (the tempo
+  map is derived, §19).
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/events.rs`): a marker is
+  changed, the tempos are scaled, a factor out of the range is
+  refused, and a range of the tempo map is made constant.
+- **Three commands** (`sound.marker.set`, `sound.tempo.scale` and
+  `sound.tempo.constant`). The MCP server now carries **305**
+  commands, and the sound battery carries **94**.
+
+### What it does not settle
+
+- **The tree's insert and cut of time are not here.** The tree can
+  insert time at a place or cut it out, and the events and the clips
+  after it move: that is a change to the whole of the session's
+  timeline, and it is not a command here.
+- **The tree's renumbering of the bars is not here.** The tree's
+  session counts its bars; here the grid counts from the bar line
+  (§200) and there are no bar numbers to renumber.
