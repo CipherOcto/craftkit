@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **forty-five commands**, one for each thing a person does to a
+//! - **forty-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -26,7 +26,7 @@
 //!   the **beat** of a clip and take it away, lock a clip's **content**
 //!   and its **place**, rate a clip, group clips and take them out of
 //!   the group, set the **grid** and put a clip on it, set a clip's
-//!   **gain** and bypass it, and
+//!   **gain** and bypass it, **conform** a clip to the tempo, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -130,9 +130,13 @@ mod grid;
 // The **gain** of a clip: how loud it is.
 mod gain;
 
+// The **conform** of a clip: making the material fit the tempo.
+mod conform;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
+pub use conform::Conform;
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
@@ -528,6 +532,7 @@ impl ClipKind {
             "sync": clip.sync,
             "rating": clip.rating,
             "gain_bypassed": clip.gain_bypassed,
+            "source_bpm": clip.source_bpm,
             "group": group::group_of(document, node.id),
         }))
     }
@@ -1059,6 +1064,12 @@ pub(crate) struct ClipPayload {
     /// A bypassed clip plays as it is: the gain is not in the path.
     /// The gain is **kept**, so taking the bypass off brings it back.
     pub(crate) gain_bypassed: bool,
+    /// The tempo the clip's **material** is at, in beats a minute.
+    ///
+    /// It is an option: a clip that has never been conformed does not
+    /// know what tempo its material is at, and the first conform takes
+    /// the tempo of the document where the clip starts.
+    pub(crate) source_bpm: Option<f64>,
 }
 
 /// The most a clip may be stretched.
@@ -1086,6 +1097,7 @@ impl ClipPayload {
             "time_locked": self.time_locked,
             "rating": self.rating,
             "gain_bypassed": self.gain_bypassed,
+            "source_bpm": self.source_bpm,
         })
     }
 
@@ -1144,6 +1156,24 @@ impl ClipPayload {
                 .get("gain_bypassed")
                 .and_then(|bypassed| bypassed.as_bool())
                 .unwrap_or(false),
+            // The tempo of the material: a number from outside, and a
+            // tempo outside the range is not a tempo.
+            source_bpm: match value.get("source_bpm").and_then(|bpm| bpm.as_f64()) {
+                None => None,
+                Some(bpm) => {
+                    if !bpm.is_finite()
+                        || bpm < crate::conform::MIN_SOURCE_BPM
+                        || bpm > crate::conform::MAX_SOURCE_BPM
+                    {
+                        return Err(format!(
+                            "the tempo of the material is from {} to {} beats a minute, and {bpm} is not",
+                            crate::conform::MIN_SOURCE_BPM,
+                            crate::conform::MAX_SOURCE_BPM
+                        ));
+                    }
+                    Some(bpm)
+                }
+            },
         })
     }
 }
@@ -1665,6 +1695,7 @@ impl AddClip {
             time_locked: false,
             rating: 0,
             gain_bypassed: false,
+            source_bpm: None,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -4503,7 +4534,7 @@ fn samples(value: f64, what: &str) -> Result<i64, EngineError> {
 /// is no more than [`MAX_STRETCH`], because a clip stretched a
 /// thousandfold would hold a thousandth of a sample for a thousand
 /// times as long.
-fn stretch_of(value: f64, id: &str) -> Result<f64, EngineError> {
+pub(crate) fn stretch_of(value: f64, id: &str) -> Result<f64, EngineError> {
     if !value.is_finite() {
         return Err(EngineError::Failed { id: id.to_string(), message: "a stretch is a number".to_string() });
     }
@@ -4582,7 +4613,8 @@ craftkit_sdk::plugin_anchor!(
     ReadGrid,
     Quantize,
     SetGain,
-    BypassGain
+    BypassGain,
+    Conform
 );
 
 #[cfg(test)]
