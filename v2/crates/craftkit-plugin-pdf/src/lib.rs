@@ -39,6 +39,12 @@
 //! it in its `/Annots`, which is an edge, the same edge the page tree
 //! is made of.
 //!
+//! And the **outline** is here: the bookmarks of the document, a tree of
+//! items with titles and destinations. The tree is a **list** of
+//! siblings in the file — each item names the next — and the counts are
+//! **derived**: how many items are visible below an item, and the sign
+//! saying whether it is open or closed.
+//!
 //! # The mapping
 //!
 //! | the object model | v2 |
@@ -48,6 +54,7 @@
 //! | its stream | the node's **stream** — the bytes, beside the document |
 //! | a reference to another object | a **relation** of the kind `ref` — and a **value** in the dictionary, because the file is written from the dictionary |
 //! | the object number | the payload's `object`, because the ids are the core's |
+//! | an outline item | an object of its own, with a `/Title` and a `/Dest` |
 //!
 //! # The three things the port found
 //!
@@ -92,6 +99,7 @@ mod content;
 mod filters;
 mod loader;
 mod objects;
+mod outline;
 mod predictors;
 mod writer;
 mod xref;
@@ -99,6 +107,8 @@ mod xref;
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+
+pub use outline::{AddOutline, ReadOutline};
 
 /// The PDF layer.
 ///
@@ -1622,7 +1632,14 @@ impl GraphEvaluator {
     id = "panel.pdf",
     label = "PDF objects",
     layer = "pdf",
-    commands("pdf.object.add", "pdf.ref.add", "pdf.annot.add", "pdf.page.annotations")
+    commands(
+        "pdf.object.add",
+        "pdf.ref.add",
+        "pdf.annot.add",
+        "pdf.page.annotations",
+        "pdf.outline.add",
+        "pdf.outline.read"
+    )
 )]
 pub struct PdfPanel;
 
@@ -1696,6 +1713,8 @@ craftkit_sdk::plugin_anchor!(
     WriteFile,
     AddReference,
     ListReferences,
+    AddOutline,
+    ReadOutline,
     GraphEvaluator,
     PdfPanel
 );
