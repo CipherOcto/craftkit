@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1266 tests.** The MCP server links **all fifteen batteries** in, so the
+**1269 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1266 tests
+cargo test          # 1269 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3612,6 +3612,7 @@ so.
 | a **page tree** | **built.** A page may have a parent, and the four attributes a page inherits are found by walking up the tree (§175) | §175 |
 | a **content stream** | **built.** The operators of a page's content are read, with the operands each one was given (§176) | §176 |
 | a **path that is placed** | **built.** A path may carry a transform — the six numbers of a matrix — and it is drawn, hit and measured where the transform puts it (§177) | §177 |
+| an **object stream** | **built.** The objects a file keeps in one place are read: each one's number and what it says (§178) | §178 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12038,3 +12039,64 @@ be where it was drawn.
   with a wider line: the line keeps its width.
 - **There is no gradient and no clip.** The canvas has no way to say
   either, and a transform is the last of the three that a path needs.
+
+---
+
+## 178. The objects a file keeps in one place
+
+A PDF file is made of **objects**, and each one is a value: a number, a
+name, a string, an array, a dictionary, a boolean, null, or a
+**reference** to another object. And since PDF 1.5 the objects may be
+kept in an **object stream** — a stream that holds them, so that they
+may be compressed together. v2's PDF battery could read a page and its
+content, and not one of the objects underneath.
+
+### What was built
+
+- The module `objects` reads the **values** of a file: the numbers, the
+  names, the strings (both spellings), the arrays, the dictionaries,
+  the booleans, null, and the references.
+- The command `pdf.objstm.read` reads the **object stream**: the
+  dictionary says how many objects it holds — `/N` — and where the
+  first one's data begins — `/First` — and the **header** says where
+  each object is.
+- A stream that does not say what it holds is **refused**, and so is
+  one whose header does not hold the objects it says.
+
+### What the port found
+
+- **The object stream's two numbers are the whole of its shape.** The
+  count and the first offset are in the dictionary, and the header is
+  that many pairs of integers — the number of an object and the offset
+  of its data, counted from `/First`. So an object stream is a stream
+  like any other: the plugin already knows how to read a stream and
+  undo its filter, and the object stream is what is left over.
+- **A dictionary is a list of pairs, and it is so here too.** The
+  plugin's own dictionaries are lists of pairs because a JSON object
+  does not keep the order of its keys; the objects inside an object
+  stream are read the same way, so a dictionary that came out of a
+  stream and a dictionary that was typed in are the same thing.
+- **A reference is not a value.** It is two numbers and the letter `R`,
+  and it says which object is meant — so it is reported as a reference
+  and not as a number, and finding the object it names is the file's
+  business and not this module's.
+- **The strings are bytes.** The same rule as the content stream's:
+  each byte is one character, so nothing is lost and nothing is
+  guessed, and a file's text is in its fonts.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/objstm.rs`): the objects of an
+  object stream, the values of an object, and the refusals.
+- **One command** (`pdf.objstm.read`). The MCP server now carries
+  **220** commands.
+
+### What it does not settle
+
+- **There is no writer.** A file may be read and not written, and an
+  object stream may be read and not made.
+- **The references are not resolved.** The reader says which object a
+  reference names; it does not go and find it.
+- **The file is still not read.** There is no parser and no
+  cross-reference table, so the objects are read out of a stream that
+  somebody has already found.
