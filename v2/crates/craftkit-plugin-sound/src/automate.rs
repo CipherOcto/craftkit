@@ -36,6 +36,13 @@ pub struct Automation {
     pub pan: Option<Vec<(i64, f64)>>,
     /// The mute, over time: one mutes and less does not.
     pub mute: Option<Vec<(i64, f64)>>,
+    /// The track's own **mute**: whether it is silenced when nothing
+    /// automates it.
+    ///
+    /// The tree's mixer keeps a mute of its own beside the mute lane,
+    /// and the lane is the mute's default: a lane with breakpoints
+    /// overrides it, and a lane without one is the mute.
+    pub muted: bool,
     /// The track's **pan**, between minus one and one: the balance of
     /// the track when nothing automates it.
     ///
@@ -61,6 +68,7 @@ pub fn automation_of(document: &Document, track: &Node) -> Automation {
         // lane says else.
         fader_db: crate::TrackPayload::from_json(&track.data).map(|payload| payload.fader_db).unwrap_or(0.0),
         pan_value: crate::TrackPayload::from_json(&track.data).map(|payload| payload.pan).unwrap_or(0.0),
+        muted: crate::TrackPayload::from_json(&track.data).map(|payload| payload.mute).unwrap_or(false),
         ..Automation::default()
     };
     for lane in document.walk().filter(|node| node.kind == "sound.lane") {
@@ -135,10 +143,16 @@ pub fn apply(automation: &Automation, samples: &[f32], channels: usize, start: i
 /// track that is muted is not heard anywhere, and a copy of it is a
 /// copy of silence.
 pub fn apply_mute(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
-    let Some(points) = &automation.mute else { return samples.to_vec() };
     if channels == 0 {
         return samples.to_vec();
     }
+    // No **lane**: the track's own mute is the mute.
+    let Some(points) = &automation.mute else {
+        if !automation.muted {
+            return samples.to_vec();
+        }
+        return vec![0.0_f32; samples.len()];
+    };
     let mut out = samples.to_vec();
     for index in 0..samples.len() / channels {
         let at = start + index as i64;

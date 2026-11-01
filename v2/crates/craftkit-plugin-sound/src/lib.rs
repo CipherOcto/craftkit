@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-seven commands**, one for each thing a person does to a
+//! - **fifty-eight commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -31,7 +31,7 @@
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
-//!   **stems**, **separate** a clip into two, and
+//!   **stems**, **separate** a clip into two, **mute** a track, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -148,6 +148,14 @@
 //!   samples as well as a division of the bar. Here a grid is a
 //!   division of the bar, because a sound document is a bar of beats and
 //!   a grid in it is a musical thing.
+//! - **The mix has the shape of the media.** The tree's session has a
+//!   channel format of its own and its mixer builds a matrix from the
+//!   source's channels to the destination's: a mono sound is *placed*
+//!   in a stereo field and a stereo sound is folded down into a mono
+//!   one. Here the mix has the shape of the media — a document of mono
+//!   sources is a mono mix — so there is no field for a mono sound to
+//!   be placed in, and the pan of a mono track does nothing. The
+//!   matrix is a redesign of the mixer and not an addition to it.
 //! - **A big shift loses the top of the sound.** The pitch shift is
 //!   made by resampling the sound as if it were played faster, and a
 //!   resample takes away what was above the new half of the rate: an
@@ -948,6 +956,12 @@ struct TrackPayload {
     /// decibels to twenty-four; it is the level of the input and not
     /// the level of the output.
     trim_db: f64,
+    /// Whether the track is **muted**.
+    ///
+    /// The tree's mixer keeps a mute of its own beside the mute lane,
+    /// and here the lane is the mute's default: a lane with
+    /// breakpoints overrides it, and a lane without one is the mute.
+    mute: bool,
     /// The track's **pan**, between minus one and one: the balance of
     /// the track's sound in the mix.
     ///
@@ -998,6 +1012,7 @@ impl TrackPayload {
             "trim_db": self.trim_db,
             "fader_db": self.fader_db,
             "pan": self.pan,
+            "mute": self.mute,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
             "elastic": self.elastic,
@@ -1012,6 +1027,7 @@ impl TrackPayload {
             trim_db: value.get("trim_db").and_then(|trim| trim.as_f64()).unwrap_or(0.0),
             fader_db: value.get("fader_db").and_then(|fader| fader.as_f64()).unwrap_or(0.0),
             pan: value.get("pan").and_then(|pan| pan.as_f64()).unwrap_or(0.0),
+            mute: value.get("mute").and_then(|mute| mute.as_bool()).unwrap_or(false),
             phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
             active_playlist: value
                 .get("active_playlist")
@@ -1559,6 +1575,7 @@ impl AddTrack {
             trim_db: 0.0,
             fader_db: 0.0,
             pan: 0.0,
+            mute: false,
             phase_invert: false,
             active_playlist: None,
             elastic: None,
@@ -1767,6 +1784,86 @@ impl SetTrackElastic {
         let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
         Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
             .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
+    }
+}
+
+/// Mute a track, or let it be heard.
+///
+/// The track's own **mute** is the level of the whole track: a muted
+/// track is not heard, and neither is the copy that a send takes of
+/// it. The tree's mixer keeps a mute beside the mute lane, and the
+/// lane is the mute's default: a **mute lane** with breakpoints
+/// overrides it, and a lane without one is the mute.
+///
+/// The mute is one of the things a **group** shares: the tree's group
+/// shares the volume, the mute, the solo and the record, and the mute
+/// is one of them — so a change to the mute of a track in a group
+/// that mixes is a change to the mute of every member.
+#[derive(Command)]
+#[command(
+    id = "sound.track.mute",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Mute"),
+    mutates,
+    undoable
+)]
+pub struct MuteTrack {
+    /// The track.
+    pub track: NodeRef,
+    /// Whether it is muted.
+    pub muted: Bool,
+}
+
+impl MuteTrack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.mute".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.mute".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let muted = self.muted.0;
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.mute".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.mute = muted;
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.mute".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        // The **mix link**: a group of tracks is mixed together, so a
+        // change to the mute of one of them is a change to the mute of
+        // all of them.
+        let mut linked = Vec::new();
+        for sibling in group::mix_siblings(session.document(), id) {
+            if sibling == id {
+                continue;
+            }
+            let Some(node) = session.document().node(sibling) else { continue };
+            let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
+            other.mute = muted;
+            let data = other.to_json();
+            if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                node.data = data;
+            }
+            linked.push(sibling);
+        }
+        Ok(Outcome::changed(format!("the track `{id}` is muted: {muted}"))
+            .with_data(serde_json::json!({ "id": id, "mute": muted, "linked": linked })))
     }
 }
 
@@ -4602,13 +4699,16 @@ impl RenderStems {
         // track is not bounced.
         let mut files = Vec::new();
         for track in document.walk().filter(|node| node.kind == "sound.track" && !is_master(node)) {
-            // The **mute** is a lane here and not a field of the
-            // track, so a muted track is one whose mute lane says so.
-            let muted = automate::automation_of(&document, track)
-                .mute
-                .as_ref()
-                .map(|points| automate::value_at(points, 0) >= 0.5)
-                .unwrap_or(false);
+            // The **mute** is a field of the track and a lane over it:
+            // a muted track is one whose own mute is on, or one whose
+            // mute lane says so.
+            let automation = automate::automation_of(&document, track);
+            let muted = automation.muted
+                || automation
+                    .mute
+                    .as_ref()
+                    .map(|points| automate::value_at(points, 0) >= 0.5)
+                    .unwrap_or(false);
             if muted {
                 continue;
             }
