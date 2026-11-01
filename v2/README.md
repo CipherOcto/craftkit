@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1345 tests.** The MCP server links **all fifteen batteries** in, so the
+**1352 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1345 tests
+cargo test          # 1352 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3631,6 +3631,7 @@ so.
 | a **reference in the dictionary** | **built.** A reference is an edge and a value at once, the page tree says itself in the file, and the count of the children is derived from the edges (§194) | §194 |
 | the **outline** of a document | **built.** The bookmarks are a tree of items with titles and destinations, the list of siblings is relinked, and the counts are derived from the visible items (§195) | §195 |
 | the **beat** of a clip | **built.** The place inside a clip where the beat falls, an option and not a zero — and it follows the audio when the clip is trimmed (§196) | §196 |
+| the **locks** on a clip | **built.** The content lock and the place lock are two locks, and the commands that would break one of them refuse (§197) | §197 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11466,9 +11467,11 @@ had no way to say that a clip is quiet.
   carries a rating, a colour override and a sync point, and they are
   what the tree's editor reads them for. The **sync point** is here
   now, and it is the **beat** of the clip (§196).
-- **The tree's locked clips are not here.** The tree's clip has an
+- **The tree's locked clips are here.** The tree's clip has an
   `edit_locked` and a `time_locked`; the kit has its own lock on a node
-  (§115), which is a lock on the node and not on the clip's time.
+  (§115), which is a lock on the node and not on the clip's time. The
+  clip's own two locks are the **beat**'s siblings in the battery's
+  payload, and they are §197.
 
 ## 169. A path's points may be moved
 
@@ -13262,3 +13265,86 @@ and the clips — and nothing that said where the beat of a clip fell.
   carries a **rating**, a **colour**, an **edit lock** and a **time
   lock**, and none of those are in this tree yet — they are fields on
   the clip rather than behaviour, and they are the next slice.
+
+## 197. The locks on a clip
+
+The tree's sound editor has two locks on a clip, and they are two
+different claims: the **edit lock** says the sound inside the clip is
+finished, and the **time lock** says the clip stays where it is. v2's
+sound battery had neither, and every command that changed a clip
+changed a clip that was supposed to be finished.
+
+### What was built
+
+- The command `sound.clip.lock.edit` locks a clip's **content** — its
+  sound is finished, and it is not trimmed, not faded and not
+  stretched.
+- The command `sound.clip.lock.time` locks a clip's **place** — it
+  stays where it is, and it is not spaced and not snapped.
+- A lock that is not named is **toggled**, and the two locks are two
+  locks: a clip may carry both, and taking one off leaves the other.
+- The commands that would break a lock **refuse** it, and say which
+  lock and which clip: the trim, the fade and the stretch ask the
+  edit lock, and the spacing and the snap ask the place lock.
+
+### What the port found
+
+- **The tree's two locks are two claims, and the kit's one lock is
+  another.** The tree's clip carries `edit_locked` and `time_locked`,
+  and they say different things: one is about the sound and one is
+  about the place. The kit has a lock of its own (§115) — `node.lock`
+  locks a **node**, so that it cannot be moved, resized or deleted —
+  and it is a lock on the node and not on the clip's time. A sound
+  clip has no place at all (§ the sound kinds have none), so the kit's
+  lock cannot say what the tree's locks say. The clip's locks are the
+  battery's own.
+- **The tree's locks are checked in a few places and not in others.**
+  The tree's editor refuses to trim an edit-locked clip and leaves
+  locked clips out of a move, but a clip's own flags are the only
+  record of the lock: nothing in the tree's **document** says what a
+  lock forbids, so a reader of a tree's file cannot know which edits
+  were forbidden. Here the locks are in the clip's **payload** and the
+  commands ask them, so the rule is in one place.
+- **A locked clip does not move, whichever lock it has.** The tree's
+  move leaves a locked clip alone — and the tree's editor moves a
+  locked clip out of the way when the clip it is up against is moved.
+  Here the lock is asked by the command that would break it: the
+  spacing and the snap refuse the whole move when one of the clips
+  named is locked, because a spacing that left one clip behind would
+  be a spacing the caller did not ask for. The tree's rule and the
+  kit's rule are the same rule — §115 says a locked node refuses the
+  whole of a selection move — and here the clip's lock refuses it too.
+- **A locked clip is still a destination.** A clip may be snapped
+  *against* a locked clip: the locked clip stays where it is and the
+  other one moves to meet it. A lock is a claim about the clip that
+  carries it, and not about the clips around it.
+
+### What it cost
+
+- **Seven tests** in the sound battery (`tests/locks.rs`): the two
+  locks are two locks, a lock that is not named is toggled, a locked
+  sound is finished, a locked place stays where it is, a locked sound
+  does not move either, a locked clip is a destination, and an
+  unlocked clip is changed as ever.
+- **Two commands** (`sound.clip.lock.edit` and
+  `sound.clip.lock.time`) and **two fields** in the clip's payload.
+  The MCP server now carries **245** commands.
+- **Five commands changed** — the trim, the fade, the stretch, the
+  spacing and the snap — because a lock that nothing asks is a flag
+  and not a lock.
+
+### What it does not settle
+
+- **The kit's own lock still does not reach the clip.** `node.lock`
+  locks a node so that it cannot be moved, resized or deleted, and
+  the sound battery's commands do not ask it: a clip whose **node** is
+  locked may still be trimmed, because the lock on the node is about
+  the node and not about the sound. The two locks are separate, and
+  this arc did not join them.
+- **The locks are not shown.** A sound document is not a picture here,
+  so a locked clip is a fact in the document and not a padlock on a
+  bar. The tree draws the lock on the clip.
+- **The clip's marks are still not here.** The tree's clip also
+  carries a **rating** and a **colour**, and neither is in this tree
+  yet — they are fields on the clip rather than behaviour, and they
+  are the next slice.
