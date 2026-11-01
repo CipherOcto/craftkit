@@ -625,6 +625,7 @@ dependencies = [
  "craftkit-audio",
  "craftkit-derive",
  "craftkit-font",
+ "craftkit-midi",
  "craftkit-plugins",
  "craftkit-sdk",
  "craftkit-sound-time",

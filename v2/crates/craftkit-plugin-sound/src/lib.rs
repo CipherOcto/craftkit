@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **sixty-two commands**, one for each thing a person does to a
+//! - **sixty-five commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -34,7 +34,8 @@
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
 //!   **mute** a track, make a track **solo safe**, **name** the clips
-//!   that editing separates, and
+//!   that editing separates, **import** and **export** the **MIDI** of
+//!   a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -144,6 +145,20 @@
 //! when no clip is in it, and a clip's record is not rewritten to
 //! change its scheme.
 //!
+//! **A clip's content is a field and not a variant.** The tree keeps
+//! the content of a clip in a closed enum of three — audio, MIDI and
+//! video — and every one of them is matched in the mixer. Here the
+//! clip says what its content is with a **string**, and the notes of a
+//! MIDI clip are in the clip's payload: a note is a pitch and a place
+//! and a length, and it has no life of its own.
+//!
+//! **The tick of a note is the kit's tick.** The MIDI library counts
+//! in nine hundred and sixty ticks a quarter note, and so does the
+//! sound battery's tempo map (§19) — so a note's place in a clip and
+//! a clip's place on the timeline are two readings of the same scale,
+//! and the length of a MIDI clip is worked out from its notes at the
+//! tempo of the document.
+//!
 //! # What this does not do
 //!
 //! - **It draws nothing.** A sound document is not a picture. v2 has no
@@ -169,6 +184,18 @@
 //!   sources is a mono mix — so there is no field for a mono sound to
 //!   be placed in, and the pan of a mono track does nothing. The
 //!   matrix is a redesign of the mixer and not an addition to it.
+//! - **A MIDI clip is not sound.** There is no synthesiser here: a
+//!   MIDI clip has no source, and the render leaves it alone — so it
+//!   is silent, and it is silent **honestly**: what it holds is the
+//!   notes, and the notes are not a sound until something makes them
+//!   one.
+//! - **A file's tempo is not the document's tempo.** A MIDI file may
+//!   carry a tempo of its own, and the import reads the notes at the
+//!   tempo the **document** says: a second tempo map would be a second
+//!   truth about the same timeline.
+//! - **The notes are not edited.** Quantising a note and moving it are
+//!   the tree's operations, and they are not here: a clip's notes may
+//!   be read and written, and not yet moved.
 //! - **A scheme has no id of its own.** The tree's scheme carries an id
 //!   "to tell this scheme from another one under the same key after an
 //!   undo or in another session, for pastes from the clipboard". This
@@ -232,6 +259,9 @@ mod gain;
 // The **conform** of a clip: making the material fit the tempo.
 mod conform;
 
+// The **MIDI** of a clip: the notes it holds.
+mod midi;
+
 use std::collections::HashMap;
 
 pub use autoname::{ReadAutoName, SetAutoName};
@@ -246,6 +276,7 @@ pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
+pub use midi::{ExportMidi, ImportMidi, ReadMidi};
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
@@ -1262,6 +1293,17 @@ pub(crate) struct ClipPayload {
     /// know what tempo its material is at, and the first conform takes
     /// the tempo of the document where the clip starts.
     pub(crate) source_bpm: Option<f64>,
+    /// What the clip's **content** is.
+    ///
+    /// It is a **string** and not a variant, for the same reason the
+    /// kinds of a sound document are strings: the kinds are open here.
+    /// `midi` is a clip of notes, and nothing is a clip of sound.
+    pub(crate) content: Option<String>,
+    /// The **notes** of a MIDI clip.
+    ///
+    /// It is an option, and it is there only when the content is
+    /// `midi`: a clip of sound holds no notes.
+    pub(crate) midi: Option<crate::midi::MidiPayload>,
 }
 
 /// A **process** on a clip's sound: something done to it on the way
@@ -1312,6 +1354,34 @@ const MAX_PITCH_SEMITONES: f64 = 24.0;
 const MAX_STRETCH: f64 = 64.0;
 
 impl ClipPayload {
+    /// A clip with nothing set on it.
+    ///
+    /// The defaults are a clip that plays a source at unity, with no
+    /// fade, no pitch, no process and no beat.
+    pub(crate) fn new() -> ClipPayload {
+        ClipPayload {
+            start: 0,
+            length: 0,
+            source: None,
+            offset: 0,
+            gain_db: 0.0,
+            fade_in: FadePayload::none(),
+            fade_out: FadePayload::none(),
+            stretch: 1.0,
+            pitch_semitones: 0.0,
+            processes: Vec::new(),
+            muted: false,
+            sync: None,
+            edit_locked: false,
+            time_locked: false,
+            rating: 0,
+            gain_bypassed: false,
+            source_bpm: None,
+            content: None,
+            midi: None,
+        }
+    }
+
     fn to_json(&self) -> Json {
         serde_json::json!({
             "start": self.start,
@@ -1331,6 +1401,8 @@ impl ClipPayload {
             "rating": self.rating,
             "gain_bypassed": self.gain_bypassed,
             "source_bpm": self.source_bpm,
+            "content": self.content,
+            "midi": self.midi.as_ref().map(crate::midi::MidiPayload::to_json),
         })
     }
 
@@ -1427,6 +1499,14 @@ impl ClipPayload {
                     }
                     Some(bpm)
                 }
+            },
+            content: value
+                .get("content")
+                .and_then(|content| content.as_str())
+                .map(|content| content.to_string()),
+            midi: match value.get("midi") {
+                Some(midi) if !midi.is_null() => Some(crate::midi::MidiPayload::from_json(midi)?),
+                _ => None,
             },
         })
     }
@@ -2333,25 +2413,11 @@ impl AddClip {
             None => 1.0,
         };
         let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
-        let payload = ClipPayload {
-            start,
-            length,
-            source: self.source.map(|source| source.0),
-            offset: 0,
-            gain_db: 0.0,
-            fade_in: FadePayload::none(),
-            fade_out: FadePayload::none(),
-            stretch,
-            pitch_semitones: 0.0,
-            processes: Vec::new(),
-            muted: false,
-            sync: None,
-            edit_locked: false,
-            time_locked: false,
-            rating: 0,
-            gain_bypassed: false,
-            source_bpm: None,
-        };
+        let mut payload = ClipPayload::new();
+        payload.start = start;
+        payload.length = length;
+        payload.source = self.source.map(|source| source.0);
+        payload.stretch = stretch;
         let name = match &self.name {
             Some(name) => name.0.clone(),
             None => format!("clip at {start}"),

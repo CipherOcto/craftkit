@@ -21,6 +21,9 @@ craftkit-sound-time = { workspace = true }
 # not a plugin: it contributes nothing to the registry and the linker
 # does not wire it in.
 craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
+# The **MIDI library**: the notes, the controllers and the Standard
+# MIDI File. A **library**, and the linker does not wire it in.
+craftkit-midi = { workspace = true }
 # The **WAV reader** and the **mixer**: the samples of a sound, and the
 # sum of many tracks. A **library** each, and the linker does not wire
 # them in.
@@ -29,3 +32,7 @@ craftkit-audio = { path = "../craftkit-audio", version = "0.2.0" }
 # The kit's own **audio plugins**: the catalogue a insert names. A
 # **library**, and the linker does not wire it in.
 craftkit-plugins = { path = "../craftkit-plugins", version = "0.2.0" }
+
+[dev-dependencies]
+# The MIDI library, so that a test may write a MIDI file to read.
+craftkit-midi = { workspace = true }
