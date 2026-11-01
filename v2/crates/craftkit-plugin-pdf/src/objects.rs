@@ -309,6 +309,24 @@ fn dictionary(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
     }
 }
 
+/// The **pairs** of a dictionary, and where the dictionary ended.
+///
+/// The pairs are the dictionary's keys and values, in the order the
+/// file had them.
+pub fn dictionary_of(bytes: &[u8], at: usize) -> Result<(Vec<(String, Json)>, usize), Error> {
+    let (value, after) = dictionary(bytes, skip_space(bytes, at))?;
+    let mut pairs: Vec<(String, Json)> = Vec::new();
+    if let Some(list) = value.as_array() {
+        for pair in list {
+            let Some(pair) = pair.as_array() else { continue };
+            let Some(key) = pair.first().and_then(|key| key.as_str()) else { continue };
+            let Some(value) = pair.get(1) else { continue };
+            pairs.push((key.to_string(), value.clone()));
+        }
+    }
+    Ok((pairs, after))
+}
+
 /// An **array**: `[1 2 3]`.
 fn array(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
     let mut at = at + 1;

@@ -70,6 +70,7 @@ mod content;
 mod filters;
 mod objects;
 mod predictors;
+mod xref;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
@@ -707,6 +708,61 @@ impl ReadObjectStream {
     }
 }
 
+/// Read the **cross-reference table** of a file.
+///
+/// The table is the file's own index of itself: it says where each
+/// object is. The command reads it and reports the entries and the
+/// trailer.
+#[derive(Command)]
+#[command(id = "pdf.file.xref", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ReadXref {
+    /// The file to read.
+    pub path: Text,
+}
+
+impl ReadXref {
+    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        if path.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.file.xref".to_string(),
+                message: "a file has a path".to_string(),
+            });
+        }
+        let limits = filters::Limits::default();
+        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+            .map_err(|message| EngineError::Failed {
+            id: "pdf.file.xref".to_string(),
+            message: format!("the file cannot be read: {message}"),
+        })?;
+        let table = xref::read(&bytes).map_err(|error| EngineError::Failed {
+            id: "pdf.file.xref".to_string(),
+            message: format!("the table cannot be read: {error:?}"),
+        })?;
+        let entries: Vec<serde_json::Value> = table
+            .entries
+            .iter()
+            .map(|entry| {
+                serde_json::json!({
+                    "object": entry.number,
+                    "offset": entry.offset,
+                    "generation": entry.generation,
+                    "kind": match entry.kind {
+                        xref::Kind::InFile => "in-file",
+                        xref::Kind::Free => "free",
+                        xref::Kind::Compressed => "compressed",
+                    },
+                })
+            })
+            .collect();
+        let trailer: Vec<serde_json::Value> =
+            table.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
+        let count = entries.len();
+        Ok(Outcome::new(format!("{count} entry(ies)"))
+            .with_data(serde_json::json!({ "path": path, "entries": entries, "trailer": trailer })))
+    }
+}
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -906,6 +962,7 @@ craftkit_sdk::plugin_anchor!(
     DecodeStream,
     ContentOperators,
     ReadObjectStream,
+    ReadXref,
     AddReference,
     ListReferences,
     GraphEvaluator,
