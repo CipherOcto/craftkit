@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1470 tests.** The MCP server links **all fifteen batteries** in, so the
+**1480 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1470 tests
+cargo test          # 1480 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3644,6 +3644,7 @@ so.
 | the **level** of a track | **built.** The trim is the input and the fader is the output, the fader is the volume lane's default, and the group links it (§207) | §207 |
 | the **pitch** of a clip | **built.** A number of semitones on the clip, refused outside its range, and the length is the same (§208) | §208 |
 | the **processes** on a clip | **built.** A name and its parameters, done in order, refused when the name is not one this battery knows (§209) | §209 |
+| the **pan** of a track | **built.** A balance from minus one to one, the default of the pan lane, applied when the track is routed (§210) | §210 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14375,3 +14376,82 @@ or turning its level.
   tree's own plugins over a clip — an equaliser, a compressor, a
   reverb — and those are the same inserts that the kit already has on
   a clip (§166).
+
+## 210. The pan of a track
+
+The tree's mixer keeps a **pan** on every track: the balance of the
+track's sound in the mix. This tree had a pan **lane** and no pan of
+its own, and the lane's law was the tree's constant-power one — which
+is a law for placing a mono sound in a stereo field, and takes three
+decibels off a stereo sound in the middle.
+
+### What was built
+
+- The **pan** is a number on the track, from minus one to one, and the
+  command `sound.track.pan` sets it. A pan outside that range is
+  **refused** and not pulled to the edge.
+- The pan is the **default of the pan lane**, as the fader is the
+  default of the volume lane: a lane with breakpoints overrides it,
+  and a lane without one is the pan.
+- The law is the tree's **balance** law: the middle is the middle, and
+  the sound is not quieter there than it is at the side. The send's
+  pan uses the same law, so a copy and the track it came from are
+  balanced the same way.
+- The pan is applied when the track is **routed**: a track that feeds a
+  bus is balanced before it reaches the bus, and a copy that a send
+  takes is balanced by the **send's** own pan and not by the track's.
+
+### What the port found
+
+- **The tree's pan is a vector and this tree's is a number.** The
+  tree's mixer keeps a pan per channel — a mono track has one panner
+  and a stereo track has two, hard left and hard right by default —
+  and the tree's command sets one of them at a time, with an `index`.
+  Here a track has one pan and it balances the sound. The tree's
+  default and this one's are the same thing: hard left and hard right
+  is no pan at all.
+- **The tree has four laws and this tree has one.** The tree's pan
+  law is a setting of the session: constant power (three decibels off
+  in the middle), a compromise (four and a half), constant voltage
+  (six), or balance (none). The first three are laws for *placing* a
+  mono sound in a stereo field. A stereo sound that is already in two
+  channels is not placed by them — it is balanced, and the balance
+  law is the one that does that without taking the level off. The tree
+  has that law too; it is the one the tree calls `Zero`.
+- **The tree's constant-power law was in this tree's pan lane.** The
+  lane took three decibels off a stereo track in the middle, which is
+  the placement law applied to a sound that is not being placed. The
+  lane is now the balance law, and the middle is the middle.
+- **The tree's pan is applied when the track is routed, and here it
+  was not.** A track that feeds a bus is heard on that bus, and this
+  tree balanced it only when it reached the main mix — so a track on a
+  bus was never balanced at all. It is balanced before it reaches the
+  bus now.
+- **The tree's group does not share the pan.** The tree's group shares
+  the volume, the mute, the solo and the record, and the pan is not
+  among them; so the pan is the track's own here too.
+
+### What it cost
+
+- **Ten tests** in the sound battery (`tests/pan.rs`): a track carries
+  its pan, a pan is set on it, one that is out of range is refused,
+  one that is not a number is refused, a node that is not a track is
+  refused, the pan is heard, a pan in the middle is the middle, a pan
+  lane overrides the pan of the track, a routed track is balanced
+  before it reaches the bus, and the pan is not linked by the group.
+- **One command** (`sound.track.pan`) and **one law changed**: the
+  pan of a lane and the pan of a send are the balance and not the
+  constant power. The MCP server now carries **266** commands, and the
+  sound battery carries **55**.
+
+### What it does not settle
+
+- **A mono sound is not placed.** This tree's mix has the shape of the
+  media — a document of mono sources is a mono mix — so there is no
+  stereo field for a mono sound to be placed in, and a pan of a mono
+  track does nothing. The tree's session has a channel format of its
+  own, and that is where the field would come from.
+- **The tree's surround panner is not here.** The tree's mixer has a
+  pucker for a surround field, with a divergence and a share for the
+  centre speaker, and an Ambisonics encoder under it. That is a
+  loudspeaker layout and not a balance.
