@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1352 tests.** The MCP server links **all fifteen batteries** in, so the
+**1359 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1352 tests
+cargo test          # 1359 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3632,6 +3632,7 @@ so.
 | the **outline** of a document | **built.** The bookmarks are a tree of items with titles and destinations, the list of siblings is relinked, and the counts are derived from the visible items (§195) | §195 |
 | the **beat** of a clip | **built.** The place inside a clip where the beat falls, an option and not a zero — and it follows the audio when the clip is trimmed (§196) | §196 |
 | the **locks** on a clip | **built.** The content lock and the place lock are two locks, and the commands that would break one of them refuse (§197) | §197 |
+| the **marks** of a clip | **built.** The rating of stars is the clip's own, and the colour is the kit's appearance — so the battery has no second way to say it (§198) | §198 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13348,3 +13349,90 @@ changed a clip that was supposed to be finished.
   carries a **rating** and a **colour**, and neither is in this tree
   yet — they are fields on the clip rather than behaviour, and they
   are the next slice.
+
+## 198. The marks of a clip
+
+The tree's sound editor puts two marks on a clip: a **rating** of stars,
+and a **colour** — a tint for the clip's bar on the timeline. The v2
+sound battery had neither, and the last arc named the rating as the
+next slice. This arc adds it, and it finds that the other mark was
+already here.
+
+### What was built
+
+- The command `sound.clip.rating` sets the clip's **rating**: stars, from
+  none to five.
+- The rating is a field in the clip's **payload**, beside the beat and
+  the locks, because those are the clip's own facts too — and the clip's
+  kind says it in the plan.
+- A rating outside the range is **refused**, and the clip keeps the
+  rating it had. A rating that is not a whole number of stars is
+  refused as well.
+- **Zero is a rating** — the clip has none — and not the absence of one,
+  so every clip carries a rating.
+- The clip's **colour** is the kit's appearance and not a field of the
+  clip: `core.appearance.set` sets one on any node, a sound clip
+  included, so the battery has no command of its own for it.
+
+### What the port found
+
+- **The tree clamps a rating and its keyboard refuses one.** The tree's
+  `clip.rating` takes any number and **clamps** it into the range: nine
+  stars become five, and minus one star becomes none. Its keyboard does
+  not pass the nine key on at all — the tree's own test asserts that a
+  press of nine leaves the rating at four. So the tree has two answers
+  to one question, and which one you get depends on how you asked.
+  Here there is one answer, and it is the **refusal** (§ the kit's own
+  rule: a refusal never truncates). A rating asked for as nine stars is
+  not a rating, and a rating asked for as two and a half stars is not a
+  rating either.
+- **The tree's two marks are not two marks.** The rating is the clip's
+  own; the colour is the **kit's**. The tree's sound editor has a
+  command of its own for the colour of a clip, but the kit already says
+  how every node is drawn — an **appearance** is the colour a node is
+  filled with, and one command sets it on any node — so a command of the
+  battery's own would be **two paths to one thing**: the tree's way for
+  a clip and the kit's way for everything else. Here the clip's colour
+  is the appearance the clip carries, and the tree's `clip.color` is
+  `core.appearance.set` with a narrower name.
+- **A rating is a mark and not a behaviour.** Nothing in the tree
+  changes because of a rating — it is a number the editor's stars are
+  drawn from — and here it is the same: a field in the payload, said in
+  the plan, and nothing else asks it. That is the difference from the
+  beat, which the audio moves when the clip is trimmed, and from the
+  locks, which the commands that would break one of them ask.
+- **The tree's type is the gate, and here the file is the gate.** The
+  tree's rating is a `u8`, so the tree's document cannot hold a rating
+  of nine stars or of two and a half: the type says no before anything
+  else is asked. Here the payload is JSON, so a rating read from a file
+  is a **number** — any number — and the reader refuses the ones that
+  are not ratings (§ the same lesson as the PDF's numbers: a number
+  read from a file's bytes is a float, and a file that says nine stars
+  is a file the battery refuses and not a file it believes).
+
+### What it cost
+
+- **Seven tests** in the sound battery (`tests/marks.rs`): a clip is
+  rated, no stars is a rating, a rating outside the range is refused,
+  half a star is not a rating, the rating is in the plan, the colour of
+  a clip is its appearance, and only a clip can be rated.
+- **One command** (`sound.clip.rating`) and **one field** in the clip's
+  payload. The MCP server now carries **246** commands, and the sound
+  battery carries **37**.
+- **The clip's kind says one thing more** — the rating, in the plan.
+
+### What it does not settle
+
+- **The rating is not shown.** A sound document is not a picture here,
+  so a rating is a fact in the document and not a row of stars on a bar.
+  The tree draws the stars.
+- **The rating is not a shortcut.** The tree sets a rating with the
+  keyboard — Cmd+Alt and a number — and here it is a command. A front
+  end that wants the shortcut may call it; the command is the shortcut's
+  only path, which is the point of the registry.
+- **The group of a clip is still not here.** The tree's clip carries a
+  **group** as well: a shared number that says which clips move
+  together. It is the third mark, and the tree's own answer to it — the
+  same number on each clip — is the answer this tree is most likely to
+  change, because a group is an **edge** and not an id. That is the next
+  slice.
