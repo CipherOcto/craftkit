@@ -1,6 +1,6 @@
 //! The **picture**: a buffer of pixels, and the PNG that carries it.
 
-use craftkit_sdk::document::Colour;
+use craftkit_sdk::document::{BlendMode, Colour};
 
 /// A picture: RGBA pixels, four bytes each, in a row.
 ///
@@ -51,32 +51,30 @@ impl Image {
     /// Paint a pixel, **over** what is there.
     ///
     /// The colour is mixed with the pixel under it: a colour with an
-    /// alpha of half a pixel is half a pixel.
-    pub fn blend(&mut self, x: usize, y: usize, colour: Colour) {
+    /// alpha of half a pixel is half a pixel. The **mode** says how the
+    /// two colours mix — the plain one lays the colour over the pixel,
+    /// and the others mix them first.
+    pub fn blend(&mut self, x: usize, y: usize, colour: Colour, blend: BlendMode) {
         if x >= self.width || y >= self.height {
             return;
         }
-        let [r, g, b, a] = bytes_of(colour);
-        let alpha = f32::from(a) / 255.0;
-        if alpha <= 0.0 {
+        if colour.0[3] <= 0.0 {
             return;
         }
         let at = (y * self.width + x) * 4;
         let Some(slice) = self.pixels.get_mut(at..at + 4) else { return };
-        if alpha >= 1.0 {
-            slice[0] = r;
-            slice[1] = g;
-            slice[2] = b;
-            slice[3] = 255;
-            return;
-        }
-        for (channel, value) in [r, g, b].into_iter().enumerate() {
-            let under = f32::from(slice[channel]);
-            let mixed = f32::from(value) * alpha + under * (1.0 - alpha);
-            slice[channel] = mixed.round().clamp(0.0, 255.0) as u8;
-        }
-        let under = f32::from(slice[3]);
-        slice[3] = (under + (255.0 - under) * alpha).round().clamp(0.0, 255.0) as u8;
+        let under = Colour([
+            f32::from(slice[0]) / 255.0,
+            f32::from(slice[1]) / 255.0,
+            f32::from(slice[2]) / 255.0,
+            f32::from(slice[3]) / 255.0,
+        ]);
+        let mixed = blend.mix(under, colour);
+        let [r, g, b, a] = bytes_of(mixed);
+        slice[0] = r;
+        slice[1] = g;
+        slice[2] = b;
+        slice[3] = a;
     }
 
     /// The picture, as a PNG file.

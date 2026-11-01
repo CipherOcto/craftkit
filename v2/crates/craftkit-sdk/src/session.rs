@@ -435,7 +435,11 @@ impl Session {
                 let parts = self.parts_of(node, from, to);
                 if !parts.is_empty() {
                     for rect in parts {
-                        canvas.rect(rect, crate::document::Fill::Solid(SELECTION_WASH));
+                        canvas.rect(
+                            rect,
+                            crate::document::Fill::Solid(SELECTION_WASH),
+                            crate::document::BlendMode::Normal,
+                        );
                     }
                     continue;
                 }
@@ -452,6 +456,7 @@ impl Session {
             canvas.path(
                 &frame,
                 crate::document::Fill::Solid(crate::document::Colour::NONE),
+                crate::document::BlendMode::Normal,
                 Some(crate::document::Stroke {
                     colour: crate::document::Colour::BLACK,
                     width,
@@ -462,6 +467,7 @@ impl Session {
             canvas.rect(
                 crate::document::Rect::new(handle.x - size / 2.0, handle.y - size / 2.0, size, size),
                 crate::document::Fill::Solid(crate::document::Colour::BLACK),
+                crate::document::BlendMode::Normal,
             );
         }
     }

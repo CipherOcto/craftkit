@@ -57,6 +57,7 @@ impl BusKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -118,7 +119,7 @@ impl InsertKind {
                 .map(|appearance| appearance.fill)
                 .unwrap_or(craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::BLACK))
         };
-        canvas.rect(rect, fill);
+        canvas.rect(rect, fill, craftkit_sdk::document::BlendMode::Normal);
     }
 
     /// Whether a point is inside an insert.
@@ -165,6 +166,7 @@ impl SendKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -233,6 +235,7 @@ impl LaneKind {
         canvas.path(
             &path,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,

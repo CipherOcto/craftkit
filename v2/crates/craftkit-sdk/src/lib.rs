@@ -104,7 +104,7 @@ pub use camera::Camera;
 pub use command::{CommandRun, CommandSpec, DynamicRun};
 pub use contribution::{Contribution, Registration, Registry, RegistryError};
 pub use document::{
-    Appearance, Asset, Canvas, Cap, Colour, Document, Fill, FillRule, Gradient, GradientGeometry,
+    Appearance, Asset, BlendMode, Canvas, Cap, Colour, Document, Fill, FillRule, Gradient, GradientGeometry,
     GradientKind, GradientStop, Join, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Relation,
     Segment, Stroke, SubPath,
 };

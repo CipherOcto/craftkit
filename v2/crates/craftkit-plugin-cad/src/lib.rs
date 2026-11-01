@@ -53,8 +53,8 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
-    Appearance, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path, Plan,
-    PlanItem, Point, Relation, Session, Stroke, Text,
+    Appearance, BlendMode, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path,
+    Plan, PlanItem, Point, Relation, Session, Stroke, Text,
 };
 
 /// The CAD layer.
@@ -318,6 +318,7 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
             canvas.path(
                 &path,
                 Fill::Solid(Colour::NONE),
+                BlendMode::Normal,
                 Some(Stroke { colour, width: 1.0, ..Default::default() }),
             );
         }
@@ -339,6 +340,7 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
             canvas.path(
                 &path,
                 Fill::Solid(Colour::NONE),
+                BlendMode::Normal,
                 Some(Stroke { colour, width: 1.0, ..Default::default() }),
             );
         }
@@ -572,6 +574,7 @@ impl AddLayer {
                         message,
                     })?),
                     stroke: None,
+                    blend: BlendMode::Normal,
                 }),
                 None => None,
             };

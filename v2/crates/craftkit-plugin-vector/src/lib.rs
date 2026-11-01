@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twenty commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **twenty-one commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -25,7 +25,9 @@
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it; `vector.path.fill` and
 //!   `vector.path.stroke` say what the path is painted with, and
-//!   `vector.path.gradient` says what the colours are;
+//!   `vector.path.gradient` says what the colours are, and
+//!   `vector.path.blend` says how the path mixes with what is under
+//!   it;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.smooth` makes a point
 //!   of a path smooth; `vector.path.transform` says where
@@ -60,9 +62,9 @@
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
-    Canvas, Cap, Colour, Document, EngineError, Fill, FillRule, FormatValue, Gradient, GradientGeometry,
-    GradientKind, GradientStop, Join, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem, Point, Rect,
-    Segment, Session, Stroke, SubPath, Text,
+    BlendMode, Canvas, Cap, Colour, Document, EngineError, Fill, FillRule, FormatValue, Gradient,
+    GradientGeometry, GradientKind, GradientStop, Join, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
+    Point, Rect, Segment, Session, Stroke, SubPath, Text,
 };
 
 use craftkit_vector_geom as geom;
@@ -91,6 +93,8 @@ pub struct VectorNode {
     pub fill: Fill,
     /// The stroke on its outline, if it has one.
     pub stroke: Option<Stroke>,
+    /// How the path mixes with what is under it.
+    pub blend: BlendMode,
     /// The transform the path is placed with.
     pub transform: geom::Matrix,
 }
@@ -115,6 +119,7 @@ impl FormatValue for VectorNode {
             "path": self.path.to_json(),
             "fill": self.fill.to_json(),
             "stroke": self.stroke.as_ref().map(|stroke| stroke.to_json()),
+            "blend": self.blend.label(),
             "transform": self.transform.to_json(),
         })
     }
@@ -129,13 +134,22 @@ impl FormatValue for VectorNode {
             Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
             _ => None,
         };
+        // A path written before the **blend mode** was in the payload
+        // has none, and a path that says nothing is laid over what is
+        // under it.
+        let blend = match value.get("blend").and_then(|blend| blend.as_str()) {
+            Some(name) => {
+                BlendMode::parse(name).ok_or_else(|| format!("there is no blend mode called `{name}`"))?
+            }
+            None => BlendMode::Normal,
+        };
         // A path written before the **transform** was in the payload
         // has none, and a path with no transform is where it is.
         let transform = match value.get("transform") {
             Some(transform) if !transform.is_null() => geom::Matrix::from_json(transform)?,
             _ => geom::Matrix::identity(),
         };
-        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, transform })
+        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, blend, transform })
     }
 }
 
@@ -155,14 +169,14 @@ impl VectorPathKind {
         // the kit's own, it is the one that can be **shared**, and a
         // path whose colours live in its own payload cannot be given
         // the same appearance as another path.
-        let (fill, stroke) = match document.appearance_of(node) {
-            Some(appearance) => (appearance.fill, appearance.stroke),
-            None => (vector.fill.clone(), vector.stroke),
+        let (fill, stroke, blend) = match document.appearance_of(node) {
+            Some(appearance) => (appearance.fill, appearance.stroke, appearance.blend),
+            None => (vector.fill.clone(), vector.stroke, vector.blend),
         };
         let fill = if node.muted { Fill::Solid(Colour::NONE) } else { fill };
         // The **transform** is where the path is put, and the canvas
         // draws the path it is given.
-        canvas.path(&vector.placed(), fill, stroke);
+        canvas.path(&vector.placed(), fill, blend, stroke);
     }
 
     /// Whether a point is inside a path.
@@ -347,7 +361,8 @@ impl AddPolygon {
         "vector.path.intersect",
         "vector.path.simplify",
         "vector.path.offset",
-        "vector.path.gradient"
+        "vector.path.gradient",
+        "vector.path.blend"
     )
 )]
 pub struct VectorPanel;
@@ -594,6 +609,7 @@ impl OutlinePath {
             path: outline.clone(),
             fill: Fill::Solid(colour),
             stroke: None,
+            blend: BlendMode::Normal,
             transform: geom::Matrix::identity(),
         };
         let rect = bounds(&outline);
@@ -750,6 +766,48 @@ impl FillPath {
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the path is filled")
             .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.0 })))
+    }
+}
+
+/// Set the **blend mode** of a path.
+///
+/// The mode says how the path mixes with what is under it: the plain
+/// mode lays it over, and the others mix the two colours first. The
+/// mode is the **kit's own**, so that a shape, a letter and a picture
+/// all mix the same way.
+///
+/// The plain mode is the mode a path has when it says nothing, and it
+/// is how a blend is taken away.
+#[derive(Command)]
+#[command(
+    id = "vector.path.blend",
+    area = "vector",
+    layer = "vector",
+    icon = "paint",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct BlendPath {
+    /// The path.
+    pub path: NodeRef,
+    /// The mode: `Normal`, `Multiply`, `Screen`, `Overlay` and the
+    /// rest.
+    pub mode: Text,
+}
+
+impl BlendPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.blend".to_string();
+        let mut vector = vector_of(session, self.path.0)?;
+        let mode = BlendMode::parse(self.mode.0.trim()).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no blend mode called `{}`", self.mode.0.trim()),
+        })?;
+        vector.blend = mode;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed(format!("the path mixes with `{}`", mode.label()))
+            .with_data(serde_json::json!({ "id": self.path.0, "blend": mode.label() })))
     }
 }
 
@@ -1572,6 +1630,7 @@ fn add_path(
         path: path.clone(),
         fill: Fill::Solid(colour),
         stroke: None,
+        blend: BlendMode::Normal,
         transform: geom::Matrix::identity(),
     };
     let rect = bounds(&path);

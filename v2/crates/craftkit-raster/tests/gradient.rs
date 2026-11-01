@@ -8,7 +8,7 @@
 use craftkit_raster::{Canvas, Image, Raster};
 use craftkit_sdk::camera::Camera;
 use craftkit_sdk::document::{
-    Colour, Fill, Gradient, GradientGeometry, GradientKind, GradientStop, Path, Point, Rect,
+    BlendMode, Colour, Fill, Gradient, GradientGeometry, GradientKind, GradientStop, Path, Point, Rect,
 };
 
 /// A canvas of that size, with a camera at the origin.
@@ -53,7 +53,7 @@ fn black_to_white() -> Gradient {
 #[test]
 fn a_linear_gradient_changes_across_the_shape() {
     let mut canvas = a_canvas(100, 100);
-    canvas.rect(a_rect(80.0, 80.0), Fill::Gradient(black_to_white()));
+    canvas.rect(a_rect(80.0, 80.0), Fill::Gradient(black_to_white()), BlendMode::Normal);
     let image = canvas.image();
     // The camera is at the origin and the picture is square, so the
     // world's origin is the picture's middle, and the world's up is the
@@ -70,7 +70,7 @@ fn a_linear_gradient_changes_across_the_shape() {
 #[test]
 fn a_gradient_is_drawn_on_a_path() {
     let mut canvas = a_canvas(100, 100);
-    canvas.path(&a_square(80.0), Fill::Gradient(black_to_white()), None);
+    canvas.path(&a_square(80.0), Fill::Gradient(black_to_white()), BlendMode::Normal, None);
     let image = canvas.image();
     let left = pixel(image, 51, 10).expect("the pixel is there");
     let right = pixel(image, 95, 10).expect("the pixel is there");
@@ -89,7 +89,7 @@ fn a_radial_gradient_changes_outwards() {
         ],
         geometry: GradientGeometry::Radial { centre: Point::new(25.0, 25.0), radius: 25.0 },
     };
-    canvas.rect(a_rect(80.0, 80.0), Fill::Gradient(gradient));
+    canvas.rect(a_rect(80.0, 80.0), Fill::Gradient(gradient), BlendMode::Normal);
     let image = canvas.image();
     let middle = pixel(image, 75, 25).expect("the pixel is there");
     let edge = pixel(image, 95, 25).expect("the pixel is there");

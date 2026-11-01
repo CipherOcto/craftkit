@@ -239,6 +239,7 @@ impl TrackKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(stroke),
         );
         // A **soloed** track is a double rule: the row says which
@@ -251,6 +252,7 @@ impl TrackKind {
             canvas.path(
                 &under,
                 craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+                craftkit_sdk::document::BlendMode::Normal,
                 Some(stroke),
             );
         }
@@ -341,7 +343,7 @@ impl ClipKind {
                 .map(|appearance| appearance.fill)
                 .unwrap_or(craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::BLACK))
         };
-        canvas.rect(rect, fill);
+        canvas.rect(rect, fill, craftkit_sdk::document::BlendMode::Normal);
         if node.muted {
             return;
         }
@@ -354,21 +356,36 @@ impl ClipKind {
         // The **waveform**: the shape of the sound the clip plays, drawn
         // on the bar in the paper's colour, the way the fade's notch is.
         for path in waveform_of(document, node, &payload, &rect) {
-            canvas.path(&path, craftkit_sdk::document::Fill::Solid(paper), None);
+            canvas.path(
+                &path,
+                craftkit_sdk::document::Fill::Solid(paper),
+                craftkit_sdk::document::BlendMode::Normal,
+                None,
+            );
         }
         let width = payload.fade_in.len as f64 / rate;
         if width > 0.0
             && width < rect.w
             && let Some(path) = fade_in_path(&rect, width, payload.fade_in.fade())
         {
-            canvas.path(&path, craftkit_sdk::document::Fill::Solid(paper), None);
+            canvas.path(
+                &path,
+                craftkit_sdk::document::Fill::Solid(paper),
+                craftkit_sdk::document::BlendMode::Normal,
+                None,
+            );
         }
         let width = payload.fade_out.len as f64 / rate;
         if width > 0.0
             && width < rect.w
             && let Some(path) = fade_out_path(&rect, width, payload.fade_out.fade())
         {
-            canvas.path(&path, craftkit_sdk::document::Fill::Solid(paper), None);
+            canvas.path(
+                &path,
+                craftkit_sdk::document::Fill::Solid(paper),
+                craftkit_sdk::document::BlendMode::Normal,
+                None,
+            );
         }
     }
 
@@ -416,6 +433,7 @@ impl TempoKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -457,6 +475,7 @@ impl MeterKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -502,6 +521,7 @@ impl MarkerKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,
@@ -575,6 +595,7 @@ impl RulerKind {
                     canvas.path(
                         &path,
                         craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+                        craftkit_sdk::document::BlendMode::Normal,
                         Some(craftkit_sdk::document::Stroke {
                             colour: craftkit_sdk::document::Colour::BLACK,
                             width: 0.01,
@@ -2713,6 +2734,7 @@ impl PlayheadKind {
         canvas.path(
             &line,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(craftkit_sdk::document::Stroke {
                 colour: craftkit_sdk::document::Colour::BLACK,
                 width: 0.01,

@@ -5,7 +5,7 @@
 //! the colours are changed in one place.
 
 use craftkit_sdk::Document;
-use craftkit_sdk::document::{Appearance, Colour, Fill, Node, Stroke};
+use craftkit_sdk::document::{Appearance, BlendMode, Colour, Fill, Node, Stroke};
 
 /// A colour, as a person writes it.
 fn colour(text: &str) -> Colour {
@@ -21,6 +21,7 @@ fn a_document() -> (Document, u64, u64) {
         node.appearance = Some(Appearance {
             fill: Fill::Solid(fill),
             stroke: Some(Stroke { colour: Colour::BLACK, width: 2.0, ..Default::default() }),
+            blend: BlendMode::Normal,
         });
     }
     let shape = document.add_node("a shape", "geometry.rect", None);

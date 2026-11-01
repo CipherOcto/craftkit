@@ -185,3 +185,19 @@ fn a_gradient_that_cannot_be_made_is_refused() {
     );
     assert!(refused.is_err(), "a stop's offset is between zero and one");
 }
+
+/// A path may **mix** with what is under it.
+///
+/// The mode is the kit's own, and the command says which one: the
+/// plain mode is how a blend is taken away.
+#[test]
+fn a_path_may_mix_with_what_is_under_it() {
+    let mut session = session();
+    let id = a_rectangle(&mut session);
+    session.execute("vector.path.blend", &json!({ "path": id, "mode": "multiply" })).expect("the path mixes");
+    let paint = paint_of(&session, id);
+    assert_eq!(paint.get("blend"), Some(&json!("Multiply")), "the path says how it mixes");
+    // A mode that is not one of the sixteen is refused.
+    let refused = session.execute("vector.path.blend", &json!({ "path": id, "mode": "shade" }));
+    assert!(refused.is_err(), "there is no blend mode called shade");
+}

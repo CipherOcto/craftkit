@@ -30,7 +30,7 @@ fn a_png(width: u32, height: u32) -> Vec<u8> {
 #[test]
 fn a_picture_the_kit_wrote_is_read_back() {
     let mut written = craftkit_raster::Image::new(4, 3, craftkit_sdk::Colour::WHITE);
-    written.blend(1, 1, craftkit_sdk::Colour::BLACK);
+    written.blend(1, 1, craftkit_sdk::Colour::BLACK, craftkit_sdk::BlendMode::Normal);
     let bytes = written.to_png();
     let picture = read(&bytes, &Limits::default()).expect("the picture is read");
     assert_eq!(picture.width, 4);

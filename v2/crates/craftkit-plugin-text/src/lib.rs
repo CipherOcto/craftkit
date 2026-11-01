@@ -133,6 +133,7 @@ impl ParagraphKind {
             canvas.path(
                 path,
                 craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+                craftkit_sdk::document::BlendMode::Normal,
                 Some(draw::stroke(colour)),
             );
         }
@@ -275,6 +276,7 @@ impl CaretKind {
         canvas.path(
             &path,
             craftkit_sdk::document::Fill::Solid(craftkit_sdk::document::Colour::NONE),
+            craftkit_sdk::document::BlendMode::Normal,
             Some(draw::stroke(colour)),
         );
     }

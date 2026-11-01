@@ -3,8 +3,8 @@
 use craftkit_font::{Font, Metrics};
 use craftkit_sdk::camera::Camera;
 use craftkit_sdk::document::{
-    Canvas, Cap, Colour, Fill, FillRule, Gradient, GradientGeometry, Join, Path, Point, Rect, Segment,
-    Stroke, SubPath,
+    BlendMode, Canvas, Cap, Colour, Fill, FillRule, Gradient, GradientGeometry, Join, Path, Point, Rect,
+    Segment, Stroke, SubPath,
 };
 
 use crate::image::Image;
@@ -149,7 +149,7 @@ impl Raster {
                     ]),
                     _ => continue,
                 };
-                self.image.blend(column, row, colour);
+                self.image.blend(column, row, colour, BlendMode::Normal);
             }
         }
     }
@@ -169,7 +169,7 @@ impl Raster {
     }
 
     /// Fill a shape that has already been turned into a polygon.
-    fn fill_polygon(&mut self, points: &[(f64, f64)], fill: &Fill, rule: FillRule) {
+    fn fill_polygon(&mut self, points: &[(f64, f64)], fill: &Fill, blend: BlendMode, rule: FillRule) {
         if points.len() < 3 || fill.is_none() {
             return;
         }
@@ -214,7 +214,7 @@ impl Raster {
                     start = x;
                 }
                 if was_inside && !is_inside {
-                    self.fill_span(row, start, x, fill);
+                    self.fill_span(row, start, x, fill, blend);
                 }
             }
         }
@@ -225,7 +225,7 @@ impl Raster {
     /// A **colour** is the same in every pixel of the span, and a
     /// **gradient** is not: every pixel is asked where it is along the
     /// gradient, and the answer is its colour.
-    fn fill_span(&mut self, row: usize, from: f64, to: f64, fill: &Fill) {
+    fn fill_span(&mut self, row: usize, from: f64, to: f64, fill: &Fill, blend: BlendMode) {
         if to <= from {
             return;
         }
@@ -234,13 +234,13 @@ impl Raster {
         match fill {
             Fill::Solid(colour) => {
                 for column in first..last {
-                    self.image.blend(column, row, *colour);
+                    self.image.blend(column, row, *colour, blend);
                 }
             }
             Fill::Gradient(gradient) => {
                 for column in first..last {
                     let colour = gradient.colour_at_parameter(self.parameter_of(gradient, column, row));
-                    self.image.blend(column, row, colour);
+                    self.image.blend(column, row, colour, blend);
                 }
             }
         }
@@ -281,7 +281,7 @@ impl Raster {
 
 impl Canvas for Raster {
     /// Draw a rectangle.
-    fn rect(&mut self, rect: Rect, fill: Fill) {
+    fn rect(&mut self, rect: Rect, fill: Fill, blend: BlendMode) {
         if fill.is_none() {
             return;
         }
@@ -303,18 +303,18 @@ impl Canvas for Raster {
                         gradient.colour_at_parameter(self.parameter_of(gradient, column, row))
                     }
                 };
-                self.image.blend(column, row, colour);
+                self.image.blend(column, row, colour, blend);
             }
         }
     }
 
     /// Draw a path: filled, and stroked on its outline.
-    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>) {
+    fn path(&mut self, path: &Path, fill: Fill, blend: BlendMode, stroke: Option<Stroke>) {
         let contours: Vec<Vec<(f64, f64)>> =
             path.subpaths.iter().map(|subpath| self.flatten(subpath)).collect();
         if !fill.is_none() {
             for contour in &contours {
-                self.fill_polygon(contour, &fill, path.rule);
+                self.fill_polygon(contour, &fill, blend, path.rule);
             }
         }
         let Some(stroke) = stroke else { return };
@@ -322,7 +322,7 @@ impl Canvas for Raster {
             return;
         }
         for contour in &contours {
-            self.stroke_contour(contour, stroke);
+            self.stroke_contour(contour, stroke, blend);
         }
     }
 
@@ -373,7 +373,7 @@ impl Canvas for Raster {
                     f32::from(b) / 255.0,
                     f32::from(a) / 255.0,
                 ]);
-                self.image.blend(column, row, colour);
+                self.image.blend(column, row, colour, BlendMode::Normal);
             }
         }
     }
@@ -405,12 +405,23 @@ impl Canvas for Raster {
                     self,
                     &path,
                     Fill::Solid(Colour::NONE),
+                    BlendMode::Normal,
                     Some(Stroke { colour, width: PEN, ..Default::default() }),
                 );
             }
             pen += glyph.advance * unit;
         }
     }
+}
+
+/// The **paint** a line is laid down with: the colour, and how it
+/// mixes with what is under it.
+#[derive(Clone, Copy)]
+struct Paint {
+    /// The colour of the line.
+    colour: Colour,
+    /// How the line mixes with what is under it.
+    blend: BlendMode,
 }
 
 impl Raster {
@@ -449,7 +460,7 @@ impl Raster {
     /// Each segment is a **quad**: the line, widened to the stroke's
     /// width. The **corners** and the **ends** are drawn from the
     /// stroke's own join and cap, because that is what they are for.
-    fn stroke_contour(&mut self, contour: &[(f64, f64)], stroke: Stroke) {
+    fn stroke_contour(&mut self, contour: &[(f64, f64)], stroke: Stroke, blend: BlendMode) {
         if contour.len() < 2 {
             return;
         }
@@ -457,6 +468,7 @@ impl Raster {
         if half <= 0.0 {
             return;
         }
+        let paint = Paint { colour: stroke.colour, blend };
         // A **closed** contour says where it starts again at the end.
         let closed = contour.len() > 2
             && (contour[0].0 - contour[contour.len() - 1].0).abs() <= f64::EPSILON
@@ -476,7 +488,7 @@ impl Raster {
             let before = if !closed && index == 0 && stroke.cap == Cap::Square { half } else { 0.0 };
             let after =
                 if !closed && index == segments - 1 && stroke.cap == Cap::Square { half } else { 0.0 };
-            self.stroke_segment(from, to, half, before, after, stroke.colour);
+            self.stroke_segment(from, to, half, before, after, paint);
         }
         // The **corners**: the joints between two segments.
         let corners = if closed { count } else { count - 2 };
@@ -485,12 +497,12 @@ impl Raster {
             let before = points[(corner_at + count - 1) % count];
             let corner = points[corner_at];
             let after = points[(corner_at + 1) % count];
-            self.stroke_joint(before, corner, after, half, stroke.join, stroke.colour);
+            self.stroke_joint(before, corner, after, half, stroke.join, paint);
         }
         // The **ends**: the caps of an open line.
         if !closed && stroke.cap == Cap::Round {
-            self.stroke_cap(points[0], points[1], half, true, stroke.colour);
-            self.stroke_cap(points[count - 1], points[count - 2], half, false, stroke.colour);
+            self.stroke_cap(points[0], points[1], half, true, paint);
+            self.stroke_cap(points[count - 1], points[count - 2], half, false, paint);
         }
     }
 
@@ -502,7 +514,7 @@ impl Raster {
         half: f64,
         before: f64,
         after: f64,
-        colour: Colour,
+        paint: Paint,
     ) {
         let Some((ux, uy)) = unit(from, to) else { return };
         let start = (from.0 - ux * before, from.1 - uy * before);
@@ -515,7 +527,7 @@ impl Raster {
             (end.0 - nx, end.1 - ny),
             (start.0 - nx, start.1 - ny),
         ];
-        self.fill_polygon(&quad, &Fill::Solid(colour), FillRule::NonZero);
+        self.fill_polygon(&quad, &Fill::Solid(paint.colour), paint.blend, FillRule::NonZero);
     }
 
     /// Draw the **corner** where two segments meet.
@@ -529,7 +541,7 @@ impl Raster {
         after: (f64, f64),
         half: f64,
         join: Join,
-        colour: Colour,
+        paint: Paint,
     ) {
         let Some((u0x, u0y)) = unit(before, corner) else { return };
         let Some((u1x, u1y)) = unit(corner, after) else { return };
@@ -546,7 +558,12 @@ impl Raster {
         let p1 = (corner.0 + o1.0 * half, corner.1 + o1.1 * half);
         match join {
             Join::Bevel => {
-                self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
+                self.fill_polygon(
+                    &[p0, p1, corner],
+                    &Fill::Solid(paint.colour),
+                    paint.blend,
+                    FillRule::NonZero,
+                );
             }
             Join::Round => {
                 // The **arc** on the outside of the turn, from one edge
@@ -559,21 +576,36 @@ impl Raster {
                     let angle = start + shortest(start, finish) * step as f64 / ARC_STEPS as f64;
                     sector.push((corner.0 + angle.cos() * half, corner.1 + angle.sin() * half));
                 }
-                self.fill_polygon(&sector, &Fill::Solid(colour), FillRule::NonZero);
+                self.fill_polygon(&sector, &Fill::Solid(paint.colour), paint.blend, FillRule::NonZero);
             }
             Join::Miter => {
                 // The two edges are carried on until they meet, and the
                 // meeting point is the **miter**. A miter that is too
                 // long is a bevel: the limit is four widths.
                 let Some(miter) = meet(p0, u0x, u0y, p1, u1x, u1y) else {
-                    self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
+                    self.fill_polygon(
+                        &[p0, p1, corner],
+                        &Fill::Solid(paint.colour),
+                        paint.blend,
+                        FillRule::NonZero,
+                    );
                     return;
                 };
                 let length = ((miter.0 - corner.0).powi(2) + (miter.1 - corner.1).powi(2)).sqrt();
                 if length > MITER_LIMIT * half {
-                    self.fill_polygon(&[p0, p1, corner], &Fill::Solid(colour), FillRule::NonZero);
+                    self.fill_polygon(
+                        &[p0, p1, corner],
+                        &Fill::Solid(paint.colour),
+                        paint.blend,
+                        FillRule::NonZero,
+                    );
                 } else {
-                    self.fill_polygon(&[p0, miter, p1], &Fill::Solid(colour), FillRule::NonZero);
+                    self.fill_polygon(
+                        &[p0, miter, p1],
+                        &Fill::Solid(paint.colour),
+                        paint.blend,
+                        FillRule::NonZero,
+                    );
                 }
             }
         }
@@ -582,7 +614,7 @@ impl Raster {
     /// Draw the **end** of an open line: the round cap.
     ///
     /// The half circle is put on the end, away from the line.
-    fn stroke_cap(&mut self, end: (f64, f64), towards: (f64, f64), half: f64, first: bool, colour: Colour) {
+    fn stroke_cap(&mut self, end: (f64, f64), towards: (f64, f64), half: f64, first: bool, paint: Paint) {
         let Some((ux, uy)) = unit(towards, end) else { return };
         // The way the line comes: from the point towards the end, and
         // the cap is behind it.
@@ -604,7 +636,7 @@ impl Raster {
             let angle = start + (finish - start) * step * index as f64 / ARC_STEPS as f64;
             cap.push((end.0 + angle.cos() * half, end.1 + angle.sin() * half));
         }
-        self.fill_polygon(&cap, &Fill::Solid(colour), FillRule::NonZero);
+        self.fill_polygon(&cap, &Fill::Solid(paint.colour), paint.blend, FillRule::NonZero);
     }
 }
 

@@ -303,6 +303,235 @@ fn mix(before: &GradientStop, after: &GradientStop, u: f64) -> Colour {
     ])
 }
 
+/// How a thing **mixes** with what is under it.
+///
+/// The modes are the PDF's and the screen's: the ones that work on each
+/// channel by themselves, and the four that do not. The mode is the
+/// **kit's own**, so that every kind of thing may be mixed the same
+/// way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlendMode {
+    /// The source is laid over the backdrop as it is.
+    #[default]
+    Normal,
+    /// The darker of the two.
+    Darken,
+    /// The product of the two.
+    Multiply,
+    /// The darker, and harder.
+    ColorBurn,
+    /// The lighter of the two.
+    Lighten,
+    /// The inverse of the product.
+    Screen,
+    /// The lighter, and harder.
+    ColorDodge,
+    /// Multiply or screen, by the backdrop.
+    Overlay,
+    /// A gentle lighten or darken.
+    SoftLight,
+    /// Multiply or screen, by the source.
+    HardLight,
+    /// The difference of the two.
+    Difference,
+    /// A gentler difference.
+    Exclusion,
+    /// The source's hue, over the backdrop's saturation and lightness.
+    Hue,
+    /// The source's saturation, over the backdrop's hue and lightness.
+    Saturation,
+    /// The source's colour, over the backdrop's lightness.
+    Color,
+    /// The source's lightness, over the backdrop's hue and saturation.
+    Luminosity,
+}
+
+impl BlendMode {
+    /// Every mode, in the order a panel shows them.
+    pub const ALL: [BlendMode; 16] = [
+        BlendMode::Normal,
+        BlendMode::Darken,
+        BlendMode::Multiply,
+        BlendMode::ColorBurn,
+        BlendMode::Lighten,
+        BlendMode::Screen,
+        BlendMode::ColorDodge,
+        BlendMode::Overlay,
+        BlendMode::SoftLight,
+        BlendMode::HardLight,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+        BlendMode::Hue,
+        BlendMode::Saturation,
+        BlendMode::Color,
+        BlendMode::Luminosity,
+    ];
+
+    /// The **name** of the mode, as the PDF writes it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            BlendMode::Normal => "Normal",
+            BlendMode::Darken => "Darken",
+            BlendMode::Multiply => "Multiply",
+            BlendMode::ColorBurn => "ColorBurn",
+            BlendMode::Lighten => "Lighten",
+            BlendMode::Screen => "Screen",
+            BlendMode::ColorDodge => "ColorDodge",
+            BlendMode::Overlay => "Overlay",
+            BlendMode::SoftLight => "SoftLight",
+            BlendMode::HardLight => "HardLight",
+            BlendMode::Difference => "Difference",
+            BlendMode::Exclusion => "Exclusion",
+            BlendMode::Hue => "Hue",
+            BlendMode::Saturation => "Saturation",
+            BlendMode::Color => "Color",
+            BlendMode::Luminosity => "Luminosity",
+        }
+    }
+
+    /// The mode a name says, if it is one.
+    ///
+    /// The name may be written as the PDF writes it, or as a person
+    /// writes it: the spaces, the dashes and the underscores do not
+    /// matter, and neither does the case.
+    pub fn parse(name: &str) -> Option<BlendMode> {
+        let normalise = |text: &str| text.to_ascii_lowercase().replace([' ', '_', '-'], "");
+        let wanted = normalise(name);
+        BlendMode::ALL.into_iter().find(|mode| normalise(mode.label()) == wanted)
+    }
+
+    /// The colour a **source** and a **backdrop** mix to.
+    ///
+    /// The source is laid over the backdrop: the two colours are mixed
+    /// by the mode, and the mix is laid over the backdrop by the
+    /// source's own opacity.
+    pub fn mix(&self, backdrop: Colour, source: Colour) -> Colour {
+        let backdrop = [backdrop.0[0], backdrop.0[1], backdrop.0[2], backdrop.0[3].clamp(0.0, 1.0)];
+        let source = [source.0[0], source.0[1], source.0[2], source.0[3].clamp(0.0, 1.0)];
+        let alpha_backdrop = backdrop[3];
+        let alpha_source = source[3];
+        let alpha_out = alpha_source + alpha_backdrop * (1.0 - alpha_source);
+        if alpha_out <= 0.0 {
+            return Colour([0.0, 0.0, 0.0, 0.0]);
+        }
+        let mixed = self.mix_rgb([backdrop[0], backdrop[1], backdrop[2]], [source[0], source[1], source[2]]);
+        let channel = |index: usize| {
+            ((1.0 - alpha_backdrop) * source[index] + alpha_backdrop * mixed[index]) * alpha_source
+                + (1.0 - alpha_source) * alpha_backdrop * backdrop[index]
+        };
+        Colour([channel(0) / alpha_out, channel(1) / alpha_out, channel(2) / alpha_out, alpha_out])
+    }
+
+    /// The **channels** the two colours mix to, on their own.
+    fn mix_rgb(&self, backdrop: [f32; 3], source: [f32; 3]) -> [f32; 3] {
+        let each = |mix: fn(f32, f32) -> f32| {
+            [0, 1, 2].map(|index| mix(backdrop[index].clamp(0.0, 1.0), source[index].clamp(0.0, 1.0)))
+        };
+        match self {
+            BlendMode::Normal => each(|_, source| source),
+            BlendMode::Multiply => each(|backdrop, source| backdrop * source),
+            BlendMode::Screen => each(screen),
+            BlendMode::Overlay => each(|backdrop, source| hard_light(source, backdrop)),
+            BlendMode::Darken => each(f32::min),
+            BlendMode::Lighten => each(f32::max),
+            BlendMode::ColorDodge => each(|backdrop, source| {
+                if backdrop <= 0.0 {
+                    0.0
+                } else if source >= 1.0 {
+                    1.0
+                } else {
+                    (backdrop / (1.0 - source)).min(1.0)
+                }
+            }),
+            BlendMode::ColorBurn => each(|backdrop, source| {
+                if backdrop >= 1.0 {
+                    1.0
+                } else if source <= 0.0 {
+                    0.0
+                } else {
+                    1.0 - ((1.0 - backdrop) / source).min(1.0)
+                }
+            }),
+            BlendMode::HardLight => each(hard_light),
+            BlendMode::SoftLight => each(|backdrop, source| {
+                if source <= 0.5 {
+                    backdrop - (1.0 - 2.0 * source) * backdrop * (1.0 - backdrop)
+                } else {
+                    let d = if backdrop <= 0.25 {
+                        ((16.0 * backdrop - 12.0) * backdrop + 4.0) * backdrop
+                    } else {
+                        backdrop.sqrt()
+                    };
+                    backdrop + (2.0 * source - 1.0) * (d - backdrop)
+                }
+            }),
+            BlendMode::Difference => each(|backdrop, source| (backdrop - source).abs()),
+            BlendMode::Exclusion => each(|backdrop, source| backdrop + source - 2.0 * backdrop * source),
+            BlendMode::Hue => set_lum(set_sat(source, saturation(backdrop)), luminance(backdrop)),
+            BlendMode::Saturation => set_lum(set_sat(backdrop, saturation(source)), luminance(backdrop)),
+            BlendMode::Color => set_lum(source, luminance(backdrop)),
+            BlendMode::Luminosity => set_lum(backdrop, luminance(source)),
+        }
+    }
+}
+
+/// The screen of two colours.
+fn screen(backdrop: f32, source: f32) -> f32 {
+    backdrop + source - backdrop * source
+}
+
+/// The hard light of two colours.
+fn hard_light(backdrop: f32, source: f32) -> f32 {
+    if source <= 0.5 { backdrop * 2.0 * source } else { screen(backdrop, 2.0 * source - 1.0) }
+}
+
+/// The **luminance** of a colour, as the PDF and the screen say.
+fn luminance(colour: [f32; 3]) -> f32 {
+    0.3 * colour[0] + 0.59 * colour[1] + 0.11 * colour[2]
+}
+
+/// The **saturation** of a colour.
+fn saturation(colour: [f32; 3]) -> f32 {
+    colour[0].max(colour[1]).max(colour[2]) - colour[0].min(colour[1]).min(colour[2])
+}
+
+/// A colour brought back inside the gamut, keeping its luminance.
+fn clip_colour(colour: [f32; 3]) -> [f32; 3] {
+    let l = luminance(colour);
+    let (low, high) = (colour[0].min(colour[1]).min(colour[2]), colour[0].max(colour[1]).max(colour[2]));
+    let mut colour = colour;
+    if low < 0.0 {
+        colour = if l - low > f32::EPSILON {
+            colour.map(|value| l + (value - l) * l / (l - low))
+        } else {
+            colour.map(|value| value.max(0.0))
+        };
+    }
+    if high > 1.0 {
+        colour = if high - l > f32::EPSILON {
+            colour.map(|value| l + (value - l) * (1.0 - l) / (high - l))
+        } else {
+            colour.map(|value| value.min(1.0))
+        };
+    }
+    colour
+}
+
+/// A colour with a **luminance** of its own.
+fn set_lum(colour: [f32; 3], l: f32) -> [f32; 3] {
+    let d = l - luminance(colour);
+    clip_colour(colour.map(|value| value + d))
+}
+
+/// A colour with a **saturation** of its own.
+fn set_sat(colour: [f32; 3], s: f32) -> [f32; 3] {
+    let (low, high) = (colour[0].min(colour[1]).min(colour[2]), colour[0].max(colour[1]).max(colour[2]));
+    if high <= low {
+        return [0.0; 3];
+    }
+    colour.map(|value| (value - low) * s / (high - low))
+}
+
 /// How a thing looks.
 ///
 /// The appearance is the **kit's own**, and not a plugin's payload: a
@@ -319,17 +548,19 @@ pub struct Appearance {
     pub fill: Fill,
     /// The line on its outline, if it has one.
     pub stroke: Option<Stroke>,
+    /// How the thing mixes with what is under it.
+    pub blend: BlendMode,
 }
 
 impl Appearance {
     /// An appearance that is filled with a colour and has no outline.
     pub fn filled(fill: Colour) -> Appearance {
-        Appearance { fill: Fill::Solid(fill), stroke: None }
+        Appearance { fill: Fill::Solid(fill), stroke: None, blend: BlendMode::Normal }
     }
 
     /// An appearance that is filled with a **paint** and has no outline.
     pub fn painted(fill: Fill) -> Appearance {
-        Appearance { fill, stroke: None }
+        Appearance { fill, stroke: None, blend: BlendMode::Normal }
     }
 }
 
@@ -544,7 +775,7 @@ impl Default for Stroke {
 /// stands, and it is written down rather than pretended away.
 pub trait Canvas {
     /// Draw a rectangle.
-    fn rect(&mut self, rect: Rect, fill: Fill);
+    fn rect(&mut self, rect: Rect, fill: Fill, blend: BlendMode);
     /// Draw a line of text.
     ///
     /// The text takes a **colour**, like everything else that is
@@ -558,7 +789,7 @@ pub trait Canvas {
     /// would be a canvas that could not draw a text of another size.
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64);
     /// Draw a path: filled, and stroked on its outline.
-    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>);
+    fn path(&mut self, path: &Path, fill: Fill, blend: BlendMode, stroke: Option<Stroke>);
     /// Draw a **picture**: its pixels, in a rectangle.
     ///
     /// The picture is drawn at the rectangle it is given, and it is
@@ -580,9 +811,9 @@ pub struct RecordingCanvas {
 }
 
 impl Canvas for RecordingCanvas {
-    fn rect(&mut self, rect: Rect, fill: Fill) {
+    fn rect(&mut self, rect: Rect, fill: Fill, blend: BlendMode) {
         self.drawn.push(format!("rect({}, {}, {}, {})", rect.x, rect.y, rect.w, rect.h));
-        let _ = fill;
+        let _ = (fill, blend);
     }
 
     fn text(&mut self, at: Point, text: &str, colour: Colour, size: f64) {
@@ -594,7 +825,7 @@ impl Canvas for RecordingCanvas {
         self.drawn.push(format!("picture({}, {}, {} pixel(s))", at.x, at.y, picture.pixels_count()));
     }
 
-    fn path(&mut self, path: &Path, fill: Fill, stroke: Option<Stroke>) {
+    fn path(&mut self, path: &Path, fill: Fill, blend: BlendMode, stroke: Option<Stroke>) {
         let segments: usize = path.subpaths.iter().map(|subpath| subpath.segments.len()).sum();
         let mut drawn = format!("path({segments} segment(s), {} contour(s)", path.subpaths.len());
         if path.rule == FillRule::EvenOdd {
@@ -602,6 +833,10 @@ impl Canvas for RecordingCanvas {
         }
         if !fill.is_none() {
             drawn.push_str(", filled");
+        }
+        if blend != BlendMode::Normal {
+            drawn.push_str(", ");
+            drawn.push_str(blend.label());
         }
         if stroke.is_some() {
             drawn.push_str(", stroked");
@@ -787,7 +1022,8 @@ impl FormatValue for Appearance {
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "fill": self.fill.to_json(),
-            "stroke": self.stroke.map(|stroke| stroke.to_json()),
+            "stroke": self.stroke.as_ref().map(|stroke| stroke.to_json()),
+            "blend": self.blend.label(),
         })
     }
 
@@ -800,7 +1036,15 @@ impl FormatValue for Appearance {
             Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
             _ => None,
         };
-        Ok(Appearance { fill, stroke })
+        // A file written before the blend mode has no mode in it, and
+        // the mode of a thing that says nothing is the plain one.
+        let blend = match value.get("blend").and_then(|blend| blend.as_str()) {
+            Some(name) => {
+                BlendMode::parse(name).ok_or_else(|| format!("there is no blend mode called `{name}`"))?
+            }
+            None => BlendMode::Normal,
+        };
+        Ok(Appearance { fill, stroke, blend })
     }
 }
 

@@ -22,7 +22,7 @@
 
 use craftkit_derive::{Command, NodeKind};
 
-use crate::document::{Canvas, Colour, Document, Fill, Node, Point, Stroke};
+use crate::document::{BlendMode, Canvas, Colour, Document, Fill, Node, Point, Stroke};
 use crate::format::FormatValue;
 use crate::serde_json::{Value as Json, json};
 use crate::{Appearance, EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -68,6 +68,9 @@ pub struct AddAppearance {
     pub stroke: Option<Text>,
     /// How wide that line is.
     pub stroke_width: Option<Number>,
+    /// How it mixes with what is under it: `Normal`, `Multiply`,
+    /// `Screen` and the rest.
+    pub blend: Option<Text>,
 }
 
 impl AddAppearance {
@@ -83,6 +86,7 @@ impl AddAppearance {
             self.fill.as_ref(),
             self.stroke.as_ref(),
             self.stroke_width.as_ref(),
+            self.blend.as_ref(),
             None,
             "core.appearance.add",
         )?;
@@ -111,6 +115,9 @@ pub struct SetAppearance {
     pub stroke: Option<Text>,
     /// How wide that line is.
     pub stroke_width: Option<Number>,
+    /// How it mixes with what is under it: `Normal`, `Multiply`,
+    /// `Screen` and the rest.
+    pub blend: Option<Text>,
 }
 
 impl SetAppearance {
@@ -127,6 +134,7 @@ impl SetAppearance {
             self.fill.as_ref(),
             self.stroke.as_ref(),
             self.stroke_width.as_ref(),
+            self.blend.as_ref(),
             current,
             "core.appearance.set",
         )?;
@@ -148,6 +156,7 @@ fn appearance_of(
     fill: Option<&Text>,
     stroke: Option<&Text>,
     stroke_width: Option<&Number>,
+    blend: Option<&Text>,
     current: Option<Appearance>,
     id: &str,
 ) -> Result<Appearance, EngineError> {
@@ -155,6 +164,7 @@ fn appearance_of(
     // stroke is copied, because the fill is not a copy any more — a
     // gradient is a list of stops.
     let current_stroke = current.as_ref().and_then(|appearance| appearance.stroke);
+    let current_blend = current.as_ref().map(|appearance| appearance.blend);
     let current_fill = current.map(|appearance| appearance.fill);
     let fill = match fill {
         Some(fill) => Fill::Solid(colour_of(fill, id)?),
@@ -168,7 +178,15 @@ fn appearance_of(
         }),
         None => current_stroke,
     };
-    Ok(Appearance { fill, stroke })
+    // The **blend**: how the thing mixes with what is under it.
+    let blend = match blend {
+        Some(blend) => BlendMode::parse(&blend.0).ok_or_else(|| EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no blend mode called `{}`", blend.0.trim()),
+        })?,
+        None => current_blend.unwrap_or(BlendMode::Normal),
+    };
+    Ok(Appearance { fill, stroke, blend })
 }
 
 /// A colour, as a person writes it.

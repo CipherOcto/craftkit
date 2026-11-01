@@ -37,7 +37,7 @@ fn session() -> Session {
 /// artwork and the fixture is made here and not shipped.
 fn a_png_file(name: &str) -> String {
     let mut image = craftkit_raster::Image::new(2, 2, Colour::WHITE);
-    image.blend(0, 0, Colour::BLACK);
+    image.blend(0, 0, Colour::BLACK, craftkit_sdk::BlendMode::Normal);
     let path = std::env::temp_dir().join(format!("craftkit-v2-image-{name}.png"));
     std::fs::write(&path, image.to_png()).expect("the picture is written");
     path.to_string_lossy().to_string()
