@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1272 tests.** The MCP server links **all fifteen batteries** in, so the
+**1274 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1272 tests
+cargo test          # 1274 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3614,6 +3614,7 @@ so.
 | a **path that is placed** | **built.** A path may carry a transform — the six numbers of a matrix — and it is drawn, hit and measured where the transform puts it (§177) | §177 |
 | an **object stream** | **built.** The objects a file keeps in one place are read: each one's number and what it says (§178) | §178 |
 | a **cross-reference table** | **built.** The file's own index of itself is read: the classic table and the cross-reference stream (§179) | §179 |
+| a **file loaded into the document** | **built.** The objects of a file become nodes, its references become relations, and the bytes of its streams go into files of their own (§180) | §180 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12163,3 +12164,65 @@ object stream — and it could not find the file's own index.
   ones are not read.
 - **The hybrid files are not read.** A file may have both kinds of
   table, and the reader takes the one it is given.
+
+---
+
+## 180. A file read into the document
+
+A PDF file is an **index** and the objects it points at. The index is
+read, the objects are read, and the document holds them: an object is a
+**node** and a reference is a **relation**. v2's PDF battery could read
+a file's pieces one at a time, and could not hold a file.
+
+### What was built
+
+- The command `pdf.file.load` reads a file and puts it in the
+  document: every object becomes a node of the kind `pdf.object` or
+  `pdf.stream`, and every reference becomes a relation of the kind
+  `ref`.
+- The bytes of a stream go into a **file of their own**, beside the
+  document, because the bytes are not the document.
+- The graph is built in **two passes** — the objects first, and the
+  references after — so that a reference which points **forward** is
+  still a relation.
+- The keys and the names are written the **kit's way**: without the
+  slash in front, so that a loaded dictionary says the same thing as
+  one that was typed in.
+
+### What the port found
+
+- **The bytes of a stream cannot live in the payload.** The kit's rule
+  is that the bytes travel beside the document in the bundle, so the
+  loader writes them out and the node says which file they are in. The
+  alternative — the bytes in the payload — would have made every
+  stream a document the size of a picture.
+- **A reference that points forward is why there are two passes.** The
+  kit's rule is that a relation names two nodes that are *in* the
+  document, so every object has to be there before any reference is
+  made. The file does not care: an object may refer to one that is
+  written later.
+- **The dictionary's spelling had to be settled.** A file writes its
+  keys as `/Type` and its names as `/Catalog`; the kit's payload writes
+  them as `Type` and `Catalog`. The loader translates, so that a
+  loaded object and a typed one are the same object — and the price is
+  that a name and a string look alike, which the plugin's header has
+  said from the start.
+
+### What it cost
+
+- **Two tests** in the battery (`tests/loader.rs`): a file is loaded
+  into the document, and the references become relations.
+- **One command** (`pdf.file.load`). The MCP server now carries
+  **222** commands.
+
+### What it does not settle
+
+- **There is no writer.** A file may be read into the document; the
+  document may not be written back as a file.
+- **The incremental save is not followed.** A file that has been saved
+  again has more than one table, and the loader takes the one the end
+  of the file points at.
+- **The page tree of a loaded file is a tree of relations, not a tree
+  of nodes.** The relations say which page names which parent, and the
+  command `pdf.page.attributes` walks them — but the pages of a loaded
+  file are ordinary objects until somebody says they are pages.
