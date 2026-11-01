@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1497 tests.** The MCP server links **all fifteen batteries** in, so the
+**1503 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1497 tests
+cargo test          # 1503 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3647,6 +3647,7 @@ so.
 | the **pan** of a track | **built.** A balance from minus one to one, the default of the pan lane, applied when the track is routed (§210) | §210 |
 | the **stems** of a session | **built.** The mix with one track in it, one file for each track, written into a directory (§211) | §211 |
 | the **separation** of a clip | **built.** One clip becomes two at a place inside it, and the two are the same sound (§212) | §212 |
+| the **mute** of a track | **built.** A switch on the track, and the mute lane is its default (§213) | §213 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14605,3 +14606,67 @@ to cut a clip in two: a clip was one thing from its start to its end.
 - **The tree's auto-rename is not here.** A set of names that count up
   as a take is cut is a fact about the take, and this tree has one
   name for a node and a command that changes it.
+
+## 213. The mute of a track
+
+The tree's mixer keeps a **mute** of its own beside the mute lane: a
+mute is a switch on the track, and the lane is a curve over it. This
+tree had the lane and no switch — a track could be silenced only by a
+lane under it, and a lane is a curve for something that moves.
+
+### What was built
+
+- The command `sound.track.mute` mutes a track and lets it be heard
+  again. The mute is a field of the track.
+- The **mute lane** is the mute's default, as the volume lane is the
+  fader's default and the pan lane is the pan's: a lane with
+  breakpoints overrides it, and a lane without one is the mute.
+- The mute is one of the things a **group** shares: the tree's group
+  shares the volume, the mute, the solo and the record, and the mute
+  is one of them — so a change to the mute of a track in a group that
+  mixes is a change to the mute of every member.
+
+### What the port found
+
+- **The tree's mixer keeps a mute and a lane, and here the lane was
+  the mute.** The tree's `Mixer` has a `mute` of its own and an
+  automation lane over the mute parameter, and the tree asks the lane
+  for its value with the mute as the default: a lane with breakpoints
+  overrides it, and a lane without one is the mute. Here the mute was
+  the lane alone, so the only way to silence a track was to write a
+  curve of ones.
+- **The tree's group shares the mute and this tree's group did not.**
+  The tree's group carries a list of the attributes it shares — the
+  volume, the mute, the solo and the record — and the fader of §207 is
+  the volume and the mute of this arc is the mute. The solo and the
+  record are still not shared: the solo is a rule about the whole
+  document and the record is a button of the tree's arm.
+- **The tree's mute is a switch and a lane, and here the switch is
+  the default.** The two are not the same thing: a switch is a
+  decision and a lane is a movement, and the tree's own mixer asks
+  the lane first and the switch second. Here the switch is the lane's
+  default, and the same shape as the fader and the pan.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/mute.rs`): a track
+  carries its mute, a mute is set on it and taken off, a muted track
+  is not heard, a mute lane overrides the mute of the track, the mute
+  is linked by the group, and a node that is not a track is refused.
+- **One command** (`sound.track.mute`). The MCP server now carries
+  **269** commands, and the sound battery carries **58**.
+
+### What it does not settle
+
+- **The solo and the record are not shared by the group.** The tree
+  shares four attributes and this tree shares two: the level and the
+  mute. The solo is a rule about the whole document — one soloed track
+  silences the rest — and sharing it would be a rule about the group
+  as well, which is a different thing.
+- **The mix has the shape of the media.** The tree's session has a
+  channel format of its own and its mixer builds a matrix from the
+  source's channels to the destination's; here the mix has the shape
+  of the media, so a mono document is a mono mix and the pan of a mono
+  track does nothing. The matrix is a redesign of the mixer and not an
+  addition to it, and it is the next thing the tree has that this
+  tree cannot say.
