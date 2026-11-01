@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1596 tests.** The MCP server links **all fifteen batteries** in, so the
+**1604 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1596 tests
+cargo test          # 1604 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,6 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **editing** of a lane | **built.** The breakpoints of a curve are set, taken away, cleared, written and thinned (§225) | §225 |
 | the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
 
@@ -15441,3 +15442,73 @@ in v2 was permanent: the link could be made and never unmade.
   a source says so in its own payload, and clearing that is a change
   to the clip and not to a link; the tree's clip has a closed kind of
   content and a clip without a source is not a clip there.
+
+## 225. The editing of a lane
+
+The tree has five commands for a lane: write a value over a range,
+clear the breakpoints, thin them, and write the current value over the
+range. v2 had **one** — a lane could be made with its points and not
+changed afterwards. So a curve could be drawn and not drawn again, and
+a mistake in it could not be undone.
+
+### What was built
+
+- The commands `sound.lane.point.set` and `sound.lane.point.remove`
+  set a **breakpoint** and take one off.
+- The command `sound.lane.clear` clears the breakpoints of a lane: all
+  of them, or the ones in a range.
+- The command `sound.lane.write` writes a **value over a range**: the
+  lane is flat over it and the curve outside it is kept, with anchors
+  just before and just after.
+- The command `sound.lane.thin` takes away the breakpoints **the curve
+  does not need**: a breakpoint goes when the curve through the ones
+  that remain changes by less than the tolerance.
+- A **pan** outside minus one and one, and a **mute** outside zero and
+  one, are refused.
+
+### What the port found
+
+- **The tree's lane is a curve and this tree's lane is a curve too.**
+  The tree's lane holds its points in the track's record; here a lane
+  is a **node** with its points in its payload, and a lane is
+  automated by a track or a clip (§ the automation). The editing is
+  the same either way, and the commands are the tree's.
+- **The tree's thinning is a slope, and so is this one.** A breakpoint
+  goes when the slope from the last breakpoint that was kept can reach
+  the next one without leaving the tolerance — the same curve without
+  it. The first and the last breakpoints always stay: a curve needs
+  its ends.
+- **The tree clamps the value and this tree refuses.** The tree's
+  `set_point` clamps the value into the range of the parameter — the
+  pan between minus one and one, the mute between zero and one — and a
+  value the caller did not ask for is a value the caller does not know
+  about. Here the value is refused, and the lane keeps what it had.
+- **The tree's commands work on a track and a selection; this tree's
+  work on a lane.** The tree's lane belongs to a track and its
+  commands take the tracks and the selection; here a lane is a node,
+  and the command names the lane — because a lane may automate a clip
+  as well as a track, and the tree's clip carries a curve of its own.
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/lanes.rs`): a
+  breakpoint is set, a breakpoint that is there takes the new value, a
+  breakpoint is taken off, a lane is cleared, a value is written over a
+  range, a lane is thinned, a value outside the range is refused, and a
+  node that is not a lane is refused.
+- **Five commands** (`sound.lane.point.set`, `sound.lane.point.remove`,
+  `sound.lane.clear`, `sound.lane.write` and `sound.lane.thin`). The
+  MCP server now carries **296** commands, and the sound battery
+  carries **85**.
+
+### What it does not settle
+
+- **The tree's "write to current" is not here.** The tree can write
+  the value a track already has over a range — the value of the fader,
+  the pan, the mute — and here the value is given by the caller. The
+  value of a track's fader is the fader's own field (§ the level), and
+  a command that reads it and writes it over a range is a command that
+  has to know which value the caller meant.
+- **The tree's thin touches every lane of a track at once.** Here a
+  lane is thinned on its own: the command names the lane, and a person
+  who wants every lane thinned asks for them one after another.
