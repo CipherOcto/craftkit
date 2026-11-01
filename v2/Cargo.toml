@@ -41,6 +41,10 @@ craftkit-wav = { path = "crates/craftkit-wav", version = "0.2.0" }
 # **library**, not a plugin: it contributes nothing to the registry and
 # the linker does not wire it in.
 craftkit-audio = { path = "crates/craftkit-audio", version = "0.2.0" }
+# The **MIDI library**: the notes, the controllers and the Standard
+# MIDI File. A **library**, not a plugin: it contributes nothing to the
+# registry and the linker does not wire it in.
+craftkit-midi = { path = "crates/craftkit-midi", version = "0.2.0" }
 # The kit's own **audio plugins**: a catalogue of small programs that
 # change a signal. A **library**, not a plugin: it contributes nothing
 # to the registry and the linker does not wire it in.

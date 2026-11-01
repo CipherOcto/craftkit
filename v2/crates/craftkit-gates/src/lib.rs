@@ -118,6 +118,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The **mixer**: the samples of many tracks, summed into one. It
     // knows nothing about a document, a canvas or the kit.
     ("craftkit-audio", 0),
+    // The **MIDI library**: the notes, the controllers and the
+    // Standard MIDI File. It knows nothing about a document, a canvas
+    // or the kit.
+    ("craftkit-midi", 0),
     // The kit's own **audio plugins**: a catalogue of small programs
     // that change a signal. It knows nothing about a document, a canvas
     // or the kit.

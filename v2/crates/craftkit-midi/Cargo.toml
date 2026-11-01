@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-midi"
+description = "The MIDI library: notes, controllers and the Standard MIDI File. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. A MIDI file is a header and a list of events, and the reader
+# is arithmetic over bytes: it knows nothing about a document, a canvas
+# or the kit.
