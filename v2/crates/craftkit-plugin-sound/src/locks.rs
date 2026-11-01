@@ -35,8 +35,12 @@ use crate::ClipPayload;
 /// Lock a clip's **content**, or take the lock off.
 ///
 /// The clip's sound is finished: it may not be trimmed, faded or
-/// stretched. The clip may still be **moved** — the time lock is a
-/// different lock, and a clip may carry both.
+/// stretched.
+///
+/// The clip does not **move** either: the tree's editor holds a locked
+/// clip still — the tree's own word for it is that a locked clip
+/// "doesn't move" — and the two locks are two different claims about
+/// the same clip, and both of them keep it where it is.
 ///
 /// Without a lock given, the lock is **toggled**: a clip that is
 /// locked is unlocked, and a clip that is not is locked.

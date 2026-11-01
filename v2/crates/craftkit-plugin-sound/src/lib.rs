@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **eighty commands**, one for each thing a person does to a
+//! - **eighty-seven commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -40,7 +40,8 @@
 //!   **remove** and **move** the notes of one, **heal** the clips that
 //!   were separated, **take away** a route, a reading, a send or a
 //!   source, **set**, **take away**, **clear**, **write** and **thin**
-//!   the breakpoints of a lane,
+//!   the breakpoints of a lane, **move** a clip and **trim** it to the
+//!   end of its material,
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -158,6 +159,13 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A clip could not be moved.** The tree's editor nudges the clips
+//! and shifts the ones on a track; here a clip was placed and trimmed
+//! and never **moved**, because the trim changes what is heard and the
+//! move changes when it is heard. So the move is a command of its own,
+//! and a locked clip does not move — the tree's own rule, and the
+//! tree's own words: a locked clip "doesn't move".
 //!
 //! **A lane's breakpoints are edited and not only written.** The tree
 //! has five commands for a lane — write a value over a range, clear
@@ -2519,6 +2527,180 @@ impl AddClip {
         Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
             serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
         ))
+    }
+}
+
+/// **Move** clips along the timeline.
+///
+/// The clips move by so many samples, later or earlier, and their
+/// **content** goes with them: a clip that moves keeps the sound it
+/// plays and plays it at another time.
+///
+/// A **locked** clip does not move — the edit lock and the time lock
+/// both hold it — and the answer says how many moved. The tree's
+/// editor does the same, and the tree's own word for it is that a
+/// locked clip "doesn't move".
+///
+/// A clip that would move **before the beginning** of the timeline is
+/// **refused**: the move is not made for one clip and not for the
+/// others, because a move that is half made is a move nobody asked
+/// for.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.move",
+    area = "sound",
+    layer = "sound",
+    icon = "move",
+    menu("Clip", "Move"),
+    mutates,
+    undoable
+)]
+pub struct MoveClips {
+    /// The clips to move: their ids.
+    pub clips: serde_json::Value,
+    /// How much later or earlier, in samples.
+    pub delta: Number,
+}
+
+impl MoveClips {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.move".to_string();
+        let clips = crate::clip_ids_of(&self.clips, &id)?;
+        if clips.is_empty() {
+            return Err(EngineError::Failed { id, message: "there are no clips to move".to_string() });
+        }
+        if !self.delta.0.is_finite() {
+            return Err(EngineError::Failed { id, message: "a distance is a number of samples".to_string() });
+        }
+        let delta = self.delta.0.round() as i64;
+        // The clips are read first, and the whole move is refused if
+        // one of them would go before the beginning.
+        let mut payloads: Vec<(u64, ClipPayload)> = Vec::with_capacity(clips.len());
+        for clip in &clips {
+            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if locks::edit_is_locked(&payload) || locks::time_is_locked(&payload) {
+                continue;
+            }
+            if payload.start + delta < 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip}` would move before the beginning of the timeline"),
+                });
+            }
+            payloads.push((*clip, payload));
+        }
+        let mut moved = 0;
+        for (clip, payload) in &payloads {
+            let mut moved_payload = payload.clone();
+            moved_payload.start += delta;
+            if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                node.data = moved_payload.to_json();
+            }
+            moved += 1;
+        }
+        Ok(Outcome::changed(format!("moved {moved} clips"))
+            .with_data(serde_json::json!({ "moved": moved, "delta": delta })))
+    }
+}
+
+/// **Trim** clips to the **material** they play.
+///
+/// A clip plays a part of a source, and a clip that was moved may
+/// reach past the end of it: the part of the clip that is past the end
+/// is **silence**, and a clip that is half silence is a clip that says
+/// something false about its own sound.
+///
+/// The clip is cut at the end of its material — and at the beginning
+/// of it, when the clip starts past the end — and the part of the
+/// material the clip plays is what is left.
+///
+/// The tree's editor has the same command, and the same name for it:
+/// "To File Boundaries".
+#[derive(Command)]
+#[command(
+    id = "sound.clip.trim.to.file",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Trim to Material"),
+    mutates,
+    undoable
+)]
+pub struct TrimClipsToFile {
+    /// The clips to trim: their ids.
+    pub clips: serde_json::Value,
+}
+
+impl TrimClipsToFile {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.trim.to.file".to_string();
+        let clips = crate::clip_ids_of(&self.clips, &id)?;
+        if clips.is_empty() {
+            return Err(EngineError::Failed { id, message: "there are no clips to trim".to_string() });
+        }
+        let settings = session_of(session.document());
+        let mut trimmed = 0;
+        for clip in &clips {
+            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if locks::edit_is_locked(&payload) {
+                continue;
+            }
+            let Some(source_id) = payload.source else { continue };
+            let Some(source_node) = session.document().node(source_id) else { continue };
+            let Ok(source) = SourcePayload::from_json(&source_node.data) else { continue };
+            // The **material** in the session's samples: the source's
+            // own frames, read at the session's rate.
+            let ratio = settings.sample_rate.max(1) as f64 / source.sample_rate.max(1) as f64;
+            let material = (source.frames.max(0) as f64 * ratio).round() as i64;
+            let offset = payload.offset.max(0);
+            if offset >= material {
+                // The clip starts past the end of the material: there
+                // is nothing of it to play.
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip}` starts past the end of its material"),
+                });
+            }
+            // The clip's content runs for as long as the material
+            // that is left of it, read at the clip's own stretch.
+            let room = ((material - offset) as f64 * payload.stretch).round() as i64;
+            if room >= payload.length {
+                continue;
+            }
+            let mut shorter = payload.clone();
+            shorter.length = room.max(1);
+            if let Some(sync) = payload.sync {
+                shorter.sync = (0..=shorter.length).contains(&sync).then_some(sync);
+            }
+            if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                node.data = shorter.to_json();
+            }
+            trimmed += 1;
+        }
+        Ok(Outcome::changed(format!("trimmed {trimmed} clips to their material"))
+            .with_data(serde_json::json!({ "trimmed": trimmed })))
     }
 }
 
