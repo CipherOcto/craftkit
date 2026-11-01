@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1281 tests.** The MCP server links **all fifteen batteries** in, so the
+**1283 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1281 tests
+cargo test          # 1283 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3618,6 +3618,7 @@ so.
 | a **reader that feeds a bus** | **built.** The buses and the readers are mixed in the order their routes say, and a mix that loops is refused (§181) | §181 |
 | the **outline of a line** | **built.** The shape a stroke covers is a path of its own, which may be filled, measured and cut (§182) | §182 |
 | a **file written out** | **built.** The document is written out as a PDF file, and the file that comes out is read back (§183) | §183 |
+| a **smooth point** | **built.** A point's two handles become one: collinear and of the same length, and a straight side becomes a curve (§184) | §184 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12402,3 +12403,65 @@ could read a file and could not write one.
   tree of nodes and relations; a PDF file is a list of objects and a
   table. The loader and the writer are the two ends of the gap, and
   the gap is still there in the middle.
+
+---
+
+## 184. A point whose two handles are one
+
+A **smooth point** is a point whose two handles are collinear and of the
+same length: the curve passes through it as one curve and not as two.
+The tree has the operation — *convert to smooth* — and v2's path had
+handles and no command that made them agree.
+
+### What was built
+
+- The command `vector.path.smooth` makes a point smooth: the two
+  handles take the average of the two they were, and a side that was a
+  straight line becomes a curve with a handle.
+- A point with **no handles** has nothing to smooth, and a point with a
+  curve on only one side is refused — both by name.
+- The **closing edge** of a closed contour is made a segment of its
+  own when a handle needs it: an implicit edge has nowhere to put one.
+
+### What the port found
+
+- **A closed contour's closing edge may be implicit, and a handle has
+  nowhere to go.** The SDK's polygon leaves the closing edge out — the
+  contour is closed, so the edge is there — and the two commands that
+  work on handles were looking at the **last segment** for the first
+  point's arriving side, which is the wrong segment: it ends at the
+  last point, not at the first. The port found it because the smooth
+  command asked the same question and got a different answer.
+- **The handles of a point are the two sides of it, and a straight
+  side has none.** The tangent of a straight line is the line itself,
+  so the offset of its handle is zero — and a point with a curve on
+  one side and a straight line on the other is smoothed by *mirroring*
+  the curve's handle, not by averaging it with nothing.
+- **A straight line that becomes a curve keeps its direction at the
+  far end.** The other handle is a third of the way along the line, so
+  the curve leaves that end in the direction the line went — the same
+  trick a path's own straight segments use when they are drawn.
+
+### What it cost
+
+- **Two tests** in the battery (`tests/smooth.rs`): a point with a
+  curve on one side may be made smooth, and a point that cannot be is
+  refused.
+- **One command** (`vector.path.smooth`). The MCP server now carries
+  **225** commands.
+- **Two helpers fixed** in the battery: which segment leaves a point
+  and which arrives at it, which took the wrong segment for the first
+  point of a closed contour.
+
+### What it does not settle
+
+- **A point cannot be made a corner again.** The tree converts a point
+  back to a corner, which frees its two handles; here the handles are
+  the shape, and freeing them means putting them back where they were
+  — which nobody kept.
+- **The average is the average.** The tree's smooth point keeps the
+  handles' directions and their lengths in a way that is not simply
+  their average; here the two handles become the average, which keeps
+  the point where it was and makes the curve as smooth as it can be.
+- **The first point of a closed contour gains a segment.** The contour
+  is the same shape, and the segment is the edge that was there.
