@@ -13,11 +13,13 @@
 //! That is the part this battery ports — the **object model** (ISO
 //! 32000-2 §7.3). The file around it comes in pieces: the
 //! **cross-reference table** is read (the module `xref`), the
-//! **objects** are read (the module `objects`), and the **loader**
-//! puts a file into the document — its objects as nodes, its
-//! references as relations, and the bytes of its streams into files of
-//! their own, beside the document. What is still not here is the
-//! **writer**: a v2 document is not a PDF file yet.
+//! **objects** are read (the module `objects`), the **loader** puts a
+//! file into the document — its objects as nodes, its references as
+//! relations, and the bytes of its streams into files of their own,
+//! beside the document — and the **writer** (the module `writer`) puts
+//! the document back out as a file. What is still not here is the
+//! **encryption** and the **object stream** on the way out: the file
+//! that is written is a plain file.
 //!
 //! One part of the file is here as well, because it is not the file but
 //! the **bytes** in it: the **filters** — the ways a stream's bytes may
@@ -75,6 +77,7 @@ mod filters;
 mod loader;
 mod objects;
 mod predictors;
+mod writer;
 mod xref;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -873,6 +876,104 @@ impl LoadFile {
     }
 }
 
+/// Write the document out as a PDF **file**.
+///
+/// The objects of the document become the objects of a file, and the
+/// file says where each one is.
+#[derive(Command)]
+#[command(id = "pdf.file.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
+pub struct WriteFile {
+    /// Where to write the file.
+    pub path: Text,
+    /// The number of the object that is the file's **root**.
+    ///
+    /// Leave it out and the object whose type is `Catalog` is the root.
+    pub root: Option<Number>,
+}
+
+impl WriteFile {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        if path.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.file.write".to_string(),
+                message: "a file has a path".to_string(),
+            });
+        }
+        // The **objects**: every node of the battery, with its number
+        // and its dictionary.
+        let mut objects: Vec<writer::Object> = Vec::new();
+        for node in session.document().walk() {
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                continue;
+            }
+            let Some(number) = node.data.get("object").and_then(|number| number.as_u64()) else {
+                continue;
+            };
+            let entries = entries_of(&node.data);
+            // The **bytes** of a stream are in the file they came from.
+            let stream = match &node.stream {
+                Some(path) => {
+                    let limits = filters::Limits::default();
+                    let bytes = craftkit_sdk::files::read_bounded(
+                        std::path::Path::new(path),
+                        limits.max_input as u64,
+                    )
+                    .map_err(|message| EngineError::Failed {
+                        id: "pdf.file.write".to_string(),
+                        message: format!("the stream's bytes cannot be read: {message}"),
+                    })?;
+                    Some(bytes)
+                }
+                None => None,
+            };
+            objects.push(writer::Object { number, entries, stream });
+        }
+        if objects.is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.file.write".to_string(),
+                message: "the document holds no objects to write".to_string(),
+            });
+        }
+        // The **root**: the one that was named, or the catalog.
+        let root = match &self.root {
+            Some(root) => {
+                let number = root.0;
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+                    return Err(EngineError::Failed {
+                        id: "pdf.file.write".to_string(),
+                        message: "an object number is a whole number".to_string(),
+                    });
+                }
+                number as u64
+            }
+            None => objects
+                .iter()
+                .find(|object| {
+                    object
+                        .entries
+                        .iter()
+                        .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
+                })
+                .map(|object| object.number)
+                .ok_or_else(|| EngineError::Failed {
+                    id: "pdf.file.write".to_string(),
+                    message: "the document holds no catalog to be the root of the file".to_string(),
+                })?,
+        };
+        let file = writer::write(&objects, root).map_err(|error| EngineError::Failed {
+            id: "pdf.file.write".to_string(),
+            message: format!("the file cannot be written: {error:?}"),
+        })?;
+        std::fs::write(&path, &file).map_err(|error| EngineError::Failed {
+            id: "pdf.file.write".to_string(),
+            message: format!("the file cannot be written to `{path}`: {error}"),
+        })?;
+        Ok(Outcome::changed(format!("wrote {} object(s)", objects.len()))
+            .with_data(serde_json::json!({ "path": path, "root": root, "bytes": file.len() })))
+    }
+}
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -1074,6 +1175,7 @@ craftkit_sdk::plugin_anchor!(
     ReadObjectStream,
     ReadXref,
     LoadFile,
+    WriteFile,
     AddReference,
     ListReferences,
     GraphEvaluator,

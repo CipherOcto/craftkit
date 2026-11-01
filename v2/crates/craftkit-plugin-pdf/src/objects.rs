@@ -76,7 +76,7 @@ fn value(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
         }
         b'(' => {
             let (text, after) = literal_string(bytes, at)?;
-            Ok((Json::String(text), after))
+            Ok((text_value(text), after))
         }
         b'<' => {
             if bytes.get(at + 1) == Some(&b'<') {
@@ -84,7 +84,7 @@ fn value(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
                 Ok((dict, after))
             } else {
                 let (text, after) = hex_string(bytes, at)?;
-                Ok((Json::String(text), after))
+                Ok((text_value(text), after))
             }
         }
         b'[' => {
@@ -103,6 +103,16 @@ fn value(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
             }
         }
     }
+}
+
+/// A **text** string, as the payload holds it.
+///
+/// A name and a text look alike when both are strings, so the payload
+/// says which is which: a name is a plain string and a text is this.
+fn text_value(text: String) -> Json {
+    let mut map = Map::new();
+    map.insert("string".to_string(), Json::String(text));
+    Json::Object(map)
 }
 
 /// A **number**, or a **reference** to another object.

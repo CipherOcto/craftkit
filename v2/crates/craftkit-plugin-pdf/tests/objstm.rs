@@ -101,7 +101,7 @@ fn the_values_of_an_object_are_read() {
     let bytes = b"5 0 6 4 7 10 8 33 (a) /Name [1 2 true null 11 0 R] true";
     let stream = an_object_stream(&mut session, &directory, "values.bin", bytes, 4, 18);
     let objects = objects_of(&mut session, stream);
-    assert_eq!(objects[0]["value"], json!("a"), "a string is a string");
+    assert_eq!(objects[0]["value"], json!({ "string": "a" }), "a string is a string");
     assert_eq!(objects[1]["value"], json!("Name"), "a name is a name");
     assert_eq!(
         objects[2]["value"],
