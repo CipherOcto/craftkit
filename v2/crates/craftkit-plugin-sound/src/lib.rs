@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **seventy-six commands**, one for each thing a person does to a
+//! - **eighty commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -38,7 +38,8 @@
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
 //!   the notes of a clip, **make** a MIDI clip and **add**, **edit**,
 //!   **remove** and **move** the notes of one, **heal** the clips that
-//!   were separated,
+//!   were separated, **take away** a route, a reading, a send or a
+//!   source,
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -156,6 +157,14 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A link that cannot be taken away is a mistake that cannot be
+//! undone.** The route between a track and a bus, the reading of a bus
+//! by a track and the link of a send are **relations** and not nodes,
+//! and a relation is not a node that `node.delete` can take away: so
+//! the sound battery has commands of its own for taking them away. A
+//! source is a node, and taking it away takes the **asset** it brought
+//! with it — a document does not need a file that nothing plays.
 //!
 //! **A note is refused where the tree clamps it.** The tree's pencil
 //! clamps a pitch, a velocity and a channel into the range a MIDI note
@@ -4698,6 +4707,55 @@ impl AddSource {
         session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
         Ok(Outcome::changed(format!("added a source `{path}`"))
             .with_data(serde_json::json!({ "id": id, "path": path })))
+    }
+}
+
+/// **Take away** a source.
+///
+/// The source goes and so does the **asset** it brought: the document
+/// says it needs the file, and a document that needs a file that
+/// nothing plays is carrying a file for nothing. The clips that played
+/// it keep their own word about the source — the clip is silent until
+/// it is told what to play — and the source itself is gone.
+///
+/// The tree's mixer has no such command: the tree's source is a file
+/// that the session names and the session does not lose.
+#[derive(Command)]
+#[command(
+    id = "sound.source.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("File", "Remove Source"),
+    mutates,
+    undoable
+)]
+pub struct RemoveSource {
+    /// The source to take away.
+    pub source: NodeRef,
+}
+
+impl RemoveSource {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.source.remove".to_string();
+        let source = self.source.0;
+        let node = session.document().node(source).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no source `{source}`"),
+        })?;
+        if node.kind != "sound.source" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{source}` is a `{}` and not a source", node.kind),
+            });
+        }
+        let path = node.name.clone();
+        session.document_mut()?.remove_node(source);
+        // The **asset** goes with it: the document does not need a file
+        // that nothing plays.
+        let removed = session.document_mut()?.remove_assets(|asset| asset.path == path);
+        Ok(Outcome::changed(format!("took the source `{path}` away"))
+            .with_data(serde_json::json!({ "source": source, "path": path, "assets": removed })))
     }
 }
 

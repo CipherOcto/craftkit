@@ -465,6 +465,58 @@ impl AddRoute {
     }
 }
 
+/// **Take away** a route: the track stops feeding the bus.
+///
+/// A route is a **relation** and not a node, and a relation that
+/// cannot be taken away is a mistake that cannot be undone: the track
+/// keeps feeding the bus and the mixer keeps mixing it in.
+///
+/// A route that is not there is **refused**, and it is refused by
+/// name: a link that was never made is not a link that was taken away.
+#[derive(Command)]
+#[command(
+    id = "sound.route.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "link",
+    menu("Track", "Route"),
+    mutates,
+    undoable
+)]
+pub struct RemoveRoute {
+    /// The track that fed the bus.
+    pub track: NodeRef,
+    /// The bus it fed.
+    pub bus: NodeRef,
+}
+
+impl RemoveRoute {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.route.remove".to_string();
+        let track = self.track.0;
+        let bus = self.bus.0;
+        for (node, what) in [(track, "track"), (bus, "bus")] {
+            if session.document().node(node).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no {what} `{node}`"),
+                });
+            }
+        }
+        let removed = session.document_mut()?.remove_relations(|relation| {
+            relation.from == track && relation.to == bus && relation.kind == "route"
+        });
+        if removed == 0 {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the track `{track}` does not feed the bus `{bus}`"),
+            });
+        }
+        Ok(Outcome::changed(format!("the track `{track}` no longer feeds the bus `{bus}`"))
+            .with_data(serde_json::json!({ "track": track, "bus": bus })))
+    }
+}
+
 /// Make a track **read** a bus.
 ///
 /// A bus is a **destination**: sound collects there and is not heard
@@ -942,6 +994,95 @@ impl AddSend {
         session.document_mut()?.add_relation(relation);
         Ok(Outcome::changed(format!("the track `{track}` sends to the bus `{bus}`"))
             .with_data(serde_json::json!({ "id": id, "track": track, "bus": bus })))
+    }
+}
+
+/// **Take away** the reading of a bus: the track stops reading it.
+///
+/// A bus is silent on its own: something must read it and take it into
+/// the mix, and the reading is a **relation**. A relation that cannot
+/// be taken away is a mistake that cannot be undone.
+#[derive(Command)]
+#[command(
+    id = "sound.track.input.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "link",
+    menu("Track", "Input"),
+    mutates,
+    undoable
+)]
+pub struct RemoveInput {
+    /// The track that read the bus.
+    pub track: NodeRef,
+    /// The bus it read.
+    pub bus: NodeRef,
+}
+
+impl RemoveInput {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.input.remove".to_string();
+        let track = self.track.0;
+        let bus = self.bus.0;
+        for (node, what) in [(track, "track"), (bus, "bus")] {
+            if session.document().node(node).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no {what} `{node}`"),
+                });
+            }
+        }
+        let removed = session.document_mut()?.remove_relations(|relation| {
+            relation.from == track && relation.to == bus && relation.kind == "input"
+        });
+        if removed == 0 {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the track `{track}` does not read the bus `{bus}`"),
+            });
+        }
+        Ok(Outcome::changed(format!("the track `{track}` no longer reads the bus `{bus}`"))
+            .with_data(serde_json::json!({ "track": track, "bus": bus })))
+    }
+}
+
+/// **Take away** a send.
+///
+/// The send is a **node** under the track, and it goes with its link
+/// to the bus: a send that is there and points at nothing is a send
+/// that sends nothing, and it is litter.
+#[derive(Command)]
+#[command(
+    id = "sound.send.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Send"),
+    mutates,
+    undoable
+)]
+pub struct RemoveSend {
+    /// The send to take away.
+    pub send: NodeRef,
+}
+
+impl RemoveSend {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.send.remove".to_string();
+        let send = self.send.0;
+        let node = session.document().node(send).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no send `{send}`"),
+        })?;
+        if node.kind != "sound.send" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{send}` is a `{}` and not a send", node.kind),
+            });
+        }
+        session.document_mut()?.remove_node(send);
+        Ok(Outcome::changed(format!("took the send `{send}` away"))
+            .with_data(serde_json::json!({ "send": send })))
     }
 }
 
