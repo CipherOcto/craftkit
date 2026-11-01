@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1316 tests.** The MCP server links **all fifteen batteries** in, so the
+**1320 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1316 tests
+cargo test          # 1320 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3626,15 +3626,18 @@ so.
 | a **dictionary** inside a dictionary | **built.** The payload holds one as a list of pairs under `entries`, and the writer writes it back as a dictionary (§189) | §189 |
 | a **gradient** | **built.** The fill is a paint — one colour or a gradient — and the gradient is the kit's own (§190) | §190 |
 | a **blend mode** | **built.** The sixteen modes of the PDF and the screen, and the kit says how each of them mixes (§191) | §191 |
+| the **copies** of a shape | **built.** A grid, a mirror over a line and a ring round a centre — the copies are paths of their own, and the transform says where each one is (§192) | §192 |
 
 ### The list of things that are honestly not there: empty
 
 It is empty, and that is not the end of the work — it is the end of
 *this* list. The table above still has rows that are not built (the
 toolbar, by design; the plugin formats, which are a shim over a door
-that is built; images, which are a port nobody has made yet), and
-those are **not** on this list because they are not gaps in the kit's
-design: they are things this tree has not been asked for.
+that is built, and the AU's own battery, which is CoreFoundation's),
+and those are **not** on this list because they are not gaps in the
+kit's design: they are things this tree has not been asked for. (The
+images were ported in §142, and the sentence that said they were not
+has been here since before that, and was wrong.)
 
 What was on this list, and where each of them went:
 
@@ -12914,3 +12917,64 @@ nothing that said how the colour met the one below.
 - **The letters do not mix.** The canvas's text takes a colour and not
   a mode, because a mode is a property of a *thing* and the canvas's
   letters are drawn one at a time.
+
+## 192. The copies of a shape
+
+The tree's vector editor has a **repeat**: a grid of copies of a shape,
+a row of mirrored copies, a ring of copies round a centre. v2's vector
+battery could make a shape and could not make another one out of it.
+
+### What was built
+
+- The geometry library grew the matrices that put one shape beside
+  another: a **move**, a **turn about a centre**, and a **mirror over
+  a line**.
+- The command `vector.path.grid` makes the copies of a path in a grid;
+  `vector.path.mirror` makes a mirrored copy; `vector.path.radial`
+  makes a ring of copies.
+- The copies are **paths of their own** — the same shape, the same
+  paint, and the transform that says where each one is.
+
+### What the port found
+
+- **The tree's repeat is a node with the copies in it.** The tree's
+  repeat is a thing that may be edited as one, and it has two
+  endings: *release* turns the copies into ordinary objects, and
+  *expand* turns the repeat into a group of its instances. Here the
+  copies are paths of their own from the start — the state the tree
+  reaches by releasing.
+- **The tree's mirror repeat is a row at an angle, and not a mirror
+  over a line.** Its **angle** and its **offset** say how the row is
+  laid out. Here the command is a mirror over a **line**: the shape
+  turned over it, once. The tree's row is a thing this tree does not
+  have — and a row of mirrored copies is a grid of copies with a
+  reflection in it.
+- **The tree's bounds are two kinds of thing.** The tree's radial
+  repeat is **refused** outside one to a thousand, and the grid's rows
+  and columns are **clamped** into one to five hundred — a clamp is a
+  truncation, and a grid of three hundred rows asked for is a grid of
+  three hundred rows. Here the bound is one kind of thing: a shape
+  that asks for more copies than the bound allows is refused by name,
+  and the tree's thousand is this tree's thousand.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/copies.rs`): the grid makes its
+  copies, the mirror makes a mirrored copy, the radial makes a ring,
+  and the copies that cannot be made are refused.
+- **Three commands** (`vector.path.grid`, `vector.path.mirror` and
+  `vector.path.radial`). The MCP server now carries **236** commands.
+- **One private bound**: a shape is given at most **1000** copies.
+
+### What it does not settle
+
+- **The copies are not a group.** The tree's repeat may be moved and
+  turned as one thing; here each copy is a path, and a group of them
+  is a layer (§44).
+- **The tree's grid has a default and this tree's does not.** The
+  tree's grid repeat, when the spacing is not said, spaces the copies
+  a quarter of the shape's size apart. Here the step is the caller's,
+  because a step that is not said is a step that is not there.
+- **The mirror is one shape and not a row.** The tree's mirror repeat
+  makes a row of mirrored copies along an angle; here the command
+  makes the one copy that is over the line.
