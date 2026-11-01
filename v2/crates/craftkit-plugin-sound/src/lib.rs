@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-eight commands**, one for each thing a person does to a
+//! - **fifty-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -31,7 +31,8 @@
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
-//!   **stems**, **separate** a clip into two, **mute** a track, and
+//!   **stems**, **separate** a clip into two, **mute** a track, make a
+//!   track **solo safe**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -956,6 +957,12 @@ struct TrackPayload {
     /// decibels to twenty-four; it is the level of the input and not
     /// the level of the output.
     trim_db: f64,
+    /// Whether the track is **solo safe**.
+    ///
+    /// A solo silences the other tracks, and a solo-safe track is not
+    /// silenced by it: it is a track that stays when somebody listens
+    /// to one thing on purpose.
+    solo_safe: bool,
     /// Whether the track is **muted**.
     ///
     /// The tree's mixer keeps a mute of its own beside the mute lane,
@@ -1013,6 +1020,7 @@ impl TrackPayload {
             "fader_db": self.fader_db,
             "pan": self.pan,
             "mute": self.mute,
+            "solo_safe": self.solo_safe,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
             "elastic": self.elastic,
@@ -1028,6 +1036,7 @@ impl TrackPayload {
             fader_db: value.get("fader_db").and_then(|fader| fader.as_f64()).unwrap_or(0.0),
             pan: value.get("pan").and_then(|pan| pan.as_f64()).unwrap_or(0.0),
             mute: value.get("mute").and_then(|mute| mute.as_bool()).unwrap_or(false),
+            solo_safe: value.get("solo_safe").and_then(|safe| safe.as_bool()).unwrap_or(false),
             phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
             active_playlist: value
                 .get("active_playlist")
@@ -1576,6 +1585,7 @@ impl AddTrack {
             fader_db: 0.0,
             pan: 0.0,
             mute: false,
+            solo_safe: false,
             phase_invert: false,
             active_playlist: None,
             elastic: None,
@@ -1784,6 +1794,66 @@ impl SetTrackElastic {
         let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
         Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
             .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
+    }
+}
+
+/// Make a track **solo safe**, or not.
+///
+/// A solo silences the other tracks, and a **solo-safe** track is not
+/// silenced by it: it is a track that stays when somebody listens to
+/// one thing on purpose — a reference, a click, a talk track.
+///
+/// The tree's mixer keeps the flag beside the solo, and the group
+/// shares the solo and not this: the flag is about one track and not
+/// about the others.
+#[derive(Command)]
+#[command(
+    id = "sound.track.solo.safe",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Solo Safe"),
+    mutates,
+    undoable
+)]
+pub struct SetTrackSoloSafe {
+    /// The track.
+    pub track: NodeRef,
+    /// Whether it is solo safe.
+    pub solo_safe: Bool,
+}
+
+impl SetTrackSoloSafe {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo.safe".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo.safe".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let solo_safe = self.solo_safe.0;
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.solo.safe".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.solo_safe = solo_safe;
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.solo.safe".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the track `{id}` is solo safe: {solo_safe}"))
+            .with_data(serde_json::json!({ "id": id, "solo_safe": solo_safe })))
     }
 }
 
@@ -4482,7 +4552,10 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
     // track's signal.
     if tracks.iter().any(|(id, _, _)| track_is_soloed(document, *id)) {
         for (id, signal, _) in &mut tracks {
-            if !track_is_soloed(document, *id) {
+            // A **solo-safe** track is not silenced by the solo: it is
+            // a track that stays when somebody listens to one thing
+            // on purpose.
+            if !track_is_soloed(document, *id) && !track_is_solo_safe(document, *id) {
                 signal.iter_mut().for_each(|sample| *sample = 0.0);
             }
         }
@@ -4490,7 +4563,7 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
         // tree's mixer skips the send of a track that is muted, and
         // the copy is not heard.
         for (id, signal) in &mut pre_fader {
-            if !track_is_soloed(document, *id) {
+            if !track_is_soloed(document, *id) && !track_is_solo_safe(document, *id) {
                 signal.iter_mut().for_each(|sample| *sample = 0.0);
             }
         }
@@ -4770,6 +4843,12 @@ fn a_stem_path(directory: &str, name: &str) -> String {
             return format!("{directory}/{safe}.wav");
         }
     }
+}
+
+/// Whether a track is **solo safe**: a track a solo does not silence.
+fn track_is_solo_safe(document: &Document, track: u64) -> bool {
+    let Some(node) = document.node(track) else { return false };
+    TrackPayload::from_json(&node.data).map(|payload| payload.solo_safe).unwrap_or(false)
 }
 
 /// Whether a track is **soloed**.
