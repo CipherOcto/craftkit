@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1604 tests.** The MCP server links **all fifteen batteries** in, so the
+**1609 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1604 tests
+cargo test          # 1609 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,6 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **moving** of a clip | **built.** A clip moves along the timeline with its content, and a locked clip does not move (§226) | §226 |
 | the **editing** of a lane | **built.** The breakpoints of a curve are set, taken away, cleared, written and thinned (§225) | §225 |
 | the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
@@ -15512,3 +15513,66 @@ a mistake in it could not be undone.
 - **The tree's thin touches every lane of a track at once.** Here a
   lane is thinned on its own: the command names the lane, and a person
   who wants every lane thinned asks for them one after another.
+
+## 226. The moving of a clip
+
+The tree's editor nudges the clips and shifts the ones on a track. v2
+had neither: a clip was **placed** and **trimmed** and never moved,
+because the trim changes what is heard and a move changes when it is
+heard — and there was no command for the second thing.
+
+### What was built
+
+- The command `sound.clip.move` moves clips by so many samples, later
+  or earlier, and their **content** goes with them: a clip that moves
+  keeps the sound it plays and plays it at another time.
+- A **locked** clip does not move — the edit lock and the time lock
+  both hold it — and the answer says how many moved.
+- A move that would take a clip **before the beginning** of the
+  timeline is refused, and no clip moves: a move that is half made is
+  a move nobody asked for.
+- The command `sound.clip.trim.to.file` trims a clip to the **end of
+  its material**: a clip that reaches past the end of its source plays
+  silence there, and a clip that is half silence says something false
+  about its own sound.
+
+### What the port found
+
+- **The tree's locked clip "doesn't move", and this tree's did not
+  move at all.** The tree's own word for it is in the tree's editor:
+  a clip that is time-locked **or** edit-locked does not move. v2's
+  locks module said as much in its header and then said the opposite
+  in the edit lock's own words — that a locked clip "may still be
+  moved" — and the second sentence was wrong. It is corrected now, in
+  the place where it stood, because a command that moves a clip has to
+  know what a lock means.
+- **The tree's trim to the file's boundaries stops at the
+  neighbours.** The tree's command trims a clip to the material it
+  plays **and** stops at the clip before and the clip after it, so
+  that a trim never overwrites. Here a clip may overlap another —
+  a crossfade is an overlap — and so the trim stops at the material's
+  end and at nothing else.
+- **The tree's move overwrites what it lands on.** The tree's editor
+  moves the clips by a delta and the clips that were there go. Here a
+  clip that lands on another is an **overlap** and both are heard:
+  the mix sums them, and a crossfade is two clips that share a time.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/move.rs`): a clip is
+  moved, a locked clip does not move, a move before the beginning is
+  refused, a clip is trimmed to its material, and a clip inside its
+  material is not trimmed.
+- **Two commands** (`sound.clip.move` and `sound.clip.trim.to.file`).
+  The MCP server now carries **298** commands, and the sound battery
+  carries **87**.
+
+### What it does not settle
+
+- **The tree's shift is not here.** The tree shifts every clip of a
+  track from a place onwards, and here the clips are moved one
+  command at a time: the command takes the clips it moves, and a
+  person who wants a whole track shifted asks for its clips.
+- **The tree's trim to fill the selection is not here.** It trims the
+  clips to the edges of a selection, and here the trim is to a range
+  the caller gives or to the material the clip plays.
