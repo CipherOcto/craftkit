@@ -29,7 +29,10 @@
 //!
 //! And the **page tree** is here: a page may have a parent, and the
 //! four attributes a page inherits — the media box, the resources, the
-//! crop box and the rotation — are found by walking up the tree.
+//! crop box and the rotation — are found by walking up the tree. The
+//! tree says itself in the **dictionary** as well as in the edges: a
+//! page names its parent, the parent names its children, and the count
+//! of the children is worked out from the edges and not kept.
 //!
 //! And the **annotation** is here: an annotation is an object of its
 //! own — a kind, a rectangle, and somewhere to go — and the page names
@@ -43,7 +46,7 @@
 //! | an indirect object | a **node**, of the kind `pdf.object` or `pdf.stream` |
 //! | its dictionary | the node's **payload** |
 //! | its stream | the node's **stream** — the bytes, beside the document |
-//! | a reference to another object | a **relation** of the kind `ref` |
+//! | a reference to another object | a **relation** of the kind `ref` — and a **value** in the dictionary, because the file is written from the dictionary |
 //! | the object number | the payload's `object`, because the ids are the core's |
 //!
 //! # The three things the port found
@@ -576,6 +579,28 @@ impl AddPage {
                     });
                 }
             }
+            // And the **dictionary** says it too: the file is written
+            // from the dictionary, and a tree that is only in the
+            // document is a tree the file does not have.
+            let to_parent = a_reference(session, parent, 0, "pdf.page.add")?;
+            add_reference(session, id, "Parent", to_parent, false)?;
+            let to_page = a_reference(session, id, 0, "pdf.page.add")?;
+            add_reference(session, parent, "Kids", to_page, true)?;
+            // The **count** of the children is derived: it is how many
+            // of them there are.
+            let kids = session
+                .document()
+                .relations
+                .iter()
+                .filter(|relation| {
+                    relation.kind == "ref"
+                        && relation.from == parent
+                        && relation.payload.get("key").and_then(|key| key.as_str()) == Some("Kids")
+                })
+                .count();
+            if let Some(node) = session.document_mut()?.node_mut(parent) {
+                node.data = with_entry(&node.data, "Count", serde_json::json!(kids));
+            }
         }
         Ok(Outcome::changed(format!("added the `{name}`"))
             .with_data(serde_json::json!({ "id": id, "object": number, "parent": parent })))
@@ -971,6 +996,58 @@ fn where_it_goes(document: &Document, entries: &[(String, serde_json::Value)]) -
         .and_then(|pair| pair.first())
         .and_then(|number| number.as_u64())?;
     Some(serde_json::json!({ "page": number }))
+}
+
+/// The value of a **reference**: the number of the object it names, and
+/// its generation.
+fn a_reference(
+    session: &Session,
+    to: u64,
+    generation: u64,
+    id: &str,
+) -> Result<serde_json::Value, EngineError> {
+    let node = session.document().node(to).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no object `{to}` in the document"),
+    })?;
+    let number = the_number_of(node).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("the object `{to}` has no object number"),
+    })?;
+    Ok(serde_json::json!({ "ref": [number, generation] }))
+}
+
+/// Put a **reference** in an object's dictionary, under a key.
+///
+/// A key that holds a **list** of references grows, and a key that
+/// holds one reference is set.
+///
+/// The reference is two things at once: an edge in the document and a
+/// value in the dictionary — and the file is written from the
+/// dictionary, so a reference that is only an edge is a reference the
+/// file does not have.
+fn add_reference(
+    session: &mut Session,
+    from: u64,
+    key: &str,
+    value: serde_json::Value,
+    list: bool,
+) -> Result<(), EngineError> {
+    let current = session.document().node(from).and_then(|node| {
+        entries_of(&node.data).into_iter().find(|(name, _)| name == key).map(|(_, value)| value)
+    });
+    let value = match (list, current) {
+        (true, Some(serde_json::Value::Array(mut list))) => {
+            list.push(value);
+            serde_json::Value::Array(list)
+        }
+        (true, _) => serde_json::json!([value]),
+        (false, _) => value,
+    };
+    if let Some(node) = session.document_mut()?.node_mut(from) {
+        node.data = with_entry(&node.data, key, value);
+    }
+    Ok(())
 }
 
 /// The **object number** of a node, if it has one.
@@ -1414,6 +1491,11 @@ pub struct AddReference {
     pub to: NodeRef,
     /// The generation of the object it names, if it is not the first.
     pub generation: Option<Number>,
+    /// Whether the key holds a **list** of references that grows, rather
+    /// than one reference that is set.
+    ///
+    /// A page tree's `/Kids` is a list and a page's `/Parent` is not.
+    pub list: Option<craftkit_sdk::Bool>,
 }
 
 impl AddReference {
@@ -1459,6 +1541,12 @@ impl AddReference {
                 message: format!("the object `{from}` already refers to `{to}`"),
             });
         }
+        // The reference is in the **dictionary** as well: the file is
+        // written from the dictionary, and an edge that is only in the
+        // document is an edge the file does not have.
+        let value = a_reference(session, to, generation, "pdf.ref.add")?;
+        let list = matches!(self.list, Some(craftkit_sdk::Bool(true)));
+        add_reference(session, from, &key, value, list)?;
         Ok(Outcome::changed(format!("`{from}` refers to `{to}` under `{key}`"))
             .with_data(serde_json::json!({ "from": from, "to": to, "payload": payload })))
     }
