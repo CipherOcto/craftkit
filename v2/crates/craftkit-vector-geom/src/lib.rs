@@ -45,9 +45,139 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_sdk::{FillRule, Path, Point, Rect, Segment, SubPath};
+use craftkit_sdk::{FillRule, FormatValue, Path, Point, Rect, Segment, SubPath};
 use kurbo::{BezPath, PathEl, Shape};
 use linesweeper::BinaryOp as SweepOp;
+
+/// A **transform**: the six numbers of an affine matrix.
+///
+/// The matrix is the one a PDF and a PostScript file use, and the six
+/// numbers stand for
+///
+/// ```text
+/// | a  b  0 |
+/// | c  d  0 |
+/// | e  f  1 |
+/// ```
+///
+/// so a point `(x, y)` moves to `(a·x + c·y + e, b·x + d·y + f)`. A
+/// matrix of `1 0 0 1 0 0` is the one that moves nothing, and it is
+/// what a path has when nothing says otherwise.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Matrix {
+    /// The first row's first number.
+    pub a: f64,
+    /// The first row's second number.
+    pub b: f64,
+    /// The second row's first number.
+    pub c: f64,
+    /// The second row's second number.
+    pub d: f64,
+    /// The third row's first number: the move across.
+    pub e: f64,
+    /// The third row's second number: the move up.
+    pub f: f64,
+}
+
+impl Matrix {
+    /// The matrix that **moves nothing**.
+    pub const fn identity() -> Matrix {
+        Matrix { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: 0.0, f: 0.0 }
+    }
+
+    /// Whether the matrix is the one that **moves nothing**.
+    pub fn is_identity(&self) -> bool {
+        *self == Matrix::identity()
+    }
+
+    /// Where the matrix puts a **point**.
+    pub fn apply(&self, point: Point) -> Point {
+        Point::new(self.a * point.x + self.c * point.y + self.e, self.b * point.x + self.d * point.y + self.f)
+    }
+
+    /// The **determinant** of the matrix: how much it scales the area.
+    pub fn determinant(&self) -> f64 {
+        self.a * self.d - self.b * self.c
+    }
+
+    /// The matrix that **undoes** this one.
+    ///
+    /// A matrix that collapses the plane onto a line has no undoing: it
+    /// is `None`, and a path that is placed with such a matrix cannot
+    /// be hit and cannot be picked out.
+    pub fn inverse(&self) -> Option<Matrix> {
+        let determinant = self.determinant();
+        if !determinant.is_finite() || determinant.abs() <= f64::EPSILON {
+            return None;
+        }
+        Some(Matrix {
+            a: self.d / determinant,
+            b: -self.b / determinant,
+            c: -self.c / determinant,
+            d: self.a / determinant,
+            e: (self.c * self.f - self.d * self.e) / determinant,
+            f: (self.b * self.e - self.a * self.f) / determinant,
+        })
+    }
+
+    /// The **path** the matrix puts somewhere else.
+    pub fn transform_path(&self, path: &Path) -> Path {
+        let subpaths = path
+            .subpaths
+            .iter()
+            .map(|subpath| SubPath {
+                start: self.apply(subpath.start),
+                segments: subpath
+                    .segments
+                    .iter()
+                    .map(|segment| match segment {
+                        Segment::Line { to } => Segment::Line { to: self.apply(*to) },
+                        Segment::Cubic { c1, c2, to } => {
+                            Segment::Cubic { c1: self.apply(*c1), c2: self.apply(*c2), to: self.apply(*to) }
+                        }
+                    })
+                    .collect(),
+                closed: subpath.closed,
+            })
+            .collect();
+        Path { subpaths, rule: path.rule }
+    }
+}
+
+impl Default for Matrix {
+    fn default() -> Self {
+        Matrix::identity()
+    }
+}
+
+impl FormatValue for Matrix {
+    fn to_json(&self) -> craftkit_sdk::serde_json::Value {
+        craftkit_sdk::serde_json::json!([self.a, self.b, self.c, self.d, self.e, self.f])
+    }
+
+    fn from_json(value: &craftkit_sdk::serde_json::Value) -> Result<Self, String> {
+        let list = value.as_array().ok_or_else(|| "a transform is six numbers".to_string())?;
+        if list.len() != 6 {
+            return Err(format!("a transform is six numbers, not {}", list.len()));
+        }
+        let mut numbers = [0.0_f64; 6];
+        for (index, item) in list.iter().enumerate() {
+            let number = item.as_f64().ok_or_else(|| "a transform is six numbers".to_string())?;
+            if !number.is_finite() {
+                return Err("a transform's numbers are finite".to_string());
+            }
+            numbers[index] = number;
+        }
+        Ok(Matrix {
+            a: numbers[0],
+            b: numbers[1],
+            c: numbers[2],
+            d: numbers[3],
+            e: numbers[4],
+            f: numbers[5],
+        })
+    }
+}
 
 /// Which boolean operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

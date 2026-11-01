@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixteen commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **seventeen commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -26,8 +26,9 @@
 //!   the curves that leave and arrive at it; `vector.path.fill` and
 //!   `vector.path.stroke` say what the path is painted with;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
-//!   corners and ends are finished; and `vector.path.rule` says which
-//!   parts of it are inside;
+//!   corners and ends are finished; `vector.path.transform` says where
+//!   the path is put; and `vector.path.rule` says which parts of it are
+//!   inside;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
@@ -76,7 +77,8 @@ pub struct VectorLayer;
 /// What a vector node carries.
 ///
 /// The payload of a `vector.path` node: the path itself, the colour it is
-/// filled with, and the stroke on its outline.
+/// filled with, the stroke on its outline, and the **transform** it is
+/// placed with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VectorNode {
     /// The outline.
@@ -85,6 +87,22 @@ pub struct VectorNode {
     pub fill: Colour,
     /// The stroke on its outline, if it has one.
     pub stroke: Option<Stroke>,
+    /// The transform the path is placed with.
+    pub transform: geom::Matrix,
+}
+
+impl VectorNode {
+    /// The path **where it is**: the path with the transform put on it.
+    ///
+    /// The path in the payload is the path as it was drawn, and the
+    /// transform says where that path is put — so the path the world
+    /// sees is the transformed one.
+    pub fn placed(&self) -> Path {
+        if self.transform.is_identity() {
+            return self.path.clone();
+        }
+        self.transform.transform_path(&self.path)
+    }
 }
 
 impl FormatValue for VectorNode {
@@ -93,6 +111,7 @@ impl FormatValue for VectorNode {
             "path": self.path.to_json(),
             "fill": self.fill.to_json(),
             "stroke": self.stroke.as_ref().map(|stroke| stroke.to_json()),
+            "transform": self.transform.to_json(),
         })
     }
 
@@ -106,7 +125,13 @@ impl FormatValue for VectorNode {
             Some(stroke) if !stroke.is_null() => Some(Stroke::from_json(stroke)?),
             _ => None,
         };
-        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke })
+        // A path written before the **transform** was in the payload
+        // has none, and a path with no transform is where it is.
+        let transform = match value.get("transform") {
+            Some(transform) if !transform.is_null() => geom::Matrix::from_json(transform)?,
+            _ => geom::Matrix::identity(),
+        };
+        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, transform })
     }
 }
 
@@ -131,7 +156,9 @@ impl VectorPathKind {
             None => (vector.fill, vector.stroke),
         };
         let fill = if node.muted { Colour::NONE } else { fill };
-        canvas.path(&vector.path, fill, stroke);
+        // The **transform** is where the path is put, and the canvas
+        // draws the path it is given.
+        canvas.path(&vector.placed(), fill, stroke);
     }
 
     /// Whether a point is inside a path.
@@ -141,7 +168,12 @@ impl VectorPathKind {
     /// it is written down rather than hidden.
     fn hit(node: &Node, _document: &Document, point: Point) -> bool {
         let Ok(vector) = VectorNode::from_json(&node.data) else { return false };
-        vector.path.subpaths.iter().any(|subpath| polygon_contains(&geom::flatten(subpath, 0.05), point))
+        // The point is in the **world**, and the path is in its own
+        // place: the point is moved back into the path's space before
+        // it is tested.
+        let Some(inverse) = vector.transform.inverse() else { return false };
+        let local = inverse.apply(point);
+        vector.path.subpaths.iter().any(|subpath| polygon_contains(&geom::flatten(subpath, 0.05), local))
     }
 
     /// What a path **means**, in the plan.
@@ -149,7 +181,7 @@ impl VectorPathKind {
         let vector = VectorNode::from_json(&node.data).ok()?;
         let segments: usize = vector.path.subpaths.iter().map(|subpath| subpath.segments.len()).sum();
         Some(serde_json::json!({
-            "area": geom::area(&vector.path),
+            "area": geom::area(&vector.placed()),
             "segments": segments,
             "contours": vector.path.subpaths.len(),
         }))
@@ -805,6 +837,54 @@ impl CapPath {
     }
 }
 
+/// Place a path with a **transform**.
+///
+/// The transform is the six numbers of an affine matrix — `a b c d e f`
+/// — and it says where the path is put: a point `(x, y)` of the path
+/// is drawn at `(a·x + c·y + e, b·x + d·y + f)`. Leave the numbers out
+/// and the path is where it is.
+#[derive(Command)]
+#[command(
+    id = "vector.path.transform",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Transform"),
+    mutates,
+    undoable
+)]
+pub struct TransformPath {
+    /// The path.
+    pub path: NodeRef,
+    /// The six numbers of the matrix.
+    pub matrix: Option<serde_json::Value>,
+}
+
+impl TransformPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let transform = match &self.matrix {
+            Some(matrix) => geom::Matrix::from_json(matrix).map_err(|reason| EngineError::Failed {
+                id: "vector.path.transform".to_string(),
+                message: format!("the transform is not a transform: {reason}"),
+            })?,
+            None => geom::Matrix::identity(),
+        };
+        // A matrix that **collapses** the plane has no undoing, and a
+        // path that cannot be undone cannot be hit.
+        if transform.inverse().is_none() {
+            return Err(EngineError::Failed {
+                id: "vector.path.transform".to_string(),
+                message: "a transform that cannot be undone is refused".to_string(),
+            });
+        }
+        vector.transform = transform;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path is placed")
+            .with_data(serde_json::json!({ "id": self.path.0, "transform": transform.to_json() })))
+    }
+}
+
 /// Say which parts of a path are **inside**.
 ///
 /// The rule is `nonzero` — the default, and the rule that makes a
@@ -1017,7 +1097,7 @@ fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
 
 /// Put a path back into a node, and move the node's box to where it is.
 fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(), EngineError> {
-    let rect = geom::bounds(&vector.path);
+    let rect = geom::bounds(&vector.placed());
     let document = session.document_mut()?;
     let node = document.node_mut(id).ok_or_else(|| EngineError::Failed {
         id: id.to_string(),
@@ -1103,7 +1183,8 @@ fn add_path(
         Some(fill) => parse_colour(&fill.0)?,
         None => Colour::BLACK,
     };
-    let vector = VectorNode { path: path.clone(), fill: colour, stroke: None };
+    let vector =
+        VectorNode { path: path.clone(), fill: colour, stroke: None, transform: geom::Matrix::identity() };
     let rect = bounds(&path);
     let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
     Ok(id)
@@ -1217,6 +1298,7 @@ craftkit_sdk::plugin_anchor!(
     OffsetPath,
     JoinPath,
     CapPath,
+    TransformPath,
     VectorPanel,
     TotalAreaEvaluator
 );
