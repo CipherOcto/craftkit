@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twenty-one commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **twenty-four commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -27,7 +27,9 @@
 //!   `vector.path.stroke` say what the path is painted with, and
 //!   `vector.path.gradient` says what the colours are, and
 //!   `vector.path.blend` says how the path mixes with what is under
-//!   it;
+//!   it; and `vector.path.grid`, `vector.path.mirror` and
+//!   `vector.path.radial` make the copies of a path — in a grid, over a
+//!   mirror and round a centre;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.smooth` makes a point
 //!   of a path smooth; `vector.path.transform` says where
@@ -68,6 +70,14 @@ use craftkit_sdk::{
 };
 
 use craftkit_vector_geom as geom;
+
+/// The most **copies** one shape may be given.
+///
+/// A grid of a million copies is a million nodes in the document, and a
+/// document that holds a million nodes is a document nobody can open.
+/// The number is this battery's, and a shape that asks for more is
+/// refused by name.
+const MAX_COPIES: i64 = 1000;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -362,7 +372,10 @@ impl AddPolygon {
         "vector.path.simplify",
         "vector.path.offset",
         "vector.path.gradient",
-        "vector.path.blend"
+        "vector.path.blend",
+        "vector.path.grid",
+        "vector.path.mirror",
+        "vector.path.radial"
     )
 )]
 pub struct VectorPanel;
@@ -767,6 +780,221 @@ impl FillPath {
         Ok(Outcome::changed("the path is filled")
             .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.0 })))
     }
+}
+
+/// Make a **grid** of copies of a path.
+///
+/// The tree's repeat tool makes a grid of copies, and the shape is the
+/// first cell of it. Here the copies are **paths of their own** — the
+/// same shape, the same paint, and a **transform** that says where each
+/// one is — and the original is where it was.
+///
+/// The copies are placed by the step: how far apart they are, across
+/// and down.
+#[derive(Command)]
+#[command(
+    id = "vector.path.grid",
+    area = "vector",
+    layer = "vector",
+    icon = "plus",
+    menu("Path", "Grid"),
+    mutates,
+    undoable
+)]
+pub struct GridPath {
+    /// The path to copy.
+    pub path: NodeRef,
+    /// How many copies across, the original among them.
+    pub columns: Number,
+    /// How many copies down, the original among them.
+    pub rows: Number,
+    /// How far apart they are, across.
+    pub step_x: Number,
+    /// How far apart they are, down.
+    pub step_y: Number,
+}
+
+impl GridPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.grid".to_string();
+        let vector = vector_of(session, self.path.0)?;
+        let columns = the_count(self.columns.0, "columns", &id)?;
+        let rows = the_count(self.rows.0, "rows", &id)?;
+        let step_x = self.step_x.0;
+        let step_y = self.step_y.0;
+        if !step_x.is_finite() || !step_y.is_finite() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the step between the copies is a number".to_string(),
+            });
+        }
+        let cells = columns.saturating_mul(rows);
+        if cells > MAX_COPIES {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a grid holds at most {MAX_COPIES} copies, and this one holds {cells}"),
+            });
+        }
+        let mut made: Vec<u64> = Vec::with_capacity(cells.saturating_sub(1) as usize);
+        for row in 0..rows {
+            for column in 0..columns {
+                if row == 0 && column == 0 {
+                    continue;
+                }
+                let move_by = geom::Matrix::translate(column as f64 * step_x, row as f64 * step_y);
+                let copy = a_copy(session, &vector, move_by, format!("copy {column}-{row}"))?;
+                made.push(copy);
+            }
+        }
+        let count = made.len();
+        Ok(Outcome::changed(format!("made {count} cop(y|ies) of the path"))
+            .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
+    }
+}
+
+/// Make a **mirrored** copy of a path.
+///
+/// The copy is the path turned over a **line**: the two points say
+/// where the line is. A line with no length mirrors nothing, and it is
+/// refused.
+#[derive(Command)]
+#[command(
+    id = "vector.path.mirror",
+    area = "vector",
+    layer = "vector",
+    icon = "plus",
+    menu("Path", "Mirror"),
+    mutates,
+    undoable
+)]
+pub struct MirrorPath {
+    /// The path to copy.
+    pub path: NodeRef,
+    /// Where the line starts, across.
+    pub from_x: Number,
+    /// Where the line starts, down.
+    pub from_y: Number,
+    /// Where the line ends, across.
+    pub to_x: Number,
+    /// Where the line ends, down.
+    pub to_y: Number,
+}
+
+impl MirrorPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.mirror".to_string();
+        let vector = vector_of(session, self.path.0)?;
+        let from = Point::new(self.from_x.0, self.from_y.0);
+        let to = Point::new(self.to_x.0, self.to_y.0);
+        if !self.from_x.0.is_finite()
+            || !self.from_y.0.is_finite()
+            || !self.to_x.0.is_finite()
+            || !self.to_y.0.is_finite()
+        {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the line is two points".to_string(),
+            });
+        }
+        let Some(mirror) = geom::Matrix::mirror(from, to) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a line with no length mirrors nothing".to_string(),
+            });
+        };
+        let copy = a_copy(session, &vector, mirror, "mirror".to_string())?;
+        Ok(Outcome::changed("made a mirrored copy of the path")
+            .with_data(serde_json::json!({ "id": self.path.0, "copies": [copy] })))
+    }
+}
+
+/// Make a **ring** of copies of a path.
+///
+/// The copies are the path turned about a **centre**: each one by its
+/// share of the whole turn, so that the last one is where the first
+/// began.
+#[derive(Command)]
+#[command(
+    id = "vector.path.radial",
+    area = "vector",
+    layer = "vector",
+    icon = "plus",
+    menu("Path", "Radial"),
+    mutates,
+    undoable
+)]
+pub struct RadialPath {
+    /// The path to copy.
+    pub path: NodeRef,
+    /// How many copies there are, the original among them.
+    pub count: Number,
+    /// Where the centre is, across.
+    pub centre_x: Number,
+    /// Where the centre is, down.
+    pub centre_y: Number,
+}
+
+impl RadialPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.radial".to_string();
+        let vector = vector_of(session, self.path.0)?;
+        let count = the_count(self.count.0, "copies", &id)?;
+        if count > MAX_COPIES {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a ring holds at most {MAX_COPIES} copies, and this one holds {count}"),
+            });
+        }
+        if !self.centre_x.0.is_finite() || !self.centre_y.0.is_finite() {
+            return Err(EngineError::Failed { id: id.clone(), message: "the centre is a point".to_string() });
+        }
+        let centre = Point::new(self.centre_x.0, self.centre_y.0);
+        let turn = std::f64::consts::TAU / count as f64;
+        let mut made: Vec<u64> = Vec::with_capacity(count.saturating_sub(1) as usize);
+        for step in 1..count {
+            let turn_by = geom::Matrix::rotate_about(centre, turn * step as f64);
+            let copy = a_copy(session, &vector, turn_by, format!("copy {step}"))?;
+            made.push(copy);
+        }
+        let made_count = made.len();
+        Ok(Outcome::changed(format!("made {made_count} cop(y|ies) of the path"))
+            .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
+    }
+}
+
+/// A **count** of things: a whole number, and at least one.
+fn the_count(value: f64, what: &str, id: &str) -> Result<i64, EngineError> {
+    if !value.is_finite() || value.fract() != 0.0 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the number of {what} is a whole number"),
+        });
+    }
+    if value < 1.0 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is at least one of the {what}"),
+        });
+    }
+    Ok(value as i64)
+}
+
+/// A **copy** of a path, put somewhere else.
+///
+/// The copy is a path of its own: the same shape, the same paint, and
+/// the **transform** that says where it is. The tree's repeat is the
+/// same thing — the copies are paths of their own, and the shape is not
+/// a shape with copies in it.
+fn a_copy(
+    session: &mut Session,
+    vector: &VectorNode,
+    move_by: geom::Matrix,
+    name: String,
+) -> Result<u64, EngineError> {
+    let mut copy = vector.clone();
+    copy.transform = vector.transform.then(&move_by);
+    let rect = bounds(&copy.placed());
+    Ok(session.document_mut()?.add_node_with(name, "vector.path", Some(rect), copy.to_json()))
 }
 
 /// Set the **blend mode** of a path.

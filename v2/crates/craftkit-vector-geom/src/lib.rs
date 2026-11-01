@@ -100,6 +100,67 @@ impl Matrix {
         self.a * self.d - self.b * self.c
     }
 
+    /// The matrix that **moves** a point.
+    pub const fn translate(dx: f64, dy: f64) -> Matrix {
+        Matrix { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: dx, f: dy }
+    }
+
+    /// The matrix that **turns** a point about a centre.
+    ///
+    /// The angle is in radians, and it turns the way the world's up is
+    /// the picture's down: counter-clockwise on the page.
+    pub fn rotate_about(centre: Point, angle: f64) -> Matrix {
+        let (sin, cos) = angle.sin_cos();
+        Matrix {
+            a: cos,
+            b: sin,
+            c: -sin,
+            d: cos,
+            e: centre.x - centre.x * cos + centre.y * sin,
+            f: centre.y - centre.x * sin - centre.y * cos,
+        }
+    }
+
+    /// The matrix that **mirrors** a point about a line.
+    ///
+    /// A line with no length mirrors nothing, and this is `None`.
+    pub fn mirror(from: Point, to: Point) -> Option<Matrix> {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        let length = dx * dx + dy * dy;
+        if !length.is_finite() || length <= f64::EPSILON {
+            return None;
+        }
+        let (ux, uy) = (dx / length.sqrt(), dy / length.sqrt());
+        // The reflection about the line through `from` with the
+        // direction (ux, uy): the point is turned about the line, and
+        // the line's own place is kept.
+        let reflect = Matrix {
+            a: 2.0 * ux * ux - 1.0,
+            b: 2.0 * ux * uy,
+            c: 2.0 * ux * uy,
+            d: 2.0 * uy * uy - 1.0,
+            e: 0.0,
+            f: 0.0,
+        };
+        Some(Matrix::translate(from.x, from.y).then(&reflect).then(&Matrix::translate(-from.x, -from.y)))
+    }
+
+    /// The matrix that does this one and **then** the other.
+    ///
+    /// The two are done in the order they are written: this one first,
+    /// and the other one after it.
+    pub fn then(&self, other: &Matrix) -> Matrix {
+        Matrix {
+            a: other.a * self.a + other.c * self.b,
+            b: other.b * self.a + other.d * self.b,
+            c: other.a * self.c + other.c * self.d,
+            d: other.b * self.c + other.d * self.d,
+            e: other.a * self.e + other.c * self.f + other.e,
+            f: other.b * self.e + other.d * self.f + other.f,
+        }
+    }
+
     /// The matrix that **undoes** this one.
     ///
     /// A matrix that collapses the plane onto a line has no undoing: it
