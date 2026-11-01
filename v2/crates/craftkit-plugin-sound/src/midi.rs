@@ -202,9 +202,9 @@ impl CtrlPayload {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct MidiPayload {
     /// The notes, in the order they were in.
-    notes: Vec<NotePayload>,
+    pub(crate) notes: Vec<NotePayload>,
     /// The controllers, in the order they were in.
-    ctrls: Vec<CtrlPayload>,
+    pub(crate) ctrls: Vec<CtrlPayload>,
 }
 
 impl MidiPayload {
@@ -301,8 +301,18 @@ impl MidiPayload {
         Ok(MidiPayload { notes, ctrls })
     }
 
+    /// Sorts the notes by their start and their pitch, and the
+    /// controllers by their tick.
+    ///
+    /// The notes of a clip are in order, so that "the third note" is
+    /// the third note and not whichever one happens to be there.
+    pub(crate) fn sort(&mut self) {
+        self.notes.sort_by_key(|note| (note.start, note.pitch, note.channel, note.length, note.velocity));
+        self.ctrls.sort_by_key(|ctrl| ctrl.tick);
+    }
+
     /// The tick the last thing of the sequence reaches.
-    fn end_tick(&self) -> i64 {
+    pub(crate) fn end_tick(&self) -> i64 {
         let note = self.notes.iter().map(|note| note.start.saturating_add(note.length)).max();
         let ctrl = self.ctrls.iter().map(|ctrl| ctrl.tick).max();
         match (note, ctrl) {
@@ -535,8 +545,8 @@ impl ReadMidi {
 /// the **earlier** one — the same tie the grid breaks everywhere else.
 ///
 /// The notes keep their **length**, and the **length of the clip** is
-/// worked out again from the notes: a clip that is as long as its
-/// notes need is a clip that says how long it is.
+/// not shortened: the room the notes had is the room they have, and a
+/// note that reaches beyond the clip makes the clip longer.
 ///
 /// The notes are read at the tempo of the document, and a note's place
 /// is a **fact**: there is no random component here, because a note
@@ -581,14 +591,18 @@ impl QuantizeMidi {
                 moved += 1;
             }
         }
-        // The **length** of the clip is derived from the notes.
-        let end_tick = midi.end_tick();
-        let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
-        let length = map
-            .ticks_to_samples(start_tick.saturating_add(end_tick), settings.sample_rate)
-            .saturating_sub(map.ticks_to_samples(start_tick, settings.sample_rate));
+        // The **length** of the clip: the room its notes need, and the
+        // room it has. The room does not shrink because the notes
+        // moved.
         payload.midi = Some(midi);
-        payload.length = length.max(1);
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &map,
+            settings.sample_rate,
+        );
+        payload.length = length;
         write_clip(session, clip_id, &payload)?;
         Ok(Outcome::changed(format!("quantised the notes of the clip `{clip_id}`"))
             .with_data(serde_json::json!({ "clip": clip_id, "notes": moved, "length": payload.length })))
@@ -758,6 +772,408 @@ fn number_of(id: &str, value: f64, what: &str) -> Result<i32, EngineError> {
         });
     }
     Ok(value as i32)
+}
+
+/// **Make a MIDI clip** with no notes in it.
+///
+/// The tree's editor makes a MIDI clip when a person asks for one on a
+/// track, and the clip is a bar long unless the selection says
+/// otherwise. Here the clip is a bar long at the **document's tempo**
+/// unless the caller says how long it is, and it holds no notes: the
+/// notes are added afterwards, or imported.
+///
+/// The **content** of the clip is `midi`, and its **length** is what
+/// it was given — a clip with no notes has nothing to derive its
+/// length from.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.add",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "New MIDI Clip"),
+    mutates,
+    undoable
+)]
+pub struct AddMidiClip {
+    /// The track the clip goes on.
+    pub track: NodeRef,
+    /// Where the clip starts, in samples.
+    pub start: Number,
+    /// How long the clip is, in samples. A bar at the document's tempo
+    /// without it.
+    pub length: Option<Number>,
+}
+
+impl AddMidiClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.add".to_string();
+        let start = samples(self.start.0, "where the clip starts")?;
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        // The length: a bar at the document's tempo, unless the caller
+        // says how long the clip is.
+        let length = match self.length {
+            Some(length) => samples(length.0, "how long the clip is")?.max(1),
+            None => {
+                let tick = map.samples_to_ticks(start, settings.sample_rate);
+                let (numerator, denominator) = map.meter_at_tick(tick);
+                let beat = craftkit_sound_time::ticks_per_beat(denominator.max(1));
+                let bar = beat * i64::from(numerator.max(1));
+                map.ticks_to_samples(tick.saturating_add(bar), settings.sample_rate)
+                    .saturating_sub(map.ticks_to_samples(tick, settings.sample_rate))
+                    .max(1)
+            }
+        };
+        let playlist = crate::playlist_of(session, self.track.0, None)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: format!("{error}") })?;
+        let mut clip = ClipPayload::new();
+        clip.start = start;
+        clip.length = length;
+        clip.content = Some(CONTENT_MIDI.to_string());
+        clip.midi = Some(MidiPayload::default());
+        let clip_id = session.document_mut()?.add_node_with_under(
+            Some(playlist),
+            "MIDI".to_string(),
+            "sound.clip",
+            None,
+            clip.to_json(),
+        );
+        Ok(Outcome::changed(format!("made a MIDI clip of {length} samples"))
+            .with_data(serde_json::json!({ "id": clip_id, "start": start, "length": length })))
+    }
+}
+
+/// **Add a note** to a MIDI clip.
+///
+/// The **pitch**, the **velocity** and the **channel** are refused when
+/// they are outside the range a MIDI note has: the tree clamps them
+/// into the range, and a note asked for as a hundred and forty is not a
+/// note the caller knows about.
+///
+/// The **length** of a note is at least one tick, and the note starts
+/// at or after the beginning of the clip.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.note.add",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Add Note"),
+    mutates,
+    undoable
+)]
+pub struct AddMidiNote {
+    /// The clip the note goes in.
+    pub clip: NodeRef,
+    /// The pitch: zero to a hundred and twenty-seven.
+    pub pitch: Number,
+    /// Where the note starts, in ticks from the start of the clip.
+    pub start: Number,
+    /// How long the note is, in ticks. Half a quarter note without it.
+    pub length: Option<Number>,
+    /// How hard the note is struck: one to a hundred and twenty-seven.
+    pub velocity: Option<Number>,
+    /// The channel the note is on: zero to fifteen.
+    pub channel: Option<Number>,
+}
+
+impl AddMidiNote {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.note.add".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let pitch = whole_of(&id, self.pitch, "the pitch", 0.0, 127.0)? as u8;
+        let start = whole_of(&id, self.start, "where the note starts", 0.0, i64::MAX as f64)?;
+        let length = match self.length {
+            Some(length) => whole_of(&id, length, "how long the note is", 1.0, i64::MAX as f64)?,
+            None => 480,
+        };
+        let velocity = match self.velocity {
+            Some(velocity) => whole_of(&id, velocity, "the velocity", 1.0, 127.0)? as u8,
+            None => 100,
+        };
+        let channel = match self.channel {
+            Some(channel) => whole_of(&id, channel, "the channel", 0.0, 15.0)? as u8,
+            None => 0,
+        };
+        midi.notes.push(NotePayload { pitch, velocity, channel, start, length });
+        midi.sort();
+        let index = midi.notes.iter().position(|note| {
+            note.pitch == pitch && note.start == start && note.channel == channel && note.velocity == velocity
+        });
+        payload.midi = Some(midi);
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &tempo_map(session.document()),
+            session_of(session.document()).sample_rate,
+        );
+        payload.length = length;
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("added a note to the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "index": index, "length": length })))
+    }
+}
+
+/// **Edit a note** of a MIDI clip.
+///
+/// The note is named by its **index** in the clip's notes, which are in
+/// order of their start. An index that names no note is **refused**.
+///
+/// The pitch, the velocity and the length are refused when they are
+/// outside the range a MIDI note has — the tree clamps them, and a note
+/// asked for as a hundred and forty is not a note the caller knows
+/// about.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.note.edit",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Edit Note"),
+    mutates,
+    undoable
+)]
+pub struct EditMidiNote {
+    /// The clip the note is in.
+    pub clip: NodeRef,
+    /// Which note: its index in the clip's notes.
+    pub index: Number,
+    /// The new pitch.
+    pub pitch: Option<Number>,
+    /// The new start, in ticks.
+    pub start: Option<Number>,
+    /// The new length, in ticks.
+    pub length: Option<Number>,
+    /// The new velocity.
+    pub velocity: Option<Number>,
+}
+
+impl EditMidiNote {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.note.edit".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let index = whole_of(&id, self.index, "which note", 0.0, i64::MAX as f64)? as usize;
+        let Some(note) = midi.notes.get(index) else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the clip `{clip_id}` has no note `{index}`"),
+            });
+        };
+        let mut note = note.clone();
+        if let Some(pitch) = self.pitch {
+            note.pitch = whole_of(&id, pitch, "the pitch", 0.0, 127.0)? as u8;
+        }
+        if let Some(start) = self.start {
+            note.start = whole_of(&id, start, "where the note starts", 0.0, i64::MAX as f64)?;
+        }
+        if let Some(length) = self.length {
+            note.length = whole_of(&id, length, "how long the note is", 1.0, i64::MAX as f64)?;
+        }
+        if let Some(velocity) = self.velocity {
+            note.velocity = whole_of(&id, velocity, "the velocity", 1.0, 127.0)? as u8;
+        }
+        if let Some(slot) = midi.notes.get_mut(index) {
+            *slot = note;
+        }
+        midi.sort();
+        payload.midi = Some(midi);
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &tempo_map(session.document()),
+            session_of(session.document()).sample_rate,
+        );
+        payload.length = length;
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("edited a note of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "index": index, "length": length })))
+    }
+}
+
+/// **Remove notes** from a MIDI clip.
+///
+/// The notes are named by their **indices**, and an index that names no
+/// note is **refused**: a note that is not there is not removed.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.note.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Remove Note"),
+    mutates,
+    undoable
+)]
+pub struct RemoveMidiNotes {
+    /// The clip the notes are in.
+    pub clip: NodeRef,
+    /// Which notes: their indices in the clip's notes.
+    pub indices: serde_json::Value,
+}
+
+impl RemoveMidiNotes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.note.remove".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let indices = crate::clip_ids_of(&self.indices, &id)?;
+        for index in &indices {
+            if *index as usize >= midi.notes.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` has no note `{index}`"),
+                });
+            }
+        }
+        let before = midi.notes.len();
+        midi.notes.retain(|_| true);
+        let mut kept: Vec<NotePayload> = Vec::with_capacity(before);
+        for (index, note) in midi.notes.iter().enumerate() {
+            if !indices.contains(&(index as u64)) {
+                kept.push(note.clone());
+            }
+        }
+        midi.notes = kept;
+        payload.midi = Some(midi);
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &tempo_map(session.document()),
+            session_of(session.document()).sample_rate,
+        );
+        payload.length = length;
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("removed notes from the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "removed": before - payload.midi.as_ref().map(|midi| midi.notes.len()).unwrap_or(0) })))
+    }
+}
+
+/// **Move notes** of a MIDI clip.
+///
+/// The notes move **later** or **earlier** by so many ticks, and **up**
+/// or **down** by so many semitones. A note that would start before the
+/// beginning of the clip, or that would leave the range of a MIDI
+/// pitch, is **refused** and no note moves: the tree clamps both, and
+/// a note the caller did not ask for is not a note the caller knows
+/// about.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.notes.move",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Move Notes"),
+    mutates,
+    undoable
+)]
+pub struct MoveMidiNotes {
+    /// The clip the notes are in.
+    pub clip: NodeRef,
+    /// Which notes: their indices in the clip's notes.
+    pub indices: serde_json::Value,
+    /// How much later or earlier, in ticks.
+    pub ticks: Option<Number>,
+    /// How much higher or lower, in semitones.
+    pub semitones: Option<Number>,
+}
+
+impl MoveMidiNotes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.notes.move".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let indices = crate::clip_ids_of(&self.indices, &id)?;
+        for index in &indices {
+            if *index as usize >= midi.notes.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` has no note `{index}`"),
+                });
+            }
+        }
+        let ticks = match self.ticks {
+            Some(ticks) => whole_of(&id, ticks, "how far the notes move", i64::MIN as f64, i64::MAX as f64)?,
+            None => 0,
+        };
+        let semitones = match self.semitones {
+            Some(semitones) => {
+                whole_of(&id, semitones, "how far the notes move", i64::MIN as f64, i64::MAX as f64)? as i32
+            }
+            None => 0,
+        };
+        // The **bounds** are checked before anything moves: a note that
+        // would leave the range is refused, and no note moves.
+        for index in &indices {
+            let Some(note) = midi.notes.get(*index as usize) else { continue };
+            let start = note.start.saturating_add(ticks);
+            if start < 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a note would start before the beginning of the clip".to_string(),
+                });
+            }
+            let pitch = i32::from(note.pitch).saturating_add(semitones);
+            if !(0..=127).contains(&pitch) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the note of pitch {} would leave the range", note.pitch),
+                });
+            }
+        }
+        for index in &indices {
+            if let Some(note) = midi.notes.get_mut(*index as usize) {
+                note.start = note.start.saturating_add(ticks);
+                note.pitch = (i32::from(note.pitch) + semitones) as u8;
+            }
+        }
+        midi.sort();
+        payload.midi = Some(midi);
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &tempo_map(session.document()),
+            session_of(session.document()).sample_rate,
+        );
+        payload.length = length;
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("moved notes of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "moved": indices.len(), "length": length })))
+    }
+}
+
+/// A whole number from a parameter, refused when it is not one.
+fn whole_of(id: &str, value: Number, what: &str, from: f64, to: f64) -> Result<i64, EngineError> {
+    let number = value.0;
+    if !number.is_finite() || number.fract() != 0.0 || number < from || number > to {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("{what} is a whole number from {from} to {to}, and {number} is not one"),
+        });
+    }
+    Ok(number as i64)
 }
 
 /// Reads a MIDI file, within the limits.

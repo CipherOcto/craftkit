@@ -99,7 +99,11 @@ fn the_notes_are_quantised_onto_the_grid() {
     let notes = notes_of(&session, clip);
     assert_eq!(notes[0].1, 0, "the note is on the line");
     let node = session.document().node(clip).expect("the clip is there");
-    assert_eq!(node.data["length"], json!(24_000), "a quarter note is half a second");
+    // The clip keeps its **room**: the note moved onto the line, and
+    // the room the clip had is the room it has. A quarter note is
+    // half a second, and the note was a hundred ticks late, so the
+    // room was a little more than that.
+    assert_eq!(node.data["length"], json!(26_500), "the clip keeps its room");
 }
 
 /// A transpose moves the **pitch** of the notes.

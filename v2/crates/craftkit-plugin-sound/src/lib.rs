@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **seventy-one commands**, one for each thing a person does to a
+//! - **seventy-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -36,7 +36,9 @@
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
-//!   the notes of a clip, **heal** the clips that were separated,
+//!   the notes of a clip, **make** a MIDI clip and **add**, **edit**,
+//!   **remove** and **move** the notes of one, **heal** the clips that
+//!   were separated,
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -154,6 +156,20 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A note is refused where the tree clamps it.** The tree's pencil
+//! clamps a pitch, a velocity and a channel into the range a MIDI note
+//! has, and a note asked for as a hundred and forty is a note the
+//! caller does not know about. Here every one of them is refused, and
+//! the note is not made — the same rule the transpose follows
+//! (§219).
+//!
+//! **The room of a MIDI clip does not shrink.** The notes of a clip are
+//! in ticks and the length of the clip is in samples, and the room the
+//! notes need is worked out against the tempo map. A note that reaches
+//! beyond the clip makes the clip **longer**, and a note that moves
+//! away does not make it shorter: the room is the room. The tree's
+//! clip has a length of its own and the notes do not touch it at all.
 //!
 //! **The quiet is thrown away and the loud parts are named.** The
 //! tree's strip silence finds the parts of a sound that are not
@@ -3687,6 +3703,35 @@ impl StripSilence {
             }),
         ))
     }
+}
+
+/// The **length** of a MIDI clip: the room its notes need, and never
+/// less than the room it has.
+///
+/// The notes are in **ticks** and the length is in **samples**, and the
+/// tempo map is what turns one into the other: the room the notes need
+/// is measured from the clip's own start, at the tempo of the document
+/// where the clip is.
+///
+/// A clip's room does **not** shrink because its notes moved: the room
+/// is the room, and a note that reaches beyond it makes the clip
+/// longer. The tree's clip has a length of its own and the notes do
+/// not touch it — and here the notes may make the clip longer, but
+/// they do not make it shorter.
+pub(crate) fn midi_length(
+    current: i64,
+    midi: &crate::midi::MidiPayload,
+    start: i64,
+    map: &TempoMap,
+    rate: u32,
+) -> i64 {
+    if midi.notes.is_empty() {
+        return current.max(1);
+    }
+    let start_tick = map.samples_to_ticks(start, rate);
+    let end_tick = start_tick.saturating_add(midi.end_tick());
+    let room = map.ticks_to_samples(end_tick, rate).saturating_sub(map.ticks_to_samples(start_tick, rate));
+    current.max(room).max(1)
 }
 
 /// The place on the **timeline** of a frame of the material.
