@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1395 tests.** The MCP server links **all fifteen batteries** in, so the
+**1400 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1395 tests
+cargo test          # 1400 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3637,6 +3637,7 @@ so.
 | the **grid** of the session | **built.** A division of the bar, counted from the bar line, and a clip's beat is put on the nearest line (§200) | §200 |
 | the **gain** of a clip | **built.** The level of the clip itself, refused outside its range, and a bypass that keeps the gain instead of throwing it away (§201) | §201 |
 | the **conform** of a clip | **built.** The material is played at the rate that makes it fit the tempo, the tempo of the material is the clip's own, and the beat follows the audio (§202) | §202 |
+| the **name** of a node | **built.** A node has a name and nothing could change it; one command renames any node (§203) | §203 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13785,3 +13786,66 @@ belongs to a different tempo than the document's.
 - **The tree's pitch shift is not here.** The tree can remove the pitch
   shift of a clip and leave the length; here there is no pitch shift to
   remove, because there is no pitch-preserving stretch.
+
+## 203. The name of a node
+
+A node has a name. The kit's node had a name and **nothing could
+change it**: `node.add` gives a node a name, and every other command in
+the tree leaves the name alone. The tree this ports has a rename
+command for **each** kind of thing — `clip.rename` and `track.rename`
+— and this arc brings the one command that says it for every node.
+
+### What was built
+
+- The command `node.rename` renames **any** node — a shape, an
+  appearance, a track, a clip, a group.
+- The name is **trimmed**, and a name that is nothing once it is
+  trimmed is **refused**: a node with no name cannot be found.
+- Renaming a node to the name it already has changes nothing, and a
+  command that changes nothing leaves no undo step behind.
+
+### What the port found
+
+- **The tree has a rename command for each kind and the kit had none
+  at all.** The tree's sound editor renames a clip with `clip.rename`
+  and a track with `track.rename`, and every other kind in every other
+  tree has one too — the same command written again and again, once
+  per kind. The kit has one command for every node, which is the same
+  thing said once: the node is a node whatever it is, and the name is
+  the node's.
+- **The tree's rename is one for a selection and the kit's is one for
+  a node.** The tree's `clip.rename` renames every clip in the
+  selection, and the answer says how many clips there were. Here the
+  command names the node it renames — and an agent that wants to
+  rename five clips calls it five times and knows exactly which
+  clips it renamed, which the tree's count does not tell it.
+- **The tree truncates a long name and the kit has no limit.** The
+  tree's `track.rename` keeps the first sixty-four characters of the
+  name and says nothing about it, so a name that was asked for is not
+  the name that is stored. The kit has no such limit — a node's name
+  is a string and there is no bound on it — so a name here is the
+  name that was asked for.
+- **The tree refuses an empty name and so does this one.** The tree
+  trims the name and refuses it when nothing is left, and a node with
+  no name is a node nobody can find: the tree's own `node_by_name`
+  would never find it.
+
+### What it cost
+
+- **Five tests** in the studio (`tests/rename.rs`): a node is renamed,
+  the name is trimmed, a name that is nothing is refused, a node that
+  is not there is refused, and renaming to the same name changes
+  nothing.
+- **One command** (`node.rename`). The MCP server now carries **256**
+  commands.
+
+### What it does not settle
+
+- **There is still no command that renames a whole selection.** The
+  tree's rename takes a selection, and here the command takes a node.
+  A front end that renames a selection calls the command once for
+  each node, and that is a decision for the front end.
+- **A node's name is not its identity.** The id is the identity, and
+  the name is what a person calls it by: two nodes may have the same
+  name, and the kit does not pretend otherwise. The tree's rename has
+  the same rule.
