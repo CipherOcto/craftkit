@@ -40,10 +40,13 @@ fn two_tracks(session: &mut Session) -> Vec<u64> {
     tracks
 }
 
-/// The trim a track carries.
-fn trim_of(session: &Session, track: u64) -> Option<f64> {
+/// The fader a track carries.
+///
+/// The fader is the one thing the group links: the tree's group links
+/// the **volume**, and the volume is the fader.
+fn fader_of(session: &Session, track: u64) -> Option<f64> {
     let node = session.document().node(track).expect("the track is there");
-    node.data.get("trim_db").and_then(|trim| trim.as_f64())
+    node.data.get("fader_db").and_then(|fader| fader.as_f64())
 }
 
 /// The group node of a name, if it is there.
@@ -81,10 +84,10 @@ fn a_group_of_tracks_mixes_them() {
         .execute("sound.track.group", &json!({ "name": "drums", "tracks": tracks }))
         .expect("the tracks are grouped");
     session
-        .execute("sound.track.set", &json!({ "track": tracks[0], "trim_db": -6.0 }))
-        .expect("the track is set");
-    assert_eq!(trim_of(&session, tracks[0]), Some(-6.0), "the track is set");
-    assert_eq!(trim_of(&session, tracks[1]), Some(-6.0), "and the group is set with it");
+        .execute("sound.track.fader", &json!({ "track": tracks[0], "db": -6.0 }))
+        .expect("the fader is set");
+    assert_eq!(fader_of(&session, tracks[0]), Some(-6.0), "the track is set");
+    assert_eq!(fader_of(&session, tracks[1]), Some(-6.0), "and the group is set with it");
 }
 
 /// A group that is **off** links nothing.
@@ -100,10 +103,10 @@ fn a_group_that_is_off_links_nothing() {
         .execute("sound.track.group.set", &json!({ "group": group, "active": false }))
         .expect("the group is off");
     session
-        .execute("sound.track.set", &json!({ "track": tracks[0], "trim_db": -6.0 }))
-        .expect("the track is set");
-    assert_eq!(trim_of(&session, tracks[0]), Some(-6.0), "the track is set");
-    assert_eq!(trim_of(&session, tracks[1]), Some(0.0), "and the group is not");
+        .execute("sound.track.fader", &json!({ "track": tracks[0], "db": -6.0 }))
+        .expect("the fader is set");
+    assert_eq!(fader_of(&session, tracks[0]), Some(-6.0), "the track is set");
+    assert_eq!(fader_of(&session, tracks[1]), Some(0.0), "and the group is not");
 }
 
 /// The **mix** can be taken off, and a group that does not mix links
@@ -120,9 +123,9 @@ fn the_mix_can_be_taken_off() {
         .execute("sound.track.group.set", &json!({ "group": group, "mix": false }))
         .expect("the group does not mix");
     session
-        .execute("sound.track.set", &json!({ "track": tracks[0], "trim_db": -6.0 }))
-        .expect("the track is set");
-    assert_eq!(trim_of(&session, tracks[1]), Some(0.0), "the group is not linked");
+        .execute("sound.track.fader", &json!({ "track": tracks[0], "db": -6.0 }))
+        .expect("the fader is set");
+    assert_eq!(fader_of(&session, tracks[1]), Some(0.0), "the group is not linked");
 }
 
 /// A group is taken away and the **tracks stay**: a group is a link
@@ -139,9 +142,9 @@ fn a_group_is_taken_away_and_the_tracks_stay() {
     assert!(group_named(&session, "drums").is_none(), "the group is gone");
     assert!(session.document().node(tracks[0]).is_some(), "the track is still there");
     session
-        .execute("sound.track.set", &json!({ "track": tracks[0], "trim_db": -6.0 }))
-        .expect("the track is set");
-    assert_eq!(trim_of(&session, tracks[1]), Some(0.0), "and nothing is linked any more");
+        .execute("sound.track.fader", &json!({ "track": tracks[0], "db": -6.0 }))
+        .expect("the fader is set");
+    assert_eq!(fader_of(&session, tracks[1]), Some(0.0), "and nothing is linked any more");
 }
 
 /// A group of **one** track is refused, the way a group of one clip is.

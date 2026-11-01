@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty commands**, one for each thing a person does to a
+//! - **fifty-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -29,7 +29,7 @@
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
-//!   and
+//!   set a track's **fader**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -902,6 +902,14 @@ struct TrackPayload {
     /// decibels to twenty-four; it is the level of the input and not
     /// the level of the output.
     trim_db: f64,
+    /// The track's **fader**, in decibels: the level of the track's
+    /// output, after its inserts.
+    ///
+    /// The tree's fader runs from minus one hundred and forty-four
+    /// decibels to twelve, and it is the **default** of the volume
+    /// lane: a lane with breakpoints overrides it, and a lane without
+    /// one is the fader.
+    fader_db: f64,
     /// Whether the track's **phase is inverted**.
     ///
     /// The phase is a sign and not a level: the sound is the same and
@@ -935,6 +943,7 @@ impl TrackPayload {
             "channels": self.channels,
             "solo": self.solo,
             "trim_db": self.trim_db,
+            "fader_db": self.fader_db,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
             "elastic": self.elastic,
@@ -947,6 +956,7 @@ impl TrackPayload {
             channels: value.get("channels").and_then(|channels| channels.as_u64()).unwrap_or(2) as u32,
             solo: value.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
             trim_db: value.get("trim_db").and_then(|trim| trim.as_f64()).unwrap_or(0.0),
+            fader_db: value.get("fader_db").and_then(|fader| fader.as_f64()).unwrap_or(0.0),
             phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
             active_playlist: value
                 .get("active_playlist")
@@ -1422,6 +1432,7 @@ impl AddTrack {
             channels,
             solo: false,
             trim_db: 0.0,
+            fader_db: 0.0,
             phase_invert: false,
             active_playlist: None,
             elastic: None,
@@ -1677,7 +1688,6 @@ impl SetTrack {
             id: "sound.track.set".to_string(),
             message: error.to_string(),
         })?;
-        let mut trim: Option<f64> = None;
         if let Some(asked) = &self.trim_db {
             let decibels = asked.0;
             if !decibels.is_finite() || !(-144.0..=24.0).contains(&decibels) {
@@ -1689,7 +1699,6 @@ impl SetTrack {
                 });
             }
             payload.trim_db = decibels;
-            trim = Some(decibels);
         }
         if let Some(phase) = &self.phase {
             payload.phase_invert = phase.0;
@@ -1702,31 +1711,107 @@ impl SetTrack {
             });
         };
         node.data = data;
-        // The **mix link**: a group of tracks is mixed together, so a
-        // change to the level of one of them is a change to the level
-        // of all of them. The phase is not a level and is not linked.
-        let mut linked = Vec::new();
-        if trim.is_some() {
-            for sibling in group::mix_siblings(session.document(), id) {
-                if sibling == id {
-                    continue;
-                }
-                let Some(node) = session.document().node(sibling) else { continue };
-                let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
-                other.trim_db = trim.unwrap_or(other.trim_db);
-                let data = other.to_json();
-                if let Some(node) = session.document_mut()?.node_mut(sibling) {
-                    node.data = data;
-                }
-                linked.push(sibling);
-            }
-        }
+        // The **trim** is not linked by the group: the tree's group
+        // links the **volume** and not the input gain, and the fader
+        // is the volume.
         Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(serde_json::json!({
             "id": id,
             "trim_db": payload.trim_db,
             "phase": payload.phase_invert,
-            "linked": linked,
         })))
+    }
+}
+
+/// Set a track's **fader**.
+///
+/// The fader is the level of the track's **output**: it comes after
+/// the track's inserts, and it is the level a track is heard at when
+/// nothing automates it. The tree's fader runs from minus one hundred
+/// and forty-four decibels to twelve, and a fader outside that is
+/// **refused** and not pulled to the edge.
+///
+/// A **volume lane** overrides the fader: the tree's mixer runs the
+/// lane when there is one and the fader when there is not, and the
+/// fader is the lane's default.
+///
+/// The fader is the one thing a **group** links: the tree's group
+/// carries a list of the attributes it shares — the volume, the mute,
+/// the solo and the record — and the volume is the fader, so a change
+/// to the fader of a track in a group that mixes is a change to the
+/// fader of every member.
+#[derive(Command)]
+#[command(
+    id = "sound.track.fader",
+    area = "sound",
+    layer = "sound",
+    icon = "sliders",
+    menu("Track", "Fader"),
+    mutates,
+    undoable
+)]
+pub struct SetTrackFader {
+    /// The track to set.
+    pub track: NodeRef,
+    /// Its level, in decibels: from minus one hundred and forty-four
+    /// to twelve.
+    pub db: Number,
+}
+
+impl SetTrackFader {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.fader".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.fader".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let decibels = self.db.0;
+        if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
+            return Err(EngineError::Failed {
+                id: "sound.track.fader".to_string(),
+                message: "a fader is a number of decibels from minus one hundred and forty-four to twelve"
+                    .to_string(),
+            });
+        }
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.fader".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.fader_db = decibels;
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.fader".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        // The **mix link**: a group of tracks is mixed together, so a
+        // change to the fader of one of them is a change to the fader
+        // of all of them.
+        let mut linked = Vec::new();
+        for sibling in group::mix_siblings(session.document(), id) {
+            if sibling == id {
+                continue;
+            }
+            let Some(node) = session.document().node(sibling) else { continue };
+            let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
+            other.fader_db = decibels;
+            let data = other.to_json();
+            if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                node.data = data;
+            }
+            linked.push(sibling);
+        }
+        Ok(Outcome::changed(format!("the track `{id}` is at {decibels} decibels"))
+            .with_data(serde_json::json!({ "id": id, "db": decibels, "linked": linked })))
     }
 }
 

@@ -36,11 +36,24 @@ pub struct Automation {
     pub pan: Option<Vec<(i64, f64)>>,
     /// The mute, over time: one mutes and less does not.
     pub mute: Option<Vec<(i64, f64)>>,
+    /// The track's **fader**, in decibels: the level of the track when
+    /// nothing automates it.
+    ///
+    /// The tree's fader is the **default** of the volume lane: a lane
+    /// with breakpoints overrides it, and a lane without one is the
+    /// fader. It is here and not in the lane because it belongs to the
+    /// track and not to the curve.
+    pub fader_db: f64,
 }
 
 /// The automation of a track: the lanes under it.
 pub fn automation_of(document: &Document, track: &Node) -> Automation {
-    let mut automation = Automation::default();
+    let mut automation = Automation {
+        // The **fader** is the track's own: a clip has no fader, and a
+        // track's is the level it is heard at when no lane says else.
+        fader_db: crate::TrackPayload::from_json(&track.data).map(|payload| payload.fader_db).unwrap_or(0.0),
+        ..Automation::default()
+    };
     for lane in document.walk().filter(|node| node.kind == "sound.lane") {
         // A lane automates the track it is under.
         if crate::timeline::parent_of(document, lane.id).map(|parent| parent.id) != Some(track.id) {
@@ -138,10 +151,18 @@ pub fn apply_mute(automation: &Automation, samples: &[f32], channels: usize, sta
 /// The fader is the track's own level, and it comes after the track's
 /// inserts: the tree's mixer runs the inserts and then the fader.
 pub fn apply_fader(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
-    let Some(points) = &automation.volume else { return samples.to_vec() };
     if channels == 0 {
         return samples.to_vec();
     }
+    // No **lane**: the fader is the level. The tree's mixer runs the
+    // lane when there is one and the fader when there is not.
+    let Some(points) = &automation.volume else {
+        let level = craftkit_audio::db_to_linear(automation.fader_db) as f32;
+        if level == 1.0 {
+            return samples.to_vec();
+        }
+        return samples.iter().map(|sample| sample * level).collect();
+    };
     let mut out = samples.to_vec();
     for index in 0..samples.len() / channels {
         let at = start + index as i64;
