@@ -68,6 +68,7 @@
 
 mod content;
 mod filters;
+mod objects;
 mod predictors;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -645,6 +646,67 @@ fn parent_of(session: &Session, id: u64) -> Option<u64> {
 /// there so that a document that says otherwise is not walked for ever.
 const MAX_ANCESTORS: usize = 64;
 
+/// Read the **objects** of an object stream.
+///
+/// An object stream is a stream that holds a file's objects, so that
+/// they may be compressed together. The command reads them: each one's
+/// number and what it says.
+#[derive(Command)]
+#[command(id = "pdf.objstm.read", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ReadObjectStream {
+    /// The stream whose objects are read.
+    pub stream: NodeRef,
+}
+
+impl ReadObjectStream {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.stream.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "pdf.objstm.read".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: "pdf.objstm.read".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+            });
+        }
+        let entries = entries_of(&node.data);
+        // The **count** and the **first**: what the dictionary says.
+        let count =
+            entries.iter().find(|(key, _)| key == "N").and_then(|(_, value)| value.as_u64()).ok_or_else(
+                || EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: "the object stream does not say how many objects it has".to_string(),
+                },
+            )?;
+        let first =
+            entries.iter().find(|(key, _)| key == "First").and_then(|(_, value)| value.as_u64()).ok_or_else(
+                || EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: "the object stream does not say where the first object begins".to_string(),
+                },
+            )?;
+        let decoded = decoded_bytes(node, None, None, false, "pdf.objstm.read")?;
+        let objects =
+            objects::object_stream(&decoded.bytes, count as usize, first as usize).map_err(|error| {
+                EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: format!("the object stream cannot be read: {error:?}"),
+                }
+            })?;
+        let list: Vec<serde_json::Value> = objects
+            .iter()
+            .map(|object| serde_json::json!({ "object": object.number, "value": object.value }))
+            .collect();
+        let count = list.len();
+        Ok(Outcome::new(format!("{count} object(s)"))
+            .with_data(serde_json::json!({ "id": id, "objects": list })))
+    }
+}
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -843,6 +905,7 @@ craftkit_sdk::plugin_anchor!(
     PageAttributes,
     DecodeStream,
     ContentOperators,
+    ReadObjectStream,
     AddReference,
     ListReferences,
     GraphEvaluator,
