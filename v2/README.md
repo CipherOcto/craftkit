@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1546 tests.** The MCP server links **all fifteen batteries** in, so the
+**1562 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1546 tests
+cargo test          # 1562 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3655,7 +3655,7 @@ so.
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
-| the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, and the notes are read from and written to a Standard MIDI File (§217, §218) | §218 |
+| the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed and given a velocity (§217, §218, §219) | §219 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15024,3 +15024,74 @@ the notes had nowhere to live.
 - **There is no synthesiser.** A MIDI clip is silent, and the tree's
   is not — the tree plays it. Making a sound out of notes is a bigger
   piece of work than reading them.
+
+## 219. The editing of the notes of a MIDI clip
+
+The tree's sound editor moves notes: it quantises them onto a grid,
+transposes them, changes how hard they are struck and how long they
+last. The clip that holds the notes was built in §218, and the notes
+could not be touched.
+
+### What was built
+
+- The **library** grows an **operations** module: the quantise, the
+  transpose, the velocity and the length, and the split by pitch. An
+  operation works in place on a list of notes and never changes how
+  many notes there are.
+- The **battery** grows three commands: `sound.clip.midi.quantize`,
+  `sound.clip.midi.transpose` and `sound.clip.midi.velocity`.
+- The quantise puts the notes on the **session's grid** (§200) — the
+  lines are musical, so they move with the tempo — and the length of
+  the clip is worked out again from the notes.
+- A pitch or a velocity outside the MIDI range is **refused**, and the
+  notes are not changed at all.
+
+### What the port found
+
+- **The tree clamps and this tree refuses.** The tree's transpose
+  pushes a note that would leave the range onto the end of it, and its
+  velocity does the same. Here both are refused and no note is moved:
+  a note that was asked for and is not there is a note the caller does
+  not know about — the same rule the gain follows (§201).
+- **The tree's quantise is random and this one is not.** The tree's
+  quantise has a random component, so that the same quantise twice
+  does not give the same notes. Here it does: a note's place in a
+  document is a fact, and a fact that changes each time it is asked
+  for is not a fact.
+- **The tree's quantise takes a grid of its own and this one takes
+  the session's.** The tree's grid is a number of ticks; the kit's
+  grid is a division of the bar, and the lines are counted from the
+  bar line and move with the tempo. One grid in the kit, and the notes
+  are put on it.
+- **The tree's note names are not here.** The tree names a note
+  ("C3"), a drum and a program; a name is for a person to read, and
+  nothing in v2 is read by a person yet.
+
+### What it cost
+
+- **Eleven tests** in the MIDI library (`tests/ops.rs`) and **five**
+  in the sound battery (`tests/midiedit.rs`): a note is put on the
+  nearest line, a note on a line stays, a grid of no ticks does
+  nothing, the strength is how far a note moves, a transpose moves the
+  pitch and is refused out of the range, the velocity is set, added
+  and scaled and is refused out of the range, the length is changed,
+  the legato ends a note before the next, the notes are split by their
+  pitch — and the notes of a clip are quantised onto the grid,
+  transposed and given a velocity, with the same refusals.
+- **Three commands** (`sound.clip.midi.quantize`,
+  `sound.clip.midi.transpose` and `sound.clip.midi.velocity`). The MCP
+  server now carries **279** commands, and the sound battery carries
+  **68**.
+
+### What it does not settle
+
+- **The tree's other operations are not here.** The velocity may be
+  set, added to and scaled; the length may be set, added to, scaled,
+  made legato and made free of overlap; and the tree has a velocity
+  that is **limited** to a range, one that **ramps** over the notes
+  and one that **humanises** them. The last three are not here, and
+  the humanise is a random one — and a random fact is not a fact.
+- **The quantise has no strength of its own here.** The library's
+  quantise has one — how far a note moves towards the line — and the
+  battery's command moves every note all the way. A person who wants
+  a note moved half way to the line has not got a command for it yet.
