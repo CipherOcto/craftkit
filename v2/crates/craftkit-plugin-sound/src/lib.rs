@@ -15,20 +15,22 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **thirty-three commands**, one for each thing a person does to a
+//! - **thirty-four commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
 //!   loop away, put a clip in front of the others, make a take, choose
 //!   the
 //!   take that is played, set the tempo,
-//!   set the meter, make a marker, make a source, set the session, and
+//!   set the meter, make a marker, make a source, set the session, set
+//!   the **beat** of a clip and take it away, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
 //! - a **panel**, `panel.sound`;
-//! - an **evaluator**, `sound.timeline`, which says what the document
-//!   means: the tempo map, and every clip in the place it sits.
+//! - **two evaluators**, `sound.timeline`, which says what the document
+//!   means: the tempo map, and every clip in the place it sits, and
+//!   `sound.routing`, which says what the mixer is made of.
 //!
 //! # What the port found
 //!
@@ -51,6 +53,11 @@
 //! party can add one without touching the core — which is the whole
 //! point of the seam, arrived at by a port rather than by an argument.
 //!
+//! **A clip's beat is an option and not a zero.** The tree keeps the
+//! place inside a clip where the beat falls as a number, and zero means
+//! *none* — so a clip whose beat is at its very first sample cannot say
+//! so. Here it is an option, and a beat at the head is a beat.
+//!
 //! # What this does not do
 //!
 //! - **It draws nothing.** A sound document is not a picture. v2 has no
@@ -63,6 +70,9 @@
 //! - **It reads no media.** A source is a **reference**: a path, a channel
 //!   count and a length. The audio itself is not in the document, and
 //!   nothing here decodes it.
+//! - **There is no grid.** The tree's editor snaps a clip to a grid, and
+//!   the grid is a setting of its own. This battery has a beat and a
+//!   tempo map and no grid, so nothing here snaps a clip to anything.
 
 #![deny(
     clippy::unwrap_used,
@@ -82,8 +92,12 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 mod automate;
 mod mixer;
 
+// The **beat** of a clip: where the beat falls inside it.
+mod beat;
+
 use std::collections::HashMap;
 
+pub use beat::{ReadBeat, RemoveBeat, SetBeat};
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
@@ -411,6 +425,7 @@ impl ClipKind {
             "gain_db": clip.gain_db,
             "fade_in": clip.fade_in.to_json(),
             "fade_out": clip.fade_out.to_json(),
+            "sync": clip.sync,
         }))
     }
 }
@@ -909,6 +924,18 @@ pub(crate) struct ClipPayload {
     /// A muted clip is not played and is still there: the tree's
     /// renderer skips it and the tree's editor keeps it.
     muted: bool,
+    /// The clip's **sync point**, in samples from the clip's start.
+    ///
+    /// The sync point is the place inside the clip where the beat
+    /// falls: it is what the clip is lined up by, and it is why a clip
+    /// that was recorded against another one still lines up.
+    ///
+    /// It is an **option**, and that is the difference from the tree:
+    /// the tree's sync point is a number where zero means *none*, and a
+    /// clip whose sync point is at its very first sample cannot say so.
+    /// Here the two are different: `None` is no sync point, and a
+    /// sync point of zero is a sync point at the start.
+    pub(crate) sync: Option<i64>,
 }
 
 /// The most a clip may be stretched.
@@ -931,6 +958,7 @@ impl ClipPayload {
             "fade_out": self.fade_out.to_json(),
             "stretch": self.stretch,
             "muted": self.muted,
+            "sync": self.sync,
         })
     }
 
@@ -962,6 +990,7 @@ impl ClipPayload {
             },
             stretch,
             muted: value.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
+            sync: value.get("sync").and_then(|sync| sync.as_i64()),
         })
     }
 }
@@ -1478,6 +1507,7 @@ impl AddClip {
             fade_out: FadePayload::none(),
             stretch,
             muted: false,
+            sync: None,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -1769,6 +1799,14 @@ impl TrimClip {
         // makes it slower, and the two are the same fact.
         let delta = from as i64 - payload.start;
         trimmed.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
+        // The **beat** moves with the audio it is in: the trim took
+        // `delta` samples off the head, so the beat is `delta` nearer
+        // the clip's head. A beat that the trim left outside the clip
+        // is not a beat of that clip any more, and it goes.
+        if let Some(sync) = payload.sync {
+            let moved = sync - delta;
+            trimmed.sync = (0..=trimmed.length).contains(&moved).then_some(moved);
+        }
         if let Some(node) = session.document_mut()?.node_mut(clip_id) {
             node.data = trimmed.to_json();
         }
@@ -1778,6 +1816,7 @@ impl TrimClip {
                 "from": from,
                 "to": to,
                 "offset": trimmed.offset,
+                "sync": trimmed.sync,
             }),
         ))
     }
@@ -2090,6 +2129,9 @@ impl LoopClip {
                 // longer than the clip is a fade past the end of it.
                 copy.fade_in.len = copy.fade_in.len.min(copy.length);
                 copy.fade_out.len = copy.fade_out.len.min(copy.length);
+                // And a **beat** past the cut is not a beat of the
+                // copy: the copy is shorter, and the beat is gone.
+                copy.sync = copy.sync.filter(|beat| (0..=copy.length).contains(beat));
             }
             let made_id = session.document_mut()?.add_node_with_under(
                 Some(playlist_id),
@@ -4024,7 +4066,10 @@ pub struct ClipTool;
         "sound.playhead.set",
         "sound.source.add",
         "sound.render",
-        "sound.session.set"
+        "sound.session.set",
+        "sound.clip.sync.set",
+        "sound.clip.sync.remove",
+        "sound.clip.sync.read"
     )
 )]
 pub struct SoundPanel;
@@ -4071,6 +4116,7 @@ impl TimelineEvaluator {
                         "end": payload.start.saturating_add(payload.length),
                         "source": payload.source,
                         "position": format!("{}.{}.{}", bar_beat.bar, bar_beat.beat, bar_beat.tick),
+                        "sync": payload.sync,
                     }));
                 }
                 playlists.push(serde_json::json!({
@@ -4213,7 +4259,7 @@ fn playlist_of(session: &Session, track: u64, name: Option<String>) -> Result<u6
 /// The selection holds whole nodes and **parts** of nodes, and a part is
 /// a range in the node's own units. A sound document's units are
 /// samples, so a part of a clip is a range of samples.
-fn selection_span(session: &Session) -> Option<(u64, (f64, f64))> {
+pub(crate) fn selection_span(session: &Session) -> Option<(u64, (f64, f64))> {
     session.selection().iter().find_map(|item| {
         let from = item.from?;
         let to = item.to?;
@@ -4313,7 +4359,10 @@ craftkit_sdk::plugin_anchor!(
     AddRoute,
     AddInsert,
     AddSend,
-    AddLane
+    AddLane,
+    SetBeat,
+    RemoveBeat,
+    ReadBeat
 );
 
 #[cfg(test)]
