@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1256 tests.** The MCP server links **all fifteen batteries** in, so the
+**1260 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1256 tests
+cargo test          # 1260 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3609,6 +3609,7 @@ so.
 | a **PDF stream's filter** | **built.** The five ways a stream's bytes may be encoded are undone — Flate, LZW with the early change, ASCIIHex, ASCII85 and RunLength — and the filter may be named in the command or in the dictionary (§172) | §172 |
 | a **PDF stream's predictor** | **built.** The step that was made after the encoding is undone: the TIFF predictor and the five PNG ones, with the width of the picture from the dictionary (§173) | §173 |
 | a **line's corners and ends** | **built.** The stroke carries a join and a cap, the rasteriser draws them, and two commands say which (§174) | §174 |
+| a **page tree** | **built.** A page may have a parent, and the four attributes a page inherits are found by walking up the tree (§175) | §175 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11840,3 +11841,69 @@ none of the six.
   library's boolean operations do not know them — they are about what
   is inside a path and not about the ink on its outline — and the tree
   has no outline-of-a-stroke operation either.
+
+---
+
+## 175. A page tree, and what a page inherits
+
+A PDF's pages are a **tree**, not a list: the root is a page tree node,
+and the pages hang under it. And a page may leave out what a page does
+not have to say — the **media box**, the **resources**, the **crop box**
+and the **rotation** come from the nearest ancestor that has them.
+v2's PDF battery had the object model and nothing that said which
+object was a page.
+
+### What was built
+
+- The command `pdf.page.add` puts a **page** in the document: an
+  indirect object whose dictionary says `/Type /Page`, with a
+  **parent** if it has one.
+- The tree is **two edges**, as the file has it: the page names its
+  parent under `Parent` and the parent names the page under `Kids`.
+- The command `pdf.page.attributes` says what a page **has**, and
+  where each thing came from: the four inheritable keys are found by
+  walking up the tree, and the nearest ancestor that has one wins.
+- A page whose type is not `Page` is **refused**, and a page with no
+  parent inherits nothing.
+
+### What the port found
+
+- **The tree was already in the tree.** The battery had a relation of
+  the kind `ref` whose payload says which **key** the reference is
+  under — and `Parent` and `Kids` are keys. So the page tree is not a
+  new kind of edge: it is two references with the right keys, and the
+  model says so.
+- **The inheritance is a question, not a value.** A page's media box is
+  not a number the page holds; it is the number the page *has*, which
+  is its own when it says one and its nearest ancestor's when it does
+  not. That is why the command is a query and the document is not
+  changed: the answer depends on the tree around the page, and writing
+  it into the page would be a second copy of something the tree already
+  says.
+- **The nearest ancestor wins, and the tree may be deep.** The walk is
+  bounded — a page may not have more than sixty-four ancestors — because
+  a document that says otherwise is not walked for ever.
+- **A page that says what it wants keeps it.** The inheritance is for
+  what a page does not say, and a page that says a media box of its own
+  says it, whatever its parent says.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/pages.rs`): a page may be put
+  in the document, a page inherits what it does not say, a page that
+  says keeps what it says, and a page with no parent inherits nothing.
+- **Two commands** (`pdf.page.add` and `pdf.page.attributes`). The MCP
+  server now carries **217** commands.
+
+### What it does not settle
+
+- **The page tree is not read from a file.** The battery still has no
+  parser and no cross-reference table, so the tree is something a
+  person or a program says; a file's own tree is not yet in the
+  document.
+- **The inherited keys are the four of the specification.** A key that
+  the specification does not inherit is not inherited here either, and
+  a page that wants one must say it.
+- **The tree is not walked downwards.** The command answers for one
+  page; there is no command that lists the pages under a node in the
+  order the tree has them.
