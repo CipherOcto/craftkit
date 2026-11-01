@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1325 tests.** The MCP server links **all fifteen batteries** in, so the
+**1330 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1325 tests
+cargo test          # 1330 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3628,6 +3628,7 @@ so.
 | a **blend mode** | **built.** The sixteen modes of the PDF and the screen, and the kit says how each of them mixes (§191) | §191 |
 | the **copies** of a shape | **built.** A grid, a mirror over a line and a ring round a centre — the copies are paths of their own, and the transform says where each one is (§192) | §192 |
 | the **order** of the drawing | **built.** The order of the tree is the order of the drawing, and two commands say it — the kit's own lookup now reaches a node wherever it is (§193) | §193 |
+| a **reference in the dictionary** | **built.** A reference is an edge and a value at once, the page tree says itself in the file, and the count of the children is derived from the edges (§194) | §194 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13040,3 +13041,66 @@ order of the drawing* — and no battery had a command that said it.
 - **The sound battery's order is what a person sees.** The clips of a
   track are mixed and not laid over one another, so their order is the
   order they are drawn in and not the order they are heard in.
+
+## 194. The edge is in the dictionary
+
+The PDF battery writes files: the document goes out as a PDF file, and the
+file is written from the **dictionaries** of its objects. But a reference
+was only an **edge** in the document — a relation of the kind `ref` — and
+an edge is not written out. So a page tree built here was a tree the
+file did not have: the page said nothing about its parent, the parent
+said nothing about its children, and nothing said how many children
+there were.
+
+### What was built
+
+- `pdf.page.add` now says the tree in the dictionary too: the page
+  names its parent in `/Parent`, the parent names its children in
+  `/Kids`, and the parent says how many there are in `/Count`.
+- `pdf.ref.add` puts the reference in the dictionary as well as in the
+  document. A new parameter, `list`, says whether the key holds a **list**
+  of references that grows — a `/Kids` — or one reference that is set — a
+  `/Parent`.
+
+### What the port found
+
+- **A reference is two things at once.** It is an edge, because the
+  document is a graph and a relation is the only way an object may name
+  another; and it is a **value in a dictionary**, because the file is
+  written from the dictionaries and not from the edges. The port had
+  only the first, and the two do not agree: a graph with no dictionaries
+  is a graph, and a PDF file is a set of dictionaries.
+- **The count of the children is derived.** The page tree's `/Count` is
+  not a number anybody keeps: it is how many children there are. The
+  port counts the edges that carry the key `Kids` and writes the number
+  down — the same rule the kit has said since the beginning: a value
+  that can be worked out is worked out, and never kept.
+- **A list key and a single key are different keys.** The `/Kids` of a
+  page tree grows, and the `/Parent` of a page is set. The dictionary
+  does not say which is which — the *key* says it, by what the file
+  means by it — so the command asks.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/refs.rs`): a reference is in
+  the dictionary, a list key grows and a single key is set, the page tree
+  says itself in the dictionary, the page tree is in the file that is
+  written out, and a reference to an object that is not there is refused.
+- **One parameter** (`list` on `pdf.ref.add`) and one behaviour (the
+  page tree in the dictionary). The MCP server now carries **238**
+  commands — the same number, because no command was added: the command
+  was there, and it did not say this.
+
+### What it does not settle
+
+- **The dictionary is written, and the edges are kept.** Both are there
+  now, and they are two spellings of the same thing. A file that is
+  written and then read back gives the two apart: the loader reads the
+  references out of the dictionaries, and it does not look at the edges
+  the document already had. Which of the two is the truth is a question
+  this tree does not answer.
+- **Only the page tree is derived.** `/Count` is counted because the
+  page tree is the one place the port knows the rule for. A `/Length`
+  of a stream is written from the bytes, a `/Size` of the file is
+  written from the number of objects, and a `/N` of anything else is
+  still a number somebody has to keep.
