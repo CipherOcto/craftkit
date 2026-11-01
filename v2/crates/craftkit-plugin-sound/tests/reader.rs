@@ -154,10 +154,10 @@ fn a_reader_has_no_sends() {
     assert!(message.contains("no sends"), "the refusal says why: {message}");
 }
 
-/// A reader is heard in the **main mix**: it is not routed anywhere
-/// else.
+/// A reader may be **routed**: it may feed a bus and be heard there
+/// and not in the main mix.
 #[test]
-fn a_reader_is_not_routed() {
+fn a_reader_may_be_routed() {
     let directory = directory("route");
     let source_path = format!("{directory}/source.wav");
     let bytes = craftkit_wav::write(1, 48_000, &[QUIET, QUIET]);
@@ -167,12 +167,12 @@ fn a_reader_is_not_routed() {
     let reader = a_reader(&mut session, bus);
     session.execute("sound.bus.add", &json!({ "name": "other" })).expect("the bus is added");
     let other = session.document().node_by_name("other").expect("the bus is there").id;
-    let refused = session.execute("sound.route.add", &json!({ "track": reader, "bus": other }));
-    let message = match refused {
-        Ok(_) => panic!("a route for a reader is refused"),
-        Err(error) => error.to_string(),
-    };
-    assert!(message.contains("main mix"), "the refusal says why: {message}");
+    session
+        .execute("sound.route.add", &json!({ "track": reader, "bus": other }))
+        .expect("the reader is routed");
+    let routes = session.document().relations_from(reader, Some("route"));
+    assert_eq!(routes.len(), 1, "the reader feeds the bus");
+    assert_eq!(routes[0].to, other, "and it is the bus that was named");
 }
 
 /// A track reads **one** bus: the same bus twice is refused, and so is

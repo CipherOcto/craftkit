@@ -2488,43 +2488,61 @@ impl RenderSound {
                 add_into(bus_signal, signal, 0, 1.0);
             }
         }
-        // The **buses in order**: a bus that feeds another bus is heard
-        // there and not by itself. The order is the order the buses are
-        // fed in, so a bus is fed before it is read.
-        for id in mixer::bus_order(session.document()) {
-            let Some(destination) = mixer::route_of(session.document(), id) else { continue };
-            let Some(index) = buses.iter().position(|(bus, _)| *bus == id) else { continue };
-            let signal = buses[index].1.clone();
-            if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
-                add_into(target, &signal, 0, 1.0);
-            }
-        }
-        // The **readers**: a track that reads a bus takes the bus's
-        // sound into the mix, with its own inserts and its own fader.
-        // A bus that is read is not heard by itself: the tree's bus is
-        // read by an aux and is silent on its own.
-        for (reader, bus) in &readers {
-            let Some((_, bus_signal)) = buses.iter().find(|(id, _)| id == bus) else { continue };
-            let Some(track) = session.document().node(*reader) else { continue };
-            let mut signal = bus_signal.clone();
-            for insert in inserts_of(session.document(), track) {
-                if insert.bypass {
-                    continue;
+        // The **mix order**: the buses and the readers, in the order
+        // they are mixed. A bus is mixed before the readers that read
+        // it, and a reader is mixed before the bus it feeds — so a
+        // reader that feeds a bus is heard there and not by itself.
+        let stages = mixer::stage_order(session.document())
+            .map_err(|message| EngineError::Failed { id: "sound.render".to_string(), message })?;
+        for stage in stages {
+            match stage {
+                mixer::Stage::Bus(id) => {
+                    // A bus that feeds another bus is heard there and
+                    // not by itself.
+                    let Some(destination) = mixer::route_of(session.document(), id) else { continue };
+                    let Some(index) = buses.iter().position(|(bus, _)| *bus == id) else { continue };
+                    let signal = buses[index].1.clone();
+                    if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
+                        add_into(target, &signal, 0, 1.0);
+                    }
                 }
-                let mut plugin = craftkit_plugins::make(
-                    &insert.plugin,
-                    &craftkit_plugins::Params::from_map(insert.params),
-                )
-                .map_err(|error| EngineError::Failed {
-                    id: "sound.render".to_string(),
-                    message: error.to_string(),
-                })?;
-                plugin.process(&mut signal, channels.max(1) as usize, rate);
+                mixer::Stage::Reader(reader, bus) => {
+                    // A track that reads a bus takes the bus's sound,
+                    // with its own inserts and its own fader. A bus
+                    // that is read is not heard by itself: the tree's
+                    // bus is read by an aux and is silent on its own.
+                    let Some((_, bus_signal)) = buses.iter().find(|(id, _)| *id == bus) else { continue };
+                    let Some(track) = session.document().node(reader) else { continue };
+                    let mut signal = bus_signal.clone();
+                    for insert in inserts_of(session.document(), track) {
+                        if insert.bypass {
+                            continue;
+                        }
+                        let mut plugin = craftkit_plugins::make(
+                            &insert.plugin,
+                            &craftkit_plugins::Params::from_map(insert.params),
+                        )
+                        .map_err(|error| EngineError::Failed {
+                            id: "sound.render".to_string(),
+                            message: error.to_string(),
+                        })?;
+                        plugin.process(&mut signal, channels.max(1) as usize, rate);
+                    }
+                    let automation = automate::automation_of(session.document(), track);
+                    let gated = automate::apply_mute(&automation, &signal, channels.max(1) as usize, 0);
+                    let faded = automate::apply_fader(&automation, &gated, channels.max(1) as usize, 0);
+                    // A reader that **feeds a bus** is heard there and
+                    // not in the main mix.
+                    match mixer::route_of(session.document(), reader) {
+                        Some(destination) => {
+                            if let Some((_, target)) = buses.iter_mut().find(|(bus, _)| *bus == destination) {
+                                add_into(target, &faded, 0, 1.0);
+                            }
+                        }
+                        None => tracks.push((reader, faded, automation)),
+                    }
+                }
             }
-            let automation = automate::automation_of(session.document(), track);
-            let gated = automate::apply_mute(&automation, &signal, channels.max(1) as usize, 0);
-            let faded = automate::apply_fader(&automation, &gated, channels.max(1) as usize, 0);
-            tracks.push((*reader, faded, automation));
         }
         // The **master** is the file: every track and every bus.
         let mut master = vec![0.0_f32; frames];

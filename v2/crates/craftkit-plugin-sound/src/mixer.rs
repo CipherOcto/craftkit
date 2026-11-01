@@ -450,14 +450,6 @@ impl AddRoute {
                 });
             }
         }
-        // A **reader** is heard in the main mix: it takes a bus into
-        // the mix and does not send its sound anywhere else.
-        if reads_bus(session.document(), track) {
-            return Err(EngineError::Failed {
-                id: "sound.route.add".to_string(),
-                message: format!("the track `{track}` reads a bus, and it is heard in the main mix"),
-            });
-        }
         let relation = craftkit_sdk::Relation::new(track, bus, "route");
         if !session.document_mut()?.add_relation(relation) {
             return Err(EngineError::Failed {
@@ -619,6 +611,90 @@ pub fn readers_of(document: &Document) -> Vec<(u64, u64)> {
         }
     }
     readers
+}
+
+/// A **stage** of the mix: a bus, or a reader and the bus it reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    /// A bus, and the signal it holds.
+    Bus(u64),
+    /// A reader, and the bus it reads.
+    Reader(u64, u64),
+}
+
+/// The **order of the mix**: the buses and the readers, in the order
+/// they are mixed.
+///
+/// A bus is mixed before the readers that read it, and a reader is
+/// mixed before the bus it feeds — so the order is worked out from the
+/// routes, and a mix that loops is refused by name.
+pub fn stage_order(document: &Document) -> Result<Vec<Stage>, String> {
+    let mut stages: Vec<Stage> = Vec::new();
+    for bus in document.walk().filter(|node| node.kind == "sound.bus") {
+        stages.push(Stage::Bus(bus.id));
+    }
+    for (reader, bus) in readers_of(document) {
+        stages.push(Stage::Reader(reader, bus));
+    }
+    let index_of = |id: u64| {
+        stages.iter().position(|stage| match stage {
+            Stage::Bus(bus) => *bus == id,
+            Stage::Reader(reader, _) => *reader == id,
+        })
+    };
+    // The **edges**: what must be mixed before what.
+    let mut edges: Vec<(usize, usize)> = Vec::new();
+    for (index, stage) in stages.iter().enumerate() {
+        match stage {
+            Stage::Bus(bus) => {
+                // A reader that reads this bus is mixed after it.
+                for (reader, read) in readers_of(document) {
+                    if read == *bus
+                        && let Some(after) = index_of(reader)
+                    {
+                        edges.push((index, after));
+                    }
+                }
+                // A bus that feeds another bus is mixed before it.
+                if let Some(destination) = route_of(document, *bus)
+                    && let Some(after) = index_of(destination)
+                {
+                    edges.push((index, after));
+                }
+            }
+            Stage::Reader(reader, _) => {
+                // A reader that feeds a bus is mixed before it.
+                if let Some(destination) = route_of(document, *reader)
+                    && let Some(after) = index_of(destination)
+                {
+                    edges.push((index, after));
+                }
+            }
+        }
+    }
+    // The **order**: the stages with nothing before them, one after
+    // another.
+    let mut done: Vec<bool> = vec![false; stages.len()];
+    let mut order: Vec<Stage> = Vec::with_capacity(stages.len());
+    for _ in 0..stages.len() {
+        let mut chosen = None;
+        for index in 0..stages.len() {
+            if done[index] {
+                continue;
+            }
+            let waiting = edges.iter().any(|(before, after)| *after == index && !done[*before]);
+            if !waiting {
+                chosen = Some(index);
+                break;
+            }
+        }
+        let Some(index) = chosen else {
+            return Err("the mix loops: a bus and a reader feed each other".to_string());
+        };
+        done[index] = true;
+        order.push(stages[index]);
+    }
+    Ok(order)
 }
 
 /// Put a plugin in a slot on a track.
