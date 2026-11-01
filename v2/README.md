@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1260 tests.** The MCP server links **all fifteen batteries** in, so the
+**1263 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1260 tests
+cargo test          # 1263 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3610,6 +3610,7 @@ so.
 | a **PDF stream's predictor** | **built.** The step that was made after the encoding is undone: the TIFF predictor and the five PNG ones, with the width of the picture from the dictionary (§173) | §173 |
 | a **line's corners and ends** | **built.** The stroke carries a join and a cap, the rasteriser draws them, and two commands say which (§174) | §174 |
 | a **page tree** | **built.** A page may have a parent, and the four attributes a page inherits are found by walking up the tree (§175) | §175 |
+| a **content stream** | **built.** The operators of a page's content are read, with the operands each one was given (§176) | §176 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11907,3 +11908,65 @@ object was a page.
 - **The tree is not walked downwards.** The command answers for one
   page; there is no command that lists the pages under a node in the
   order the tree has them.
+
+---
+
+## 176. A page says what it draws
+
+A page's **content** is a stream of operands and operators: `10 20 m`
+moves the pen to a point, `100 100 200 200 re` draws a rectangle and
+`f` fills what the pen has drawn. The PDF's content is how a page is
+drawn, and v2's PDF battery could not read a byte of it.
+
+### What was built
+
+- The module `content` **reads** a content stream: it says what the
+  stream says, in the order the stream says it.
+- The command `pdf.content.operators` reads a stream — decoded first,
+  if it is encoded — and reports every **operator** with the
+  **operands** it was given.
+- The operands are the PDF's own: the numbers, the **names** (`/F1`),
+  the **strings** (`(text)` and `<hex>`), the **arrays** and the
+  **dictionaries**.
+- An operator the kit does not know is **refused by name**, and so is
+  a stream that ends with operands and no operator.
+
+### What the port found
+
+- **The bytes of a content stream are usually not encoded.** The
+  decode path demands a filter — a stream that is being decoded must
+  say what it is in — and the content path does not: a page's content
+  is the plain bytes unless the file says otherwise. Two commands, one
+  reader, and the difference is one question: *does this stream say
+  what it is in?*
+- **A string is a sequence of bytes and not text.** The kit does not
+  pretend otherwise: each byte of a PDF string is one character of the
+  answer, so nothing is lost and nothing is guessed. A PDF's text is
+  in its fonts, and a font is not yet in this tree.
+- **An inline image is not a list of operands.** Between `BI` and `EI`
+  the bytes are the image, and a reader that read them as operands
+  would find a picture full of operators. The operator is reported and
+  the bytes are skipped — and that is a gap, not a solution: the image
+  itself is not read.
+- **The operator is a word and the operand is its value.** The PDF
+  writes them the other way round — the operands first and the operator
+  last — and a reader that took the first word of a pair as the
+  operator would read every stream backwards.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/content.rs`): the operators
+  and their operands, the names and the strings and the arrays, and
+  the refusals.
+- **One command** (`pdf.content.operators`). The MCP server now
+  carries **218** commands.
+
+### What it does not settle
+
+- **The operators are not carried out.** The module says that a `re` is
+  there; what a `re` draws is the evaluator's business, and the
+  evaluator does not draw a PDF page yet.
+- **The graphics state is not followed.** `q` and `Q` save and restore
+  the state, `cm` changes the matrix and `gs` brings in an extended
+  state; the command reports them and does not track them.
+- **The inline images are not read**, and the text is not laid out.
