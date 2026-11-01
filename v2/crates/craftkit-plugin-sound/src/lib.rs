@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **forty commands**, one for each thing a person does to a
+//! - **forty-three commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -25,7 +25,7 @@
 //!   set the meter, make a marker, make a source, set the session, set
 //!   the **beat** of a clip and take it away, lock a clip's **content**
 //!   and its **place**, rate a clip, group clips and take them out of
-//!   the group, and
+//!   the group, set the **grid** and put a clip on it, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -60,6 +60,14 @@
 //! *none* — so a clip whose beat is at its very first sample cannot say
 //! so. Here it is an option, and a beat at the head is a beat.
 //!
+//! **The grid is a setting of the session and not of the editor.** The
+//! tree keeps the grid in its **edit state** — beside the tool, the
+//! edit mode and the selection — and saves the session with it, so the
+//! tree's file does say what grid it was made on, in a place where a
+//! reader would not think to look. Here the grid is with the sample
+//! rate and the timecode: a file says what it is without saying what
+//! was selected when it was written.
+//!
 //! **A clip's colour is the kit's appearance.** The tree's sound
 //! editor has a command of its own for the colour of a clip, a tint
 //! for its bar on the timeline. The kit already says how every node is
@@ -79,9 +87,11 @@
 //! - **It reads no media.** A source is a **reference**: a path, a channel
 //!   count and a length. The audio itself is not in the document, and
 //!   nothing here decodes it.
-//! - **There is no grid.** The tree's editor snaps a clip to a grid, and
-//!   the grid is a setting of its own. This battery has a beat and a
-//!   tempo map and no grid, so nothing here snaps a clip to anything.
+//! - **The grid is musical and the tree's is not only that.** The tree's
+//!   grid can be a number of seconds, a number of frames or a number of
+//!   samples as well as a division of the bar. Here a grid is a
+//!   division of the bar, because a sound document is a bar of beats and
+//!   a grid in it is a musical thing.
 
 #![deny(
     clippy::unwrap_used,
@@ -113,6 +123,9 @@ mod marks;
 // The **group** a clip is in: a set of clips that belong together.
 mod group;
 
+// The **grid**: the lines a clip is put on.
+mod grid;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
@@ -120,6 +133,7 @@ use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
+pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, Ungroup};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
@@ -132,7 +146,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
 
 // The time model: a library, not a plugin.
-use craftkit_sound_time::{MAX_POSITION, TempoMap};
+use craftkit_sound_time::{Grid, MAX_POSITION, NoteValue, TempoMap};
 
 mod timeline;
 
@@ -170,6 +184,11 @@ pub struct SoundSession {
     pub click_note: f64,
     /// The **accent's** pitch: the click on the first beat of a bar.
     pub click_accent_note: f64,
+    /// The **grid**: the lines a clip is put on.
+    ///
+    /// The grid is a setting of the session and not of the editor: it
+    /// is in the document, so a file says what grid it was made on.
+    pub grid: Grid,
 }
 
 impl Default for SoundSession {
@@ -181,6 +200,7 @@ impl Default for SoundSession {
             click_volume_db: -6.0,
             click_note: 72.0,
             click_accent_note: 84.0,
+            grid: Grid::default(),
         }
     }
 }
@@ -220,11 +240,57 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         .and_then(|note| note.as_f64())
         .filter(|note| note.is_finite())
         .unwrap_or(SoundSession::default().click_accent_note);
-    SoundSession { sample_rate, timecode_start, metronome, click_volume_db, click_note, click_accent_note }
+    // The **grid**: a note value and two flags. A grid that is not one
+    // this tree knows is the default one, the way a sample rate that
+    // makes no sense is the default one.
+    let grid = match settings.and_then(|settings| settings.get("grid")) {
+        Some(grid) => Grid {
+            value: grid
+                .get("value")
+                .and_then(|value| value.as_str())
+                .and_then(NoteValue::parse)
+                .unwrap_or(SoundSession::default().grid.value),
+            dotted: grid.get("dotted").and_then(|dotted| dotted.as_bool()).unwrap_or(false),
+            triplet: grid.get("triplet").and_then(|triplet| triplet.as_bool()).unwrap_or(false),
+        },
+        None => SoundSession::default().grid,
+    };
+    SoundSession {
+        sample_rate,
+        timecode_start,
+        metronome,
+        click_volume_db,
+        click_note,
+        click_accent_note,
+        grid,
+    }
+}
+
+/// The clip ids a command was given.
+///
+/// The list is a list of **numbers**: an id that is not a number is not
+/// an id, and a command that took it and looked it up would be a
+/// command looking for a node that cannot be named.
+pub(crate) fn clip_ids_of(value: &serde_json::Value, id: &str) -> Result<Vec<u64>, EngineError> {
+    let list = value.as_array().ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: "the clips are a list of their ids".to_string(),
+    })?;
+    let mut ids = Vec::with_capacity(list.len());
+    for item in list {
+        let Some(number) = item.as_u64() else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "a clip's id is a number".to_string(),
+            });
+        };
+        ids.push(number);
+    }
+    Ok(ids)
 }
 
 /// Put the session's settings back into the document.
-fn set_session(document: &mut Document, session: &SoundSession) {
+pub(crate) fn set_session(document: &mut Document, session: &SoundSession) {
     let mut data = match document.data.as_object() {
         Some(object) => object.clone(),
         None => serde_json::Map::new(),
@@ -238,6 +304,11 @@ fn set_session(document: &mut Document, session: &SoundSession) {
             "click_volume_db": session.click_volume_db,
             "click_note": session.click_note,
             "click_accent_note": session.click_accent_note,
+            "grid": serde_json::json!({
+                "value": session.grid.value.name(),
+                "dotted": session.grid.dotted,
+                "triplet": session.grid.triplet,
+            }),
         }),
     );
     document.data = Json::Object(data);
@@ -4483,7 +4554,10 @@ craftkit_sdk::plugin_anchor!(
     GroupKind,
     Group,
     Ungroup,
-    ReadGroup
+    ReadGroup,
+    SetGrid,
+    ReadGrid,
+    Quantize
 );
 
 #[cfg(test)]

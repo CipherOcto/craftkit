@@ -31,6 +31,10 @@
 //!   variable; samples are derived from them.
 //! - A **meter** event says how many beats are in a bar, and what a beat
 //!   is worth, from a tick onwards.
+//! - A **grid** is a division of the bar ([`Grid`]): the lines a clip is
+//!   put on. The lines are musical, so they move with the tempo, and
+//!   they are counted from the bar line, so that a bar of an odd number
+//!   of beats does not make them drift.
 //!
 //! The conversions are exact inverses at tick boundaries: a tick is a
 //! round number of ticks, and the sample index it maps to is the one a
@@ -52,6 +56,11 @@
     clippy::unreachable
 )]
 #![forbid(unsafe_code)]
+
+/// The **grid**: the lines a thing lands on.
+pub mod grid;
+
+pub use grid::{Grid, NoteValue};
 
 /// An absolute position in the audio stream, counted in samples.
 pub type Samples = i64;
@@ -326,6 +335,21 @@ impl TempoMap {
             return BarBeat { bar, beat: within_bar / per_beat + 1, tick: within_bar % per_beat };
         }
         BarBeat { bar: 1, beat: 1, tick: 0 }
+    }
+
+    /// The tick the bar that holds `tick` starts at.
+    ///
+    /// The **bar line** is where the counting of the bar starts, and a
+    /// grid counts its lines from there: a bar of an odd number of
+    /// beats has no even number of eighths in it, and lines counted
+    /// from the start of the song would drift a little with every bar.
+    pub fn bar_start_tick_at(&self, tick: i64) -> i64 {
+        let tick = tick.max(0);
+        let bar_beat = self.bar_beat_at_tick(tick);
+        let (_, denominator) = self.meter_at_tick(tick);
+        let per_beat = ticks_per_beat(denominator);
+        let within_bar = (bar_beat.beat - 1) * per_beat + bar_beat.tick;
+        (tick - within_bar).max(0)
     }
 
     /// The meter segments of the map, in tick order.

@@ -143,7 +143,7 @@ impl Group {
         if name.is_empty() {
             return Err(EngineError::Failed { id, message: "a group has a name".to_string() });
         }
-        let clips = clip_ids_of(&self.clips, &id)?;
+        let clips = crate::clip_ids_of(&self.clips, &id)?;
         if clips.len() < 2 {
             return Err(EngineError::Failed {
                 id,
@@ -213,7 +213,7 @@ pub struct Ungroup {
 impl Ungroup {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "sound.clip.ungroup".to_string();
-        let clips = clip_ids_of(&self.clips, &id)?;
+        let clips = crate::clip_ids_of(&self.clips, &id)?;
         let mut left = 0;
         for clip in &clips {
             if session.document().node(*clip).is_none() {
@@ -275,25 +275,6 @@ impl ReadGroup {
             "members": members,
         })))
     }
-}
-
-/// The clip ids a command was given.
-fn clip_ids_of(value: &serde_json::Value, id: &str) -> Result<Vec<u64>, EngineError> {
-    let list = value.as_array().ok_or_else(|| EngineError::Failed {
-        id: id.to_string(),
-        message: "the clips are a list of their ids".to_string(),
-    })?;
-    let mut ids = Vec::with_capacity(list.len());
-    for item in list {
-        let Some(number) = item.as_u64() else {
-            return Err(EngineError::Failed {
-                id: id.to_string(),
-                message: "a clip's id is a number".to_string(),
-            });
-        };
-        ids.push(number);
-    }
-    Ok(ids)
 }
 
 /// Take away the groups that have no clips in them.

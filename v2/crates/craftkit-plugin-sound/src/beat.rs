@@ -36,10 +36,11 @@
 //!
 //! # What this does not do
 //!
-//! - **There is no grid.** The tree's editor quantises a clip to a
-//!   grid, and the grid is a setting of its own — a division of the
-//!   bar. This tree has a tempo map and a beat, and no grid, so
-//!   nothing here snaps a clip to anything.
+//! - **The beat is not put on a grid.** The tree's editor quantises a
+//!   clip to a grid — a division of the bar — and the grid is a setting
+//!   of the session. There is a grid here too, and it puts a clip's
+//!   beat on a grid line; but the beat itself does not know about the
+//!   grid, and a beat that is not on a line is still a beat.
 //! - **The beat is not shown.** A sound document is not a picture
 //!   here (§ the tree's own notes), so the beat is a fact in the
 //!   document and not a mark on a bar.
