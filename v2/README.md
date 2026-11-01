@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1590 tests.** The MCP server links **all fifteen batteries** in, so the
+**1596 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1590 tests
+cargo test          # 1596 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3658,6 +3658,7 @@ so.
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
 
 ### The list of things that are honestly not there: empty
@@ -15378,3 +15379,65 @@ command to touch them.
 - **The tree's note names are not here.** A note is a pitch, a place
   and a length, and it has no name: the tree names a note "C3", and a
   name is for a person to read.
+
+## 224. The taking away of a link
+
+A route between a track and a bus, a track's reading of a bus and a
+send's link to a bus are **relations** and not nodes — and a relation
+is not a node that `node.delete` can take away. So a routing mistake
+in v2 was permanent: the link could be made and never unmade.
+
+### What was built
+
+- The command `sound.route.remove` takes away the **route**: the track
+  stops feeding the bus.
+- The command `sound.track.input.remove` takes away the **reading** of
+  a bus by a track.
+- The command `sound.send.remove` takes away a **send**, and its link
+  goes with it.
+- The command `sound.source.remove` takes away a **source**, and the
+  **asset** it brought goes with it: a document does not need a file
+  that nothing plays.
+- A link that is **not there** is refused, and it is refused by name:
+  a link that was never made is not a link that was taken away.
+
+### What the port found
+
+- **The tree's mixer removes these things and v2 could not.** The tree
+  has `mix.insert_remove` and `mix.send_remove`, and its routes are a
+  property of a track — the tree's track has one output, and setting
+  it again is how a route is changed. Here a track may feed **several**
+  buses, so a route is a list of edges and the taking away of one is a
+  command of its own.
+- **A relation is not a node, and the kit's own `node.delete` cannot
+  reach it.** That is the finding of this arc: the sound battery's
+  links were the one thing in the document that could not be undone,
+  and a document that cannot undo a mistake is a document that keeps
+  it. The sound battery now has commands of its own for the links, and
+  they are the same commands the tree has for the same things.
+- **The tree's source is a file the session names and the session does
+  not lose.** Here a source is a node **and** an asset — the document
+  says it needs the file — so taking the source away takes the asset
+  away with it. A document that keeps a file nothing plays is carrying
+  a file for nothing.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/links.rs`): a route is
+  taken away, a route that is not there is refused, a reading is taken
+  away, a send is taken away, a source is taken away with its asset,
+  and a node that is not a send is refused.
+- **Four commands** (`sound.route.remove`, `sound.track.input.remove`,
+  `sound.send.remove` and `sound.source.remove`). The MCP server now
+  carries **291** commands, and the sound battery carries **80**.
+
+### What it does not settle
+
+- **The tree's inserts are not removed by a command of their own.**
+  They are nodes, and `node.delete` takes them away with their links;
+  the tree has `mix.insert_remove`, and here the insert is a node
+  like any other.
+- **A clip's link to its source is not taken away.** A clip that plays
+  a source says so in its own payload, and clearing that is a change
+  to the clip and not to a link; the tree's clip has a closed kind of
+  content and a clip without a source is not a clip there.
