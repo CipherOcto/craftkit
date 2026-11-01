@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1400 tests.** The MCP server links **all fifteen batteries** in, so the
+**1406 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1400 tests
+cargo test          # 1406 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3638,6 +3638,7 @@ so.
 | the **gain** of a clip | **built.** The level of the clip itself, refused outside its range, and a bypass that keeps the gain instead of throwing it away (§201) | §201 |
 | the **conform** of a clip | **built.** The material is played at the rate that makes it fit the tempo, the tempo of the material is the clip's own, and the beat follows the audio (§202) | §202 |
 | the **name** of a node | **built.** A node has a name and nothing could change it; one command renames any node (§203) | §203 |
+| the **copy** of a node | **built.** A node and everything under it, with the edges copied and the copies joined to the copies (§204) | §204 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13849,3 +13850,83 @@ command for **each** kind of thing — `clip.rename` and `track.rename`
   the name is what a person calls it by: two nodes may have the same
   name, and the kit does not pretend otherwise. The tree's rename has
   the same rule.
+
+## 204. The copy of a node
+
+The tree this ports has a command to duplicate each kind of thing — a
+track is duplicated with its playlists and its clips, and everything
+else is duplicated with whatever is under it. The kit had no command
+to copy a node at all, and a document in which nothing can be copied
+is a document in which every copy is made by hand.
+
+### What was built
+
+- The command `node.duplicate` copies **any** node and everything
+  under it.
+- The copy is a **new thing** with new ids: a track is copied with its
+  playlists and its clips, and a group is copied with what is in it.
+- The **edges** are copied, and an edge that joins two copied things
+  joins the **copies**: the copy of a clip still plays the same source,
+  and the copy of a track is still on the same layer.
+- A copied child goes under the **copy** of its parent, and not under
+  the thing it was copied from.
+- The copy may be **named**, and without a name it is the node's own
+  name with `.dup` on the end.
+
+### What the port found
+
+- **The tree's duplicate is one for a track, and the kit's is one for
+  every node.** The tree's `track.duplicate` copies the track, its
+  playlists and its clips, and gives the clips new ids while their
+  contents stay. It also has flags — *without the playlists*, *without
+  the automation*, *without the inserts*, *without the sends* — so a
+  caller can ask for a copy with less in it. Here the copy is the whole
+  node, and a caller who wants less copies less: the flags are a way
+  of asking for a different thing, and the kit does not have a way of
+  asking for a different thing here.
+- **The tree's copy keeps the name of the thing it copied, with
+  `.dup` on the end — and makes it unique.** The tree's
+  `unique_track_name` adds a number when the name is taken, so the
+  second copy of a track is called `drums.dup2` and the third
+  `drums.dup3`. Here the name is the name that was asked for: the kit
+  does not pretend that names are unique — a node's id is its
+  identity and its name is what a person calls it by — so two copies
+  may have the same name, and the tree's numbering was there to answer
+  a question the kit does not ask.
+- **The tree's copies are copies of the contents, and here the copy is
+  a copy of the node.** The tree's duplicate clones the track's
+  **struct**: the same fields, a new id, and the clips inside it with
+  new ids. Everything a track knows about itself is in that struct,
+  so the clone is complete. Here a node is a node in a document: it
+  has a payload, a place, an appearance and **edges**, and the edges
+  are the half of a node that is not in the node. So the copy copies
+  the edges as well — and an edge that joins two copied things joins
+  the copies, which is the part a struct clone cannot do: the tree's
+  cloned clip points at the same source because the source was in the
+  struct, and a copied group here points at the copied group.
+- **The tree skips what it cannot copy and here it is refused.** The
+  tree's duplicate walks the tracks and *skips* the ones that are not
+  there, and it answers with the list of the ids it made. Here the
+  node that is not there is **refused by name**, before anything is
+  copied.
+
+### What it cost
+
+- **Six tests** in the studio (`tests/duplicate.rs`): a node is
+  duplicated, what is under it is copied too, the edges are copied,
+  the copy may be named, a node that is not there is refused, and — with
+  the sound feature on — a track is duplicated with its clips and the
+  copy's clip still plays the same source.
+- **One command** (`node.duplicate`). The MCP server now carries
+  **257** commands.
+
+### What it does not settle
+
+- **The tree's flags are not here.** The tree can copy a track without
+  its playlists, without its automation, without its inserts and
+  without its sends. Here the copy is the whole node.
+- **A copy is not a reference.** The copy is a new thing: it has its
+  own payload, and changing it changes nothing but itself. The tree's
+  duplicate is the same, and the kit's **appearance** is the opposite
+  — two things sharing one appearance is a reference, and a copy is
+  not.
