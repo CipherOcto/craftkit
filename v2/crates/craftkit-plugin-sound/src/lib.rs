@@ -15,9 +15,10 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **twenty-eight commands**, one for each thing a person does to a
+//! - **twenty-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
-//!   clip, make a take, choose the take that is played, set the tempo,
+//!   clip, space the clips against each other, make a take, choose the
+//!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
@@ -1747,6 +1748,128 @@ impl TrimClip {
                 "offset": trimmed.offset,
             }),
         ))
+    }
+}
+
+/// Space the **clips** against each other.
+///
+/// The clips are butted together: each one starts where the last one
+/// ended, with a **gap** between them. The tree's editor does this when
+/// the pieces of a take are laid out by hand.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.space",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip"),
+    mutates,
+    undoable
+)]
+pub struct SpaceClips {
+    /// The clips to space: their ids.
+    pub clips: serde_json::Value,
+    /// The gap between them, in samples.
+    pub gap: Number,
+    /// `end-to-start` — each clip starts where the last one ended — or
+    /// `start-to-start`, which keeps their starts the same distance
+    /// apart. The first one if it is left out.
+    pub mode: Option<Text>,
+}
+
+impl SpaceClips {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.space".to_string();
+        let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: "the clips to space are a list of their ids".to_string(),
+        })?;
+        let mut ids: Vec<u64> = Vec::with_capacity(list.len());
+        for item in list {
+            let Some(number) = item.as_u64() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a clip's id is a number".to_string(),
+                });
+            };
+            ids.push(number);
+        }
+        if ids.len() < 2 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "two or more clips are spaced".to_string(),
+            });
+        }
+        let gap = self.gap.0;
+        if !gap.is_finite() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a gap is a number of samples".to_string(),
+            });
+        }
+        let gap = gap.round() as i64;
+        if gap < 0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a gap is not a negative number of samples".to_string(),
+            });
+        }
+        let start_to_start = match &self.mode {
+            Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
+                "end-to-start" | "end_to_start" => false,
+                "start-to-start" | "start_to_start" => true,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the mode `{other}` is not one of the two"),
+                    });
+                }
+            },
+            None => false,
+        };
+        // The **clips** and where they are now.
+        let mut clips: Vec<(u64, i64, i64)> = Vec::with_capacity(ids.len());
+        for clip_id in &ids {
+            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            clips.push((*clip_id, payload.start, payload.length));
+        }
+        clips.sort_by_key(|(clip_id, start, _)| (*start, *clip_id));
+        // The **new** places: each clip butts against the last one.
+        let mut moved: Vec<(u64, i64)> = Vec::with_capacity(clips.len());
+        let mut current = clips[0].1;
+        for (clip_id, start, length) in &clips {
+            let at = if moved.is_empty() { *start } else { current };
+            moved.push((*clip_id, at.max(0)));
+            current = if start_to_start { at + gap } else { at + length + gap };
+        }
+        for (clip_id, at) in &moved {
+            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            payload.start = *at;
+            if let Some(node) = session.document_mut()?.node_mut(*clip_id) {
+                node.data = payload.to_json();
+            }
+        }
+        let count = moved.len();
+        Ok(Outcome::changed(format!("spaced {count} clip(s)")).with_data(serde_json::json!({
+            "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
+            "gap": gap,
+        })))
     }
 }
 
