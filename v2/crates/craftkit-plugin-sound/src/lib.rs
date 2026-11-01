@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **thirty-six commands**, one for each thing a person does to a
+//! - **thirty-seven commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -24,7 +24,7 @@
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, set
 //!   the **beat** of a clip and take it away, lock a clip's **content**
-//!   and its **place**, and
+//!   and its **place**, rate a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -58,6 +58,13 @@
 //! place inside a clip where the beat falls as a number, and zero means
 //! *none* — so a clip whose beat is at its very first sample cannot say
 //! so. Here it is an option, and a beat at the head is a beat.
+//!
+//! **A clip's colour is the kit's appearance.** The tree's sound
+//! editor has a command of its own for the colour of a clip, a tint
+//! for its bar on the timeline. The kit already says how every node is
+//! drawn — an **appearance** is the colour a node is filled with, and
+//! one command sets it on any node — so the battery has no command for
+//! it, and the clip's colour is the appearance the clip carries.
 //!
 //! # What this does not do
 //!
@@ -99,6 +106,9 @@ mod beat;
 // The **locks** on a clip: what may not change, and what may not move.
 mod locks;
 
+// The **marks** on a clip: what a person has said about it.
+mod marks;
+
 use std::collections::HashMap;
 
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
@@ -107,6 +117,7 @@ use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
 pub use locks::{EditLock, TimeLock};
+pub use marks::SetRating;
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
@@ -431,6 +442,7 @@ impl ClipKind {
             "fade_in": clip.fade_in.to_json(),
             "fade_out": clip.fade_out.to_json(),
             "sync": clip.sync,
+            "rating": clip.rating,
         }))
     }
 }
@@ -951,6 +963,11 @@ pub(crate) struct ClipPayload {
     /// A locked clip stays where it is: it is not spaced and not
     /// snapped.
     pub(crate) time_locked: bool,
+    /// How many **stars** the clip is rated.
+    ///
+    /// From none to five. Zero is a rating — the clip has none — and
+    /// not the absence of one, so every clip carries a rating.
+    pub(crate) rating: u8,
 }
 
 /// The most a clip may be stretched.
@@ -976,6 +993,7 @@ impl ClipPayload {
             "sync": self.sync,
             "edit_locked": self.edit_locked,
             "time_locked": self.time_locked,
+            "rating": self.rating,
         })
     }
 
@@ -1010,6 +1028,26 @@ impl ClipPayload {
             sync: value.get("sync").and_then(|sync| sync.as_i64()),
             edit_locked: value.get("edit_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
             time_locked: value.get("time_locked").and_then(|locked| locked.as_bool()).unwrap_or(false),
+            rating: match value.get("rating").and_then(|rating| rating.as_f64()) {
+                None => 0,
+                Some(rating) => {
+                    // A rating read from a file is a number like any
+                    // other, and a rating of nine stars is not a
+                    // rating: the file is refused rather than
+                    // believed.
+                    if !rating.is_finite()
+                        || rating.fract() != 0.0
+                        || rating < 0.0
+                        || rating > crate::marks::MAX_RATING as f64
+                    {
+                        return Err(format!(
+                            "a rating is from none to {} stars, and {rating} is not a rating",
+                            crate::marks::MAX_RATING
+                        ));
+                    }
+                    rating as u8
+                }
+            },
         })
     }
 }
@@ -1529,6 +1567,7 @@ impl AddClip {
             sync: None,
             edit_locked: false,
             time_locked: false,
+            rating: 0,
         };
         let name = match &self.name {
             Some(name) => name.0.clone(),
@@ -4430,7 +4469,8 @@ craftkit_sdk::plugin_anchor!(
     RemoveBeat,
     ReadBeat,
     EditLock,
-    TimeLock
+    TimeLock,
+    SetRating
 );
 
 #[cfg(test)]
