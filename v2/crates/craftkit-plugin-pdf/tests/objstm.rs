@@ -86,9 +86,9 @@ fn the_objects_of_an_object_stream_are_read() {
     let objects = objects_of(&mut session, stream);
     assert_eq!(objects.len(), 2, "the stream holds two objects");
     assert_eq!(objects[0]["object"], json!(5), "the first is object five");
-    assert_eq!(objects[0]["value"], json!([["/Type", "/Page"]]), "and it says what it is");
+    assert_eq!(objects[0]["value"], json!([["Type", "Page"]]), "and it says what it is");
     assert_eq!(objects[1]["object"], json!(6), "the second is object six");
-    assert_eq!(objects[1]["value"], json!([["/Type", "/Pages"]]), "and it says what it is");
+    assert_eq!(objects[1]["value"], json!([["Type", "Pages"]]), "and it says what it is");
 }
 
 /// An object may be a **value** and not a dictionary: a number, a
@@ -102,7 +102,7 @@ fn the_values_of_an_object_are_read() {
     let stream = an_object_stream(&mut session, &directory, "values.bin", bytes, 4, 18);
     let objects = objects_of(&mut session, stream);
     assert_eq!(objects[0]["value"], json!("a"), "a string is a string");
-    assert_eq!(objects[1]["value"], json!("/Name"), "a name is a name");
+    assert_eq!(objects[1]["value"], json!("Name"), "a name is a name");
     assert_eq!(
         objects[2]["value"],
         json!([1.0, 2.0, true, null, { "ref": [11.0, 0.0] }]),

@@ -206,7 +206,10 @@ fn name(bytes: &[u8], at: usize) -> Result<(String, usize), Error> {
             name.push(byte);
         }
     }
-    Ok((format!("/{}", String::from_utf8_lossy(&name)), at))
+    // A name is a **string without its slash**, which is the kit's
+    // spelling: the payload holds what the file says, and the file's
+    // own keys and names are written the same way.
+    Ok((String::from_utf8_lossy(&name).to_string(), at))
 }
 
 /// A **literal string**: `(text)`.
@@ -307,6 +310,96 @@ fn dictionary(bytes: &[u8], at: usize) -> Result<(Json, usize), Error> {
         pairs.push(Json::Array(vec![Json::String(key), value]));
         at = after;
     }
+}
+
+/// An **indirect object**: the header, the value, and the stream.
+///
+/// An indirect object is how a file holds an object: the number and
+/// the generation, the word `obj`, the object itself, and — when the
+/// object is a stream — the bytes after the word `stream`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Indirect {
+    /// The object's number in the file.
+    pub number: u64,
+    /// Its generation.
+    pub generation: u64,
+    /// What the object says.
+    pub value: Json,
+    /// The bytes of the stream, and where they are in the file.
+    pub stream: Option<(usize, usize)>,
+}
+
+/// Read an **indirect object**, and where it ended.
+pub fn indirect(bytes: &[u8], at: usize) -> Result<(Indirect, usize), Error> {
+    let mut at = skip_space(bytes, at);
+    let (number, after) = integer(bytes, at)?;
+    let (generation, after) = integer(bytes, after)?;
+    at = skip_space(bytes, after);
+    if bytes.get(at..at + 3) != Some(b"obj") {
+        return Err(Error::Malformed("the object does not begin with `obj`".to_string()));
+    }
+    at = skip_space(bytes, at + 3);
+    let (value, after) = value(bytes, at)?;
+    let number = u64::try_from(number)
+        .map_err(|_| Error::Malformed("an object's number is not a whole number".to_string()))?;
+    let generation = u64::try_from(generation)
+        .map_err(|_| Error::Malformed("an object's generation is not a whole number".to_string()))?;
+    // The **stream**: the word, and then the bytes.
+    let after = skip_space(bytes, after);
+    if bytes.get(after..after + 6) != Some(b"stream") {
+        return Ok((Indirect { number, generation, value, stream: None }, after));
+    }
+    let mut data_at = after + 6;
+    if bytes.get(data_at) == Some(&b'\r') {
+        data_at += 1;
+    }
+    if bytes.get(data_at) == Some(&b'\n') {
+        data_at += 1;
+    }
+    // The **length**: the dictionary says how long the stream is, and
+    // when it does not, the stream ends where `endstream` is.
+    let length = length_of(&value).and_then(|length| length.as_f64()).map(|length| length as usize);
+    let end = match length {
+        Some(length) => data_at
+            .checked_add(length)
+            .filter(|end| *end <= bytes.len())
+            .ok_or_else(|| Error::Malformed("the stream is longer than the file".to_string()))?,
+        None => find_endstream(bytes, data_at)
+            .ok_or_else(|| Error::Malformed("the stream is never closed".to_string()))?,
+    };
+    Ok((Indirect { number, generation, value, stream: Some((data_at, end - data_at)) }, end))
+}
+
+/// The **length** of a stream, from its dictionary.
+fn length_of(value: &Json) -> Option<Json> {
+    let list = value.as_array()?;
+    for pair in list {
+        let pair = pair.as_array()?;
+        if pair.first().and_then(|key| key.as_str()) == Some("/Length") {
+            return pair.get(1).cloned();
+        }
+    }
+    None
+}
+
+/// Where the word `endstream` is, from a place onwards.
+fn find_endstream(bytes: &[u8], from: usize) -> Option<usize> {
+    let mut at = from;
+    while at < bytes.len() {
+        if bytes.get(at..at + 9) == Some(b"endstream") {
+            // The line before the word is the end of the data.
+            let mut end = at;
+            if end > from && bytes[end - 1] == b'\n' {
+                end -= 1;
+            }
+            if end > from && bytes[end - 1] == b'\r' {
+                end -= 1;
+            }
+            return Some(end);
+        }
+        at += 1;
+    }
+    None
 }
 
 /// The **pairs** of a dictionary, and where the dictionary ended.

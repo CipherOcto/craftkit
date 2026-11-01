@@ -192,7 +192,7 @@ fn stream(bytes: &[u8], at: usize) -> Result<Xref, Error> {
     if bytes.get(at) == Some(&b'\n') {
         at += 1;
     }
-    let length = value_of("/Length")
+    let length = value_of("Length")
         .and_then(|length| length.as_f64())
         .map(|length| length as u64)
         .ok_or_else(|| Error::Unsupported("the table's length is not a number".to_string()))?;
@@ -205,7 +205,7 @@ fn stream(bytes: &[u8], at: usize) -> Result<Xref, Error> {
         .get(at..end)
         .ok_or_else(|| Error::Malformed("the table's data is past the end of the file".to_string()))?;
     // The **filter**, if the table is compressed.
-    let filters: Vec<String> = match value_of("/Filter") {
+    let filters: Vec<String> = match value_of("Filter") {
         Some(Json::String(name)) => vec![name],
         Some(Json::Array(names)) => {
             names.iter().filter_map(|name| name.as_str().map(|name| name.to_string())).collect()
@@ -216,7 +216,7 @@ fn stream(bytes: &[u8], at: usize) -> Result<Xref, Error> {
     let data = filters::decode_named(&filters, data, &limits)
         .map_err(|error| Error::Malformed(format!("the table cannot be decoded: {error:?}")))?;
     // The **widths**: how many bytes each field takes.
-    let widths: Vec<usize> = value_of("/W")
+    let widths: Vec<usize> = value_of("W")
         .and_then(|widths| widths.as_array().cloned())
         .map(|widths| widths.iter().filter_map(|width| width.as_f64().map(|width| width as usize)).collect())
         .ok_or_else(|| Error::Unsupported("the table does not say how wide its fields are".to_string()))?;
@@ -228,12 +228,12 @@ fn stream(bytes: &[u8], at: usize) -> Result<Xref, Error> {
         return Err(Error::Unsupported("the table's fields are no width at all".to_string()));
     }
     // The **subsections**: which objects the table holds.
-    let index: Vec<u64> = match value_of("/Index") {
+    let index: Vec<u64> = match value_of("Index") {
         Some(Json::Array(list)) => {
             list.iter().filter_map(|number| number.as_f64().map(|number| number as u64)).collect()
         }
         _ => {
-            let size = value_of("/Size")
+            let size = value_of("Size")
                 .and_then(|size| size.as_f64())
                 .map(|size| size as u64)
                 .ok_or_else(|| Error::Unsupported("the table does not say how big it is".to_string()))?;

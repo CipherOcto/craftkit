@@ -11,9 +11,13 @@
 //! file.
 //!
 //! That is the part this battery ports — the **object model** (ISO
-//! 32000-2 §7.3), not the file: the cross-reference table, the
-//! incremental save and the parser are the *file*, and a v2 document
-//! is not a PDF file.
+//! 32000-2 §7.3). The file around it comes in pieces: the
+//! **cross-reference table** is read (the module `xref`), the
+//! **objects** are read (the module `objects`), and the **loader**
+//! puts a file into the document — its objects as nodes, its
+//! references as relations, and the bytes of its streams into files of
+//! their own, beside the document. What is still not here is the
+//! **writer**: a v2 document is not a PDF file yet.
 //!
 //! One part of the file is here as well, because it is not the file but
 //! the **bytes** in it: the **filters** — the ways a stream's bytes may
@@ -68,6 +72,7 @@
 
 mod content;
 mod filters;
+mod loader;
 mod objects;
 mod predictors;
 mod xref;
@@ -763,6 +768,111 @@ impl ReadXref {
     }
 }
 
+/// Load a PDF **file** into the document.
+///
+/// The file's own index says where its objects are, and the loader
+/// reads them: every object becomes a **node**, and every reference
+/// becomes a **relation**. The bytes of a stream go into a file of
+/// their own, beside the document, because the bytes are not the
+/// document.
+#[derive(Command)]
+#[command(id = "pdf.file.load", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
+pub struct LoadFile {
+    /// The file to read.
+    pub path: Text,
+    /// Where the **streams' bytes** go: a directory of this file's own.
+    pub into: Text,
+}
+
+impl LoadFile {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let path = self.path.0.clone();
+        if path.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.file.load".to_string(),
+                message: "a file has a path".to_string(),
+            });
+        }
+        let into = self.into.0.clone();
+        if into.trim().is_empty() {
+            return Err(EngineError::Failed {
+                id: "pdf.file.load".to_string(),
+                message: "the streams' bytes go somewhere".to_string(),
+            });
+        }
+        let limits = filters::Limits::default();
+        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+            .map_err(|message| EngineError::Failed {
+            id: "pdf.file.load".to_string(),
+            message: format!("the file cannot be read: {message}"),
+        })?;
+        let objects = loader::load(&bytes).map_err(|error| EngineError::Failed {
+            id: "pdf.file.load".to_string(),
+            message: format!("the file cannot be loaded: {error:?}"),
+        })?;
+        std::fs::create_dir_all(&into).map_err(|error| EngineError::Failed {
+            id: "pdf.file.load".to_string(),
+            message: format!("the streams' bytes have nowhere to go: {error}"),
+        })?;
+        // The **first pass**: the objects. A reference may point
+        // forward, so every object is in the document before any
+        // reference is made.
+        let mut nodes: Vec<(u64, u64)> = Vec::with_capacity(objects.len());
+        for object in &objects {
+            let entries: Vec<serde_json::Value> =
+                object.entries.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
+            let data = serde_json::json!({ "object": object.number, "entries": entries });
+            let has_stream = object.stream.is_some();
+            let name = if has_stream {
+                format!("stream {}", object.number)
+            } else {
+                format!("object {}", object.number)
+            };
+            let kind = if has_stream { "pdf.stream" } else { "pdf.object" };
+            let id = session.document_mut()?.add_node_with(name, kind, None, data);
+            if let Some(stream) = &object.stream {
+                // The **bytes** are in a file of their own.
+                let stream_path = format!("{into}/{}.bin", object.number);
+                std::fs::write(&stream_path, stream).map_err(|error| EngineError::Failed {
+                    id: "pdf.file.load".to_string(),
+                    message: format!("the stream's bytes cannot be written: {error}"),
+                })?;
+                if let Some(node) = session.document_mut()?.node_mut(id) {
+                    node.stream = Some(stream_path);
+                }
+            }
+            nodes.push((object.number, id));
+        }
+        // The **second pass**: the references.
+        let mut relations = 0_usize;
+        for object in &objects {
+            let Some((_, from)) = nodes.iter().find(|(number, _)| *number == object.number) else {
+                continue;
+            };
+            for reference in &object.references {
+                let Some((_, to)) = nodes.iter().find(|(number, _)| *number == reference.number) else {
+                    continue;
+                };
+                let payload = serde_json::json!({
+                    "key": reference.key,
+                    "generation": reference.generation,
+                });
+                let relation = craftkit_sdk::Relation::with_payload(*from, *to, "ref", payload);
+                if session.document_mut()?.add_relation(relation) {
+                    relations += 1;
+                }
+            }
+        }
+        let count = objects.len();
+        Ok(Outcome::changed(format!("loaded {count} object(s)")).with_data(serde_json::json!({
+            "path": path,
+            "into": into,
+            "objects": count,
+            "relations": relations,
+        })))
+    }
+}
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -963,6 +1073,7 @@ craftkit_sdk::plugin_anchor!(
     ContentOperators,
     ReadObjectStream,
     ReadXref,
+    LoadFile,
     AddReference,
     ListReferences,
     GraphEvaluator,
