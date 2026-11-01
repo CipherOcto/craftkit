@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1278 tests.** The MCP server links **all fifteen batteries** in, so the
+**1281 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1278 tests
+cargo test          # 1281 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3617,6 +3617,7 @@ so.
 | a **file loaded into the document** | **built.** The objects of a file become nodes, its references become relations, and the bytes of its streams go into files of their own (§180) | §180 |
 | a **reader that feeds a bus** | **built.** The buses and the readers are mixed in the order their routes say, and a mix that loops is refused (§181) | §181 |
 | the **outline of a line** | **built.** The shape a stroke covers is a path of its own, which may be filled, measured and cut (§182) | §182 |
+| a **file written out** | **built.** The document is written out as a PDF file, and the file that comes out is read back (§183) | §183 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12338,3 +12339,66 @@ v2's geometry library could not make it, and no command asked for it.
 - **The outline is not in the file format.** It is a path, so it is —
   but there is no "outline" of a path in the tree's own format, and
   the outline here is a path like any other.
+
+---
+
+## 183. The document, written out as a file
+
+The reader reads a file into the document; the **writer** writes the
+document out as a file. The two are the same questions asked in the
+other order: where each object is, and what it says. v2's PDF battery
+could read a file and could not write one.
+
+### What was built
+
+- The module `writer` writes the **objects** — each with its number and
+  the word `obj` — the **cross-reference table** that says where they
+  are, and the **trailer**, which says how many there are and which
+  one is the root.
+- The command `pdf.file.write` writes the document out: every object
+  of the battery becomes an object of the file, and a **stream** takes
+  its bytes from the file they live in.
+- The root is the object that was named, or the one whose type is
+  `Catalog`; a document with neither has no root, and the refusal says
+  so.
+- A file that was read in and written out is **read back** — the same
+  objects, and the same references between them.
+
+### What the port found
+
+- **A name and a text had to be told apart.** The payload holds a
+  **name** as a plain string — the kit's spelling, and the one every
+  other command uses — and a **text** string as `{"string": …}`, so
+  that the writer knows that `/Title` is a name and `(Hello)` is a
+  text. §180 said the two look alike; this is the price of that, paid
+  in the loader.
+- **The length of a stream is in its dictionary, and the writer puts
+  it there.** The file's own dictionary says how long the stream is,
+  and the writer writes the number it has — so the length is never
+  guessed and never wrong.
+- **The table is a list of subsections.** The object numbers of a
+  document are not necessarily consecutive, and the table says so: a
+  subsection is a first object and a count, and the numbers that are
+  not next to each other are in subsections of their own.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/writer.rs`): a file is written
+  out again, the file that is written is read back, and a document
+  with no root is refused.
+- **One command** (`pdf.file.write`). The MCP server now carries
+  **224** commands.
+
+### What it does not settle
+
+- **The file that is written is a plain file.** No encryption, no
+  object stream, and the classic table — a file that a reader must
+  understand is a file that every reader understands.
+- **The streams are written as they are.** A stream whose bytes are
+  compressed in the document is written out compressed, and the
+  dictionary says so — but the writer does not compress anything
+  itself.
+- **The document's own format is not the file's.** A v2 document is a
+  tree of nodes and relations; a PDF file is a list of objects and a
+  table. The loader and the writer are the two ends of the gap, and
+  the gap is still there in the middle.
