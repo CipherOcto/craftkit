@@ -15,9 +15,10 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead` and `sound.source`;
-//! - **thirty-one commands**, one for each thing a person does to a
+//! - **thirty-two commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
-//!   clip, space the clips against each other, loop a clip and take the
+//!   clip, space the clips against each other, snap a clip to its
+//!   neighbour, loop a clip and take the
 //!   loop away, make a take, choose the
 //!   take that is played, set the tempo,
 //!   set the meter, make a marker, make a source, set the session, and
@@ -2258,6 +2259,162 @@ fn the_next_start(
         next = Some(next.map_or(other.start, |best: i64| best.min(other.start)));
     }
     next
+}
+
+/// Snap a clip to its **neighbour**.
+///
+/// The tree's editor has a menu — *Edit ▸ Snap to* — with two items in
+/// it: **Next** moves a clip so that its end meets the start of the
+/// clip that follows it, and **Previous** moves a clip so that its
+/// start meets the end of the clip that comes before it.
+///
+/// The tree's editor snaps the clip **nearest the destination first**,
+/// so that the neighbours stay where they are: a row of clips that are
+/// snapped together does not pile itself up on one clip.
+///
+/// The clips that are named are the destinations too. The tree's
+/// editor found that out the hard way — ignoring the selected
+/// neighbours made *Snap to Next* pile every selected clip onto the
+/// same later clip, and made *Snap to Previous* leave the gap between
+/// the selected clips in place.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.snap",
+    area = "sound",
+    layer = "sound",
+    icon = "trim",
+    menu("Clip", "Snap to"),
+    mutates,
+    undoable
+)]
+pub struct SnapClip {
+    /// The clips to snap: their ids.
+    pub clips: serde_json::Value,
+    /// `next` — each clip's end meets the start of the clip that
+    /// follows it. `previous` — each clip's start meets the end of the
+    /// clip that comes before it.
+    pub direction: Text,
+}
+
+impl SnapClip {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.snap".to_string();
+        let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: "the clips to snap are a list of their ids".to_string(),
+        })?;
+        let mut ids: Vec<u64> = Vec::with_capacity(list.len());
+        for item in list {
+            let Some(number) = item.as_u64() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a clip's id is a number".to_string(),
+                });
+            };
+            ids.push(number);
+        }
+        if ids.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "there is no clip to snap".to_string(),
+            });
+        }
+        let next = match self.direction.0.trim().to_ascii_lowercase().as_str() {
+            "next" => true,
+            "previous" => false,
+            other => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the direction `{other}` is not one of the two"),
+                });
+            }
+        };
+        // The **clips** and where they are now.
+        let mut order: Vec<(u64, i64, i64, u64)> = Vec::with_capacity(ids.len());
+        for clip_id in &ids {
+            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            // The **list** the clip is in: the playlist under the
+            // track, or the track itself. A clip's neighbours are the
+            // clips of its own list — a take is a list of clips of its
+            // own, and a clip in another take is not on this timeline.
+            let list =
+                timeline::parent_of(session.document(), *clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is on no playlist"),
+                })?;
+            order.push((*clip_id, payload.start, payload.length, list.id));
+        }
+        // The clip **nearest the destination** is snapped first, so that
+        // the neighbours stay where they are.
+        order.sort_by_key(|(_, start, _, _)| if next { -*start } else { *start });
+        let mut moved: Vec<(u64, i64)> = Vec::with_capacity(order.len());
+        for (clip_id, start, length, list) in order {
+            let end = start.saturating_add(length);
+            // The **neighbour**: the clip the destination is. The clips
+            // that are named are neighbours too.
+            let delta = if next {
+                clips_in(session.document(), list)
+                    .into_iter()
+                    .filter(|(other, _)| *other != clip_id)
+                    .map(|(_, payload)| payload.start)
+                    .filter(|other_start| *other_start >= end)
+                    .min()
+                    .map(|other_start| other_start - end)
+            } else {
+                clips_in(session.document(), list)
+                    .into_iter()
+                    .filter(|(other, _)| *other != clip_id)
+                    .map(|(_, payload)| (payload.start, payload.start.saturating_add(payload.length)))
+                    .filter(|(_, other_end)| *other_end <= start)
+                    .map(|(_, other_end)| other_end)
+                    .max()
+                    .map(|other_end| other_end - start)
+            };
+            // A clip that is already against its neighbour is not
+            // moved: there is nothing to snap.
+            let Some(delta) = delta.filter(|delta| *delta != 0) else { continue };
+            let at = start.saturating_add(delta).max(0);
+            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                let mut payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                payload.start = at;
+                node.data = payload.to_json();
+            }
+            moved.push((clip_id, at));
+        }
+        let count = moved.len();
+        Ok(Outcome::changed(format!("snapped {count} clip(s)")).with_data(serde_json::json!({
+            "moved": count,
+            "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
+        })))
+    }
+}
+
+/// The **clips** in a list, with what they say.
+///
+/// A list is a playlist under a track, or a track that holds its clips
+/// itself. A clip's neighbours are the clips of the list it is in.
+fn clips_in(document: &craftkit_sdk::document::Document, list: u64) -> Vec<(u64, ClipPayload)> {
+    let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
+    for node in document.walk().filter(|node| node.kind == "sound.clip") {
+        if timeline::parent_of(document, node.id).map(|parent| parent.id) != Some(list) {
+            continue;
+        }
+        let Ok(payload) = ClipPayload::from_json(&node.data) else { continue };
+        clips.push((node.id, payload));
+    }
+    clips
 }
 
 /// Set the tempo.
