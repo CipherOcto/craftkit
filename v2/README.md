@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1488 tests.** The MCP server links **all fifteen batteries** in, so the
+**1497 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1488 tests
+cargo test          # 1497 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3646,6 +3646,7 @@ so.
 | the **processes** on a clip | **built.** A name and its parameters, done in order, refused when the name is not one this battery knows (§209) | §209 |
 | the **pan** of a track | **built.** A balance from minus one to one, the default of the pan lane, applied when the track is routed (§210) | §210 |
 | the **stems** of a session | **built.** The mix with one track in it, one file for each track, written into a directory (§211) | §211 |
+| the **separation** of a clip | **built.** One clip becomes two at a place inside it, and the two are the same sound (§212) | §212 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14531,3 +14532,76 @@ several.
 - **The tree bounces a range.** The tree's bounce takes the start and
   the end of what is bounced; here the whole document is bounced, as
   the render does.
+
+## 212. The separation of a clip
+
+The tree's editor can **separate** a take: every clip that crosses a
+place on the track becomes two clips, and the two are the same sound
+with a line between them. It is how a take is cut into parts — a
+drum loop into its hits, a phrase into its notes. This tree had no way
+to cut a clip in two: a clip was one thing from its start to its end.
+
+### What was built
+
+- The command `sound.clip.separate` cuts a clip at a place **inside**
+  it, and the clip becomes two clips under the same take.
+- The two pieces are the **same sound**: the first keeps the head of
+  the clip and the second keeps the tail, and the second starts later
+  in the source by the distance the cut made — **divided by the
+  stretch**, because a stretched clip's source is read more slowly.
+- The **beat** moves with the audio it is in: a beat that the cut left
+  in the other piece is not a beat of this one.
+- The **fade** at the cut is dropped: the tree drops it too, because a
+  fade that ended at the cut would be a fade of nothing.
+- A place that is **not inside** the clip is refused — at its edge and
+  outside it alike — because there is nothing to separate.
+
+### What the port found
+
+- **The tree separates a place on a track and this tree separates a
+  clip.** The tree's separate takes the track and the place and splits
+  every clip that crosses it, so one command can cut a whole take.
+  Here one clip is separated at one place. The tree's own editor does
+  the same thing one clip at a time, and the place is inside the clip
+  there too: the tree's `split_clip` refuses a place at the clip's
+  edge or outside it.
+- **The tree's cut is two trims.** The tree's `split_clip` trims the
+  clip to end at the place and trims a copy to start there — and the
+  trims move the content and the beat, because that is what a trim
+  does. Here the two pieces are made directly, and the content moves
+  by the delta **divided by the stretch**, the same fact the trim
+  command uses (§185).
+- **The tree drops the fade at the cut and so does this.** The tree's
+  split sets the left piece's fade-out and the right piece's fade-in
+  to nothing, because a fade that ended at the cut would be a fade of
+  nothing.
+- **The tree's pieces are named by an auto-rename scheme and this
+  tree's are not.** The tree gives the new piece the next name of the
+  scheme the clip belongs to, and the piece keeps the clip's name when
+  there is no scheme. Here the piece keeps the name, and the tree's
+  **auto-rename** — a set of names that count up as a take is cut — is
+  not built.
+- **The tree separates on transients and on the grid as well.** The
+  tree can find the places itself: a sound's transients, or the lines
+  of the grid. Here the place is given, and the finding of the places
+  is a piece of analysis this tree does not have.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/separate.rs`): a clip is
+  separated into two, the second piece starts later in the source, a
+  stretched clip is separated by the stretch, the two pieces are heard
+  as one, a place that is not inside the clip is refused, a place at
+  the edge is refused, a locked clip is not separated, a node that is
+  not a clip is refused, and the beat moves with the audio.
+- **One command** (`sound.clip.separate`). The MCP server now carries
+  **268** commands, and the sound battery carries **57**.
+
+### What it does not settle
+
+- **The tree finds the places itself.** Separating on transients needs
+  the sound to be looked at, and separating on the grid needs the grid
+  to be asked; here the place is given.
+- **The tree's auto-rename is not here.** A set of names that count up
+  as a take is cut is a fact about the take, and this tree has one
+  name for a node and a command that changes it.
