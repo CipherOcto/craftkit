@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1378 tests.** The MCP server links **all fifteen batteries** in, so the
+**1387 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1378 tests
+cargo test          # 1387 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3635,6 +3635,7 @@ so.
 | the **marks** of a clip | **built.** The rating of stars is the clip's own, and the colour is the kit's appearance — so the battery has no second way to say it (§198) | §198 |
 | the **group** of a clip | **built.** A group is a node with a name and the clips point at it, so the name is the handle and the membership is an edge (§199) | §199 |
 | the **grid** of the session | **built.** A division of the bar, counted from the bar line, and a clip's beat is put on the nearest line (§200) | §200 |
+| the **gain** of a clip | **built.** The level of the clip itself, refused outside its range, and a bypass that keeps the gain instead of throwing it away (§201) | §201 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13625,3 +13626,81 @@ and the sound battery's own notes said so.
 - **The grid is not shown.** A sound document is not a picture here, so
   the grid is a setting and a set of lines in the plan, and not a row
   of lines on a ruler.
+
+## 201. The gain of a clip
+
+The tree's sound editor has a gain on every clip, a command to set it,
+a pair of commands to nudge it and a third to bypass it. The v2 sound
+battery had a **gain field** in the clip's payload and nothing that set
+it: every clip was played at unity, whatever the document said. The
+field was there and the fact was unreachable.
+
+### What was built
+
+- The command `sound.clip.gain` sets the gain of clips, **absolutely**
+  (`db`) or by a **change** (`delta_db`), and one of the two is
+  needed.
+- A gain outside the range — from minus one hundred and forty-four to
+  thirty-six decibels — is **refused**, and the clips keep the gain
+  they had. A change that would take a clip out of the range is
+  refused as well.
+- The command `sound.clip.gain.bypass` takes the gain out of the path
+  and **keeps** it, and a bypass that is not named is toggled.
+- The **render** and the **waveform** honour the bypass: a bypassed
+  clip is as loud as it is.
+- The clip's kind says the gain and the bypass in the plan.
+
+### What the port found
+
+- **The tree clamps a gain and this tree refuses it.** The tree's
+  `clip.gain` takes any number and clamps it into the range: a gain of
+  a hundred decibels becomes thirty-six, and a gain of minus a
+  thousand becomes minus one hundred and forty-four. A gain asked for
+  as a hundred decibels is not a gain, so here it is refused (§ the
+  kit's own rule: a bound is not negotiable, and a refusal never
+  truncates).
+- **The tree's bypass is a reset and not a bypass.** The tree's
+  `clip.gain_bypass` sets the clip's gain to zero and throws the old
+  gain away — the clip plays as it is, and the gain that was there is
+  gone for good. That is a **reset**, and the name says otherwise: a
+  bypass is a thing that is taken out of the path, and the thing in the
+  path is still there when the bypass is taken off. Here the gain is
+  kept and a flag says that it is out of the path, so the clip plays
+  as it is while the bypass is on and the gain comes back when it is
+  taken off. The tree's version cannot do that: the gain it threw away
+  is gone.
+- **The tree's nudge is a change of a decibel.** The tree has two
+  commands for it — nudge up and nudge down — and each is a change of
+  one decibel. Here a change is a change: `delta_db` says how much,
+  and the tree's two commands are a change of one and a change of
+  minus one.
+- **A field with no command is a fact nobody can change.** The gain
+  was in the clip's payload from the first arc of the battery, and the
+  renderer read it — and nothing could write it, so the field was
+  always zero and the renderer was reading a thing that could not be
+  anything else. A fact that no command can reach is not a fact in the
+  document; it is a field.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/gain.rs`): the gain is
+  set, the gain is changed by a delta, a gain outside the range is
+  refused, a change outside the range is refused, a gain with nothing
+  to say is refused, the gain is bypassed and kept, a bypass that is
+  not named is toggled, the gain is heard, and only a clip has a gain.
+- **Two commands** (`sound.clip.gain` and `sound.clip.gain.bypass`) and
+  **one field** in the clip's payload. The MCP server now carries
+  **254** commands, and the sound battery carries **45**.
+- **Two places changed** — the render and the waveform — because a
+  bypass that nothing asks is a flag and not a bypass.
+
+### What it does not settle
+
+- **The tree's gain envelope is not here.** The tree's clip can carry
+  a **curve** of gain over its length, and its bypass clears the curve
+  as well as the level. There is no envelope on a clip here: the
+  battery's automation is on the **track** (`sound.lane.add`), and a
+  clip's own curve is a different thing.
+- **The tree's gain render is not here.** The tree can render a clip's
+  gain to a file — the sound of the clip with the gain and nothing
+  else — and this battery renders the whole document.
