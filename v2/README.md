@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1577 tests.** The MCP server links **all fifteen batteries** in, so the
+**1581 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1577 tests
+cargo test          # 1581 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3656,6 +3656,7 @@ so.
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **healing** of a track | **built.** The clips that were separated are joined again when they are the same sound continued (§220) | §220 |
 | the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
+| the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed and given a velocity (§217, §218, §219) | §219 |
 
@@ -15239,3 +15240,66 @@ grid (§215), and the sound itself was never listened to.
   quiet parts of a clip and names the pieces that are left; here the
   transients are found and the clip is cut at them, and the quiet parts
   are still in the pieces.
+
+## 222. The stripping of silence
+
+The tree's editor strips silence: it finds the parts of a sound that
+are not silent, cuts the clip at the edges of them, and keeps the loud
+parts. The clip was cut at a place (§212), on the grid (§215) and at
+its transients (§221), and the quiet parts of it were still in it.
+
+### What was built
+
+- The **audio crate** grows `loud_ranges`: the parts of a sound that
+  are loud enough to keep, in the sound's own samples.
+- The command `sound.clip.strip.silence` strips the silence out of a
+  clip: the clip is cut at the edges of the loud parts, the quiet
+  pieces are thrown away, and the loud ones are kept.
+- The **threshold** is how far below the loudest part of the material
+  a part may be and still be kept, in decibels; the **minimum length**
+  is how long a part must be, and a click is not a part; the **pad** is
+  how much silence is kept at each end of a part, so that a part does
+  not begin or end with a click.
+- The kept pieces are **named** from the auto rename scheme (§217), in
+  time order.
+
+### What the port found
+
+- **The tree's pieces are named and the thrown-away ones are not.** The
+  tree names the pieces it keeps, in time order, and the pieces it
+  removes take no name. Here the cut names every piece it makes — the
+  cut is the cut of §212 and it does what it does — so the scheme's
+  number is **put back** before the kept pieces are named: the kept
+  pieces take the numbers of the scheme and nothing is skipped.
+- **The tree's threshold is a level and this one's is too.** The
+  tree's threshold is forty-eight decibels by default and it is
+  measured against the loudest part of the sound; here it is the same
+  number and the same meaning, and a number outside minus ninety-six
+  to zero is clamped into it — the threshold is a knob and not a fact
+  about the sound.
+- **The tree works on a track and a range, and this one works on a
+  clip.** The tree's command takes a track and a selection, because a
+  person strips the part of a track they are looking at. Here the clip
+  is the unit, and the clip is cut and the quiet pieces of it are
+  thrown away.
+- **The tree's silence is of the clip and this one's is of the
+  material.** The tree reads the clip's rendered sound, so a clip that
+  is stretched or processed is heard as it will be played; here the
+  source is read, and the clip's stretch is undone on the way back.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/strip.rs`): the silence
+  is stripped out, the kept parts are named from the scheme, a silent
+  clip is refused, and a clip that plays no sound is refused.
+- **One command** (`sound.clip.strip.silence`). The MCP server now
+  carries **282** commands, and the sound battery carries **71**.
+
+### What it does not settle
+
+- **The tree's three modes are not here.** The tree's command strips
+  the silence, **extracts** it, or separates at every edge and keeps
+  everything; here the silence is stripped, and the other two are not.
+- **The tree's preview is not here.** The tree scans a track without
+  changing it, so that a person can see the ranges before they strip
+  them; here the command strips, and there is no scan to see.
