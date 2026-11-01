@@ -17,13 +17,14 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **ten commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **twelve commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.simplify` and `vector.path.offset` work on whole
-//!   paths; and `vector.path.move` and `vector.path.handle` move a
-//!   point of a path and set the handles of the curves that leave and
-//!   arrive at it;
+//!   paths; `vector.path.move` and `vector.path.handle` move a point of
+//!   a path and set the handles of the curves that leave and arrive at
+//!   it; and `vector.path.fill` and `vector.path.stroke` say what the
+//!   path is painted with;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
 //! - an **evaluator**, `vector.totalarea`.
@@ -620,6 +621,87 @@ impl HandlePoint {
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the handles have moved")
             .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+    }
+}
+
+/// Set the **fill** of a path.
+///
+/// The fill is what is inside the path, and the rule that says what is
+/// inside is the path's own.
+#[derive(Command)]
+#[command(
+    id = "vector.path.fill",
+    area = "vector",
+    layer = "vector",
+    icon = "paint",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct FillPath {
+    /// The path.
+    pub path: NodeRef,
+    /// The colour, as `#rrggbb`.
+    pub colour: Text,
+}
+
+impl FillPath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let colour = parse_colour(&self.colour.0)?;
+        vector.fill = colour;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path is filled")
+            .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.0 })))
+    }
+}
+
+/// Set the **stroke** of a path, or take it away.
+///
+/// The stroke is the line on the path's outline, and it has a colour
+/// and a width. A path with no stroke has no line.
+#[derive(Command)]
+#[command(
+    id = "vector.path.stroke",
+    area = "vector",
+    layer = "vector",
+    icon = "paint",
+    menu("Path", "Paint"),
+    mutates,
+    undoable
+)]
+pub struct StrokePath {
+    /// The path.
+    pub path: NodeRef,
+    /// The colour of the line, as `#rrggbb`.
+    pub colour: Text,
+    /// How wide the line is.
+    pub width: Number,
+    /// Take the line away instead.
+    pub none: Option<craftkit_sdk::Bool>,
+}
+
+impl StrokePath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        if self.none.map(|none| none.0).unwrap_or(false) {
+            vector.stroke = None;
+            write_back(session, self.path.0, &vector)?;
+            return Ok(Outcome::changed("the path has no line")
+                .with_data(serde_json::json!({ "id": self.path.0, "stroke": Json::Null })));
+        }
+        let width = self.width.0;
+        if !width.is_finite() || width < 0.0 {
+            return Err(EngineError::Failed {
+                id: "vector.path.stroke".to_string(),
+                message: "a line's width is a number and not a negative one".to_string(),
+            });
+        }
+        let colour = parse_colour(&self.colour.0)?;
+        vector.stroke = Some(Stroke { colour, width });
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path has a line")
+            .with_data(serde_json::json!({ "id": self.path.0, "width": width })))
     }
 }
 
