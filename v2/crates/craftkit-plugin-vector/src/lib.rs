@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **eighteen commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **nineteen commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -26,7 +26,8 @@
 //!   the curves that leave and arrive at it; `vector.path.fill` and
 //!   `vector.path.stroke` say what the path is painted with;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
-//!   corners and ends are finished; `vector.path.transform` says where
+//!   corners and ends are finished; `vector.path.smooth` makes a point
+//!   of a path smooth; `vector.path.transform` says where
 //!   the path is put; `vector.path.outline` makes the shape a line
 //!   covers into a path of its own; and `vector.path.rule` says which
 //!   parts of it are inside;
@@ -943,6 +944,158 @@ impl TransformPath {
     }
 }
 
+/// Make a point of a path **smooth**.
+///
+/// A smooth point's two handles are collinear and of the same length:
+/// the curve passes through the point as one curve and not as two. The
+/// command makes it so — the handles take the average of the two they
+/// were, and a side that was a straight line becomes a curve.
+#[derive(Command)]
+#[command(
+    id = "vector.path.smooth",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Points"),
+    mutates,
+    undoable
+)]
+pub struct SmoothPoint {
+    /// The path.
+    pub path: NodeRef,
+    /// Which contour of the path, counting from zero. The first one if
+    /// it is left out.
+    pub contour: Option<Number>,
+    /// Which point of the contour, counting from zero.
+    pub point: Number,
+}
+
+impl SmoothPoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
+        let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
+        let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
+        smooth_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
+            id: "vector.path.smooth".to_string(),
+            message: reason,
+        })?;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the point is smooth")
+            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+    }
+}
+
+/// Make a point of a path **smooth**.
+///
+/// The two handles of the point become collinear and of the same
+/// length, and a side that was a straight line becomes a curve with a
+/// handle.
+fn smooth_point(path: &mut Path, contour: usize, point: usize) -> Result<(), String> {
+    let Some(subpath) = path.subpaths.get_mut(contour) else {
+        return Err(format!("the path has no contour {contour}"));
+    };
+    let segments = subpath.segments.len();
+    let count = segments + 1;
+    if point >= count {
+        return Err(format!("the contour has {count} points and not a point {point}"));
+    }
+    // A closed contour may leave its **closing edge** out, and a
+    // handle needs a segment to hold it: the edge is made explicit
+    // when the point needs one.
+    if subpath.closed && closing_segment(subpath).is_none() && (point == 0 || point == segments) {
+        subpath.segments.push(Segment::Line { to: subpath.start });
+    }
+    let leaving = leaving_segment(subpath, point);
+    let arriving = arriving_segment(subpath, point);
+    // The **point** itself: where the two sides meet.
+    let at = match leaving {
+        Some(index) => {
+            if index == 0 {
+                subpath.start
+            } else {
+                subpath.segments[index - 1].end()
+            }
+        }
+        None => match arriving {
+            Some(index) => subpath.segments[index].end(),
+            None => subpath.start,
+        },
+    };
+    // The two **handles**: a straight side has none, and its tangent
+    // is the line itself.
+    let out_handle = match leaving {
+        Some(index) => match &subpath.segments[index] {
+            Segment::Line { .. } => None,
+            Segment::Cubic { c1, .. } => Some(*c1),
+        },
+        None => None,
+    };
+    let in_handle = match arriving {
+        Some(index) => match &subpath.segments[index] {
+            Segment::Line { .. } => None,
+            Segment::Cubic { c2, .. } => Some(*c2),
+        },
+        None => None,
+    };
+    if leaving.is_none() || arriving.is_none() {
+        return Err(format!("the point {point} has a curve on only one side"));
+    }
+    let out_offset = match out_handle {
+        Some(handle) => Point::new(handle.x - at.x, handle.y - at.y),
+        None => Point::new(0.0, 0.0),
+    };
+    let in_offset = match in_handle {
+        Some(handle) => Point::new(handle.x - at.x, handle.y - at.y),
+        None => Point::new(0.0, 0.0),
+    };
+    let out_is_zero = out_offset.x.abs() < f64::EPSILON && out_offset.y.abs() < f64::EPSILON;
+    let in_is_zero = in_offset.x.abs() < f64::EPSILON && in_offset.y.abs() < f64::EPSILON;
+    if out_is_zero && in_is_zero {
+        return Err(format!("the point {point} has no handles to smooth"));
+    }
+    // The **new** handle: the average of the two, or the one that is
+    // there when the other side is a straight line.
+    let offset = if out_is_zero || in_is_zero {
+        if out_is_zero { in_offset } else { out_offset }
+    } else {
+        Point::new((out_offset.x + in_offset.x) / 2.0, (out_offset.y + in_offset.y) / 2.0)
+    };
+    let out_at = Point::new(at.x + offset.x, at.y + offset.y);
+    let in_at = Point::new(at.x - offset.x, at.y - offset.y);
+    // The **leaving** side: the handle at the point, and — when the
+    // side was a straight line — the other end keeps the line's
+    // direction.
+    if let Some(index) = leaving {
+        let end = subpath.segments[index].end();
+        let c2 = if out_is_zero {
+            // A straight line that becomes a curve: the other end's
+            // handle is a third of the way along it.
+            Point::new(end.x - (end.x - at.x) / 3.0, end.y - (end.y - at.y) / 3.0)
+        } else {
+            match &subpath.segments[index] {
+                Segment::Line { .. } => end,
+                Segment::Cubic { c2, .. } => *c2,
+            }
+        };
+        subpath.segments[index] = Segment::Cubic { c1: out_at, c2, to: end };
+    }
+    // The **arriving** side: the same, the other way round.
+    if let Some(index) = arriving {
+        let start = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
+        let c1 = if in_is_zero {
+            Point::new(start.x + (at.x - start.x) / 3.0, start.y + (at.y - start.y) / 3.0)
+        } else {
+            match &subpath.segments[index] {
+                Segment::Line { .. } => start,
+                Segment::Cubic { c1, .. } => *c1,
+            }
+        };
+        subpath.segments[index] = Segment::Cubic { c1, c2: in_at, to: at };
+    }
+    Ok(())
+}
+
 /// Say which parts of a path are **inside**.
 ///
 /// The rule is `nonzero` — the default, and the rule that makes a
@@ -1040,8 +1193,17 @@ fn index_of(value: Option<Number>, what: &str) -> Result<usize, String> {
 /// and every other point is left by the segment that starts there. The
 /// last point of a contour is left by nothing: the curve that closes a
 /// closed contour is not in the kit's path.
-fn leaving_segment(_closed: bool, point: usize, segments: usize) -> Option<usize> {
-    if point < segments { Some(point) } else { None }
+fn leaving_segment(subpath: &SubPath, point: usize) -> Option<usize> {
+    let segments = subpath.segments.len();
+    if point < segments {
+        return Some(point);
+    }
+    // The last point of a **closed** contour is left by the closing
+    // segment, when the contour has one.
+    if point == segments {
+        return closing_segment(subpath);
+    }
+    None
 }
 
 /// Which segment **arrives** at a point, if there is one.
@@ -1049,11 +1211,30 @@ fn leaving_segment(_closed: bool, point: usize, segments: usize) -> Option<usize
 /// Every point but the first is arrived at by the segment before it,
 /// and the first point of a **closed** contour is arrived at by the
 /// last segment.
-fn arriving_segment(closed: bool, point: usize, segments: usize) -> Option<usize> {
+fn arriving_segment(subpath: &SubPath, point: usize) -> Option<usize> {
     if point > 0 {
-        Some(point - 1)
-    } else if closed && segments > 0 {
-        Some(segments - 1)
+        return Some(point - 1);
+    }
+    // The first point of a **closed** contour is arrived at by the
+    // closing segment, when the contour has one.
+    closing_segment(subpath)
+}
+
+/// The **closing segment** of a closed contour, if it has one.
+///
+/// A closed contour may leave its closing edge out — the edge is then a
+/// straight line, and there is nothing to hold a handle — or it may
+/// have one, and then that segment ends where the contour starts.
+fn closing_segment(subpath: &SubPath) -> Option<usize> {
+    let segments = subpath.segments.len();
+    if !subpath.closed || segments == 0 {
+        return None;
+    }
+    let last = segments - 1;
+    let end = subpath.segments[last].end();
+    let start = subpath.start;
+    if (end.x - start.x).abs() < f64::EPSILON && (end.y - start.y).abs() < f64::EPSILON {
+        Some(last)
     } else {
         None
     }
@@ -1079,8 +1260,8 @@ fn move_point(path: &mut Path, contour: usize, point: usize, to: Point) -> Resul
         *end = to;
     }
     // The **handles** move with it: an anchor carries its handles.
-    let leaving = leaving_segment(subpath.closed, point, subpath.segments.len());
-    let arriving = arriving_segment(subpath.closed, point, subpath.segments.len());
+    let leaving = leaving_segment(subpath, point);
+    let arriving = arriving_segment(subpath, point);
     if let Some(index) = leaving
         && let Segment::Cubic { c1, .. } = &mut subpath.segments[index]
     {
@@ -1113,10 +1294,8 @@ fn handle_point(
     if point >= count {
         return Err(format!("the contour has {count} points and not a point {point}"));
     }
-    let closed = subpath.closed;
-    let segments = subpath.segments.len();
     if let Some(handle) = c1 {
-        let Some(index) = leaving_segment(closed, point, segments) else {
+        let Some(index) = leaving_segment(subpath, point) else {
             return Err(format!("the point {point} has no curve leaving it"));
         };
         let end = subpath.segments[index].end();
@@ -1127,7 +1306,7 @@ fn handle_point(
         subpath.segments[index] = Segment::Cubic { c1: handle, c2: old_c2, to: end };
     }
     if let Some(handle) = c2 {
-        let Some(index) = arriving_segment(closed, point, segments) else {
+        let Some(index) = arriving_segment(subpath, point) else {
             return Err(format!("the point {point} has no curve arriving at it"));
         };
         let start = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
@@ -1356,6 +1535,7 @@ craftkit_sdk::plugin_anchor!(
     OffsetPath,
     JoinPath,
     CapPath,
+    SmoothPoint,
     OutlinePath,
     TransformPath,
     VectorPanel,
