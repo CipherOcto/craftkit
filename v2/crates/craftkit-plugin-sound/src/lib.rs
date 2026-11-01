@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **forty-six commands**, one for each thing a person does to a
+//! - **forty-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -26,7 +26,8 @@
 //!   the **beat** of a clip and take it away, lock a clip's **content**
 //!   and its **place**, rate a clip, group clips and take them out of
 //!   the group, set the **grid** and put a clip on it, set a clip's
-//!   **gain** and bypass it, **conform** a clip to the tempo, and
+//!   **gain** and bypass it, **conform** a clip to the tempo, group
+//!   **tracks** so that they are mixed together, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -143,7 +144,7 @@ use craftkit_sdk::{
 };
 pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
-pub use group::{Group, GroupKind, ReadGroup, Ungroup};
+pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
 pub use mixer::{
@@ -1528,9 +1529,10 @@ impl SetTrack {
             id: "sound.track.set".to_string(),
             message: error.to_string(),
         })?;
-        if let Some(trim) = &self.trim_db {
-            let trim = trim.0;
-            if !trim.is_finite() || !(-144.0..=24.0).contains(&trim) {
+        let mut trim: Option<f64> = None;
+        if let Some(asked) = &self.trim_db {
+            let decibels = asked.0;
+            if !decibels.is_finite() || !(-144.0..=24.0).contains(&decibels) {
                 return Err(EngineError::Failed {
                     id: "sound.track.set".to_string(),
                     message:
@@ -1538,7 +1540,8 @@ impl SetTrack {
                             .to_string(),
                 });
             }
-            payload.trim_db = trim;
+            payload.trim_db = decibels;
+            trim = Some(decibels);
         }
         if let Some(phase) = &self.phase {
             payload.phase_invert = phase.0;
@@ -1551,9 +1554,31 @@ impl SetTrack {
             });
         };
         node.data = data;
-        Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(
-            serde_json::json!({ "id": id, "trim_db": payload.trim_db, "phase": payload.phase_invert }),
-        ))
+        // The **mix link**: a group of tracks is mixed together, so a
+        // change to the level of one of them is a change to the level
+        // of all of them. The phase is not a level and is not linked.
+        let mut linked = Vec::new();
+        if trim.is_some() {
+            for sibling in group::mix_siblings(session.document(), id) {
+                if sibling == id {
+                    continue;
+                }
+                let Some(node) = session.document().node(sibling) else { continue };
+                let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
+                other.trim_db = trim.unwrap_or(other.trim_db);
+                let data = other.to_json();
+                if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                    node.data = data;
+                }
+                linked.push(sibling);
+            }
+        }
+        Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(serde_json::json!({
+            "id": id,
+            "trim_db": payload.trim_db,
+            "phase": payload.phase_invert,
+            "linked": linked,
+        })))
     }
 }
 
@@ -4614,7 +4639,10 @@ craftkit_sdk::plugin_anchor!(
     Quantize,
     SetGain,
     BypassGain,
-    Conform
+    Conform,
+    SetTrackGroup,
+    SetGroupFlags,
+    UngroupTracks
 );
 
 #[cfg(test)]

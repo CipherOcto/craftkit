@@ -44,12 +44,23 @@
 //! clips stay on their own tracks, where they were. A clip that went
 //! into a kit group would leave its playlist, and a playlist is where a
 //! clip's place in the timeline is kept.
+//!
+//! # A group of tracks
+//!
+//! The tree's sound editor has a second kind of group: a group of
+//! **tracks**, which is not a set of things that belong together but a
+//! **link**. The tracks in it are mixed together: a change to one
+//! track's level is a change to every track in the group.
+//!
+//! Here that is the same kind of node — a group — with two flags on
+//! it: **mix** says the group links its members' levels, and
+//! **active** says the group is on. A group that is off links nothing.
 
 use craftkit_derive::{Command, NodeKind};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
-use craftkit_sdk::{Canvas, Document, EngineError, Node, NodeRef, Outcome, Point, Session, Text};
+use craftkit_sdk::{Bool, Canvas, Document, EngineError, Node, NodeRef, Outcome, Point, Session, Text};
 
 /// The edge that says a clip is in a group.
 ///
@@ -86,12 +97,83 @@ impl GroupKind {
     /// group, and they are worked out every time rather than kept.
     fn evaluate(node: &Node, document: &Document) -> Option<Json> {
         let members = members_of(document, node.id);
+        let payload = payload_of(document, node.id);
         Some(serde_json::json!({
             "name": node.name,
             "members": members,
             "size": members.len(),
+            "mix": payload.mix,
+            "active": payload.active,
         }))
     }
+}
+
+/// What a group says about itself.
+///
+/// The two flags are about **tracks**: a group of clips has them and
+/// nothing asks them, because there is no mix to link.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct GroupPayload {
+    /// Whether the group's members are **mixed together**: a change to
+    /// one member's level is a change to every member's.
+    pub(crate) mix: bool,
+    /// Whether the group is **on**.
+    ///
+    /// A group that is off links nothing.
+    pub(crate) active: bool,
+}
+
+impl GroupPayload {
+    /// The payload of a group that links nothing.
+    pub(crate) fn none() -> GroupPayload {
+        GroupPayload { mix: false, active: true }
+    }
+
+    /// The payload of a group that **links** its members.
+    pub(crate) fn linking() -> GroupPayload {
+        GroupPayload { mix: true, active: true }
+    }
+
+    fn to_json(&self) -> Json {
+        serde_json::json!({ "mix": self.mix, "active": self.active })
+    }
+
+    fn from_json(value: &Json) -> GroupPayload {
+        GroupPayload {
+            mix: value.get("mix").and_then(|mix| mix.as_bool()).unwrap_or(false),
+            active: value.get("active").and_then(|active| active.as_bool()).unwrap_or(true),
+        }
+    }
+}
+
+/// The payload of a group, as the document holds it.
+pub(crate) fn payload_of(document: &Document, group: u64) -> GroupPayload {
+    document.node(group).map(|node| GroupPayload::from_json(&node.data)).unwrap_or_else(GroupPayload::none)
+}
+
+/// The tracks a change to `track`'s level applies to.
+///
+/// It is the track itself and the members of every **active** group
+/// that **mixes** and has the track in it: the tree applies the same
+/// change to the group, and a group that is off links nothing.
+pub(crate) fn mix_siblings(document: &Document, track: u64) -> Vec<u64> {
+    let mut tracks = vec![track];
+    for group in document.walk().filter(|node| node.kind == "sound.group") {
+        let payload = payload_of(document, group.id);
+        if !payload.active || !payload.mix {
+            continue;
+        }
+        for member in members_of(document, group.id) {
+            if member == track {
+                for other in members_of(document, group.id) {
+                    if !tracks.contains(&other) {
+                        tracks.push(other);
+                    }
+                }
+            }
+        }
+    }
+    tracks
 }
 
 /// The clips in a group.
@@ -170,7 +252,15 @@ impl Group {
             .map(|node| node.id)
         {
             Some(group) => group,
-            None => session.document_mut()?.add_node(name.clone(), "sound.group", None),
+            None => {
+                let group = session.document_mut()?.add_node(name.clone(), "sound.group", None);
+                // A group of **clips** links nothing: there is no mix
+                // to link.
+                if let Some(node) = session.document_mut()?.node_mut(group) {
+                    node.data = GroupPayload::none().to_json();
+                }
+                group
+            }
         };
         for clip in &clips {
             // A clip is in one group: the edge it had goes, and the new
@@ -292,5 +382,193 @@ fn prune_empty_groups(document: &mut Document) {
     for group in empty {
         document.remove_relations(|relation| relation.to == group && relation.kind == GROUPED);
         document.remove_node(group);
+    }
+}
+
+/// **Put tracks in a group**.
+///
+/// The group is named: the tracks go into the group with that name, and
+/// the group is made if it is not there yet — the same handle the group
+/// of clips uses.
+///
+/// A group of tracks is a **link**: the members are mixed together, so
+/// a change to one member's level is a change to every member's. That
+/// can be taken off, and the group can be taken off altogether; both
+/// are commands of their own.
+///
+/// A group of **one** track is refused, the way a group of one clip is:
+/// a group is a set of things that belong together, and one thing
+/// belongs to itself.
+#[derive(Command)]
+#[command(
+    id = "sound.track.group",
+    area = "sound",
+    layer = "sound",
+    icon = "group",
+    menu("Track", "Group"),
+    mutates,
+    undoable
+)]
+pub struct SetTrackGroup {
+    /// The name of the group.
+    pub name: Text,
+    /// The tracks to put in it: their ids.
+    pub tracks: serde_json::Value,
+}
+
+impl SetTrackGroup {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.group".to_string();
+        let name = self.name.0.trim().to_string();
+        if name.is_empty() {
+            return Err(EngineError::Failed { id, message: "a group has a name".to_string() });
+        }
+        let tracks = crate::clip_ids_of(&self.tracks, &id)?;
+        if tracks.len() < 2 {
+            return Err(EngineError::Failed {
+                id,
+                message: "a group is two tracks or more, and this is one".to_string(),
+            });
+        }
+        for track in &tracks {
+            let node = session.document().node(*track).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{track}`"),
+            })?;
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+        }
+        // The group: the one with that name, or a new one. A group of
+        // tracks **links** its members.
+        let group = match session
+            .document()
+            .walk()
+            .find(|node| node.kind == "sound.group" && node.name == name)
+            .map(|node| node.id)
+        {
+            Some(group) => group,
+            None => {
+                let group = session.document_mut()?.add_node(name.clone(), "sound.group", None);
+                if let Some(node) = session.document_mut()?.node_mut(group) {
+                    node.data = GroupPayload::linking().to_json();
+                }
+                group
+            }
+        };
+        for track in &tracks {
+            // A track is in one group: the edge it had goes, and the
+            // new one comes.
+            session
+                .document_mut()?
+                .remove_relations(|relation| relation.from == *track && relation.kind == GROUPED);
+            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(*track, group, GROUPED));
+        }
+        // A group that is left with no members is not a group.
+        prune_empty_groups(session.document_mut()?);
+        Ok(Outcome::changed(format!("the tracks are in the group `{name}`"))
+            .with_data(serde_json::json!({ "group": group, "name": name, "tracks": tracks.len() })))
+    }
+}
+
+/// **Set the flags** of a group of tracks.
+///
+/// **Mix** says the group's members are mixed together, and **active**
+/// says the group is on. A group that is off links nothing, whatever
+/// its other flags say.
+///
+/// The parts that are not named are **left alone**.
+#[derive(Command)]
+#[command(
+    id = "sound.track.group.set",
+    area = "sound",
+    layer = "sound",
+    icon = "group",
+    menu("Track", "Group Settings"),
+    mutates,
+    undoable
+)]
+pub struct SetGroupFlags {
+    /// The group.
+    pub group: NodeRef,
+    /// Whether the members are mixed together.
+    pub mix: Option<Bool>,
+    /// Whether the group is on.
+    pub active: Option<Bool>,
+}
+
+impl SetGroupFlags {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.group.set".to_string();
+        let group = self.group.0;
+        let node = session.document().node(group).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{group}`"),
+        })?;
+        if node.kind != "sound.group" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{group}` is a `{}` and not a group", node.kind),
+            });
+        }
+        let mut payload = payload_of(session.document(), group);
+        if let Some(mix) = self.mix {
+            payload.mix = mix.0;
+        }
+        if let Some(active) = self.active {
+            payload.active = active.0;
+        }
+        if let Some(node) = session.document_mut()?.node_mut(group) {
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("the group `{group}` is set")).with_data(serde_json::json!({
+            "group": group,
+            "mix": payload.mix,
+            "active": payload.active,
+        })))
+    }
+}
+
+/// **Take a group** of tracks away.
+///
+/// The group is removed and the tracks stay where they were: a group is
+/// a link between them and not a box they are in.
+#[derive(Command)]
+#[command(
+    id = "sound.track.ungroup",
+    area = "sound",
+    layer = "sound",
+    icon = "group",
+    menu("Track", "Ungroup"),
+    mutates,
+    undoable
+)]
+pub struct UngroupTracks {
+    /// The group to take away.
+    pub group: NodeRef,
+}
+
+impl UngroupTracks {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.ungroup".to_string();
+        let group = self.group.0;
+        let node = session.document().node(group).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{group}`"),
+        })?;
+        if node.kind != "sound.group" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{group}` is a `{}` and not a group", node.kind),
+            });
+        }
+        let members = members_of(session.document(), group);
+        session.document_mut()?.remove_relations(|relation| relation.to == group && relation.kind == GROUPED);
+        session.document_mut()?.remove_node(group);
+        Ok(Outcome::changed(format!("the group `{group}` is taken away"))
+            .with_data(serde_json::json!({ "group": group, "tracks": members.len() })))
     }
 }
