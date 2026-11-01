@@ -15,7 +15,7 @@
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **fifty-four commands**, one for each thing a person does to a
+//! - **fifty-five commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -29,8 +29,8 @@
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
-//!   set a track's **fader**, move a clip's **pitch**, do a **process**
-//!   to a clip's sound and take it off, and
+//!   set a track's **fader** and its **pan**, move a clip's **pitch**,
+//!   do a **process** to a clip's sound and take it off, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -79,6 +79,17 @@
 //! drawn — an **appearance** is the colour a node is filled with, and
 //! one command sets it on any node — so the battery has no command for
 //! it, and the clip's colour is the appearance the clip carries.
+//!
+//! **A pan is a balance and not a placement.** The tree's mixer keeps
+//! a pan on every track, and a stereo track has one panner for each of
+//! its channels; the tree's law for a panner is **constant power**,
+//! which is a law for placing a mono sound in a stereo field, and it
+//! takes three decibels off a stereo sound in the middle. Here a track
+//! has one pan and it **balances** the sound: the middle is the
+//! middle, and the sound is not quieter there than it is at the side.
+//! The tree has the balance law too — it is the one the tree calls
+//! `Zero` — and it is the law that fits a sound that is already in two
+//! channels.
 //!
 //! **A process is a field and not a rendering.** The tree's audio
 //! suite reverses a clip's sound, turns it upside down, brings it to a
@@ -930,6 +941,13 @@ struct TrackPayload {
     /// decibels to twenty-four; it is the level of the input and not
     /// the level of the output.
     trim_db: f64,
+    /// The track's **pan**, between minus one and one: the balance of
+    /// the track's sound in the mix.
+    ///
+    /// The tree's mixer keeps a pan per channel — a stereo track has
+    /// two — and here a track has one: it balances the sound, and the
+    /// middle is the middle.
+    pan: f64,
     /// The track's **fader**, in decibels: the level of the track's
     /// output, after its inserts.
     ///
@@ -972,6 +990,7 @@ impl TrackPayload {
             "solo": self.solo,
             "trim_db": self.trim_db,
             "fader_db": self.fader_db,
+            "pan": self.pan,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
             "elastic": self.elastic,
@@ -985,6 +1004,7 @@ impl TrackPayload {
             solo: value.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
             trim_db: value.get("trim_db").and_then(|trim| trim.as_f64()).unwrap_or(0.0),
             fader_db: value.get("fader_db").and_then(|fader| fader.as_f64()).unwrap_or(0.0),
+            pan: value.get("pan").and_then(|pan| pan.as_f64()).unwrap_or(0.0),
             phase_invert: value.get("phase_invert").and_then(|phase| phase.as_bool()).unwrap_or(false),
             active_playlist: value
                 .get("active_playlist")
@@ -1531,6 +1551,7 @@ impl AddTrack {
             solo: false,
             trim_db: 0.0,
             fader_db: 0.0,
+            pan: 0.0,
             phase_invert: false,
             active_playlist: None,
             elastic: None,
@@ -1739,6 +1760,74 @@ impl SetTrackElastic {
         let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
         Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
             .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
+    }
+}
+
+/// Set a track's **pan**.
+///
+/// The pan is the **balance** of the track's sound: minus one is all
+/// to the left and one is all to the right, and the middle is the
+/// middle. It is applied when the track is routed — a track that
+/// feeds a bus is balanced before it reaches the bus — and a copy
+/// that a send takes is balanced by the **send's** own pan and not by
+/// this one.
+///
+/// The pan runs from minus one to one, and a pan outside that is
+/// **refused** and not pulled to the edge.
+#[derive(Command)]
+#[command(
+    id = "sound.track.pan",
+    area = "sound",
+    layer = "sound",
+    icon = "sliders",
+    menu("Track", "Pan"),
+    mutates,
+    undoable
+)]
+pub struct SetTrackPan {
+    /// The track to set.
+    pub track: NodeRef,
+    /// Its balance: from minus one to one.
+    pub pan: Number,
+}
+
+impl SetTrackPan {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.track.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.pan".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: "sound.track.pan".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let pan = self.pan.0;
+        if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
+            return Err(EngineError::Failed {
+                id: "sound.track.pan".to_string(),
+                message: "a pan is a number between minus one and one".to_string(),
+            });
+        }
+        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+            id: "sound.track.pan".to_string(),
+            message: error.to_string(),
+        })?;
+        payload.pan = pan;
+        let data = payload.to_json();
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.track.pan".to_string(),
+                message: format!("there is no track `{id}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the track `{id}` is at {pan}"))
+            .with_data(serde_json::json!({ "id": id, "pan": pan })))
     }
 }
 
@@ -4125,7 +4214,13 @@ impl RenderSound {
             // bus and not in the main mix. The tree's strip goes to
             // its output and to nowhere else.
             match mixer::route_of(session.document(), track.id) {
-                Some(bus) => routed.push((bus, faded)),
+                // The **balance** is applied when the track is routed:
+                // a track that feeds a bus is balanced before it
+                // reaches the bus, and it is not balanced again.
+                Some(bus) => {
+                    let panned = automate::apply_pan(&automation, &faded, channels.max(1) as usize, 0);
+                    routed.push((bus, panned));
+                }
                 None => tracks.push((track.id, faded, automation)),
             }
         }
@@ -4518,13 +4613,10 @@ fn apply_processes(
 /// to the right, and the middle is the middle. A **mono** signal is
 /// not balanced and is left alone.
 fn panned(signal: &[f32], pan: f64, channels: usize) -> Vec<f32> {
-    let pan = pan.clamp(-1.0, 1.0);
     if channels < 2 || pan == 0.0 {
         return signal.to_vec();
     }
-    let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI;
-    let left = angle.cos() as f32;
-    let right = angle.sin() as f32;
+    let (left, right) = automate::balance(pan);
     let mut out = signal.to_vec();
     for index in 0..signal.len() / channels {
         for channel in 0..channels {

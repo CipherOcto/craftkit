@@ -36,6 +36,13 @@ pub struct Automation {
     pub pan: Option<Vec<(i64, f64)>>,
     /// The mute, over time: one mutes and less does not.
     pub mute: Option<Vec<(i64, f64)>>,
+    /// The track's **pan**, between minus one and one: the balance of
+    /// the track when nothing automates it.
+    ///
+    /// The tree's pan is the **default** of the pan lane, as its fader
+    /// is the default of the volume lane: a lane with breakpoints
+    /// overrides it, and a lane without one is the pan.
+    pub pan_value: f64,
     /// The track's **fader**, in decibels: the level of the track when
     /// nothing automates it.
     ///
@@ -49,9 +56,11 @@ pub struct Automation {
 /// The automation of a track: the lanes under it.
 pub fn automation_of(document: &Document, track: &Node) -> Automation {
     let mut automation = Automation {
-        // The **fader** is the track's own: a clip has no fader, and a
-        // track's is the level it is heard at when no lane says else.
+        // The **fader** and the **pan** are the track's own: a clip
+        // has neither, and a track's are what it is heard at when no
+        // lane says else.
         fader_db: crate::TrackPayload::from_json(&track.data).map(|payload| payload.fader_db).unwrap_or(0.0),
+        pan_value: crate::TrackPayload::from_json(&track.data).map(|payload| payload.pan).unwrap_or(0.0),
         ..Automation::default()
     };
     for lane in document.walk().filter(|node| node.kind == "sound.lane") {
@@ -186,22 +195,53 @@ pub fn apply_fader(automation: &Automation, samples: &[f32], channels: usize, st
 /// **routed**: a copy that a send takes is balanced by the **send's**
 /// own pan, and not by the track's.
 pub fn apply_pan(automation: &Automation, samples: &[f32], channels: usize, start: i64) -> Vec<f32> {
-    let Some(points) = &automation.pan else { return samples.to_vec() };
     // A **mono** sound has one channel and is not balanced.
     if channels < 2 {
         return samples.to_vec();
     }
+    // No **lane**: the track's own pan is the balance.
+    let Some(points) = &automation.pan else {
+        let (left, right) = balance(automation.pan_value);
+        return balanced(samples, channels, left, right);
+    };
     let mut out = samples.to_vec();
     for index in 0..samples.len() / channels {
         let at = start + index as i64;
-        let pan = value_at(points, at).clamp(-1.0, 1.0);
-        let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI;
-        let left = angle.cos() as f32;
-        let right = angle.sin() as f32;
+        let (left, right) = balance(value_at(points, at));
         for channel in 0..channels {
             let at_index = index * channels + channel;
             if at_index < out.len() {
                 out[at_index] *= if channel % 2 == 0 { left } else { right };
+            }
+        }
+    }
+    out
+}
+
+/// The **balance** of a pan: the gain of the left and the gain of the
+/// right.
+///
+/// This is the tree's **balance** law — the one the tree calls `Zero`
+/// — and not its constant-power law. The constant-power law is a law
+/// for *placing* a mono sound in a stereo field, and it takes three
+/// decibels off the sound in the middle; a stereo sound that is
+/// balanced is not quieter in the middle than it is at the side.
+///
+/// The pan is a balance: minus one is all to the left and one is all
+/// to the right, and the middle is the middle.
+pub fn balance(pan: f64) -> (f32, f32) {
+    let pan = if pan.is_finite() { pan.clamp(-1.0, 1.0) } else { 0.0 };
+    ((1.0 - pan).min(1.0) as f32, (1.0 + pan).min(1.0) as f32)
+}
+
+/// The sound with the two sides **balanced**.
+fn balanced(samples: &[f32], channels: usize, left: f32, right: f32) -> Vec<f32> {
+    let mut out = samples.to_vec();
+    for index in 0..samples.len() / channels {
+        for channel in 0..channels {
+            let at = index * channels + channel;
+            if at < out.len() {
+                out[at] *= if channel % 2 == 0 { left } else { right };
             }
         }
     }
