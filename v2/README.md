@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1263 tests.** The MCP server links **all fifteen batteries** in, so the
+**1266 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1263 tests
+cargo test          # 1266 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3611,6 +3611,7 @@ so.
 | a **line's corners and ends** | **built.** The stroke carries a join and a cap, the rasteriser draws them, and two commands say which (§174) | §174 |
 | a **page tree** | **built.** A page may have a parent, and the four attributes a page inherits are found by walking up the tree (§175) | §175 |
 | a **content stream** | **built.** The operators of a page's content are read, with the operands each one was given (§176) | §176 |
+| a **path that is placed** | **built.** A path may carry a transform — the six numbers of a matrix — and it is drawn, hit and measured where the transform puts it (§177) | §177 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11970,3 +11971,70 @@ drawn, and v2's PDF battery could not read a byte of it.
   the state, `cm` changes the matrix and `gs` brings in an extended
   state; the command reports them and does not track them.
 - **The inline images are not read**, and the text is not laid out.
+
+---
+
+## 177. A path is drawn once and placed somewhere
+
+A path is drawn once and **placed** somewhere: the six numbers of a
+matrix say where. v2's vector battery had a path and a colour and a
+line, and no way to say where the path was — so a path could only ever
+be where it was drawn.
+
+### What was built
+
+- The geometry library holds a **matrix**: the six numbers `a b c d e f`
+  of an affine transform, with the point `(x, y)` moved to
+  `(a·x + c·y + e, b·x + d·y + f)`.
+- The command `vector.path.transform` places a path, and the matrix
+  stays in the payload.
+- The path in the payload is the path **as it was drawn**, and the
+  transform says where that path is: the path is **drawn**, **hit** and
+  **measured** where the transform puts it, and its box moves with it.
+- A matrix that is not six numbers is **refused by name**, and so is
+  one that collapses the plane: a path that cannot be undone cannot be
+  hit.
+
+### What the port found
+
+- **The matrix belongs to the geometry library and not to the
+  battery.** A matrix is an operation on a shape, and the library is
+  where the operations on a shape live; the battery owns the *command*
+  and the *payload*, and the library owns the arithmetic. The library
+  is a library and not a plugin: it adds no command and the linker
+  does not wire it in.
+- **The path in the payload is not the path in the world.** A path is
+  drawn once and placed, and a payload that held the placed path would
+  lose the drawing: the path could not be moved, scaled or rotated
+  again, because the transform that did it would be gone. So the
+  payload holds the path and the transform, and the world sees the two
+  together.
+- **The hit test has to go backwards.** The point a person clicks is
+  in the **world** and the path is in its own place, so the point is
+  moved back into the path's space before it is tested. That is why a
+  matrix that cannot be undone is refused: there would be no way to
+  ask where the person clicked.
+- **A path written before the transform was in the payload has none,
+  and the file did not need a new version.** The transform is
+  **optional** in the file, and a path that says nothing about it is
+  where it is — the same way the stroke's join and cap are optional.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/transform.rs`): a path may be
+  placed, a placed path is where the transform says, and a transform
+  that cannot be used is refused.
+- **One command** (`vector.path.transform`). The MCP server now
+  carries **219** commands.
+
+### What it does not settle
+
+- **The transform is not in the shape.** The SDK's path is the shape a
+  file carries and a canvas draws, and it has no matrix of its own; a
+  program that wants a transformed path outside this battery must
+  transform it itself.
+- **The stroke is not transformed.** The line is drawn by the canvas
+  with the width it is given, and a path that is scaled is not a path
+  with a wider line: the line keeps its width.
+- **There is no gradient and no clip.** The canvas has no way to say
+  either, and a transform is the last of the three that a path needs.
