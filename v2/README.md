@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1387 tests.** The MCP server links **all fifteen batteries** in, so the
+**1395 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1387 tests
+cargo test          # 1395 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3636,6 +3636,7 @@ so.
 | the **group** of a clip | **built.** A group is a node with a name and the clips point at it, so the name is the handle and the membership is an edge (§199) | §199 |
 | the **grid** of the session | **built.** A division of the bar, counted from the bar line, and a clip's beat is put on the nearest line (§200) | §200 |
 | the **gain** of a clip | **built.** The level of the clip itself, refused outside its range, and a bypass that keeps the gain instead of throwing it away (§201) | §201 |
+| the **conform** of a clip | **built.** The material is played at the rate that makes it fit the tempo, the tempo of the material is the clip's own, and the beat follows the audio (§202) | §202 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13704,3 +13705,83 @@ field was there and the fact was unreachable.
 - **The tree's gain render is not here.** The tree can render a clip's
   gain to a file — the sound of the clip with the gain and nothing
   else — and this battery renders the whole document.
+
+## 202. The conform of a clip
+
+A recording is made at some tempo — the one the band was playing — and
+a document may be at another. The tree's sound editor has a command
+that **conforms** a clip to the document's tempo. The v2 sound battery
+had a stretch and a tempo map and no way to say that a clip's material
+belongs to a different tempo than the document's.
+
+### What was built
+
+- The command `sound.clip.conform` conforms a clip to the tempo of the
+  document: the clip is played at the rate that makes the material
+  fit, and the clip is as long as the material then lasts.
+- The tempo of the **material** is a field of the clip, and it may be
+  given: without it, the clip's own tempo is used, and the tempo of
+  the document where the clip starts if the clip does not have one yet.
+- The clip's **beat** follows the audio when the clip is conformed.
+- A clip whose **content** is locked is refused, a clip with **no
+  sound** has nothing to conform, and a tempo of the material outside
+  the range is refused.
+
+### What the port found
+
+- **The tree keeps two facts about a clip outside the clip.** The
+  tree's conform remembers the tempo of the material in the **edit
+  state** — in a map of values, under a key made of the clip's id —
+  and the length the clip had before it was ever conformed in another
+  key beside it. So the two facts that say what a clip's material is
+  are in a map that only the tree's editor knows about, and a reader
+  of a tree's file cannot see them at all. Here the tempo of the
+  material is a **field of the clip**, and it is in the plan.
+- **The tree keeps the length it had before, and here it is not kept
+  at all.** The tree remembers `len0` — the length of the clip before
+  the first conform — so that a conform after a tempo change is the
+  same conform whatever happened to the clip in between. Here that
+  length is not kept: the material's length is the clip's length
+  divided by its stretch, and it is worked out every time. The same
+  answer, with one fact fewer to be wrong.
+- **The tree's conform leaves the beat where it was, and the material
+  moves away from it.** The tree's conform makes the clip twice as
+  long and leaves the sync point at the sample it was at, so the
+  material's downbeat is now twice as far from the beat that marks
+  it. Here the beat moves with the audio, the way it moves when the
+  clip is trimmed (§ the beat of a clip): the clip's timeline is what
+  changed, and the beat is a place in it.
+- **The tree skips what it cannot do, and here it is refused.** The
+  tree's conform walks the clips and *skips* the ones that are locked
+  or that have no audio, and it says how many it conformed and not
+  which ones it did not. Here a clip that is locked, or that has no
+  sound, is **refused by name** — a caller that asked for a clip to be
+  conformed and got a list of the ones that were is a caller that has
+  to work out what happened.
+- **The tree clamps the ratio and this tree refuses it.** The tree
+  clamps the conform's ratio into a window of 0.05 to 20, and the
+  clip is conformed to the edge of the window. Here the ratio is a
+  **stretch**, and a stretch outside the clip's own bounds is refused
+  (§ the kit's own rule: a bound is not negotiable).
+
+### What it cost
+
+- **Eight tests** in the sound battery (`tests/conform.rs`): the clip
+  is conformed, the material fits the tempo, the tempo of the material
+  may be given, the beat follows the audio, a locked clip is not
+  conformed, a clip with no sound is refused, a tempo outside the range
+  is refused, and only a clip is conformed.
+- **One command** (`sound.clip.conform`) and **one field** in the
+  clip's payload. The MCP server now carries **255** commands, and the
+  sound battery carries **46**.
+
+### What it does not settle
+
+- **The conform is not a time stretch.** The tree's elastic audio tracks
+  stretch the clip and keep the pitch; here the conform is a
+  **varispeed** — the material is played more slowly and the pitch
+  falls with it, the way `sound.clip.stretch` does it. A pitch-
+  preserving stretch is a different thing and it is not here.
+- **The tree's pitch shift is not here.** The tree can remove the pitch
+  shift of a clip and leave the length; here there is no pitch shift to
+  remove, because there is no pitch-preserving stretch.
