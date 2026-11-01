@@ -3365,11 +3365,18 @@ impl RenderSound {
             // The **clip's own** automation: the lanes under the clip,
             // and their times are the clip's own — a clip carries a
             // curve of its own, and the family's does.
-            let own = session
+            let mut own = session
                 .document()
                 .node(*clip_id)
                 .map(|clip| automate::automation_of(session.document(), clip))
                 .unwrap_or_default();
+            // A **bypassed** gain is not in the path: the clip is as
+            // loud as it is, and the curve that automates its level is
+            // not in the path either. The curve is **kept**, and it
+            // comes back when the bypass is taken off.
+            if payload.gain_bypassed {
+                own.volume = None;
+            }
             let mut samples = automate::apply(&own, &samples, sound.channels as usize, 0);
             // The clip's **gain**: the level of the clip itself. The
             // tree's mixer multiplies it into the clip before the

@@ -13700,11 +13700,14 @@ field was there and the fact was unreachable.
 
 ### What it does not settle
 
-- **The tree's gain envelope is not here.** The tree's clip can carry
-  a **curve** of gain over its length, and its bypass clears the curve
-  as well as the level. There is no envelope on a clip here: the
-  battery's automation is on the **track** (`sound.lane.add`), and a
-  clip's own curve is a different thing.
+- **The tree's bypass clears the curve and this one keeps it.** The
+  tree's clip can carry a **curve** of gain over its length — and that
+  curve is here, as a lane under the clip (`sound.lane.add` with the
+  clip, not the track) — and the tree's bypass **clears** the curve as
+  well as the level. Here the bypass takes the level out of the path
+  and leaves the curve where it is, out of the path as well: a
+  bypassed clip plays as it is, and taking the bypass off brings the
+  curve back.
 - **The tree's gain render is not here.** The tree can render a clip's
   gain to a file — the sound of the clip with the gain and nothing
   else — and this battery renders the whole document.

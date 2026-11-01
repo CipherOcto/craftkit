@@ -158,20 +158,17 @@ fn a_bypass_that_is_not_named_is_toggled() {
     assert_eq!(bypassed_of(&session, clip), Some(false), "the gain is in the path");
 }
 
-/// The gain is **heard**: a clip six decibels down is quieter, and a
-/// bypassed clip is not.
-#[test]
-fn the_gain_is_heard() {
-    let directory = directory("heard");
+/// A tone at half the scale, a clip that plays it, and where to write
+/// the rendered sound.
+fn a_tone(session: &mut Session, name: &str) -> (u64, String) {
+    let directory = directory(name);
     let source_path = format!("{directory}/tone.wav");
     let output_path = format!("{directory}/out.wav");
-    // A tone at half the scale, a second long.
     let samples: Vec<f32> = (0..48_000)
         .map(|index| 0.5 * (2.0 * std::f32::consts::PI * 440.0 * index as f32 / 48_000.0).sin())
         .collect();
     let bytes = craftkit_wav::write(1, 48_000, &samples);
     std::fs::write(&source_path, bytes).expect("the sound is written");
-    let mut session = session();
     session.execute("sound.source.add", &json!({ "path": source_path })).expect("the source is added");
     let source = session
         .document()
@@ -190,25 +187,61 @@ fn the_gain_is_heard() {
         .find(|node| node.kind == "sound.clip")
         .map(|node| node.id)
         .expect("the clip is there");
-    session.execute("sound.clip.gain", &json!({ "clips": [clip], "db": -6.0 })).expect("the gain is set");
-    session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
+    (clip, output_path)
+}
+
+/// The loudest sample of a rendered sound.
+fn peak_of(path: &str) -> f32 {
     let sound = craftkit_wav::read(
-        &std::fs::read(&output_path).expect("the sound is on the disk"),
+        &std::fs::read(path).expect("the sound is on the disk"),
         &craftkit_wav::Limits::default(),
     )
     .expect("the sound is read");
-    let quiet = sound.samples.iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()));
+    sound.samples.iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()))
+}
+
+/// The gain is **heard**: a clip six decibels down is quieter, and a
+/// bypassed clip is not.
+#[test]
+fn the_gain_is_heard() {
+    let mut session = session();
+    let (clip, output_path) = a_tone(&mut session, "heard");
+    session.execute("sound.clip.gain", &json!({ "clips": [clip], "db": -6.0 })).expect("the gain is set");
+    session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
+    let quiet = peak_of(&output_path);
     assert!(quiet > 0.2 && quiet < 0.3, "the clip is six decibels down: {quiet}");
     // And with the bypass on, the clip is as loud as it is.
     session.execute("sound.clip.gain.bypass", &json!({ "clips": [clip] })).expect("the gain is bypassed");
     session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
-    let sound = craftkit_wav::read(
-        &std::fs::read(&output_path).expect("the sound is on the disk"),
-        &craftkit_wav::Limits::default(),
-    )
-    .expect("the sound is read");
-    let loud = sound.samples.iter().fold(0.0_f32, |loudest, sample| loudest.max(sample.abs()));
+    let loud = peak_of(&output_path);
     assert!(loud > 0.45, "the clip is as loud as it is: {loud}");
+}
+
+/// The bypass takes the clip's **curve** out of the path as well: the
+/// tree's bypass clears the curve, and here the curve is kept and is
+/// out of the path while the bypass is on.
+#[test]
+fn a_bypassed_gain_takes_the_curve_out_of_the_path_too() {
+    let mut session = session();
+    let (clip, output_path) = a_tone(&mut session, "curve");
+    // A lane under the clip that automates its level, twelve decibels
+    // down.
+    session
+        .execute("sound.lane.add", &json!({ "clip": clip, "param": "volume", "points": [[0, -12.0]] }))
+        .expect("the lane is added");
+    session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
+    let quiet = peak_of(&output_path);
+    assert!(quiet > 0.1 && quiet < 0.15, "the curve is on: {quiet}");
+    // With the gain bypassed, the clip is as loud as it is.
+    session.execute("sound.clip.gain.bypass", &json!({ "clips": [clip] })).expect("the gain is bypassed");
+    session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
+    let loud = peak_of(&output_path);
+    assert!(loud > 0.45, "the clip is as loud as it is: {loud}");
+    // And taking the bypass off brings the curve back.
+    session.execute("sound.clip.gain.bypass", &json!({ "clips": [clip] })).expect("the bypass is taken off");
+    session.execute("sound.render", &json!({ "path": output_path })).expect("the sound is rendered");
+    let quiet = peak_of(&output_path);
+    assert!(quiet > 0.1 && quiet < 0.15, "the curve is back: {quiet}");
 }
 
 /// Only a **clip** has a gain.
