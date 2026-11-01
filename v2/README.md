@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1562 tests.** The MCP server links **all fifteen batteries** in, so the
+**1568 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1562 tests
+cargo test          # 1568 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3654,6 +3654,7 @@ so.
 | the **mute** of a track | **built.** A switch on the track, and the mute lane is its default (§213) | §213 |
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
+| the **healing** of a track | **built.** The clips that were separated are joined again when they are the same sound continued (§220) | §220 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed and given a velocity (§217, §218, §219) | §219 |
 
@@ -15095,3 +15096,72 @@ could not be touched.
   quantise has one — how far a note moves towards the line — and the
   battery's command moves every note all the way. A person who wants
   a note moved half way to the line has not got a command for it yet.
+
+## 220. The healing of a track
+
+The tree's editor heals a separation: it walks the clips of a track in
+order and joins each one with the one before it when they are **the
+same sound continued**. The cut of §212 is the cut that is undone, and
+until now nothing undid it.
+
+### What was built
+
+- The command `sound.clip.heal` heals a track: the clips of the track
+  are walked in order and each one is joined with the one before it
+  when they are the same sound continued. The answer says how many
+  joins were made.
+- Four things must hold for two clips to be one sound: the **same
+  source**, the **offset lines up** — the second starts in the source
+  where the first's sound carries on, the distance of any gap on the
+  timeline **divided by the stretch** — the **same way of playing it**,
+  and the second must not **start before** the first ends.
+- The joined clip is the **first** one, made longer: it keeps its own
+  head, its own fade in and its own beat, and it takes the second's
+  fade out.
+- The second clip's **lanes** move into the first, and their
+  breakpoints move with them: a lane that was over the second piece is
+  over the second piece of the sound.
+
+### What the port found
+
+- **The tree's rule is about the content and so is this one.** Two
+  clips that touch are not a separation: the second must start in the
+  source where the first's sound carries on. A clip that was moved
+  without its content moving is a different sound, and it stays apart.
+- **The tree checks the mute, the stretch and the gain, and this tree
+  checks the pitch as well.** The tree's clip has no pitch of its own
+  — the pitch is the track's business — and this tree's clip has one
+  (§208), and a clip played at another pitch is not the same sound
+  continued.
+- **The tree's gain envelope is joined and this tree's lanes are
+  moved.** The tree keeps a clip's curve in the clip's own record and
+  joins two curves into one at the seam; here a curve is a **lane**, a
+  node of its own under the clip it automates, so the lanes of the
+  second piece are moved into the first and their breakpoints move
+  with them.
+- **The tree heals a range and this tree heals a track.** The tree's
+  command takes a selection, because a person heals the part of a
+  track they are looking at. Here the track is the unit: the clips of
+  the whole track are walked, and the joins are made where they are.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/heal.rs`): a separated
+  clip is healed, clips of different sources stay apart, clips that
+  overlap stay apart, clips played differently stay apart, the lanes
+  of the second piece move into the first, and the fade out of the
+  second piece is kept.
+- **One command** (`sound.clip.heal`). The MCP server now carries
+  **280** commands, and the sound battery carries **69**.
+
+### What it does not settle
+
+- **The tree's beat is not here.** The tree's clip has no beat of its
+  own; this tree's clip has one (§196), and the joined clip keeps the
+  first piece's beat and drops the second's — unless the first piece
+  has none, and then the second's moves with the sound it is in. A
+  clip that carried two beats carries one after the healing, and that
+  is a small loss of a thing the tree never had to lose.
+- **The tree's range is not here.** A person heals the part of a track
+  they are looking at, and this tree heals the whole track: there is
+  no range in the command, and the whole track is walked.
