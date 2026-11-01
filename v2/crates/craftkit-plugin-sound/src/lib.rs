@@ -39,7 +39,8 @@
 //!   the notes of a clip, **make** a MIDI clip and **add**, **edit**,
 //!   **remove** and **move** the notes of one, **heal** the clips that
 //!   were separated, **take away** a route, a reading, a send or a
-//!   source,
+//!   source, **set**, **take away**, **clear**, **write** and **thin**
+//!   the breakpoints of a lane,
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
@@ -157,6 +158,13 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **A lane's breakpoints are edited and not only written.** The tree
+//! has five commands for a lane — write a value over a range, clear
+//! the breakpoints, thin them, and write the current value over the
+//! range — and v2 had **one**: a lane could be made with its points
+//! and not changed afterwards. So a curve could be drawn and not
+//! drawn again, and a mistake in it could not be undone.
 //!
 //! **A link that cannot be taken away is a mistake that cannot be
 //! undone.** The route between a track and a bus, the reading of a bus

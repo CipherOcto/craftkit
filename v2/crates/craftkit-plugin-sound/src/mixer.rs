@@ -1183,6 +1183,354 @@ impl AddLane {
     }
 }
 
+/// The **lane** of a command, read.
+fn lane_of(session: &Session, id: &str, lane: u64) -> Result<LanePayload, EngineError> {
+    let node = session.document().node(lane).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no lane `{lane}`"),
+    })?;
+    if node.kind != "sound.lane" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{lane}` is a `{}` and not a lane", node.kind),
+        });
+    }
+    LanePayload::from_json(&node.data)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })
+}
+
+/// Write a lane's points back into the document.
+fn write_lane(session: &mut Session, lane: u64, payload: &LanePayload) -> Result<(), EngineError> {
+    if let Some(node) = session.document_mut()?.node_mut(lane) {
+        node.data = payload.to_json();
+    }
+    Ok(())
+}
+
+/// The value a lane's parameter may have.
+///
+/// The **pan** is between minus one and one and the **mute** is
+/// between zero and one, and a value outside is **refused**: the tree
+/// clamps it into the range, and a value the caller did not ask for
+/// is a value the caller does not know about.
+///
+/// The **volume** is any number of decibels, and a lane of any other
+/// parameter is **drawn** and not heard (§ the automation), so its
+/// value is only a number.
+fn check_value(id: &str, param: &str, value: f64) -> Result<f64, EngineError> {
+    if !value.is_finite() {
+        return Err(EngineError::Failed { id: id.to_string(), message: "a value is a number".to_string() });
+    }
+    match param {
+        "pan" if !(-1.0..=1.0).contains(&value) => Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the pan is a number between minus one and one, and {value} is not one"),
+        }),
+        "mute" if !(0.0..=1.0).contains(&value) => Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the mute is a number between zero and one, and {value} is not one"),
+        }),
+        _ => Ok(value),
+    }
+}
+
+/// **Set a breakpoint** on a lane.
+///
+/// A breakpoint that is already there takes the new value, and a
+/// breakpoint that is not there is added: the lane's points are in
+/// order of their time, so "the breakpoint at that time" is a thing
+/// that can be named.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.point.set",
+    area = "sound",
+    layer = "sound",
+    icon = "plus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct SetLanePoint {
+    /// The lane the breakpoint goes on.
+    pub lane: NodeRef,
+    /// Where the breakpoint is, in the owner's samples.
+    pub at: Number,
+    /// The value at that time.
+    pub value: Number,
+}
+
+impl SetLanePoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.point.set".to_string();
+        let lane = self.lane.0;
+        let mut payload = lane_of(session, &id, lane)?;
+        let at = crate::samples(self.at.0, "where the breakpoint is")?;
+        let value = check_value(&id, &payload.param, self.value.0)?;
+        match payload.points.iter_mut().find(|(when, _)| *when == at) {
+            Some(point) => point.1 = value,
+            None => payload.points.push((at, value)),
+        }
+        payload.points.sort_by_key(|(at, _)| *at);
+        write_lane(session, lane, &payload)?;
+        Ok(Outcome::changed(format!("set a breakpoint on the lane `{lane}`"))
+            .with_data(serde_json::json!({ "lane": lane, "at": at, "value": value })))
+    }
+}
+
+/// **Take a breakpoint** off a lane.
+///
+/// A time that has no breakpoint on it is **refused**: a breakpoint
+/// that is not there is not one that was taken away.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.point.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct RemoveLanePoint {
+    /// The lane the breakpoint is on.
+    pub lane: NodeRef,
+    /// Where the breakpoint is, in the owner's samples.
+    pub at: Number,
+}
+
+impl RemoveLanePoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.point.remove".to_string();
+        let lane = self.lane.0;
+        let mut payload = lane_of(session, &id, lane)?;
+        let at = crate::samples(self.at.0, "where the breakpoint is")?;
+        let before = payload.points.len();
+        payload.points.retain(|(when, _)| *when != at);
+        if payload.points.len() == before {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the lane `{lane}` has no breakpoint at {at}"),
+            });
+        }
+        write_lane(session, lane, &payload)?;
+        Ok(Outcome::changed(format!("took a breakpoint off the lane `{lane}`"))
+            .with_data(serde_json::json!({ "lane": lane, "at": at })))
+    }
+}
+
+/// **Clear** the breakpoints of a lane.
+///
+/// Without a range every breakpoint goes, and with one the breakpoints
+/// in the range go and the rest stay: the tree's command clears a
+/// range or the whole lane, and the range is the tree's selection.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.clear",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct ClearLane {
+    /// The lane to clear.
+    pub lane: NodeRef,
+    /// The start of the range, in the owner's samples. The whole lane
+    /// without it.
+    pub start: Option<Number>,
+    /// The end of the range, in the owner's samples.
+    pub end: Option<Number>,
+}
+
+impl ClearLane {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.clear".to_string();
+        let lane = self.lane.0;
+        let mut payload = lane_of(session, &id, lane)?;
+        let range = match (self.start, self.end) {
+            (Some(start), Some(end)) => {
+                let start = crate::samples(start.0, "where the range starts")?;
+                let end = crate::samples(end.0, "where the range ends")?;
+                Some((start, end))
+            }
+            (None, None) => None,
+            _ => {
+                return Err(EngineError::Failed { id, message: "a range is a start and an end".to_string() });
+            }
+        };
+        let before = payload.points.len();
+        match range {
+            Some((start, end)) => payload.points.retain(|(at, _)| *at < start || *at >= end),
+            None => payload.points.clear(),
+        }
+        let removed = before - payload.points.len();
+        write_lane(session, lane, &payload)?;
+        Ok(Outcome::changed(format!("cleared {removed} breakpoints of the lane `{lane}`"))
+            .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
+    }
+}
+
+/// **Write** a value over a range of a lane.
+///
+/// The lane is **flat** over the range: a breakpoint at each end of it
+/// with the value, and the curve outside the range is kept — with an
+/// anchor just before and just after, so that the curve does not jump
+/// where the range begins and ends.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.write",
+    area = "sound",
+    layer = "sound",
+    icon = "pencil",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct WriteLane {
+    /// The lane to write on.
+    pub lane: NodeRef,
+    /// Where the range starts, in the owner's samples.
+    pub start: Number,
+    /// Where the range ends, in the owner's samples.
+    pub end: Number,
+    /// The value over the range.
+    pub value: Number,
+}
+
+impl WriteLane {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.write".to_string();
+        let lane = self.lane.0;
+        let mut payload = lane_of(session, &id, lane)?;
+        let start = crate::samples(self.start.0, "where the range starts")?;
+        let end = crate::samples(self.end.0, "where the range ends")?;
+        let value = check_value(&id, &payload.param, self.value.0)?;
+        if end <= start {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the range from {start} to {end} is empty"),
+            });
+        }
+        // The curve before and after the range, so that the anchors
+        // keep it.
+        let before = crate::automate::value_at(&payload.points, start.saturating_sub(1));
+        let after = crate::automate::value_at(&payload.points, end);
+        payload.points.retain(|(at, _)| *at < start || *at > end);
+        fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
+            match points.iter_mut().find(|(when, _)| *when == at) {
+                Some(point) => point.1 = value,
+                None => points.push((at, value)),
+            }
+        }
+        if start > 0 {
+            set(&mut payload.points, start - 1, before);
+        }
+        set(&mut payload.points, start, value);
+        set(&mut payload.points, end, value);
+        // A breakpoint that is already just after the range keeps its
+        // own value.
+        if !payload.points.iter().any(|(at, _)| *at == end + 1) {
+            set(&mut payload.points, end + 1, after);
+        }
+        payload.points.sort_by_key(|(at, _)| *at);
+        write_lane(session, lane, &payload)?;
+        Ok(Outcome::changed(format!("wrote the lane `{lane}` over a range"))
+            .with_data(serde_json::json!({ "lane": lane, "start": start, "end": end, "value": value })))
+    }
+}
+
+/// **Thin** a lane: take away the breakpoints the curve does not need.
+///
+/// A breakpoint is taken away when the curve through the ones that
+/// remain changes by less than the **tolerance** — the same shape of
+/// curve without it. A tolerance of nothing takes away nothing, and a
+/// large one takes away everything the curve can lose.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.thin",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct ThinLane {
+    /// The lane to thin.
+    pub lane: NodeRef,
+    /// How much the curve may change, in the value of the parameter.
+    pub tolerance: Option<Number>,
+}
+
+impl ThinLane {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.thin".to_string();
+        let lane = self.lane.0;
+        let mut payload = lane_of(session, &id, lane)?;
+        let tolerance = match self.tolerance {
+            Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
+            Some(_) => {
+                return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
+            }
+            None => 0.1,
+        };
+        let removed = thin_points(&mut payload.points, tolerance);
+        write_lane(session, lane, &payload)?;
+        Ok(Outcome::changed(format!("took {removed} breakpoints off the lane `{lane}`"))
+            .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
+    }
+}
+
+/// Take away the breakpoints of a curve that the curve does not need.
+///
+/// A breakpoint is taken away when the **slope** from the last
+/// breakpoint that was kept to the next one can be reached from every
+/// slope since then without leaving the tolerance: the curve through
+/// the ones that remain is the same curve, within the tolerance.
+///
+/// The first and the last breakpoints are always kept: a curve needs
+/// its ends.
+fn thin_points(points: &mut Vec<(i64, f64)>, tolerance: f64) -> usize {
+    if points.len() < 3 {
+        return 0;
+    }
+    let mut keep = vec![true; points.len()];
+    let mut last = 0_usize;
+    let (mut low, mut high) = (f64::NEG_INFINITY, f64::INFINITY);
+    for index in 1..points.len() - 1 {
+        let (Some(a), Some(b), Some(c)) = (points.get(last), points.get(index), points.get(index + 1)) else {
+            continue;
+        };
+        let span = b.0.saturating_sub(a.0) as f64;
+        if span <= 0.0 {
+            continue;
+        }
+        let rise = b.1 - a.1;
+        low = low.max((rise - tolerance) / span);
+        high = high.min((rise + tolerance) / span);
+        let slope = (c.1 - a.1) / (c.0.saturating_sub(a.0) as f64).max(f64::EPSILON);
+        if (low..=high).contains(&slope) {
+            if let Some(slot) = keep.get_mut(index) {
+                *slot = false;
+            }
+        } else {
+            last = index;
+            low = f64::NEG_INFINITY;
+            high = f64::INFINITY;
+        }
+    }
+    let before = points.len();
+    let mut kept = Vec::with_capacity(before);
+    for (index, point) in points.iter().enumerate() {
+        if keep.get(index).copied().unwrap_or(true) {
+            kept.push(*point);
+        }
+    }
+    *points = kept;
+    before - points.len()
+}
+
 /// The routing: who feeds whom, and in what order.
 ///
 /// This is **derived state** over the relations: the document holds the
