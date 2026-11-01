@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1368 tests.** The MCP server links **all fifteen batteries** in, so the
+**1378 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1368 tests
+cargo test          # 1378 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3634,6 +3634,7 @@ so.
 | the **locks** on a clip | **built.** The content lock and the place lock are two locks, and the commands that would break one of them refuse (§197) | §197 |
 | the **marks** of a clip | **built.** The rating of stars is the clip's own, and the colour is the kit's appearance — so the battery has no second way to say it (§198) | §198 |
 | the **group** of a clip | **built.** A group is a node with a name and the clips point at it, so the name is the handle and the membership is an edge (§199) | §199 |
+| the **grid** of the session | **built.** A division of the bar, counted from the bar line, and a clip's beat is put on the nearest line (§200) | §200 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13532,3 +13533,95 @@ likely to change.
   two steps — read the members of each group and ungroup them — because
   a group is named and its members are said in the plan, and a
   document-wide sweep is not a thing a command should do quietly.
+
+## 200. The grid of the session
+
+The tree's sound editor has a **grid** — a division of the bar — and a
+command that puts a clip on it. The v2 sound battery had a tempo map
+and a beat and no grid, so nothing here snapped a clip to anything,
+and the sound battery's own notes said so.
+
+### What was built
+
+- The **grid**: a note value — a bar, a half, a quarter, an eighth, a
+  sixteenth, a thirty-second, a sixty-fourth — and two flags,
+  **dotted** and **triplet**.
+- The grid is a setting of the **session**, with the sample rate and
+  the timecode, so a file says what grid it was made on.
+- The command `sound.grid.set` sets the grid and refuses a value that
+  is not a note value, and the command `sound.grid.read` reads it: the
+  step in ticks, the step in samples and the first lines.
+- The command `sound.clip.quantize` puts a clip's **beat** on the
+  nearest grid line and moves the clip so that its beat is there.
+- The lines are counted **from the bar line**, so a bar of an odd
+  number of beats does not make them drift.
+- The **time model** grows the grid: `craftkit-sound-time` has a grid
+  module with the note values, the step, the lines and the snap, and
+  the tempo map has a public `bar_start_tick_at`.
+
+### What the port found
+
+- **The tree's grid is saved, in the wrong place.** The tree keeps the
+  grid in the **edit state** — beside the tool, the edit mode and the
+  selection — and the edit state is saved with the session, so the
+  tree's file does say what grid the session was made on. It says it
+  among the things the editor was doing, which is where a reader would
+  not think to look. Here the grid is with the sample rate and the
+  timecode: the file says what the grid is without saying what tool
+  was selected when it was written.
+- **The tree's grid is musical, and it is also four other things.** The
+  tree's grid is a closed choice: a note value, a number of seconds, a
+  number of frames or a number of samples. The last three are grids
+  for a timeline that is not musical, and a sound document is a bar of
+  beats — so here the grid is a division of the bar and nothing else.
+  The tree's own default is musical too: a sixteenth.
+- **The tree's grid lines restart at every bar, and it matters.** A bar
+  of 3/4 has no even number of eighths in it, and lines counted from
+  the start of the song would drift a quarter of a beat by the end of
+  every odd bar. The tree counts them from the bar line, and so does
+  this tree: it is the tree's rule and it is the right one.
+- **The tree clamps a clip at zero and this tree refuses it.** The
+  tree's quantise moves the clip so that its sync point is on the
+  line, and the tree's move clamps a clip that would start before the
+  beginning at zero — so the clip's sync point is *not* on the line
+  after the move, and the command says nothing about it. Here the move
+  that would put a clip before the beginning is **refused**: a clip
+  whose beat is not on a line is not on the grid, and a clip that was
+  quietly put somewhere else is a clip the caller did not ask for.
+- **The tree's grid is a mode and a flag as well as a value.** The
+  tree has an edit mode — shuffle, slip, spot, grid, relative grid —
+  and a flag that says whether the edit cursor and the selections snap
+  to the grid. Those are the behaviour of a **drag**, and v2 has no
+  drag: the port is the part that is a fact about the document, which
+  is the quantise command.
+
+### What it cost
+
+- **Ten tests** in the sound battery (`tests/grid.rs`): the grid is set
+  and read, a grid that is not a note value is refused, a grid may be
+  dotted or a triplet, the lines are counted from the bar line, a clip
+  is put on the grid by its beat, a clip with no beat is put on the
+  grid by its head, a clip on the grid does not change, a clip that
+  would start before the beginning is refused, a locked clip is not put
+  on the grid, and only a clip is put on the grid.
+- **Three commands** (`sound.grid.set`, `sound.grid.read` and
+  `sound.clip.quantize`) and **one setting** in the session's
+  settings. The MCP server now carries **252** commands, and the sound
+  battery carries **43**.
+- **The time model grew** — a grid module in `craftkit-sound-time`,
+  the note values, the step, the lines, the snap and the bar line — and
+  the tempo map grew one public method, `bar_start_tick_at`.
+
+### What it does not settle
+
+- **The tree's absolute grids are not here.** A grid of seconds, of
+  frames or of samples has no port: those are grids for a timeline
+  that is not musical, and a sound document is a bar of beats.
+- **The tree's grid drag modes are not here.** The tree's absolute and
+  relative grid modes move a clip as it is dragged — the relative mode
+  keeps the clip's offset from the line and moves it by whole steps.
+  There is no drag in v2, and a drag is not a command: it is a
+  movement with a button held down.
+- **The grid is not shown.** A sound document is not a picture here, so
+  the grid is a setting and a set of lines in the plan, and not a row
+  of lines on a ruler.
