@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1457 tests.** The MCP server links **all fifteen batteries** in, so the
+**1470 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1457 tests
+cargo test          # 1470 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3643,6 +3643,7 @@ so.
 | the **elastic** of a track | **built.** An algorithm on the track says that its clips are stretched and the pitch stays, and the bound is the tree's own (§206) | §206 |
 | the **level** of a track | **built.** The trim is the input and the fader is the output, the fader is the volume lane's default, and the group links it (§207) | §207 |
 | the **pitch** of a clip | **built.** A number of semitones on the clip, refused outside its range, and the length is the same (§208) | §208 |
+| the **processes** on a clip | **built.** A name and its parameters, done in order, refused when the name is not one this battery knows (§209) | §209 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14294,3 +14295,83 @@ stretched and could not be tuned.
   normalizes, reverses, inverts, removes the direct current and ramps
   the speed; each of them is a rendering in the tree and each of them
   would be a field here.
+
+## 209. The processes on a clip
+
+The tree's **audio suite** does four things to a clip's sound: it
+reverses it, turns it upside down, brings it to a level, and takes the
+direct current away. It does each of them by **rendering** the
+material and replacing the clip's content with the rendered file — so
+the tree's clip, after a process, is a clip of a new file, and the
+sound it used to be is gone. This tree had no processes at all, and a
+clip's sound could only be changed by stretching it, moving its pitch
+or turning its level.
+
+### What was built
+
+- A **process** is a name and its parameters, and it is on the clip.
+  The command `sound.clip.process` adds one and the command
+  `sound.clip.process.remove` takes the last one of that name away.
+- The processes are done in the order they were added, so a clip may
+  have more than one and may have the same one twice — which is what
+  the tree does when the same process is asked for twice.
+- The four the tree has are here: **reverse**, **invert**,
+  **normalize** (with a `target_db`) and **dc_offset**. The audio
+  crate gains the four that do them.
+- A process this battery does not know is **refused** — when it is
+  asked for, and when the clip is played. A process that is quietly
+  ignored is worse than no process at all: the document says the sound
+  was changed and it was not.
+
+### What the port found
+
+- **The tree's processes are renderings and this tree's are facts.**
+  The tree's `audiosuite.process` renders the material, adds it to the
+  session as a new source, replaces the clip's content with it and
+  sets the clip's stretch back to one — and the clip's gain, its
+  fades and its place on the timeline stay where they were, because
+  the tree's own test says the gain is kept. Here the process is on
+  the clip and the sound is worked out when it is played: there is no
+  new source, no rendered file, and a process that is taken off
+  leaves the sound exactly as it was.
+- **The tree's process list is closed and this tree's name is a
+  string.** The tree's command lists the processes it knows and
+  refuses the others. Here the name is a string, for the same reason
+  the kinds of a sound document are strings here — a third party may
+  name a process — but a name nothing knows is **refused** rather than
+  ignored, so the openness is in the naming and not in the silence.
+- **The tree's normalize takes a target and a flag.** The tree's
+  normalizer may bring the sound to a level as a whole or channel by
+  channel, and it clamps the target into its range. Here the level is
+  the whole sound — the tree's own default — and a level outside the
+  range is **refused**.
+- **The tree's direct current is per channel and so is this one's.**
+  A stereo sound may sit above zero in one channel and not in the
+  other, and the mean of each is taken on its own.
+
+### What it cost
+
+- **Thirteen tests** in the sound battery (`tests/process.rs`): a
+  process is on the clip, one that is not known is refused, one with
+  no name is refused, a level outside its range is refused, a locked
+  clip is not processed, the sound is reversed, the sound is upside
+  down, the sound is at a level, the sound has no direct current, the
+  processes are done in order, a process is taken off, one that is not
+  there cannot be taken off, and the sound is the source again when
+  the process is taken off.
+- **Two commands** (`sound.clip.process` and
+  `sound.clip.process.remove`) and **four functions** in the audio
+  crate (`reverse`, `invert`, `normalize` and `remove_dc`). The MCP
+  server now carries **265** commands, and the sound battery carries
+  **54**.
+
+### What it does not settle
+
+- **The tree's other processes are not here.** The audio suite also
+  ramps the speed over time and generates a signal; a ramp is a
+  curve over the clip and a generator is a new source, and both are
+  more than a name and its parameters.
+- **The tree's plugins are not here either.** The audio suite runs the
+  tree's own plugins over a clip — an equaliser, a compressor, a
+  reverb — and those are the same inserts that the kit already has on
+  a clip (§166).
