@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1231 tests.** The MCP server links **all fifteen batteries** in, so the
+**1235 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1231 tests
+cargo test          # 1235 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3604,6 +3604,7 @@ so.
 | a **track with takes** | **built.** A track may have several takes and one of them is the one that is played; the take is named, and a track whose active take is gone plays its first (§167) | §167 |
 | a **muted clip** | **built.** A clip may be muted: the render skips it and the clip stays in the document, so a quiet clip is a clip that may be loud again (§168) | §168 |
 | a **path that may be edited** | **built.** A point of a path may be moved and the handles of its curves set; the handles move with the point, and a handle on a straight segment makes it a curve (§169) | §169 |
+| a **path that may be painted** | **built.** The fill and the stroke of a path may be set: what is inside it and what the line on its outline is; a colour that is not a colour is refused (§170) | §170 |
 
 ### The list of things that are honestly not there: empty
 
@@ -11143,7 +11144,7 @@ is a strip that reads a bus, and v2 had no reader at all.
   is heard through the reader, a reader holds no clips, a reader has no
   sends, a reader is not routed, and a track reads one bus.
 - **One command** (`sound.track.input`) and **one relation kind**
-  (`input`). The MCP server now carries **208** commands.
+  (`input`). The MCP server now carries **210** commands.
 
 ### What it does not settle
 
@@ -11503,3 +11504,56 @@ touched a point of it.
 - **The tree's anchor is a point with two handles and a type.** The
   tree's anchor says what it is — a corner, a smooth point — and the
   editor draws it differently. v2's points have no kind.
+
+## 170. A path may be painted
+
+The tree's path carries a **fill** and a **stroke**, and two commands
+say what they are. v2's path carried both and no command could write
+either: the payload had a colour and a line and nothing ever put them
+there.
+
+### What was built
+
+- The command `vector.path.fill` says what is **inside** the path, and
+  the rule that says what is inside is the path's own.
+- The command `vector.path.stroke` says what the **line on the
+  outline** is — a colour and a width — and the line may be taken away
+  again.
+- A colour that is not a colour is **refused by name**, and the kit's
+  spelling of a colour — `#rrggbb` — is the one every battery takes.
+
+### What the port found
+
+- **The payload had fields that nothing wrote.** The vector node's
+  payload has carried a fill and a stroke since the battery was built,
+  and the three shape commands took a fill as an argument — so a path
+  made by a command had a colour and a path that came from anywhere
+  else had none. The port had read the payload and not asked who fills
+  it in: a field that is only written by one command is a field that
+  only one shape has.
+- **The tree's stroke is a colour and a width and a join and a cap**,
+  and v2's stroke is a colour and a width. The join and the cap are
+  the next thing, and they are in the kit's own vocabulary and not in
+  the payload: a stroke is drawn by the backend and every backend
+  wants the same words for it.
+- **The tree's fill is not only a colour.** The tree's paint carries
+  gradients as well as flat colours (§ the gradients), and a colour
+  that is not a colour is refused rather than read as black: a path
+  that is painted the wrong colour is a path that is wrong.
+
+### What it cost
+
+- **Four tests** in the battery (`tests/paint.rs`): a path may be
+  filled, a path may have a line, the line may be taken away, and a
+  colour that is not a colour is refused.
+- **Two commands** (`vector.path.fill` and `vector.path.stroke`) and no
+  change to the payload: the fields were there and are now written.
+
+### What it does not settle
+
+- **A stroke has no join and no cap.** The kit's stroke is a colour
+  and a width, and the rasteriser draws a square at every corner
+  because a square is what a machine can draw; the tree's renderer
+  draws the join the document asks for.
+- **A fill is a colour and not a paint server.** The tree's fill may
+  be a gradient, and a gradient is a list of stops and a direction.
