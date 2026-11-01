@@ -1164,6 +1164,295 @@ impl MoveMidiNotes {
     }
 }
 
+/// **Add a controller** to a MIDI clip.
+///
+/// The **kind** says what it changes: a `control` change, a
+/// `pitch_bend`, a `channel_pressure`, a `poly_pressure` or a
+/// `program`. A kind that is not one of them is **refused**: a
+/// controller that does nothing is worse than no controller at all.
+///
+/// The two kinds that change a **number** — the control change and the
+/// pressure of one pitch — need one, and the others must not have one:
+/// a number that nothing reads is not a fact.
+///
+/// The **value** is in the range of its kind: a control change, a
+/// pressure and a program are from zero to a hundred and twenty-seven,
+/// and the pitch bend is centred on zero, from minus eight thousand
+/// one hundred and ninety-two to eight thousand one hundred and
+/// ninety-one.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.ctrl.add",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Add Controller"),
+    mutates,
+    undoable
+)]
+pub struct AddMidiCtrl {
+    /// The clip the controller goes in.
+    pub clip: NodeRef,
+    /// What it changes: `control`, `pitch_bend`, `channel_pressure`,
+    /// `poly_pressure` or `program`.
+    pub kind: Text,
+    /// Where it happens, in ticks from the start of the clip.
+    pub at: Number,
+    /// The value it changes it to.
+    pub value: Number,
+    /// The number it changes, for the kinds that have one.
+    pub number: Option<Number>,
+    /// The channel it happens on: zero to fifteen.
+    pub channel: Option<Number>,
+}
+
+impl AddMidiCtrl {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.ctrl.add".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let ctrl = ctrl_of(&id, self.kind.0.trim(), self.at, self.value, self.number, self.channel)?;
+        midi.ctrls.push(ctrl);
+        midi.sort();
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("added a controller to the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "ctrls": payload.midi.as_ref().map(|midi| midi.ctrls.len()).unwrap_or(0) })))
+    }
+}
+
+/// **Edit a controller** of a MIDI clip.
+///
+/// The controller is named by its **index** in the clip's controllers,
+/// which are in order of their tick, and an index that names no
+/// controller is **refused**.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.ctrl.edit",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Edit Controller"),
+    mutates,
+    undoable
+)]
+pub struct EditMidiCtrl {
+    /// The clip the controller is in.
+    pub clip: NodeRef,
+    /// Which controller: its index in the clip's controllers.
+    pub index: Number,
+    /// What it changes.
+    pub kind: Option<Text>,
+    /// Where it happens, in ticks.
+    pub at: Option<Number>,
+    /// The value it changes it to.
+    pub value: Option<Number>,
+    /// The number it changes, for the kinds that have one.
+    pub number: Option<Number>,
+    /// The channel it happens on.
+    pub channel: Option<Number>,
+}
+
+impl EditMidiCtrl {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.ctrl.edit".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let index = whole_of(&id, self.index, "which controller", 0.0, i64::MAX as f64)? as usize;
+        let Some(ctrl) = midi.ctrls.get(index) else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the clip `{clip_id}` has no controller `{index}`"),
+            });
+        };
+        let kind = self.kind.as_ref().map(|kind| kind.0.trim().to_string()).unwrap_or(ctrl.kind.clone());
+        let number = match self.number {
+            Some(number) => Some(whole_of(&id, number, "the number", 0.0, 127.0)? as u8),
+            None => ctrl.number,
+        };
+        // The **kind** decides whether the number means anything, and
+        // the value is in the range of the kind.
+        let edited = ctrl_of(
+            &id,
+            &kind,
+            match self.at {
+                Some(at) => Number(at.0),
+                None => Number(ctrl.tick as f64),
+            },
+            match self.value {
+                Some(value) => value,
+                None => Number(ctrl.value as f64),
+            },
+            number.map(|number| Number(f64::from(number))),
+            self.channel.or(Some(Number(ctrl.channel as f64))),
+        )?;
+        if let Some(slot) = midi.ctrls.get_mut(index) {
+            *slot = edited;
+        }
+        midi.sort();
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("edited a controller of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "index": index })))
+    }
+}
+
+/// **Take controllers** off a MIDI clip.
+///
+/// The controllers are named by their **indices**, and an index that
+/// names no controller is **refused**.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.ctrl.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Remove Controller"),
+    mutates,
+    undoable
+)]
+pub struct RemoveMidiCtrls {
+    /// The clip the controllers are in.
+    pub clip: NodeRef,
+    /// Which controllers: their indices in the clip's controllers.
+    pub indices: serde_json::Value,
+}
+
+impl RemoveMidiCtrls {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.ctrl.remove".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let indices = crate::clip_ids_of(&self.indices, &id)?;
+        for index in &indices {
+            if *index as usize >= midi.ctrls.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` has no controller `{index}`"),
+                });
+            }
+        }
+        let before = midi.ctrls.len();
+        let mut kept: Vec<CtrlPayload> = Vec::with_capacity(before);
+        for (index, ctrl) in midi.ctrls.iter().enumerate() {
+            if !indices.contains(&(index as u64)) {
+                kept.push(ctrl.clone());
+            }
+        }
+        midi.ctrls = kept;
+        let left = midi.ctrls.len();
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("removed controllers from the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "removed": before - left })))
+    }
+}
+
+/// **Take the duplicate notes** out of a MIDI clip.
+///
+/// Two notes of the same channel, pitch and start are the same note,
+/// and the **longer** one is kept: a note that was struck twice is one
+/// note that was held. Two controllers of the same kind, channel and
+/// tick are the same controller, and the **last** one is kept, because
+/// that is the one a synthesiser would end up with.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.notes.dedupe",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Remove Duplicate Notes"),
+    mutates,
+    undoable
+)]
+pub struct DedupeMidiNotes {
+    /// The clip to tidy.
+    pub clip: NodeRef,
+}
+
+impl DedupeMidiNotes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.notes.dedupe".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let mut sequence = midi.to_sequence();
+        let removed = sequence.remove_duplicates();
+        let tidied = MidiPayload::from_sequence(&sequence);
+        midi.notes = tidied.notes;
+        midi.ctrls = tidied.ctrls;
+        midi.sort();
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("took {removed} duplicates out of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "removed": removed })))
+    }
+}
+
+/// A controller, from the parameters of a command.
+///
+/// The kind says what it changes, the number is for the kinds that
+/// have one, and the value is in the range of the kind. Everything
+/// outside those ranges is **refused**.
+fn ctrl_of(
+    id: &str,
+    kind: &str,
+    at: Number,
+    value: Number,
+    number: Option<Number>,
+    channel: Option<Number>,
+) -> Result<CtrlPayload, EngineError> {
+    if !CTRL_KINDS.contains(&kind) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no controller called `{kind}`"),
+        });
+    }
+    let wants_number = matches!(kind, "control" | "poly_pressure");
+    let number = match (wants_number, number) {
+        (true, Some(number)) => Some(whole_of(id, number, "the number", 0.0, 127.0)? as u8),
+        (true, None) => {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("a {kind} changes a number, and it needs one"),
+            });
+        }
+        (false, Some(_)) => {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("a {kind} changes no number"),
+            });
+        }
+        (false, None) => None,
+    };
+    let tick = whole_of(id, at, "where the controller happens", 0.0, i64::MAX as f64)?;
+    let value = if kind == "pitch_bend" {
+        whole_of(id, value, "the value", -8192.0, 8191.0)?
+    } else {
+        whole_of(id, value, "the value", 0.0, 127.0)?
+    };
+    let channel = match channel {
+        Some(channel) => whole_of(id, channel, "the channel", 0.0, 15.0)? as u8,
+        None => 0,
+    };
+    Ok(CtrlPayload { tick, channel, kind: kind.to_string(), number, value: value as i32 })
+}
+
 /// A whole number from a parameter, refused when it is not one.
 fn whole_of(id: &str, value: Number, what: &str, from: f64, to: f64) -> Result<i64, EngineError> {
     let number = value.0;

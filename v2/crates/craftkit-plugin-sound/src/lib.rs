@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **eighty-seven commands**, one for each thing a person does to a
+//! - **ninety-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -37,7 +37,9 @@
 //!   that editing separates, **import** and **export** the **MIDI** of
 //!   a clip, **quantise**, **transpose** and change the **velocity** of
 //!   the notes of a clip, **make** a MIDI clip and **add**, **edit**,
-//!   **remove** and **move** the notes of one, **heal** the clips that
+//!   **remove** and **move** the notes of one, **add**, **edit** and
+//!   **remove** the controllers of one and take the duplicate notes
+//!   out of it, **heal** the clips that
 //!   were separated, **take away** a route, a reading, a send or a
 //!   source, **set**, **take away**, **clear**, **write** and **thin**
 //!   the breakpoints of a lane, **move** a clip and **trim** it to the
@@ -159,6 +161,12 @@
 //! clip says what its content is with a **string**, and the notes of a
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
+//!
+//! **The whole of a MIDI clip can be edited.** The tree's MIDI editor
+//! has a pencil for the **notes** and none for the **controllers**;
+//! here both have one, and the duplicate notes can be taken out — the
+//! tree has a command for that too, and it is the library's own
+//! `remove_duplicates`.
 //!
 //! **A clip could not be moved.** The tree's editor nudges the clips
 //! and shifts the ones on a track; here a clip was placed and trimmed
