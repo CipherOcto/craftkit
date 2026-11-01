@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1434 tests.** The MCP server links **all fifteen batteries** in, so the
+**1444 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1434 tests
+cargo test          # 1444 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3641,6 +3641,7 @@ so.
 | the **copy** of a node | **built.** A node and everything under it, with the edges copied and the copies joined to the copies (§204) | §204 |
 | the **group** of tracks | **built.** A group of tracks is a link: the members are mixed together, and a group that is off links nothing (§205) | §205 |
 | the **elastic** of a track | **built.** An algorithm on the track says that its clips are stretched and the pitch stays, and the bound is the tree's own (§206) | §206 |
+| the **level** of a track | **built.** The trim is the input and the fader is the output, the fader is the volume lane's default, and the group links it (§207) | §207 |
 
 ### The list of things that are honestly not there: empty
 
@@ -13954,9 +13955,12 @@ group, so nothing in it was ever linked to anything.
   and the command `sound.track.group.set` sets the flags.
 - The command `sound.track.ungroup` takes the group away and leaves
   the tracks where they were.
-- The command `sound.track.set` **asks the groups**: a change to the
-  trim of a track in a group that mixes is a change to the trim of
-  every member.
+- The command `sound.track.fader` **asks the groups**: a change to the
+  fader of a track in a group that mixes is a change to the fader of
+  every member. (This arc, §207, is where the fader came: when this
+  section was written the fader did not exist, and the group linked
+  the **trim** — which is the tree's *input* gain, and the tree does
+  not link it. The link moved when the thing it links arrived.)
 - A group of **one** track is refused, the way a group of one clip is.
 
 ### What the port found
@@ -13984,7 +13988,9 @@ group, so nothing in it was ever linked to anything.
   tree's group carries a list — volume, mute, solo, rec — and a
   change to one of those attributes is a change to the whole group.
   Here the group says one thing: it **mixes**. The level is the thing
-  that is linked, and the phase — which is not a level — is not.
+  that is linked — the **fader**, which is the tree's *volume* — and
+  the phase, which is not a level, is not. (The trim is the tree's
+  input gain, and the tree does not link it either; §207 says more.)
 - **The tree skips what it cannot do and here it is refused.** The
   tree's `track.group` walks the tracks and skips the ones that are
   not there, and it answers with the id of the group it made. Here a
@@ -14127,3 +14133,81 @@ the stretch was always a varispeed: the pitch always fell.
   warped, is a clip of the rendered file; here it is a clip of the
   source with a stretch, and the sound of it is the source's, played
   as the stretch says.
+
+## 207. The level of a track
+
+The tree's mixer keeps **two** levels on a track and they are not the
+same thing: the **trim** is the gain of the input, before the inserts,
+and the **fader** is the level of the output, after them. This tree
+had the trim and no fader, so a track's level could be automated and
+never set — the only way to make a track quieter was to write a lane,
+and a lane is a curve for something that moves.
+
+### What was built
+
+- The **fader** is a field of the track: `fader_db`, in decibels. The
+  command `sound.track.fader` sets it, and a fader outside the tree's
+  range — from minus one hundred and forty-four decibels to twelve —
+  is **refused** and not pulled to the edge.
+- The fader is the **default of the volume lane**, as it is in the
+  tree: a lane with breakpoints overrides it, and a lane without one
+  *is* the fader. So the sound of a track with a lane is the lane's,
+  and the sound of a track without one is its fader's.
+- The fader is the level of the track's **output**: it comes after the
+  track's inserts, and a send may still take its copy from before it.
+- The **group's link moves to the fader**: the tree's group links the
+  **volume**, and the volume is the fader. The trim is the tree's
+  input gain, and the tree does not link it — so `sound.track.set`,
+  which sets the trim, no longer asks the groups, and
+  `sound.track.fader` does.
+
+### What the port found
+
+- **The tree's trim and fader are two levels and this tree had one.**
+  The tree's mixer has `trim_db` and `volume_db` side by side, and
+  they are at different ends of the chain: the trim is before the
+  inserts and the fader is after them. This tree had the trim and
+  made the volume a lane, so the level of a track was a curve and
+  never a number. The fader is that number.
+- **The tree's fader is the lane's default.** The tree's lane is asked
+  for its value with the fader as the default — `value_at(at, base)` —
+  and the default is used when the lane has no breakpoints. So the
+  fader is not a second level on top of the lane; it is what the lane
+  falls back to. Here the fader is carried with the lanes, in the
+  track's own automation, and it is used exactly when the lane has
+  nothing to say.
+- **The tree links the volume and this tree linked the trim.** The
+  tree's group carries a list of the attributes it shares — the
+  volume, the mute, the solo and the record — and the volume is the
+  fader. The trim is not on that list, and the tree's `mix.trim` does
+  not ask the group at all. This tree's group (§205) linked the
+  **trim**, because the trim was the only level it had; the link
+  moved to the fader in this arc, and §205's text was corrected in the
+  same breath.
+- **The tree clamps and this tree refuses.** The tree's fader is
+  clamped into its range when a file is read and when it is set. Here
+  a fader outside the range is refused, and the fader does not move.
+
+### What it cost
+
+- **Ten tests** in the sound battery (`tests/level.rs`): a track
+  carries a fader, a fader is set, one that is too low is refused, one
+  that is too high is refused, one that is not a number is refused, a
+  node that is not a track is refused, the fader is heard, a volume
+  lane overrides it, the trim is not linked by the group, and the
+  fader is.
+- **Four tests changed** in `tests/trackgroup.rs`: the group links the
+  fader and not the trim, which is what the tree does.
+- **One command** (`sound.track.fader`) and **one command changed** —
+  `sound.track.set` no longer asks the groups. The MCP server now
+  carries **262** commands, and the sound battery carries **51**.
+
+### What it does not settle
+
+- **The tree's mute, solo and record are not linked here.** The tree's
+  group shares four attributes, and this tree shares one: the level.
+  The mute and the solo are the track's own, and the record is the
+  tree's arm button and has no place in a document.
+- **The tree's fader is a nudge and a number.** The tree moves the
+  fader in steps as well as setting it, and its nudge is a command of
+  its own. Here the fader is a number and the number is set.
