@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **sixty-five commands**, one for each thing a person does to a
+//! - **sixty-eight commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -35,7 +35,8 @@
 //!   **stems**, **separate** a clip into two or on the **grid**,
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
-//!   a clip, and
+//!   a clip, **quantise**, **transpose** and change the **velocity** of
+//!   the notes of a clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -152,6 +153,25 @@
 //! MIDI clip are in the clip's payload: a note is a pitch and a place
 //! and a length, and it has no life of its own.
 //!
+//! **A note's place is a fact and the tree's quantise is not.** The
+//! tree's quantise has a **random** component: a note is moved by a
+//! random fraction of a step, and the same quantise twice does not
+//! give the same notes. Here it does not: a note's place in a
+//! document is a fact, and a fact that changes each time it is asked
+//! for is not a fact.
+//!
+//! **The tree clamps a pitch and this tree refuses.** The tree's
+//! transpose pushes a note past the top of the range onto a hundred
+//! and twenty-seven, and a note asked for as a hundred and thirty is
+//! a note the caller does not know about. Here the transpose is
+//! **refused** and no note is moved — the same rule the gain follows
+//! (§201).
+//!
+//! **The quantise is onto the session's grid.** The tree's quantise
+//! takes a grid of its own, in ticks; here the grid is the session's
+//! (§200) and it is musical, so the lines move with the tempo and
+//! follow the meter.
+//!
 //! **The tick of a note is the kit's tick.** The MIDI library counts
 //! in nine hundred and sixty ticks a quarter note, and so does the
 //! sound battery's tempo map (§19) — so a note's place in a clip and
@@ -193,9 +213,6 @@
 //!   carry a tempo of its own, and the import reads the notes at the
 //!   tempo the **document** says: a second tempo map would be a second
 //!   truth about the same timeline.
-//! - **The notes are not edited.** Quantising a note and moving it are
-//!   the tree's operations, and they are not here: a clip's notes may
-//!   be read and written, and not yet moved.
 //! - **A scheme has no id of its own.** The tree's scheme carries an id
 //!   "to tell this scheme from another one under the same key after an
 //!   undo or in another session, for pastes from the clipboard". This
@@ -276,7 +293,7 @@ pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
-pub use midi::{ExportMidi, ImportMidi, ReadMidi};
+pub use midi::{ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, TransposeMidi, VelocityMidi};
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,

@@ -527,6 +527,239 @@ impl ReadMidi {
     }
 }
 
+/// **Quantise the notes** of a clip onto the session's **grid**.
+///
+/// The grid is the session's (§200) and the lines are musical, so they
+/// move with the tempo and follow the meter. Every note is put on the
+/// nearest line, and a note that is exactly between two lines goes to
+/// the **earlier** one — the same tie the grid breaks everywhere else.
+///
+/// The notes keep their **length**, and the **length of the clip** is
+/// worked out again from the notes: a clip that is as long as its
+/// notes need is a clip that says how long it is.
+///
+/// The notes are read at the tempo of the document, and a note's place
+/// is a **fact**: there is no random component here, because a note
+/// that is somewhere else each time it is asked is a note nobody can
+/// rely on.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.quantize",
+    area = "sound",
+    layer = "sound",
+    icon = "sound",
+    menu("Clip", "Quantize MIDI"),
+    mutates,
+    undoable
+)]
+pub struct QuantizeMidi {
+    /// The clip to quantise.
+    pub clip: NodeRef,
+}
+
+impl QuantizeMidi {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.quantize".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        let mut moved = 0;
+        for note in midi.notes.iter_mut() {
+            // The note's place on the timeline, and the line nearest to
+            // it.
+            let at = payload.start.saturating_add(map.ticks_to_samples(note.start, settings.sample_rate));
+            let line = settings.grid.snap(at, &map, settings.sample_rate);
+            let offset = line.saturating_sub(payload.start).max(0);
+            let tick = map.samples_to_ticks(offset, settings.sample_rate);
+            if tick != note.start {
+                note.start = tick;
+                moved += 1;
+            }
+        }
+        // The **length** of the clip is derived from the notes.
+        let end_tick = midi.end_tick();
+        let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
+        let length = map
+            .ticks_to_samples(start_tick.saturating_add(end_tick), settings.sample_rate)
+            .saturating_sub(map.ticks_to_samples(start_tick, settings.sample_rate));
+        payload.midi = Some(midi);
+        payload.length = length.max(1);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("quantised the notes of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "notes": moved, "length": payload.length })))
+    }
+}
+
+/// **Transpose** the notes of a clip.
+///
+/// The pitch of a MIDI note is from zero to a hundred and twenty-seven,
+/// and a transpose that would take a note out of that range is
+/// **refused**: the notes are not changed at all. The tree clamps such
+/// a pitch into the range, and a note that was asked for and is not
+/// there is a note the caller does not know about.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.transpose",
+    area = "sound",
+    layer = "sound",
+    icon = "sound",
+    menu("Clip", "Transpose MIDI"),
+    mutates,
+    undoable
+)]
+pub struct TransposeMidi {
+    /// The clip to transpose.
+    pub clip: NodeRef,
+    /// How many semitones, up or down.
+    pub semitones: Number,
+}
+
+impl TransposeMidi {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.transpose".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        if !self.semitones.0.is_finite() {
+            return Err(EngineError::Failed {
+                id,
+                message: "a transpose is a number of semitones".to_string(),
+            });
+        }
+        let semitones = self.semitones.0.round() as i32;
+        let mut sequence = midi.to_sequence();
+        craftkit_midi::transpose(&mut sequence.notes, semitones).map_err(|error| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "the note of pitch {} would leave the range with {semitones} semitones",
+                error.pitch
+            ),
+        })?;
+        // The notes come back with their new pitches, and the rest of
+        // the sequence is as it was.
+        for (note, moved) in midi.notes.iter_mut().zip(sequence.notes.iter()) {
+            note.pitch = moved.pitch;
+        }
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("transposed the notes of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "semitones": semitones })))
+    }
+}
+
+/// **Change the velocity** of the notes of a clip.
+///
+/// The velocity is how hard a note is struck, and it is from one to a
+/// hundred and twenty-seven. A velocity outside that range is
+/// **refused** and the notes are not changed: the tree clamps such a
+/// velocity into the range, and a note asked for as a hundred and fifty
+/// is not a note the caller knows about.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.velocity",
+    area = "sound",
+    layer = "sound",
+    icon = "sound",
+    menu("Clip", "Velocity"),
+    mutates,
+    undoable
+)]
+pub struct VelocityMidi {
+    /// The clip to change.
+    pub clip: NodeRef,
+    /// The velocity every note is struck at.
+    pub set: Option<Number>,
+    /// The change in the velocity of every note.
+    pub delta: Option<Number>,
+}
+
+impl VelocityMidi {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.velocity".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        let op = match (self.set, self.delta) {
+            (Some(set), _) => craftkit_midi::VelocityOp::Set(number_of(&id, set.0, "the velocity")? as u8),
+            (None, Some(delta)) => {
+                craftkit_midi::VelocityOp::Add(number_of(&id, delta.0, "the change in the velocity")?)
+            }
+            (None, None) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the velocity, or the change in it, is needed".to_string(),
+                });
+            }
+        };
+        let mut sequence = midi.to_sequence();
+        craftkit_midi::change_velocity(&mut sequence.notes, &op).map_err(|error| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "the velocity {} is not one a note may have: it is from {} to {}",
+                error.velocity,
+                craftkit_midi::MIN_VELOCITY,
+                craftkit_midi::MAX_VELOCITY
+            ),
+        })?;
+        for (note, moved) in midi.notes.iter_mut().zip(sequence.notes.iter()) {
+            note.velocity = moved.velocity;
+        }
+        payload.midi = Some(midi);
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("changed the velocity of the notes of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id })))
+    }
+}
+
+/// The clip of a command, read.
+fn clip_of(session: &Session, id: &str, clip_id: u64) -> Result<ClipPayload, EngineError> {
+    let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no node `{clip_id}`"),
+    })?;
+    if node.kind != "sound.clip" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+        });
+    }
+    ClipPayload::from_json(&node.data)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })
+}
+
+/// Write a clip's payload back into the document.
+fn write_clip(session: &mut Session, clip_id: u64, payload: &ClipPayload) -> Result<(), EngineError> {
+    if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+        node.data = payload.to_json();
+    }
+    Ok(())
+}
+
+/// A whole number from a parameter.
+fn number_of(id: &str, value: f64, what: &str) -> Result<i32, EngineError> {
+    if !value.is_finite() || value.fract() != 0.0 {
+        return Err(EngineError::Failed { id: id.to_string(), message: format!("{what} is a whole number") });
+    }
+    if value < i32::MIN as f64 || value > i32::MAX as f64 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("{what} is a whole number that fits in a note"),
+        });
+    }
+    Ok(value as i32)
+}
+
 /// Reads a MIDI file, within the limits.
 fn read_midi_file(id: &str, path: &str) -> Result<craftkit_midi::Smf, EngineError> {
     let metadata = std::fs::metadata(path).map_err(|error| EngineError::Failed {

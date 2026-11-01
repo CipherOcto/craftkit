@@ -36,14 +36,33 @@
 //! million events is not read, because the reading would be the
 //! problem, not the file.
 //!
+//! # What was found
+//!
+//! **The tree's MIDI is a crate of a model, a file, an operations
+//! module and a set of names.** The model and the file are here, and
+//! the operations are here too — the quantise, the transpose, the
+//! velocity and the length — and the **names** are not: a name is for
+//! a person to read, and nothing here is read by a person yet.
+//!
+//! **The tree's transpose clamps and this one refuses.** A pitch of a
+//! MIDI note is from zero to a hundred and twenty-seven, and the tree
+//! pushes a note that would leave the range onto the end of it. Here
+//! the transpose is refused and no note is moved: a note that was asked
+//! for and is not there is a note the caller does not know about.
+//!
+//! **The tree's quantise is random and this one is not.** The tree's
+//! quantise may move a note by a random fraction of a step, so that
+//! the same quantise twice does not give the same notes. Here a note's
+//! place is a fact, and a fact that changes each time it is asked for
+//! is not a fact.
+//!
 //! # What this does not do
 //!
 //! - **It does not make a sound.** There is no synthesiser here: the
 //!   notes are numbers and the numbers do not sing.
-//! - **It does not edit.** Quantising a note and moving it are the
-//!   tree's operations, and they are a matter of arithmetic over the
-//!   notes — but they are not here yet, and a file may be read and
-//!   written without them.
+//! - **It does not play.** The operations here move notes, change how
+//!   hard they are struck and how long they last; they do not make a
+//!   sound of them, and there is no synthesiser anywhere in the kit.
 //! - **It does not keep the file's extras.** A MIDI file may carry a
 //!   key signature, a marker, a tempo or a meter; the reader keeps
 //!   those it understands, and the writer writes them back.
@@ -58,8 +77,13 @@
 )]
 #![forbid(unsafe_code)]
 
+mod ops;
 mod smf;
 
+pub use ops::{
+    DurationOp, MAX_VELOCITY, MIN_VELOCITY, QuantizeOptions, TransposeError, VelocityError, VelocityOp,
+    change_duration, change_velocity, quantize, quantize_sequence, split_by_pitch, transpose,
+};
 pub use smf::{MAX_EVENTS, MAX_TRACKS, Smf, SmfTrack, read_smf, write_smf};
 
 /// Ticks a quarter note lasts, in this crate's ticks.
