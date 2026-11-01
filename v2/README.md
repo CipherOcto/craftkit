@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1503 tests.** The MCP server links **all fifteen batteries** in, so the
+**1509 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1503 tests
+cargo test          # 1509 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3648,6 +3648,7 @@ so.
 | the **stems** of a session | **built.** The mix with one track in it, one file for each track, written into a directory (§211) | §211 |
 | the **separation** of a clip | **built.** One clip becomes two at a place inside it, and the two are the same sound (§212) | §212 |
 | the **mute** of a track | **built.** A switch on the track, and the mute lane is its default (§213) | §213 |
+| the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14670,3 +14671,48 @@ lane under it, and a lane is a curve for something that moves.
   track does nothing. The matrix is a redesign of the mixer and not an
   addition to it, and it is the next thing the tree has that this
   tree cannot say.
+
+## 214. The solo-safe track
+
+The tree's mixer keeps a **solo-safe** flag beside the solo: a solo
+silences the other tracks, and a solo-safe track is not silenced by
+it. It is the flag that says *this one stays* — a reference, a click, a
+talk track — when somebody listens to one thing on purpose. This tree
+had the solo and no way to exempt a track from it.
+
+### What was built
+
+- The command `sound.track.solo.safe` makes a track solo safe and
+  takes it back.
+- A solo silences the other tracks as it did before, and a solo-safe
+  track is **not** silenced by it — neither its own sound nor the copy
+  that a send takes of it.
+
+### What the port found
+
+- **The tree's flag is beside the solo and this tree's is a command of
+  its own.** The tree's `mix.solo_safe` is a switch on the track, like
+  the mute of §213, and the mixer asks it when it silences the others:
+  a track is silenced by a solo unless it is soloed itself or it is
+  solo safe. Here the flag was missing and the mixer silenced every
+  track that was not soloed.
+- **The tree has a third case and this tree has two.** The tree's
+  mixer also keeps a track that **receives a solo** — a track fed by a
+  soloed track through a bus — and that one is not silenced either.
+  Here a bus is a bus and the question of what it receives is the
+  routing's, so the flag is the only way to stay.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/solosafe.rs`): a track
+  carries its solo safe, a solo silences the other tracks, a solo-safe
+  track stays, a track that is not solo safe is silenced, the solo
+  safe can be taken off, and a node that is not a track is refused.
+- **One command** (`sound.track.solo.safe`). The MCP server now
+  carries **270** commands, and the sound battery carries **59**.
+
+### What it does not settle
+
+- **The tree's "receives a solo" is not here.** A track fed by a
+  soloed track through a bus is not silenced in the tree, and here it
+  is: the flag is the only way to stay.
