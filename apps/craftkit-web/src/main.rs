@@ -23,10 +23,16 @@
 //! ## Running it
 //!
 //! ```text
-//! cargo xtask wasm        # or: cargo build --target wasm32-unknown-unknown -p craftkit-web
-//! wasm-bindgen --target web --out-dir apps/craftkit-web/dist \
-//!     target/wasm32-unknown-unknown/release/craftkit-web.wasm
+//! cargo xtask bundle      # writes apps/craftkit-web/dist/craftkit_web.js
 //! ```
+//!
+//! **`cargo xtask bundle`, not `cargo xtask wasm`.** The wasm phase only
+//! *checks* that the crates compile ✓ and writes nothing ✓; the bundle is
+//! what produces the file this page imports ✓ — and `wasm-bindgen` names it
+//! after the `.wasm` file it is given ✓ (`craftkit-web.js` ✓), while the page
+//! imports `./dist/craftkit_web.js` ✓. A reader who followed the old
+//! instructions got a 404 on every load ✓ (§11 ✓). The bundle command passes
+//! `--out-name craftkit_web` ✓, so the two cannot drift ✓.
 //!
 //! Serve `apps/craftkit-web/` over HTTP. `file://` will not do: a canvas needs a
 //! real origin, and `localStorage` needs one too.
@@ -413,7 +419,8 @@ fn main() -> std::process::ExitCode {
         "craftkit-web is the browser build and needs one.\n\
          It is still a normal Rust crate, so `cargo test -p craftkit-web` runs here,\n\
          and `craftkit-web --selftest` draws frames with no browser at all.\n\
-         Build it with `cargo xtask wasm`, or use `craftkit` for a desktop window."
+         Check it with `cargo xtask wasm`, build the page with `cargo xtask bundle`,\n\
+         or use `craftkit` for a desktop window."
     );
     std::process::ExitCode::from(2)
 }
@@ -454,9 +461,8 @@ const USAGE: &str = "\
 craftkit-web — craftkit in a browser
 
 USAGE (browser only):
-    cargo xtask wasm
-    wasm-bindgen --target web --out-dir apps/craftkit-web/dist \\
-        target/wasm32-unknown-unknown/release/craftkit-web.wasm
+    cargo xtask bundle
+    # writes apps/craftkit-web/dist/craftkit_web.js
     # then serve apps/craftkit-web/ over HTTP
 
 ON A MACHINE:
