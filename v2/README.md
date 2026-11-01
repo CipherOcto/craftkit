@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1283 tests.** The MCP server links **all fifteen batteries** in, so the
+**1286 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1283 tests
+cargo test          # 1286 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3619,6 +3619,7 @@ so.
 | the **outline of a line** | **built.** The shape a stroke covers is a path of its own, which may be filled, measured and cut (§182) | §182 |
 | a **file written out** | **built.** The document is written out as a PDF file, and the file that comes out is read back (§183) | §183 |
 | a **smooth point** | **built.** A point's two handles become one: collinear and of the same length, and a straight side becomes a curve (§184) | §184 |
+| the **spacing** of the clips | **built.** The clips are butted against each other, with a gap between them, end to start or start to start (§185) | §185 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12465,3 +12466,56 @@ handles and no command that made them agree.
   the point where it was and makes the curve as smooth as it can be.
 - **The first point of a closed contour gains a segment.** The contour
   is the same shape, and the segment is the edge that was there.
+
+---
+
+## 185. The clips, butted against each other
+
+The tree's editor lays the pieces of a take out by hand, and the
+**spacing** command does it: the clips are moved so that each one
+starts where the last one ended. v2's timeline could trim a clip and
+stretch it and mute it, and could not move a row of clips at once.
+
+### What was built
+
+- The command `sound.clip.space` spaces the clips it is given: each
+  one starts where the last one ended, with a **gap** between them.
+- The spacing may be **start to start** as well — the starts are the
+  same distance apart and the lengths are their own.
+- One clip is not **spaced**, and a gap that is not a gap is refused
+  by name.
+
+### What the port found
+
+- **The gap is in samples and not in seconds.** The tree's editor
+  works in seconds, because a person edits in seconds; this tree's
+  timeline is in the session's samples (§19), and a gap of a quarter
+  of a second is a number of samples that depends on the tempo of the
+  session — so the gap here is a number of samples and the caller
+  says which.
+- **Moving a clip does not move what it reads.** The clip's start is
+  where it sits, and its offset is where it reads from in the source;
+  spacing the clips moves the first and leaves the second — the same
+  fact the trim command found when it moved the offset by the delta
+  divided by the stretch.
+
+### What it cost
+
+- **Three tests** in the battery (`tests/space.rs`): the clips are
+  butted together, they may be spaced start to start, and a spacing
+  that cannot be done is refused.
+- **One command** (`sound.clip.space`). The MCP server now carries
+  **226** commands.
+
+### What it does not settle
+
+- **The locked clips are not skipped.** The tree's editor leaves a
+  time-locked or an edit-locked clip where it is; this tree has no
+  locks, so every clip that is named is moved.
+- **The clips are spaced in the order they start.** The tree's editor
+  spaces the selected clips, and so does this one, but the selection
+  here is a list of ids and not the editor's selection — which is the
+  session's state and not the document's.
+- **The gap is not musical.** The tree's editor can space the clips
+  on the beats; here the gap is a number of samples, and the caller
+  works out what a beat is.
