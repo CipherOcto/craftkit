@@ -11,11 +11,12 @@
 //! It contributes:
 //!
 //! - a **layer**, `sound`, which the rest of it is in;
-//! - **fourteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
+//! - **fifteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
-//!   `sound.playhead`, `sound.source` and `sound.group`;
-//! - **sixty commands**, one for each thing a person does to a
+//!   `sound.playhead`, `sound.source`, `sound.group` and
+//!   `sound.autoname`;
+//! - **sixty-two commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -32,7 +33,8 @@
 //!   set a track's **fader** and its **pan**, move a clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
-//!   **mute** a track, make a track **solo safe**, and
+//!   **mute** a track, make a track **solo safe**, **name** the clips
+//!   that editing separates, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -132,6 +134,16 @@
 //! file in the session, and a length in the edit state — has no place
 //! here: the stretch is a fact and the material is derived from it.
 //!
+//! **A naming scheme is a node and not a number in a map.** The tree
+//! keeps its auto rename schemes in the session, keyed by a number,
+//! and each clip holds the key of the scheme it is in — and the key is
+//! what makes the scheme **shared**, because the clips separated from
+//! one clip share it and count up one sequence. Here the scheme is a
+//! node and the clips **point at it**, the same shape as a group
+//! (§199): a scheme is a thing with a life of its own, it is pruned
+//! when no clip is in it, and a clip's record is not rewritten to
+//! change its scheme.
+//!
 //! # What this does not do
 //!
 //! - **It draws nothing.** A sound document is not a picture. v2 has no
@@ -157,6 +169,11 @@
 //!   sources is a mono mix — so there is no field for a mono sound to
 //!   be placed in, and the pan of a mono track does nothing. The
 //!   matrix is a redesign of the mixer and not an addition to it.
+//! - **A scheme has no id of its own.** The tree's scheme carries an id
+//!   "to tell this scheme from another one under the same key after an
+//!   undo or in another session, for pastes from the clipboard". This
+//!   battery has no clipboard — there is no copy and no paste — and so
+//!   there is nothing for such an id to tell apart.
 //! - **A big shift loses the top of the sound.** The pitch shift is
 //!   made by resampling the sound as if it were played faster, and a
 //!   resample takes away what was above the new half of the rate: an
@@ -199,6 +216,10 @@ mod locks;
 // The **marks** on a clip: what a person has said about it.
 mod marks;
 
+// The **auto rename** of a clip: the names editing gives the pieces it
+// separates.
+mod autoname;
+
 // The **group** a clip is in: a set of clips that belong together.
 mod group;
 
@@ -213,6 +234,7 @@ mod conform;
 
 use std::collections::HashMap;
 
+pub use autoname::{ReadAutoName, SetAutoName};
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
 pub use conform::Conform;
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
@@ -3066,6 +3088,10 @@ fn separate_at(
     if let Some(source) = source {
         document.add_relation(craftkit_sdk::Relation::new(second_id, source, "source"));
     }
+    // The **new piece** takes the next name of the scheme the clip is
+    // in: the scheme counts up, and the piece before the cut keeps the
+    // name it had.
+    crate::autoname::name_the_new_piece(session, clip_id, second_id)?;
     Ok(second_id)
 }
 
