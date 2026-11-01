@@ -21,6 +21,10 @@
 //! steps made after the encoding — are in the module `predictors`, and
 //! the command `pdf.stream.decode` undoes both.
 //!
+//! And the **page tree** is here: a page may have a parent, and the
+//! four attributes a page inherits — the media box, the resources, the
+//! crop box and the rotation — are found by walking up the tree.
+//!
 //! # The mapping
 //!
 //! | the object model | v2 |
@@ -376,6 +380,179 @@ impl DecodeStream {
     }
 }
 
+/// Put a **page** in the document.
+///
+/// A page is an indirect object whose dictionary says `/Type /Page`, and
+/// it may have a **parent**: the page is in a tree, and the tree is
+/// what a PDF file has instead of a list of pages.
+#[derive(Command)]
+#[command(id = "pdf.page.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
+pub struct AddPage {
+    /// The object's number in the file.
+    pub object: Number,
+    /// The page's own dictionary: a list of `[key, value]` pairs, in
+    /// order.
+    pub entries: Option<serde_json::Value>,
+    /// The page's parent, if it has one.
+    pub parent: Option<NodeRef>,
+}
+
+impl AddPage {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let object = self.object.0;
+        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: "pdf.page.add".to_string(),
+                message: "an object number is a whole number".to_string(),
+            });
+        }
+        let number = object as u64;
+        if number == 0 {
+            return Err(EngineError::Failed {
+                id: "pdf.page.add".to_string(),
+                message: "object numbers start at one".to_string(),
+            });
+        }
+        let mut entries = match &self.entries {
+            Some(entries) => check_entries(entries)?,
+            None => Vec::new(),
+        };
+        // The page says what it is: the type is the page's own.
+        let kind = entries.iter().find_map(|entry| {
+            let pair = entry.as_array()?;
+            if pair.first()?.as_str()? == "Type" { Some(pair.get(1)?.clone()) } else { None }
+        });
+        match kind {
+            Some(value) if value.as_str() != Some("Page") => {
+                return Err(EngineError::Failed {
+                    id: "pdf.page.add".to_string(),
+                    message: "a page's type is `Page`".to_string(),
+                });
+            }
+            Some(_) => {}
+            None => entries.push(serde_json::json!(["Type", "Page"])),
+        }
+        let parent = self.parent.map(|parent| parent.0);
+        if let Some(parent) = parent {
+            let node = session.document().node(parent).ok_or_else(|| EngineError::Failed {
+                id: "pdf.page.add".to_string(),
+                message: format!("there is no node `{parent}` in the document"),
+            })?;
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: "pdf.page.add".to_string(),
+                    message: format!("the node `{parent}` is a `{}` and not an object", node.kind),
+                });
+            }
+        }
+        let data = serde_json::json!({ "object": number, "entries": entries });
+        let name = format!("page {number}");
+        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+        if let Some(parent) = parent {
+            // The page names its parent and the parent names the page:
+            // the tree is two edges, as the file has it.
+            for (from, to, key) in [(id, parent, "Parent"), (parent, id, "Kids")] {
+                let payload = serde_json::json!({ "key": key, "generation": 0 });
+                let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
+                if !session.document_mut()?.add_relation(relation) {
+                    return Err(EngineError::Failed {
+                        id: "pdf.page.add".to_string(),
+                        message: format!("the page `{id}` is already under `{parent}`"),
+                    });
+                }
+            }
+        }
+        Ok(Outcome::changed(format!("added the `{name}`"))
+            .with_data(serde_json::json!({ "id": id, "object": number, "parent": parent })))
+    }
+}
+
+/// The **attributes** of a page, and the ones it inherits.
+///
+/// A page may leave out what a page does not have to say: the **media
+/// box**, the **resources**, the **crop box** and the **rotation** are
+/// inherited from the nearest ancestor that has them. The command says
+/// what the page has, and where each thing came from.
+#[derive(Command)]
+#[command(id = "pdf.page.attributes", area = "pdf", layer = "pdf", icon = "list")]
+pub struct PageAttributes {
+    /// The page.
+    pub page: NodeRef,
+}
+
+/// The keys a page **inherits**.
+const INHERITED: [&str; 4] = ["Resources", "MediaBox", "CropBox", "Rotate"];
+
+impl PageAttributes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.page.0;
+        let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
+            id: "pdf.page.attributes".to_string(),
+            message: format!("there is no node `{id}`"),
+        })?;
+        let own = entries_of(&node.data);
+        let mut attributes = serde_json::Map::new();
+        let mut inherited = serde_json::Map::new();
+        for key in INHERITED {
+            if let Some((_, value)) = own.iter().find(|(name, _)| name == key) {
+                attributes.insert(key.to_string(), value.clone());
+                continue;
+            }
+            // The **ancestors**: the nearest one that has it wins.
+            let mut ancestor = parent_of(session, id);
+            let mut steps = 0_usize;
+            let mut found = None;
+            while let Some(current) = ancestor {
+                steps += 1;
+                if steps > MAX_ANCESTORS {
+                    break;
+                }
+                let Some(current_node) = session.document().node(current) else { break };
+                let entries = entries_of(&current_node.data);
+                if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
+                    found = Some((value.clone(), current));
+                    break;
+                }
+                ancestor = parent_of(session, current);
+            }
+            if let Some((value, from)) = found {
+                attributes.insert(key.to_string(), value);
+                inherited.insert(key.to_string(), serde_json::json!(from));
+            }
+        }
+        Ok(Outcome::new(format!("{} attribute(s)", attributes.len())).with_data(serde_json::json!({
+            "id": id,
+            "attributes": attributes,
+            "inherited": inherited,
+        })))
+    }
+}
+
+/// The **parent** of a page.
+fn parent_of(session: &Session, id: u64) -> Option<u64> {
+    session
+        .document()
+        .relations
+        .iter()
+        .find(|relation| {
+            relation.kind == "ref"
+                && relation.from == id
+                && relation
+                    .payload
+                    .get("key")
+                    .and_then(|key| key.as_str())
+                    .map(|key| key == "Parent")
+                    .unwrap_or(false)
+        })
+        .map(|relation| relation.to)
+}
+
+/// How many **ancestors** a page may have.
+///
+/// A page tree is a tree, and a tree has no loop in it; the bound is
+/// there so that a document that says otherwise is not walked for ever.
+const MAX_ANCESTORS: usize = 64;
+
 /// Say that one object refers to another.
 ///
 /// The reference says which **key** it is under and which **generation**
@@ -570,6 +747,8 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     AddObject,
     AddStream,
+    AddPage,
+    PageAttributes,
     DecodeStream,
     AddReference,
     ListReferences,
