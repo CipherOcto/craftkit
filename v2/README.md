@@ -836,6 +836,10 @@ different commands with one id.
 - `crates/craftkit-sound-time` — the **time model**: samples, ticks, a
   tempo map and the three timebases (§19). A library, not a plugin, for
   the same reason the geometry is.
+- `crates/craftkit-midi` — the **MIDI library**: the notes, the
+  controllers and the Standard MIDI File (§217). A library, not a
+  plugin, for the same reason the geometry is: a file is a file, and
+  the reader knows nothing about a document.
 - `crates/craftkit-plugin-pdf` — the **PDF battery**: the object model of
   a PDF document — indirect objects, dictionaries, streams and
   references — ported into v2's seams, and the three things it found
@@ -995,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1523 tests.** The MCP server links **all fifteen batteries** in, so the
+**1538 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1523 tests
+cargo test          # 1538 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3651,6 +3655,7 @@ so.
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
+| the **MIDI** of a document | **partly.** The notes, the controllers and the Standard MIDI File are a library of their own; a clip does not hold notes yet (§217) | §217 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14859,3 +14864,83 @@ next clip separated from any of them is "Kick4".
   with it, and the copy pasted into another session brings the scheme
   along and counts on from it. This battery has no clipboard, and so
   there is nothing to carry.
+
+## 217. The MIDI library
+
+MIDI is a **sequence of events on a timeline**: a note, or a change of
+something that is not a pitch. The tree's sound editor has all of it —
+a MIDI clip holds a sequence of notes and controllers, and the tree
+reads and writes Standard MIDI Files — and v2 had none of it: there
+was no note in the whole of v2, and no MIDI file.
+
+### What was built
+
+- The crate `craftkit-midi`: the **model** — a `Note`, a `CtrlEvent`
+  and a `Sequence` of them — and the **file**: `read_smf` and
+  `write_smf`, the Standard MIDI File, in the public SMF 1.0
+  specification.
+- The ticks are counted at **960 a quarter note**, and every file is
+  converted to them when it is read, so a tick is a tick everywhere.
+- The reader is **patient** with what the format allows: a running
+  status, a note-on of velocity zero as a note-off, a note-off with no
+  note-on (ignored), two notes of the same pitch on top of each other
+  (matched first in, first out) and a note that is never let go
+  (closed at the end of the track). It is not patient with what the
+  format does not allow: a header that is not one, a chunk longer than
+  the file, a number longer than four bytes, a data byte with no
+  status to run on. Each of those is a **refusal with a name**.
+- The file is **hostile**: the number of events and the number of
+  tracks are capped, and the writer **refuses** a fact it cannot
+  write — a tempo of zero, a meter whose denominator is not a power of
+  two.
+
+### What the port found
+
+- **The tree's MIDI is a crate and this tree's is a crate too.** The
+  tree has `soundcraft-midi`: the model, the file, the **editing
+  operations** and the display names. Here the model and the file are
+  built, and the operations and the names are not — a note may be read
+  and written, and moving one is the tree's operation and not yet
+  here.
+- **The tree's ticks are the model's ticks and so are these.** The
+  tree counts at 960 a quarter note and converts every file to it when
+  it is read, so that a file's own division does not change what a
+  tick means. Here the same: the division in the file is read and
+  converted, and a SMPTE division — frames a second — is approximated
+  at a hundred and twenty beats a minute, because a file does not say
+  how fast it is played.
+- **The tree's errors are the errors of a `thiserror` enum and these
+  are the kit's.** The tree's `MidiError` is a list of named
+  refusals; here it is the same list, written the way the kit writes
+  its own — a `Display` and a `std::error::Error`, and no `thiserror`,
+  because the kit's crates carry no dependencies.
+- **The tree's file is not an `Eq` and this one is not either.** A
+  tempo is a number of beats a minute, and a number of beats a minute
+  is a float; a file that holds one cannot be compared with `==`. The
+  tree's `Smf` says the same, and here the reason is written down
+  where the type is.
+
+### What it cost
+
+- **Fifteen tests** in the new crate (`tests/midi.rs`): a file that is
+  written is a file that is read back, an empty file, the ticks, the
+  controllers, the tempos and the meters, a file that is not a MIDI
+  file, a truncated file, a number that is too long, a chunk longer
+  than the file, notes that overlap, a note that is never let go, a
+  tempo that is not a tempo, a meter that is not a meter, the
+  duplicates and the end of a sequence.
+- **One crate** (`craftkit-midi`), at **L0** — it depends on nothing,
+  and the layer table says so.
+
+### What it does not settle
+
+- **The notes are not in a document yet.** A MIDI file may be read and
+  written, but a clip does not hold notes: the sound battery has no
+  MIDI clip, and the library is not yet under anything.
+- **The editing operations are not here.** Quantising a note, moving
+  it, changing its velocity and splitting it are the tree's
+  operations, and they are arithmetic over the notes — but they are
+  the tree's, and they are not in this crate yet.
+- **The names are not here.** The tree names a note ("C3"), a drum and
+  a program; a name is for a person to read, and nothing here is read
+  by a person yet.
