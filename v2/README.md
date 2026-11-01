@@ -995,7 +995,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1509 tests.** The MCP server links **all fifteen batteries** in, so the
+**1514 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1097,7 +1097,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1509 tests
+cargo test          # 1514 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3649,6 +3649,7 @@ so.
 | the **separation** of a clip | **built.** One clip becomes two at a place inside it, and the two are the same sound (§212) | §212 |
 | the **mute** of a track | **built.** A switch on the track, and the mute lane is its default (§213) | §213 |
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
+| the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14716,3 +14717,69 @@ had the solo and no way to exempt a track from it.
 - **The tree's "receives a solo" is not here.** A track fed by a
   soloed track through a bus is not silenced in the tree, and here it
   is: the flag is the only way to stay.
+
+## 215. The separation of a clip on the grid
+
+The tree's editor separates a take **on the grid**: the clip is cut
+at every line of the grid it crosses, and the pieces are the bars or
+the beats the grid says they are. The separation of §212 takes a
+place; this one takes the **lines**.
+
+### What was built
+
+- The command `sound.clip.separate.grid` cuts a clip at every **line
+  of the session's grid** that it crosses. The grid is the session's
+  (§200) and the lines are musical, so they move with the tempo and
+  follow the meter.
+- The number of lines is **bounded**: a clip that crosses more lines
+  than the bound is **refused**, and not cut at the first thousand of
+  them. A clip cut at a thousand lines is a clip nobody meant to make.
+- The cut itself is §212's cut: the pieces are the same sound, the
+  second starts later in the source by the distance the cut made, and
+  the fade at the cut is dropped.
+
+### What the port found
+
+- **The tree separates a range on a track and this tree separates a
+  clip.** The tree's `separate_on_grid` takes the tracks and the
+  range, reads the grid lines of the range — bounded at ten thousand
+  — and separates every clip that crosses each of them. Here one clip
+  is separated at the lines it crosses, and the lines are the clip's
+  own span.
+- **The tree truncates the lines and this tree refuses.** The tree
+  reads at most ten thousand lines and separates at the ones it got;
+  a clip that crosses more lines than that is cut at the first ten
+  thousand and the rest of it is not cut at all. Here the bound is a
+  thousand lines and a clip that crosses more is **refused** — a
+  refusal never truncates (§ the kit's own rule), and a clip that was
+  cut at some of its lines and not at the others is a clip that says
+  something false about its own length.
+- **The tree's lines are read from its edit state and this tree's
+  from the session.** The tree's grid lives beside the tool and the
+  edit mode (§200), and here it lives with the sample rate and the
+  timecode — so the lines a clip was cut on are in the document and
+  not in the editor's state.
+- **The tree's separation is a track's and this tree's is a clip's.**
+  The tree's cuts every clip that crosses the line, so one command can
+  cut a whole take; here the clip is named, because a clip is the
+  thing the command is about.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/separategrid.rs`): a
+  clip is cut at every line it crosses, the pieces are the same sound,
+  a clip that crosses no line is not cut, a locked clip is not cut,
+  and a node that is not a clip is refused.
+- **One command** (`sound.clip.separate.grid`) and **one cut** shared
+  with §212 — the cut is now a function of its own, and the two
+  commands are two ways of saying where the cuts are. The MCP server
+  now carries **271** commands, and the sound battery carries **60**.
+
+### What it does not settle
+
+- **The tree finds the places itself.** Separating at transients needs
+  the sound to be looked at, and the tree's sensitivity is a number
+  the caller gives; here the places are the grid's, which are known
+  without looking at anything.
+- **The tree separates at a range and not at a clip.** A take of
+  twenty clips is cut in one command in the tree and in twenty here.
