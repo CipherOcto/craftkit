@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1883 tests.** The MCP server links **all fifteen batteries** in, so the
+**1895 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1883 tests
+cargo test          # 1895 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3705,6 +3705,7 @@ so.
 | the **taking away** of a clip | **built.** A clip is taken off its track, the edge that says which item it played goes with it, and the gap is a gap (§268) | §268 |
 | the **rippling** of a clip | **built.** A clip is taken away and the gap closes, and the ripple is refused when the time the clip took is not free (§269) | §269 |
 | the **filling** of a range | **built.** A range is filled from a cell — copied or counted on — and the target holds the source at a corner (§270) | §270 |
+| the **number format** of a cell | **built.** A cell carries a number format and the text it shows is derived from its value and that format (§271) | §271 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18686,3 +18687,89 @@ The spreadsheet battery could set a cell and could not fill a **range**.
   (`1st`, `2nd`).
 - **The tree's source may be a range.** The tree fills lane by lane
   from a source that is a range of cells; here the source is one cell.
+
+---
+
+## 271. The number format of a cell
+
+The spreadsheet battery could set a cell and could not say how the cell
+is **written**.
+
+### What was built
+
+- The command `grid.cell.format` puts a **number format** on a cell.
+  The formats this tree has are `general`, `0`, `0.00`, `#,##0`,
+  `#,##0.00`, `0%` and `0.00%`. A format that is **not one of them**
+  is refused, and so is a format that is **too long** — the tree's own
+  bound of 255 characters.
+- The command `grid.cell.text` reads the **text the cell shows**: the
+  value of the cell written with its format. The value of a **formula**
+  cell is computed, so this is the calculation.
+- A **percentage** is multiplied by a hundred, the **thousands** are
+  separated, and a number is **rounded away from zero** — the tree's
+  rounding.
+- A cell may be formatted **before it has a value**, setting a value
+  or a formula in a cell keeps its **format**, and the **fill** copies
+  the format of the source.
+- A **text** is not changed by a format, and a cell that is **not
+  there** — a sheet that is not there — is refused.
+
+### What the port found
+
+- **The tree's format is a style, and a style is shared.** In the tree
+  a cell has a **style** and the style holds the format, so a hundred
+  cells with one format carry one format and changing the style changes
+  them all. Here the format is a **field of the cell**, so a hundred
+  cells with one format carry a hundred formats — and the tree's style
+  also carries a font, a fill, borders, an alignment and a protection,
+  none of which are here. The port found the same bargain the compositing battery
+  made with its paths: the thing that is too many to be a node goes in
+  the payload, and the plugin owns it.
+- **The tree's format is a language and this one is a subset.** The
+  tree's `NumberFormat` parses sections, colours, fills, dates, times,
+  currency, accounting, fractions, scientific notation and text
+  sections; and it **never fails** — an unknown part of a code becomes
+  literal text, and a code that is too long becomes General, with the
+  code kept as it is. Here a code that is not one of the seven is
+  **refused**: the tree degrades quietly, and a format that is quietly
+  ignored is a format the user believes in and the program does not
+  have.
+- **The tree's General format is about a screen.** The tree's General
+  format fits the number to the **width of the column** — fewer
+  decimals, then scientific notation, then `####` — because a cell is
+  drawn in a column that is not wide enough. Here the General format is
+  the number as it is: a document is not a screen, and the width of a
+  column is not in it.
+- **The tree's rounding is away from zero, and it is not Rust's
+  default.** The tree's numbers are written with the digits the format
+  asks for, rounded the way a spreadsheet rounds: `0.125` with two
+  decimals is `0.13`. Rust's own formatting rounds halves to even and
+  would write `0.12`, so here the number is scaled and **rounded away
+  from zero** before it is written.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/format.rs`): a number is
+  written with its decimals, the thousands are separated, a percentage
+  is multiplied by a hundred, a number is rounded away from zero, a
+  cell with no format shows its value, a text is not changed by a
+  format, a formula cell shows what it computes, a format that is not
+  one of ours is refused, a format that is too long is refused, a cell
+  may be formatted before it has a value, the fill copies the format,
+  and a sheet that is not there is refused.
+- **Two commands** (`grid.cell.format` and `grid.cell.text`) and a
+  **field** on the cell: the format. The grid battery now carries **11**
+  commands and the MCP server **360**.
+
+### What it does not settle
+
+- **The tree's dates, times, currency, accounting, fractions and
+  scientific formats are not here**, and neither are the tree's
+  **sections** — a format with one code for positive numbers and
+  another for negative ones is not here.
+- **The tree's style is not here**: a style is shared between cells and
+  carries a font, a fill, borders, an alignment and a protection, and
+  here the format is the cell's own.
+- **The tree's `TEXT` function is not here**: the tree's `TEXT` writes
+  a value with a format code inside a formula, and a formula in this
+  tree has no format code in it.
