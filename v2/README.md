@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1627 tests.** The MCP server links **all fifteen batteries** in, so the
+**1632 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1627 tests
+cargo test          # 1632 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3665,6 +3665,7 @@ so.
 | the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
 | the **velocity** of a note | **built.** The notes are struck at a velocity, changed by one, scaled, limited and ramped, and a velocity outside the range is refused (§229) | §229 |
+| the **length** of a note | **built.** The notes are given a length, changed by one, scaled and made legato, and a note is never shorter than a tick (§230) | §230 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15783,3 +15784,64 @@ the **limit** or the **ramp**.
   editor's state — which this tree does not keep (§200). Here the
   clip is named, and a caller with several clips says so several
   times.
+
+## 230. The length of a note
+
+The tree changes how long a note lasts in four ways: it sets the
+length, adds to it, scales it and makes the notes **legato**. v2's
+library had all four operations and no command reached them — the
+notes of a MIDI clip could be struck at another velocity but not made
+another length.
+
+### What was built
+
+- The command `sound.clip.midi.duration` takes a `set`, a `delta`, a
+  `scale` and a `gap` — the gap is the **legato**: every note ends so
+  many ticks before the next note starts, and the last note keeps its
+  length.
+- A note is never shorter than **one tick**: a note of no length is a
+  note that cannot be heard.
+- The length is changed **one way at a time**, as the velocity is
+  (§229).
+- The **room** of the clip is worked out again from the notes: the
+  room grows when the notes need more of it, and it does not shrink
+  when they need less.
+
+### What the port found
+
+- **The tree's command is over a selection and this one is over a
+  clip.** The tree's `event.duration` works on every clip that is
+  selected, and a selection is a thing of the editor's state, which
+  this tree does not keep (§200). Here the clip is named.
+- **The tree's length is clamped and this one is a shape.** The tree's
+  command makes a note's length `max(1)` — a note of no length is
+  never made — and that is a **shape** and not a bound: a note that
+  cannot be heard is not a note at any length, so there is no length
+  that could be asked for and refused. Here the same rule holds, and
+  the shape lives in the library, where the operation is.
+- **The tree's scale is clamped and this one is refused.** The tree
+  takes the factor a caller gave and pushes it into the range between
+  a hundredth and a hundred, so a factor of zero comes out as a
+  hundredth and the caller never hears about it. Here a factor that is
+  not a number, or is negative, is refused and the notes are not
+  changed (§219, the same rule the transpose follows).
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/duration.rs`): the
+  length is set, changed and scaled; a note is never shorter than a
+  tick; the notes are made legato; two ways at once are refused; and
+  the room grows and does not shrink.
+- **One command** (`sound.clip.midi.duration`). The sound battery now
+  carries **95** commands and the MCP server **306**.
+
+### What it does not settle
+
+- **The tree's `RemoveOverlap` is not here.** The tree's library has
+  an operation that shortens a note so that it ends no later than the
+  next note of the same pitch and channel starts, and its own command
+  does not reach it — so here it is in the library and not in a
+  command, for the same reason (§219: a field with no command is not
+  a fact).
+- **The tree's length change is over a selection**, and here it is
+  over a clip: the same gap as the velocity's (§229).
