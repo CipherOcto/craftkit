@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1618 tests.** The MCP server links **all fifteen batteries** in, so the
+**1627 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1618 tests
+cargo test          # 1627 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3664,6 +3664,7 @@ so.
 | the **editing** of a lane | **built.** The breakpoints of a curve are set, taken away, cleared, written and thinned (§225) | §225 |
 | the **taking away** of a link | **built.** A route, a reading, a send and a source can all be taken away, and a link that was never made is refused (§224) | §224 |
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
+| the **velocity** of a note | **built.** The notes are struck at a velocity, changed by one, scaled, limited and ramped, and a velocity outside the range is refused (§229) | §229 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15706,3 +15707,79 @@ and v2 could only put things there.
 - **The tree's renumbering of the bars is not here.** The tree's
   session counts its bars; here the grid counts from the bar line
   (§200) and there are no bar numbers to renumber.
+
+## 229. The velocity of a note
+
+The tree changes how hard a note is struck in four ways: it sets the
+velocity, adds to it, scales it and **limits** it. v2's command had
+only the first two — the library had the **scale**, and nothing had
+the **limit** or the **ramp**.
+
+### What was built
+
+- The command `sound.clip.midi.velocity` takes a `scale` beside its
+  `set` and its `delta`, and a **limit** as its `min` and its `max`.
+- The library's velocity grows two ways: a **limit**, which moves a
+  note onto the edge of the limit, and a **ramp**, which strikes the
+  notes harder and harder along their span — the earliest note at the
+  first value, the latest at the second.
+- The limit's bounds are **swapped** when they are the wrong way
+  round, so a limit of a hundred and ten is a limit of ten and a
+  hundred.
+- The limit's own bounds are **refused** when they are outside the
+  range, and a limit with only one bound is refused as well: a limit
+  says no softer than this **and** no harder than that.
+- The velocity is changed **one way at a time**: two of the four at
+  once is refused, because a caller that meant one and got the other
+  would not know.
+
+### What the port found
+
+- **The tree's limit is the one velocity change that clamps on
+  purpose.** Every other velocity the tree changes is clamped into the
+  range — a note asked for as a hundred and fifty is struck as a
+  hundred and twenty-seven — and this tree **refuses** all of those
+  (§219). But a **limit** says *no softer than this and no harder than
+  that*, so moving a note onto the edge of the limit is what was
+  asked for and not a quiet correction. So the limit clamps and
+  everything else refuses, and the limit's own bounds are still
+  refused: a limit of zero is not a limit of anything, because a
+  velocity of zero is the way a note is let go.
+- **The tree's humanise is random and this one is not.** The tree's
+  velocity has a `Humanize` of its own, which moves every note by a
+  random amount. It is not here, and it is not here for the same
+  reason the tree's random quantise is not (§219): a note struck
+  harder by a different amount each time is not a note the caller
+  knows about. The tree's **limit** and **ramp** are here, because both
+  of them say the same thing every time they are asked.
+- **The tree's command takes the ways in an order, and this one takes
+  them one at a time.** The tree's `event.velocity` tries `set`, then
+  `add`, then `scale`, and a limit is whatever is left over — so a
+  caller that gave both a `set` and a `scale` got the `set` and never
+  heard about the `scale`. Here two ways at once are **refused** and
+  the caller is told which ways there are, because a command that
+  silently drops half of what it was asked for is a command that
+  answers a question nobody asked.
+
+### What it cost
+
+- **Nine tests**: five in the MIDI library (`tests/ops.rs` — the
+  limit, the swapped bounds, a limit out of range, the ramp and a ramp
+  of one note) and four in the sound battery (`tests/velocity.rs` —
+  the scale, the limit, a limit with one bound and two ways at once).
+- **One command** changed and **one library** grown: the sound battery
+  still carries **94** commands and the MCP server **305**, because a
+  command that takes more parameters is not another command.
+
+### What it does not settle
+
+- **The tree's humanise is not here**, and that is a decision and not
+  an oversight (§219): the tree's version moves every note by a random
+  amount, and this tree does not do random. A caller that wants a
+  human feel can read the velocities and change them itself.
+- **The tree's velocity is a command over a selection, and this one is
+  a command over a clip.** The tree's `event.velocity` works
+  on every clip that is selected, and a selection is a thing of the
+  editor's state — which this tree does not keep (§200). Here the
+  clip is named, and a caller with several clips says so several
+  times.
