@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1641 tests.** The MCP server links **all fifteen batteries** in, so the
+**1645 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1641 tests
+cargo test          # 1645 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3669,6 +3669,7 @@ so.
 | the **modes** of the strip of silence | **built.** The silence is stripped, the sound extracted or the clip separated, and the loud parts can be read without changing anything (§231) | §231 |
 | the **cut** of a MIDI clip | **built.** The cut divides the notes, and each piece keeps the notes that are its own (§232) | §232 |
 | the **trim** of a MIDI clip | **built.** The trim takes the notes off the head and counts the rest from the clip's new head (§233) | §233 |
+| the **automation** of a whole track | **built.** Every lane of a track is written with the static value of its parameter or thinned at once (§234) | §234 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16048,3 +16049,74 @@ clip's new head.
 - **A note that sounds past the trim is not shortened.** The tree
   leaves it whole, and so does this: a note is a note, and cutting it
   in half is a thing the tree does not do on a trim.
+
+## 234. The automation of a whole track
+
+The tree's editor has a **"Thin All"** and a **"Write to Current"**:
+the first thins every lane of every track and the second writes the
+static value of every parameter over a range. v2 could thin one lane
+and write one lane, and not the lot.
+
+### What was built
+
+- The command `sound.lane.thin.all` thins **every lane** of a track:
+  the breakpoints the curves do not need are taken away from all of
+  them.
+- The command `sound.lane.write.all` writes the **static value** of
+  every lane of a track over a range: the fader over the volume lane,
+  the pan over the pan lane and the mute over the mute lane, so that
+  the curve is flat over the range and the value before and after it
+  is kept.
+- A track with **no** lanes is not a failure: there is nothing to
+  write and nothing to thin, and that is said and not thrown.
+
+### What the port found
+
+- **The tree's "Write to Current" writes the static value, and not the
+  value at the playhead.** The name is a trap: "current" sounds like
+  "where the playhead is", and the tree's `current_value` is the
+  track's **static** value — the fader, the pan, the mute — the value
+  the parameter has when nothing automates it. Here those values are
+  the **defaults of their lanes** (§ the fader), so the command writes
+  the default over the range.
+- **The tree's mixer keeps a mute of its own beside the mute lane, and
+  here the lane is the mute's default.** The tree's track has a
+  `mute` in its mixer and a lane that automates the mute, and the two
+  are separate: the mixer value is what the track is when no lane
+  says else. Here there is one fact — the lane is the mute's default,
+  and a lane without breakpoints is the mute — and the write puts the
+  track's own value back over the range.
+- **The tree's automation is over every track and this tree's is over
+  one.** The tree's commands take a list of tracks, because the tree's
+  editor has a selection and a selection is a list of things. Here a
+  track is a **node** and a node is something a command can be given,
+  and a caller with several tracks says so several times. This is the
+  same gap as the velocity's (§229) and the length's (§230), and it
+  has the same answer.
+- **The tree's lane is one of a track's parameters and here a lane is
+  a node.** The tree's track holds a list of lanes, one per parameter,
+  and the parameters are a closed set — volume, pan, mute, the sends
+  and the plugins. Here a lane is a node under a track and its
+  parameter is a **string**, so a third party may automate something
+  the kit does not know. A lane whose parameter the kit does not know
+  has no static value, and the write **leaves it alone** rather than
+  writing a number into it that means nothing.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/lanesall.rs`): every
+  lane of the track is thinned, the static value is written over a
+  range, a track with no lanes is nothing to do, and a node that is
+  not a track is refused.
+- **Two commands** (`sound.lane.thin.all` and `sound.lane.write.all`).
+  The sound battery now carries **98** commands and the MCP server
+  **309**.
+
+### What it does not settle
+
+- **The tree's commands are over a selection**, and here they are over
+  a track: the same gap as the velocity's (§229).
+- **A lane of an unknown parameter is left alone.** The kit does not
+  know what such a lane's static value is, and writing a number into
+  it would be a number that means nothing. A third party that automates
+  something of its own may write its own values with its own command.
