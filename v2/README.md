@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1831 tests.** The MCP server links **all fifteen batteries** in, so the
+**1844 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1831 tests
+cargo test          # 1844 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3699,6 +3699,7 @@ so.
 | the **number** of an object | **built.** The number of a PDF object is changed and every reference to it follows, and no two objects share one (§262) | §262 |
 | the **trimming** of a clip | **built.** The head or the tail of a clip is trimmed, and a trim that would cross a bound is refused and says which bound (§263) | §263 |
 | the **moving** of a clip | **built.** A clip moves along its track or to another one, and a move that would land on another clip is refused (§264) | §264 |
+| the **keyframes** of a property | **built.** A keyframe is set and taken away, and the value of a property at a frame is the line between the keyframes (§265) | §265 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18258,3 +18259,84 @@ clip on a track and never move it.
 - **The tree's linked clips are not here**, and neither is the tree's
   **locked** track: a locked track refuses a move in the tree, and
   here a track has no lock to refuse with.
+
+---
+
+## 265. The keyframes of a property
+
+The compositing battery could set a property and read it, and could
+not put a **keyframe** on it — and the battery's own finding says that
+the value at a time is derived, so there was no way to make one.
+
+### What was built
+
+- The command `fx.keyframe.set` sets a keyframe: the keyframe that is
+  there is **changed**, the one that is not there is **added**, and the
+  list stays **sorted by frame**.
+- The command `fx.keyframe.remove` takes a keyframe away, and a frame
+  that has **no keyframe** is refused: a keyframe that was never there
+  is not a keyframe that was taken away.
+- The command `fx.prop.at` reads the **value at a frame**: the first
+  keyframe's value before the first keyframe, the last keyframe's value
+  after the last one, and the **line** between them in between.
+- The **interpolation** is the tree's: a number is interpolated
+  between two numbers, a list of numbers between two lists of the same
+  length, and anything else is **held** — the value of the earlier
+  keyframe.
+- A property that is **not animated** cannot have a keyframe: it is
+  refused, and it says so. A path that names **nothing** is refused,
+  and so is a frame that is **not a whole number**, and so is a node
+  that is not a layer.
+
+### What the port found
+
+- **A keyframe in the tree is more than a frame and a value.** The
+  tree's `Keyframe` carries an interpolation on **each side** —
+  linear, bezier or hold — and an ease with a speed and an influence,
+  and the handles of a spatial curve, and a label. Here a keyframe is
+  a frame and a value, and the curve is the line: the tree's `Interp`
+  has three values and one of them is here.
+- **The tree keeps the shape of a keyframe when only its value
+  changes.** The tree's `set_key` replaces a key at the same time and
+  **keeps its interpolation, its eases, its handles and its label** —
+  the curve is the keyframe's, and the value is a thing that comes and
+  goes. Here there is no curve to keep, and the keyframe is the frame
+  and the value, so changing the value changes the keyframe.
+- **The hold is a property of the value and not only of the curve.**
+  The tree's `segment_value` holds the earlier value when
+  `a.value.interpolates()` is false — a colour or a string does not
+  interpolate — and not only when the keyframe says "hold". Here the
+  same rule: two numbers and two lists of numbers are interpolated,
+  and anything else is held, and the difference is not asked about.
+- **The tree's value at a time is a function of the keyframes and of
+  nothing else.** The tree's `evaluate` finds the segment with a
+  partition point and the fraction `x` between the two keys, clamped
+  to the segment; before the first key it is the first key's value and
+  after the last key it is the last key's. Here the same function,
+  with the keyframes in the payload, because a property tree is not a
+  tree of nodes (§31).
+
+### What it cost
+
+- **Thirteen tests** in the fx battery (`tests/keys.rs`): a keyframe
+  is set, a keyframe that is there is changed, the value in between is
+  the line, the value outside the keyframes is held, a list of numbers
+  is interpolated, a value that does not interpolate is held, a
+  property that is not animated has one value, a keyframe is taken
+  away, a frame that has no keyframe is refused, a property that is
+  not animated is refused, a path that names nothing is refused, a
+  frame that is not a whole number is refused, and a node that is not
+  a layer is refused.
+- **Three commands** (`fx.keyframe.set`, `fx.keyframe.remove` and
+  `fx.prop.at`). The fx battery now carries **7** commands and the MCP
+  server **353**.
+
+### What it does not settle
+
+- **The shape of the curve is not here.** The tree's bezier eases, its
+  spatial handles and its `Hold` interpolation are not here: the value
+  between two keyframes is the line.
+- **The expression is not here.** The tree may put an expression on a
+  property, and an expression is a language and not a value.
+- **The tree's linked properties are not here**: the tree may key two
+  properties together, and here a property is a property.
