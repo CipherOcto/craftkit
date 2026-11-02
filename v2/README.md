@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1803 tests.** The MCP server links **all fifteen batteries** in, so the
+**1810 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1803 tests
+cargo test          # 1810 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3696,6 +3696,7 @@ so.
 | the **anchor** of a segment | **built.** A segment is split in two, and the two halves are the same curve (§259) | §259 |
 | the **key** of an object | **built.** A key of a PDF object's dictionary is set and taken away, and the order is kept (§260) | §260 |
 | the **taking away** of an object | **built.** An object of a PDF file is taken away, and the references that named it go with it (§261) | §261 |
+| the **number** of an object | **built.** The number of a PDF object is changed and every reference to it follows, and no two objects share one (§262) | §262 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17939,7 +17940,7 @@ was wrong the moment it was written.
   there is refused, a node that is not an object is refused, and an
   empty key is refused.
 - **Two commands** (`pdf.entry.set` and `pdf.entry.remove`). The PDF
-  battery now carries **19** commands and the MCP server **347**.
+  battery now carries **20** commands and the MCP server **348**.
 
 ### What it does not settle
 
@@ -18004,8 +18005,9 @@ is not a file that can be edited.
   does not.** The tree's `doc.free` puts the number back in the pool;
   here the number is the caller's to give, and `pdf.object.add` takes
   any number at all, so a number that is free again may be given to
-  another object. That is a gap, and it is named in the arc that
-  closes it — or in the arc that does not.
+  another object. That is a gap, and §262 closes half of it: a number
+  may not be taken twice, and a number that is free again may be given
+  to another object.
 
 ### What it cost
 
@@ -18014,7 +18016,7 @@ is not a file that can be edited.
   that named it, the root is refused, a node that is not an object is
   refused, and a node that is not there is refused.
 - **One command** (`pdf.object.remove`) and **two renames**. The PDF
-  battery now carries **19** commands and the MCP server **347**.
+  battery now carries **20** commands and the MCP server **348**.
 
 ### What it does not settle
 
@@ -18029,3 +18031,74 @@ is not a file that can be edited.
 - **The tree's file is not here**: the cross-reference table is
   written by the writer from the objects that are in the document, and
   an object that is gone is not in the table.
+
+---
+
+## 262. The number of an object
+
+An indirect object is named by its **number** in the file, and every
+reference to it is that number. The battery let two objects share one
+number, and a file with two objects of one number is a file that cannot
+say which one it means.
+
+### What was built
+
+- The command `pdf.object.number` changes the number of an object, and
+  **every reference to it follows**: the references in the dictionaries
+  of the objects that point at it are changed, the ones in a list one
+  element at a time, and the ones inside a nested dictionary as well.
+- The commands `pdf.object.add` and `pdf.stream.add` **refuse a number
+  that is taken**: one number is one object.
+- A number that is **another object's** is refused, and so is a number
+  the object **already has**, and so is a number that is **not a whole
+  number**, and so is zero.
+
+### What the port found
+
+- **The tree hands the numbers out, and here the caller does.** The
+  tree's `doc.free` puts the number of a deleted object back in the
+  pool, and a new object takes a free one — the tree is the one that
+  decides, so the tree never has to check. Here the number is a
+  **parameter**: `pdf.object.add` takes a number and not "the next
+  one", so "one number is one object" is a rule that has to be
+  **enforced** rather than assumed. The tree's rule is a fact about the
+  tree; this one is a check.
+- **A number is a fact with two faces.** In the tree a reference names
+  an `ObjRef` — a number and a generation — and the file's table names
+  the same pair. Here the number is in the node's payload and in the
+  dictionaries of the other objects, and the two have to agree, so a
+  number that is changed is a **surgery on every other object** and
+  not a field that is set. The tree never changes a number, so it never
+  has to make the references follow.
+- **The tree's pages keep their numbers when the tree is rebuilt.**
+  `delete_pages` rebuilds the page tree around the pages that stay and
+  the survivors keep their `ObjRef`s. Here the same act is not a
+  rebuild but a change of one number and of every reference to it, and
+  a number may be changed at will — a thing the tree does not offer.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/number.rs`): a number that
+  is taken is refused, the number is changed and the references follow,
+  a number that is another object's is refused, a number the object
+  already has is refused, a number that is not a whole number is
+  refused, a node that is not an object is refused, and a node that is
+  not there is refused.
+- The **tests that added two streams to one session** were given free
+  numbers: one number is one object.
+- **One command** (`pdf.object.number`). The PDF battery now carries
+  **20** commands and the MCP server **348**.
+
+### What it does not settle
+
+- **The generation is not moved.** A reference names a number and a
+  generation, and the generation says which version of an object is
+  meant; this arc moves the number and keeps the generation, because
+  an object here has no generation of its own.
+- **A number that is free may be given away.** Nothing in the tree
+  stops that either — the tree's pool does it deliberately — but here
+  the caller is the one who decides, and the tree's `doc.free` has no
+  counterpart that says which numbers are free.
+- **The tree's file is not here**: the cross-reference table is written
+  from the objects that are in the document, and because a number may
+  not be taken twice, the table has one entry for every number.
