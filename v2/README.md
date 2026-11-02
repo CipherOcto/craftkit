@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1895 tests.** The MCP server links **all fifteen batteries** in, so the
+**1902 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1895 tests
+cargo test          # 1902 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3706,6 +3706,7 @@ so.
 | the **rippling** of a clip | **built.** A clip is taken away and the gap closes, and the ripple is refused when the time the clip took is not free (§269) | §269 |
 | the **filling** of a range | **built.** A range is filled from a cell — copied or counted on — and the target holds the source at a corner (§270) | §270 |
 | the **number format** of a cell | **built.** A cell carries a number format and the text it shows is derived from its value and that format (§271) | §271 |
+| the **lifting** of a range | **built.** The clips in a range of a track are taken away and the gap they leave is a gap (§272) | §272 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18597,9 +18598,9 @@ it. The delete is §268, and this is the ripple.
 
 - **The sync-locked tracks are not here**, and neither is the tree's
   **locked** track.
-- **The tree's lift and extract are not here**: they take a **range**
-  away — the tree's lift leaves the gap and the tree's extract closes
-  it — and a range is a range of a track, not a clip.
+- **The tree's lift was not here — §272 is where it came.** The
+  tree's **extract** is still not here: it takes a range away and
+  closes the gap, where the lift leaves it.
 
 ---
 
@@ -18773,3 +18774,65 @@ is **written**.
 - **The tree's `TEXT` function is not here**: the tree's `TEXT` writes
   a value with a format code inside a formula, and a formula in this
   tree has no format code in it.
+
+---
+
+## 272. The lifting of a range
+
+The tree has two ways of taking a **range** of a track away: the
+**lift**, which leaves the gap, and the **extract**, which closes it.
+The lift is here.
+
+### What was built
+
+- The command `film.clip.lift` takes the clips that are **in a range**
+  of a track away, and the gap they leave is a **gap**: the clips that
+  were after the range stay where they are, and the track is shorter by
+  the length of the range.
+- A clip that **spans an edge** of the range is **refused**, and the
+  refusal names it: the tree splits it, and the split is a command of
+  its own.
+- A range that **ends before it starts** is refused, and so is a range
+  that is **not whole frames**, and so is a node that is not a track,
+  and so is a node that is not there.
+
+### What the port found
+
+- **The tree's lift is a remove and a split.** The tree's `lift` calls
+  `clear_track_range`, and that **splits the clips at the boundaries
+  of the range** and then removes the clips that are inside it — so the
+  range has two edges, and the material that was in the range is gone
+  and the material around it is still there. Here the range has to
+  have edges that exist: a clip that spans an edge is refused, and the
+  split that would make the edge is a command of its own.
+- **The tree's two ways of taking a range away differ in one thing.**
+  The tree's `lift` removes the material and leaves the gap; the
+  tree's `extract` removes the material **and closes the gap** by
+  shifting the clips that were after the range up by the length of the
+  range. So the tree's lift and this lift are the same operation, and
+  the tree's extract is the lift plus one more thing — which is why
+  they are two commands here too.
+- **The tree's lift works on several tracks at once, and the extract
+  works on the sync-locked ones as well.** The tree's `lift` takes a
+  list of tracks; the tree's `extract` also closes the gap on the
+  tracks that are **sync-locked** with the target, so that a group of
+  tracks stays together. Here a track is a track, and there is no lock
+  to be in.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/lift.rs`): the clips in
+  the range are taken away, the clips outside the range stay where they
+  are, a clip that spans an edge is refused, a range that ends before
+  it starts is refused, a range that is not whole frames is refused, a
+  node that is not a track is refused, and a node that is not there is
+  refused.
+- **One command** (`film.clip.lift`). The film battery now carries
+  **12** commands and the MCP server **361**.
+
+### What it does not settle
+
+- **The extract is not here**, and neither is the tree's
+  **sync-locked** tracks and its **locked** tracks.
+- **The tree's links and transitions are not here**, and neither is the
+  tree's **caption tracks**, which the extract also closes the gap on.
