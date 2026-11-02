@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1738 tests.** The MCP server links **all fifteen batteries** in, so the
+**1742 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1738 tests
+cargo test          # 1742 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3684,6 +3684,7 @@ so.
 | the **clipboard** | **built.** The material of a range is copied, cut and pasted, and the clipboard is in the document (§247) | §247 |
 | the **voice** of a track | **built.** A track's voice is turned off and on again, and an inactive track is not heard (§248) | §248 |
 | the **commit** of a track | **built.** The sound of a track is written to a file, a new track of it is made, and the old track goes quiet (§249) | §249 |
+| the **chain** of inserts | **built.** An insert is taken away and it moves in the chain, and the chain is the order of the nodes (§250) | §250 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17306,3 +17307,59 @@ and its settings, and it is quiet.
 - **The file is a WAV** — v2's sources are files on the disk and a
   sound is a sound — and the new track is named `<name>.cm`, which is
   the tree's name for a committed track.
+
+## 250. The chain of inserts
+
+The tree's **insert** is a plugin in a **slot** on a track: there are
+so many slots, some of them are empty, and an insert is taken away by
+emptying its slot. Here the insert is a **node** under the thing it is
+on, and the **chain** is the order of those nodes.
+
+### What was built
+
+- The command `sound.insert.remove` takes an insert away: the node is
+  gone and the sound is the sound without it. There is no slot left
+  empty, because there was never a slot.
+- The command `sound.insert.move` moves an insert: it and another one
+  **swap their places** in the chain, and the chain is the order the
+  plugins are run in.
+- Two inserts of **different** things are refused: a chain is the
+  chain of one thing, and there is no chain that holds both.
+- A node that is **not an insert** is refused.
+
+### What the port found
+
+- **The tree's inserts live in slots and this tree's are nodes.** The
+  tree's track carries a list of slots — a fixed number of them, with
+  some empty — and an insert is at an index. Here an insert is a node
+  under the track, the chain is the order of the children, and a
+  taken-away insert leaves nothing behind. The tree's empty slot is a
+  hole in a fixed ladder; here the chain is only as long as it is.
+- **The tree's move swaps two slots and this one swaps two nodes.**
+  The tree's `insert_move` swaps the slots `from` and `to` of one
+  track, and says nothing when a slot is empty. Here the two inserts
+  swap their places in the chain of the thing they are on, and the
+  inserts have to be on the same thing: the tree's slots are the
+  track's by construction, and here a node can be on a track or on a
+  clip.
+- **The tree's removal of an insert that is not there does nothing**,
+  and answers with an empty object. Here a node that is not an insert
+  is **refused**, and it says why.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/inserts.rs`): the insert
+  is taken away, two inserts swap their places, a node that is not an
+  insert is refused, and two inserts of different things are refused.
+- **Two commands** (`sound.insert.remove` and `sound.insert.move`).
+  The sound battery now carries **119** commands and the MCP server
+  **330**.
+
+### What it does not settle
+
+- **The chain is not a ladder of fixed slots.** A track here may have
+  as many inserts as it likes, in any order, and there is no slot
+  number to name: an insert is named by its **node**.
+- **The tree's insert has a preset and this one's has not.** The
+  tree's `mix.insert_param` and its preset command put a named preset
+  on an insert; here an insert is a plugin and a table of numbers.

@@ -317,6 +317,12 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's insert lives in a slot and this tree's is a node.**
+//! The tree's track carries a fixed ladder of slots and an insert is
+//! at an index, and taking an insert away empties its slot; here an
+//! insert is a node under the thing it is on, the chain is the order
+//! of the children, and a taken-away insert leaves nothing behind.
+//!
 //! **The tree's commit renders two seconds more than the material.**
 //! The tree's commit renders a track over a range that ends two
 //! seconds after its last clip, so that the tail of an insert is in
