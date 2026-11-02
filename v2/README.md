@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1783 tests.** The MCP server links **all fifteen batteries** in, so the
+**1791 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1783 tests
+cargo test          # 1791 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3693,6 +3693,7 @@ so.
 | the **taking away** of an event | **built.** A tempo, a meter and a key go away, and the document's own stays (§256) | §256 |
 | the **shapes** of the tree | **built.** A star, a line and a spiral are made out of numbers, with the tree's own geometry (§257) | §257 |
 | the **turning** of a path | **built.** A path's open contour is closed and a path is turned the other way round (§258) | §258 |
+| the **anchor** of a segment | **built.** A segment is split in two, and the two halves are the same curve (§259) | §259 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17831,3 +17832,63 @@ other way round. This tree's vector battery could do neither.
 - **The tree's path.average and the tree's path.reshape are not
   here**: the average of a set of points and the reshaping of a path
   are two more pieces of the tree's geometry.
+
+## 259. The anchor in the middle of a segment
+
+The tree's editor adds an **anchor point** on a segment: the segment is
+split in two, and the two halves are the same curve. This tree's
+vector battery had no way to put a point on a curve.
+
+### What was built
+
+- The command `vector.path.anchor.add` splits a segment of a contour
+  in two, and the path has one more point to move. The anchor goes in
+  at a place along the segment — `t`, from zero at its beginning to one
+  at its end.
+- The two halves are the **same curve**: the shape of the path does not
+  change, and the point where the halves meet is the point the curve
+  had at `t`. The split is worked out by **de Casteljau**, which is
+  the tree's own way of cutting a curve.
+- A segment that does **not** exist is refused, and so is a contour
+  that does not exist.
+- The geometry is in the **geometry crate** (`craftkit-vector-geom`),
+  where the other path operations live.
+
+### What the port found
+
+- **The tree's anchor is an anchor, and here an anchor is a point of
+  the contour.** The tree's path carries a list of **anchors** and the
+  segments join them; this tree's path carries the segments themselves,
+  and the points of the contour are where the segments begin and end.
+  Adding an anchor here is therefore the same thing as splitting a
+  segment — which is what the tree's own `insert_anchor` does to its
+  anchors.
+- **The tree's split takes the segment out of the anchors and puts the
+  halves in, and this one's splits the segment itself.** The geometry
+  is the same: the tree's `subsegment` is de Casteljau, and so is this.
+- **The tree's `t` is clamped and this one clamps it too**: the tree's
+  `t` is pulled into the range from zero to one, and a place along a
+  segment outside that range is a place at the end of the segment.
+
+### What it cost
+
+- **Five tests** in the geometry crate (`tests/split.rs`) and **three**
+  in the vector battery (`tests/anchor.rs`): a split curve is the same
+  curve, a split line is the same line, a segment that is not there is
+  refused, a split at the end is the same curve, the start of the
+  contour does not move, the anchor is added, the shape of the path
+  does not change, and the segment that is not there is refused.
+- **One command** (`vector.path.anchor.add`) and **one function** in
+  the geometry crate (`split_segment`). The vector battery now carries
+  **31** commands and the MCP server **344**.
+
+### What it does not settle
+
+- **The tree's delete of an anchor is not here.** The tree deletes the
+  anchors that are **selected** and keeps the surviving stretches
+  apart rather than joining across the deleted ones — and the
+  selection is the editor's state, which this tree does not have.
+- **The tree's anchor is smooth or a corner, and here it is what the
+  split makes it.** The tree's new anchor is a smooth one, with its
+  handles on the curve; here the two halves carry the handles the
+  split worked out, which is the same curve and not the same handle.
