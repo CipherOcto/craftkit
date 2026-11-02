@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and nineteen commands**, one for each thing a person does to a
+//! - **a hundred and twenty-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -51,7 +51,8 @@
 //!   of a clip in any of its three **modes**, **copy**, **cut** and
 //!   **paste** the material of a range, turn a track's **voice** off
 //!   and on again, **commit** a track to a file, **take away** an
-//!   **insert** and **move** it in the chain, and
+//!   **insert** and **move** it in the chain, **rename** a track and a
+//!   clip, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -459,6 +460,7 @@ mod inactive;
 mod keys;
 mod ranges;
 mod remove;
+mod rename;
 mod repeat;
 mod split;
 mod time;
@@ -491,6 +493,7 @@ pub use mixer::{
     LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload,
 };
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
+pub use rename::{RenameClip, RenameTrack};
 pub use repeat::RepeatRange;
 pub use split::SplitMono;
 pub use time::{CutTime, InsertTime};
@@ -7843,6 +7846,8 @@ craftkit_sdk::plugin_anchor!(
     RemoveInsert,
     RemoveMarker,
     RemoveTrack,
+    RenameClip,
+    RenameTrack,
     SetTrackInactive,
     RepeatRange,
     SplitMono,
