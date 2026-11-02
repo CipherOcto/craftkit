@@ -651,6 +651,12 @@ pub struct Cell {
     pub value: Option<Value>,
     /// The formula's text, when the cell holds one.
     pub formula: Option<String>,
+    /// The **number format** of the cell, when it has one.
+    ///
+    /// The tree's format is a style and a style is shared between
+    /// cells; here the format is the cell's own, so a hundred cells
+    /// with one format carry a hundred formats.
+    pub format: Option<String>,
 }
 
 impl Cells {
@@ -665,13 +671,39 @@ impl Cells {
     }
 
     /// Put a value in a cell.
+    ///
+    /// The cell keeps its **format**: setting a value does not change
+    /// how the value is written.
     pub fn set_value(&mut self, cell: CellRef, value: Value) {
-        self.cells.insert(cell, Cell { value: Some(value), formula: None });
+        let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
+        self.cells.insert(cell, Cell { value: Some(value), formula: None, format });
     }
 
     /// Put a formula in a cell.
+    ///
+    /// The cell keeps its **format**, as it does when a value is put in
+    /// it.
     pub fn set_formula(&mut self, cell: CellRef, formula: String) {
-        self.cells.insert(cell, Cell { value: None, formula: Some(formula) });
+        let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
+        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format });
+    }
+
+    /// The **number format** of a cell, if it has one.
+    pub fn format(&self, cell: CellRef) -> Option<&str> {
+        self.cells.get(&cell)?.format.as_deref()
+    }
+
+    /// Put a **number format** on a cell, keeping what the cell holds.
+    ///
+    /// A cell that is not there is made: a cell may be formatted before
+    /// it has a value.
+    pub fn set_format(&mut self, cell: CellRef, format: Option<String>) {
+        match self.cells.get_mut(&cell) {
+            Some(entry) => entry.format = format,
+            None => {
+                self.cells.insert(cell, Cell { value: None, formula: None, format });
+            }
+        }
     }
 
     /// Empty a cell.

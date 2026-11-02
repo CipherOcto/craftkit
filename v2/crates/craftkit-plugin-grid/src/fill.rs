@@ -264,9 +264,10 @@ impl FillRange {
             });
         }
         // The **source**: what it holds.
-        let source_value = {
+        let (source_value, source_format) = {
             let sheet_cells = cells_of(node);
-            match sheet_cells.get(source) {
+            let format = sheet_cells.format(source).map(|code| code.to_string());
+            let value = match sheet_cells.get(source) {
                 Some(entry) if entry.formula.is_some() => {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -278,7 +279,8 @@ impl FillRange {
                 }
                 Some(entry) => entry.value.clone(),
                 None => None,
-            }
+            };
+            (value, format)
         };
         let Some(value) = source_value else {
             return Err(EngineError::Failed {
@@ -301,6 +303,11 @@ impl FillRange {
                     continue;
                 };
                 sheet_cells.set_value(cell, value.clone());
+                // The tree's fill copies the **style** of the source,
+                // and the style holds the format.
+                if let Some(format) = &source_format {
+                    sheet_cells.set_format(cell, Some(format.clone()));
+                }
                 written.push(json!({ "cell": cell.to_text(), "value": value.to_json() }));
             }
             node.data["cells"] = cells_into(&sheet_cells);

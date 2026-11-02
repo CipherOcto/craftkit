@@ -29,6 +29,11 @@
 //! — with the tree's rule that the target holds the source at a corner
 //! (the module `fill`).
 //!
+//! And a cell may carry a **number format**, and the **text** it shows
+//! is derived from its value and that format: a format is the cell's
+//! own, where the tree's format is a style and a style is shared (the
+//! module `format`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -63,6 +68,7 @@
 #![forbid(unsafe_code)]
 
 mod fill;
+mod format;
 mod formula;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -70,6 +76,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
 
 use fill::FillRange;
+use format::{Format, MAX_FORMAT_CHARS};
 use formula::{Book, CellRef, Cells, Value};
 
 /// The grid layer.
@@ -150,10 +157,14 @@ fn cells_of(node: &Node) -> Cells {
         let Some(cell) = CellRef::parse(address) else { continue };
         let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|text| text.to_string());
         let value = entry.get("value").map(Value::from_json);
+        let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
             (None, None) => {}
+        }
+        if let Some(format) = format {
+            cells.set_format(cell, Some(format));
         }
     }
     cells
@@ -169,6 +180,9 @@ fn cells_into(cells: &Cells) -> Json {
         }
         if let Some(value) = &entry.value {
             one.insert("value".to_string(), value.to_json());
+        }
+        if let Some(format) = &entry.format {
+            one.insert("format".to_string(), Json::String(format.clone()));
         }
         map.insert(cell.to_text(), Json::Object(one));
     }
@@ -281,6 +295,127 @@ impl SetCell {
         node.data["cells"] = cells_into(&cells);
         Ok(Outcome::changed(format!("set the cell {}", cell.to_text()))
             .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "value": value.to_json() })))
+    }
+}
+
+/// Put a **number format** on a cell.
+///
+/// The formats this tree knows are `general`, `0`, `0.00`, `#,##0`,
+/// `#,##0.00`, `0%` and `0.00%`. A format that is **not one of them**
+/// is refused: a format that is quietly ignored is a format the user
+/// believes in and the program does not have.
+///
+/// A cell may be formatted **before it has a value**, and the format
+/// is the cell's own: the tree's format is a style and a style is
+/// shared, and here a hundred cells with one format carry a hundred
+/// formats.
+#[derive(Command)]
+#[command(id = "grid.cell.format", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
+pub struct SetFormat {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// The format: `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` or
+    /// `0.00%`.
+    pub format: Text,
+}
+
+impl SetFormat {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.cell.format".to_string();
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, &id)?;
+        let code = self.format.0.trim().to_string();
+        if code.chars().count() > MAX_FORMAT_CHARS {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a format is at most {MAX_FORMAT_CHARS} characters long"),
+            });
+        }
+        if Format::parse(&code).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{code}` is not a format this tree has: the formats are `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` and `0.00%`"
+                ),
+            });
+        }
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let mut cells = sheet_cells_mut(node);
+        cells.set_format(cell, Some(code.clone()));
+        node.data["cells"] = cells_into(&cells);
+        Ok(Outcome::changed(format!("the cell {} is formatted `{code}`", cell.to_text()))
+            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "format": code })))
+    }
+}
+
+/// The **text** a cell shows.
+///
+/// The text is the **value** of the cell written with its format, and
+/// the value of a formula cell is computed: a cell that holds a
+/// formula has no value until it is calculated, and this is the
+/// calculation.
+#[derive(Command)]
+#[command(id = "grid.cell.text", area = "grid", layer = "grid", icon = "list")]
+pub struct CellText {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+}
+
+impl CellText {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.cell.text".to_string();
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, &id)?;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let name = node.name.clone();
+        let cells = cells_of(node);
+        let format = match cells.format(cell) {
+            Some(code) => Format::parse(code).unwrap_or(Format::General),
+            None => Format::General,
+        };
+        // The **value**: the one the cell holds, or the one its formula
+        // computes.
+        let value = match cells.get(cell) {
+            Some(entry) => match (&entry.value, &entry.formula) {
+                (Some(value), _) => value.clone(),
+                (None, Some(_)) => {
+                    let book = book_of(session.document());
+                    book.value_of(&name, cell)
+                }
+                (None, None) => Value::Empty,
+            },
+            None => Value::Empty,
+        };
+        let text = format.text(&value);
+        Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
+            json!({ "sheet": sheet, "cell": cell.to_text(), "text": text, "value": value.to_json() }),
+        ))
     }
 }
 
@@ -597,6 +732,8 @@ craftkit_sdk::plugin_anchor!(
     ReadDependents,
     CalcSheet,
     FillRange,
+    SetFormat,
+    CellText,
     CalcEvaluator,
     GridPanel
 );
