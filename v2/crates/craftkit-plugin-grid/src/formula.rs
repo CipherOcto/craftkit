@@ -10,7 +10,8 @@
 //! - **cell references** (`B3`) and **ranges** (`A1:B4`);
 //! - the arithmetic (`+ - * / ^`), the comparisons (`= <> < <= > >=`)
 //!   and the parentheses;
-//! - four functions: `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT`.
+//! - five functions: `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT`; and
+//!   the tree's `TEXT`, which writes a value with a format code.
 //!
 //! # The two things that matter
 //!
@@ -31,6 +32,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use craftkit_sdk::serde_json;
+
+use crate::format::Format;
 
 /// The most rows a sheet has.
 ///
@@ -973,6 +976,9 @@ impl Book {
 
     /// Call a function.
     fn call(&self, sheet: &str, name: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if name == "TEXT" {
+            return self.text_call(sheet, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1030,6 +1036,32 @@ impl Book {
             "COUNT" => Value::Number(numbers.len() as f64),
             "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
             other => Value::Error(format!("there is no function `{other}`")),
+        }
+    }
+}
+
+impl Book {
+    /// The tree's `TEXT`: a value written with a **format code**.
+    ///
+    /// The code is the second argument and it is **evaluated**, so it
+    /// may be a cell that holds a code. A code that this tree does not
+    /// have is an error: the tree's `TEXT` takes the tree's whole
+    /// format language, and this one takes the sixteen codes it has.
+    fn text_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() != 2 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let value = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &value {
+            return Value::Error(message.clone());
+        }
+        let code = self.evaluate(sheet, &arguments[1], being);
+        let Value::Text(code) = code else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        match Format::parse(&code) {
+            Some(format) => Value::Text(format.text(&value)),
+            None => Value::Error(format!("there is no format `{code}`")),
         }
     }
 }

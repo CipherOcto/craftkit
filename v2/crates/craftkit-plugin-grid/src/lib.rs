@@ -348,7 +348,7 @@ impl SetFormat {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{code}` is not a format this tree has: the formats are `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` and `0.00%`, and the dates are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`"
+                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`"
                 ),
             });
         }

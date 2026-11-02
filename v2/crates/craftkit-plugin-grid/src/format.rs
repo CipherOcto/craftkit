@@ -14,6 +14,19 @@
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
 //!
+//! The **number** formats are a **grammar** and not a list: the
+//! thousands separated by a comma, a whole part of `0` and `#`
+//! placeholders with at least one `0` in it, a point and up to fifteen
+//! decimals, and a percent sign at the end. So `0`, `0.00`, `#,##0`,
+//! `0.0000` and `0%` are all codes this tree has.
+//!
+//! The **date** formats are a **list** of nine, because the tree's
+//! date formats are a language and this one has nine shapes of it.
+//!
+//! A code that is neither a number format of that shape nor one of the
+//! nine dates is **refused**: a format that is quietly ignored is a
+//! format the user believes in and the program does not have.
+//!
 //! A **date** is a number with one of those on it: the number says
 //! how many days have passed and the format says that the number is a
 //! date and how it is written (the module `dates`).
