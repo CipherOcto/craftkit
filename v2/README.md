@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1870 tests.** The MCP server links **all fifteen batteries** in, so the
+**1883 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1870 tests
+cargo test          # 1883 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3704,6 +3704,7 @@ so.
 | the **splitting** of a clip | **built.** A clip is divided at a place, the second piece is a new clip, and the media moves with the cut (§267) | §267 |
 | the **taking away** of a clip | **built.** A clip is taken off its track, the edge that says which item it played goes with it, and the gap is a gap (§268) | §268 |
 | the **rippling** of a clip | **built.** A clip is taken away and the gap closes, and the ripple is refused when the time the clip took is not free (§269) | §269 |
+| the **filling** of a range | **built.** A range is filled from a cell — copied or counted on — and the target holds the source at a corner (§270) | §270 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18598,3 +18599,90 @@ it. The delete is §268, and this is the ripple.
 - **The tree's lift and extract are not here**: they take a **range**
   away — the tree's lift leaves the gap and the tree's extract closes
   it — and a range is a range of a track, not a clip.
+
+---
+
+## 270. The filling of a range
+
+The spreadsheet battery could set a cell and could not fill a **range**.
+
+### What was built
+
+- The command `grid.range.fill` fills a range from a cell. The tree has
+  two shapes for it — the plain drag **copies** and the series
+  **counts on** — so the fill has a **mode**, and it says which:
+  `copy` and `series`. The **default is the series**, because the
+  tree's command defaults to the series too.
+- The patterns of the series are the tree's: a **number** counts on by
+  one, and **text with a number in it** — `Item 7`, `Q003x` — counts
+  its number on and keeps the **width** of the digits. Anything else is
+  **copied**.
+- The **target holds the source at a corner**: a fill from `A1` into
+  `A1:A10` goes **down**, a fill from `A10` goes **up**, and a fill
+  into `A1:C1` goes **right**. A target that does not hold the source
+  is refused, and so is a source that is not at a corner.
+- The fill is **bounded**: the tree refuses a fill whose source or
+  target is bigger than five million cells — "range too large" — and
+  this one refuses a fill that would write more than **ten thousand**
+  cells.
+- A source that holds a **formula** is refused: the tree copies the
+  formula and shifts its references, and that is a thing of its own.
+  A source that is **empty** is refused, and so is a mode that is not a
+  mode, and so is a sheet that is not there.
+
+### What the port found
+
+- **The tree has two fills and one of them surprises.** The tree's
+  plain drag of a lone number **copies** it — a drag of `1` gives
+  `1, 1, 1` — and only the tree's series mode, or its `Ctrl`+drag,
+  counts it up. So "fill" is two different things in the tree, and a
+  command that picked one of them silently would be wrong half the
+  time. Here the fill **says** which one it is — and the tree's own
+  command says too: `edit.autoFill` takes a mode, and there are nine
+  of them (`copy`, `alternate`, `formats`, `values`, `extend`, `days`,
+  `weekdays`, `months`, `years`), and **the series is the default**.
+- **The tree's corner rule is the shape of the operation.** The tree's
+  `holds_source_in_corner` says that a target must contain the source
+  and that the source must sit in one of its corners, and the tree
+  refuses a fill that does not: "the target must contain the source in
+  one of its corners". A fill has a **direction**, and the direction
+  comes from where the source is in the target.
+- **The tree's series is a pattern, and the patterns are read off the
+  source.** The tree's `Pattern::detect` finds a numeric series, a
+  text with a number in it, or a list of days and months, and the
+  pattern decides what every cell of the range holds. Here the numeric
+  series and the text with a number are here, and the **lists** — the
+  days, the months, the quarters — are not: a text that is a day of
+  the week is copied here, and the tree would step through the week.
+- **The tree's numbers are rounded to fifteen digits.** The tree's
+  `round15` keeps a series of numbers from growing a tail of floating
+  point noise, and here the same: `0.1` plus `0.2` counts on as
+  `0.3` and not as `0.30000000000000004`.
+- **The tree's overflow is a nothing and not a wrap.** The tree's
+  series near the largest number yields nothing: the cell keeps what
+  it had, rather than wrapping around. Here the same: a cell whose
+  number would overflow is not written.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/fill.rs`): a copy
+  fill copies the value, a series fill counts a number on, a series
+  fill counts the number in a text on, a text with no number is copied,
+  the fill goes up, the fill goes right, a target that does not hold
+  the source is refused, a source that is not at a corner is refused, a
+  source that holds a formula is refused, an empty source is refused, a
+  mode that is not a mode is refused, a fill that is too large is
+  refused, and a sheet that is not there is refused.
+- **One command** (`grid.range.fill`). The grid battery now carries
+  **9** commands and the MCP server **358**.
+
+### What it does not settle
+
+- **A formula is not filled.** The tree copies a formula and shifts
+  its relative references for every cell it writes; that is a thing of
+  its own, and it is not here.
+- **The tree's dates and lists are not here**, and neither is the
+  tree's **quarter** (`Q1`, `Q2`, `Q3`, `Q4`) and its **ordinal**
+  (`1st`, `2nd`).
+- **The tree's source may be a range.** The tree fills lane by lane
+  from a source that is a range of cells; here the source is one cell.
