@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-four commands**, one for each thing a person does to a
+//! - **ninety-five commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -37,8 +37,9 @@
 //!   range of the tempo map **constant**,
 //!   **mute** a track, make a track **solo safe**, **name** the clips
 //!   that editing separates, **import** and **export** the **MIDI** of
-//!   a clip, **quantise**, **transpose** and change the **velocity** of
-//!   the notes of a clip, **make** a MIDI clip and **add**, **edit**,
+//!   a clip, **quantise**, **transpose** and change the **velocity** and
+//!   the **length** of the notes of a clip, **make** a MIDI clip and
+//!   **add**, **edit**,
 //!   **remove** and **move** the notes of one, **add**, **edit** and
 //!   **remove** the controllers of one and take the duplicate notes
 //!   out of it, **heal** the clips that
@@ -391,7 +392,7 @@ pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungro
 pub use heal::HealTrack;
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
-pub use midi::{ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, TransposeMidi, VelocityMidi};
+pub use midi::{DurationMidi, ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, TransposeMidi, VelocityMidi};
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,

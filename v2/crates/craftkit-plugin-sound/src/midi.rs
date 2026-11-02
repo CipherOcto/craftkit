@@ -797,6 +797,122 @@ impl VelocityMidi {
     }
 }
 
+/// **Change the length** of the notes of a clip.
+///
+/// A note is always at least one tick long: a note of no length is a
+/// note that cannot be heard, and that is a **shape** and not a bound
+/// — so a length of zero is a length of one tick, the way the tree
+/// makes it.
+///
+/// The tree's command changes a note's length four ways: it sets it,
+/// adds to it, scales it and makes it **legato** — every note ends a
+/// gap of ticks before the next note starts, and the last note keeps
+/// its length. They are tried in that order, and here they are tried
+/// **one at a time**: asking for two of them at once is refused,
+/// because a caller that meant one of them and got the other would
+/// not know.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.midi.duration",
+    area = "sound",
+    layer = "sound",
+    icon = "sound",
+    menu("Clip", "Duration"),
+    mutates,
+    undoable
+)]
+pub struct DurationMidi {
+    /// The clip to change.
+    pub clip: NodeRef,
+    /// The length every note is given, in ticks.
+    pub set: Option<Number>,
+    /// The change in the length of every note, in ticks.
+    pub delta: Option<Number>,
+    /// The factor every note's length is multiplied by.
+    pub scale: Option<Number>,
+    /// The gap of ticks before the next note, for a legato.
+    pub gap: Option<Number>,
+}
+
+impl DurationMidi {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.duration".to_string();
+        let clip_id = self.clip.0;
+        let mut payload = clip_of(session, &id, clip_id)?;
+        let mut midi = payload.midi.clone().ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip_id}` holds no notes"),
+        })?;
+        // The ways the length is changed, and how many of them were
+        // asked for.
+        let ways = usize::from(self.set.is_some())
+            + usize::from(self.delta.is_some())
+            + usize::from(self.scale.is_some())
+            + usize::from(self.gap.is_some());
+        if ways > 1 {
+            return Err(EngineError::Failed {
+                id,
+                message: "the length is changed one way at a time: set, delta, scale or legato".to_string(),
+            });
+        }
+        let op = match (self.set, self.delta, self.scale, self.gap) {
+            (Some(set), _, _, _) => {
+                let length = whole_of(&id, set, "the length of a note", i64::MIN as f64, i64::MAX as f64)?;
+                craftkit_midi::DurationOp::Set(length)
+            }
+            (None, Some(delta), _, _) => {
+                let delta = whole_of(
+                    &id,
+                    delta,
+                    "the change in the length of a note",
+                    i64::MIN as f64,
+                    i64::MAX as f64,
+                )?;
+                craftkit_midi::DurationOp::Add(delta)
+            }
+            (None, None, Some(scale), _) => {
+                if !scale.0.is_finite() || scale.0 < 0.0 {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "the factor is a number that is not negative".to_string(),
+                    });
+                }
+                craftkit_midi::DurationOp::Scale(scale.0)
+            }
+            (None, None, None, Some(gap)) => {
+                let gap = whole_of(&id, gap, "the gap before the next note", 0.0, i64::MAX as f64)?;
+                craftkit_midi::DurationOp::Legato { gap }
+            }
+            _ => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the length, the change in it, the factor, or the gap is needed".to_string(),
+                });
+            }
+        };
+        let mut sequence = midi.to_sequence();
+        craftkit_midi::change_duration(&mut sequence.notes, &op);
+        for (note, moved) in midi.notes.iter_mut().zip(sequence.notes.iter()) {
+            note.length = moved.length;
+        }
+        payload.midi = Some(midi);
+        // The **length** of the clip: the room its notes need, and the
+        // room it has. The room does not shrink because the notes moved.
+        let settings = session_of(session.document());
+        let length = crate::midi_length(
+            payload.length,
+            payload.midi.as_ref().unwrap_or(&MidiPayload::default()),
+            payload.start,
+            &tempo_map(session.document()),
+            settings.sample_rate,
+        );
+        payload.length = length;
+        write_clip(session, clip_id, &payload)?;
+        Ok(Outcome::changed(format!("changed the length of the notes of the clip `{clip_id}`"))
+            .with_data(serde_json::json!({ "clip": clip_id, "length": payload.length })))
+    }
+}
+
 /// The clip of a command, read.
 fn clip_of(session: &Session, id: &str, clip_id: u64) -> Result<ClipPayload, EngineError> {
     let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
