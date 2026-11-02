@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-five commands**, one for each thing a person does to a
+//! - **ninety-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -48,7 +48,7 @@
 //!   the breakpoints of a lane, **move** a clip and **trim** it to the
 //!   end of its material,
 //!   separate a clip at its **transients**, **strip** the silence out
-//!   of a clip, and
+//!   of a clip in any of its three **modes**, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -253,6 +253,15 @@
 //! give the same notes. Here it does not: a note's place in a
 //! document is a fact, and a fact that changes each time it is asked
 //! for is not a fact.
+//!
+//! **The tree's strip of silence has three modes and a preview, and so
+//! does this one.** The tree's editor strips the silence, or extracts
+//! the sound and keeps the silence, or separates the clip at the edges
+//! of the loud parts and keeps everything — and it has a preview that
+//! finds the silence and says where the parts are without changing
+//! anything. Here the mode is a **name** and a name this battery does
+//! not know is **refused**, and the preview is a **read**: it says
+//! the same thing and it does not change the document.
 //!
 //! **The tree clamps a pitch and this tree refuses.** The tree's
 //! transpose pushes a note past the top of the range onto a hundred
@@ -3723,6 +3732,12 @@ impl SeparateClipOnTransients {
 ///
 /// The **pad** is how much of the silence is kept at each end of a
 /// part, so that a part does not begin or end with a click.
+///
+/// The tree's editor does this in three **modes**: it **strips** the
+/// silence and keeps the loud parts, it **extracts** the loud parts and
+/// keeps the silence, and it **separates** the clip at the edges of the
+/// loud parts and keeps everything. The mode is given by name, and a
+/// name this battery does not know is **refused**.
 #[derive(Command)]
 #[command(
     id = "sound.clip.strip.silence",
@@ -3745,12 +3760,30 @@ pub struct StripSilence {
     pub pad_before_ms: Option<Number>,
     /// How much silence is kept after each part, in milliseconds.
     pub pad_after_ms: Option<Number>,
+    /// What to do with the parts: `strip` keeps the loud parts and
+    /// throws the quiet ones away, `extract` keeps the quiet parts and
+    /// throws the loud ones away, and `separate` cuts the clip at the
+    /// edges of the loud parts and keeps everything.
+    pub mode: Option<Text>,
 }
 
 impl StripSilence {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "sound.clip.strip.silence".to_string();
         let clip_id = self.clip.0;
+        // The **mode**: what is kept and what is thrown away. A mode
+        // this battery does not know is refused, and nothing is
+        // changed.
+        let mode = match &self.mode {
+            Some(mode) => StripMode::parse(mode.0.trim()).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "there is no mode called `{}`: the modes are `strip`, `extract` and `separate`",
+                    mode.0.trim()
+                ),
+            })?,
+            None => StripMode::Strip,
+        };
         let (name, payload) = {
             let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -3780,64 +3813,33 @@ impl StripSilence {
                 message: format!("the clip `{clip_id}` plays no sound, and there is no silence in it"),
             });
         };
-        let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no source `{source_id}`"),
-        })?;
-        let source = SourcePayload::from_json(&source_node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let sound = read_sound(&id, &source.path)?;
-        let settings = session_of(session.document());
-        let rate = settings.sample_rate.max(1) as f64;
-        let ratio = sound.rate.max(1) as f64 / rate;
-        let threshold_db = match self.threshold_db {
-            Some(value) if value.0.is_finite() => value.0.clamp(-96.0, 0.0),
-            Some(_) => {
+        if session.document().node(source_id).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no source `{source_id}`"),
+            });
+        }
+        // The **loud parts** of the clip, in the clip's own time.
+        let ranges = loud_parts_of(
+            &id,
+            session,
+            &payload,
+            self.threshold_db,
+            self.min_length_ms,
+            self.pad_before_ms,
+            self.pad_after_ms,
+        )?;
+        if ranges.is_empty() {
+            // A clip with no loud part at all is **silent**. The strip
+            // and the separate have nothing to keep, and the extract
+            // keeps the whole clip — which is what a silent clip is:
+            // all silence.
+            if mode != StripMode::Extract {
                 return Err(EngineError::Failed {
                     id,
-                    message: "the threshold is a number of decibels".to_string(),
+                    message: format!("the clip `{clip_id}` is silent: there is nothing to keep"),
                 });
             }
-            None => -48.0,
-        };
-        let ms = |value: Option<Number>, default: f64| -> f64 {
-            match value {
-                Some(value) if value.0.is_finite() => value.0.clamp(0.0, 10_000.0),
-                _ => default,
-            }
-        };
-        // The lengths are in **milliseconds**, and a millisecond is a
-        // thousandth of a second.
-        let min_length = (ms(self.min_length_ms, 50.0) / 1000.0 * rate) as i64;
-        let pad_before = (ms(self.pad_before_ms, 5.0) / 1000.0 * rate) as i64;
-        let pad_after = (ms(self.pad_after_ms, 20.0) / 1000.0 * rate) as i64;
-        // The **loud parts** of the material, in the material's samples.
-        let loud =
-            craftkit_audio::loud_ranges(&sound.samples, sound.channels as usize, threshold_db, min_length);
-        // And the loud parts in the **clip's own time**.
-        let end = payload.start + payload.length;
-        let mut ranges: Vec<(i64, i64)> = Vec::new();
-        for (from, to) in loud {
-            let start = at_of_frame(from as i64, payload.offset, payload.stretch, ratio) - pad_before;
-            let stop = at_of_frame(to as i64, payload.offset, payload.stretch, ratio) + pad_after;
-            let start = start.max(payload.start);
-            let stop = stop.min(end);
-            if stop <= start {
-                continue;
-            }
-            if let Some(last) = ranges.last_mut()
-                && start <= last.1
-            {
-                last.1 = last.1.max(stop);
-                continue;
-            }
-            ranges.push((start, stop));
-        }
-        if ranges.is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the clip `{clip_id}` is silent: there is nothing to keep"),
-            });
         }
         // The scheme and its **number** before the cut: the pieces
         // that are kept are named from it, and the pieces that are
@@ -3846,6 +3848,7 @@ impl StripSilence {
         let number = scheme.map(|scheme| crate::autoname::number_of(session, scheme));
         // The **cut**: at the edges of the loud parts, so that the
         // pieces are the parts and the gaps.
+        let end = payload.start + payload.length;
         let mut points: Vec<i64> = Vec::new();
         for (start, stop) in &ranges {
             for point in [start, stop] {
@@ -3875,8 +3878,10 @@ impl StripSilence {
             current = separate_at(session, current, &piece, &name, *point)?;
             pieces += 1;
         }
-        // The **quiet pieces** are thrown away, and the loud ones are
-        // kept.
+        // The pieces are **kept** or **thrown away**, and which is
+        // which depends on the **mode**: the strip keeps the loud
+        // pieces, the extract keeps the quiet ones, and the separate
+        // keeps everything and only cuts.
         let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
         let mut kept: Vec<u64> = Vec::new();
         let mut removed: Vec<u64> = Vec::new();
@@ -3891,7 +3896,12 @@ impl StripSilence {
             let start = payload.start;
             let stop = payload.start + payload.length;
             let loud = ranges.iter().any(|(from, to)| start >= *from && stop <= *to);
-            if loud {
+            let keep = match mode {
+                StripMode::Strip => loud,
+                StripMode::Extract => !loud,
+                StripMode::Separate => true,
+            };
+            if keep {
                 kept.push(node.id);
             } else {
                 removed.push(node.id);
@@ -3917,16 +3927,193 @@ impl StripSilence {
             Some(scheme) => crate::autoname::name_the_pieces(session, scheme, &kept),
             None => 0,
         };
-        Ok(Outcome::changed(format!("stripped the silence out of the clip `{clip_id}`")).with_data(
-            serde_json::json!({
-                "id": clip_id,
-                "kept": kept.len(),
-                "removed": removed.len(),
-                "pieces": pieces,
-                "named": named,
-                "ranges": ranges.len(),
-            }),
-        ))
+        let what = match mode {
+            StripMode::Strip => "stripped the silence out of",
+            StripMode::Extract => "extracted the sound of",
+            StripMode::Separate => "separated the clip",
+        };
+        Ok(Outcome::changed(format!("{what} the clip `{clip_id}`")).with_data(serde_json::json!({
+            "id": clip_id,
+            "mode": match mode {
+                StripMode::Strip => "strip",
+                StripMode::Extract => "extract",
+                StripMode::Separate => "separate",
+            },
+            "kept": kept.len(),
+            "removed": removed.len(),
+            "pieces": pieces,
+            "named": named,
+            "ranges": ranges.len(),
+        })))
+    }
+}
+
+/// The **loud parts** of a clip, in the clip's own time.
+///
+/// The parts are found in the **material** — the source the clip plays
+/// — and not in the clip's own sound: the clip's sound is the
+/// material read the clip's way, and the material's own silence is
+/// where the silence is.
+///
+/// The **threshold** is how far below the loudest part of the material
+/// a part may be and still be kept, in decibels. The **minimum
+/// length** is how long a part must be to be kept, and the **pad** is
+/// how much of the silence is kept at each end of a part.
+fn loud_parts_of(
+    id: &str,
+    session: &Session,
+    payload: &ClipPayload,
+    threshold_db: Option<Number>,
+    min_length_ms: Option<Number>,
+    pad_before_ms: Option<Number>,
+    pad_after_ms: Option<Number>,
+) -> Result<Vec<(i64, i64)>, EngineError> {
+    let Some(source_id) = payload.source else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "the clip plays no sound, and there is no silence in it".to_string(),
+        });
+    };
+    let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("there is no source `{source_id}`"),
+    })?;
+    let source = SourcePayload::from_json(&source_node.data)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })?;
+    let sound = read_sound(id, &source.path)?;
+    let settings = session_of(session.document());
+    let rate = settings.sample_rate.max(1) as f64;
+    let ratio = sound.rate.max(1) as f64 / rate;
+    let threshold_db = match threshold_db {
+        Some(value) if value.0.is_finite() => value.0.clamp(-96.0, 0.0),
+        Some(_) => {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "the threshold is a number of decibels".to_string(),
+            });
+        }
+        None => -48.0,
+    };
+    let ms = |value: Option<Number>, default: f64| -> f64 {
+        match value {
+            Some(value) if value.0.is_finite() => value.0.clamp(0.0, 10_000.0),
+            _ => default,
+        }
+    };
+    // The lengths are in **milliseconds**, and a millisecond is a
+    // thousandth of a second.
+    let min_length = (ms(min_length_ms, 50.0) / 1000.0 * rate) as i64;
+    let pad_before = (ms(pad_before_ms, 5.0) / 1000.0 * rate) as i64;
+    let pad_after = (ms(pad_after_ms, 20.0) / 1000.0 * rate) as i64;
+    // The **loud parts** of the material, in the material's samples.
+    let loud = craftkit_audio::loud_ranges(&sound.samples, sound.channels as usize, threshold_db, min_length);
+    // And the loud parts in the **clip's own time**.
+    let end = payload.start + payload.length;
+    let mut ranges: Vec<(i64, i64)> = Vec::new();
+    for (from, to) in loud {
+        let start = at_of_frame(from as i64, payload.offset, payload.stretch, ratio) - pad_before;
+        let stop = at_of_frame(to as i64, payload.offset, payload.stretch, ratio) + pad_after;
+        let start = start.max(payload.start);
+        let stop = stop.min(end);
+        if stop <= start {
+            continue;
+        }
+        if let Some(last) = ranges.last_mut()
+            && start <= last.1
+        {
+            last.1 = last.1.max(stop);
+            continue;
+        }
+        ranges.push((start, stop));
+    }
+    Ok(ranges)
+}
+
+/// **Read** the **loud parts** of a clip: where the silence is.
+///
+/// The tree's editor has a **preview** of its Strip Silence: it finds
+/// the silence and says where the parts are, without changing
+/// anything — so that a person can see what the strip would do before
+/// it does it.
+///
+/// Here the preview is a **read**: it says the same thing and it does
+/// not change the document. The clip is not cut, nothing is thrown
+/// away and nothing is named.
+#[derive(Command)]
+#[command(id = "sound.clip.strip.silence.read", area = "sound", layer = "sound", icon = "list")]
+pub struct ReadStripSilence {
+    /// The clip to look at.
+    pub clip: NodeRef,
+    /// How far below the loudest part a part may be and still be kept,
+    /// in decibels.
+    pub threshold_db: Option<Number>,
+    /// How long a part must be to be kept, in milliseconds.
+    pub min_length_ms: Option<Number>,
+    /// How much silence is kept before each part, in milliseconds.
+    pub pad_before_ms: Option<Number>,
+    /// How much silence is kept after each part, in milliseconds.
+    pub pad_after_ms: Option<Number>,
+}
+
+impl ReadStripSilence {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.strip.silence.read".to_string();
+        let clip_id = self.clip.0;
+        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{clip_id}`"),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        let ranges = loud_parts_of(
+            &id,
+            session,
+            &payload,
+            self.threshold_db,
+            self.min_length_ms,
+            self.pad_before_ms,
+            self.pad_after_ms,
+        )?;
+        let parts: Vec<Json> = ranges.iter().map(|(from, to)| serde_json::json!([from, to])).collect();
+        Ok(Outcome::new(format!("the clip `{clip_id}` has {} loud parts", ranges.len()))
+            .with_data(serde_json::json!({ "id": clip_id, "ranges": parts })))
+    }
+}
+
+/// What the strip of silence does with the pieces of a clip once it
+/// has found the silence.
+///
+/// The tree's editor does this in three modes and names them: `strip`,
+/// `extract` and `separate`. The name is a **string** and not a
+/// variant, because the kinds of this kit are open — and a name this
+/// battery does not know is **refused**, because a mode that does
+/// nothing is worse than no mode at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StripMode {
+    /// The quiet pieces are thrown away and the loud ones are kept.
+    Strip,
+    /// The loud pieces are thrown away and the quiet ones are kept.
+    Extract,
+    /// The clip is cut at the edges of the loud parts and everything
+    /// is kept.
+    Separate,
+}
+
+impl StripMode {
+    /// The mode of that name, or **none** when the name is not one.
+    fn parse(name: &str) -> Option<StripMode> {
+        match name {
+            "strip" => Some(StripMode::Strip),
+            "extract" => Some(StripMode::Extract),
+            "separate" => Some(StripMode::Separate),
+            _ => None,
+        }
     }
 }
 
